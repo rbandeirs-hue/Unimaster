@@ -1,0 +1,346 @@
+{% extends "base.html" %}
+{% block title %}Lista de Alunos{% endblock %}
+{% block content %}
+
+<style>
+  /* ========================= */
+  /* 🎨 Lista de Alunos (Card) */
+  /* ========================= */
+
+  .alunos-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .search-input {
+    border-radius: 10px;
+    padding: 0.75rem 1rem;
+  }
+
+  .aluno-card {
+    transition: all 0.25s ease;
+    border-radius: 14px;
+    overflow: hidden;
+    border: 1px solid #e8edf3;
+    background: #ffffff;
+  }
+
+  .aluno-card:hover {
+    box-shadow: 0 6px 18px rgba(13, 110, 253, 0.08);
+    transform: translateY(-2px);
+  }
+
+  .card-header-minimal {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    padding: 16px 18px;
+    background: linear-gradient(180deg, #ffffff 0%, #f9fbff 100%);
+    cursor: pointer;
+  }
+
+  .aluno-ident {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .aluno-sub {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .foto-aluno {
+    width: 68px;
+    height: 68px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 3px solid #0d6efd;
+    background: #f2f4f7;
+  }
+
+  .nome-aluno {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #1f2937;
+  }
+
+  .aluno-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .btn-editar-min {
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-size: 0.85rem;
+  }
+
+  .btn-detalhes {
+    border-radius: 8px;
+    padding: 6px 10px;
+  }
+
+  .info-block {
+    background: #ffffff;
+    border-radius: 10px;
+    padding: 14px;
+    border: 1px solid #eef1f6;
+    border-left: 4px solid #0d6efd;
+    box-shadow: 0 2px 6px rgba(31, 41, 55, 0.05);
+  }
+
+  .info-block h6 {
+    font-size: 0.9rem;
+    margin-bottom: 8px;
+    font-weight: 700;
+    color: #0d6efd;
+  }
+
+  .info-block p {
+    margin: 2px 0;
+    font-size: 0.86rem;
+    color: #374151;
+  }
+
+  .info-block-aptidao.apto {
+    border-left-color: #28a745 !important;
+  }
+
+  .info-block-aptidao.inapto {
+    border-left-color: #dc3545 !important;
+  }
+
+  .modal-section {
+    border: 1px solid #eef1f6;
+    border-radius: 12px;
+    padding: 12px 14px;
+    background: #fbfcfe;
+  }
+
+  .modal-section h6 {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #0d6efd;
+    margin-bottom: 10px;
+  }
+
+  .modal-info-list {
+    display: grid;
+    gap: 6px;
+  }
+
+  .modal-info-item {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 0.9rem;
+    color: #374151;
+  }
+
+  .modal-info-item span {
+    color: #6b7280;
+    min-width: 140px;
+  }
+
+  .modal-info-item strong {
+    color: #111827;
+    text-align: right;
+  }
+
+  @media (max-width: 768px) {
+    .foto-aluno {
+      width: 58px;
+      height: 58px;
+    }
+
+    .nome-aluno {
+      font-size: 1rem;
+    }
+  }
+</style>
+
+<div class="container mt-4">
+
+  <div class="alunos-toolbar mb-3">
+    <h3 class="fw-bold text-primary mb-0">🎓 Alunos</h3>
+    <div class="d-flex gap-2">
+      <a href="{{ back_url }}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left-circle"></i> Voltar
+      </a>
+      <a href="{{ url_for('alunos.cadastrar_aluno', next=request.full_path) }}" class="btn btn-success">
+        <i class="bi bi-plus-circle-fill"></i> Novo Aluno
+      </a>
+    </div>
+  </div>
+
+  <div class="input-group mb-4">
+    <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+    <input id="searchInput" type="text" class="form-control search-input"
+           placeholder="Buscar aluno por nome, faixa ou turma..." value="{{ busca }}">
+  </div>
+
+  <div id="listaAlunos" class="row g-3">
+    {% for aluno in alunos|sort(attribute='nome') %}
+    <div class="col-12 col-lg-6">
+      <div class="card aluno-card" data-nome="{{ aluno.nome|lower }}">
+
+        <!-- Cabeçalho -->
+        <div class="card-header-minimal">
+
+          <div class="d-flex align-items-center gap-3 flex-wrap">
+            {% if aluno.foto %}
+            <img src="{{ url_for('static', filename='uploads/' + aluno.foto) }}" class="foto-aluno">
+            {% else %}
+            <img src="https://placehold.co/120x120/CCCCCC/666666?text=Sem+Foto" class="foto-aluno">
+            {% endif %}
+
+            <div class="aluno-ident">
+              <span class="nome-aluno">{{ aluno.nome }}</span>
+              <div class="aluno-sub">
+                <span class="badge bg-light text-dark border">Faixa: {{ aluno.faixa or '-' }}</span>
+                <span class="badge bg-light text-dark border">Turma: {{ aluno.turma_nome or '-' }}</span>
+                <span class="badge bg-light text-dark border">Academia: {{ aluno.academia_nome or '-' }}</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="aluno-actions">
+            <a href="{{ url_for('alunos.editar_aluno', aluno_id=aluno.id, next=request.full_path) }}" class="btn btn-warning btn-editar-min">
+              <i class="bi bi-pencil-fill"></i>
+            </a>
+            <button type="button" class="btn btn-primary btn-detalhes" data-bs-toggle="modal"
+              data-bs-target="#modalAluno{{ aluno.id }}" aria-label="Ver detalhes">
+              <i class="bi bi-eye"></i>
+            </button>
+          </div>
+
+        </div>
+
+      </div>
+    </div>
+
+    <!-- 🔹 MODAL DETALHES -->
+    <div class="modal fade" id="modalAluno{{ aluno.id }}" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">
+              <i class="bi bi-person-badge me-1"></i> {{ aluno.nome }}
+            </h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+          </div>
+          <div class="modal-body">
+            <div class="row g-3">
+
+              <!-- Dados Pessoais -->
+              <div class="col-12 col-lg-6">
+                <div class="modal-section">
+                  <h6><i class="bi bi-person-vcard me-1"></i> Dados Pessoais</h6>
+                  <div class="modal-info-list">
+                    <div class="modal-info-item"><span>Nascimento</span><strong>{{ aluno.data_nascimento_formatada }} ({{ aluno.idade_real }} anos)</strong></div>
+                    <div class="modal-info-item"><span>CPF</span><strong>{{ aluno.cpf or '-' }}</strong></div>
+                    <div class="modal-info-item"><span>Telefone</span><strong>{{ aluno.telefone or '-' }}</strong></div>
+                    <div class="modal-info-item"><span>Email</span><strong>{{ aluno.email or '-' }}</strong></div>
+                    <div class="modal-info-item"><span>Responsável</span><strong>{{ aluno.responsavel or '-' }}</strong></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Acadêmico -->
+              <div class="col-12 col-lg-6">
+                <div class="modal-section">
+                  <h6><i class="bi bi-award me-1"></i> Informações Acadêmicas</h6>
+                  <div class="modal-info-list">
+                    <div class="modal-info-item"><span>Faixa Atual</span><strong>{{ aluno.faixa }} {{ aluno.graduacao }}</strong></div>
+                    <div class="modal-info-item"><span>Próxima Faixa</span><strong>{{ aluno.proxima_faixa }}</strong></div>
+                    <div class="modal-info-item"><span>Elegível em</span><strong>{{ aluno.data_elegivel }}</strong></div>
+                    <div class="modal-info-item"><span>Categoria de Idade</span><strong>{{ aluno.idade_ano_civil }} anos</strong></div>
+                    <div class="modal-info-item"><span>Turma</span><strong>{{ aluno.turma_nome or '-' }}</strong></div>
+                    <div class="modal-info-item"><span>Zempo</span><strong>{{ aluno.zempo or '-' }}</strong></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Peso e Categoria -->
+              <div class="col-12 col-lg-6">
+                <div class="modal-section">
+                  <h6><i class="bi bi-bar-chart-line me-1"></i> Peso & Categoria</h6>
+                  <div class="modal-info-list">
+                    <div class="modal-info-item"><span>Peso Atual</span><strong>{{ aluno.peso or '-' }} kg</strong></div>
+                    <div class="modal-info-item">
+                      <span>Classes / Categorias</span>
+                      <strong>{{ aluno.classes_e_pesos or '-' }}</strong>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Aptidão -->
+              <div class="col-12 col-lg-6">
+                <div class="modal-section">
+                  <h6><i class="bi bi-clipboard-check me-1"></i> Aptidão</h6>
+                  <div class="modal-info-list">
+                    <div class="modal-info-item">
+                      <span>Status</span>
+                      <strong>
+                        {% if aluno.aptidao_status == 'Apto' %}
+                        <span class="text-success fw-bold">APTO</span>
+                        {% else %}
+                        <span class="text-danger fw-bold">INAPTO</span>
+                        {% endif %}
+                      </strong>
+                    </div>
+                    <div class="modal-info-item"><span>Próxima Faixa</span><strong>{{ aluno.proxima_faixa or '-' }}</strong></div>
+                    <div class="modal-info-item"><span>Elegível</span><strong>{{ aluno.data_elegivel or '-' }}</strong></div>
+                    <div class="modal-info-item"><span>Motivo</span><strong class="text-danger">{{ aluno.motivo or '-' }}</strong></div>
+                  </div>
+                </div>
+              </div>
+
+              {% if aluno.observacoes %}
+              <div class="col-12">
+                <div class="modal-section">
+                  <h6><i class="bi bi-journal-text me-1"></i> Observações</h6>
+                  <div class="modal-info-list">
+                    <div class="modal-info-item"><span>Observações</span><strong>{{ aluno.observacoes }}</strong></div>
+                  </div>
+                </div>
+              </div>
+              {% endif %}
+
+            </div>
+          </div>
+          <div class="modal-footer">
+            <a href="{{ url_for('alunos.editar_aluno', aluno_id=aluno.id, next=request.full_path) }}" class="btn btn-warning">
+              <i class="bi bi-pencil-fill me-1"></i> Editar
+            </a>
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+</div>
+
+
+<script>
+  /* 🔍 Filtro de busca */
+  document.getElementById("searchInput").addEventListener("input", function () {
+    let q = this.value.toLowerCase();
+    document.querySelectorAll(".aluno-card").forEach(card => {
+      let nome = card.dataset.nome;
+      card.style.display = nome.includes(q) ? "block" : "none";
+    });
+  });
+</script>
+
+{% endblock %}

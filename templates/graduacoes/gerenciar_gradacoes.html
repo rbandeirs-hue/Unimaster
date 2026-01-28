@@ -1,0 +1,411 @@
+{% extends "base.html" %}
+{% block title %}Gerenciar Graduações{% endblock %}
+{% block content %}
+
+<div class="container mt-4">
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 mb-3">
+        <div>
+            <h3 class="fw-bold text-danger mb-1">Gerenciar Graduações</h3>
+            <p class="text-muted mb-0">Ajuste regras de transição de faixa com base na graduação.</p>
+        </div>
+        <a href="{{ url_for('painel.home') }}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left-circle me-1"></i> Voltar
+        </a>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-header bg-danger text-white">
+            <i class="bi bi-award-fill me-2"></i> Regras por Graduação
+        </div>
+        <div class="card-body">
+            <form method="POST">
+                <div class="table-responsive">
+                    <table class="table align-middle table-hover table-striped tabela-graduacoes">
+                        <thead class="table-light">
+                            <tr>
+                                <th>ID</th>
+                                <th>Faixa</th>
+                                <th>Graduação</th>
+                                <th>Categoria</th>
+                                {% if col_idade_minima %}
+                                <th>Idade mínima</th>
+                                {% endif %}
+                                {% if col_carencia_meses %}
+                                <th>Carência (meses)</th>
+                                {% endif %}
+                                {% if col_carencia_dias %}
+                                <th>Carência (dias)</th>
+                                {% endif %}
+                                {% if col_carencia and not (col_carencia_meses or col_carencia_dias) %}
+                                <th>Carência</th>
+                                {% endif %}
+                                {% if col_carencia_minima %}
+                                <th>Carência mínima</th>
+                                {% endif %}
+                                {% if col_observacao %}
+                                <th class="col-observacao">Observação</th>
+                                {% endif %}
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for g in graduacoes %}
+                            <tr class="linha-graduacao" data-editing="0">
+                                <td class="text-muted" data-label="ID">
+                                    {{ g.get('id') }}
+                                    {% set faixa_nome = (g.get('faixa') or '')|lower %}
+                                    {% set cor_faixa = '#9ca3af' %}
+                                    {% set cor_ponta = '#9ca3af' %}
+                                    {% if 'branca' in faixa_nome %}{% set cor_faixa = '#f9fafb' %}{% set cor_ponta = '#f9fafb' %}{% endif %}
+                                    {% if 'cinza' in faixa_nome %}{% set cor_faixa = '#9ca3af' %}{% set cor_ponta = '#9ca3af' %}{% endif %}
+                                    {% if 'azul' in faixa_nome %}{% set cor_faixa = '#2563eb' %}{% set cor_ponta = '#2563eb' %}{% endif %}
+                                    {% if 'amarela' in faixa_nome %}{% set cor_faixa = '#facc15' %}{% set cor_ponta = '#facc15' %}{% endif %}
+                                    {% if 'laranja' in faixa_nome %}{% set cor_faixa = '#f97316' %}{% set cor_ponta = '#f97316' %}{% endif %}
+                                    {% if 'verde' in faixa_nome %}{% set cor_faixa = '#16a34a' %}{% set cor_ponta = '#16a34a' %}{% endif %}
+                                    {% if 'roxa' in faixa_nome %}{% set cor_faixa = '#7c3aed' %}{% set cor_ponta = '#7c3aed' %}{% endif %}
+                                    {% if 'marrom' in faixa_nome %}{% set cor_faixa = '#7c2d12' %}{% set cor_ponta = '#7c2d12' %}{% endif %}
+                                    {% if 'preta' in faixa_nome %}{% set cor_faixa = '#111827' %}{% set cor_ponta = '#111827' %}{% endif %}
+                                    {% if 'vermelha e branca' in faixa_nome %}{% set cor_faixa = '#f9fafb' %}{% set cor_ponta = '#ef4444' %}{% endif %}
+                                    {% if 'vermelha' in faixa_nome %}{% set cor_faixa = '#dc2626' %}{% set cor_ponta = '#dc2626' %}{% endif %}
+                                    {% if 'branca/cinza' in faixa_nome %}{% set cor_faixa = '#f9fafb' %}{% set cor_ponta = '#9ca3af' %}{% endif %}
+                                    {% if 'cinza/azul' in faixa_nome %}{% set cor_faixa = '#9ca3af' %}{% set cor_ponta = '#2563eb' %}{% endif %}
+                                    {% if 'azul/amarela' in faixa_nome %}{% set cor_faixa = '#2563eb' %}{% set cor_ponta = '#facc15' %}{% endif %}
+                                    {% if 'amarela/laranja' in faixa_nome %}{% set cor_faixa = '#facc15' %}{% set cor_ponta = '#f97316' %}{% endif %}
+                                    <span class="faixa-dupla">
+                                        <span class="faixa-cor-faixa" style="background-color: {{ cor_faixa }};"></span>
+                                        <span class="faixa-cor-ponta" style="background-color: {{ cor_ponta }};"></span>
+                                    </span>
+                                    <div class="faixa-cores-edit">
+                                        <input type="color" class="form-control form-control-sm campo-cor"
+                                               name="cor_faixa" value="{{ cor_faixa }}" disabled>
+                                        <input type="color" class="form-control form-control-sm campo-cor"
+                                               name="cor_ponta" value="{{ cor_ponta }}" disabled>
+                                    </div>
+                                    <input type="hidden" name="id" value="{{ g.get('id') }}">
+                                </td>
+                                <td data-label="Faixa">
+                                    <input type="text" class="form-control form-control-sm campo-graduacao"
+                                           name="faixa" value="{{ g.get('faixa') or '' }}" readonly>
+                                </td>
+                                <td data-label="Graduação">
+                                    <input type="text" class="form-control form-control-sm campo-graduacao"
+                                           name="graduacao" value="{{ g.get('graduacao') or '' }}" readonly>
+                                </td>
+                                <td data-label="Categoria">
+                                    <input type="text" class="form-control form-control-sm campo-graduacao"
+                                           name="categoria" value="{{ g.get('categoria') or '' }}" readonly>
+                                </td>
+                                {% if col_idade_minima %}
+                                <td data-label="Idade mínima">
+                                    <input type="text" class="form-control form-control-sm campo-graduacao"
+                                           name="idade_minima" value="{{ g.get(col_idade_minima) or '' }}" readonly>
+                                </td>
+                                {% endif %}
+                                {% if col_carencia_meses %}
+                                <td data-label="Carência (meses)">
+                                    <input type="number" min="0" step="1"
+                                           class="form-control form-control-sm campo-graduacao"
+                                           name="carencia_meses" value="{{ g.get(col_carencia_meses) or '' }}" readonly>
+                                </td>
+                                {% endif %}
+                                {% if col_carencia_dias %}
+                                <td data-label="Carência (dias)">
+                                    <input type="number" min="0" step="1"
+                                           class="form-control form-control-sm campo-graduacao"
+                                           name="carencia_dias" value="{{ g.get(col_carencia_dias) or '' }}" readonly>
+                                </td>
+                                {% endif %}
+                                {% if col_carencia and not (col_carencia_meses or col_carencia_dias) %}
+                                <td data-label="Carência">
+                                    <input type="text" class="form-control form-control-sm campo-graduacao"
+                                           name="carencia" value="{{ g.get(col_carencia) or '' }}" readonly>
+                                </td>
+                                {% endif %}
+                                {% if col_carencia_minima %}
+                                <td data-label="Carência mínima">
+                                    <input type="text" class="form-control form-control-sm campo-graduacao"
+                                           name="carencia_minima" value="{{ g.get(col_carencia_minima) or '' }}" readonly>
+                                </td>
+                                {% endif %}
+                                {% if col_observacao %}
+                                <td data-label="Observação" class="col-observacao">
+                                    <textarea class="form-control form-control-sm observacao-textarea campo-graduacao"
+                                              name="observacao" rows="3" readonly>{{ g.get(col_observacao) or '' }}</textarea>
+                                    <button type="button"
+                                            class="btn btn-link btn-sm p-0 mt-1 btn-ver-observacao"
+                                            data-bs-toggle="modal"
+                                            data-bs-target="#modalObs{{ g.get('id') }}">
+                                        <i class="bi bi-arrows-fullscreen me-1"></i> Ver completo
+                                    </button>
+                                </td>
+                                {% endif %}
+                                <td data-label="Ações" class="col-acoes">
+                                    <button type="button" class="btn btn-outline-primary btn-sm btn-editar-linha">
+                                        <i class="bi bi-pencil-square me-1"></i> Editar
+                                    </button>
+                                </td>
+                            </tr>
+                            {% if col_observacao %}
+                            <div class="modal fade" id="modalObs{{ g.get('id') }}" tabindex="-1" aria-hidden="true">
+                                <div class="modal-dialog modal-dialog-centered modal-lg">
+                                    <div class="modal-content">
+                                        <div class="modal-header">
+                                            <h5 class="modal-title">Observação</h5>
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                                        </div>
+                                        <div class="modal-body">
+                                            <div class="observacao-modal-text">
+                                                {{ g.get(col_observacao) or '-' }}
+                                            </div>
+                                        </div>
+                                        <div class="modal-footer">
+                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endif %}
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 mt-3">
+                    <small class="text-muted">
+                        {% if col_carencia_meses or col_carencia_dias %}
+                        Preencha carência em meses ou em dias (use um dos dois campos).
+                        {% elif col_carencia_minima %}
+                        Preencha carência mínima (ex.: 3 MESES, 1 ANO).
+                        {% else %}
+                        Ajuste a carência conforme o padrão atual da sua tabela.
+                        {% endif %}
+                    </small>
+                    <button type="submit" class="btn btn-danger">
+                        <i class="bi bi-save me-1"></i> Salvar alterações
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<style>
+    .tabela-graduacoes {
+        table-layout: fixed;
+        width: 100%;
+    }
+
+    .tabela-graduacoes thead th {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        background: #f8f9fa;
+    }
+
+    .tabela-graduacoes th,
+    .tabela-graduacoes td {
+        vertical-align: top;
+    }
+
+    .tabela-graduacoes th,
+    .tabela-graduacoes td {
+        word-wrap: break-word;
+        word-break: break-word;
+    }
+
+    .faixa-cor {
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        margin-left: 8px;
+        border: 1px solid rgba(0, 0, 0, 0.15);
+        vertical-align: middle;
+    }
+
+    .faixa-dupla {
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+        margin-left: 8px;
+        vertical-align: middle;
+    }
+
+    .faixa-cor-faixa {
+        display: inline-block;
+        width: 40px;
+        height: 8px;
+        border-radius: 999px;
+        border: 1px solid rgba(0, 0, 0, 0.2);
+        background: #9ca3af;
+    }
+
+    .faixa-cor-ponta {
+        display: inline-block;
+        width: 12px;
+        height: 8px;
+        border-radius: 2px;
+        border: 1px solid rgba(0, 0, 0, 0.2);
+        background: #9ca3af;
+        clip-path: polygon(0 0, 100% 50%, 0 100%);
+    }
+
+    .faixa-cores-edit {
+        display: flex;
+        gap: 6px;
+        margin-top: 6px;
+        align-items: center;
+    }
+
+    .faixa-cores-edit input[type="color"] {
+        width: 32px;
+        height: 26px;
+        padding: 0;
+        border: 1px solid #d1d5db;
+        border-radius: 6px;
+        background: #fff;
+    }
+
+    .col-observacao {
+        width: 32%;
+        min-width: 280px;
+    }
+
+    .observacao-textarea {
+        resize: vertical;
+        min-height: 72px;
+        white-space: pre-wrap;
+        line-height: 1.3;
+    }
+
+    .observacao-modal-text {
+        white-space: pre-wrap;
+        line-height: 1.5;
+        color: #111827;
+    }
+
+    .col-acoes {
+        width: 120px;
+        white-space: nowrap;
+    }
+
+    @media (max-width: 768px) {
+        .tabela-graduacoes {
+            table-layout: auto;
+        }
+
+        .col-observacao {
+            width: 100%;
+            min-width: 0;
+        }
+
+        .tabela-graduacoes thead {
+            display: none;
+        }
+
+        .tabela-graduacoes tbody,
+        .tabela-graduacoes tr,
+        .tabela-graduacoes td {
+            display: block;
+            width: 100%;
+        }
+
+        .tabela-graduacoes tr {
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 12px;
+            margin-bottom: 12px;
+            background: #fff;
+        }
+
+        .tabela-graduacoes td {
+            padding: 8px 0;
+        }
+
+        .tabela-graduacoes td::before {
+            content: attr(data-label);
+            display: block;
+            font-weight: 600;
+            color: #6b7280;
+            margin-bottom: 4px;
+        }
+
+        .col-acoes {
+            width: 100%;
+        }
+    }
+</style>
+
+<script>
+    document.querySelectorAll(".linha-graduacao").forEach((linha) => {
+        linha.dataset.editing = "0";
+        linha.querySelectorAll(".campo-graduacao").forEach((el) => {
+            el.dataset.originalValue = el.value;
+
+            el.addEventListener("focus", () => {
+                if (linha.dataset.editing !== "1") {
+                    el.blur();
+                }
+            });
+
+            el.addEventListener("keydown", (event) => {
+                if (linha.dataset.editing !== "1") {
+                    event.preventDefault();
+                }
+            });
+
+            el.addEventListener("input", () => {
+                if (linha.dataset.editing !== "1") {
+                    el.value = el.dataset.originalValue || "";
+                } else {
+                    el.dataset.originalValue = el.value;
+                }
+            });
+        });
+    });
+
+    const autoResize = (el) => {
+        el.style.height = "auto";
+        el.style.height = `${el.scrollHeight}px`;
+    };
+
+    document.querySelectorAll(".observacao-textarea").forEach((el) => {
+        autoResize(el);
+        el.addEventListener("input", () => autoResize(el));
+    });
+
+    document.querySelectorAll(".btn-editar-linha").forEach((btn) => {
+        btn.addEventListener("click", () => {
+            const linha = btn.closest("tr");
+            const inputs = linha.querySelectorAll(".campo-graduacao");
+            const cores = linha.querySelectorAll(".campo-cor");
+            const habilitar = linha.dataset.editing !== "1";
+
+            inputs.forEach((el) => {
+                if (habilitar) {
+                    el.removeAttribute("readonly");
+                    el.classList.add("bg-white");
+                    if (el.classList.contains("observacao-textarea")) {
+                        autoResize(el);
+                    }
+                } else {
+                    el.setAttribute("readonly", "readonly");
+                    el.classList.remove("bg-white");
+                }
+            });
+
+            cores.forEach((el) => {
+                el.disabled = !habilitar;
+            });
+
+            linha.dataset.editing = habilitar ? "1" : "0";
+            btn.classList.toggle("btn-outline-primary", !habilitar);
+            btn.classList.toggle("btn-success", habilitar);
+            btn.innerHTML = habilitar
+                ? '<i class="bi bi-check2-circle me-1"></i> Pronto'
+                : '<i class="bi bi-pencil-square me-1"></i> Editar';
+        });
+    });
+</script>
+
+{% endblock %}

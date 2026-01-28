@@ -1,0 +1,965 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Editar' if aluno else 'Cadastrar' }} Aluno{% endblock %}
+{% block content %}
+{% set form_data = form_data if form_data is defined else request.form %}
+{% set modalidades_sel = form_data.getlist('aluno_modalidade_ids') if form_data else [] %}
+{% set sexo_val = form_data.get('sexo', aluno.sexo if aluno else '') %}
+{% set parentesco_sel = form_data.get('responsavel_grau_parentesco', '') %}
+{% set graduacao_sel = form_data.get('graduacao_id', '') %}
+{% set turma_sel = form_data.get('TurmaID', '') %}
+{% set id_academia_sel = form_data.get('id_academia', '') %}
+
+<style>
+    /* --------------------------------------------- */
+    /* 🔵 Ajustes gerais e responsividade            */
+    /* --------------------------------------------- */
+    .card {
+        border-radius: 1rem;
+    }
+
+    @media (max-width: 768px) {
+        .card {
+            border-radius: 0.6rem;
+        }
+
+        .display-6 {
+            font-size: 1.5rem;
+        }
+
+        .lead {
+            font-size: 0.9rem;
+        }
+
+        .btn-lg {
+            width: 100%;
+        }
+    }
+
+    /* --------------------------------------------- */
+    /* 🔵 Estilo da miniatura da foto                */
+    /* --------------------------------------------- */
+    #miniatura {
+        width: 150px;
+        height: 150px;
+        object-fit: cover;
+        border-radius: 50%;
+        border: 3px solid #0d6efd;
+    }
+
+    /* --------------------------------------------- */
+    /* 🔵 Modal de Câmera (fullscreen)               */
+    /* --------------------------------------------- */
+    .camera-modal {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        justify-content: center;
+        align-items: center;
+        background: rgba(0, 0, 0, 0.9);
+        z-index: 9999;
+    }
+
+    .camera-content {
+        width: 90%;
+        max-width: 480px;
+        text-align: center;
+    }
+
+    .camera-content video,
+    .camera-content canvas {
+        width: 100%;
+        border-radius: 10px;
+        border: 2px solid #ddd;
+        margin-bottom: 10px;
+    }
+
+    .camera-buttons button {
+        margin: 5px;
+    }
+
+    /* 🔵 Card ocupa toda a largura útil */
+    .fullwidth-card {
+        width: 100%;
+        border-radius: 1rem;
+    }
+
+    @media (min-width: 1400px) {
+        .fullwidth-card {
+            max-width: 1400px;
+            margin: auto;
+        }
+    }
+
+    /* 🔵 Botão de câmera tamanho de botão normal    */
+    #btnAbrirCamera {
+        padding: .45rem .8rem !important;
+        font-size: .95rem !important;
+    }
+</style>
+
+
+<div class="container-fluid px-4 mt-4">
+
+    <!-- Título -->
+    <div class="text-center mb-4">
+        <h2 class="display-6 text-primary fw-bold">
+            {{ 'Editar Aluno' if aluno else 'Cadastrar Novo Aluno' }}
+        </h2>
+        <p class="lead text-muted">Preencha todas as informações do aluno abaixo.</p>
+    </div>
+
+    <!-- Card Principal -->
+    <div class="card shadow-lg fullwidth-card p-3 p-md-4">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0">
+                <i class="bi bi-person-lines-fill me-2"></i>
+                Informações do Aluno
+            </h5>
+        </div>
+
+        <div class="card-body p-4">
+            <form method="POST" enctype="multipart/form-data" id="formAluno">
+                <input type="hidden" name="next" value="{{ back_url }}">
+
+                <!-- ===================================================== -->
+                <!-- 🟦 1 — Dados do Atleta                                 -->
+                <!-- ===================================================== -->
+                <h6 class="border-bottom pb-2 mb-3 text-secondary fw-bold">
+                    <i class="bi bi-person-badge-fill me-1"></i> Dados do Atleta
+                </h6>
+
+                <div class="row">
+                    <div class="col-md-12 mb-3">
+                        <label class="form-label fw-semibold">Nome completo *</label>
+                        <input type="text" class="form-control" name="nome" required
+                               placeholder="Nome completo"
+                               value="{{ form_data.get('nome', aluno.nome if aluno else '') }}">
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label fw-semibold">Sexo</label>
+                        <select class="form-control" name="sexo">
+                            <option value="" {% if not sexo_val %}selected{% endif %}>Selecione</option>
+                            <option value="M" {% if sexo_val == 'M' %}selected{% endif %}>Masculino</option>
+                            <option value="F" {% if sexo_val == 'F' %}selected{% endif %}>Feminino</option>
+                            <option value="O" {% if sexo_val == 'O' %}selected{% endif %}>Outro</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- ===================================================== -->
+                <!-- 🟦 2 — Vínculos (Academia / Associação)                -->
+                <!-- ===================================================== -->
+                <h6 class="border-bottom pb-2 mb-3 mt-4 text-secondary fw-bold">
+                    <i class="bi bi-diagram-3 me-1"></i> Vínculos
+                </h6>
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-semibold">Academia *</label>
+                        {% if current_user.has_role('admin') %}
+                        <select class="form-control" name="id_academia" id="id_academia" required>
+                            <option value="" disabled {% if not id_academia_sel %}selected{% endif %}>Selecione a academia</option>
+                            {% for ac in academias %}
+                            <option value="{{ ac.id }}"
+                                    data-associacao="{{ ac.associacao_nome or '' }}"
+                                    {% if id_academia_sel and id_academia_sel|int == ac.id %}selected{% elif not id_academia_sel and ac.id == current_user.id_academia %}selected{% endif %}>
+                                {{ ac.academia_nome }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        {% else %}
+                        {% set ac_atual = (academias|first) %}
+                        <input type="text" class="form-control" value="{{ ac_atual.academia_nome if ac_atual else '' }}" readonly>
+                        <input type="hidden" name="id_academia" value="{{ id_academia_sel if id_academia_sel else current_user.id_academia }}">
+                        {% endif %}
+                    </div>
+
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-semibold">Associação</label>
+                        <input type="text" class="form-control" name="associacao_nome"
+                               id="associacao_nome" placeholder="Associação" readonly
+                               value="{{ form_data.get('associacao_nome', '') }}">
+                    </div>
+                </div>
+
+                <!-- ===================================================== -->
+                <!-- 🟦 3 — Filiação                                        -->
+                <!-- ===================================================== -->
+                <h6 class="border-bottom pb-2 mb-3 mt-4 text-secondary fw-bold">
+                    <i class="bi bi-people-fill me-1"></i> Filiação
+                </h6>
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-semibold">Nome do Pai</label>
+                        <input type="text" class="form-control" name="nome_pai"
+                               placeholder="Nome do pai"
+                               value="{{ form_data.get('nome_pai', aluno.nome_pai if aluno else '') }}">
+                    </div>
+
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-semibold">Nome da Mãe</label>
+                        <input type="text" class="form-control" name="nome_mae"
+                               placeholder="Nome da mãe"
+                               value="{{ form_data.get('nome_mae', aluno.nome_mae if aluno else '') }}">
+                    </div>
+                </div>
+
+                <!-- ===================================================== -->
+                <!-- 🟦 4 — Responsável / Parentesco                        -->
+                <!-- ===================================================== -->
+                <h6 class="border-bottom pb-2 mb-3 mt-4 text-secondary fw-bold">
+                    <i class="bi bi-person-check me-1"></i> Responsável / Parentesco
+                </h6>
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-semibold">Grau de Parentesco</label>
+                        <select class="form-control" name="responsavel_grau_parentesco" id="responsavel_grau_parentesco">
+                            <option value="" {% if not parentesco_sel %}selected{% endif %}>Selecione</option>
+                            <option value="Pai" {% if parentesco_sel == 'Pai' %}selected{% endif %}>Pai</option>
+                            <option value="Mãe" {% if parentesco_sel == 'Mãe' %}selected{% endif %}>Mãe</option>
+                            <option value="Outro" {% if parentesco_sel == 'Outro' %}selected{% endif %}>Outro</option>
+                        </select>
+                    </div>
+
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-semibold">Responsável (menor)</label>
+                        <input type="text" class="form-control" name="responsavel_nome" id="responsavel_nome"
+                               placeholder="Nome do responsável"
+                               value="{{ form_data.get('responsavel_nome', aluno.responsavel_nome if aluno else '') }}" readonly>
+                    </div>
+                </div>
+
+                <div class="row" id="responsavel_tipo_wrapper" style="display: none;">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-semibold">Tipo</label>
+                        <input type="text" class="form-control" name="responsavel_parentesco" id="responsavel_parentesco"
+                               placeholder="Ex: Tio, Avó, Avô..."
+                               value="{{ form_data.get('responsavel_parentesco', '') }}">
+                    </div>
+                </div>
+
+                <!-- ===================================================== -->
+                <!-- 🟦 5 — Registro Esportivo                              -->
+                <!-- ===================================================== -->
+                <h6 class="border-bottom pb-2 mb-3 mt-4 text-secondary fw-bold">
+                    <i class="bi bi-award-fill me-1"></i> Registro Esportivo
+                </h6>
+
+                <div class="form-check mb-3">
+                    <input class="form-check-input" type="checkbox" id="cadastro_zempo" name="cadastro_zempo" value="1"
+                           {% if form_data.get('cadastro_zempo') == '1' %}checked{% endif %}>
+                    <label class="form-check-label fw-semibold" for="cadastro_zempo">
+                        Cadastro no Zempo
+                    </label>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label fw-semibold">Registro Zempo nº</label>
+                        <input type="text" class="form-control" name="zempo" id="zempo"
+                               placeholder="Número do registro Zempo"
+                               value="{{ form_data.get('zempo', aluno.zempo if aluno else '') }}" disabled>
+                    </div>
+
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label fw-semibold">Data de Cadastro Zempo</label>
+                        <input type="date" class="form-control" name="data_cadastro_zempo" id="data_cadastro_zempo"
+                               placeholder="Data de cadastro"
+                               value="{{ form_data.get('data_cadastro_zempo', aluno.data_cadastro_zempo if aluno else '') }}" disabled>
+                    </div>
+
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label fw-semibold">Faixa / Grau *</label>
+                        <select class="form-control" name="graduacao_id" required>
+                            <option value="" disabled {% if not graduacao_sel %}selected{% endif %}>Selecione</option>
+                            {% for g in graduacoes %}
+                            <option value="{{ g.id }}"
+                                {% if graduacao_sel and graduacao_sel|int == g.id %}selected{% elif aluno and aluno.graduacao_id == g.id %}selected{% endif %}>
+                                {{ g.faixa }} - {{ g.graduacao }} - {{ g.categoria }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label fw-semibold">Peso</label>
+                        <input type="number" step="0.1" class="form-control" name="peso"
+                               placeholder="Peso (kg)"
+                               value="{{ form_data.get('peso', aluno.peso if aluno else '') }}">
+                    </div>
+                </div>
+
+                <!-- ===================================================== -->
+                <!-- 🟦 6 — Identificação                                   -->
+                <!-- ===================================================== -->
+                <h6 class="border-bottom pb-2 mb-3 mt-4 text-secondary fw-bold">
+                    <i class="bi bi-file-earmark-text-fill me-1"></i> Identificação
+                </h6>
+
+                <div class="row">
+
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label fw-semibold">Data da Última Graduação</label>
+                        <input type="date" class="form-control" name="ultimo_exame_faixa"
+                               placeholder="Data da última graduação"
+                               value="{{ form_data.get('ultimo_exame_faixa', aluno.ultimo_exame_faixa if aluno else '') }}">
+                    </div>
+
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label fw-semibold">Data de nascimento *</label>
+                        <input type="date" class="form-control" name="data_nascimento" required
+                               placeholder="Selecione a data"
+                               value="{{ form_data.get('data_nascimento', aluno.data_nascimento if aluno else '') }}">
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label fw-semibold">Nacionalidade</label>
+                        <input type="text" class="form-control" name="nacionalidade"
+                               placeholder="Nacionalidade"
+                               value="{{ form_data.get('nacionalidade', aluno.nacionalidade if aluno else '') }}">
+                    </div>
+
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label fw-semibold">CPF</label>
+                        <input type="text" class="form-control" name="cpf" data-mask="cpf"
+                               placeholder="CPF"
+                               value="{{ form_data.get('cpf', aluno.cpf if aluno else '') }}">
+                    </div>
+
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label fw-semibold">RG</label>
+                        <input type="text" class="form-control" name="rg"
+                               placeholder="RG"
+                               value="{{ form_data.get('rg', aluno.rg if aluno else '') }}">
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label fw-semibold">Órgão Emissor / UF</label>
+                        <input type="text" class="form-control" name="orgao_emissor"
+                               placeholder="Ex: SDS/PE"
+                               value="{{ form_data.get('orgao_emissor', aluno.orgao_emissor if aluno else '') }}">
+                    </div>
+
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label fw-semibold">Data de Emissão</label>
+                        <input type="date" class="form-control" name="rg_data_emissao"
+                               placeholder="Data de emissão"
+                               value="{{ form_data.get('rg_data_emissao', aluno.rg_data_emissao if aluno else '') }}">
+                    </div>
+                </div>
+
+                <!-- ===================================================== -->
+                <!-- 🟦 7 — Endereço                                        -->
+                <!-- ===================================================== -->
+                <h6 class="border-bottom pb-2 mb-3 mt-4 text-secondary fw-bold">
+                    <i class="bi bi-geo-alt-fill me-1"></i> Endereço
+                </h6>
+
+                <div class="row">
+                    <div class="col-md-3 mb-3">
+                        <label class="form-label fw-semibold">CEP</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control" name="cep" id="cep" data-mask="cep"
+                                   placeholder="00000-000"
+                                   value="{{ form_data.get('cep', aluno.cep if aluno else '') }}">
+                            <button type="button" class="btn btn-outline-primary" id="btnBuscarCEP">
+                                <i class="bi bi-search"></i>
+                            </button>
+                        </div>
+                        <small class="text-muted">Digite e clique em buscar para preencher o endereço.</small>
+                    </div>
+
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-semibold">Rua / Logradouro</label>
+                        <input type="text" class="form-control" name="endereco"
+                               placeholder="Endereço completo"
+                               id="endereco"
+                               value="{{ form_data.get('endereco', aluno.endereco if aluno else '') }}">
+                    </div>
+
+                    <div class="col-md-3 mb-3">
+                        <label class="form-label fw-semibold">Nº</label>
+                        <input type="text" class="form-control" name="numero"
+                               placeholder="Número"
+                               value="{{ form_data.get('numero', aluno.numero if aluno else '') }}">
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label fw-semibold">Bairro</label>
+                        <input type="text" class="form-control" name="bairro" id="bairro"
+                               placeholder="Bairro"
+                               value="{{ form_data.get('bairro', aluno.bairro if aluno else '') }}">
+                    </div>
+
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label fw-semibold">Cidade</label>
+                        <input type="text" class="form-control" name="cidade" id="cidade"
+                               placeholder="Cidade"
+                               value="{{ form_data.get('cidade', aluno.cidade if aluno else '') }}">
+                    </div>
+
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label fw-semibold">Estado</label>
+                        <input type="text" class="form-control" name="estado" id="estado"
+                               placeholder="UF"
+                               value="{{ form_data.get('estado', aluno.estado if aluno else '') }}">
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-12 mb-3">
+                        <label class="form-label fw-semibold">Complemento</label>
+                        <input type="text" class="form-control" name="complemento"
+                               placeholder="Complemento"
+                               value="{{ form_data.get('complemento', aluno.complemento if aluno else '') }}">
+                    </div>
+                </div>
+
+                <!-- ===================================================== -->
+                <!-- 🟦 8 — Contato                                         -->
+                <!-- ===================================================== -->
+                <h6 class="border-bottom pb-2 mb-3 mt-4 text-secondary fw-bold">
+                    <i class="bi bi-telephone-fill me-1"></i> Contato
+                </h6>
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-semibold">E-mail *</label>
+                        <input type="email" class="form-control" name="email" required
+                               placeholder="email@exemplo.com"
+                               value="{{ form_data.get('email', aluno.email if aluno else '') }}">
+                    </div>
+
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-semibold">Telefone Celular *</label>
+                        <input type="tel" class="form-control" name="telefone_celular"
+                               data-mask="phone"
+                               placeholder="(00) 00000-0000"
+                               value="{{ form_data.get('telefone_celular', aluno.telefone_celular if aluno and aluno.telefone_celular else aluno.telefone if aluno and aluno.telefone else '') }}">
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label fw-semibold">Telefone Residencial</label>
+                        <input type="tel" class="form-control" name="telefone_residencial" data-mask="phone"
+                               placeholder="(00) 0000-0000"
+                               value="{{ form_data.get('telefone_residencial', aluno.telefone_residencial if aluno else '') }}">
+                    </div>
+
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label fw-semibold">Telefone Comercial</label>
+                        <input type="tel" class="form-control" name="telefone_comercial" data-mask="phone"
+                               placeholder="(00) 0000-0000"
+                               value="{{ form_data.get('telefone_comercial', aluno.telefone_comercial if aluno else '') }}">
+                    </div>
+
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label fw-semibold">Outro Telefone</label>
+                        <input type="tel" class="form-control" name="telefone_outro" data-mask="phone"
+                               placeholder="(00) 0000-0000"
+                               value="{{ form_data.get('telefone_outro', aluno.telefone_outro if aluno else '') }}">
+                    </div>
+                </div>
+
+                <!-- ===================================================== -->
+                <!-- 🟦 Turma e Modalidades                                 -->
+                <!-- ===================================================== -->
+                <h6 class="border-bottom pb-2 mb-3 mt-4 text-secondary fw-bold">
+                    <i class="bi bi-people-fill me-1"></i> Turma e Modalidades
+                </h6>
+
+                <div class="row">
+                    <div class="col-md-8 mb-3">
+                        <label class="form-label fw-semibold">Turma *</label>
+                        <select class="form-control" name="TurmaID" required>
+                            <option value="">Selecione a turma</option>
+                            {% for t in turmas %}
+                            <option value="{{ t.TurmaID }}"
+                                {% if turma_sel and turma_sel|int == t.TurmaID %}selected{% elif aluno and aluno.TurmaID == t.TurmaID %}selected{% endif %}>
+                                {{ t.Nome }} ({{ t.Classificacao }}, {{ t.DiasHorario }})
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Modalidades *</label>
+                    <div class="d-flex flex-wrap gap-3 bg-light p-3 border rounded">
+                        {% for m in modalidades %}
+                        <div>
+                            <input type="checkbox" class="form-check-input"
+                                   name="aluno_modalidade_ids"
+                                   value="{{ m.id }}"
+                                   {% if (m.id|string) in modalidades_sel %}checked{% elif aluno and m.id in (aluno.modalidades_ids or []) %}checked{% endif %}>
+                            <label class="form-check-label">{{ m.nome }}</label>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="mb-4">
+                    <label class="form-label fw-semibold">Observações</label>
+                    <textarea class="form-control" name="observacoes" rows="3" placeholder="Observações adicionais">{{ form_data.get('observacoes', aluno.observacoes if aluno else '') }}</textarea>
+                </div>
+
+                <!-- ===================================================== -->
+                <!-- 🟦 8 — Responsável Financeiro                          -->
+                <!-- ===================================================== -->
+                <h6 class="border-bottom pb-2 mb-3 mt-4 text-secondary fw-bold">
+                    <i class="bi bi-cash-coin me-1"></i> Responsável Financeiro
+                </h6>
+
+                <div class="row align-items-end">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-semibold">Nome do Responsável Financeiro</label>
+                        <input type="text" class="form-control" name="responsavel_financeiro_nome"
+                               id="responsavel_financeiro_nome"
+                               placeholder="Nome do responsável financeiro"
+                               value="{{ form_data.get('responsavel_financeiro_nome', aluno.responsavel_financeiro_nome if aluno else '') }}">
+                    </div>
+
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label fw-semibold">CPF do Responsável Financeiro</label>
+                        <input type="text" class="form-control" name="responsavel_financeiro_cpf"
+                               id="responsavel_financeiro_cpf" data-mask="cpf"
+                               placeholder="CPF do responsável financeiro"
+                               value="{{ form_data.get('responsavel_financeiro_cpf', aluno.responsavel_financeiro_cpf if aluno else '') }}">
+                    </div>
+
+                    <div class="col-md-2 mb-3 d-grid">
+                        <button type="button" class="btn btn-outline-primary mt-md-4"
+                                id="btnMesmoResponsavelFinanceiro">
+                            <i class="bi bi-person-check"></i>
+                            <span class="d-block d-md-none">Usar aluno</span>
+                            <span class="d-none d-md-inline">Próprio aluno</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- ===================================================== -->
+                <!-- 🟦 9 — Foto                                             -->
+                <!-- ===================================================== -->
+                <h6 class="border-bottom pb-2 mb-3 mt-4 text-secondary fw-bold">
+                    <i class="bi bi-camera-fill me-1"></i> Foto do Aluno
+                </h6>
+
+                <div class="d-flex flex-column flex-md-row align-items-start gap-4">
+
+                    <!-- Miniatura -->
+                    <div class="text-center mb-3 mb-md-0">
+                        <label class="form-label fw-semibold">Foto atual</label><br>
+                        <img id="miniatura"
+                             src="{{ aluno.foto if aluno and aluno.foto else '' }}"
+                             class="{{ 'd-block' if aluno and aluno.foto else 'd-none' }}">
+                        <input type="hidden" id="fotoInput" name="foto">
+                    </div>
+
+                    <!-- Botões -->
+                    <div class="flex-grow-1">
+                        <label class="form-label fw-semibold">Opções de foto</label>
+                        <div class="d-flex flex-column flex-md-row gap-2">
+                            <button type="button"
+                                    class="btn btn-primary btn-sm d-flex align-items-center gap-2"
+                                    id="btnAbrirCamera">
+                                <i class="bi bi-camera-fill"></i>
+                                Câmera
+                            </button>
+
+                            <input type="file" name="foto_arquivo" class="form-control" accept="image/*">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ===================================================== -->
+                <!-- 🟦 Botões finais                                       -->
+                <!-- ===================================================== -->
+                <div class="d-flex justify-content-between mt-4 pt-3 border-top">
+                    <a href="{{ back_url }}" class="btn btn-outline-secondary btn-lg">
+                        <i class="bi bi-arrow-left-circle me-2"></i> Voltar
+                    </a>
+
+                    <button type="submit" class="btn btn-success btn-lg">
+                        <i class="bi bi-save2-fill me-2"></i>
+                        {{ 'Atualizar Aluno' if aluno else 'Salvar Aluno' }}
+                    </button>
+                </div>
+
+            </form>
+        </div>
+    </div>
+</div>
+
+
+<!-- ===================================================== -->
+<!-- 🟦 MODAL DA CÂMERA                                    -->
+<!-- ===================================================== -->
+<div class="camera-modal" id="cameraModal">
+    <div class="camera-content">
+
+        <video id="cameraVideo" autoplay playsinline></video>
+        <canvas id="cameraCanvas" style="display:none;"></canvas>
+
+        <div class="camera-buttons">
+            <button class="btn btn-success" id="btnCapturar">
+                <i class="bi bi-camera"></i> Capturar
+            </button>
+
+            <button class="btn btn-primary" id="btnConfirmarFoto" style="display:none;">
+                <i class="bi bi-check"></i> Confirmar
+            </button>
+
+            <button class="btn btn-warning" id="btnTirarNovamente" style="display:none;">
+                <i class="bi bi-arrow-clockwise"></i> Refazer
+            </button>
+
+            <button class="btn btn-info text-white" id="btnTrocarCameraModal" style="display:none;">
+                <i class="bi bi-arrow-repeat"></i> Trocar
+            </button>
+
+            <button class="btn btn-danger" id="btnFecharModal">
+                <i class="bi bi-x"></i> Fechar
+            </button>
+        </div>
+    </div>
+</div>
+
+
+<!-- ===================================================== -->
+<!-- 🟦 JS da câmera, CEP e máscaras                       -->
+<!-- ===================================================== -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.4/jquery.min.js"></script>
+
+<script>
+    let stream, devices = [], currentIndex = 0;
+
+    async function listarCameras() {
+        const medias = await navigator.mediaDevices.enumerateDevices();
+        devices = medias.filter(d => d.kind === "videoinput");
+        $('#btnTrocarCameraModal').toggle(devices.length > 1);
+    }
+
+    async function abrirCameraModal(deviceId = null) {
+        if (stream) stream.getTracks().forEach(t => t.stop());
+
+        let constraints = { video: true };
+
+        if (deviceId) {
+            constraints.video = { deviceId: { exact: deviceId } };
+        }
+
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+        document.getElementById("cameraVideo").srcObject = stream;
+
+        $('#cameraModal').fadeIn();
+    }
+
+    $("#btnAbrirCamera").click(async function () {
+        try {
+            await listarCameras();
+            await abrirCameraModal(devices[0]?.deviceId);
+        } catch (e) {
+            alert("Não foi possível acessar a câmera: " + e.message);
+        }
+    });
+
+    $("#btnTrocarCameraModal").click(async function () {
+        currentIndex = (currentIndex + 1) % devices.length;
+        await abrirCameraModal(devices[currentIndex].deviceId);
+    });
+
+    $("#btnFecharModal").click(function () {
+        $("#cameraModal").fadeOut();
+        if (stream) stream.getTracks().forEach(t => t.stop());
+    });
+
+    $("#btnCapturar").click(function () {
+        let video = document.getElementById("cameraVideo");
+        let canvas = document.getElementById("cameraCanvas");
+
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+
+        canvas.getContext("2d").drawImage(video, 0, 0);
+
+        $("#cameraCanvas").show();
+        $("#cameraVideo").hide();
+        $("#btnConfirmarFoto, #btnTirarNovamente").show();
+        $("#btnCapturar, #btnTrocarCameraModal").hide();
+    });
+
+    $("#btnTirarNovamente").click(function () {
+        $("#cameraCanvas").hide();
+        $("#cameraVideo").show();
+        $("#btnConfirmarFoto, #btnTirarNovamente").hide();
+        $("#btnCapturar").show();
+        $("#btnTrocarCameraModal").toggle(devices.length > 1);
+    });
+
+    $("#btnConfirmarFoto").click(function () {
+        const dataURL = document.getElementById("cameraCanvas").toDataURL("image/png");
+        $("#fotoInput").val(dataURL);
+        $("#miniatura").attr("src", dataURL).removeClass("d-none");
+        $("#cameraModal").fadeOut();
+        if (stream) stream.getTracks().forEach(t => t.stop());
+    });
+
+    /* ---------------------------- */
+    /* 🟦 Máscara telefone e CPF    */
+    /* ---------------------------- */
+    function aplicarMascaraTelefone(input) {
+        let v = input.value.replace(/\D/g, '');
+        if (v.length > 11) v = v.slice(0, 11);
+
+        if (v.length > 10) {
+            input.value = `(${v.slice(0, 2)}) ${v.slice(2, 7)}-${v.slice(7, 11)}`;
+        } else if (v.length > 6) {
+            input.value = `(${v.slice(0, 2)}) ${v.slice(2, 6)}-${v.slice(6, 10)}`;
+        } else if (v.length > 2) {
+            input.value = `(${v.slice(0, 2)}) ${v.slice(2)}`;
+        } else if (v.length > 0) {
+            input.value = `(${v}`;
+        } else {
+            input.value = v;
+        }
+    }
+
+    document.querySelectorAll('input[data-mask="phone"]').forEach(function (el) {
+        el.addEventListener('input', function () {
+            aplicarMascaraTelefone(this);
+        });
+    });
+
+    function aplicarMascaraCPF(input) {
+        let v = input.value.replace(/\D/g, '');
+        if (v.length > 11) v = v.slice(0, 11);
+
+        if (v.length > 9) {
+            input.value = `${v.slice(0, 3)}.${v.slice(3, 6)}.${v.slice(6, 9)}-${v.slice(9, 11)}`;
+        } else if (v.length > 6) {
+            input.value = `${v.slice(0, 3)}.${v.slice(3, 6)}.${v.slice(6, 9)}`;
+        } else if (v.length > 3) {
+            input.value = `${v.slice(0, 3)}.${v.slice(3, 6)}`;
+        } else {
+            input.value = v;
+        }
+    }
+
+    document.querySelectorAll('input[data-mask="cpf"]').forEach(function (el) {
+        el.addEventListener('input', function () {
+            aplicarMascaraCPF(this);
+        });
+    });
+
+    function aplicarMascaraCEP(input) {
+        let v = input.value.replace(/\D/g, '');
+        if (v.length > 8) v = v.slice(0, 8);
+        if (v.length > 5) {
+            input.value = `${v.slice(0, 5)}-${v.slice(5, 8)}`;
+        } else {
+            input.value = v;
+        }
+    }
+
+    const cepInput = document.querySelector('input[name="cep"]');
+    if (cepInput) {
+        cepInput.addEventListener('input', function () {
+            aplicarMascaraCEP(this);
+        });
+    }
+
+    /* ---------------------------- */
+    /* 🟦 Consulta CEP (ViaCEP)     */
+    /* ---------------------------- */
+    async function buscarCEP() {
+        const cepCampo = document.getElementById('cep');
+        if (!cepCampo) return;
+
+        let cep = cepCampo.value.replace(/\D/g, '');
+        if (cep.length !== 8) {
+            alert('CEP inválido. Use 8 dígitos.');
+            return;
+        }
+
+        try {
+            const resp = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+            const dados = await resp.json();
+
+            if (dados.erro) {
+                alert('CEP não encontrado.');
+                return;
+            }
+
+            document.getElementById('endereco').value = dados.logradouro || '';
+            document.getElementById('bairro').value = dados.bairro || '';
+            document.getElementById('cidade').value = dados.localidade || '';
+            document.getElementById('estado').value = dados.uf || '';
+
+        } catch (e) {
+            alert('Erro ao consultar CEP: ' + e.message);
+        }
+    }
+
+    $('#btnBuscarCEP').on('click', buscarCEP);
+    if (cepInput) {
+        cepInput.addEventListener('blur', function () {
+            if (this.value.replace(/\D/g, '').length === 8) {
+                buscarCEP();
+            }
+        });
+    }
+
+    /* ---------------------------- */
+    /* 🟦 Botão "Próprio aluno"     */
+    /* ---------------------------- */
+    $('#btnMesmoResponsavelFinanceiro').on('click', function () {
+        const nomeAluno = $('input[name="nome"]').val();
+        const cpfAluno = $('input[name="cpf"]').val();
+
+        if (!nomeAluno) {
+            alert('Preencha o nome do aluno antes.');
+            return;
+        }
+
+        $('#responsavel_financeiro_nome').val(nomeAluno);
+        $('#responsavel_financeiro_cpf').val(cpfAluno).trigger('input');
+    });
+
+    function preencherAssociacao() {
+        const select = document.getElementById('id_academia');
+        const assocInput = document.getElementById('associacao_nome');
+        if (!select || !assocInput) return;
+        const option = select.options[select.selectedIndex];
+        assocInput.value = option ? (option.getAttribute('data-associacao') || '') : '';
+    }
+
+    document.getElementById('id_academia')?.addEventListener('change', preencherAssociacao);
+    preencherAssociacao();
+
+    function atualizarCamposZempo() {
+        const marcado = document.getElementById('cadastro_zempo')?.checked;
+        const zempo = document.getElementById('zempo');
+        const dataZempo = document.getElementById('data_cadastro_zempo');
+        if (!zempo || !dataZempo) return;
+        zempo.disabled = !marcado;
+        dataZempo.disabled = !marcado;
+        if (!marcado) {
+            zempo.value = '';
+            dataZempo.value = '';
+        }
+    }
+
+    document.getElementById('cadastro_zempo')?.addEventListener('change', atualizarCamposZempo);
+    atualizarCamposZempo();
+
+    function atualizarResponsavel() {
+        const parentesco = document.getElementById('responsavel_grau_parentesco');
+        const responsavelNome = document.getElementById('responsavel_nome');
+        const tipoWrapper = document.getElementById('responsavel_tipo_wrapper');
+        const tipoInput = document.getElementById('responsavel_parentesco');
+        const nomePai = document.querySelector('input[name="nome_pai"]')?.value || '';
+        const nomeMae = document.querySelector('input[name="nome_mae"]')?.value || '';
+
+        if (!parentesco || !responsavelNome || !tipoWrapper || !tipoInput) return;
+
+        if (parentesco.value === 'Pai') {
+            responsavelNome.value = nomePai;
+            responsavelNome.readOnly = true;
+            tipoWrapper.style.display = 'none';
+            tipoInput.value = '';
+        } else if (parentesco.value === 'Mãe') {
+            responsavelNome.value = nomeMae;
+            responsavelNome.readOnly = true;
+            tipoWrapper.style.display = 'none';
+            tipoInput.value = '';
+        } else if (parentesco.value === 'Outro') {
+            if (responsavelNome.value === nomePai || responsavelNome.value === nomeMae) {
+                responsavelNome.value = '';
+            }
+            responsavelNome.readOnly = false;
+            tipoWrapper.style.display = 'block';
+        } else {
+            responsavelNome.value = '';
+            responsavelNome.readOnly = true;
+            tipoWrapper.style.display = 'none';
+            tipoInput.value = '';
+        }
+    }
+
+    document.getElementById('responsavel_grau_parentesco')?.addEventListener('change', atualizarResponsavel);
+    document.querySelector('input[name="nome_pai"]')?.addEventListener('input', atualizarResponsavel);
+    document.querySelector('input[name="nome_mae"]')?.addEventListener('input', atualizarResponsavel);
+    atualizarResponsavel();
+
+    /* ---------------------------- */
+    /* 🟦 Validação menor + CPF     */
+    /* ---------------------------- */
+    function validarCPF(cpf) {
+        cpf = (cpf || '').replace(/\D/g, '');
+        if (cpf.length !== 11 || /^(\d)\1+$/.test(cpf)) return false;
+
+        let soma = 0;
+        for (let i = 0; i < 9; i++) soma += parseInt(cpf.charAt(i)) * (10 - i);
+        let dig1 = (soma % 11) < 2 ? 0 : 11 - (soma % 11);
+        if (dig1 !== parseInt(cpf.charAt(9))) return false;
+
+        soma = 0;
+        for (let i = 0; i < 10; i++) soma += parseInt(cpf.charAt(i)) * (11 - i);
+        let dig2 = (soma % 11) < 2 ? 0 : 11 - (soma % 11);
+        return dig2 === parseInt(cpf.charAt(10));
+    }
+
+    function calcularIdade(data) {
+        if (!data) return null;
+        const partes = data.split('-');
+        if (partes.length !== 3) return null;
+        const nasc = new Date(parseInt(partes[0]), parseInt(partes[1]) - 1, parseInt(partes[2]));
+        const hoje = new Date();
+        let idade = hoje.getFullYear() - nasc.getFullYear();
+        const m = hoje.getMonth() - nasc.getMonth();
+        if (m < 0 || (m === 0 && hoje.getDate() < nasc.getDate())) idade--;
+        return idade;
+    }
+
+    $('#formAluno').on('submit', function (e) {
+        const dataNasc = $('input[name="data_nascimento"]').val();
+        const idade = calcularIdade(dataNasc);
+        const cpfAluno = $('input[name="cpf"]').val();
+        const cpfResp = $('#responsavel_financeiro_cpf').val();
+
+        if (!validarCPF(cpfAluno) && !validarCPF(cpfResp)) {
+            e.preventDefault();
+            alert('Informe CPF válido do aluno ou do responsável financeiro.');
+            $('input[name="cpf"]').focus();
+            return false;
+        }
+
+        if (idade !== null && idade < 18) {
+            if (!validarCPF(cpfResp)) {
+                e.preventDefault();
+                alert('Aluno menor: informe CPF válido do responsável financeiro.');
+                $('#responsavel_financeiro_cpf').focus();
+                return false;
+            }
+        }
+    });
+</script>
+
+{% endblock %}

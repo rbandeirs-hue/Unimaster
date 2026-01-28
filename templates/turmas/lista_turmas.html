@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+{% block title %}Lista de Turmas{% endblock %}
+
+{% block content %}
+
+<style>
+    /* Estilos customizados para a Lista de Turmas */
+    .container {
+        max-width: 1000px;
+    }
+
+    .display-6 {
+        font-size: 1.8rem;
+    }
+
+    /* Estilo para a célula de ações */
+    .table-responsive .btn-outline-info {
+        transition: all 0.2s;
+    }
+
+    .table-responsive .btn-outline-info:hover {
+        background-color: #0dcaf0;
+        color: white;
+        border-color: #0dcaf0;
+    }
+
+    /* Estilo para o campo de busca */
+    .card.shadow-sm input.form-control-lg {
+        border-radius: 0.5rem;
+    }
+
+    /* Responsividade para Títulos e Botões */
+    @media (max-width: 767.98px) {
+        .display-6 {
+            font-size: 1.5rem;
+        }
+
+        /* Empilha o título e o botão Nova Turma no mobile */
+        .d-flex.justify-content-between.align-items-center.mb-4 {
+            flex-direction: column;
+            align-items: flex-start !important;
+        }
+
+        .d-flex.justify-content-between.align-items-center.mb-4 .btn-lg {
+            width: 100%;
+            margin-top: 1rem;
+        }
+
+        /* Faz os botões do filtro ocuparem a largura total no mobile */
+        .row.g-3 .col-md-4, .row.g-3 .col-md-8 {
+            width: 100% !important;
+        }
+    }
+
+    /* Melhoria da visualização da tabela no mobile (usando Cards virtuais) */
+    @media (max-width: 575.98px) {
+        .table-responsive {
+            border: none;
+        }
+
+        /* Esconde o cabeçalho da tabela no mobile */
+        .table thead {
+            display: none;
+        }
+
+        .table, .table tbody, .table tr, .table td {
+            display: block;
+            width: 100%;
+            border: none;
+        }
+
+        .table tr {
+            margin-bottom: 1rem;
+            border-bottom: 2px solid #dee2e6;
+            background-color: #fff;
+            border-radius: 0.5rem;
+            box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+        }
+
+        .table td {
+            text-align: left !important;
+            padding: 0.75rem 1rem;
+            position: relative;
+            padding-left: 50%; /* Espaço para o label */
+        }
+
+        /* Cria o label antes do conteúdo da célula */
+        .table td::before {
+            content: attr(data-label);
+            position: absolute;
+            left: 1rem;
+            width: 45%;
+            padding-right: 10px;
+            white-space: nowrap;
+            font-weight: 700;
+            color: #495057;
+        }
+
+        /* Mapeamento de Labels para as Colunas */
+        .table td:nth-of-type(1)::before { content: "ID"; }
+        .table td:nth-of-type(2)::before { content: "Nome da Turma"; }
+        .table td:nth-of-type(3)::before { content: "Dias e Horário"; }
+        .table td:nth-of-type(4)::before { content: "Professor"; }
+        .table td:nth-of-type(5)::before { content: "Faixa Etária"; }
+        .table td:nth-of-type(6)::before { content: "Capacidade"; }
+        .table td:nth-of-type(7)::before { content: "Ações"; }
+        
+        .table td:nth-of-type(7) {
+            text-align: center !important; /* Centraliza o botão de ações */
+        }
+    }
+
+</style>
+
+<div class="container my-4">
+    <!-- Botão de Voltar para o Dashboard -->
+    <a href="{{ url_for('painel.home') }}" class="btn btn-outline-secondary mb-4 shadow-sm">
+        <i class="bi bi-arrow-left-circle me-2"></i> Voltar
+    </a>
+    
+    <!-- Título e Introdução -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="display-6 fw-bold text-primary">Turmas Cadastradas</h2>
+            <p class="lead text-muted">Gerencie e visualize todas as turmas ativas.</p>
+        </div>
+        <!-- Botão para Nova Turma (Mantido no topo e estilizado) -->
+        <a href="{{ url_for('turmas.cadastro_turma', next=request.full_path) }}" class="btn btn-success btn-lg shadow-lg">
+            <i class="bi bi-plus-circle-fill me-2"></i> Nova Turma
+        </a>
+    </div>
+
+    <!-- Filtro de Busca -->
+    <div class="card shadow-sm mb-4 p-3 border-0">
+        <form method="GET" action="{{ url_for('turmas.lista_turmas') }}" class="row g-3 align-items-center">
+            <div class="col-md-8 col-lg-10">
+                <input type="text" name="busca" class="form-control form-control-lg"
+                    placeholder="Buscar turma pelo nome, professor ou horário..." 
+                    value="{{ busca if busca is not none }}">
+            </div>
+            <div class="col-md-4 col-lg-2">
+                <button type="submit" class="btn btn-primary w-100 btn-lg shadow-sm">
+                    <i class="bi bi-search me-1"></i> Buscar
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Tabela de Turmas (Responsiva) -->
+    <div class="card shadow-lg border-0">
+        <div class="card-body p-0">
+            {% if turmas %}
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-primary text-white">
+                        <tr>
+                            <th scope="col" class="text-center">ID</th>
+                            <th scope="col">Nome</th>
+                            <th scope="col">Dias/Horário</th>
+                            <th scope="col">Professor</th>
+                            <th scope="col" class="text-center">Idades</th>
+                            <th scope="col" class="text-center">Capacidade</th>
+                            <th scope="col" class="text-center">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for turma in turmas %}
+                        <tr class="align-middle">
+                            <!-- Adicionando data-label para responsividade mobile -->
+                            <td class="text-center" data-label="ID">{{ turma.TurmaID }}</td>
+                            <td class="fw-semibold" data-label="Nome da Turma">{{ turma.Nome }}</td>
+                            <td data-label="Dias e Horário">{{ turma.DiasHorario }}</td>
+                            <td data-label="Professor">{{ turma.Professor }}</td>
+                            <td class="text-center" data-label="Faixa Etária">
+                                <span class="badge bg-secondary">{{ turma.IdadeMin }} - {{ turma.IdadeMax }}</span>
+                            </td>
+                            <td class="text-center" data-label="Capacidade">
+                                <span class="badge bg-info text-dark">{{ turma.Capacidade }}</span>
+                            </td>
+                            <td class="text-center" data-label="Ações">
+                                <a href="{{ url_for('turmas.editar_turma', turma_id=turma.TurmaID, next=request.full_path) }}"
+                                    class="btn btn-sm btn-outline-info shadow-sm" data-bs-toggle="tooltip" title="Editar Turma">
+                                    <i class="bi bi-pencil-fill"></i> Editar
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <!-- Mensagem se não houver turmas ou a busca for vazia -->
+            <div class="p-5 text-center bg-light rounded-3">
+                <i class="bi bi-journal-x text-warning display-4 mb-3"></i>
+                <p class="lead">Nenhuma turma encontrada.</p>
+                {% if busca %}
+                <p class="text-muted">Tente um termo de busca diferente ou <a
+                        href="{{ url_for('turmas.lista_turmas') }}" class="text-decoration-none fw-semibold">limpe o filtro</a>.</p>
+                {% else %}
+                <p class="text-muted">Que tal <a href="{{ url_for('turmas.cadastro_turma', next=request.full_path) }}" class="text-decoration-none fw-semibold">cadastrar a primeira
+                        turma</a> agora?</p>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+    // Inicializa tooltips do Bootstrap (caso sejam usados)
+    document.addEventListener('DOMContentLoaded', function () {
+        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+        var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl)
+        })
+    });
+</script>
+{% endblock %}
+
+
+Eu unifiquei o código, adicionei um pouco de **CSS customizado** e implementei a técnica de **"tabela como cards"** para garantir que a lista de turmas seja perfeitamente **responsiva** no celular!
+
+Se precisar de qualquer outra página para otimizar ou unificar, é só me dizer!

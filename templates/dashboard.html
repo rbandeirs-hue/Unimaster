@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block title %}Painel de Alunos{% endblock %}
+{% block content %}
+<div class="container mt-5">
+    
+    <!-- Header com Título e Subtítulo -->
+    <div class="mb-5 text-center">
+        <h2 class="display-5 fw-bold text-primary">Gestão de Alunos</h2>
+        <p class="lead text-muted">Acesso rápido às funcionalidades principais do módulo de estudantes.</p>
+    </div>
+
+    <!-- Opções em formato de Cards de Ação -->
+    <div class="row g-4 justify-content-center">
+
+        <!-- 1. Cadastrar Aluno (Principal) -->
+        <div class="col-xl-3 col-lg-4 col-md-6 col-sm-6">
+            <a href="{{ url_for('alunos.cadastrar_aluno') }}" class="card-action-link">
+
+                <div class="card h-100 shadow-sm border-success custom-card-success">
+                    <div class="card-body text-center p-4">
+                        <i class="bi bi-person-plus-fill display-4 mb-3 text-success"></i>
+                        <h5 class="card-title fw-bold">Cadastrar Aluno</h5>
+                        <p class="card-text small text-muted">Adicione um novo estudante à base de dados da academia.</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <!-- 2. Lista de Alunos (Principal) -->
+        <div class="col-xl-3 col-lg-4 col-md-6 col-sm-6">
+            <a href="{{ url_for('alunos.lista_alunos') }}" class="card-action-link">
+                <div class="card h-100 shadow-sm border-primary custom-card-primary">
+                    <div class="card-body text-center p-4">
+                        <i class="bi bi-people-fill display-4 mb-3 text-primary"></i>
+                        <h5 class="card-title fw-bold">Lista de Alunos</h5>
+                        <p class="card-text small text-muted">Visualize e gerencie o registro completo de todos os alunos.</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+        
+        <!-- 3. Registro de Presença -->
+        <div class="col-xl-3 col-lg-4 col-md-6 col-sm-6">
+            <a href="{{ url_for('presencas.registro_presenca') }}" class="card-action-link">
+                <div class="card h-100 shadow-sm border-warning custom-card-warning">
+                    <div class="card-body text-center p-4">
+                        <i class="bi bi-check2-square display-4 mb-3 text-warning"></i>
+                        <h5 class="card-title fw-bold">Registro de Presença</h5>
+                        <p class="card-text small text-muted">Marque a presença dos alunos em tempo real nas turmas.</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <!-- 4. Ata de Presença -->
+        <div class="col-xl-3 col-lg-4 col-md-6 col-sm-6">
+            <a href="{{ url_for('presencas.ata_presenca') }}" class="card-action-link">
+                <div class="card h-100 shadow-sm border-info custom-card-info">
+                    <div class="card-body text-center p-4">
+                        <i class="bi bi-journal-text display-4 mb-3 text-info"></i>
+                        <h5 class="card-title fw-bold">Ata de Presença</h5>
+                        <p class="card-text small text-muted">Gere relatórios detalhados de presença por turma e período.</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <!-- 5. Histórico de Presença -->
+        <div class="col-xl-3 col-lg-4 col-md-6 col-sm-6">
+            <a href="{{ url_for('presencas.historico_presenca_lista') }}" class="card-action-link">
+                <div class="card h-100 shadow-sm border-dark custom-card-dark">
+                    <div class="card-body text-center p-4">
+                        <i class="bi bi-bar-chart-fill display-4 mb-3 text-dark"></i>
+                        <h5 class="card-title fw-bold">Histórico de Presença</h5>
+                        <p class="card-text small text-muted">Acompanhe estatísticas de frequência individual e geral.</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <!-- 6. Cadastro de Usuário (Acesso Restrito) -->
+        {% if perfil in ['Coordenador', 'admin'] %}
+        <div class="col-xl-3 col-lg-4 col-md-6 col-sm-6">
+            <a href="{{ url_for('criar_usuario') }}" class="card-action-link">
+                <div class="card h-100 shadow-sm border-secondary custom-card-secondary">
+                    <div class="card-body text-center p-4">
+                        <i class="bi bi-person-badge-fill display-4 mb-3 text-secondary"></i>
+                        <h5 class="card-title fw-bold">Cadastrar Usuário</h5>
+                        <p class="card-text small text-muted">Criação e gerenciamento de contas para novos colaboradores.</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+        {% endif %}
+        
+    </div>
+</div>
+
+<!-- Estilos Customizados para os Cards de Ação -->
+<style>
+    /* Remove a decoração de link dos cards */
+    .card-action-link {
+        text-decoration: none;
+        color: inherit;
+        display: block; /* Garante que o link ocupe todo o card */
+    }
+
+    /* Estilo base do card */
+    .card {
+        transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+        border-radius: 0.75rem; /* Bordas mais arredondadas */
+    }
+
+    /* Efeito de hover profissional */
+    .card:hover {
+        transform: translateY(-5px); /* Efeito "flutuante" */
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15) !important;
+    }
+    
+    /* Cores das fontes nos cards com fundo claro */
+    .custom-card-warning .card-title, 
+    .custom-card-warning .card-text,
+    .custom-card-info .card-title, 
+    .custom-card-info .card-text,
+    .custom-card-dark .card-title, 
+    .custom-card-dark .card-text {
+        color: #343a40 !important; /* Texto escuro para melhor legibilidade */
+    }
+</style>
+{% endblock %}

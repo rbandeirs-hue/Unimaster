@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Painel da Associação{% endblock %}
+{% block content %}
+
+<div class="container mt-5">
+
+    <!-- Header -->
+    <div class="mb-4">
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-center gap-3">
+            <div class="text-center text-md-start">
+                <h2 class="display-5 fw-bold text-primary mb-1">Painel da Associação</h2>
+                <p class="lead text-muted mb-0">Abaixo estão as academias registradas na sua associação.</p>
+            </div>
+            <a href="{{ url_for('associacao.cadastro_academia', next=url_for('associacao.painel_associacao')) }}" class="btn btn-success btn-lg">
+                <i class="bi bi-plus-circle-fill me-2"></i> Nova Academia
+            </a>
+        </div>
+    </div>
+
+    {% if academias %}
+    <div class="row g-4 justify-content-center">
+
+        {% for acad in academias %}
+        <!-- Card da Academia -->
+        <div class="col-xl-3 col-lg-4 col-md-6 col-sm-6">
+            <a href="{{ url_for('academia.painel_academia') }}" class="card-action-link">
+                <div class="card h-100 shadow-sm border-success custom-card-success">
+                    <div class="card-body text-center p-4">
+                        <i class="bi bi-building display-4 mb-3 text-success"></i>
+                        <h5 class="card-title fw-bold">{{ acad.nome }}</h5>
+                        <p class="card-text small text-muted">
+                            Clique para visualizar informações, professores e alunos da academia.
+                        </p>
+                    </div>
+                </div>
+            </a>
+        </div>
+        {% endfor %}
+
+    </div>
+
+    {% else %}
+    <div class="alert alert-info text-center mt-4">
+        Nenhuma academia cadastrada nesta associação.
+    </div>
+    {% endif %}
+
+</div>
+
+<!-- Estilos dos Cards -->
+<style>
+    .card-action-link {
+        text-decoration: none;
+        color: inherit;
+        display: block;
+    }
+
+    .card {
+        transition: transform 0.25s ease-in-out, box-shadow 0.25s ease-in-out;
+        border-radius: 0.75rem;
+    }
+
+    .card:hover {
+        transform: translateY(-6px);
+        box-shadow: 0 1rem 1.4rem rgba(0, 0, 0, 0.15) !important;
+    }
+</style>
+
+{% endblock %}

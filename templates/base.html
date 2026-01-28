@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Judo Academy{% endblock %}</title>
+
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
+
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/base/layout.css') }}">
+  {% block extra_css %}{% endblock %}
+</head>
+
+<body>
+
+{% if current_user.is_authenticated %}
+
+<!-- ====================================================== -->
+<!-- 🔹 SIDEBAR COM RBAC REAL                               -->
+<!-- ====================================================== -->
+<div class="sidebar" id="sidebar">
+
+  <div class="brand">
+    <i class="bi bi-trophy-fill me-2"></i> <strong>Judo Academy</strong>
+  </div>
+
+  <nav class="nav flex-column mt-3">
+
+    <!-- 🔹 Painel (todos) -->
+    <a class="nav-link {% if request.endpoint == 'painel.home' %}active{% endif %}"
+       href="{{ url_for('painel.home') }}">
+      <i class="bi bi-speedometer2"></i> Painel
+    </a>
+
+    <!-- ====================================================== -->
+    <!-- 👑 ADMIN — ACESSO TOTAL                                -->
+    <!-- ====================================================== -->
+    {% if current_user.has_role('admin') %}
+      <a class="nav-link" href="{{ url_for('federacao.painel_federacao') }}">
+        <i class="bi bi-diagram-3"></i> Associações
+      </a>
+
+      <a class="nav-link" href="{{ url_for('associacao.painel_associacao') }}">
+        <i class="bi bi-people"></i> Academias
+      </a>
+
+      <a class="nav-link" href="{{ url_for('alunos.lista_alunos') }}">
+        <i class="bi bi-people-fill"></i> Alunos
+      </a>
+
+      <a class="nav-link" href="{{ url_for('cadastros.hub') }}">
+        <i class="bi bi-person-lines-fill"></i> Cadastros
+      </a>
+
+      <a class="nav-link" href="#"><i class="bi bi-gear"></i> Gerenciamento</a>
+      <a class="nav-link" href="#"><i class="bi bi-cash-coin"></i> Financeiro</a>
+      <a class="nav-link" href="#"><i class="bi bi-sliders"></i> Configurações</a>
+    {% endif %}
+
+
+    <!-- ====================================================== -->
+    <!-- 🟦 FEDERAÇÃO — SOMENTE ASSOCIAÇÕES                     -->
+    <!-- ====================================================== -->
+    {% if current_user.has_role('gestor_federacao') and not current_user.has_role('admin') %}
+      <a class="nav-link" href="{{ url_for('federacao.painel_federacao') }}">
+        <i class="bi bi-diagram-3"></i> Associações
+      </a>
+      <a class="nav-link" href="{{ url_for('alunos.lista_alunos') }}">
+        <i class="bi bi-people-fill"></i> Alunos
+      </a>
+    {% endif %}
+
+
+    <!-- ====================================================== -->
+    <!-- 🟩 ASSOCIAÇÃO — SOMENTE ACADEMIAS                      -->
+    <!-- ====================================================== -->
+    {% if current_user.has_role('gestor_associacao') and not current_user.has_role('admin') %}
+      <a class="nav-link" href="{{ url_for('associacao.painel_associacao') }}">
+        <i class="bi bi-people"></i> Academias
+      </a>
+      <a class="nav-link" href="{{ url_for('alunos.lista_alunos') }}">
+        <i class="bi bi-people-fill"></i> Alunos
+      </a>
+    {% endif %}
+
+
+    <!-- ====================================================== -->
+    <!-- 🟧 ACADEMIA (GESTOR + PROFESSOR)                        -->
+    <!-- ====================================================== -->
+    {% if (current_user.has_role('gestor_academia') or current_user.has_role('professor')) 
+          and not current_user.has_role('admin') %}
+
+      <a class="nav-link" href="{{ url_for('cadastros.hub') }}">
+        <i class="bi bi-person-lines-fill"></i> Cadastros
+      </a>
+
+      <a class="nav-link" href="{{ url_for('alunos.lista_alunos') }}">
+        <i class="bi bi-people-fill"></i> Alunos
+      </a>
+
+      {% if current_user.has_role('gestor_academia') %}
+        <a class="nav-link" href="#"><i class="bi bi-gear"></i> Gerenciamento</a>
+        <a class="nav-link" href="#"><i class="bi bi-cash-coin"></i> Financeiro</a>
+        <a class="nav-link" href="#"><i class="bi bi-sliders"></i> Configurações</a>
+      {% endif %}
+    {% endif %}
+
+
+    <!-- ====================================================== -->
+    <!-- 🟡 ALUNO — LINK CORRIGIDO PARA O NOVO BLUEPRINT        -->
+    <!-- ====================================================== -->
+    {% if current_user.has_role('aluno') %}
+      <a class="nav-link" href="{{ url_for('painel_aluno.painel') }}">
+        <i class="bi bi-person-badge"></i> Meu Perfil
+      </a>
+    {% endif %}
+
+  </nav>
+
+  <div class="logout mt-auto mb-3">
+    <a class="nav-link text-danger fw-bold" href="{{ url_for('auth.logout') }}">
+      <i class="bi bi-box-arrow-right"></i> Sair
+    </a>
+  </div>
+
+</div>
+{% endif %}
+
+
+
+<!-- ====================================================== -->
+<!-- 🔹 MAIN CONTENT                                         -->
+<!-- ====================================================== -->
+<div class="main-content" id="main-content">
+
+  {% if current_user.is_authenticated %}
+  <div class="navbar-top">
+    <button class="toggle-btn" onclick="toggleSidebar()">
+      <i class="bi bi-list"></i>
+    </button>
+
+    <div class="user-info ms-auto">
+      <strong>{{ current_user.nome }}</strong><br>
+      <small>{{ current_user.roles | join(', ') }}</small>
+    </div>
+  </div>
+  {% endif %}
+
+  {% with messages = get_flashed_messages(with_categories=True) %}
+    {% if messages %}
+    <div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 1100;">
+      {% for category, message in messages %}
+        {% set cat = category or 'info' %}
+        {% set bg = 'text-bg-info' %}
+        {% if cat == 'success' %}
+          {% set bg = 'text-bg-success' %}
+        {% elif cat == 'danger' %}
+          {% set bg = 'text-bg-danger' %}
+        {% elif cat == 'warning' %}
+          {% set bg = 'text-bg-warning' %}
+        {% elif cat == 'info' %}
+          {% set bg = 'text-bg-info' %}
+        {% endif %}
+        <div class="toast align-items-center {{ bg }} border-0 mb-2" role="alert" aria-live="assertive" aria-atomic="true" data-bs-delay="5000">
+          <div class="d-flex">
+            <div class="toast-body">
+              {{ message }}
+            </div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Fechar"></button>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  {% endwith %}
+
+  <div class="container-fluid mt-4">
+    {% block content %}{% endblock %}
+  </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+function toggleSidebar() {
+    const sidebar = document.getElementById("sidebar");
+    const main = document.getElementById("main-content");
+
+    sidebar.classList.toggle("active");
+    main.classList.toggle("sidebar-active");
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+    const toastElList = document.querySelectorAll(".toast");
+    toastElList.forEach((toastEl) => {
+        const toast = new bootstrap.Toast(toastEl);
+        toast.show();
+    });
+});
+</script>
+
+{% block extra_js %}{% endblock %}
+</body>
+</html>

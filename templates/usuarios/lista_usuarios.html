@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% block title %}Lista de Usuários{% endblock %}
+
+{% block content %}
+<div class="container my-4 my-md-5">
+
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-center mb-4 gap-3">
+        <div class="d-flex flex-column flex-sm-row align-items-center gap-2">
+            <a href="{{ url_for('cadastros.hub') }}" class="btn btn-outline-secondary btn-lg w-100 w-sm-auto">
+                <i class="bi bi-arrow-left-circle me-2"></i> Voltar
+            </a>
+
+            <h2 class="h4 fw-bold text-dark m-0 text-center text-md-start">
+                <i class="bi bi-person-lines-fill me-2"></i> Usuários Cadastrados
+            </h2>
+        </div>
+
+        <a href="{{ url_for('usuarios.cadastro_usuario', next=request.full_path) }}" class="btn btn-success btn-lg w-100 w-md-auto">
+            <i class="bi bi-person-plus-fill me-1"></i> Novo Usuário
+        </a>
+    </div>
+
+    <div class="card shadow-sm mb-4 border-0">
+        <div class="card-body py-3">
+            <form method="GET" action="{{ url_for('usuarios.lista_usuarios') }}"
+                class="row g-2 g-md-3 align-items-center">
+                <div class="col-12 col-md-8">
+                    <input type="text" class="form-control" id="busca" name="busca"
+                        placeholder="Buscar por nome ou email..." value="{{ busca if busca else '' }}">
+                </div>
+                <div class="col-12 col-md-4">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="bi bi-search me-1"></i> Buscar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="table-container">
+        <table class="table table-hover align-middle shadow-sm rounded-3 overflow-hidden">
+            <thead class="table-dark d-none d-sm-table-header-group">
+                <tr class="text-center text-sm-start">
+                    <th class="text-center" style="width: 50px;">ID</th>
+                    <th style="width: 30%;">Nome</th>
+                    <th style="width: 35%;">Email</th>
+                    <th style="width: 15%;">Perfil</th>
+                    <th class="text-center" style="width: 10%;">Status</th>
+                    <th class="text-center" style="width: 10%;">Ações</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if usuarios %}
+                {% for usuario in usuarios %}
+                <tr class="user-row">
+                    <td class="text-center user-data-cell" data-label="ID">{{ usuario.id }}</td>
+                    
+                    <td class="user-data-cell" data-label="Nome">{{ usuario.nome }}</td>
+                    
+                    <td class="user-data-cell text-truncate" data-label="Email">{{ usuario.email }}</td>
+                    
+                    <td class="user-data-cell" data-label="Perfil">
+                        {% for nivel in usuario.niveis_acesso %}
+                        <span class="badge bg-secondary me-1">{{ nivel }}</span>
+                        {% endfor %}
+                    </td>
+                    
+                    <td class="text-center user-data-cell" data-label="Status">
+                        {% if usuario.ativo %}
+                        <span class="badge bg-success"><i class="bi bi-check-circle-fill"></i> Ativo</span>
+                        {% else %}
+                        <span class="badge bg-danger"><i class="bi bi-x-circle-fill"></i> Inativo</span>
+                        {% endif %}
+                    </td>
+                    
+                    <td class="text-center user-actions-cell" data-label="Ações">
+                        <div class="d-flex justify-content-center gap-2 flex-wrap">
+                            <a href="{{ url_for('usuarios.editar_usuario', user_id=usuario.id, next=request.full_path) }}"
+                                class="btn btn-sm btn-outline-primary" title="Editar Usuário">
+                                <i class="bi bi-pencil-square"></i>
+                            </a>
+                            <button type="button" class="btn btn-sm btn-outline-danger" title="Excluir Usuário"
+                                onclick="confirmDelete('{{ usuario.id }}', '{{ usuario.nome }}')">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+                {% else %}
+                <tr>
+                    <td colspan="6" class="text-center py-4 text-muted">Nenhum usuário encontrado.</td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if total_paginas > 1 %}
+    <nav class="mt-4">
+        <ul class="pagination justify-content-center flex-wrap">
+            <li class="page-item {% if pagina_atual == 1 %}disabled{% endif %}">
+                <a class="page-link" href="{{ url_for('usuarios.lista_usuarios', busca=busca, page=pagina_atual-1) }}">
+                    Anterior
+                </a>
+            </li>
+
+            {% for p in range(1, total_paginas + 1) %}
+            <li class="page-item {% if p == pagina_atual %}active{% endif %}">
+                <a class="page-link" href="{{ url_for('usuarios.lista_usuarios', busca=busca, page=p) }}">{{ p }}</a>
+            </li>
+            {% endfor %}
+
+            <li class="page-item {% if pagina_atual == total_paginas %}disabled{% endif %}">
+                <a class="page-link" href="{{ url_for('usuarios.lista_usuarios', busca=busca, page=pagina_atual+1) }}">
+                    Próximo
+                </a>
+            </li>
+        </ul>
+    </nav>
+    {% endif %}
+</div>
+
+<div class="modal fade" id="deleteModal" tabindex="-1" aria-labelledby="deleteModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="deleteModalLabel">Confirmar Exclusão</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body text-center">
+                <p>Tem certeza de que deseja excluir o usuário <strong id="userNameToDelete"></strong>?</p>
+                <small class="text-muted">Esta ação é irreversível.</small>
+            </div>
+            <div class="modal-footer d-flex justify-content-center">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <form id="deleteUserForm" method="POST" style="display:inline;">
+                    <button type="submit" class="btn btn-danger px-4">Excluir</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

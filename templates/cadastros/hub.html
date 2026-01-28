@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block title %}Cadastros{% endblock %}
+{% block content %}
+
+<div class="container mt-5">
+
+    <!-- TÍTULO -->
+    <div class="mb-5 text-center">
+        <h2 class="display-5 fw-bold text-primary">Cadastros</h2>
+        <p class="lead text-muted">Gerenciamento geral dos módulos do sistema.</p>
+    </div>
+    
+    <!-- CARDS DO CADASTROS -->
+    <div class="row g-4 justify-content-center">
+
+        <!-- 🔹 Usuários -->
+        {% if current_user.has_permission('cad_usuario') or current_user.has_role('admin') %}
+        <div class="col-xl-3 col-lg-4 col-md-6 col-sm-6">
+            <a href="{{ url_for('usuarios.lista_usuarios') }}" class="card-action-link">
+                <div class="card h-100 shadow-sm border-warning custom-card-warning">
+                    <div class="card-body text-center p-4">
+                        <i class="bi bi-person-plus display-4 mb-3 text-warning"></i>
+                        <h5 class="card-title fw-bold">Usuários</h5>
+                        <p class="card-text small text-muted">Gerencie contas e permissões de acesso.</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+        {% endif %}
+
+        <!-- 🔹 Alunos -->
+        {% if current_user.has_permission('cad_aluno') or current_user.has_role('admin') %}
+        <div class="col-xl-3 col-lg-4 col-md-6 col-sm-6">
+            <a href="{{ url_for('alunos.lista_alunos') }}" class="card-action-link">
+                <div class="card h-100 shadow-sm border-success custom-card-success">
+                    <div class="card-body text-center p-4">
+                        <i class="bi bi-people-fill display-4 mb-3 text-success"></i>
+                        <h5 class="card-title fw-bold">Alunos</h5>
+                        <p class="card-text small text-muted">Cadastro, edição e acompanhamento dos alunos.</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+        {% endif %}
+
+        <!-- 🔹 Turmas -->
+        {% if current_user.has_permission('cad_turma') or current_user.has_role('admin') %}
+        <div class="col-xl-3 col-lg-4 col-md-6 col-sm-6">
+            <a href="{{ url_for('turmas.lista_turmas') }}" class="card-action-link">
+                <div class="card h-100 shadow-sm border-primary custom-card-primary">
+                    <div class="card-body text-center p-4">
+                        <i class="bi bi-grid-3x3-gap-fill display-4 mb-3 text-primary"></i>
+                        <h5 class="card-title fw-bold">Turmas</h5>
+                        <p class="card-text small text-muted">Gerenciamento completo das turmas.</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+        {% endif %}
+
+        <!-- 🔹 Academias -->
+        {% if current_user.has_permission('cad_academia') or current_user.has_role('admin') %}
+        <div class="col-xl-3 col-lg-4 col-md-6 col-sm-6">
+            <a href="{{ url_for('associacao.lista_academias') }}" class="card-action-link">
+                <div class="card h-100 shadow-sm border-info custom-card-info">
+                    <div class="card-body text-center p-4">
+                        <i class="bi bi-house-fill display-4 mb-3 text-info"></i>
+                        <h5 class="card-title fw-bold">Academias</h5>
+                        <p class="card-text small text-muted">Cadastro e estrutura das academias.</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+        {% endif %}
+
+        <!-- 🔹 Associações -->
+        {% if current_user.has_permission('cad_associacao') or current_user.has_role('admin') %}
+        <div class="col-xl-3 col-lg-4 col-md-6 col-sm-6">
+            <a href="{{ url_for('federacao.lista_associacoes') }}" class="card-action-link">
+                <div class="card h-100 shadow-sm border-secondary custom-card-secondary">
+                    <div class="card-body text-center p-4">
+                        <i class="bi bi-diagram-3 display-4 mb-3 text-secondary"></i>
+                        <h5 class="card-title fw-bold">Associações</h5>
+                        <p class="card-text small text-muted">Gestão completa das associações vinculadas.</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+        {% endif %}
+
+        <!-- 🔹 Federações -->
+        {% if current_user.has_permission('cad_federacao') or current_user.has_role('admin') %}
+        <div class="col-xl-3 col-lg-4 col-md-6 col-sm-6">
+            <a href="{{ url_for('federacao.lista_federacoes') }}" class="card-action-link">
+                <div class="card h-100 shadow-sm border-dark custom-card-dark">
+                    <div class="card-body text-center p-4">
+                        <i class="bi bi-diagram-3-fill display-4 mb-3 text-dark"></i>
+                        <h5 class="card-title fw-bold">Federações</h5>
+                        <p class="card-text small text-muted">Estrutura organizacional das federações.</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+        {% endif %}
+
+    </div>
+</div>
+
+<!-- Estilos dos Cards (mesmos do painel) -->
+<style>
+    .card-action-link {
+        text-decoration: none;
+        color: inherit;
+        display: block;
+    }
+
+    .card {
+        transition: transform 0.25s ease-in-out, box-shadow 0.25s ease-in-out;
+        border-radius: 0.75rem;
+    }
+
+    .card:hover {
+        transform: translateY(-6px);
+        box-shadow: 0 1rem 1.4rem rgba(0, 0, 0, 0.15) !important;
+    }
+</style>
+
+{% endblock %}

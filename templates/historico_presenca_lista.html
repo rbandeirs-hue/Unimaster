@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% block title %}Histórico de Presença{% endblock %}
+{% block content %}
+<style>
+    .accordion-item {
+        border: 1px solid #dee2e6;
+        border-radius: 0.5rem;
+        margin-bottom: 1rem;
+    }
+    .accordion-button {
+        padding: 1rem 1.25rem;
+        font-weight: bold;
+    }
+    .accordion-button:not(.collapsed) {
+        background-color: var(--bs-primary);
+        color: white;
+        box-shadow: none;
+    }
+    .filtro-container {
+        border-bottom: 1px solid #eee;
+        padding-bottom: 10px;
+    }
+    @media (max-width: 576px) {
+        .accordion-body .filtro-mes, .accordion-body .filtro-ano {
+            width: 100% !important;
+        }
+        .d-flex.gap-2.flex-wrap {
+            flex-direction: column;
+        }
+    }
+</style>
+
+<div class="container mt-4">
+    <h2 class="mb-4 text-center text-primary fw-bold">🧾 Histórico de Presença</h2>
+    <a href="{{ url_for('admin.dashboard') }}" class="btn btn-secondary mb-3 shadow-sm">
+        <i class="bi bi-arrow-left"></i> Voltar
+    </a>
+
+    <div class="accordion" id="accordionHistorico">
+        {% set meses = ["Todos os meses","Janeiro","Fevereiro","Março","Abril","Maio","Junho",
+                        "Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"] %}
+        
+        {% for aluno in alunos %}
+            {% set collapse_id = "collapse_" ~ aluno.id %}
+            {% set heading_id = "heading_" ~ aluno.id %}
+            
+            <div class="accordion-item mb-3 shadow-sm">
+                <h2 class="accordion-header" id="{{ heading_id }}">
+                    <button class="accordion-button collapsed" type="button"
+                            data-bs-toggle="collapse"
+                            data-bs-target="#{{ collapse_id }}"
+                            aria-expanded="false"
+                            aria-controls="{{ collapse_id }}">
+                        <i class="bi bi-person-circle me-2"></i> {{ aluno.nome }}
+                    </button>
+                </h2>
+                <div id="{{ collapse_id }}" class="accordion-collapse collapse"
+                     aria-labelledby="{{ heading_id }}" data-bs-parent="#accordionHistorico">
+                    <div class="accordion-body">
+                        <!-- filtros internos -->
+                        <div class="filtro-container mb-3 d-flex gap-3 flex-wrap align-items-center">
+                            <label class="form-label mb-0 small text-muted">Filtrar por:</label>
+                            <select class="form-select form-select-sm filtro-mes" style="max-width:160px;">
+                                {% for i in range(0,13) %}
+                                    <option value="{{ i }}" {% if i == hoje.month and loop.first is not sameas true %}selected{% endif %}>
+                                        {{ meses[i] }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                            <input type="number" class="form-control form-control-sm filtro-ano"
+                                    style="max-width:110px;" min="2000" max="2100" value="{{ hoje.year }}">
+                        </div>
+
+                        <div class="historico-conteudo mt-2" id="historico-{{ aluno.id }}">
+                            <div class="text-center text-muted small p-3">
+                                <i class="bi bi-arrow-down-circle me-1"></i>
+                                Selecione os filtros e abra o painel para carregar o histórico.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        {% endfor %}
+    </div>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+
+    // --- CORREÇÃO DO ERRO 'ALUNO_ID' ---
+    // 1. Usamos um ID numérico dummy (e.g., 9999999) para satisfazer o <int:aluno_id> do Flask.
+    {% set DUMMY_ID = 999999999 %}
+    const templatePath = "{{ url_for('presencas.historico_presenca_ajax', aluno_id=DUMMY_ID) }}";
+
+    // 2. No JavaScript, substituímos o ID dummy pelo nosso placeholder de string 'ALUNO_ID'.
+    // Isso cria um template de URL seguro para uso em JS.
+    const baseAjaxUrl = templatePath.replace('{{ DUMMY_ID }}', 'ALUNO_ID');
+    // ------------------------------------
+
+    function carregarHistorico(alunoId, mes, ano, targetDiv) {
+        // Exibe um loading
+        targetDiv.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>';
+
+        // 1. Substitui o placeholder 'ALUNO_ID' pelo ID real do aluno
+        const urlWithId = baseAjaxUrl.replace('ALUNO_ID', alunoId);
+        
+        // 2. Adiciona os parâmetros de consulta (mes e ano)
+        const finalUrl = `${urlWithId}?mes=${encodeURIComponent(mes)}&ano=${encodeURIComponent(ano)}`;
+        
+        // 3. Realiza o fetch
+        fetch(finalUrl)
+            .then(resp => {
+                if (!resp.ok) {
+                    throw new Error(`Erro de rede: ${resp.status}`);
+                }
+                return resp.text();
+            })
+            .then(html => targetDiv.innerHTML = html)
+            .catch(err => {
+                targetDiv.innerHTML = `<p class="alert alert-danger p-2 small"><i class="bi bi-exclamation-triangle-fill"></i> Erro ao carregar histórico: ${err.message}.</p>`;
+                console.error("Erro ao carregar histórico:", err);
+            });
+    }
+
+    // Dispara o AJAX quando o painel do aluno é aberto
+    document.querySelectorAll('.accordion-collapse').forEach(collapse => {
+        collapse.addEventListener('show.bs.collapse', function() {
+            const card = this;
+            const alunoId = card.id.replace('collapse_', '');
+            
+            const mes = card.querySelector('.filtro-mes').value;
+            const ano = card.querySelector('.filtro-ano').value;
+            const target = card.querySelector('.historico-conteudo');
+            
+            carregarHistorico(alunoId, mes, ano, target);
+        });
+    });
+
+    // Atualiza o conteúdo se filtros internos mudarem e o card estiver ABERTO
+    document.querySelectorAll('.filtro-mes, .filtro-ano').forEach(el => {
+        el.addEventListener('change', function() {
+            const cardBody = this.closest('.accordion-body');
+            const collapse = this.closest('.accordion-collapse');
+            
+            if (collapse.classList.contains('show')) {
+                const alunoId = collapse.id.replace('collapse_', '');
+                const mes = cardBody.querySelector('.filtro-mes').value;
+                const ano = cardBody.querySelector('.filtro-ano').value;
+                const target = cardBody.querySelector('.historico-conteudo');
+                carregarHistorico(alunoId, mes, ano, target);
+            }
+        });
+    });
+
+});
+</script>
+{% endblock %}

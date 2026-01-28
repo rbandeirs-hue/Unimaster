@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Painel da Federação{% endblock %}
+{% block content %}
+
+<div class="container mt-5">
+
+    <!-- Header -->
+    <div class="mb-4">
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-center gap-3">
+            <div class="text-center text-md-start">
+                <h2 class="display-5 fw-bold text-primary mb-1">Painel da Federação</h2>
+                <p class="lead text-muted mb-0">Selecione uma associação para visualizar suas academias e alunos.</p>
+            </div>
+            <a href="{{ url_for('federacao.cadastro_associacao', next=url_for('federacao.painel_federacao')) }}" class="btn btn-success btn-lg">
+                <i class="bi bi-plus-circle-fill me-2"></i> Nova Associação
+            </a>
+        </div>
+    </div>
+
+    {% if associacoes %}
+    <div class="row g-4 justify-content-center">
+
+        {% for assoc in associacoes %}
+        <!-- Card da Associação -->
+        <div class="col-xl-3 col-lg-4 col-md-6 col-sm-6">
+
+            <a href="{{ url_for('associacao.painel_associacao', id=assoc.id) }}" class="card-action-link">
+
+                <div class="card h-100 shadow-sm border-primary custom-card-primary">
+                    <div class="card-body text-center p-4">
+
+                        <i class="bi bi-diagram-3-fill display-4 mb-3 text-primary"></i>
+
+                        <h5 class="card-title fw-bold">{{ assoc.nome }}</h5>
+
+                        <p class="card-text small text-muted">
+                            Clique para visualizar academias e alunos desta associação.
+                        </p>
+
+                    </div>
+                </div>
+
+            </a>
+
+        </div>
+        {% endfor %}
+
+    </div>
+
+    {% else %}
+    <div class="alert alert-info text-center mt-4">
+        Nenhuma associação cadastrada no sistema.
+    </div>
+    {% endif %}
+
+</div>
+
+<!-- Estilos dos cards (herdado do seu padrão) -->
+<style>
+    .card-action-link {
+        text-decoration: none;
+        color: inherit;
+        display: block;
+    }
+
+    .card {
+        transition: transform 0.25s ease-in-out, box-shadow 0.25s ease-in-out;
+        border-radius: 0.75rem;
+    }
+
+    .card:hover {
+        transform: translateY(-6px);
+        box-shadow: 0 1rem 1.4rem rgba(0, 0, 0, 0.15) !important;
+    }
+</style>
+
+{% endblock %}

@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+{% block title %}Cadastrar Novo Usuário{% endblock %}
+
+{% block content %}
+<div class="container my-4 my-md-5">
+  <div class="card shadow-lg border-0 rounded-3 mx-auto" style="max-width: 650px;">
+    <div class="card-header bg-primary text-white text-center py-3 rounded-top-3">
+      <h5 class="mb-0 fw-bold d-flex align-items-center justify-content-center flex-wrap">
+        <i class="bi bi-person-plus-fill me-2"></i> Cadastro de Novo Usuário
+      </h5>
+    </div>
+
+    <div class="card-body p-4 p-md-5">
+      <p class="text-muted text-center mb-4">
+        Preencha os dados abaixo para criar uma nova conta de acesso ao sistema.
+      </p>
+
+      <form method="POST" action="{{ url_for('usuarios.cadastro_usuario') }}" class="needs-validation" novalidate>
+        <input type="hidden" name="next" value="{{ back_url }}">
+
+        <!-- Nome -->
+        <div class="mb-3">
+          <label for="nome" class="form-label fw-semibold">Nome Completo</label>
+          <input type="text" class="form-control" id="nome" name="nome"
+                 placeholder="Ex: João da Silva" required>
+          <div class="invalid-feedback">Informe o nome completo.</div>
+        </div>
+
+        <!-- Email -->
+        <div class="mb-3">
+          <label for="email" class="form-label fw-semibold">Email</label>
+          <input type="email" class="form-control" id="email" name="email"
+                 placeholder="exemplo@academia.com" required>
+          <div class="form-text">Este será o login do usuário.</div>
+          <div class="invalid-feedback">Informe um email válido.</div>
+        </div>
+
+        <!-- Senha -->
+        <div class="row g-3 mb-3">
+          <div class="col-12 col-md-6">
+            <label for="senha" class="form-label fw-semibold">Senha</label>
+            <input type="password" class="form-control" id="senha" name="senha" required>
+            <div class="invalid-feedback">Defina uma senha.</div>
+          </div>
+        </div>
+
+        <!-- Roles -->
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Níveis de Acesso (Roles)</label>
+          <div class="row g-2">
+            {% for role in roles %}
+            <div class="col-12 col-md-6">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="roles" id="role_{{ role.id }}"
+                       value="{{ role.id }}">
+                <label class="form-check-label" for="role_{{ role.id }}">
+                  {{ role.nome }}
+                </label>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+          <div class="form-text">Selecione pelo menos uma role.</div>
+        </div>
+
+        <!-- Botões -->
+        <div class="d-flex flex-column flex-md-row justify-content-center align-items-center gap-3 mt-4">
+          <button type="submit" class="btn btn-primary w-100 w-md-auto btn-lg">
+            <i class="bi bi-save me-2"></i> Cadastrar Usuário
+          </button>
+          <a href="{{ back_url }}" class="btn btn-outline-secondary w-100 w-md-auto btn-lg">
+            <i class="bi bi-arrow-left-circle me-2"></i> Voltar
+          </a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+  /* 🔹 Ajustes para telas pequenas */
+  @media (max-width: 576px) {
+    .card {
+      border-radius: 0 !important;
+      box-shadow: none !important;
+    }
+    .card-body {
+      padding: 1.5rem !important;
+    }
+    h5 {
+      font-size: 1.2rem;
+      text-align: center;
+    }
+    .btn-lg {
+      font-size: 1rem;
+      padding: 0.75rem 1rem;
+    }
+    .form-control,
+    .form-select {
+      font-size: 1rem;
+      padding: 0.6rem 0.75rem;
+    }
+  }
+
+  /* 🔹 Efeitos visuais */
+  .form-control:focus, .form-select:focus {
+    box-shadow: 0 0 0 0.2rem rgba(13,110,253,0.25);
+  }
+
+  .form-label {
+    color: #343a40;
+  }
+
+  /* 🔹 Realce de validação */
+  .was-validated .form-control:invalid,
+  .was-validated .form-select:invalid {
+    border-color: #dc3545;
+  }
+
+  .was-validated .form-control:valid,
+  .was-validated .form-select:valid {
+    border-color: #198754;
+  }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  // Validação Bootstrap customizada
+  (function () {
+    'use strict';
+    const forms = document.querySelectorAll('.needs-validation');
+    Array.from(forms).forEach(function (form) {
+      form.addEventListener('submit', function (event) {
+        if (!form.checkValidity()) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+        form.classList.add('was-validated');
+      }, false);
+    });
+  })();
+</script>
+{% endblock %}

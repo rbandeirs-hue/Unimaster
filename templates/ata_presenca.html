@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+{% block title %}Ata de Presença{% endblock %}
+{% block content %}
+<style>
+    /* Estilização básica para o acordeão */
+    .accordion-item {
+        margin-bottom: 1rem;
+        border: 1px solid #dee2e6;
+        border-radius: 0.5rem;
+    }
+
+    /* Estilização para o filtro fixo */
+    .sticky-top-filters {
+        position: sticky;
+        top: 0;
+        z-index: 1000;
+        background-color: #fff;
+        padding-top: 10px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid #e9ecef;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    }
+
+    .accordion-button.bg-primary {
+        background-color: var(--bs-primary) !important;
+        color: white !important;
+        font-weight: bold;
+    }
+
+    .accordion-button:not(.collapsed) {
+        background-color: var(--bs-indigo) !important; /* Cor diferente quando aberto */
+        box-shadow: none;
+    }
+
+    .table th, .table td {
+        vertical-align: middle;
+    }
+
+    @media (max-width: 768px) {
+        .accordion-button {
+            font-size: 0.9rem;
+        }
+    }
+</style>
+
+<div class="container mt-4">
+
+    <!-- Rota Voltar Corrigida: Assumindo que 'admin.dashboard' está correta para voltar -->
+    <a href="{{ url_for('admin.dashboard') }}" class="btn btn-secondary mb-3 shadow-sm">
+        <i class="bi bi-arrow-left"></i> Voltar
+    </a>
+    <h2 class="mb-4 text-center text-primary fw-bold">📋 Ata de Presença</h2>
+
+    <!-- Filtros fixos no topo -->
+    <div class="row mb-4 justify-content-center g-2 sticky-top-filters">
+        <div class="col-md-3 col-sm-6">
+            <select id="mes" class="form-select shadow-sm">
+                <option value="0" {% if mes==0 %}selected{% endif %}>Todos os meses</option>
+                {% set meses = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho",
+                                 "Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"] %}
+                {% for i in range(1,13) %}
+                <option value="{{ i }}" {% if i==mes %}selected{% endif %}>{{ meses[i-1] }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-2 col-sm-6">
+            <select id="ano" class="form-select shadow-sm">
+                {% for y in range(ano-5, ano+1) %}
+                <option value="{{ y }}" {% if y==ano %}selected{% endif %}>{{ y }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-3 col-sm-12">
+            <select id="turma" class="form-select shadow-sm">
+                <option value="0" {% if turma_id==0 %}selected{% endif %}>Todas as turmas</option>
+                {% for tid, nome in turmas.items() %}
+                <option value="{{ tid }}" {% if tid|string == turma_id|string %}selected{% endif %}>{{ nome }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-2 col-sm-12 d-grid">
+            <!-- Botão de Atualizar para garantir que o filtro funciona em navegadores sem JS no evento 'change' -->
+            <button class="btn btn-primary shadow-sm" onclick="atualizarPresencas()">
+                <i class="bi bi-funnel-fill"></i> Filtrar
+            </button>
+        </div>
+    </div>
+
+    {% if presencas_por_mes %}
+    <div class="accordion" id="accordionAta">
+        {% set idx = 0 %}
+        {% for mes_ano, aulas in presencas_por_mes.items() %}
+            <h4 class="mt-4 mb-2 text-secondary border-bottom pb-1">{{ mes_ano }}</h4>
+            
+            {% for data, turmas_dict in aulas.items() %}
+                {% for turma_id_item, registro in turmas_dict.items() %}
+                    {% set idx = idx + 1 %}
+                    {% set unique_key = mes_ano|replace('/','_') ~ "_" ~ data|replace('/','_') ~ "_" ~ turma_id_item %}
+                    {% set collapse_id = "collapse_" ~ unique_key %}
+                    {% set heading_id = "heading_" ~ unique_key %}
+                    
+                    <div class="accordion-item mb-3 shadow-sm">
+                        <h2 class="accordion-header" id="{{ heading_id }}">
+                            <button class="accordion-button collapsed bg-primary text-white" type="button"
+                                    data-bs-toggle="collapse" data-bs-target="#{{ collapse_id }}"
+                                    aria-expanded="false" aria-controls="{{ collapse_id }}">
+                                <i class="bi bi-calendar-check-fill me-2"></i> 
+                                Aula em {{ data }} - Turma: {{ turmas[turma_id_item] }} - Registrado por: {{ registro.responsavel }}
+                            </button>
+                        </h2>
+                        <div id="{{ collapse_id }}" class="accordion-collapse collapse"
+                            aria-labelledby="{{ heading_id }}" data-bs-parent="#accordionAta">
+                            <div class="accordion-body p-0">
+                                <table class="table table-hover table-striped mb-0">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th scope="col" class="py-3">Aluno</th>
+                                            <th scope="col" class="text-center py-3">Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for aluno in registro.alunos %}
+                                        <tr>
+                                            <td>{{ aluno.nome }}</td>
+                                            <td class="text-center">
+                                                {% if aluno.id in registro.presentes %}
+                                                    <span class="badge bg-success py-2 px-3"><i class="bi bi-check-circle-fill me-1"></i> Presente</span>
+                                                {% else %}
+                                                    <span class="badge bg-danger py-2 px-3"><i class="bi bi-x-circle-fill me-1"></i> Faltou</span>
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                {% endfor %}
+            {% endfor %}
+        {% endfor %}
+    </div>
+
+    {% else %}
+        <div class="alert alert-info text-center mt-5" role="alert">
+            <h4 class="alert-heading"><i class="bi bi-info-circle"></i> Sem Registros</h4>
+            <p>Nenhuma presença registrada para os filtros selecionados.</p>
+        </div>
+    {% endif %}
+
+</div>
+
+<script>
+    const mesSelect = document.getElementById('mes');
+    const anoSelect = document.getElementById('ano');
+    const turmaSelect = document.getElementById('turma');
+
+    function atualizarPresencas() {
+        const mes = mesSelect.value;
+        const ano = anoSelect.value;
+        const turma = turmaSelect.value;
+        // CORREÇÃO AQUI: Adicionado 'presencas.' ao url_for
+        window.location.href = `{{ url_for('presencas.ata_presenca') }}?mes=${mes}&ano=${ano}&turma=${turma}`;
+    }
+
+    // Adiciona o listener para atualizar a página automaticamente ao mudar o filtro
+    mesSelect.addEventListener('change', atualizarPresencas);
+    anoSelect.addEventListener('change', atualizarPresencas);
+    turmaSelect.addEventListener('change', atualizarPresencas);
+</script>
+{% endblock %}

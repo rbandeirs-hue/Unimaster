@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Gerenciar Usuários{% endblock %}
+
+{% block content %}
+
+<div class="container mt-5">
+
+    <!-- Título -->
+    <div class="mb-5 text-center">
+        <h2 class="display-6 fw-bold text-primary">Gerenciar Usuários</h2>
+        <p class="lead text-muted">Administre contas, permissões e perfis do sistema.</p>
+    </div>
+
+    <!-- Botão Criar Novo -->
+    <div class="text-end mb-4">
+        <a href="{{ url_for('usuarios.cadastro_usuario') }}" class="btn btn-primary btn-lg">
+            <i class="bi bi-person-plus-fill me-2"></i> Novo Usuário
+        </a>
+    </div>
+
+    <!-- Lista em Tabela -->
+    <div class="card shadow-sm border-0">
+        <div class="card-body p-0">
+
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>#</th>
+                        <th>Nome</th>
+                        <th>Email</th>
+                        <th>Perfil</th>
+                        <th>Criado em</th>
+                        <th class="text-center">Ações</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    {% for u in usuarios %}
+                    <tr>
+                        <td>{{ u.id }}</td>
+                        <td>{{ u.nome }}</td>
+                        <td>{{ u.email }}</td>
+                        <td>
+                            {% for nivel in u.niveis_acesso %}
+                            <span class="badge bg-primary me-1">{{ nivel }}</span>
+                            {% endfor %}
+                        </td>
+                        <td>{{ u.criado_em }}</td>
+
+                        <td class="text-center">
+                            <a href="{{ url_for('usuarios.editar_usuario', user_id=u.id) }}"
+                               class="btn btn-sm btn-warning me-2">
+                                <i class="bi bi-pencil-square"></i>
+                            </a>
+
+                            <form method="POST"
+                                  action="{{ url_for('usuarios.excluir_usuario', user_id=u.id) }}"
+                                  style="display:inline-block;"
+                                  onsubmit="return confirm('Excluir usuário {{ u.nome }}?')">
+                                <button class="btn btn-sm btn-danger">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </form>
+                        </td>
+
+                    </tr>
+                    {% endfor %}
+                </tbody>
+
+            </table>
+
+        </div>
+    </div>
+
+</div>
+
+{% endblock %}
+    

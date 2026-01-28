@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Login - Judo Academy</title>
+
+    <!-- Fonte e Bootstrap -->
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
+
+    <!-- CSS de Login -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/login/style.css') }}">
+</head>
+
+<body>
+    <!-- 🔹 Fundo com imagem -->
+    <div class="background-overlay"></div>
+
+    <!-- 🔹 Fundo animado por cima (pontos em movimento) -->
+    <div class="background-animated-overlay"></div>
+
+    <!-- 🔹 Container do formulário -->
+    <div class="container-fluid login-container">
+        <div class="col-sm-10 col-md-8 col-lg-5">
+            <div class="login-card">
+
+                <!-- Cabeçalho -->
+                <div class="card-header">
+                    <i class="bi bi-person-circle logo-icon"></i>
+                    <h3>Bem-vindo(a) à Judo Academy</h3>
+                    <p class="text-muted mb-0">Faça login para acessar o painel de gerenciamento.</p>
+                </div>
+
+                <!-- Mensagens flash -->
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }} alert-dismissible fade show mt-2" role="alert">
+                            {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        </div>
+                    {% endfor %}
+                {% endif %}
+                {% endwith %}
+
+                <!-- Formulário -->
+                <div class="card-body p-0 pt-3">
+                    <form method="POST">
+                        <div class="mb-3">
+                            <label for="email" class="form-label fw-bold">Email</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-envelope"></i></span>
+                                <input type="email" class="form-control" id="email" name="email" required placeholder="Digite seu email">
+                            </div>
+                        </div>
+
+                        <div class="mb-4">
+                            <label for="senha" class="form-label fw-bold">Senha</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-lock"></i></span>
+                                <input type="password" class="form-control" id="senha" name="senha" required placeholder="Digite sua senha">
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary w-100 shadow-sm">
+                            <i class="bi bi-box-arrow-in-right me-2"></i> Entrar no Sistema
+                        </button>
+                    </form>
+                </div>
+
+                <div class="text-center mt-4">
+                    <small class="text-muted">&copy; {{ now().year if now else '2025' }} Judo Academy. Todos os direitos reservados.</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

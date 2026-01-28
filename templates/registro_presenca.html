@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-8 col-sm-12">
+
+    <!-- Botão Voltar -->
+    <a href="{{ url_for('admin.dashboard') }}" class="btn btn-secondary mb-3">← Voltar</a>
+
+    <div class="card shadow">
+      <div class="card-header bg-warning text-dark">
+        <h4 class="mb-0">Registro de Presença</h4>
+      </div>
+      <div class="card-body">
+
+        <!-- Seleção de Turma e Data -->
+        <form method="get" class="mb-3 row g-3">
+          <div class="col-md-6">
+            <label for="turma_id" class="form-label">Selecionar Turma</label>
+            <select name="turma_id" id="turma_id" class="form-select" onchange="this.form.submit()">
+              <option value="">-- Escolha a turma --</option>
+              {% for turma in turmas %}
+                <option value="{{ turma.TurmaID }}" {% if turma_selecionada == turma.TurmaID %}selected{% endif %}>
+                  {{ turma.Nome }}
+                </option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label for="data_presenca" class="form-label">Data da Aula</label>
+            <input type="date" class="form-control" name="data_presenca" id="data_presenca"
+                   value="{{ data_presenca }}" onchange="this.form.submit()">
+          </div>
+        </form>
+
+        {% if alunos %}
+        <!-- Lista de Alunos -->
+        <form method="POST">
+          <input type="hidden" name="turma_id" value="{{ turma_selecionada }}">
+          <input type="hidden" name="data_presenca" value="{{ data_presenca }}">
+
+          <div class="mb-3">
+            <label class="form-label">Selecione os alunos presentes:</label>
+            <div class="row">
+              {% for aluno in alunos %}
+              <div class="col-6 col-md-4">
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" name="aluno_id"
+                         value="{{ aluno.id }}" id="aluno{{ aluno.id }}"
+                         {% if aluno.id in presencas_registradas %}checked{% endif %}>
+                  <label class="form-check-label" for="aluno{{ aluno.id }}">
+                    {{ aluno.nome }}
+                  </label>
+                </div>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+
+          <button type="submit" class="btn btn-warning w-100">Registrar Presença</button>
+        </form>
+        {% else %}
+          {% if turma_selecionada %}
+            <p class="text-center">Nenhum aluno encontrado para esta turma.</p>
+          {% endif %}
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
