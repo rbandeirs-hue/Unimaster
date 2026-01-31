@@ -2,7 +2,7 @@
 # 🧩 Blueprint: Presenças
 # ======================================================
 
-from flask import Blueprint, render_template, request, redirect, url_for, flash
+from flask import Blueprint, render_template, request, redirect, url_for, flash, session
 from flask_login import login_required, current_user
 from config import get_db_connection
 from datetime import date, datetime
@@ -14,15 +14,54 @@ bp_presencas = Blueprint("presencas", __name__)
 # ======================================================
 # 🔹 Registro de Presença
 # ======================================================
+def _get_academia_filtro_presencas():
+    """Retorna academia_id para filtrar turmas (modo academia)."""
+    aid = request.args.get("academia_id", type=int) or (
+        session.get("academia_gerenciamento_id") if session.get("modo_painel") == "academia" else None
+    )
+    if not aid:
+        return None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(dictionary=True)
+        if current_user.has_role("admin"):
+            cur.execute("SELECT 1 FROM academias WHERE id = %s", (aid,))
+        elif current_user.has_role("gestor_federacao"):
+            cur.execute(
+                "SELECT 1 FROM academias ac JOIN associacoes ass ON ass.id = ac.id_associacao WHERE ac.id = %s AND ass.id_federacao = %s",
+                (aid, getattr(current_user, "id_federacao", None)),
+            )
+        elif current_user.has_role("gestor_associacao"):
+            cur.execute("SELECT 1 FROM academias WHERE id = %s AND id_associacao = %s", (aid, getattr(current_user, "id_associacao", None)))
+        elif getattr(current_user, "id_academia", None) == aid:
+            cur.execute("SELECT 1 FROM academias WHERE id = %s", (aid,))
+        else:
+            cur.close()
+            conn.close()
+            return None
+        ok = cur.fetchone() is not None
+        cur.close()
+        conn.close()
+        return aid if ok else None
+    except Exception:
+        return None
+
+
 @bp_presencas.route('/registro_presenca', methods=['GET', 'POST'])
 @login_required
 def registro_presenca():
     db = get_db_connection()
     cursor = db.cursor(dictionary=True)
+    academia_id = _get_academia_filtro_presencas()
 
-    # Buscar todas as turmas
-    cursor.execute("SELECT TurmaID, Nome FROM turmas ORDER BY Nome")
-    turmas = cursor.fetchall()
+    try:
+        if academia_id:
+            cursor.execute("SELECT TurmaID, Nome FROM turmas WHERE id_academia = %s ORDER BY Nome", (academia_id,))
+        else:
+            cursor.execute("SELECT TurmaID, Nome FROM turmas ORDER BY Nome")
+        turmas = cursor.fetchall()
+    except Exception:
+        turmas = []
 
     # Seleção da turma e data
     turma_selecionada = request.form.get('turma_id') or request.args.get('turma_id')
@@ -30,50 +69,64 @@ def registro_presenca():
     data_presenca = request.form.get('data_presenca') or request.args.get('data_presenca') or date.today().strftime('%Y-%m-%d')
 
     if request.method == 'POST' and turma_selecionada:
-        alunos_selecionados = [int(a) for a in request.form.getlist('aluno_id')]
+        try:
+            alunos_selecionados = [int(a) for a in request.form.getlist('aluno_id')]
+        except (ValueError, TypeError):
+            alunos_selecionados = []
 
-        cursor.execute("SELECT id FROM alunos WHERE TurmaID=%s", (turma_selecionada,))
-        todos_alunos = [row['id'] for row in cursor.fetchall()]
+        try:
+            cursor.execute("SELECT id FROM alunos WHERE TurmaID=%s", (turma_selecionada,))
+            todos_alunos = [row['id'] for row in cursor.fetchall()]
+        except Exception:
+            todos_alunos = []
 
-        for aluno_id in todos_alunos:
-            presente = 1 if aluno_id in alunos_selecionados else 0
+        try:
+            for aluno_id in todos_alunos:
+                presente = 1 if aluno_id in alunos_selecionados else 0
+                cursor.execute("""
+                    INSERT INTO presencas (aluno_id, turma_id, data_presenca, responsavel_id, responsavel_nome, presente)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    ON DUPLICATE KEY UPDATE
+                        turma_id = VALUES(turma_id),
+                        presente = VALUES(presente),
+                        responsavel_id = VALUES(responsavel_id),
+                        responsavel_nome = VALUES(responsavel_nome),
+                        registrado_em = CURRENT_TIMESTAMP
+                """, (aluno_id, turma_selecionada, data_presenca, current_user.id, current_user.nome, presente))
+            db.commit()
+            flash("Presenças registradas com sucesso!", "success")
+        except Exception as e:
+            db.rollback()
+            flash(f"Erro ao registrar presenças: {e}", "danger")
 
-            # Inserir ou atualizar presença por aluno e data
-            cursor.execute("""
-                INSERT INTO presencas (aluno_id, data_presenca, responsavel_id, responsavel_nome, presente)
-                VALUES (%s, %s, %s, %s, %s)
-                ON DUPLICATE KEY UPDATE
-                    presente = VALUES(presente),
-                    responsavel_id = VALUES(responsavel_id),
-                    responsavel_nome = VALUES(responsavel_nome),
-                    registrado_em = CURRENT_TIMESTAMP
-            """, (aluno_id, data_presenca, current_user.id, current_user.nome, presente))
-
-        db.commit()
         db.close()
-        flash("Presenças registradas com sucesso!", "success")
         
         # ⚠️ CORREÇÃO/GARANTIA: Referenciando a rota com o prefixo do Blueprint
-        return redirect(url_for('presencas.registro_presenca', turma_id=turma_selecionada, data_presenca=data_presenca))
+        kwargs = {"turma_id": turma_selecionada, "data_presenca": data_presenca}
+        if academia_id:
+            kwargs["academia_id"] = academia_id
+        return redirect(url_for("presencas.registro_presenca", **kwargs))
 
-    # Buscar alunos da turma selecionada
     alunos = []
     presencas_registradas = []
     if turma_selecionada:
-        cursor.execute("SELECT id, nome FROM alunos WHERE TurmaID=%s ORDER BY nome", (turma_selecionada,))
-        alunos = cursor.fetchall()
+        try:
+            cursor.execute("SELECT id, nome FROM alunos WHERE TurmaID=%s ORDER BY nome", (turma_selecionada,))
+            alunos = cursor.fetchall()
+        except Exception:
+            alunos = []
 
         if alunos:
-            placeholders = ','.join(['%s'] * len(alunos))
-            aluno_ids = [a['id'] for a in alunos]
-            # Buscar apenas os alunos que tiveram presença (presente=1) na data selecionada
-            query = f"""
-                SELECT aluno_id 
-                FROM presencas 
-                WHERE data_presenca=%s AND presente=1 AND aluno_id IN ({placeholders})
-            """
-            cursor.execute(query, [data_presenca] + aluno_ids)
-            presencas_registradas = [row['aluno_id'] for row in cursor.fetchall()]
+            try:
+                placeholders = ','.join(['%s'] * len(alunos))
+                aluno_ids = [a['id'] for a in alunos]
+                cursor.execute(
+                    f"SELECT aluno_id FROM presencas WHERE data_presenca=%s AND presente=1 AND aluno_id IN ({placeholders})",
+                    [data_presenca] + aluno_ids
+                )
+                presencas_registradas = [row['aluno_id'] for row in cursor.fetchall()]
+            except Exception:
+                presencas_registradas = []
 
     db.close()
     return render_template(
@@ -82,7 +135,8 @@ def registro_presenca():
         alunos=alunos,
         turma_selecionada=turma_selecionada,
         data_presenca=data_presenca,
-        presencas_registradas=presencas_registradas
+        presencas_registradas=presencas_registradas,
+        academia_id=academia_id,
     )
 
 # ======================================================
@@ -99,66 +153,81 @@ def ata_presenca():
     ano_selecionado = int(request.args.get('ano', hoje.year))
     turma_selecionada = int(request.args.get('turma', 0))
 
-    # Buscar turmas
-    cursor.execute("SELECT TurmaID, Nome FROM turmas")
-    turmas = {t['TurmaID']: t['Nome'] for t in cursor.fetchall()}
+    try:
+        cursor.execute("SELECT TurmaID, Nome FROM turmas")
+        turmas = {t['TurmaID']: t['Nome'] for t in cursor.fetchall()}
+    except Exception:
+        turmas = {}
 
-    # Buscar todos os alunos
-    cursor.execute("SELECT id, nome, TurmaID FROM alunos ORDER BY nome")
-    alunos = cursor.fetchall()
+    try:
+        cursor.execute("SELECT id, nome, TurmaID FROM alunos ORDER BY nome")
+        alunos = cursor.fetchall()
+    except Exception:
+        alunos = []
     alunos_por_turma = {}
     for a in alunos:
-        alunos_por_turma.setdefault(a['TurmaID'], []).append(a)
+        alunos_por_turma.setdefault(a.get('TurmaID'), []).append(a)
 
-    # Buscar presenças
-    query = """
-        SELECT p.data_presenca, p.aluno_id, p.presente, u.nome AS responsavel, a.TurmaID
-        FROM presencas p
-        JOIN alunos a ON a.id = p.aluno_id
-        JOIN usuarios u ON u.id = p.responsavel_id
-        WHERE YEAR(p.data_presenca) = %s
-    """
-    params = [ano_selecionado]
-    if mes_selecionado != 0:
-        query += " AND MONTH(p.data_presenca) = %s"
-        params.append(mes_selecionado)
-    if turma_selecionada != 0:
-        query += " AND a.TurmaID = %s"
-        params.append(turma_selecionada)
+    presencas = []
+    try:
+        query = """
+            SELECT p.data_presenca, p.aluno_id, p.presente,
+                   COALESCE(u.nome, p.responsavel_nome, '-') AS responsavel, a.TurmaID
+            FROM presencas p
+            JOIN alunos a ON a.id = p.aluno_id
+            LEFT JOIN usuarios u ON u.id = p.responsavel_id
+            WHERE YEAR(p.data_presenca) = %s
+        """
+        params = [ano_selecionado]
+        if mes_selecionado != 0:
+            query += " AND MONTH(p.data_presenca) = %s"
+            params.append(mes_selecionado)
+        if turma_selecionada != 0:
+            query += " AND a.TurmaID = %s"
+            params.append(turma_selecionada)
+        query += " ORDER BY p.data_presenca"
+        cursor.execute(query, tuple(params))
+        presencas = cursor.fetchall()
+    except Exception as e:
+        flash(f"Erro ao carregar presenças: {e}", "danger")
 
-    query += " ORDER BY p.data_presenca"
-    cursor.execute(query, tuple(params))
-    presencas = cursor.fetchall()
     db.close()
 
-    # Organizar presenças por data e turma
     presencas_por_data = {}
     for p in presencas:
-        data_str = p['data_presenca'].strftime("%d/%m/%Y")
-        turma_id = p['TurmaID']
+        dp = p.get('data_presenca')
+        if not dp:
+            continue
+        data_str = dp.strftime("%d/%m/%Y") if hasattr(dp, 'strftime') else str(dp)
+        turma_id = p.get('TurmaID')
         if data_str not in presencas_por_data:
             presencas_por_data[data_str] = {}
         if turma_id not in presencas_por_data[data_str]:
             presencas_por_data[data_str][turma_id] = {
                 'presentes': [],
-                'responsavel': p['responsavel'],
+                'responsavel': p.get('responsavel', '-'),
                 'alunos': alunos_por_turma.get(turma_id, [])
             }
-        if p['presente'] == 1:
-            presencas_por_data[data_str][turma_id]['presentes'].append(p['aluno_id'])
+        if p.get('presente') == 1:
+            presencas_por_data[data_str][turma_id]['presentes'].append(p.get('aluno_id'))
 
-    # 🟢 Corrigido: Agrupar por mês/ano para o template
     presencas_por_mes = {}
     for data, turmas_dict in presencas_por_data.items():
-        mes_ano = data[-7:]  # MM/YYYY
+        mes_ano = data[-7:] if len(data) >= 7 else data
         if mes_ano not in presencas_por_mes:
             presencas_por_mes[mes_ano] = {}
         presencas_por_mes[mes_ano][data] = turmas_dict
 
-    presencas_por_mes = dict(sorted(
-        presencas_por_mes.items(),
-        key=lambda x: datetime.strptime(x[0], "%m/%Y")
-    ))
+    try:
+        def _parse_mes_ano(s):
+            partes = s.split('/')
+            if len(partes) >= 2:
+                m, a = int(partes[0]) if partes[0].isdigit() else 1, int(partes[-1]) if partes[-1].isdigit() else 2025
+                return (a, m)
+            return (2025, 1)
+        presencas_por_mes = dict(sorted(presencas_por_mes.items(), key=lambda x: _parse_mes_ano(x[0])))
+    except (ValueError, TypeError, IndexError):
+        pass
 
     return render_template('ata_presenca.html',
                             presencas_por_mes=presencas_por_mes,
@@ -176,8 +245,11 @@ def ata_presenca():
 def historico_presenca_lista():
     db = get_db_connection()
     cursor = db.cursor(dictionary=True)
-    cursor.execute("SELECT id, nome FROM alunos ORDER BY nome")
-    alunos = cursor.fetchall()
+    try:
+        cursor.execute("SELECT id, nome FROM alunos ORDER BY nome")
+        alunos = cursor.fetchall()
+    except Exception:
+        alunos = []
     db.close()
 
     hoje = datetime.today()

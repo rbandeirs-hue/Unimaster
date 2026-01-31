@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}Dash — Academia{% endblock %}
+{% block content %}
+<div class="container mt-4">
+    {% if academias|length > 1 %}
+    <form method="GET" class="mb-3">
+        <label class="form-label small fw-semibold">Academia:</label>
+        <select name="academia_id" class="form-select form-select-sm d-inline-block w-auto" onchange="this.form.submit()">
+            {% for ac in academias %}
+            <option value="{{ ac.id }}" {% if ac.id == academia_id %}selected{% endif %}>{{ ac.nome }}</option>
+            {% endfor %}
+        </select>
+    </form>
+    {% endif %}
+    <div class="text-center mb-4">
+        <h2 class="fw-bold text-primary">Dash</h2>
+        <p class="text-muted">Resumo da academia</p>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+            <div class="card shadow-sm border-primary card-hover painel-atalho-card h-100">
+                <div class="card-body text-center py-3 px-3 d-flex flex-column align-items-center justify-content-center">
+                    <i class="bi bi-people-fill fs-3 mb-2 text-primary"></i>
+                    <h6 class="fw-bold mb-1">Alunos</h6>
+                    <span class="display-6 fw-bold text-primary">{{ stats.get('alunos', 0) }}</span>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+            <div class="card shadow-sm border-info card-hover painel-atalho-card h-100">
+                <div class="card-body text-center py-3 px-3 d-flex flex-column align-items-center justify-content-center">
+                    <i class="bi bi-collection-fill fs-3 mb-2 text-info"></i>
+                    <h6 class="fw-bold mb-1">Turmas</h6>
+                    <span class="display-6 fw-bold text-info">{{ stats.get('turmas', 0) }}</span>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+            <div class="card shadow-sm border-warning card-hover painel-atalho-card h-100">
+                <div class="card-body text-center py-3 px-3 d-flex flex-column align-items-center justify-content-center">
+                    <i class="bi bi-person-badge-fill fs-3 mb-2 text-warning"></i>
+                    <h6 class="fw-bold mb-1">Professores</h6>
+                    <span class="display-6 fw-bold text-warning">{{ stats.get('professores', 0) }}</span>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+            <div class="card shadow-sm border-success card-hover painel-atalho-card h-100">
+                <div class="card-body text-center py-3 px-3 d-flex flex-column align-items-center justify-content-center">
+                    <i class="bi bi-cash-coin fs-3 mb-2 text-success"></i>
+                    <h6 class="fw-bold mb-1">Receitas (mês)</h6>
+                    <span class="h5 fw-bold text-success">R$ {{ "%.2f" % (stats.get('receitas_mes', 0) or 0) }}</span>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+            <div class="card shadow-sm border-danger card-hover painel-atalho-card h-100">
+                <div class="card-body text-center py-3 px-3 d-flex flex-column align-items-center justify-content-center">
+                    <i class="bi bi-cash-stack fs-3 mb-2 text-danger"></i>
+                    <h6 class="fw-bold mb-1">Despesas (mês)</h6>
+                    <span class="h5 fw-bold text-danger">R$ {{ "%.2f" % (stats.get('despesas_mes', 0) or 0) }}</span>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+            {% set saldo = (stats.get('receitas_mes', 0) or 0) - (stats.get('despesas_mes', 0) or 0) %}
+            <div class="card shadow-sm {{ 'border-success' if saldo >= 0 else 'border-warning' }} card-hover painel-atalho-card h-100">
+                <div class="card-body text-center py-3 px-3 d-flex flex-column align-items-center justify-content-center">
+                    <i class="bi bi-graph-up-arrow fs-3 mb-2 {{ 'text-success' if saldo >= 0 else 'text-warning' }}"></i>
+                    <h6 class="fw-bold mb-1">Saldo (mês)</h6>
+                    <span class="h5 fw-bold {{ 'text-success' if saldo >= 0 else 'text-warning' }}">R$ {{ "%.2f" % saldo }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<style>
+.painel-atalho-card { transition: 0.2s ease; }
+.card { border-radius: 0.75rem; transition: 0.2s ease; }
+.card:hover, .card-hover:hover { transform: translateY(-5px); box-shadow: 0 0.6rem 1.2rem rgba(0,0,0,0.15) !important; }
+</style>
+{% endblock %}

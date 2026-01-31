@@ -14,6 +14,7 @@ from config import get_db_connection
 def role_required(*roles):
     """
     Exige que o usuário tenha pelo menos um dos roles passados.
+    Admin tem acesso total e ignora a verificação de roles específicos.
     Exemplo:
         @role_required("gestor_academia", "professor")
     """
@@ -24,6 +25,9 @@ def role_required(*roles):
             if not current_user.is_authenticated:
                 flash("Faça login primeiro.", "warning")
                 return redirect(url_for("auth.login"))
+
+            if current_user.has_role("admin"):
+                return func(*args, **kwargs)
 
             if not any(current_user.has_role(r) for r in roles):
                 flash("Acesso negado.", "danger")
@@ -40,6 +44,7 @@ def role_required(*roles):
 def permission_required(*permissions):
     """
     Exige que o usuário tenha uma ou mais permissões específicas.
+    Admin tem acesso total (has_permission retorna True para qualquer permissão).
     Exemplo:
         @permission_required("editar_aluno")
     """
@@ -50,6 +55,9 @@ def permission_required(*permissions):
             if not current_user.is_authenticated:
                 flash("Faça login para continuar.", "warning")
                 return redirect(url_for("auth.login"))
+
+            if current_user.has_role("admin"):
+                return func(*args, **kwargs)
 
             if not any(current_user.has_permission(p) for p in permissions):
                 flash("Você não tem permissão para isso.", "danger")
@@ -103,6 +111,12 @@ def aluno_access(permitir_edicao=False):
                 return redirect(url_for("painel.home"))
 
             user = current_user
+
+            # -----------------------------
+            # ADMIN — ACESSO TOTAL
+            # -----------------------------
+            if user.has_role("admin"):
+                return func(*args, **kwargs)
 
             # -----------------------------
             # FEDERAÇÃO (ROLE)

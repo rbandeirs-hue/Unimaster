@@ -4,8 +4,30 @@
 
 from flask import Blueprint, render_template, redirect, url_for, session
 from flask_login import login_required, current_user
+from config import get_db_connection
 
 painel_bp = Blueprint("painel", __name__, url_prefix="/painel")
+
+
+def _stats_admin():
+    """Retorna contagens básicas para o dashboard admin."""
+    stats = {"federacoes": 0, "associacoes": 0, "academias": 0, "alunos": 0}
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT COUNT(*) as c FROM federacoes")
+        stats["federacoes"] = cur.fetchone().get("c") or 0
+        cur.execute("SELECT COUNT(*) as c FROM associacoes")
+        stats["associacoes"] = cur.fetchone().get("c") or 0
+        cur.execute("SELECT COUNT(*) as c FROM academias")
+        stats["academias"] = cur.fetchone().get("c") or 0
+        cur.execute("SELECT COUNT(*) as c FROM alunos")
+        stats["alunos"] = cur.fetchone().get("c") or 0
+        cur.close()
+        conn.close()
+    except Exception:
+        pass
+    return stats
 
 # Mapeamento: modo -> (nome, url_endpoint, template_ou_none)
 MODOS = {
@@ -33,17 +55,38 @@ def _modos_disponiveis():
     return modos
 
 
+def _aluno_tem_registro():
+    """Verifica se o usuário tem um aluno vinculado."""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT id FROM alunos WHERE usuario_id = %s LIMIT 1", (current_user.id,))
+        ok = cur.fetchone() is not None
+        cur.close()
+        conn.close()
+        return ok
+    except Exception:
+        return False
+
+
 def _redirecionar_modo(modo):
     """Redireciona para o painel do modo."""
     if modo == "admin":
-        return render_template("painel/admin.html", usuario=current_user)
+        stats = _stats_admin()
+        return render_template("painel/admin.html", usuario=current_user, stats=stats)
     if modo == "federacao":
         return redirect(url_for("federacao.painel_federacao"))
     if modo == "associacao":
         return redirect(url_for("associacao.painel_associacao"))
     if modo == "academia":
-        return redirect(url_for("academia.painel_academia"))
+        return redirect(url_for("academia.dash"))
     if modo == "aluno":
+        if not _aluno_tem_registro():
+            from flask import flash
+            flash("Nenhum cadastro de aluno vinculado a este usuário. Contate o administrador.", "warning")
+            session.pop("modo_painel", None)
+            modos = _modos_disponiveis()
+            return render_template("painel/sem_aluno_vinculado.html", modos=modos)
         return redirect(url_for("painel_aluno.painel"))
     return redirect(url_for("painel.home"))
 
@@ -92,4 +135,5 @@ def escolher_modo(modo):
 @painel_bp.route("/_admin")
 @login_required
 def _redirect_admin():
-    return render_template("painel/admin.html", usuario=current_user)
+    stats = _stats_admin()
+    return render_template("painel/admin.html", usuario=current_user, stats=stats)

@@ -73,13 +73,40 @@ def painel_federacao():
         """, (getattr(current_user, "id_federacao", None),))
 
     associacoes = cur.fetchall()
+
+    # Dashboard: contagens
+    stats = {"associacoes": 0, "academias": 0, "alunos": 0}
+    try:
+        stats["associacoes"] = len(associacoes)
+        if current_user.has_role("admin"):
+            cur.execute("SELECT COUNT(*) as c FROM academias")
+            stats["academias"] = cur.fetchone().get("c") or 0
+            cur.execute("SELECT COUNT(*) as c FROM alunos")
+            stats["alunos"] = cur.fetchone().get("c") or 0
+        else:
+            fid = getattr(current_user, "id_federacao", None)
+            if fid:
+                cur.execute(
+                    "SELECT COUNT(*) as c FROM academias ac JOIN associacoes ass ON ass.id = ac.id_associacao WHERE ass.id_federacao = %s",
+                    (fid,),
+                )
+                stats["academias"] = cur.fetchone().get("c") or 0
+                cur.execute(
+                    "SELECT COUNT(*) as c FROM alunos a JOIN academias ac ON ac.id = a.id_academia JOIN associacoes ass ON ass.id = ac.id_associacao WHERE ass.id_federacao = %s",
+                    (fid,),
+                )
+                stats["alunos"] = cur.fetchone().get("c") or 0
+    except Exception:
+        pass
+
     cur.close()
     conn.close()
 
     return render_template(
         "painel/painel_federacao.html",
         usuario=current_user,
-        associacoes=associacoes
+        associacoes=associacoes,
+        stats=stats,
     )
 
 

@@ -91,7 +91,7 @@
                             {% for g in graduacoes %}
                             <option value="{{ g.id }}"
                                 {% if aluno.graduacao_id == g.id %}selected{% endif %}>
-                                {{ g.faixa }} - {{ g.graduacao }} - {{ g.categoria }}
+                                {{ g.get('faixa', '') }} - {{ g.get('graduacao', '') }}{% if g.get('categoria') %} - {{ g.get('categoria') }}{% endif %}
                             </option>
                             {% endfor %}
                         </select>
@@ -166,16 +166,19 @@
 
                 <div class="row">
                     <div class="col-md-8 mb-3">
-                        <label class="form-label fw-semibold">Turma *</label>
-                        <select class="form-control" name="TurmaID" required>
-                            <option value="">Selecione</option>
+                        <label class="form-label fw-semibold">Turma(s)</label>
+                        <p class="small text-muted mb-2">Marque uma ou mais turmas em que o aluno está matriculado</p>
+                        <div class="d-flex flex-wrap gap-3">
                             {% for t in turmas %}
-                            <option value="{{ t.TurmaID }}"
-                                {% if aluno.TurmaID == t.TurmaID %}selected{% endif %}>
-                                {{ t.Nome }} ({{ t.Classificacao }}, {{ t.DiasHorario }})
-                            </option>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="turmas_ids" value="{{ t.TurmaID }}" id="turma_{{ t.TurmaID }}"
+                                    {% if t.TurmaID in (aluno.turmas_ids or []) or (not (aluno.turmas_ids or []) and aluno.TurmaID == t.TurmaID) %}checked{% endif %}>
+                                <label class="form-check-label" for="turma_{{ t.TurmaID }}">
+                                    {{ t.Nome }} ({{ t.Classificacao }}{% if t.DiasHorario %}, {{ t.DiasHorario }}{% endif %})
+                                </label>
+                            </div>
                             {% endfor %}
-                        </select>
+                        </div>
                     </div>
 
                     <div class="col-md-4 mb-3">

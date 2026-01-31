@@ -44,7 +44,8 @@ def login():
         cur.execute("""
             SELECT 
                 id, nome, email, senha,
-                id_federacao, id_associacao, id_academia
+                id_federacao, id_associacao, id_academia,
+                COALESCE(ativo, 1) AS ativo
             FROM usuarios
             WHERE email = %s
         """, (email,))
@@ -53,6 +54,10 @@ def login():
 
         if not usuario:
             flash("E-mail ou senha incorretos!", "danger")
+            return render_template("login.html", login_logo_url=_get_login_logo())
+
+        if not usuario.get("ativo", 1):
+            flash("Conta inativa. Contate o administrador.", "warning")
             return render_template("login.html", login_logo_url=_get_login_logo())
 
         # --------------------------------------------

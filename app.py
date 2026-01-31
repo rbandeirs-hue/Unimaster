@@ -110,13 +110,60 @@ def injetar_modos_e_contexto():
         modos = _modos_disponiveis()
         return len(modos) > 1
 
+    def modos_disponiveis():
+        """Lista de (modo_id, modo_nome) para dropdown."""
+        if not hasattr(current_user, 'is_authenticated') or not current_user.is_authenticated:
+            return []
+        from blueprints.painel.routes import _modos_disponiveis
+        return _modos_disponiveis()
+
+    def modo_atual_nome():
+        """Retorna o nome amigável do modo atual (ex: Academia, Aluno)."""
+        if not hasattr(current_user, 'is_authenticated') or not current_user.is_authenticated:
+            return ""
+        from utils.contexto_logo import _modo_efetivo
+        modo = session.get("modo_painel") or _modo_efetivo(current_user)
+        mapeamento = {"admin": "Administrador", "federacao": "Federação",
+                      "associacao": "Associação", "academia": "Academia", "aluno": "Aluno"}
+        return mapeamento.get(modo, "")
+
     logo_url, contexto_nome, _ = get_contexto_logo_e_nome(current_user, session)
     return dict(
         tem_multiplos_modos=tem_multiplos_modos,
+        modos_disponiveis=modos_disponiveis,
+        modo_atual_nome=modo_atual_nome,
         contexto_logo_url=logo_url,
         contexto_nome=contexto_nome,
         current_year=datetime.now().year,
     )
+
+
+# ============================================================
+# 🔹 Filtro Jinja: data em formato BR (dd/mm/yyyy)
+# ============================================================
+def _formatar_data_br(valor):
+    """Converte date/datetime/string para dd/mm/yyyy. Retorna '' se inválido."""
+    if valor is None:
+        return ""
+    from datetime import datetime, date
+    if isinstance(valor, (date, datetime)):
+        return valor.strftime("%d/%m/%Y")
+    if isinstance(valor, str):
+        valor = (valor or "").strip()[:10]
+        if not valor:
+            return ""
+        for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y"):
+            try:
+                d = datetime.strptime(valor, fmt)
+                return d.strftime("%d/%m/%Y")
+            except ValueError:
+                continue
+    return str(valor) if valor else ""
+
+
+@app.template_filter("data_br")
+def filtro_data_br(valor):
+    return _formatar_data_br(valor)
 
 
 # ============================================================

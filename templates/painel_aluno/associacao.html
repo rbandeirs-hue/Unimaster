@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Associação — Academias{% endblock %}
+{% block content %}
+<div class="container mt-4 px-2 px-sm-3">
+    <a href="{{ url_for('painel_aluno.meu_perfil') }}" class="btn btn-outline-secondary btn-sm mb-3">
+        <i class="bi bi-arrow-left me-1"></i> Voltar
+    </a>
+    <h2 class="h5 fw-bold mb-3">Associação</h2>
+    {% if associacao_nome %}
+    <p class="text-muted small mb-4">Academias vinculadas à <strong>{{ associacao_nome }}</strong></p>
+    {% endif %}
+
+    {% if academias %}
+    <div class="row g-3">
+        {% for acad in academias %}
+        <div class="col-12 col-sm-6 col-md-4 col-lg-3">
+            <div class="card shadow-sm border h-100 academia-card">
+                <div class="card-body text-center d-flex flex-column align-items-center p-3">
+                    <div class="academia-logo mb-2">
+                        {% if acad.logo_url %}
+                        <img src="{{ acad.logo_url }}" alt="{{ acad.nome }}" class="rounded-circle" style="width: 80px; height: 80px; object-fit: cover;">
+                        {% else %}
+                        <div class="rounded-circle bg-secondary text-white d-flex align-items-center justify-content-center" style="width: 80px; height: 80px; font-size: 2rem; font-weight: 700;">
+                            {{ (acad.nome or 'A')[:1] }}
+                        </div>
+                        {% endif %}
+                    </div>
+                    <h6 class="fw-bold mb-1 text-truncate w-100" title="{{ acad.nome }}">{{ acad.nome or '—' }}</h6>
+                    {% if acad.cidade or acad.uf %}
+                    <small class="text-muted d-block mb-2">{{ acad.cidade or '' }}{% if acad.cidade and acad.uf %} - {% endif %}{{ acad.uf or '' }}</small>
+                    {% endif %}
+                    {% if acad.email %}
+                    <a href="mailto:{{ acad.email }}?subject=Solicitação de visita - {{ acad.nome or 'Academia' }}"
+                       class="btn btn-primary btn-sm w-100 mt-auto" target="_blank" rel="noopener"
+                       title="Enviar e-mail para solicitar visita">
+                        <i class="bi bi-envelope-plus me-1"></i> Solicitar visita
+                    </a>
+                    {% elif acad.telefone %}
+                    <a href="tel:{{ acad.telefone | replace(' ', '') | replace('(', '') | replace(')', '') | replace('-', '') }}"
+                       class="btn btn-primary btn-sm w-100 mt-auto" title="Ligar para solicitar visita">
+                        <i class="bi bi-telephone-plus me-1"></i> Solicitar visita
+                    </a>
+                    {% else %}
+                    <button type="button" class="btn btn-outline-secondary btn-sm w-100 mt-auto" disabled
+                            title="Academia sem contato cadastrado">
+                        <i class="bi bi-envelope-plus me-1"></i> Solicitar visita
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="alert alert-info">
+        <i class="bi bi-info-circle me-2"></i>
+        {% if not associacao_nome %}
+        Sua academia ainda não está vinculada a uma associação, ou não há outras academias cadastradas.
+        {% else %}
+        Nenhuma academia encontrada nesta associação.
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+<style>
+.academia-card { border-color: var(--dark-bg, #212529) !important; border-width: 2px; }
+</style>
+{% endblock %}

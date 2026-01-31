@@ -1,34 +1,147 @@
 {% extends "base.html" %}
-{% block title %}Minha Turma — Aluno{% endblock %}
+{% block title %}Minha Turma{% endblock %}
 {% block content %}
-<div class="container mt-4">
-    <a href="{{ url_for('painel_aluno.painel') }}" class="btn btn-outline-secondary mb-3">
+<div class="container mt-4 px-2 px-sm-3">
+    <a href="{{ url_for('painel_aluno.meu_perfil') if current_user.has_role('aluno') else url_for('painel.home') }}" class="btn btn-outline-secondary btn-sm mb-3">
         <i class="bi bi-arrow-left me-1"></i> Voltar
     </a>
-    <h2 class="h4 fw-bold mb-3">Minha Turma</h2>
+    <h2 class="h5 fw-bold mb-3">Minha Turma</h2>
 
-    {% if turma %}
-    <div class="card border-0 shadow-sm">
-        <div class="card-body">
-            <h5 class="card-title fw-bold text-primary">{{ turma.Nome }}</h5>
-            <dl class="row mb-0">
-                <dt class="col-sm-3">Horário</dt>
-                <dd class="col-sm-9">{{ turma.DiasHorario or '-' }}</dd>
-                <dt class="col-sm-3">Idade mínima</dt>
-                <dd class="col-sm-9">{{ turma.IdadeMin or '-' }}</dd>
-                <dt class="col-sm-3">Idade máxima</dt>
-                <dd class="col-sm-9">{{ turma.IdadeMax or '-' }}</dd>
-                {% if turma.Professor %}
-                <dt class="col-sm-3">Professor</dt>
-                <dd class="col-sm-9">{{ turma.Professor }}</dd>
-                {% endif %}
-            </dl>
-        </div>
+    {% if turmas_com_alunos %}
+    {% if turmas_com_alunos|length > 1 %}
+    <div class="mb-4">
+        <label class="form-label small fw-semibold">Selecionar turma</label>
+        <select id="seletor-turma" class="form-select form-select-sm" style="max-width: 320px;">
+            <option value="">Todas as turmas</option>
+            {% for turma, alunos in turmas_com_alunos %}
+            <option value="{{ turma.TurmaID }}" {% if turma_selecionada_id == turma.TurmaID %}selected{% endif %}>
+                {{ turma.Nome }} ({{ alunos|length }} aluno{{ 's' if alunos|length != 1 else '' }})
+            </option>
+            {% endfor %}
+        </select>
     </div>
+    {% endif %}
+
+    {% for turma, alunos_turma in turmas_com_alunos %}
+    <div class="turma-secao mb-4" data-turma-id="{{ turma.TurmaID }}" {% if turma_selecionada_id and turma_selecionada_id != turma.TurmaID %}style="display:none;"{% endif %}>
+        <div class="card shadow-sm border-info mb-3">
+            <div class="card-body">
+                <h5 class="card-title fw-bold text-primary">{{ turma.Nome }}</h5>
+                <dl class="row mb-0">
+                    <dt class="col-sm-3">Horário</dt>
+                    <dd class="col-sm-9">{{ turma.DiasHorario or '-' }}</dd>
+                    {% if turma.Professor %}
+                    <dt class="col-sm-3">Professor</dt>
+                    <dd class="col-sm-9">{{ turma.Professor }}</dd>
+                    {% endif %}
+                </dl>
+            </div>
+        </div>
+
+        {% if alunos_turma and (current_user.has_role('professor') or current_user.has_role('admin') or current_user.has_role('aluno')) %}
+        <div class="alunos-da-turma">
+            <h6 class="fw-bold mb-2">Alunos da turma</h6>
+            <div class="mb-2">
+                <input type="text" class="form-control form-control-sm busca-turma" data-turma="{{ turma.TurmaID }}" placeholder="Pesquisar por nome..." style="max-width: 280px;">
+            </div>
+            <div class="row g-2 g-sm-3 lista-alunos" data-turma="{{ turma.TurmaID }}">
+                {% for a in alunos_turma %}
+                <div class="col-6 col-sm-4 col-md-3 col-lg-2 aluno-card-item" data-turma="{{ turma.TurmaID }}" data-nome="{{ (a.nome or '')|lower }}">
+                    <div class="card shadow-sm border h-100 turma-aluno-card">
+                        <div class="card-body p-2 text-center d-flex flex-column align-items-center">
+                            <div class="turma-aluno-foto mb-2">
+                                {% if a.foto %}
+                                <img src="{{ url_for('static', filename='uploads/' + a.foto) }}" alt="" class="rounded-circle">
+                                {% else %}
+                                <div class="turma-aluno-placeholder"><i class="bi bi-person-fill"></i></div>
+                                {% endif %}
+                            </div>
+                            <h6 class="mb-0 small fw-semibold text-truncate w-100" title="{{ a.nome }}">{{ a.nome or '-' }}</h6>
+                            <small class="text-muted">{{ a.faixa_nome or '' }}{% if a.faixa_nome and a.graduacao_nome %} ({{ a.graduacao_nome }}){% elif a.graduacao_nome %}{{ a.graduacao_nome }}{% else %}—{% endif %}</small>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            <p class="text-muted small mt-2 mb-0 contador-turma" data-turma="{{ turma.TurmaID }}">{{ alunos_turma|length }} aluno(s) na turma</p>
+        </div>
+        {% endif %}
+    </div>
+    {% endfor %}
+
     {% else %}
     <div class="alert alert-warning">
         <i class="bi bi-exclamation-triangle me-2"></i>Você ainda não está vinculado a nenhuma turma. Entre em contato com a secretaria da academia.
     </div>
     {% endif %}
 </div>
+
+<style>
+.turma-aluno-card {
+    border-radius: 0.75rem;
+    transition: 0.2s ease;
+}
+.turma-aluno-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 0.4rem 0.8rem rgba(0,0,0,0.1) !important;
+}
+.turma-aluno-foto {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    overflow: hidden;
+    background: #e9ecef;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.turma-aluno-foto img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+.turma-aluno-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    color: #6c757d;
+}
+</style>
+
+<script>
+(function() {
+    var seletor = document.getElementById('seletor-turma');
+    var secoes = document.querySelectorAll('.turma-secao');
+    if (seletor) {
+        seletor.addEventListener('change', function() {
+            var val = this.value;
+            if (val) {
+                window.location.href = "{{ url_for('painel_aluno.minha_turma') }}?turma_id=" + val;
+            } else {
+                secoes.forEach(function(s) { s.style.display = ''; });
+                window.location.href = "{{ url_for('painel_aluno.minha_turma') }}";
+            }
+        });
+    }
+    document.querySelectorAll('.busca-turma').forEach(function(busca) {
+        var turmaId = busca.getAttribute('data-turma');
+        var itens = document.querySelectorAll('.aluno-card-item[data-turma="' + turmaId + '"]');
+        var contador = document.querySelector('.contador-turma[data-turma="' + turmaId + '"]');
+        busca.addEventListener('input', function() {
+            var q = (this.value || '').toLowerCase().trim();
+            var visiveis = 0;
+            itens.forEach(function(el) {
+                var nome = (el.getAttribute('data-nome') || '');
+                var ok = !q || nome.indexOf(q) >= 0;
+                el.style.display = ok ? '' : 'none';
+                if (ok) visiveis++;
+            });
+            if (contador) contador.textContent = visiveis + ' aluno(s) na turma';
+        });
+    });
+})();
+</script>
 {% endblock %}

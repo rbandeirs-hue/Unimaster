@@ -1,0 +1,356 @@
+{% extends "base.html" %}
+{% block title %}Meu currículo — Judô{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/curriculo.css') }}?v=3">
+{% endblock %}
+{% block content %}
+<div class="container mt-4 pb-4 px-2 px-sm-3 px-md-4">
+  <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3 curriculo-top-actions">
+    <a href="{{ url_for('painel_aluno.meu_perfil') }}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-arrow-left me-1"></i> Voltar ao Meu Perfil
+    </a>
+    <div class="d-flex flex-wrap gap-2">
+      <a href="{{ url_for('painel_aluno.curriculo_impressao') }}" class="btn btn-danger btn-sm" target="_blank">
+        <i class="bi bi-file-pdf me-1"></i> Exportar PDF
+      </a>
+      <button class="btn btn-outline-secondary btn-sm curriculo-no-print" type="button" data-bs-toggle="collapse" data-bs-target="#gerir-curriculo">
+        <i class="bi bi-gear me-1"></i> Sincronizar Zempo / Gerir
+      </button>
+    </div>
+  </div>
+
+  <div id="gerir-curriculo" class="collapse curriculo-no-print mb-4">
+    <div class="card shadow-sm">
+      <div class="card-header bg-light py-2">
+        <h6 class="mb-0 fw-bold"><i class="bi bi-link-45deg me-2"></i> Zempo — Link e sincronização</h6>
+      </div>
+      <div class="card-body">
+        <p class="small text-muted mb-3">Cole o link do seu perfil no Zempo e informe código/senha para sincronizar. <a href="https://zempo.com.br/portal/" target="_blank" rel="noopener">zempo.com.br/portal</a></p>
+        <form id="form-zempo" method="post" action="{{ url_for('painel_aluno.curriculo_sincronizar') }}">
+          <div class="row g-2 mb-2">
+            <div class="col-12">
+              <label class="form-label small fw-semibold">Link do perfil</label>
+              <input type="url" class="form-control form-control-sm" name="link_zempo" id="link_zempo" placeholder="https://zempo.com.br/..." value="{{ aluno.link_zempo or '' }}">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold">Código Zempo</label>
+              <input type="text" class="form-control form-control-sm" name="zempo_user" id="zempo_user" placeholder="Código (ex.: CPF)">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold">Senha Zempo</label>
+              <input type="password" class="form-control form-control-sm" name="zempo_pass" id="zempo_pass" placeholder="Senha">
+            </div>
+            <div class="col-12">
+              <div class="form-check">
+                <input type="checkbox" class="form-check-input" id="lembrar-zempo" name="lembrar_zempo">
+                <label class="form-check-label small" for="lembrar-zempo">Lembrar código e senha neste navegador</label>
+              </div>
+            </div>
+          </div>
+          <div class="d-flex flex-wrap gap-2">
+            <button type="button" id="btn-salvar-link" class="btn btn-primary btn-sm">Salvar link</button>
+            <button type="submit" id="btn-sincronizar" class="btn btn-success btn-sm"><i class="bi bi-arrow-repeat me-1"></i> Sincronizar</button>
+          </div>
+        </form>
+        <div id="msg-link" class="small mt-2"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="curriculo-cv shadow-sm rounded p-3 p-md-4 bg-white" id="curriculo-cv">
+    <header class="cv-header">
+      <div class="cv-photo-wrap">
+        {% if aluno.foto %}
+        <img class="cv-photo" src="{{ url_for('static', filename='uploads/' + aluno.foto) }}" alt="Foto">
+        {% else %}
+        <i class="bi bi-person-fill text-muted" style="font-size:2rem;"></i>
+        {% endif %}
+      </div>
+      <div class="cv-title flex-grow-1">
+        <h1 class="cv-name">{{ aluno.nome }}{% if aluno.nome_social %} <span class="text-muted">({{ aluno.nome_social }})</span>{% endif %}</h1>
+        <p class="cv-subtitle">Currículo Judô — Atleta</p>
+      </div>
+    </header>
+
+    <section class="cv-section">
+      <h3>Dados do atleta</h3>
+      <div class="cv-dados cv-dados-columns row g-2">
+        <div class="col-md-6">
+          <p><strong>Nome completo:</strong><br>{{ aluno.nome }}{% if aluno.nome_social %} ({{ aluno.nome_social }}){% endif %}</p>
+          {% if aluno.telefone_curriculo %}<p><strong>Telefone / celular:</strong><br>{{ aluno.telefone_curriculo }}</p>{% endif %}
+          {% if aluno.email_curriculo %}<p><strong>E-mail:</strong><br>{{ aluno.email_curriculo }}</p>{% endif %}
+          {% if aluno.cidade or aluno.estado %}<p><strong>Cidade e Estado:</strong><br>{{ aluno.cidade or '' }}{% if aluno.cidade and aluno.estado %}, {% endif %}{{ aluno.estado or '' }}</p>{% endif %}
+        </div>
+        <div class="col-md-6">
+          {% if aluno.endereco_completo %}<p><strong>Endereço:</strong><br>{{ aluno.endereco_completo }}</p>{% endif %}
+          {% if aluno.ultimo_exame_faixa_formatada %}<p><strong>Data da Última Graduação:</strong><br>{{ aluno.ultimo_exame_faixa_formatada }}</p>{% endif %}
+          {% if aluno.faixa_nome or aluno.graduacao_nome %}<p><strong>Faixa:</strong><br>{{ aluno.faixa_nome or '' }}{% if aluno.faixa_nome and aluno.graduacao_nome %} ({{ aluno.graduacao_nome }}){% elif aluno.graduacao_nome %}{{ aluno.graduacao_nome }}{% endif %}</p>{% endif %}
+        </div>
+      </div>
+    </section>
+
+    <section class="cv-section">
+      <h3>Participações em competições — atleta</h3>
+      <div class="cv-actions curriculo-no-print d-flex flex-wrap gap-2 align-items-center mb-2">
+        <button type="button" class="btn btn-success btn-sm" data-bs-toggle="collapse" data-bs-target="#form-add-comp">
+          <i class="bi bi-plus-circle me-1"></i> Adicionar competição
+        </button>
+        <form method="post" action="{{ url_for('painel_aluno.curriculo_excluir_competicoes') }}" id="form-excluir-comp" class="d-inline">
+          <button type="submit" class="btn btn-outline-danger btn-sm" id="btn-excluir-comp" disabled><i class="bi bi-trash me-1"></i> Excluir selecionados</button>
+        </form>
+      </div>
+      <div id="form-add-comp" class="collapse curriculo-no-print mb-3">
+        <div class="card card-body bg-light">
+          <form method="post" action="{{ url_for('painel_aluno.curriculo_adicionar_competicao') }}" class="row g-2">
+            <div class="col-md-6">
+              <label class="form-label small">Colocação</label>
+              <input type="text" name="colocacao" class="form-control form-control-sm" placeholder="Ex: 1º Lugar, 2º Lugar, ouro, prata, —">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small">Competição <span class="text-danger">*</span></label>
+              <input type="text" name="competicao" class="form-control form-control-sm" required placeholder="Nome da competição">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small">Âmbito</label>
+              <input type="text" name="ambito" class="form-control form-control-sm" placeholder="Ex: Nacional, Estadual">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small">Local</label>
+              <input type="text" name="local_texto" class="form-control form-control-sm" placeholder="Ex: SP, PE">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small">Data</label>
+              <input type="date" name="data_competicao" class="form-control form-control-sm">
+            </div>
+            <div class="col-12">
+              <label class="form-label small">Categoria</label>
+              <input type="text" name="categoria" class="form-control form-control-sm" placeholder="Ex: Júnior Masculino -60kg">
+            </div>
+            <div class="col-12">
+              <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-check-lg me-1"></i> Salvar</button>
+              <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="collapse" data-bs-target="#form-add-comp">Cancelar</button>
+            </div>
+          </form>
+        </div>
+      </div>
+      {% if competicoes %}
+      <div class="table-responsive">
+        <table class="table cv-table mb-0">
+          <thead class="table-light">
+            <tr>
+              <th class="curriculo-no-print" style="width:2rem;"><input type="checkbox" id="check-all-comp" title="Selecionar todos"></th>
+              <th>Colocação</th><th>Competição</th><th>Âmbito</th><th>Local</th><th>Data</th><th>Categoria</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for c in competicoes %}
+            <tr>
+              <td class="curriculo-no-print" data-label=""><input type="checkbox" class="cb-comp" value="{{ c.id }}" form="form-excluir-comp" name="ids"></td>
+              <td data-label="Colocação">{{ c.colocacao or '—' }}</td>
+              <td data-label="Competição">{{ c.competicao or '—' }}</td>
+              <td data-label="Âmbito">{{ c.ambito or '—' }}</td>
+              <td data-label="Local">{{ c.local_texto or '—' }}</td>
+              <td data-label="Data">{{ c.data_competicao|data_br or '—' }}</td>
+              <td data-label="Categoria">{{ c.categoria or '—' }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="cv-empty mb-0">Nenhuma competição. Adicione manualmente ou use <strong>Sincronizar Zempo</strong> acima.</p>
+      {% endif %}
+    </section>
+
+    <section class="cv-section">
+      <h3>Participações em eventos</h3>
+      <div class="cv-actions curriculo-no-print d-flex flex-wrap gap-2 align-items-center mb-2">
+        <button type="button" class="btn btn-success btn-sm" data-bs-toggle="collapse" data-bs-target="#form-add-evt">
+          <i class="bi bi-plus-circle me-1"></i> Adicionar evento
+        </button>
+        <form method="post" action="{{ url_for('painel_aluno.curriculo_excluir_eventos') }}" id="form-excluir-evt" class="d-inline">
+          <button type="submit" class="btn btn-outline-danger btn-sm" id="btn-excluir-evt" disabled><i class="bi bi-trash me-1"></i> Excluir selecionados</button>
+        </form>
+      </div>
+      <div id="form-add-evt" class="collapse curriculo-no-print mb-3">
+        <div class="card card-body bg-light">
+          <form method="post" action="{{ url_for('painel_aluno.curriculo_adicionar_evento') }}" class="row g-2">
+            <div class="col-md-6">
+              <label class="form-label small">Evento <span class="text-danger">*</span></label>
+              <input type="text" name="evento" class="form-control form-control-sm" required placeholder="Nome do evento">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small">Atividade</label>
+              <input type="text" name="atividade" class="form-control form-control-sm" placeholder="Ex: Pleito Bolsa Atleta">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small">Âmbito</label>
+              <input type="text" name="ambito" class="form-control form-control-sm" placeholder="Ex: Nacional">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small">Local</label>
+              <input type="text" name="local_texto" class="form-control form-control-sm" placeholder="Ex: RJ">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small">Data</label>
+              <input type="date" name="data_evento" class="form-control form-control-sm">
+            </div>
+            <div class="col-12">
+              <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-check-lg me-1"></i> Salvar</button>
+              <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="collapse" data-bs-target="#form-add-evt">Cancelar</button>
+            </div>
+          </form>
+        </div>
+      </div>
+      {% if eventos %}
+      <div class="table-responsive">
+        <table class="table cv-table mb-0">
+          <thead class="table-light">
+            <tr>
+              <th class="curriculo-no-print" style="width:2rem;"><input type="checkbox" id="check-all-evt" title="Selecionar todos"></th>
+              <th>Evento</th><th>Atividade</th><th>Âmbito</th><th>Local</th><th>Data</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for e in eventos %}
+            <tr>
+              <td class="curriculo-no-print" data-label=""><input type="checkbox" class="cb-evt" value="{{ e.id }}" form="form-excluir-evt" name="ids"></td>
+              <td data-label="Evento">{{ e.evento or '—' }}</td>
+              <td data-label="Atividade">{{ e.atividade or '—' }}</td>
+              <td data-label="Âmbito">{{ e.ambito or '—' }}</td>
+              <td data-label="Local">{{ e.local_texto or '—' }}</td>
+              <td data-label="Data">{{ e.data_evento|data_br or '—' }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="cv-empty mb-0">Nenhum evento. Adicione manualmente ou use <strong>Sincronizar Zempo</strong> acima.</p>
+      {% endif %}
+    </section>
+  </div>
+</div>
+
+<script>
+(function() {
+  var ZEMPO_KEY = "curriculo_zempo_credenciais";
+  function loadZempoRemember() {
+    try {
+      var s = localStorage.getItem(ZEMPO_KEY);
+      if (s) {
+        var d = JSON.parse(s);
+        if (d && d.user !== undefined) {
+          var zu = document.getElementById("zempo_user");
+          var zp = document.getElementById("zempo_pass");
+          var lz = document.getElementById("lembrar-zempo");
+          if (zu) zu.value = d.user || "";
+          if (zp) zp.value = d.pass || "";
+          if (lz) lz.checked = true;
+        }
+      }
+    } catch (e) {}
+  }
+  function saveZempoRemember() {
+    var lz = document.getElementById("lembrar-zempo");
+    if (lz && lz.checked) {
+      var zu = document.getElementById("zempo_user");
+      var zp = document.getElementById("zempo_pass");
+      try {
+        localStorage.setItem(ZEMPO_KEY, JSON.stringify({ user: zu ? zu.value : "", pass: zp ? zp.value : "" }));
+      } catch (e) {}
+    } else {
+      try { localStorage.removeItem(ZEMPO_KEY); } catch (e) {}
+    }
+  }
+  loadZempoRemember();
+
+  var linkInp = document.getElementById("link_zempo");
+  var btnSalvar = document.getElementById("btn-salvar-link");
+  var msg = document.getElementById("msg-link");
+  var formZempo = document.getElementById("form-zempo");
+  if (formZempo) {
+    formZempo.addEventListener("submit", function() {
+      saveZempoRemember();
+    });
+  }
+  var lembrarZempo = document.getElementById("lembrar-zempo");
+  if (lembrarZempo) {
+    lembrarZempo.addEventListener("change", function() {
+      if (!this.checked) { try { localStorage.removeItem(ZEMPO_KEY); } catch (e) {} }
+    });
+  }
+  if (btnSalvar) {
+    btnSalvar.addEventListener("click", function() {
+      var link = (linkInp && linkInp.value || "").trim();
+      var fd = new FormData();
+      fd.append("link_zempo", link);
+      if (msg) msg.textContent = "";
+      fetch("{{ url_for('painel_aluno.curriculo_salvar_link') }}", {
+        method: "POST",
+        body: fd,
+        headers: { "X-Requested-With": "XMLHttpRequest" }
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (msg) {
+          msg.className = "small mt-2 " + (d.ok ? "text-success" : "text-danger");
+          msg.textContent = d.ok ? (d.msg || "Link salvo.") : (d.msg || "Erro.");
+        }
+      })
+      .catch(function() { if (msg) { msg.className = "small mt-2 text-danger"; msg.textContent = "Erro ao salvar."; } });
+    });
+  }
+
+  function toggleExcluir(btn, cbs) {
+    var n = 0;
+    for (var i = 0; i < cbs.length; i++) { if (cbs[i] && cbs[i].checked) n++; }
+    if (btn) btn.disabled = n === 0;
+  }
+
+  var checkAllComp = document.getElementById("check-all-comp");
+  var cbsComp = document.querySelectorAll(".cb-comp");
+  var btnExclComp = document.getElementById("btn-excluir-comp");
+  var formExclComp = document.getElementById("form-excluir-comp");
+  if (checkAllComp && cbsComp.length) {
+    checkAllComp.addEventListener("change", function() {
+      cbsComp.forEach(function(cb) { cb.checked = checkAllComp.checked; });
+      toggleExcluir(btnExclComp, cbsComp);
+    });
+    cbsComp.forEach(function(cb) {
+      cb.addEventListener("change", function() { toggleExcluir(btnExclComp, cbsComp); });
+    });
+  }
+  if (formExclComp) {
+    formExclComp.addEventListener("submit", function() {
+      var vals = [];
+      cbsComp.forEach(function(cb) { if (cb && cb.checked) vals.push(cb.value); });
+      if (vals.length === 0) return false;
+      return confirm("Excluir " + vals.length + " competição(ões) selecionada(s)?");
+    });
+  }
+
+  var checkAllEvt = document.getElementById("check-all-evt");
+  var cbsEvt = document.querySelectorAll(".cb-evt");
+  var btnExclEvt = document.getElementById("btn-excluir-evt");
+  var formExclEvt = document.getElementById("form-excluir-evt");
+  if (checkAllEvt && cbsEvt.length) {
+    checkAllEvt.addEventListener("change", function() {
+      cbsEvt.forEach(function(cb) { cb.checked = checkAllEvt.checked; });
+      toggleExcluir(btnExclEvt, cbsEvt);
+    });
+    cbsEvt.forEach(function(cb) {
+      cb.addEventListener("change", function() { toggleExcluir(btnExclEvt, cbsEvt); });
+    });
+  }
+  if (formExclEvt) {
+    formExclEvt.addEventListener("submit", function() {
+      var vals = [];
+      cbsEvt.forEach(function(cb) { if (cb && cb.checked) vals.push(cb.value); });
+      if (vals.length === 0) return false;
+      return confirm("Excluir " + vals.length + " evento(s) selecionado(s)?");
+    });
+  }
+})();
+</script>
+{% endblock %}

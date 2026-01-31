@@ -11,19 +11,27 @@
     <h2 class="h4 fw-bold mb-3">Financeiro — {{ academia_nome or 'Dashboard' }}</h2>
 
     <div class="row g-3 mb-4">
-        <div class="col-12 col-md-6">
-            <div class="card border-0 shadow-sm">
+        <div class="col-12 col-md-4">
+            <div class="card border-0 shadow-sm border-start border-4 border-success">
                 <div class="card-body">
                     <h6 class="text-muted">Receitas (mês)</h6>
                     <p class="h4 mb-0 text-success">R$ {{ "%.2f" % (receitas_mes or 0) }}</p>
                 </div>
             </div>
         </div>
-        <div class="col-12 col-md-6">
-            <div class="card border-0 shadow-sm">
+        <div class="col-12 col-md-4">
+            <div class="card border-0 shadow-sm border-start border-4 border-danger">
                 <div class="card-body">
                     <h6 class="text-muted">Despesas (mês)</h6>
                     <p class="h4 mb-0 text-danger">R$ {{ "%.2f" % (despesas_mes or 0) }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-md-4">
+            <div class="card border-0 shadow-sm border-start border-4 {{ 'border-success' if (receitas_mes or 0) - (despesas_mes or 0) >= 0 else 'border-warning' }}">
+                <div class="card-body">
+                    <h6 class="text-muted">Saldo (mês)</h6>
+                    <p class="h4 mb-0 {{ 'text-success' if (receitas_mes or 0) - (despesas_mes or 0) >= 0 else 'text-warning' }}">R$ {{ "%.2f" % ((receitas_mes or 0) - (despesas_mes or 0)) }}</p>
                 </div>
             </div>
         </div>

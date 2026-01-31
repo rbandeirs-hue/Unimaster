@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}Usuários — {{ academia_nome }}{% endblock %}
+{% block content %}
+<div class="container my-4 my-md-5">
+  <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4 gap-3">
+    <div>
+      <a href="{{ url_for('academia.painel_academia') }}" class="btn btn-outline-secondary btn-sm mb-2">
+        <i class="bi bi-arrow-left me-1"></i> Voltar
+      </a>
+      <h2 class="h4 fw-bold text-primary mb-0">
+        <i class="bi bi-person-lines-fill me-2"></i> Usuários — {{ academia_nome or 'Academia' }}
+      </h2>
+    </div>
+    <a href="{{ url_for('academia.cadastro_usuario', next=request.full_path) }}" class="btn btn-success btn-sm">
+      <i class="bi bi-person-plus-fill me-1"></i> Novo Usuário
+    </a>
+  </div>
+
+  {% if academias|length > 1 %}
+  <div class="mb-3">
+    <form method="GET" class="d-flex align-items-center gap-2 flex-wrap">
+      <label class="form-label mb-0 small">Academia:</label>
+      <select name="academia_id" class="form-select form-select-sm" style="max-width: 260px;" onchange="this.form.submit()">
+        {% for ac in academias %}
+        <option value="{{ ac.id }}" {% if ac.id == academia_id %}selected{% endif %}>{{ ac.nome }}</option>
+        {% endfor %}
+      </select>
+      <input type="hidden" name="busca" value="{{ busca or '' }}">
+    </form>
+  </div>
+  {% endif %}
+
+  <form method="GET" action="{{ url_for('academia.lista_usuarios') }}" class="d-flex gap-2 mb-4">
+    <input type="hidden" name="academia_id" value="{{ academia_id }}">
+    <input type="text" class="form-control form-control-sm" name="busca" placeholder="Buscar por nome ou e-mail..." value="{{ busca or '' }}" style="max-width: 280px;">
+    <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-search me-1"></i> Buscar</button>
+  </form>
+
+  <ul class="list-group list-group-flush">
+    {% if usuarios %}
+    {% for u in usuarios %}
+    <li class="list-group-item d-flex justify-content-between align-items-center px-3 py-2 border-start-0 border-end-0">
+      <span class="fw-medium">{{ u.nome }}</span>
+      <div class="d-flex align-items-center gap-2">
+        <span class="badge {{ 'bg-success' if u.ativo else 'bg-secondary' }}" style="font-size: 0.75rem;">
+          {{ 'Ativo' if u.ativo else 'Inativo' }}
+        </span>
+        <a href="{{ url_for('usuarios.editar_usuario', user_id=u.id, next=request.full_path) }}" class="btn btn-outline-primary btn-sm" title="Editar">
+          <i class="bi bi-pencil-fill"></i>
+        </a>
+        {% if u.id != current_user.id %}
+        <form method="POST" action="{{ url_for('academia.toggle_usuario_ativo', user_id=u.id) }}" class="d-inline" onsubmit="return confirm('Alterar status deste usuário?');">
+          <button type="submit" class="btn btn-sm {{ 'btn-outline-warning' if u.ativo else 'btn-outline-success' }}" title="{{ 'Inativar' if u.ativo else 'Ativar' }}">
+            <i class="bi {{ 'bi-pause-circle-fill' if u.ativo else 'bi-play-circle-fill' }}"></i>
+          </button>
+        </form>
+        {% endif %}
+      </div>
+    </li>
+    {% endfor %}
+    {% else %}
+    <li class="list-group-item text-center py-5 text-muted">
+      Nenhum usuário nesta academia.
+      <a href="{{ url_for('academia.cadastro_usuario') }}" class="d-block mt-2">Cadastrar usuário</a>
+    </li>
+    {% endif %}
+  </ul>
+
+  {% if total_paginas > 1 %}
+  <nav class="mt-4">
+    <ul class="pagination justify-content-center pagination-sm">
+      <li class="page-item {% if pagina_atual == 1 %}disabled{% endif %}">
+        <a class="page-link" href="{{ url_for('academia.lista_usuarios', busca=busca, academia_id=academia_id, page=pagina_atual-1) }}">Anterior</a>
+      </li>
+      {% for p in range(1, total_paginas + 1) %}
+      <li class="page-item {% if p == pagina_atual %}active{% endif %}">
+        <a class="page-link" href="{{ url_for('academia.lista_usuarios', busca=busca, academia_id=academia_id, page=p) }}">{{ p }}</a>
+      </li>
+      {% endfor %}
+      <li class="page-item {% if pagina_atual == total_paginas %}disabled{% endif %}">
+        <a class="page-link" href="{{ url_for('academia.lista_usuarios', busca=busca, academia_id=academia_id, page=pagina_atual+1) }}">Próximo</a>
+      </li>
+    </ul>
+  </nav>
+  {% endif %}
+</div>
+{% endblock %}

@@ -32,102 +32,113 @@
   </div>
 
   <nav class="nav flex-column mt-3">
+    <!-- 👤 Menu mobile: usuário e modo (visível só em telas pequenas, exceto aluno) -->
+    {% if not current_user.has_role('aluno') %}
+    <div class="sidebar-mobile-user d-lg-none border-bottom border-secondary mb-2 pb-2">
+      <div class="px-3 py-2">
+        <a class="nav-link d-flex align-items-center gap-2" href="{{ url_for('usuarios.meu_perfil', next=request.url) }}">
+          <i class="bi bi-person-circle fs-4"></i>
+          <div class="text-start">
+            <span class="small fw-bold d-block">{{ current_user.nome }}</span>
+            <span class="small opacity-75">{{ modo_atual_nome() }}</span>
+          </div>
+        </a>
+        <div class="d-flex flex-column gap-1 mt-2">
+          <a class="nav-link py-2 small" href="{{ url_for('usuarios.meu_perfil', next=request.url) }}">
+            <i class="bi bi-person-lines-fill me-2"></i> Editar cadastro
+          </a>
+          {% if tem_multiplos_modos() %}
+          <div class="dropdown mt-1">
+            <a class="nav-link py-2 small dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+              <i class="bi bi-arrow-repeat me-2"></i> Trocar modo
+            </a>
+            <ul class="dropdown-menu dropdown-menu-dark">
+              {% for modo_id, modo_nome in modos_disponiveis() %}
+              <li><a class="dropdown-item" href="{{ url_for('painel.escolher_modo', modo=modo_id) }}">{{ modo_nome }}</a></li>
+              {% endfor %}
+            </ul>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    {% endif %}
 
-    <!-- 🔹 Painel (todos) -->
-    <a class="nav-link {% if request.endpoint == 'painel.home' or request.endpoint == 'painel.escolher_modo' %}active{% endif %}"
-       href="{{ url_for('painel.home') }}">
-      <i class="bi bi-speedometer2"></i> Painel
+    <!-- 🔹 Painel/Dash — aluno e academia têm Dash próprio -->
+    <a class="nav-link {% if request.endpoint == 'painel.home' or request.endpoint == 'painel.escolher_modo' or (session.get('modo_painel') == 'aluno' and request.endpoint == 'painel_aluno.painel') or (session.get('modo_painel') == 'academia' and request.endpoint == 'academia.dash') %}active{% endif %}"
+       href="{{ url_for('painel_aluno.painel') if session.get('modo_painel') == 'aluno' else (url_for('academia.dash') if session.get('modo_painel') == 'academia' else url_for('painel.home')) }}">
+      <i class="bi bi-speedometer2"></i> {{ 'Dash' if session.get('modo_painel') in ('aluno', 'academia') else 'Painel' }}
     </a>
 
     <!-- ====================================================== -->
-    <!-- 👑 ADMIN — ACESSO TOTAL                                -->
+    <!-- Menus por modo: só exibe o menu do modo acessado        -->
     <!-- ====================================================== -->
-    {% if current_user.has_role('admin') %}
+    <!-- 👑 MODO ADMIN -->
+    {% if session.get('modo_painel') == 'admin' and current_user.has_role('admin') %}
       <a class="nav-link" href="{{ url_for('federacao.painel_federacao') }}">
         <i class="bi bi-diagram-3"></i> Associações
       </a>
-
       <a class="nav-link" href="{{ url_for('associacao.painel_associacao') }}">
         <i class="bi bi-people"></i> Academias
       </a>
-
       <a class="nav-link" href="{{ url_for('alunos.lista_alunos') }}">
         <i class="bi bi-people-fill"></i> Alunos
       </a>
-
       <a class="nav-link" href="{{ url_for('cadastros.hub') }}">
         <i class="bi bi-person-lines-fill"></i> Cadastros
       </a>
-
       <a class="nav-link" href="{{ url_for('academia.painel_academia') }}"><i class="bi bi-gear"></i> Gerenciamento</a>
+      <a class="nav-link" href="{{ url_for('presencas.registro_presenca') }}"><i class="bi bi-clipboard-check"></i> Registrar Presença</a>
+      <a class="nav-link" href="{{ url_for('presencas.ata_presenca') }}"><i class="bi bi-file-text"></i> Ata</a>
+      <a class="nav-link" href="{{ url_for('presencas.historico_presenca_lista') }}"><i class="bi bi-clock-history"></i> Histórico</a>
       <a class="nav-link" href="{{ url_for('financeiro.dashboard') }}"><i class="bi bi-cash-coin"></i> Financeiro</a>
       <a class="nav-link" href="{{ url_for('configuracoes.hub') }}"><i class="bi bi-sliders"></i> Configurações</a>
     {% endif %}
 
-
-    <!-- ====================================================== -->
-    <!-- 🟦 FEDERAÇÃO — SOMENTE ASSOCIAÇÕES                     -->
-    <!-- ====================================================== -->
-    {% if current_user.has_role('gestor_federacao') and not current_user.has_role('admin') %}
+    <!-- 🟦 MODO FEDERAÇÃO -->
+    {% if session.get('modo_painel') == 'federacao' and current_user.has_role('gestor_federacao') %}
       <a class="nav-link" href="{{ url_for('federacao.painel_federacao') }}">
         <i class="bi bi-diagram-3"></i> Associações
       </a>
       <a class="nav-link" href="{{ url_for('alunos.lista_alunos') }}">
         <i class="bi bi-people-fill"></i> Alunos
       </a>
+      <a class="nav-link" href="{{ url_for('presencas.registro_presenca') }}"><i class="bi bi-clipboard-check"></i> Presenças</a>
+      <a class="nav-link" href="{{ url_for('presencas.ata_presenca') }}"><i class="bi bi-file-text"></i> Ata</a>
+      <a class="nav-link" href="{{ url_for('presencas.historico_presenca_lista') }}"><i class="bi bi-clock-history"></i> Histórico</a>
+      <a class="nav-link" href="{{ url_for('financeiro.dashboard') }}"><i class="bi bi-cash-coin"></i> Financeiro</a>
     {% endif %}
 
-
-    <!-- ====================================================== -->
-    <!-- 🟩 ASSOCIAÇÃO — SOMENTE ACADEMIAS                      -->
-    <!-- ====================================================== -->
-    {% if current_user.has_role('gestor_associacao') and not current_user.has_role('admin') %}
+    <!-- 🟩 MODO ASSOCIAÇÃO -->
+    {% if session.get('modo_painel') == 'associacao' and current_user.has_role('gestor_associacao') %}
       <a class="nav-link" href="{{ url_for('associacao.painel_associacao') }}">
         <i class="bi bi-people"></i> Academias
       </a>
       <a class="nav-link" href="{{ url_for('alunos.lista_alunos') }}">
         <i class="bi bi-people-fill"></i> Alunos
       </a>
+      <a class="nav-link" href="{{ url_for('presencas.registro_presenca') }}"><i class="bi bi-clipboard-check"></i> Presenças</a>
+      <a class="nav-link" href="{{ url_for('presencas.ata_presenca') }}"><i class="bi bi-file-text"></i> Ata</a>
+      <a class="nav-link" href="{{ url_for('presencas.historico_presenca_lista') }}"><i class="bi bi-clock-history"></i> Histórico</a>
+      <a class="nav-link" href="{{ url_for('financeiro.dashboard') }}"><i class="bi bi-cash-coin"></i> Financeiro</a>
     {% endif %}
 
-
-    <!-- ====================================================== -->
-    <!-- 🟧 ACADEMIA (GESTOR + PROFESSOR)                        -->
-    <!-- ====================================================== -->
-    {% if (current_user.has_role('gestor_academia') or current_user.has_role('professor')) 
-          and not current_user.has_role('admin') %}
-
-      <a class="nav-link" href="{{ url_for('cadastros.hub') }}">
-        <i class="bi bi-person-lines-fill"></i> Cadastros
+    <!-- 🟧 MODO ACADEMIA -->
+    {% if session.get('modo_painel') == 'academia' %}
+      <a class="nav-link {% if request.endpoint == 'academia.painel_academia' %}active{% endif %}" href="{{ url_for('academia.painel_academia') }}">
+        <i class="bi bi-gear"></i> Gerenciamento
       </a>
-
-      <a class="nav-link" href="{{ url_for('alunos.lista_alunos') }}">
-        <i class="bi bi-people-fill"></i> Alunos
+      <a class="nav-link {% if 'financeiro' in (request.endpoint or '') %}active{% endif %}" href="{{ url_for('financeiro.dashboard') }}">
+        <i class="bi bi-cash-coin"></i> Financeiro
       </a>
-
-      {% if current_user.has_role('gestor_academia') %}
-        <a class="nav-link" href="{{ url_for('academia.painel_academia') }}"><i class="bi bi-gear"></i> Gerenciamento</a>
-        <a class="nav-link" href="{{ url_for('financeiro.dashboard') }}"><i class="bi bi-cash-coin"></i> Financeiro</a>
-        <a class="nav-link" href="{{ url_for('configuracoes.hub') }}"><i class="bi bi-sliders"></i> Configurações</a>
-      {% endif %}
     {% endif %}
 
-
     <!-- ====================================================== -->
-    <!-- 🟡 ALUNO — PAINEL COMPLETO                             -->
+    <!-- 🟡 MODO ALUNO — MEU PERFIL (Painel já no menu geral)   -->
     <!-- ====================================================== -->
-    {% if current_user.has_role('aluno') %}
-      <a class="nav-link {% if request.endpoint == 'painel_aluno.painel' %}active{% endif %}" href="{{ url_for('painel_aluno.painel') }}">
+    {% if session.get('modo_painel') == 'aluno' %}
+      <a class="nav-link {% if request.endpoint == 'painel_aluno.meu_perfil' %}active{% endif %}" href="{{ url_for('painel_aluno.meu_perfil') }}">
         <i class="bi bi-person-badge"></i> Meu Perfil
-      </a>
-      <a class="nav-link {% if request.endpoint == 'painel_aluno.minhas_mensalidades' %}active{% endif %}" href="{{ url_for('painel_aluno.minhas_mensalidades') }}">
-        <i class="bi bi-calendar-check"></i> Minhas Mensalidades
-      </a>
-      <a class="nav-link {% if request.endpoint == 'painel_aluno.minha_turma' %}active{% endif %}" href="{{ url_for('painel_aluno.minha_turma') }}">
-        <i class="bi bi-collection"></i> Minha Turma
-      </a>
-      <a class="nav-link {% if request.endpoint == 'painel_aluno.minhas_presencas' %}active{% endif %}" href="{{ url_for('painel_aluno.minhas_presencas') }}">
-        <i class="bi bi-clipboard-check"></i> Minhas Presenças
       </a>
     {% endif %}
 
@@ -152,20 +163,62 @@
 
   {% if current_user.is_authenticated %}
   <div class="navbar-top">
-    <button class="toggle-btn" onclick="toggleSidebar()">
+    <button class="toggle-btn" onclick="toggleSidebar()" aria-label="Abrir menu">
       <i class="bi bi-list"></i>
     </button>
+    <div class="dropdown d-lg-none ms-auto">
+      <button class="toggle-btn toggle-btn-user dropdown-toggle" type="button" id="dropdownUsuarioMobile" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Conta e configurações">
+        <i class="bi bi-person-circle"></i>
+      </button>
+      <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="dropdownUsuarioMobile">
+        <li><h6 class="dropdown-header">Configurações de usuário</h6></li>
+        <li>
+          <a class="dropdown-item" href="{{ url_for('usuarios.meu_perfil', next=request.url) }}">
+            <i class="bi bi-person-lines-fill me-2"></i> Editar cadastro
+          </a>
+        </li>
+        {% if tem_multiplos_modos() %}
+        <li><hr class="dropdown-divider"></li>
+        <li><h6 class="dropdown-header">Trocar modo</h6></li>
+        {% for modo_id, modo_nome in modos_disponiveis() %}
+        <li>
+          <a class="dropdown-item" href="{{ url_for('painel.escolher_modo', modo=modo_id) }}">
+            {{ modo_nome }}
+          </a>
+        </li>
+        {% endfor %}
+        {% endif %}
+      </ul>
+    </div>
 
-    <div class="user-info ms-auto d-flex align-items-center gap-2">
-      <div>
-        <strong>{{ current_user.nome }}</strong><br>
-        <small>{{ current_user.roles | join(', ') }}</small>
+    <div class="user-info ms-auto d-none d-lg-flex align-items-center gap-2">
+      <div class="dropdown">
+        <button class="btn btn-link p-0 text-dark text-decoration-none dropdown-toggle d-flex align-items-center" type="button" id="dropdownUsuario" data-bs-toggle="dropdown" aria-expanded="false" style="line-height: 1.2;">
+          <div class="text-start">
+            <strong>{{ current_user.nome }}</strong><br>
+            <small class="text-muted d-block text-end">{{ modo_atual_nome() }}</small>
+          </div>
+        </button>
+        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="dropdownUsuario">
+          <li><h6 class="dropdown-header">Configurações de usuário</h6></li>
+          <li>
+            <a class="dropdown-item" href="{{ url_for('usuarios.meu_perfil', next=request.url) }}">
+              <i class="bi bi-person-lines-fill me-2"></i> Editar cadastro
+            </a>
+          </li>
+          {% if tem_multiplos_modos() %}
+          <li><hr class="dropdown-divider"></li>
+          <li><h6 class="dropdown-header">Trocar modo</h6></li>
+          {% for modo_id, modo_nome in modos_disponiveis() %}
+          <li>
+            <a class="dropdown-item" href="{{ url_for('painel.escolher_modo', modo=modo_id) }}">
+              {{ modo_nome }}
+            </a>
+          </li>
+          {% endfor %}
+          {% endif %}
+        </ul>
       </div>
-      {% if tem_multiplos_modos() %}
-      <a href="{{ url_for('painel.home', trocar=1) }}" class="btn btn-sm btn-outline-primary" title="Trocar modo de acesso">
-        <i class="bi bi-arrow-repeat"></i> Trocar modo
-      </a>
-      {% endif %}
     </div>
   </div>
   {% endif %}

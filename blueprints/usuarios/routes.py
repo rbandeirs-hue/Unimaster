@@ -167,25 +167,37 @@ def cadastro_usuario():
 # ======================================================
 # 🔹 EDITAR USUÁRIO
 # ======================================================
+def _pode_editar_usuario(usuario):
+    """Verifica se o usuário logado pode editar o usuário informado."""
+    if current_user.has_role("admin"):
+        return True
+    if current_user.has_role("gestor_academia") and getattr(current_user, "id_academia", None):
+        return usuario.get("id_academia") == current_user.id_academia
+    return False
+
+
 @bp_usuarios.route("/editar/<int:user_id>", methods=["GET", "POST"])
 @login_required
 def editar_usuario(user_id):
 
-    if not require_admin():
-        return redirect(url_for("painel.home"))
-
-    back_url = request.args.get("next") or request.referrer or url_for("usuarios.lista_usuarios")
-
     db = get_db_connection()
     cursor = db.cursor(dictionary=True)
-
-    # Carregar usuário
     cursor.execute("SELECT * FROM usuarios WHERE id=%s", (user_id,))
     usuario = cursor.fetchone()
 
     if not usuario:
+        cursor.close()
+        db.close()
         flash("Usuário não encontrado.", "danger")
-        return redirect(url_for("usuarios.lista_usuarios"))
+        return redirect(url_for("painel.home"))
+
+    if not _pode_editar_usuario(usuario):
+        cursor.close()
+        db.close()
+        flash("Você não tem permissão para editar este usuário.", "danger")
+        return redirect(request.args.get("next") or request.referrer or url_for("painel.home"))
+
+    back_url = request.args.get("next") or request.referrer or url_for("usuarios.lista_usuarios")
 
     # Carregar roles disponíveis
     cursor.execute("SELECT id, nome FROM roles ORDER BY nome")
@@ -232,6 +244,80 @@ def editar_usuario(user_id):
         roles=roles,
         roles_do_usuario=roles_do_usuario,
         back_url=back_url
+    )
+
+
+# ======================================================
+# 🔹 MEU PERFIL (usuário edita seu próprio cadastro e senha)
+# ======================================================
+@bp_usuarios.route("/meu-perfil", methods=["GET", "POST"])
+@login_required
+def meu_perfil():
+    """Permite que o usuário logado edite seu próprio nome, e-mail e senha."""
+    user_id = current_user.id
+    back_url = request.args.get("next") or request.referrer or url_for("painel.home")
+
+    db = get_db_connection()
+    cursor = db.cursor(dictionary=True)
+
+    cursor.execute("SELECT id, nome, email FROM usuarios WHERE id=%s", (user_id,))
+    usuario = cursor.fetchone()
+
+    if not usuario:
+        flash("Usuário não encontrado.", "danger")
+        db.close()
+        return redirect(url_for("painel.home"))
+
+    if request.method == "POST":
+        nome = (request.form.get("nome") or "").strip()
+        email = (request.form.get("email") or "").strip()
+        nova_senha = request.form.get("senha") or None
+
+        erros = []
+        if not nome:
+            erros.append("Nome é obrigatório.")
+        if not email:
+            erros.append("E-mail é obrigatório.")
+
+        if erros:
+            for e in erros:
+                flash(e, "danger")
+        else:
+            try:
+                cursor.execute(
+                    "SELECT id FROM usuarios WHERE email=%s AND id != %s",
+                    (email, user_id),
+                )
+                if cursor.fetchone():
+                    flash("Este e-mail já está em uso por outro usuário.", "danger")
+                else:
+                    if nova_senha:
+                        cursor.execute(
+                            "UPDATE usuarios SET nome=%s, email=%s, senha=%s WHERE id=%s",
+                            (nome, email, generate_password_hash(nova_senha), user_id),
+                        )
+                        flash("Cadastro e senha atualizados com sucesso!", "success")
+                    else:
+                        cursor.execute(
+                            "UPDATE usuarios SET nome=%s, email=%s WHERE id=%s",
+                            (nome, email, user_id),
+                        )
+                        flash("Cadastro atualizado com sucesso!", "success")
+                    db.commit()
+                    redirect_url = request.form.get("next") or back_url
+                    db.close()
+                    return redirect(redirect_url)
+            except Exception as e:
+                db.rollback()
+                flash(f"Erro ao atualizar: {e}", "danger")
+
+    cursor.close()
+    db.close()
+
+    return render_template(
+        "usuarios/meu_perfil.html",
+        usuario=usuario,
+        back_url=back_url,
     )
 
 

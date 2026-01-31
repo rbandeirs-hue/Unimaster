@@ -1,18 +1,18 @@
 {% extends "base.html" %}
 {% block title %}Minhas Mensalidades — Aluno{% endblock %}
 {% block content %}
-<div class="container mt-4">
-    <a href="{{ url_for('painel_aluno.painel') }}" class="btn btn-outline-secondary mb-3">
+<div class="container mt-4 px-2 px-sm-3">
+    <a href="{{ url_for('painel_aluno.meu_perfil') }}" class="btn btn-outline-secondary btn-sm mb-3">
         <i class="bi bi-arrow-left me-1"></i> Voltar
     </a>
-    <h2 class="h4 fw-bold mb-3">Minhas Mensalidades</h2>
+    <h2 class="h5 fw-bold mb-3">Minhas Mensalidades</h2>
 
     {% if mensalidades %}
     <div class="card border-0 shadow-sm">
         <div class="card-body p-0">
             <div class="table-responsive">
-                <table class="table table-hover mb-0">
-                    <thead class="table-light">
+                <table class="table table-hover mb-0 mensalidades-table">
+                    <thead class="table-light mensalidades-thead">
                         <tr>
                             <th>Plano</th>
                             <th>Vencimento</th>
@@ -24,15 +24,15 @@
                     <tbody>
                         {% for m in mensalidades %}
                         <tr>
-                            <td>{{ m.plano_nome or '-' }}</td>
-                            <td>{{ m.data_vencimento }}</td>
-                            <td>R$ {{ "%.2f"|format(m.valor or 0) }}</td>
-                            <td>
+                            <td data-label="Plano">{{ m.plano_nome or '-' }}</td>
+                            <td data-label="Vencimento">{{ m.data_vencimento|data_br or '-' }}</td>
+                            <td data-label="Valor">R$ {{ "%.2f"|format(m.valor or 0) }}</td>
+                            <td data-label="Status">
                                 <span class="badge {% if m.status == 'pago' %}bg-success{% elif m.status == 'atrasado' %}bg-danger{% else %}bg-warning text-dark{% endif %}">
                                     {{ m.status|capitalize }}
                                 </span>
                             </td>
-                            <td>{{ m.data_pagamento or '-' }}</td>
+                            <td data-label="Pagamento">{{ m.data_pagamento|data_br or '-' }}</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -47,4 +47,35 @@
     </div>
     {% endif %}
 </div>
+
+<style>
+@media (max-width: 767px) {
+    .mensalidades-thead { display: none; }
+    .mensalidades-table { display: block; }
+    .mensalidades-table tbody { display: block; }
+    .mensalidades-table tbody tr {
+        display: block;
+        border-bottom: 1px solid #dee2e6;
+        padding: 0.75rem 0;
+        margin: 0 0.75rem;
+    }
+    .mensalidades-table tbody tr:last-child { border-bottom: none; }
+    .mensalidades-table tbody td {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.35rem 0;
+        border: none;
+        font-size: 0.9rem;
+        word-break: break-word;
+    }
+    .mensalidades-table tbody td::before {
+        content: attr(data-label);
+        font-weight: 600;
+        color: #6c757d;
+        margin-right: 0.5rem;
+        flex-shrink: 0;
+    }
+}
+</style>
 {% endblock %}

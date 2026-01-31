@@ -1,7 +1,7 @@
 # ======================================================
 # 🧩 Blueprint: Turmas
 # ======================================================
-from flask import Blueprint, render_template, request, redirect, url_for, flash
+from flask import Blueprint, render_template, request, redirect, url_for, flash, session
 # Importamos current_user para acessar o perfil do usuário logado
 from flask_login import login_required, current_user
 from config import get_db_connection
@@ -35,6 +35,36 @@ def carregar_academias_do_usuario(cursor):
         return []
 
     return cursor.fetchall()
+
+
+def _get_academias_ids():
+    """IDs de academias acessíveis (para filtro em modo academia)."""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(dictionary=True)
+        if current_user.has_role("admin"):
+            cur.execute("SELECT id FROM academias ORDER BY nome")
+            ids = [r["id"] for r in cur.fetchall()]
+        elif current_user.has_role("gestor_federacao"):
+            cur.execute(
+                "SELECT ac.id FROM academias ac JOIN associacoes ass ON ass.id = ac.id_associacao WHERE ass.id_federacao = %s ORDER BY ac.nome",
+                (getattr(current_user, "id_federacao", None),),
+            )
+            ids = [r["id"] for r in cur.fetchall()]
+        elif current_user.has_role("gestor_associacao"):
+            cur.execute("SELECT id FROM academias WHERE id_associacao = %s ORDER BY nome", (getattr(current_user, "id_associacao", None),))
+            ids = [r["id"] for r in cur.fetchall()]
+        elif getattr(current_user, "id_academia", None):
+            ids = [current_user.id_academia]
+        else:
+            ids = []
+        cur.close()
+        conn.close()
+        return ids
+    except Exception:
+        return []
+
+
 # Função auxiliar para obter o perfil de forma segura
 def get_user_profile():
     """Retorna o perfil do usuário logado ou 'Visitante' se não estiver definido."""
@@ -61,28 +91,53 @@ def painel_turmas():
 @login_required
 def lista_turmas():
     perfil_usuario = get_user_profile()
+    ids_acessiveis = _get_academias_ids()
+    academia_filtro = request.args.get("academia_id", type=int) or (
+        session.get("academia_gerenciamento_id") if session.get("modo_painel") == "academia" else None
+    )
 
     db = get_db_connection()
     cursor = db.cursor(dictionary=True)
 
     busca = request.args.get('busca', '').strip()
     query = "SELECT * FROM turmas"
-    params = ()
+    params = []
+    filters = []
 
+    if academia_filtro and academia_filtro in ids_acessiveis:
+        filters.append("id_academia = %s")
+        params.append(academia_filtro)
     if busca:
-        query += " WHERE Nome LIKE %s"
-        params = ('%' + busca + '%',)
+        filters.append("Nome LIKE %s")
+        params.append('%' + busca + '%')
+    if filters:
+        query += " WHERE " + " AND ".join(filters)
     query += " ORDER BY Nome"
 
-    cursor.execute(query, params)
+    cursor.execute(query, tuple(params))
     turmas = cursor.fetchall()
+
+    academias = []
+    academia_id_sel = None
+    if len(ids_acessiveis) > 1 and (session.get("modo_painel") == "academia" or request.args.get("academia_id")):
+        try:
+            cursor.execute(
+                "SELECT id, nome FROM academias WHERE id IN (%s) ORDER BY nome" % ",".join(["%s"] * len(ids_acessiveis)),
+                tuple(ids_acessiveis),
+            )
+            academias = cursor.fetchall()
+            academia_id_sel = academia_filtro or ids_acessiveis[0]
+        except Exception:
+            pass
+
     db.close()
 
-    # 🚨 CORREÇÃO: Passando 'perfil' para o template
-    return render_template('turmas/lista_turmas.html', 
-                           turmas=turmas, 
-                           busca=busca, 
-                           perfil=perfil_usuario)
+    return render_template('turmas/lista_turmas.html',
+                           turmas=turmas,
+                           busca=busca,
+                           perfil=perfil_usuario,
+                           academias=academias or [],
+                           academia_id=academia_id_sel)
 
 
 # ======================================================
@@ -99,7 +154,11 @@ def cadastro_turma():
     db = get_db_connection()
     cursor = db.cursor(dictionary=True)
     academias = carregar_academias_do_usuario(cursor)
-    academia_selecionada = getattr(current_user, "id_academia", None)
+    academia_selecionada = (
+        request.args.get("academia_id", type=int)
+        or (session.get("academia_gerenciamento_id") if session.get("modo_painel") == "academia" else None)
+        or getattr(current_user, "id_academia", None)
+    )
 
     if request.method == 'POST':
         nome = request.form['nome'].strip()

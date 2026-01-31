@@ -1,146 +1,58 @@
 {% extends "base.html" %}
-{% block title %}Meu Painel – Aluno{% endblock %}
+{% block title %}Painel – Aluno{% endblock %}
 
 {% block content %}
 <div class="container mt-4">
 
     <!-- Título -->
-    <div class="text-center mb-5">
-        <h2 class="fw-bold text-primary">Meu Painel</h2>
-        <p class="text-muted">Informações pessoais, graduação e atalhos rápidos</p>
+    <div class="text-center mb-4">
+        <h2 class="fw-bold text-primary">Dash</h2>
+        <p class="text-muted">Resumo do seu acompanhamento</p>
     </div>
 
-    <div class="row g-4 justify-content-center">
-
-        <!-- CARD: Dados do Aluno -->
-        <div class="col-xl-4 col-lg-5 col-md-6 col-sm-10">
-            <div class="card shadow-sm h-100 equal-card border-primary">
-                <div class="card-body text-center p-4">
-
-                    <!-- Foto -->
-                    <div class="mb-3">
-                        <i class="bi bi-person-circle text-primary" style="font-size: 4rem;"></i>
-                    </div>
-
-                    <h4 class="fw-bold">{{ usuario.nome }}</h4>
-
-                    <p class="text-muted mb-1">
-                        <i class="bi bi-envelope"></i> {{ usuario.email }}
-                    </p>
-
-                    <p class="text-muted">
-                        <i class="bi bi-award text-warning"></i>
-                        Faixa Atual:
-                        <strong class="text-dark">
-                            {% if aluno and aluno.faixa %}
-                                {{ aluno.faixa }}
-                            {% else %}
-                                Em breve
-                            {% endif %}
-                        </strong>
-                    </p>
-
+    <!-- DASHBOARD - cards no mesmo estilo do Meu Perfil -->
+    {% if stats %}
+    <div class="row g-4">
+        <div class="col-12 col-sm-6 col-md-4">
+            <div class="card shadow-sm border-success card-hover painel-atalho-card h-100">
+                <div class="card-body text-center py-3 px-3 d-flex flex-column align-items-center justify-content-center">
+                    <i class="bi bi-clipboard-check fs-3 mb-2 text-success"></i>
+                    <h6 class="fw-bold mb-1">Presenças (mês)</h6>
+                    <p class="text-muted small mb-2">Registros no mês atual</p>
+                    <span class="display-6 fw-bold text-success">{{ stats.get('presencas_mes', 0) }}</span>
                 </div>
             </div>
         </div>
-
-        <!-- CARD: Minhas Mensalidades -->
-        <div class="col-xl-4 col-lg-5 col-md-6 col-sm-10">
-            <a href="{{ url_for('painel_aluno.minhas_mensalidades') }}" class="text-decoration-none">
-                <div class="card shadow-sm h-100 equal-card border-success card-hover">
-                    <div class="card-body text-center p-4 d-flex flex-column">
-                        <i class="bi bi-calendar-check display-5 mb-3 text-success"></i>
-                        <h5 class="fw-bold">Minhas Mensalidades</h5>
-                        <p class="text-muted mt-3">Consulte vencimentos e status de pagamento.</p>
-                        <div class="mt-auto">
-                            <span class="btn btn-success px-4">Acessar</span>
-                        </div>
-                    </div>
-                </div>
-            </a>
-        </div>
-
-        <!-- CARD: Minha Turma -->
-        <div class="col-xl-4 col-lg-5 col-md-6 col-sm-10">
-            <a href="{{ url_for('painel_aluno.minha_turma') }}" class="text-decoration-none">
-                <div class="card shadow-sm h-100 equal-card border-info card-hover">
-                    <div class="card-body text-center p-4 d-flex flex-column">
-                        <i class="bi bi-collection display-5 mb-3 text-info"></i>
-                        <h5 class="fw-bold">Minha Turma</h5>
-                        <p class="text-muted mt-3">Horários e informações da sua turma.</p>
-                        <div class="mt-auto">
-                            <span class="btn btn-info text-white px-4">Acessar</span>
-                        </div>
-                    </div>
-                </div>
-            </a>
-        </div>
-
-        <!-- CARD: Minhas Presenças -->
-        <div class="col-xl-4 col-lg-5 col-md-6 col-sm-10">
-            <a href="{{ url_for('painel_aluno.minhas_presencas') }}" class="text-decoration-none">
-                <div class="card shadow-sm h-100 equal-card border-warning card-hover">
-                    <div class="card-body text-center p-4 d-flex flex-column">
-                        <i class="bi bi-clipboard-check display-5 mb-3 text-warning"></i>
-                        <h5 class="fw-bold">Minhas Presenças</h5>
-                        <p class="text-muted mt-3">Histórico de presença por período.</p>
-                        <div class="mt-auto">
-                            <span class="btn btn-warning text-dark px-4">Acessar</span>
-                        </div>
-                    </div>
-                </div>
-            </a>
-        </div>
-
-        <!-- CARD: Boletins e Graduação -->
-        <div class="col-xl-4 col-lg-5 col-md-6 col-sm-10">
-            <div class="card shadow-sm h-100 equal-card border-info">
-                <div class="card-body text-center p-4 d-flex flex-column">
-
-                    <i class="bi bi-journal-text display-5 mb-3 text-info"></i>
-
-                    <h5 class="fw-bold">Graduação & Boletins</h5>
-
-                    <p class="text-muted mt-3">
-                        Veja sua progressão, histórico de faixas e boletins avaliativos.
-                    </p>
-
-                    <div class="mt-auto">
-                        <a href="#" class="btn btn-info text-white px-4 disabled">Em breve</a>
-                    </div>
-
+        <div class="col-12 col-sm-6 col-md-4">
+            <div class="card shadow-sm border-info card-hover painel-atalho-card h-100">
+                <div class="card-body text-center py-3 px-3 d-flex flex-column align-items-center justify-content-center">
+                    <i class="bi bi-collection fs-3 mb-2 text-info"></i>
+                    <h6 class="fw-bold mb-1">Turmas</h6>
+                    <p class="text-muted small mb-2">Turmas vinculadas</p>
+                    <span class="display-6 fw-bold text-info">{{ stats.get('turmas_count', 0) }}</span>
                 </div>
             </div>
         </div>
-
+        <div class="col-12 col-sm-6 col-md-4">
+            <div class="card shadow-sm {{ 'border-warning' if stats.get('mensalidades_pendentes', 0) > 0 else 'border-secondary' }} card-hover painel-atalho-card h-100">
+                <div class="card-body text-center py-3 px-3 d-flex flex-column align-items-center justify-content-center">
+                    <i class="bi bi-calendar-x fs-3 mb-2 {{ 'text-warning' if stats.get('mensalidades_pendentes', 0) > 0 else 'text-secondary' }}"></i>
+                    <h6 class="fw-bold mb-1">Mensalidades em aberto</h6>
+                    <p class="text-muted small mb-2">Pagamentos pendentes</p>
+                    <span class="display-6 fw-bold {{ 'text-warning' if stats.get('mensalidades_pendentes', 0) > 0 else 'text-secondary' }}">{{ stats.get('mensalidades_pendentes', 0) }}</span>
+                </div>
+            </div>
+        </div>
     </div>
+    {% endif %}
 </div>
 
 <style>
-    .equal-card {
-        height: 100%;
-    }
-
-    .card-action-link {
-        text-decoration: none;
-        color: inherit;
-        display: block;
-    }
-
-    .card {
-        border-radius: 0.75rem;
-        transition: 0.2s ease;
-    }
-
-    .card:hover, .card-hover:hover {
-        transform: translateY(-5px);
-        box-shadow: 0 0.6rem 1.2rem rgba(0,0,0,0.15) !important;
-    }
-
-    @media (max-width: 576px) {
-        .card {
-            margin-bottom: 1rem;
-        }
-    }
+.painel-atalho-card { transition: 0.2s ease; }
+.card { border-radius: 0.75rem; transition: 0.2s ease; }
+.card:hover, .card-hover:hover { transform: translateY(-5px); box-shadow: 0 0.6rem 1.2rem rgba(0,0,0,0.15) !important; }
+@media (max-width: 575.98px) {
+    .row.g-4 > [class*="col-"] { margin-bottom: 0.5rem; }
+}
 </style>
 {% endblock %}

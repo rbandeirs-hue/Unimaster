@@ -10,6 +10,7 @@ from flask import (
     flash,
     Blueprint,
     current_app,
+    session,
 )
 from flask_login import login_required, current_user
 from config import get_db_connection
@@ -20,6 +21,34 @@ import base64
 import unicodedata
 
 bp_alunos = Blueprint("alunos", __name__, url_prefix="/alunos")
+
+
+def _get_academias_ids():
+    """IDs de academias acessíveis pelo usuário (para filtro em modo academia)."""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(dictionary=True)
+        if current_user.has_role("admin"):
+            cur.execute("SELECT id FROM academias ORDER BY nome")
+            ids = [r["id"] for r in cur.fetchall()]
+        elif current_user.has_role("gestor_federacao"):
+            cur.execute(
+                "SELECT ac.id FROM academias ac JOIN associacoes ass ON ass.id = ac.id_associacao WHERE ass.id_federacao = %s ORDER BY ac.nome",
+                (getattr(current_user, "id_federacao", None),),
+            )
+            ids = [r["id"] for r in cur.fetchall()]
+        elif current_user.has_role("gestor_associacao"):
+            cur.execute("SELECT id FROM academias WHERE id_associacao = %s ORDER BY nome", (getattr(current_user, "id_associacao", None),))
+            ids = [r["id"] for r in cur.fetchall()]
+        elif getattr(current_user, "id_academia", None):
+            ids = [current_user.id_academia]
+        else:
+            ids = []
+        cur.close()
+        conn.close()
+        return ids
+    except Exception:
+        return []
 
 
 # ======================================================
@@ -186,9 +215,16 @@ def lista_alunos():
     # ======================================================
     # 🔐 RBAC — CONTROLE DE ACESSO POR ROLE
     # ======================================================
-
-    # SUPERUSER (admin) → vê tudo
-    if current_user.has_role("admin"):
+    # Se em modo academia com academia_id selecionada, filtra por ela
+    academia_filtro = request.args.get("academia_id", type=int) or (
+        session.get("academia_gerenciamento_id") if session.get("modo_painel") == "academia" else None
+    )
+    ids_acessiveis = _get_academias_ids()
+    if academia_filtro and academia_filtro in ids_acessiveis:
+        query += " AND a.id_academia = %s"
+        params.append(academia_filtro)
+    # SUPERUSER (admin) → vê tudo (só quando não tem filtro de academia)
+    elif current_user.has_role("admin"):
         pass
 
     # FEDERAÇÃO → vê alunos das academias da federação
@@ -583,6 +619,22 @@ def lista_alunos():
 
         aluno["classes_e_pesos"] = " | ".join(partes)
 
+    # Carregar academias para seletor (quando usuário tem acesso a mais de uma)
+    academias = []
+    academia_id_sel = None
+    if len(ids_acessiveis) > 1 and (
+        session.get("modo_painel") == "academia" or request.args.get("academia_id")
+    ):
+        try:
+            cursor.execute(
+                "SELECT id, nome FROM academias WHERE id IN (%s) ORDER BY nome" % ",".join(["%s"] * len(ids_acessiveis)),
+                tuple(ids_acessiveis),
+            )
+            academias = cursor.fetchall()
+            academia_id_sel = academia_filtro or ids_acessiveis[0]
+        except Exception:
+            pass
+
     db.close()
 
     back_url = request.args.get("next") or request.referrer or url_for("painel.home")
@@ -591,6 +643,8 @@ def lista_alunos():
         alunos=alunos,
         busca=busca,
         back_url=back_url,
+        academias=academias,
+        academia_id=academia_id_sel,
     )
 
 
@@ -620,7 +674,11 @@ def cadastrar_aluno():
     cursor.execute("SELECT * FROM graduacao ORDER BY id")
     graduacoes = cursor.fetchall()
 
-    cursor.execute("SELECT * FROM turmas ORDER BY Nome")
+    acad_filtro = request.args.get("academia_id", type=int) or (session.get("academia_gerenciamento_id") if session.get("modo_painel") == "academia" else None)
+    if acad_filtro and acad_filtro in _get_academias_ids():
+        cursor.execute("SELECT * FROM turmas WHERE id_academia = %s ORDER BY Nome", (acad_filtro,))
+    else:
+        cursor.execute("SELECT * FROM turmas ORDER BY Nome")
     turmas = cursor.fetchall()
 
     cursor.execute(
@@ -979,6 +1037,7 @@ def cadastrar_aluno():
                 flash("CPF já cadastrado. Verifique e tente novamente.", "danger")
             else:
                 flash(f"Erro ao cadastrar aluno: {e}", "danger")
+            academia_selecionada = form.get("id_academia") or request.args.get("academia_id")
             db.close()
             return render_template(
                 "alunos/cadastro_aluno.html",
@@ -988,7 +1047,10 @@ def cadastrar_aluno():
                 academias=academias,
                 back_url=back_url,
                 form_data=form,
+                academia_selecionada=academia_selecionada,
             )
+
+    academia_selecionada = request.args.get("academia_id") or getattr(current_user, "id_academia", None)
 
     db.close()
     return render_template(
@@ -998,6 +1060,7 @@ def cadastrar_aluno():
         modalidades=modalidades,
         academias=academias,
         back_url=back_url,
+        academia_selecionada=academia_selecionada,
     )
 
 
@@ -1008,27 +1071,38 @@ def cadastrar_aluno():
 @bp_alunos.route("/editar_aluno/<int:aluno_id>", methods=["GET", "POST"])
 @login_required
 def editar_aluno(aluno_id):
-    back_url = request.args.get("next") or request.referrer or url_for("alunos.lista_alunos")
+    back_url = (
+        request.args.get("next")
+        or request.referrer
+        or (url_for("painel_aluno.painel") if current_user.has_role("aluno") else url_for("alunos.lista_alunos"))
+    )
 
     db = get_db_connection()
     cursor = db.cursor(dictionary=True)
 
-    # Carrega dados do aluno + academia / associação
-    cursor.execute(
-        """
-        SELECT a.*,
-               ac.nome  AS academia_nome,
-               ass.nome AS associacao_nome,
-               fed.nome AS federacao_nome
-        FROM alunos a
-        LEFT JOIN academias ac   ON a.id_academia = ac.id
-        LEFT JOIN associacoes ass ON a.id_associacao = ass.id
-        LEFT JOIN federacoes fed ON a.id_federacao = fed.id
-        WHERE a.id = %s
-        """,
-        (aluno_id,),
-    )
-    aluno = cursor.fetchone()
+    try:
+        cursor.execute(
+            """
+            SELECT a.*,
+                   ac.nome  AS academia_nome,
+                   ass.nome AS associacao_nome,
+                   fed.nome AS federacao_nome
+            FROM alunos a
+            LEFT JOIN academias ac   ON a.id_academia = ac.id
+            LEFT JOIN associacoes ass ON a.id_associacao = ass.id
+            LEFT JOIN federacoes fed ON a.id_federacao = fed.id
+            WHERE a.id = %s
+            """,
+            (aluno_id,),
+        )
+        aluno = cursor.fetchone()
+    except Exception as e:
+        if db:
+            db.close()
+        flash("Erro ao carregar aluno. Tente novamente.", "danger")
+        if current_user.has_role("aluno"):
+            return redirect(url_for("painel_aluno.painel"))
+        return redirect(url_for("alunos.lista_alunos"))
 
     if not aluno:
         flash("Aluno não encontrado.", "danger")
@@ -1042,36 +1116,69 @@ def editar_aluno(aluno_id):
             current_user.has_role("gestor_academia")
             and aluno.get("id_academia") == getattr(current_user, "id_academia", None)
         )
+        or (
+            current_user.has_role("aluno")
+            and aluno.get("usuario_id") == current_user.id
+        )
     )
 
     if not pode_editar:
         flash("Você não tem permissão para editar este aluno.", "danger")
         db.close()
+        if current_user.has_role("aluno"):
+            return redirect(url_for("painel_aluno.painel"))
         return redirect(url_for("alunos.lista_alunos"))
 
-    # Carrega combos
-    cursor.execute("SELECT * FROM graduacao ORDER BY id")
-    graduacoes = cursor.fetchall()
+    graduacoes = []
+    turmas = []
+    modalidades = []
+    aluno["modalidades_ids"] = []
 
-    cursor.execute("SELECT * FROM turmas ORDER BY Nome")
-    turmas = cursor.fetchall()
+    try:
+        cursor.execute("SELECT * FROM graduacao ORDER BY id")
+        graduacoes = cursor.fetchall()
+    except Exception:
+        pass
 
-    cursor.execute(
-        """
-        SELECT * FROM modalidade
-        WHERE (id_academia IS NULL OR id_academia = %s) AND ativo = 1
-        ORDER BY nome
-        """,
-        (aluno.get("id_academia"),),
-    )
-    modalidades = cursor.fetchall()
+    try:
+        cursor.execute("SELECT * FROM turmas ORDER BY Nome")
+        turmas = cursor.fetchall()
+    except Exception:
+        pass
 
-    # Modalidades do aluno
-    cursor.execute(
-        "SELECT modalidade_id FROM aluno_modalidades WHERE aluno_id = %s",
-        (aluno_id,),
-    )
-    aluno["modalidades_ids"] = [row["modalidade_id"] for row in cursor.fetchall()]
+    try:
+        cursor.execute(
+            """
+            SELECT * FROM modalidade
+            WHERE (id_academia IS NULL OR id_academia = %s) AND ativo = 1
+            ORDER BY nome
+            """,
+            (aluno.get("id_academia"),),
+        )
+        modalidades = cursor.fetchall()
+    except Exception:
+        pass
+
+    try:
+        cursor.execute(
+            "SELECT modalidade_id FROM aluno_modalidades WHERE aluno_id = %s",
+            (aluno_id,),
+        )
+        aluno["modalidades_ids"] = [row["modalidade_id"] for row in cursor.fetchall()]
+    except Exception:
+        pass
+
+    aluno["turmas_ids"] = []
+    try:
+        cursor.execute(
+            "SELECT TurmaID FROM aluno_turmas WHERE aluno_id = %s",
+            (aluno_id,),
+        )
+        aluno["turmas_ids"] = [row["TurmaID"] for row in cursor.fetchall()]
+    except Exception:
+        pass
+    if not aluno["turmas_ids"] and aluno.get("TurmaID"):
+        aluno["turmas_ids"] = [aluno["TurmaID"]]
 
     # Mapear rua -> endereco (para o template)
     aluno["endereco"] = aluno.get("rua")
@@ -1084,7 +1191,8 @@ def editar_aluno(aluno_id):
         sexo = form.get("sexo") or None
         data_matricula = aluno.get("data_matricula")
         graduacao_id = form.get("graduacao_id") or None
-        TurmaID = form.get("TurmaID") or None
+        turmas_ids = [int(x) for x in form.getlist("turmas_ids") if x and str(x).isdigit()]
+        TurmaID = turmas_ids[0] if turmas_ids else form.get("TurmaID") or None
 
         nacionalidade = form.get("nacionalidade") or None
         nome_pai = form.get("nome_pai") or None
@@ -1255,6 +1363,20 @@ def editar_aluno(aluno_id):
                             """,
                             (aluno_id, mid),
                         )
+
+            # Atualizar aluno_turmas N:N (múltiplas turmas)
+            try:
+                cursor_update.execute(
+                    "DELETE FROM aluno_turmas WHERE aluno_id = %s", (aluno_id,)
+                )
+                for tid in turmas_ids:
+                    if tid:
+                        cursor_update.execute(
+                            "INSERT IGNORE INTO aluno_turmas (aluno_id, TurmaID) VALUES (%s, %s)",
+                            (aluno_id, tid),
+                        )
+            except Exception:
+                pass
 
             db.commit()
             flash(f'Dados do aluno "{nome}" atualizados com sucesso!', "success")

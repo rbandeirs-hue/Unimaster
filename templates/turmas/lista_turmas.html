@@ -125,14 +125,29 @@
             <p class="lead text-muted">Gerencie e visualize todas as turmas ativas.</p>
         </div>
         <!-- Botão para Nova Turma (Mantido no topo e estilizado) -->
-        <a href="{{ url_for('turmas.cadastro_turma', next=request.full_path) }}" class="btn btn-success btn-lg shadow-lg">
+        <a href="{{ url_for('turmas.cadastro_turma', academia_id=academia_id, next=request.full_path) if (academia_id is defined and academia_id) else url_for('turmas.cadastro_turma', next=request.full_path) }}" class="btn btn-success btn-lg shadow-lg">
             <i class="bi bi-plus-circle-fill me-2"></i> Nova Turma
         </a>
     </div>
 
+    {% if academias|length > 1 %}
+    <div class="mb-3">
+        <form method="GET" class="d-flex align-items-center gap-2 flex-wrap">
+            <label class="form-label mb-0 small fw-semibold">Academia:</label>
+            <select name="academia_id" class="form-select form-select-sm" style="max-width: 280px;" onchange="this.form.submit()">
+                {% for ac in academias %}
+                <option value="{{ ac.id }}" {% if ac.id == academia_id %}selected{% endif %}>{{ ac.nome }}</option>
+                {% endfor %}
+            </select>
+            {% if busca %}<input type="hidden" name="busca" value="{{ busca }}">{% endif %}
+        </form>
+    </div>
+    {% endif %}
+
     <!-- Filtro de Busca -->
     <div class="card shadow-sm mb-4 p-3 border-0">
         <form method="GET" action="{{ url_for('turmas.lista_turmas') }}" class="row g-3 align-items-center">
+            {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
             <div class="col-md-8 col-lg-10">
                 <input type="text" name="busca" class="form-control form-control-lg"
                     placeholder="Buscar turma pelo nome, professor ou horário..." 

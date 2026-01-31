@@ -1,21 +1,31 @@
 {% extends "base.html" %}
-{% block title %}Gerenciamento — Academia{% endblock %}
+{% block title %}Gerenciamento — {{ academia.nome if academia else 'Academia' }}{% endblock %}
 {% block content %}
 <div class="container mt-5">
-    <div class="mb-5">
-        <h2 class="h4 fw-bold text-primary">Gerenciamento da Academia</h2>
-        <p class="text-muted mb-0">Acesse os módulos da sua academia.</p>
+    <div class="mb-4">
+        {% if academias|length > 1 %}
+        <form method="GET" class="mb-3">
+            <label class="form-label small fw-semibold">Academia:</label>
+            <select name="academia_id" class="form-select form-select-sm d-inline-block w-auto" onchange="this.form.submit()">
+                {% for ac in academias %}
+                <option value="{{ ac.id }}" {% if ac.id == academia_id %}selected{% endif %}>{{ ac.nome }}</option>
+                {% endfor %}
+            </select>
+        </form>
+        {% endif %}
+        <h2 class="h4 fw-bold text-primary">Gerenciamento — {{ academia.nome if academia else 'Academia' }}</h2>
+        <p class="text-muted mb-0">Acesse os módulos da academia.</p>
     </div>
 
     <div class="row g-4">
-        <!-- Cadastros -->
+        <!-- Usuários -->
         <div class="col-xl-3 col-lg-4 col-md-6">
-            <a href="{{ url_for('cadastros.hub') }}" class="card-action-link text-decoration-none">
-                <div class="card h-100 shadow-sm border-0">
+            <a href="{{ url_for('academia.lista_usuarios', academia_id=academia_id) }}" class="card-action-link text-decoration-none">
+                <div class="card h-100 shadow-sm border-primary">
                     <div class="card-body text-center p-4">
                         <i class="bi bi-person-lines-fill display-5 mb-3 text-primary"></i>
-                        <h5 class="card-title fw-bold">Cadastros</h5>
-                        <p class="card-text small text-muted mb-0">Graduações, categorias e mais.</p>
+                        <h5 class="card-title fw-bold">Usuários</h5>
+                        <p class="card-text small text-muted mb-0">Usuários vinculados à academia.</p>
                     </div>
                 </div>
             </a>
@@ -23,8 +33,8 @@
 
         <!-- Alunos -->
         <div class="col-xl-3 col-lg-4 col-md-6">
-            <a href="{{ url_for('alunos.lista_alunos') }}" class="card-action-link text-decoration-none">
-                <div class="card h-100 shadow-sm border-0">
+            <a href="{{ url_for('alunos.lista_alunos', academia_id=academia_id) }}" class="card-action-link text-decoration-none">
+                <div class="card h-100 shadow-sm border-success">
                     <div class="card-body text-center p-4">
                         <i class="bi bi-people-fill display-5 mb-3 text-success"></i>
                         <h5 class="card-title fw-bold">Alunos</h5>
@@ -36,8 +46,8 @@
 
         <!-- Turmas -->
         <div class="col-xl-3 col-lg-4 col-md-6">
-            <a href="{{ url_for('turmas.lista_turmas') }}" class="card-action-link text-decoration-none">
-                <div class="card h-100 shadow-sm border-0">
+            <a href="{{ url_for('turmas.lista_turmas', academia_id=academia_id) }}" class="card-action-link text-decoration-none">
+                <div class="card h-100 shadow-sm border-info">
                     <div class="card-body text-center p-4">
                         <i class="bi bi-collection-fill display-5 mb-3 text-info"></i>
                         <h5 class="card-title fw-bold">Turmas</h5>
@@ -51,7 +61,7 @@
         {% if academia %}
         <div class="col-xl-3 col-lg-4 col-md-6">
             <a href="{{ url_for('professores.lista', academia_id=academia.id) }}" class="card-action-link text-decoration-none">
-                <div class="card h-100 shadow-sm border-0">
+                <div class="card h-100 shadow-sm border-warning">
                     <div class="card-body text-center p-4">
                         <i class="bi bi-person-badge-fill display-5 mb-3 text-warning"></i>
                         <h5 class="card-title fw-bold">Professores</h5>
@@ -64,8 +74,8 @@
 
         <!-- Presenças -->
         <div class="col-xl-3 col-lg-4 col-md-6">
-            <a href="{{ url_for('presencas.registro_presenca') }}" class="card-action-link text-decoration-none">
-                <div class="card h-100 shadow-sm border-0">
+            <a href="{{ url_for('presencas.registro_presenca', academia_id=academia_id) }}" class="card-action-link text-decoration-none">
+                <div class="card h-100 shadow-sm border-secondary">
                     <div class="card-body text-center p-4">
                         <i class="bi bi-clipboard-check-fill display-5 mb-3 text-secondary"></i>
                         <h5 class="card-title fw-bold">Presenças</h5>
@@ -76,10 +86,10 @@
         </div>
 
         <!-- Financeiro -->
-        {% if current_user.has_role('gestor_academia') or current_user.has_role('admin') %}
+        {% if current_user.has_role('gestor_academia') or current_user.has_role('admin') or current_user.has_role('gestor_federacao') or current_user.has_role('gestor_associacao') %}
         <div class="col-xl-3 col-lg-4 col-md-6">
-            <a href="{{ url_for('financeiro.dashboard') }}" class="card-action-link text-decoration-none">
-                <div class="card h-100 shadow-sm border-0">
+            <a href="{{ url_for('financeiro.dashboard', academia_id=academia_id) }}" class="card-action-link text-decoration-none">
+                <div class="card h-100 shadow-sm border-success">
                     <div class="card-body text-center p-4">
                         <i class="bi bi-cash-coin display-5 mb-3 text-success"></i>
                         <h5 class="card-title fw-bold">Financeiro</h5>

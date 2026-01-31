@@ -74,13 +74,29 @@ def painel_associacao():
 
     academias = cur.fetchall()
 
+    # Dashboard: contagens (alunos via id_academia das academias da associação)
+    stats = {"academias": 0, "alunos": 0}
+    try:
+        stats["academias"] = len(academias)
+        if academias:
+            ids_acad = tuple(a["id"] for a in academias)
+            if len(ids_acad) == 1:
+                cur.execute("SELECT COUNT(*) as c FROM alunos WHERE id_academia = %s", (ids_acad[0],))
+            else:
+                ph = ",".join(["%s"] * len(ids_acad))
+                cur.execute(f"SELECT COUNT(*) as c FROM alunos WHERE id_academia IN ({ph})", ids_acad)
+            stats["alunos"] = cur.fetchone().get("c") or 0
+    except Exception:
+        pass
+
     cur.close()
     conn.close()
 
     return render_template(
         "painel/painel_associacao.html",
         usuario=current_user,
-        academias=academias
+        academias=academias,
+        stats=stats,
     )
 
 

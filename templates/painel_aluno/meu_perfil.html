@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}Meu Perfil – Aluno{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="mb-4">
+        <h2 class="fw-bold text-primary">Meu Perfil</h2>
+        <p class="text-muted mb-0">Informações pessoais e atalhos rápidos</p>
+    </div>
+
+    <div class="row g-4">
+        <!-- Coluna esquerda: Perfil do Aluno -->
+        <div class="col-lg-4 col-md-5">
+            <div class="card shadow-sm border-primary painel-perfil-card">
+                <div class="card-body p-4">
+                    <div class="perfil-card-content">
+                        <div class="perfil-foto-wrap">
+                            {% if aluno and aluno.foto %}
+                            <img src="{{ url_for('static', filename='uploads/' + aluno.foto) }}" alt="Foto do aluno" class="perfil-foto">
+                            {% else %}
+                            <div class="perfil-foto-placeholder"><i class="bi bi-person-fill"></i></div>
+                            {% endif %}
+                        </div>
+                        <h5 class="fw-bold text-center mb-3 mt-2">Perfil do aluno</h5>
+                        <div class="perfil-dados">
+                            <div class="perfil-item"><span class="perfil-label">Academia</span><span class="perfil-valor">{{ aluno.academia_nome or '—' }}</span></div>
+                            <div class="perfil-item"><span class="perfil-label">Turma</span><span class="perfil-valor">{{ aluno.turma_nome or '—' }}</span></div>
+                            <div class="perfil-item"><span class="perfil-label">Modalidades</span><span class="perfil-valor">{{ (aluno.modalidades or []) | join(', ') or '—' }}</span></div>
+                            <div class="perfil-item"><span class="perfil-label">Faixa</span><span class="perfil-valor">{% if aluno.faixa_nome or aluno.graduacao_nome %}{{ aluno.faixa_nome or '' }}{% if aluno.faixa_nome and aluno.graduacao_nome %} ({{ aluno.graduacao_nome }}){% elif aluno.graduacao_nome %}{{ aluno.graduacao_nome }}{% endif %}{% else %}—{% endif %}</span></div>
+                            <div class="perfil-item"><span class="perfil-label">Próxima faixa</span><span class="perfil-valor">{{ aluno.proxima_faixa|default('—') }}</span></div>
+                        </div>
+                        <a href="{{ url_for('alunos.editar_aluno', aluno_id=aluno.id, next=url_for('painel_aluno.meu_perfil')) }}" class="btn btn-primary btn-sm w-100 mt-3" title="Ir para página de edição do cadastro">
+                            <i class="bi bi-pencil-square me-1"></i> Editar cadastro
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Coluna direita: atalhos -->
+        <div class="col-lg-8 col-md-7">
+            <div class="row g-2">
+                <div class="col-sm-6 col-12">
+                    <a href="{{ url_for('painel_aluno.minhas_mensalidades') }}" class="text-decoration-none">
+                        <div class="card shadow-sm border-success card-hover painel-atalho-card">
+                            <div class="card-body text-center py-3 px-3 d-flex flex-column align-items-center">
+                                <i class="bi bi-calendar-check fs-3 mb-2 text-success"></i>
+                                <h6 class="fw-bold mb-1">Minhas Mensalidades</h6>
+                                <p class="text-muted small mb-2">Vencimentos e pagamentos</p>
+                                <span class="btn btn-success btn-sm px-3">Acessar</span>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+                <div class="col-sm-6 col-12">
+                    <a href="{{ url_for('painel_aluno.minha_turma') }}" class="text-decoration-none">
+                        <div class="card shadow-sm border-info card-hover painel-atalho-card">
+                            <div class="card-body text-center py-3 px-3 d-flex flex-column align-items-center">
+                                <i class="bi bi-collection fs-3 mb-2 text-info"></i>
+                                <h6 class="fw-bold mb-1">Minha Turma</h6>
+                                <p class="text-muted small mb-2">Horários e informações</p>
+                                <span class="btn btn-info btn-sm text-white px-3">Acessar</span>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+                <div class="col-sm-6 col-12">
+                    <a href="{{ url_for('painel_aluno.minhas_presencas') }}" class="text-decoration-none">
+                        <div class="card shadow-sm border-warning card-hover painel-atalho-card">
+                            <div class="card-body text-center py-3 px-3 d-flex flex-column align-items-center">
+                                <i class="bi bi-clipboard-check fs-3 mb-2 text-warning"></i>
+                                <h6 class="fw-bold mb-1">Minhas Presenças</h6>
+                                <p class="text-muted small mb-2">Histórico de presença</p>
+                                <span class="btn btn-warning btn-sm text-dark px-3">Acessar</span>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+                <div class="col-sm-6 col-12">
+                    <a href="{{ url_for('painel_aluno.curriculo') }}" class="text-decoration-none">
+                        <div class="card shadow-sm border-secondary card-hover painel-atalho-card">
+                            <div class="card-body text-center py-3 px-3 d-flex flex-column align-items-center">
+                                <i class="bi bi-file-earmark-person fs-3 mb-2 text-secondary"></i>
+                                <h6 class="fw-bold mb-1">Meu currículo</h6>
+                                <p class="text-muted small mb-2">Competições e eventos</p>
+                                <span class="btn btn-secondary btn-sm px-3">Acessar</span>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+                <div class="col-sm-6 col-12">
+                    <a href="{{ url_for('painel_aluno.associacao') }}" class="text-decoration-none">
+                        <div class="card shadow-sm border-dark card-hover painel-atalho-card">
+                            <div class="card-body text-center py-3 px-3 d-flex flex-column align-items-center">
+                                <i class="bi bi-building fs-3 mb-2 text-dark"></i>
+                                <h6 class="fw-bold mb-1">Associação</h6>
+                                <p class="text-muted small mb-2">Academias vinculadas</p>
+                                <span class="btn btn-dark btn-sm px-3">Acessar</span>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.perfil-card-content { display: flex; flex-direction: column; align-items: center; }
+.painel-perfil-card { align-self: flex-start; }
+.painel-atalho-card { transition: 0.2s ease; }
+.card { border-radius: 0.75rem; transition: 0.2s ease; }
+.card:hover, .card-hover:hover { transform: translateY(-5px); box-shadow: 0 0.6rem 1.2rem rgba(0,0,0,0.15) !important; }
+.perfil-foto-wrap {
+    width: 100px; height: 100px; border-radius: 50%; overflow: hidden;
+    background: #e9ecef; display: flex; align-items: center; justify-content: center;
+    border: 3px solid rgba(13, 110, 253, 0.3);
+}
+.perfil-foto { width: 100%; height: 100%; object-fit: cover; }
+.perfil-foto-placeholder { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 2.5rem; color: #6c757d; }
+.perfil-dados { width: 100%; }
+.perfil-item { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.75rem; padding: 0.35rem 0; border-bottom: 1px solid rgba(0,0,0,0.06); font-size: 0.875rem; }
+.perfil-item:last-of-type { border-bottom: none; }
+.perfil-label { font-weight: 600; color: #495057; flex-shrink: 0; }
+.perfil-valor { color: #212529; text-align: right; word-break: break-word; }
+</style>
+{% endblock %}

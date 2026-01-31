@@ -46,16 +46,42 @@ class Usuario(UserMixin):
         self.permissoes = permissoes or []
         self.menus = menus or []
 
+    # Mapeamento: nomes no código -> equivalentes na tabela roles (DB usa "Administrador", "Gestor Federação", etc.)
+    ROLE_ALIASES = {
+        "admin": ["admin", "administrador"],
+        "gestor_federacao": ["gestor_federacao", "gestor federação", "gestor federacao"],
+        "gestor_associacao": ["gestor_associacao", "gestor associação", "gestor associacao"],
+        "gestor_academia": ["gestor_academia", "gestor academia"],
+        "professor": ["professor"],
+        "aluno": ["aluno"],
+    }
+
     # ======================================================
     # 🔹 ROLE: Verifica se o usuário possui uma role
     # ======================================================
     def has_role(self, role_name):
-        return role_name.lower() in [r.lower() for r in self.roles]
+        r_lower = role_name.lower().strip()
+        roles_lower = [str(r).lower().strip() for r in (self.roles or [])]
+        if r_lower in roles_lower:
+            return True
+        aliases = self.ROLE_ALIASES.get(r_lower, [r_lower])
+        for alias in aliases:
+            if alias in roles_lower:
+                return True
+        for role in roles_lower:
+            if role.replace(" ", "_") == r_lower:
+                return True
+            if r_lower.replace("_", " ") == role:
+                return True
+        return False
 
     # ======================================================
     # 🔹 PERMISSÃO: Verifica permissões herdadas via role
+    # Admin tem acesso total a todas as permissões
     # ======================================================
     def has_permission(self, perm_name):
+        if self.has_role("admin"):
+            return True
         return perm_name.lower() in [p.lower() for p in self.permissoes]
 
     # ======================================================
@@ -65,7 +91,7 @@ class Usuario(UserMixin):
         level = (level_name or "").strip().lower()
         role_set = {r.lower() for r in self.roles}
 
-        if "admin" in role_set:
+        if "admin" in role_set or "administrador" in role_set:
             return level in {label.lower() for label, _ in self.ACCESS_LEVELS}
 
         for label, roles in self.ACCESS_LEVELS:
@@ -82,7 +108,7 @@ class Usuario(UserMixin):
     def niveis_acesso_por_roles(roles):
         role_set = {r.lower() for r in (roles or [])}
 
-        if "admin" in role_set:
+        if "admin" in role_set or "administrador" in role_set:
             return [label for label, _ in Usuario.ACCESS_LEVELS]
 
         levels = []

@@ -5,11 +5,45 @@
 {% endblock %}
 {% block content %}
 <div class="container mt-4">
-    <a href="{{ url_for('financeiro.dashboard') }}" class="btn btn-outline-secondary mb-3">
-        <i class="bi bi-arrow-left me-1"></i> Voltar
-    </a>
-    <h2 class="h4 fw-bold mb-3">Receitas — {{ "%02d/%s"|format(mes, ano) }}</h2>
-    <p class="text-muted small">Total do mês: R$ {{ "%.2f"|format(total_mes or 0) }}</p>
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+        <div>
+            <a href="{{ url_for('financeiro.dashboard') }}" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-arrow-left me-1"></i> Voltar
+            </a>
+        </div>
+        <a href="{{ url_for('financeiro.cadastrar_receita') }}" class="btn btn-success">
+            <i class="bi bi-plus-circle me-1"></i> Nova Receita
+        </a>
+    </div>
+
+    <div class="card border-0 shadow-sm mb-3">
+        <div class="card-body py-3">
+            <form method="GET" class="row g-2 align-items-end">
+                <div class="col-auto">
+                    <label class="form-label small mb-0">Mês</label>
+                    <select name="mes" class="form-select form-select-sm" style="width: auto;">
+                        {% for m in range(1, 13) %}
+                        <option value="{{ m }}" {% if mes == m %}selected{% endif %}>{{ "%02d"|format(m) }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-auto">
+                    <label class="form-label small mb-0">Ano</label>
+                    <select name="ano" class="form-select form-select-sm" style="width: auto;">
+                        {% for a in range(ano_atual, ano_atual - 5, -1) %}
+                        <option value="{{ a }}" {% if ano == a %}selected{% endif %}>{{ a }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-auto">
+                    <button type="submit" class="btn btn-outline-primary btn-sm">Filtrar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <h2 class="h4 fw-bold mb-2">Receitas — {{ "%02d/%s"|format(mes, ano) }}</h2>
+    <p class="text-muted small mb-3">Total do mês: <strong class="text-success">R$ {{ "%.2f"|format(total_mes or 0) }}</strong></p>
 
     <div class="card border-0 shadow-sm">
         <div class="card-body">
@@ -20,18 +54,23 @@
                         <tr>
                             <th>Data</th>
                             <th>Descrição</th>
-                            <th>Valor</th>
-                            <th>Ações</th>
+                            <th class="d-none d-md-table-cell">Categoria</th>
+                            <th class="text-end">Valor</th>
+                            <th class="text-end">Ações</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for r in receitas %}
                         <tr>
-                            <td>{{ r.data }}</td>
+                            <td>{{ r.data|data_br }}</td>
                             <td>{{ r.descricao }}</td>
-                            <td>R$ {{ "%.2f"|format(r.valor or 0) }}</td>
-                            <td>
+                            <td class="d-none d-md-table-cell text-muted small">{{ r.categoria or '-' }}</td>
+                            <td class="text-end text-success fw-semibold">R$ {{ "%.2f"|format(r.valor or 0) }}</td>
+                            <td class="text-end">
                                 <a href="{{ url_for('financeiro.editar_receita', receita_id=r.id) }}" class="btn btn-sm btn-outline-primary">Editar</a>
+                                <form method="POST" action="{{ url_for('financeiro.excluir_receita', receita_id=r.id) }}" class="d-inline" onsubmit="return confirm('Excluir esta receita?');">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger">Excluir</button>
+                                </form>
                             </td>
                         </tr>
                         {% endfor %}
@@ -39,7 +78,7 @@
                 </table>
             </div>
             {% else %}
-            <p class="text-muted mb-0">Nenhuma receita neste período.</p>
+            <p class="text-muted mb-0">Nenhuma receita neste período. <a href="{{ url_for('financeiro.cadastrar_receita') }}">Cadastrar receita</a></p>
             {% endif %}
         </div>
     </div>

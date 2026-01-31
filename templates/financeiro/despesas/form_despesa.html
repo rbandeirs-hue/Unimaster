@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Editar' if despesa else 'Nova' }} Despesa{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/financeiro/responsive.css') }}?v=1">
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="mb-3">
+        <a href="{{ url_for('financeiro.lista_despesas') }}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrow-left me-1"></i> Voltar
+        </a>
+    </div>
+    <div class="card shadow-lg border-0 mx-auto financeiro-form" style="max-width: 600px;">
+        <div class="card-header {{ 'bg-warning text-dark' if despesa else 'bg-danger text-white' }}">
+            <h5 class="mb-0"><i class="bi {{ 'bi-pencil-square' if despesa else 'bi-plus-circle' }} me-2"></i> {{ 'Editar' if despesa else 'Nova' }} Despesa</h5>
+        </div>
+        <div class="card-body p-4">
+            <form method="POST">
+                <div class="mb-3">
+                    <label for="descricao" class="form-label fw-semibold">Descrição <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="descricao" name="descricao" required
+                           value="{{ despesa.descricao if despesa else '' }}" placeholder="Ex: Aluguel, Luz, Material">
+                </div>
+                <div class="mb-3">
+                    <label for="valor" class="form-label fw-semibold">Valor (R$) <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="valor" name="valor" required
+                           value="{{ (despesa.valor|default('')) if despesa else '' }}" placeholder="0,00"
+                           pattern="[0-9]+([,\.][0-9]{2})?">
+                </div>
+                <div class="mb-3">
+                    <label for="data" class="form-label fw-semibold">Data <span class="text-danger">*</span></label>
+                    <input type="date" class="form-control" id="data" name="data" required
+                           value="{{ (despesa.data.strftime('%Y-%m-%d') if despesa.data and not (despesa.data is string) else (despesa.data or '')) if despesa else '' }}">
+                </div>
+                <div class="mb-3">
+                    <label for="categoria" class="form-label fw-semibold">Categoria</label>
+                    <input type="text" class="form-control" id="categoria" name="categoria"
+                           value="{{ despesa.categoria or '' }}" placeholder="Ex: Aluguel, Contas, Material">
+                </div>
+                {% if academias|length > 1 %}
+                <div class="mb-3">
+                    <label for="id_academia" class="form-label fw-semibold">Academia</label>
+                    <select class="form-select" id="id_academia" name="id_academia">
+                        {% for ac in academias %}
+                        <option value="{{ ac.id }}" {% if (despesa and despesa.id_academia == ac.id) or (not despesa and ac.id == academia_id) %}selected{% endif %}>{{ ac.nome }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {% else %}
+                <input type="hidden" name="id_academia" value="{{ academias[0].id if academias else academia_id }}">
+                {% endif %}
+                <div class="mb-3">
+                    <label for="observacoes" class="form-label fw-semibold">Observações</label>
+                    <textarea class="form-control" id="observacoes" name="observacoes" rows="3">{{ (despesa.observacoes or '') if despesa else '' }}</textarea>
+                </div>
+                <div class="d-flex gap-2 mt-4">
+                    <a href="{{ url_for('financeiro.lista_despesas') }}" class="btn btn-outline-secondary">Cancelar</a>
+                    <button type="submit" class="btn {{ 'btn-warning' if despesa else 'btn-danger' }}">
+                        {{ 'Salvar' if despesa else 'Cadastrar' }}
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
