@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Minhas Mensalidades — Aluno{% endblock %}
+{% block content %}
+<div class="container mt-4">
+    <a href="{{ url_for('painel_aluno.painel') }}" class="btn btn-outline-secondary mb-3">
+        <i class="bi bi-arrow-left me-1"></i> Voltar
+    </a>
+    <h2 class="h4 fw-bold mb-3">Minhas Mensalidades</h2>
+
+    {% if mensalidades %}
+    <div class="card border-0 shadow-sm">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Plano</th>
+                            <th>Vencimento</th>
+                            <th>Valor</th>
+                            <th>Status</th>
+                            <th>Pagamento</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for m in mensalidades %}
+                        <tr>
+                            <td>{{ m.plano_nome or '-' }}</td>
+                            <td>{{ m.data_vencimento }}</td>
+                            <td>R$ {{ "%.2f"|format(m.valor or 0) }}</td>
+                            <td>
+                                <span class="badge {% if m.status == 'pago' %}bg-success{% elif m.status == 'atrasado' %}bg-danger{% else %}bg-warning text-dark{% endif %}">
+                                    {{ m.status|capitalize }}
+                                </span>
+                            </td>
+                            <td>{{ m.data_pagamento or '-' }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <p class="text-muted small mt-2">Exibindo as últimas 24 mensalidades.</p>
+    {% else %}
+    <div class="alert alert-info">
+        <i class="bi bi-info-circle me-2"></i>Nenhuma mensalidade registrada para o seu perfil.
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

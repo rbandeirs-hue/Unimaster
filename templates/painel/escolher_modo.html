@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Escolher modo de acesso{% endblock %}
+{% block content %}
+<div class="container mt-5">
+    <div class="text-center mb-5">
+        <h2 class="h4 fw-bold text-primary">Escolha como deseja acessar</h2>
+        <p class="text-muted">Você possui acesso a mais de um painel. Selecione o modo desejado:</p>
+    </div>
+
+    <div class="row g-4 justify-content-center">
+        {% for modo_id, modo_nome in modos %}
+        <div class="col-xl-3 col-lg-4 col-md-6">
+            <a href="{{ url_for('painel.escolher_modo', modo=modo_id) }}" class="text-decoration-none">
+                <div class="card shadow-sm border-0 h-100 card-modopainel">
+                    <div class="card-body text-center p-4">
+                        {% if modo_id == 'admin' %}
+                        <i class="bi bi-shield-lock display-5 mb-3 text-warning"></i>
+                        {% elif modo_id == 'federacao' %}
+                        <i class="bi bi-diagram-3 display-5 mb-3 text-primary"></i>
+                        {% elif modo_id == 'associacao' %}
+                        <i class="bi bi-people display-5 mb-3 text-success"></i>
+                        {% elif modo_id == 'academia' %}
+                        <i class="bi bi-house-gear display-5 mb-3 text-info"></i>
+                        {% elif modo_id == 'aluno' %}
+                        <i class="bi bi-person-badge display-5 mb-3 text-secondary"></i>
+                        {% else %}
+                        <i class="bi bi-grid display-5 mb-3 text-dark"></i>
+                        {% endif %}
+                        <h5 class="fw-bold">{{ modo_nome }}</h5>
+                        <p class="text-muted small mb-0">Acessar painel {{ modo_nome }}</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+<style>
+.card-modopainel { transition: transform 0.2s, box-shadow 0.2s; }
+.card-modopainel:hover { transform: translateY(-4px); box-shadow: 0 0.5rem 1rem rgba(0,0,0,0.15) !important; }
+</style>
+{% endblock %}

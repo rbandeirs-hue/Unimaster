@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Cadastrar Modalidade{% endblock %}
+{% block content %}
+<div class="container my-4" style="max-width: 640px;">
+    <a href="{{ url_for('configuracoes.modalidades_lista') }}" class="btn btn-outline-secondary mb-3">
+        <i class="bi bi-arrow-left-circle me-2"></i> Voltar
+    </a>
+    <div class="card shadow-sm">
+        <div class="card-header bg-warning text-dark">
+            <h5 class="mb-0"><i class="bi bi-collection-fill me-2"></i> Cadastrar Modalidade</h5>
+        </div>
+        <div class="card-body p-4">
+            <form method="POST">
+                <div class="mb-3">
+                    <label for="nome" class="form-label fw-semibold">Nome <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="nome" name="nome" required placeholder="Ex: Judô, Jiu-Jitsu" value="{{ request.form.get('nome', '') }}">
+                </div>
+                <div class="mb-3">
+                    <label for="descricao" class="form-label fw-semibold">Descrição</label>
+                    <textarea class="form-control" id="descricao" name="descricao" rows="3" placeholder="Opcional">{{ request.form.get('descricao', '') }}</textarea>
+                </div>
+                <div class="mb-3">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="ativo" id="ativo" value="1" checked>
+                        <label class="form-check-label" for="ativo">Modalidade ativa</label>
+                    </div>
+                </div>
+                <div class="mb-4">
+                    <label class="form-label fw-semibold">Vincular às academias</label>
+                    <div class="border rounded p-3" style="max-height: 220px; overflow-y: auto;">
+                        {% for ac in academias %}
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="academia_ids" id="ac{{ ac.id }}" value="{{ ac.id }}">
+                            <label class="form-check-label" for="ac{{ ac.id }}">{{ ac.nome }}</label>
+                        </div>
+                        {% endfor %}
+                        {% if not academias %}<p class="text-muted small mb-0">Nenhuma academia cadastrada.</p>{% endif %}
+                    </div>
+                </div>
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn btn-primary">Salvar</button>
+                    <a href="{{ url_for('configuracoes.modalidades_lista') }}" class="btn btn-outline-secondary">Cancelar</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

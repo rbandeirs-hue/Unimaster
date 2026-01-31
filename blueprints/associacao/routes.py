@@ -95,6 +95,8 @@ def cadastro_academia():
         flash("Acesso negado.", "danger")
         return redirect(url_for("painel.home"))
 
+    back_url = request.args.get("next") or request.referrer or url_for("associacao.lista_academias")
+
     conn = get_db_connection()
     cur = conn.cursor(dictionary=True)
 
@@ -148,6 +150,18 @@ def cadastro_academia():
             redirect_url = request.form.get("next") or back_url
             return redirect(redirect_url)
 
+    # Modo associação: não mostrar seletor de associação (usar apenas a do usuário)
+    modo_associacao = (
+        current_user.has_role("gestor_associacao")
+        and not current_user.has_role("admin")
+        and id_associacao_padrao
+    )
+    associacao_nome_cadastro = None
+    if modo_associacao:
+        cur.execute("SELECT nome FROM associacoes WHERE id = %s", (id_associacao_padrao,))
+        row = cur.fetchone()
+        associacao_nome_cadastro = row["nome"] if row else None
+
     cur.close()
     conn.close()
 
@@ -155,7 +169,9 @@ def cadastro_academia():
         "academias/cadastro_academia.html",
         associacoes=associacoes,
         id_associacao_selecionada=id_associacao_padrao,
-        back_url=back_url
+        back_url=back_url,
+        modo_associacao=modo_associacao,
+        associacao_nome=associacao_nome_cadastro
     )
 
 
@@ -165,6 +181,7 @@ def cadastro_academia():
 @associacao_bp.route("/academias")
 @login_required
 def lista_academias():
+    from flask import session
 
     if not (current_user.has_role("admin") or current_user.has_role("gestor_federacao")
             or current_user.has_role("gestor_associacao")):
@@ -172,11 +189,29 @@ def lista_academias():
         return redirect(url_for("painel.home"))
 
     associacao_id = request.args.get("associacao_id", type=int)
+    id_assoc_user = getattr(current_user, "id_associacao", None)
+    modo_ativo = session.get("modo_painel")
+
+    # Quando em modo associação, filtrar SEMPRE pela associação do usuário
+    escopo_associacao_usuario = (
+        modo_ativo == "associacao"
+        or (current_user.has_role("gestor_associacao")
+            and not current_user.has_role("admin")
+            and not current_user.has_role("gestor_federacao"))
+    )
 
     conn = get_db_connection()
     cur = conn.cursor(dictionary=True)
 
-    if current_user.has_role("admin"):
+    if escopo_associacao_usuario and id_assoc_user:
+        cur.execute("""
+            SELECT ac.id, ac.nome, ac.cidade, ac.uf, ass.nome AS associacao_nome
+            FROM academias ac
+            LEFT JOIN associacoes ass ON ass.id = ac.id_associacao
+            WHERE ac.id_associacao = %s
+            ORDER BY ac.nome
+        """, (id_assoc_user,))
+    elif current_user.has_role("admin") and not escopo_associacao_usuario:
         if associacao_id:
             cur.execute("""
                 SELECT ac.id, ac.nome, ac.cidade, ac.uf, ass.nome AS associacao_nome
@@ -221,10 +256,28 @@ def lista_academias():
     academias = cur.fetchall()
     for acad in academias:
         acad["logo_url"] = buscar_logo_url("academia", acad["id"])
+
+    # Modo associação: título específico quando gestor_associacao (sem admin/gestor_fed)
+    escopo_associacao = (
+        current_user.has_role("gestor_associacao")
+        and not current_user.has_role("admin")
+        and not current_user.has_role("gestor_federacao")
+    )
+    associacao_nome = None
+    if escopo_associacao and id_assoc_user:
+        cur.execute("SELECT nome FROM associacoes WHERE id = %s", (id_assoc_user,))
+        row = cur.fetchone()
+        associacao_nome = row["nome"] if row else None
+
     cur.close()
     conn.close()
 
-    return render_template("academias/lista_academias.html", academias=academias)
+    return render_template(
+        "academias/lista_academias.html",
+        academias=academias,
+        escopo_associacao=escopo_associacao,
+        associacao_nome=associacao_nome
+    )
 
 
 # =====================================================

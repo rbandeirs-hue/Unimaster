@@ -34,25 +34,15 @@ def painel_academia():
         flash("Você não está vinculado a nenhuma academia.", "warning")
         return redirect(url_for("painel.home"))
 
-    # =====================================================
-    # 🔍 Buscar alunos da academia
-    # =====================================================
     conn = get_db_connection()
     cur = conn.cursor(dictionary=True)
-
-    cur.execute("""
-        SELECT id, nome, email
-        FROM academias
-        WHERE id = %s
-    """, (current_user.id_academia,))
-
-    alunos = cur.fetchall()
-
+    cur.execute("SELECT id, nome FROM academias WHERE id = %s", (current_user.id_academia,))
+    academia = cur.fetchone()
     cur.close()
     conn.close()
 
     return render_template(
         "painel/painel_academia.html",
         usuario=current_user,
-        alunos=alunos
+        academia=academia,
     )

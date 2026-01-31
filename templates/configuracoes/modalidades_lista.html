@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Modalidades — Configurações{% endblock %}
+{% block content %}
+<div class="container my-4">
+    <a href="{{ url_for('configuracoes.hub') }}" class="btn btn-outline-secondary mb-3">
+        <i class="bi bi-arrow-left-circle me-2"></i> Voltar
+    </a>
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
+        <div>
+            <h2 class="h4 fw-bold text-dark mb-1">Modalidades</h2>
+            <p class="text-muted small mb-0">Cadastre modalidades e vincule a academias.</p>
+        </div>
+        <a href="{{ url_for('configuracoes.modalidades_cadastro') }}" class="btn btn-success">
+            <i class="bi bi-plus-circle-fill me-1"></i> Cadastrar modalidade
+        </a>
+    </div>
+    <div class="card shadow-sm border-0">
+        <div class="card-body p-0">
+            {% if modalidades %}
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Nome</th>
+                            <th>Descrição</th>
+                            <th>Academias</th>
+                            <th class="text-center">Status</th>
+                            <th class="text-center">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for m in modalidades %}
+                        <tr>
+                            <td data-label="Nome" class="fw-semibold">{{ m.nome }}</td>
+                            <td data-label="Descrição">{{ (m.descricao or '')[:60] }}{% if (m.descricao or '')|length > 60 %}…{% endif %}</td>
+                            <td data-label="Academias">
+                                {% if m.academias %}
+                                    {% for ac in m.academias %}<span class="badge bg-light text-dark border me-1">{{ ac.nome }}</span>{% endfor %}
+                                {% else %}<span class="text-muted">Nenhuma</span>{% endif %}
+                            </td>
+                            <td data-label="Status" class="text-center">
+                                <span class="badge {{ 'bg-success' if m.ativo else 'bg-secondary' }}">{{ 'Ativa' if m.ativo else 'Inativa' }}</span>
+                            </td>
+                            <td data-label="Ações" class="text-center">
+                                <a href="{{ url_for('configuracoes.modalidades_vincular', modalidade_id=m.id) }}" class="btn btn-sm btn-outline-primary me-1">Vincular</a>
+                                <form method="post" action="{{ url_for('configuracoes.modalidades_toggle', modalidade_id=m.id) }}" class="d-inline">
+                                    {% if m.ativo %}
+                                    <button type="submit" class="btn btn-sm btn-outline-warning">Inativar</button>
+                                    {% else %}
+                                    <button type="submit" class="btn btn-sm btn-outline-success">Ativar</button>
+                                    {% endif %}
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="p-5 text-center text-muted">
+                <p class="mb-2">Nenhuma modalidade cadastrada.</p>
+                <a href="{{ url_for('configuracoes.modalidades_cadastro') }}" class="btn btn-success">Cadastrar a primeira</a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

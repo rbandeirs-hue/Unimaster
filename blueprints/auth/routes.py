@@ -5,8 +5,25 @@ from flask_login import login_user, logout_user
 from werkzeug.security import check_password_hash
 from config import get_db_connection
 from .user_model import Usuario
+from utils.contexto_logo import buscar_logo_url
 
 auth_bp = Blueprint("auth", __name__)
+
+
+def _get_login_logo():
+    """Retorna URL da logo para a tela de login (primeira federação ou academia)."""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT id FROM federacoes ORDER BY nome LIMIT 1")
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+        if row:
+            return buscar_logo_url("federacao", row["id"])
+    except Exception:
+        pass
+    return None
 
 
 # =======================================================
@@ -36,14 +53,14 @@ def login():
 
         if not usuario:
             flash("E-mail ou senha incorretos!", "danger")
-            return render_template("login.html")
+            return render_template("login.html", login_logo_url=_get_login_logo())
 
         # --------------------------------------------
         # 2️⃣ Validar senha
         # --------------------------------------------
         if not check_password_hash(usuario["senha"], senha):
             flash("E-mail ou senha incorretos!", "danger")
-            return render_template("login.html")
+            return render_template("login.html", login_logo_url=_get_login_logo())
 
         cur.close()
         conn.close()
@@ -71,7 +88,7 @@ def login():
 
         return redirect(url_for("painel.home"))
 
-    return render_template("login.html")
+    return render_template("login.html", login_logo_url=_get_login_logo())
 
 
 # =======================================================

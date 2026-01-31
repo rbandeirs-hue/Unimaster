@@ -22,14 +22,19 @@
 <!-- ====================================================== -->
 <div class="sidebar" id="sidebar">
 
-  <div class="brand">
-    <i class="bi bi-trophy-fill me-2"></i> <strong>Judo Academy</strong>
+  <div class="brand d-flex align-items-center gap-2 px-3">
+    {% if contexto_logo_url %}
+    <img src="{{ contexto_logo_url }}" alt="Logo" class="brand-logo" style="width: 40px; height: 40px; object-fit: contain; border-radius: 6px; background: rgba(255,255,255,0.2);">
+    {% else %}
+    <i class="bi bi-trophy-fill fs-4"></i>
+    {% endif %}
+    <strong class="brand-text text-truncate">{{ contexto_nome or 'Judo Academy' }}</strong>
   </div>
 
   <nav class="nav flex-column mt-3">
 
     <!-- 🔹 Painel (todos) -->
-    <a class="nav-link {% if request.endpoint == 'painel.home' %}active{% endif %}"
+    <a class="nav-link {% if request.endpoint == 'painel.home' or request.endpoint == 'painel.escolher_modo' %}active{% endif %}"
        href="{{ url_for('painel.home') }}">
       <i class="bi bi-speedometer2"></i> Painel
     </a>
@@ -54,9 +59,9 @@
         <i class="bi bi-person-lines-fill"></i> Cadastros
       </a>
 
-      <a class="nav-link" href="#"><i class="bi bi-gear"></i> Gerenciamento</a>
-      <a class="nav-link" href="#"><i class="bi bi-cash-coin"></i> Financeiro</a>
-      <a class="nav-link" href="#"><i class="bi bi-sliders"></i> Configurações</a>
+      <a class="nav-link" href="{{ url_for('academia.painel_academia') }}"><i class="bi bi-gear"></i> Gerenciamento</a>
+      <a class="nav-link" href="{{ url_for('financeiro.dashboard') }}"><i class="bi bi-cash-coin"></i> Financeiro</a>
+      <a class="nav-link" href="{{ url_for('configuracoes.hub') }}"><i class="bi bi-sliders"></i> Configurações</a>
     {% endif %}
 
 
@@ -101,19 +106,28 @@
       </a>
 
       {% if current_user.has_role('gestor_academia') %}
-        <a class="nav-link" href="#"><i class="bi bi-gear"></i> Gerenciamento</a>
-        <a class="nav-link" href="#"><i class="bi bi-cash-coin"></i> Financeiro</a>
-        <a class="nav-link" href="#"><i class="bi bi-sliders"></i> Configurações</a>
+        <a class="nav-link" href="{{ url_for('academia.painel_academia') }}"><i class="bi bi-gear"></i> Gerenciamento</a>
+        <a class="nav-link" href="{{ url_for('financeiro.dashboard') }}"><i class="bi bi-cash-coin"></i> Financeiro</a>
+        <a class="nav-link" href="{{ url_for('configuracoes.hub') }}"><i class="bi bi-sliders"></i> Configurações</a>
       {% endif %}
     {% endif %}
 
 
     <!-- ====================================================== -->
-    <!-- 🟡 ALUNO — LINK CORRIGIDO PARA O NOVO BLUEPRINT        -->
+    <!-- 🟡 ALUNO — PAINEL COMPLETO                             -->
     <!-- ====================================================== -->
     {% if current_user.has_role('aluno') %}
-      <a class="nav-link" href="{{ url_for('painel_aluno.painel') }}">
+      <a class="nav-link {% if request.endpoint == 'painel_aluno.painel' %}active{% endif %}" href="{{ url_for('painel_aluno.painel') }}">
         <i class="bi bi-person-badge"></i> Meu Perfil
+      </a>
+      <a class="nav-link {% if request.endpoint == 'painel_aluno.minhas_mensalidades' %}active{% endif %}" href="{{ url_for('painel_aluno.minhas_mensalidades') }}">
+        <i class="bi bi-calendar-check"></i> Minhas Mensalidades
+      </a>
+      <a class="nav-link {% if request.endpoint == 'painel_aluno.minha_turma' %}active{% endif %}" href="{{ url_for('painel_aluno.minha_turma') }}">
+        <i class="bi bi-collection"></i> Minha Turma
+      </a>
+      <a class="nav-link {% if request.endpoint == 'painel_aluno.minhas_presencas' %}active{% endif %}" href="{{ url_for('painel_aluno.minhas_presencas') }}">
+        <i class="bi bi-clipboard-check"></i> Minhas Presenças
       </a>
     {% endif %}
 
@@ -126,6 +140,7 @@
   </div>
 
 </div>
+<button type="button" class="sidebar-overlay" id="sidebar-overlay" onclick="toggleSidebar()" aria-label="Fechar menu"></button>
 {% endif %}
 
 
@@ -141,9 +156,16 @@
       <i class="bi bi-list"></i>
     </button>
 
-    <div class="user-info ms-auto">
-      <strong>{{ current_user.nome }}</strong><br>
-      <small>{{ current_user.roles | join(', ') }}</small>
+    <div class="user-info ms-auto d-flex align-items-center gap-2">
+      <div>
+        <strong>{{ current_user.nome }}</strong><br>
+        <small>{{ current_user.roles | join(', ') }}</small>
+      </div>
+      {% if tem_multiplos_modos() %}
+      <a href="{{ url_for('painel.home', trocar=1) }}" class="btn btn-sm btn-outline-primary" title="Trocar modo de acesso">
+        <i class="bi bi-arrow-repeat"></i> Trocar modo
+      </a>
+      {% endif %}
     </div>
   </div>
   {% endif %}
@@ -188,9 +210,11 @@
 function toggleSidebar() {
     const sidebar = document.getElementById("sidebar");
     const main = document.getElementById("main-content");
+    const overlay = document.getElementById("sidebar-overlay");
 
     sidebar.classList.toggle("active");
     main.classList.toggle("sidebar-active");
+    if (overlay) overlay.classList.toggle("show");
 }
 
 document.addEventListener("DOMContentLoaded", () => {

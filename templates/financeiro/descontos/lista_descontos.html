@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Descontos{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/financeiro/responsive.css') }}?v=1">
+{% endblock %}
+{% block content %}
+<div class="container mt-4">
+    <a href="{{ url_for('financeiro.dashboard') }}" class="btn btn-outline-secondary mb-3">
+        <i class="bi bi-arrow-left me-1"></i> Voltar
+    </a>
+    <h2 class="h4 fw-bold mb-3">Descontos</h2>
+
+    <div class="card border-0 shadow-sm">
+        <div class="card-body">
+            {% if descontos %}
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Nome</th>
+                            <th>Tipo</th>
+                            <th>Valor</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for d in descontos %}
+                        <tr>
+                            <td>{{ d.nome }}</td>
+                            <td>{{ d.tipo or 'percentual' }}</td>
+                            <td>{{ "%.2f" % (d.valor or 0) }}{{ '%' if (d.tipo or '') == 'percentual' else ' R$' }}</td>
+                            <td>
+                                <a href="{{ url_for('financeiro.editar_desconto', desconto_id=d.id) }}" class="btn btn-sm btn-outline-primary">Editar</a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-muted mb-0">Nenhum desconto cadastrado.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -44,12 +44,17 @@ body {
 }
 
 .sidebar .brand {
-  font-size: 1.6rem;
+  font-size: 1.15rem;
   font-weight: 700; 
-  padding: 1.5rem 1rem; 
+  padding: 1rem 1rem; 
   text-align: left;
   background-color: var(--primary); 
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1); 
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.sidebar .brand-text {
+  flex: 1;
+  min-width: 0;
 }
 
 .sidebar .nav {
@@ -200,31 +205,40 @@ body {
   }
 
   /* Overlay para escurecer o fundo quando a sidebar estiver aberta */
-  body::after {
-    content: '';
+  .sidebar-overlay {
+    display: block;
     position: fixed;
     top: 0;
     left: 0;
     right: 0;
     bottom: 0;
     background: rgba(0, 0, 0, 0.5);
-    z-index: 1040; 
-    display: none;
+    z-index: 1040;
     opacity: 0;
+    pointer-events: none;
     transition: opacity 0.3s;
+    border: none;
+    cursor: pointer;
+  }
+
+  .sidebar-overlay.show {
+    opacity: 1;
+    pointer-events: auto;
   }
 
   .sidebar.active {
     transform: translateX(0);
   }
-  
+
   .main-content {
-    margin-left: 0; 
-    padding: 0 1rem; 
+    margin-left: 0;
+    padding: 0 1rem;
   }
-  
-  .sidebar.active ~ body::after {
-    display: block;
-    opacity: 1;
+}
+
+/* Overlay oculto em desktop */
+@media (min-width: 992px) {
+  .sidebar-overlay {
+    display: none !important;
   }
 }

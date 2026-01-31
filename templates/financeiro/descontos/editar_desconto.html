@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Editar Desconto{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/financeiro/responsive.css') }}?v=1">
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="mb-3">
+        <a href="{{ url_for('financeiro.lista_descontos') }}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrow-left me-1"></i> Voltar
+        </a>
+    </div>
+    <div class="card shadow-lg border-0 mx-auto financeiro-form" style="max-width: 600px;">
+        <div class="card-header bg-warning text-dark">
+            <h5 class="mb-0"><i class="bi bi-pencil me-2"></i> Editar Desconto</h5>
+        </div>
+        <div class="card-body p-4">
+            <form method="POST">
+                <div class="mb-3">
+                    <label for="nome" class="form-label fw-semibold">Nome <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="nome" name="nome" required value="{{ desconto.nome }}">
+                </div>
+                <div class="mb-3">
+                    <label for="descricao" class="form-label fw-semibold">Descrição</label>
+                    <textarea class="form-control" id="descricao" name="descricao" rows="2">{{ desconto.descricao or '' }}</textarea>
+                </div>
+                <div class="mb-3">
+                    <label for="tipo" class="form-label fw-semibold">Tipo</label>
+                    <select class="form-select" id="tipo" name="tipo">
+                        <option value="percentual" {% if desconto.tipo == 'percentual' %}selected{% endif %}>Percentual (%)</option>
+                        <option value="valor_fixo" {% if desconto.tipo == 'valor_fixo' %}selected{% endif %}>Valor fixo (R$)</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label for="valor" class="form-label fw-semibold">Valor <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="valor" name="valor" required value="{{ "%.2f"|format(desconto.valor|float) if desconto.tipo == 'valor_fixo' else "%.0f"|format(desconto.valor|float) }}" pattern="[0-9]+([,\.][0-9]{2})?">
+                </div>
+                {% if academias|length > 1 %}
+                <div class="mb-3">
+                    <label for="id_academia" class="form-label fw-semibold">Academia</label>
+                    <select class="form-select" id="id_academia" name="id_academia">
+                        <option value="">Todas</option>
+                        {% for ac in academias %}
+                        <option value="{{ ac.id }}" {% if desconto.id_academia == ac.id %}selected{% endif %}>{{ ac.nome }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {% else %}
+                <input type="hidden" name="id_academia" value="{{ desconto.id_academia or (academias[0].id if academias else '') }}">
+                {% endif %}
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Aplicar desconto apenas quando pagamento em dia?</label>
+                    <div class="d-flex gap-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="aplicar_apenas_pagamento_em_dia" id="em_dia_sim" value="1" {% if desconto.get('aplicar_apenas_pagamento_em_dia', 1) != 0 %}checked{% endif %}>
+                            <label class="form-check-label" for="em_dia_sim">Sim</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="aplicar_apenas_pagamento_em_dia" id="em_dia_nao" value="0" {% if desconto.get('aplicar_apenas_pagamento_em_dia') == 0 %}checked{% endif %}>
+                            <label class="form-check-label" for="em_dia_nao">Não (aplicar sempre)</label>
+                        </div>
+                    </div>
+                    <small class="text-muted">Sim = só aplica se data do pagamento ≤ vencimento. Não = aplica mesmo em atraso.</small>
+                </div>
+                <div class="mb-3">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="ativo" id="ativo" value="1" {% if desconto.ativo %}checked{% endif %}>
+                        <label class="form-check-label" for="ativo">Ativo</label>
+                    </div>
+                </div>
+                <div class="d-flex gap-2 mt-4">
+                    <a href="{{ url_for('financeiro.lista_descontos') }}" class="btn btn-outline-secondary">Cancelar</a>
+                    <button type="submit" class="btn btn-warning text-dark">Salvar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,4 +1,4 @@
-# 📦 Guia de Instalação de Dependências - Judo Academy
+# 📦 Guia de Instalação de Dependências - Unimaster
 
 ## 🚀 Instalação Rápida
 

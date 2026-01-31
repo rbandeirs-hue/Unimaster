@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Despesas{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/financeiro/responsive.css') }}?v=1">
+{% endblock %}
+{% block content %}
+<div class="container mt-4">
+    <a href="{{ url_for('financeiro.dashboard') }}" class="btn btn-outline-secondary mb-3">
+        <i class="bi bi-arrow-left me-1"></i> Voltar
+    </a>
+    <h2 class="h4 fw-bold mb-3">Despesas — {{ "%02d/%s"|format(mes, ano) }}</h2>
+    <p class="text-muted small">Total do mês: R$ {{ "%.2f"|format(total_mes or 0) }}</p>
+
+    <div class="card border-0 shadow-sm">
+        <div class="card-body">
+            {% if despesas %}
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Data</th>
+                            <th>Descrição</th>
+                            <th>Valor</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for d in despesas %}
+                        <tr>
+                            <td>{{ d.data }}</td>
+                            <td>{{ d.descricao }}</td>
+                            <td>R$ {{ "%.2f"|format(d.valor or 0) }}</td>
+                            <td>
+                                <a href="{{ url_for('financeiro.editar_despesa', despesa_id=d.id) }}" class="btn btn-sm btn-outline-primary">Editar</a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-muted mb-0">Nenhuma despesa neste período.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

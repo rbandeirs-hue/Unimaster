@@ -18,6 +18,10 @@ from blueprints.aluno import bp_alunos, bp_painel_aluno
 from blueprints.cadastros import cadastros_bp
 from blueprints.usuarios.routes import bp_usuarios
 from blueprints.turmas.routes import bp_turmas
+from blueprints.presencas.presencas import bp_presencas
+from blueprints.professores.routes import bp_professores
+from blueprints.configuracoes import bp_configuracoes
+from blueprints.financeiro.routes import bp_financeiro
 
 # 🔹 Modelo de Usuário (flask-login)
 from blueprints.auth.user_model import Usuario
@@ -90,6 +94,32 @@ def load_user(user_id):
 
 
 # ============================================================
+# 🔹 Context processor: múltiplos modos (para botão Trocar modo)
+# ============================================================
+@app.context_processor
+def injetar_modos_e_contexto():
+    from datetime import datetime
+    from flask_login import current_user
+    from flask import session
+    from utils.contexto_logo import get_contexto_logo_e_nome
+
+    def tem_multiplos_modos():
+        if not hasattr(current_user, 'is_authenticated') or not current_user.is_authenticated:
+            return False
+        from blueprints.painel.routes import _modos_disponiveis
+        modos = _modos_disponiveis()
+        return len(modos) > 1
+
+    logo_url, contexto_nome, _ = get_contexto_logo_e_nome(current_user, session)
+    return dict(
+        tem_multiplos_modos=tem_multiplos_modos,
+        contexto_logo_url=logo_url,
+        contexto_nome=contexto_nome,
+        current_year=datetime.now().year,
+    )
+
+
+# ============================================================
 # 🔹 Rota padrão
 # ============================================================
 @app.route("/")
@@ -112,6 +142,10 @@ app.register_blueprint(bp_painel_aluno) # Painel do aluno
 app.register_blueprint(cadastros_bp)    # Hub de Cadastros
 app.register_blueprint(bp_usuarios)     # Usuários (lista/cadastro/editar/excluir)
 app.register_blueprint(bp_turmas)       # Turmas (CRUD)
+app.register_blueprint(bp_presencas)    # Presenças (registro, ata, histórico)
+app.register_blueprint(bp_professores)  # Professores (CRUD por academia)
+app.register_blueprint(bp_configuracoes)  # Configurações (admin: modalidades)
+app.register_blueprint(bp_financeiro)   # Financeiro (dashboard, descontos, mensalidades, receitas, despesas)
 
 
 # ============================================================

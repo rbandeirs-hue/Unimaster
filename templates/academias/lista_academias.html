@@ -44,8 +44,20 @@
 <div class="container my-4">
     <div class="d-flex flex-column flex-md-row justify-content-between align-items-center mb-4 gap-3">
         <div class="text-center text-md-start">
-            <h2 class="display-6 fw-bold text-primary mb-1">Academias</h2>
-            <p class="lead text-muted mb-0">Lista completa das academias cadastradas.</p>
+            <h2 class="display-6 fw-bold text-primary mb-1">
+                {% if escopo_associacao|default(False) and associacao_nome %}
+                    Academias — {{ associacao_nome }}
+                {% else %}
+                    Academias
+                {% endif %}
+            </h2>
+            <p class="lead text-muted mb-0">
+                {% if escopo_associacao|default(False) %}
+                    Lista de academias da sua associação.
+                {% else %}
+                    Lista completa das academias cadastradas.
+                {% endif %}
+            </p>
         </div>
         <div class="d-flex flex-column flex-md-row gap-2 w-100 w-md-auto align-items-md-center">
             <div class="d-flex align-items-center gap-2">
@@ -82,9 +94,11 @@
                             </div>
                             <div>
                                 <h5 class="fw-bold mb-1">{{ acad.nome }}</h5>
+                                {% if not escopo_associacao|default(False) %}
                                 <div class="text-muted small">
                                     <span class="me-2">Associação: {{ acad.associacao_nome or '-' }}</span>
                                 </div>
+                                {% endif %}
                             </div>
                         </div>
                         <div class="card-actions">
@@ -106,7 +120,11 @@
     </div>
     {% else %}
     <div class="alert alert-info text-center mt-4">
-        Nenhuma academia cadastrada no sistema.
+        {% if escopo_associacao|default(False) %}
+            Nenhuma academia cadastrada nesta associação.
+        {% else %}
+            Nenhuma academia cadastrada no sistema.
+        {% endif %}
     </div>
     {% endif %}
 </div>

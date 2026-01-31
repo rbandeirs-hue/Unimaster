@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+{% block title %}Descontos - {{ aluno.nome }}{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/financeiro/responsive.css') }}?v=1">
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4 descontos-aluno-page">
+    <div class="d-flex justify-content-between align-items-center mb-4 financeiro-header flex-wrap gap-2">
+        <div>
+            <a href="{{ url_for('financeiro.mensalidades_aluno', aluno_id=aluno.id) }}" class="btn btn-outline-secondary btn-sm mb-2">
+                <i class="bi bi-arrow-left me-1"></i> Voltar às mensalidades
+            </a>
+            <h2 class="h4 fw-bold text-dark mb-1">{{ aluno.nome }}</h2>
+            <p class="text-muted small mb-0">Descontos vinculados (aplicados normalmente nas mensalidades)</p>
+        </div>
+    </div>
+
+    <!-- Vincular novo desconto -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-light">
+            <h6 class="mb-0 fw-bold"><i class="bi bi-plus-circle me-2"></i> Vincular desconto</h6>
+        </div>
+        <div class="card-body">
+            <form method="POST" action="{{ url_for('financeiro.vincular_desconto_aluno', aluno_id=aluno.id) }}" class="row g-2 align-items-end financeiro-desconto-vincular-form">
+                <div class="col-12 col-md-4">
+                    <label class="form-label small">Desconto</label>
+                    <select name="desconto_id" class="form-select" required>
+                        <option value="">Selecione...</option>
+                        {% for d in descontos_disponiveis %}
+                        <option value="{{ d.id }}">{{ d.nome }} — {% if d.tipo == 'percentual' %}{{ "%.0f"|format(d.valor|float) }}%{% else %}R$ {{ "%.2f"|format(d.valor|float) }}{% endif %}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label small">Início</label>
+                    <input type="date" name="data_inicio" class="form-control">
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label small">Fim</label>
+                    <input type="date" name="data_fim" class="form-control">
+                </div>
+                <div class="col-12 col-md-2">
+                    <label class="form-label small">Tipo vigência</label>
+                    <select name="tipo_vigencia" class="form-select">
+                        <option value="parcial">Parcial</option>
+                        <option value="integral">Integral</option>
+                    </select>
+                </div>
+                <div class="col-12 col-md-2">
+                    <button type="submit" class="btn btn-primary w-100">Vincular</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Lista de descontos do aluno -->
+    <div class="card shadow-sm border-0">
+        <div class="card-body p-0">
+            {% if vinculos %}
+            <!-- Mobile: cards -->
+            <div class="descontos-aluno-mobile-cards d-md-none p-3">
+                {% for v in vinculos %}
+                <div class="card mb-3 border">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <strong>{{ v.desconto_nome }}</strong>
+                            {% if v.ativo %}
+                            <span class="badge bg-success">Ativo</span>
+                            {% else %}
+                            <span class="badge bg-secondary">Inativo</span>
+                            {% endif %}
+                        </div>
+                        <p class="mb-1 small">
+                            {% if v.tipo == 'percentual' %}
+                            {{ "%.0f"|format(v.desconto_valor|float) }}%
+                            {% else %}
+                            R$ {{ "%.2f"|format(v.desconto_valor|float) }}
+                            {% endif %}
+                            {% if v.get('tipo_vigencia') == 'integral' %}
+                            · <span class="badge bg-info">Integral</span>
+                            {% else %}
+                            · <span class="badge bg-secondary">Parcial</span>
+                            {% endif %}
+                        </p>
+                        <p class="mb-2 small text-muted">
+                            {{ v.data_inicio.strftime('%d/%m/%Y') if v.data_inicio else '-' }} até {{ v.data_fim.strftime('%d/%m/%Y') if v.data_fim else '-' }}
+                        </p>
+                        {% if v.ativo %}
+                        <form method="POST" action="{{ url_for('financeiro.remover_desconto_aluno', aluno_id=aluno.id, desconto_id=v.desconto_id) }}" class="d-inline" onsubmit="return confirm('Remover este desconto do aluno?');">
+                            <button type="submit" class="btn btn-sm btn-outline-danger">Remover</button>
+                        </form>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            <!-- Desktop: tabela -->
+            <div class="table-responsive d-none d-md-block">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Desconto</th>
+                            <th>Tipo / Valor</th>
+                            <th>Vigência</th>
+                            <th>Tipo</th>
+                            <th>Status</th>
+                            <th class="text-end">Ação</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for v in vinculos %}
+                        <tr>
+                            <td class="fw-semibold">{{ v.desconto_nome }}</td>
+                            <td>
+                                {% if v.tipo == 'percentual' %}
+                                {{ "%.0f"|format(v.desconto_valor|float) }}%
+                                {% else %}
+                                R$ {{ "%.2f"|format(v.desconto_valor|float) }}
+                                {% endif %}
+                            </td>
+                            <td>
+                                {{ v.data_inicio.strftime('%d/%m/%Y') if v.data_inicio else '-' }}
+                                até
+                                {{ v.data_fim.strftime('%d/%m/%Y') if v.data_fim else '-' }}
+                            </td>
+                            <td>
+                                {% if v.get('tipo_vigencia') == 'integral' %}
+                                <span class="badge bg-info" title="Só aplica se mensalidades anteriores pagas">Integral</span>
+                                {% else %}
+                                <span class="badge bg-secondary">Parcial</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if v.ativo %}
+                                <span class="badge bg-success">Ativo</span>
+                                {% else %}
+                                <span class="badge bg-secondary">Inativo</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-end">
+                                {% if v.ativo %}
+                                <form method="POST" action="{{ url_for('financeiro.remover_desconto_aluno', aluno_id=aluno.id, desconto_id=v.desconto_id) }}" class="d-inline" onsubmit="return confirm('Remover este desconto do aluno?');">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger">Remover</button>
+                                </form>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="p-4 text-center text-muted">
+                <i class="bi bi-percent fs-1"></i>
+                <p class="mb-0">Nenhum desconto vinculado a este aluno.</p>
+                <p class="small">Use o formulário acima para vincular um desconto.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

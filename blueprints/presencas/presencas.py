@@ -21,7 +21,7 @@ def registro_presenca():
     cursor = db.cursor(dictionary=True)
 
     # Buscar todas as turmas
-    cursor.execute("SELECT TurmaID, Nome FROM Turmas ORDER BY Nome")
+    cursor.execute("SELECT TurmaID, Nome FROM turmas ORDER BY Nome")
     turmas = cursor.fetchall()
 
     # Seleção da turma e data
@@ -100,7 +100,7 @@ def ata_presenca():
     turma_selecionada = int(request.args.get('turma', 0))
 
     # Buscar turmas
-    cursor.execute("SELECT TurmaID, Nome FROM Turmas")
+    cursor.execute("SELECT TurmaID, Nome FROM turmas")
     turmas = {t['TurmaID']: t['Nome'] for t in cursor.fetchall()}
 
     # Buscar todos os alunos
