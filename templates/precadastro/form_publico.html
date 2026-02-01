@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Pré-cadastro — {{ academia_nome }}</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        .camera-modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.9);z-index:9999;justify-content:center;align-items:center;}
+        .camera-modal.show{display:flex;}
+        .camera-content{width:90%;max-width:480px;text-align:center;}
+        .camera-content video,.camera-content canvas{width:100%;border-radius:10px;border:2px solid #ddd;margin-bottom:10px;}
+        #miniatura{width:120px;height:120px;object-fit:cover;border-radius:50%;border:3px solid #0d6efd;}
+        .cam-btns button{margin:4px;}
+    </style>
+</head>
+<body class="bg-light">
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white text-center py-3">
+                    <h5 class="mb-0"><i class="bi bi-person-plus-fill me-2"></i> Pré-cadastro — {{ academia_nome }}</h5>
+                    <p class="mb-0 small opacity-90">Preencha os dados para iniciar o cadastro</p>
+                </div>
+                <div class="card-body p-4">
+                    {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        {% for cat, msg in messages %}
+                        <div class="alert alert-{{ cat }} alert-dismissible fade show">{{ msg }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>
+                        {% endfor %}
+                    {% endif %}
+                    {% endwith %}
+                    {% if sucesso %}
+                    <div class="alert alert-success">
+                        <i class="bi bi-check-circle-fill me-2"></i>Pré-cadastro realizado com sucesso! Em breve a academia entrará em contato.
+                    </div>
+                    <a href="{{ url_for('precadastro.form_publico', academia_slug=academia_slug) }}" class="btn btn-outline-primary">Fazer outro pré-cadastro</a>
+                    {% else %}
+                    <form method="POST" enctype="multipart/form-data" id="formPrecad">
+                        <h6 class="border-bottom pb-2 mb-3 text-secondary fw-bold"><i class="bi bi-person-badge me-1"></i> Dados do aluno</h6>
+                        <div class="row g-2">
+                            <div class="col-md-12 mb-3">
+                                <label class="form-label fw-semibold">Nome completo *</label>
+                                <input type="text" class="form-control" name="nome" required value="{{ form.get('nome','') }}">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-semibold">Data de nascimento</label>
+                                <input type="date" class="form-control" name="data_nascimento" id="dataNasc" value="{{ form.get('data_nascimento','') }}">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-semibold">Sexo</label>
+                                <select class="form-select" name="sexo">
+                                    <option value="">Selecione</option>
+                                    <option value="M" {% if form.get('sexo')=='M' %}selected{% endif %}>Masculino</option>
+                                    <option value="F" {% if form.get('sexo')=='F' %}selected{% endif %}>Feminino</option>
+                                    <option value="O" {% if form.get('sexo')=='O' %}selected{% endif %}>Outro</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-semibold">CPF do aluno</label>
+                                <input type="text" class="form-control" name="cpf" id="cpfAluno" data-mask="cpf" placeholder="000.000.000-00" value="{{ form.get('cpf','') }}">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-semibold">Telefone</label>
+                                <input type="text" class="form-control" name="telefone" id="telAluno" data-mask="phone" placeholder="(11) 99999-9999" value="{{ form.get('telefone','') }}">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-semibold">E-mail</label>
+                                <input type="email" class="form-control" name="email" placeholder="email@exemplo.com" value="{{ form.get('email','') }}">
+                            </div>
+                        </div>
+
+                        <h6 class="border-bottom pb-2 mb-3 mt-4 text-secondary fw-bold"><i class="bi bi-camera-fill me-1"></i> Foto</h6>
+                        <div class="d-flex align-items-center gap-3 mb-3">
+                            <div class="position-relative" style="width:120px;height:120px;flex-shrink:0;">
+                                <img id="miniatura" src="" alt="" class="d-none position-absolute top-0 start-0 rounded-circle" style="width:120px;height:120px;object-fit:cover;border:3px solid #0d6efd;">
+                                <div id="miniaturaPlaceholder" class="position-absolute top-0 start-0 rounded-circle bg-secondary d-flex align-items-center justify-content-center text-white" style="width:120px;height:120px;"><i class="bi bi-person-fill fs-1"></i></div>
+                            </div>
+                            <div class="flex-grow-1">
+                                <input type="hidden" name="foto" id="fotoInput">
+                                <button type="button" class="btn btn-primary btn-sm mb-2" id="btnCamera"><i class="bi bi-camera-fill me-1"></i> Câmera</button>
+                                <input type="file" class="form-control form-control-sm" name="foto_arquivo" accept="image/*">
+                            </div>
+                        </div>
+
+                        <h6 class="border-bottom pb-2 mb-3 mt-4 text-secondary fw-bold"><i class="bi bi-shield-lock me-1"></i> Acesso ao sistema</h6>
+                        <p class="small text-muted">Quem terá acesso à área do aluno no sistema?</p>
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="acesso_sistema" id="acessoAluno" value="aluno" {% if form.get('acesso_sistema','aluno')=='aluno' %}checked{% endif %}>
+                                <label class="form-check-label" for="acessoAluno">O próprio aluno (maior de idade ou responsável fará o cadastro)</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="acesso_sistema" id="acessoResp" value="responsavel" {% if form.get('acesso_sistema')=='responsavel' %}checked{% endif %}>
+                                <label class="form-check-label" for="acessoResp">O responsável (menor de idade — responsável terá o acesso)</label>
+                            </div>
+                        </div>
+                        <div id="blocoEmailAcesso" class="mb-3" style="display:{% if form.get('acesso_sistema')=='responsavel' %}block{% else %}none{% endif %};">
+                            <label class="form-label fw-semibold">E-mail para criar acesso *</label>
+                            <input type="email" class="form-control" name="email_acesso" id="emailAcesso" placeholder="email@exemplo.com" value="{{ form.get('email_acesso', form.get('email','')) }}">
+                            <small class="text-muted">Será usado para login no sistema (quem terá o acesso).</small>
+                        </div>
+
+                        <h6 class="border-bottom pb-2 mb-3 mt-4 text-secondary fw-bold"><i class="bi bi-cash-coin me-1"></i> Responsável financeiro</h6>
+                        <p class="small text-muted">Para alunos menores ou quando outra pessoa é responsável pelas mensalidades.</p>
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="checkbox" name="responsavel_eh_proprio" id="respProprio" value="1" {% if form.get('responsavel_eh_proprio')=='1' %}checked{% endif %}>
+                            <label class="form-check-label" for="respProprio"><strong>O responsável financeiro sou eu (o próprio aluno)</strong></label>
+                        </div>
+                        <div id="blocoRespFinanceiro">
+                            <div class="row g-2">
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label fw-semibold">Nome do responsável financeiro</label>
+                                    <input type="text" class="form-control" name="responsavel_financeiro_nome" id="respNome" value="{{ form.get('responsavel_financeiro_nome','') }}">
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label fw-semibold">CPF do responsável financeiro</label>
+                                    <input type="text" class="form-control" name="responsavel_financeiro_cpf" id="respCpf" data-mask="cpf" placeholder="000.000.000-00" value="{{ form.get('responsavel_financeiro_cpf','') }}">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Observações</label>
+                            <textarea class="form-control" name="observacoes" rows="2">{{ form.get('observacoes','') }}</textarea>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="bi bi-send me-2"></i> Enviar pré-cadastro
+                        </button>
+                    </form>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="camera-modal" id="cameraModal">
+    <div class="camera-content">
+        <video id="cameraVideo" autoplay playsinline></video>
+        <canvas id="cameraCanvas" style="display:none;"></canvas>
+        <div class="cam-btns">
+            <button type="button" class="btn btn-success" id="btnCapturar"><i class="bi bi-camera me-1"></i> Capturar</button>
+            <button type="button" class="btn btn-primary d-none" id="btnConfirmar"><i class="bi bi-check me-1"></i> Confirmar</button>
+            <button type="button" class="btn btn-warning d-none" id="btnRefazer"><i class="bi bi-arrow-clockwise me-1"></i> Refazer</button>
+            <button type="button" class="btn btn-danger" id="btnFechar"><i class="bi bi-x me-1"></i> Fechar</button>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+(function(){
+    let stream;
+    const modal = document.getElementById('cameraModal');
+    const video = document.getElementById('cameraVideo');
+    const canvas = document.getElementById('cameraCanvas');
+    const miniatura = document.getElementById('miniatura');
+    const placeholder = document.getElementById('miniaturaPlaceholder');
+    const fotoInput = document.getElementById('fotoInput');
+    const respProprio = document.getElementById('respProprio');
+    const blocoResp = document.getElementById('blocoRespFinanceiro');
+    const acessoAluno = document.getElementById('acessoAluno');
+    const acessoResp = document.getElementById('acessoResp');
+    const emailAcesso = document.getElementById('emailAcesso');
+    const nomeInput = document.querySelector('input[name="nome"]');
+    const cpfAluno = document.getElementById('cpfAluno');
+    const emailGeral = document.querySelector('input[name="email"]');
+
+    document.getElementById('btnCamera').onclick = async function(){
+        try{
+            stream = await navigator.mediaDevices.getUserMedia({video:true});
+            video.srcObject = stream;
+            modal.classList.add('show');
+        }catch(e){ alert('Não foi possível acessar a câmera: '+e.message); }
+    };
+    document.getElementById('btnFechar').onclick = function(){
+        modal.classList.remove('show');
+        if(stream) stream.getTracks().forEach(t=>t.stop());
+    };
+    document.getElementById('btnCapturar').onclick = function(){
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        canvas.getContext('2d').drawImage(video,0,0);
+        canvas.style.display = 'block';
+        video.style.display = 'none';
+        document.getElementById('btnCapturar').classList.add('d-none');
+        document.getElementById('btnConfirmar').classList.remove('d-none');
+        document.getElementById('btnRefazer').classList.remove('d-none');
+    };
+    document.getElementById('btnRefazer').onclick = function(){
+        canvas.style.display = 'none';
+        video.style.display = 'block';
+        document.getElementById('btnCapturar').classList.remove('d-none');
+        document.getElementById('btnConfirmar').classList.add('d-none');
+        document.getElementById('btnRefazer').classList.add('d-none');
+    };
+    document.getElementById('btnConfirmar').onclick = function(){
+        const dataURL = canvas.toDataURL('image/png');
+        fotoInput.value = dataURL;
+        miniatura.src = dataURL;
+        miniatura.classList.remove('d-none');
+        placeholder.classList.add('d-none');
+        modal.classList.remove('show');
+        if(stream) stream.getTracks().forEach(t=>t.stop());
+    };
+
+    respProprio.onchange = function(){
+        const checked = respProprio.checked;
+        blocoResp.style.display = checked ? 'none' : 'block';
+        if(checked){
+            document.getElementById('respNome').value = nomeInput ? nomeInput.value : '';
+            document.getElementById('respCpf').value = cpfAluno ? cpfAluno.value : '';
+        }
+    };
+    if(respProprio.checked) blocoResp.style.display = 'none';
+
+    function sincronizarRespProprio(){
+        if(respProprio.checked && nomeInput){
+            document.getElementById('respNome').value = nomeInput.value;
+            document.getElementById('respCpf').value = cpfAluno ? cpfAluno.value : '';
+        }
+    }
+    nomeInput && nomeInput.addEventListener('blur', sincronizarRespProprio);
+    cpfAluno && cpfAluno.addEventListener('blur', sincronizarRespProprio);
+
+    function toggleEmailAcesso(){
+        const resp = document.getElementById('acessoResp');
+        const bloco = document.getElementById('blocoEmailAcesso');
+        const inp = document.getElementById('emailAcesso');
+        if(resp && resp.checked){
+            bloco.style.display = 'block';
+            if(inp) inp.required = true;
+        } else {
+            bloco.style.display = 'none';
+            if(inp) inp.required = false;
+        }
+    }
+    acessoAluno && acessoAluno.addEventListener('change', toggleEmailAcesso);
+    acessoResp && acessoResp.addEventListener('change', toggleEmailAcesso);
+    toggleEmailAcesso();
+
+    function mascaraCPF(el){
+        let v = el.value.replace(/\D/g,'');
+        if(v.length>11) v = v.slice(0,11);
+        if(v.length>9) el.value = v.slice(0,3)+'.'+v.slice(3,6)+'.'+v.slice(6,9)+'-'+v.slice(9);
+        else if(v.length>6) el.value = v.slice(0,3)+'.'+v.slice(3,6)+'.'+v.slice(6);
+        else if(v.length>3) el.value = v.slice(0,3)+'.'+v.slice(3);
+        else el.value = v;
+    }
+    function mascaraPhone(el){
+        let v = el.value.replace(/\D/g,'');
+        if(v.length>11) v = v.slice(0,11);
+        if(v.length>10) el.value = '('+v.slice(0,2)+') '+v.slice(2,7)+'-'+v.slice(7);
+        else if(v.length>6) el.value = '('+v.slice(0,2)+') '+v.slice(2,6)+'-'+v.slice(6);
+        else if(v.length>2) el.value = '('+v.slice(0,2)+') '+v.slice(2);
+        else el.value = v;
+    }
+    document.querySelectorAll('[data-mask="cpf"]').forEach(el=>el.addEventListener('input',function(){mascaraCPF(this);}));
+    document.querySelectorAll('[data-mask="phone"]').forEach(el=>el.addEventListener('input',function(){mascaraPhone(this);}));
+
+    document.querySelector('input[name="foto_arquivo"]')?.addEventListener('change', function(){
+        const f = this.files[0];
+        if(f){
+            const r = new FileReader();
+            r.onload = function(){ fotoInput.value = r.result; miniatura.src = r.result; miniatura.classList.remove('d-none'); placeholder.classList.add('d-none'); };
+            r.readAsDataURL(f);
+        }
+    });
+})();
+</script>
+</body>
+</html>

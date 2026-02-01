@@ -320,6 +320,15 @@ def lista_alunos():
     )
     aprovacoes = {a["aluno_id"]: a for a in cursor.fetchall()}
 
+    # Turmas de Judô (modalidade_id=1) para cálculo de frequência
+    try:
+        cursor.execute(
+            "SELECT turma_id FROM turma_modalidades WHERE modalidade_id = 1"
+        )
+        turmas_judo_ids = [r["turma_id"] for r in cursor.fetchall()]
+    except Exception:
+        turmas_judo_ids = []
+
     # Carrega modalidades de todos os alunos (N:N)
     aluno_ids = [a["id"] for a in alunos]
     modalidades_por_aluno = {}
@@ -356,6 +365,41 @@ def lista_alunos():
 
         nasc = parse_date(aluno.get("data_nascimento"))
         exame = parse_date(aluno.get("ultimo_exame_faixa"))
+
+        # Frequência Judô (ano, mês, desde último exame)
+        freq_ano, freq_mes, freq_desde_exame = None, None, None
+        total_desde, presentes_desde = 0, 0
+        data_inicio_freq = exame or parse_date(aluno.get("data_matricula")) or hoje
+        if turmas_judo_ids:
+            ph = ",".join(["%s"] * len(turmas_judo_ids))
+            params_j = [aluno["id"]] + turmas_judo_ids
+            for label, extra_sql, extra_params in [
+                ("ano", "AND YEAR(data_presenca)=%s", [hoje.year]),
+                ("mes", "AND YEAR(data_presenca)=%s AND MONTH(data_presenca)=%s", [hoje.year, hoje.month]),
+                ("desde", "AND data_presenca >= %s AND data_presenca <= %s", [data_inicio_freq, hoje]),
+            ]:
+                cursor.execute(
+                    f"""SELECT COUNT(*) AS tot, SUM(CASE WHEN presente=1 THEN 1 ELSE 0 END) AS pres
+                        FROM presencas WHERE aluno_id=%s AND turma_id IN ({ph}) {extra_sql}""",
+                    params_j + extra_params,
+                )
+                r = cursor.fetchone()
+                if r and r.get("tot", 0) and r["tot"] > 0:
+                    pct = round((r["pres"] or 0) / r["tot"] * 100, 1)
+                    if label == "ano":
+                        freq_ano = pct
+                    elif label == "mes":
+                        freq_mes = pct
+                    else:
+                        freq_desde_exame = pct
+                        total_desde = r["tot"]
+                        presentes_desde = r["pres"] or 0
+        aluno["frequencia_ano"] = freq_ano
+        aluno["frequencia_mes"] = freq_mes
+        aluno["frequencia_desde_exame"] = freq_desde_exame
+        aluno["frequencia_desde_inicio"] = data_inicio_freq.strftime("%d/%m/%Y")
+        aluno["total_aulas_desde"] = total_desde
+        aluno["presentes_desde"] = presentes_desde
 
         # Idade real e em ano civil
         aluno["idade_real"] = (
@@ -422,6 +466,7 @@ def lista_alunos():
                     "motivo": "",
                     "data_elegivel": "-",
                     "faltam_dias": 0,
+                    "frequencia_aptidao_ok": True,
                 }
             )
             continue
@@ -475,7 +520,12 @@ def lista_alunos():
         )
         aluno["faltam_dias"] = faltam
 
-        if idade_ok and idade_data_ok and carencia_ok:
+        # Exige 70% de frequência em Judô desde o último exame
+        freq_val = aluno.get("frequencia_desde_exame")
+        frequencia_ok = True if freq_val is None else freq_val >= 70
+        aluno["frequencia_aptidao_ok"] = frequencia_ok
+
+        if idade_ok and idade_data_ok and carencia_ok and frequencia_ok:
             aluno["aptidao_status"] = "Apto"
             aluno["aptidao"] = (
                 f"Apto para exame de faixa {aluno['proxima_faixa']}"
@@ -502,6 +552,12 @@ def lista_alunos():
                 motivos.append(
                     f"Idade mínima em {data_idade_minima.strftime('%d/%m/%Y')}"
                 )
+            if not frequencia_ok and freq_val is not None:
+                motivos.append(
+                    f"Frequência Judô: {freq_val}% (mínimo 70% desde {aluno.get('frequencia_desde_inicio', 'último exame')})"
+                )
+            elif not frequencia_ok and total_desde == 0:
+                motivos.append("Sem registro de frequência em Judô desde o último exame")
             aluno["aptidao_status"] = "Inapto"
             aluno["aptidao"] = "Inapto"
             aluno["motivo"] = "; ".join(motivos)
@@ -637,7 +693,17 @@ def lista_alunos():
 
     db.close()
 
-    back_url = request.args.get("next") or request.referrer or url_for("painel.home")
+    back_url = request.args.get("next")
+    if not back_url:
+        ref = request.referrer or ""
+        if ref and "cadastrar_aluno" not in ref:
+            back_url = ref
+    if not back_url:
+        back_url = (
+            url_for("academia.painel_academia", academia_id=academia_id_sel)
+            if academia_id_sel and session.get("modo_painel") == "academia"
+            else url_for("painel.home")
+        )
     return render_template(
         "alunos/lista_alunos.html",
         alunos=alunos,
@@ -675,20 +741,26 @@ def cadastrar_aluno():
     graduacoes = cursor.fetchall()
 
     acad_filtro = request.args.get("academia_id", type=int) or (session.get("academia_gerenciamento_id") if session.get("modo_painel") == "academia" else None)
-    if acad_filtro and acad_filtro in _get_academias_ids():
-        cursor.execute("SELECT * FROM turmas WHERE id_academia = %s ORDER BY Nome", (acad_filtro,))
-    else:
+    try:
+        if acad_filtro and acad_filtro in _get_academias_ids():
+            cursor.execute("SELECT * FROM turmas WHERE id_academia = %s ORDER BY Nome", (acad_filtro,))
+        else:
+            cursor.execute("SELECT * FROM turmas ORDER BY Nome")
+    except Exception:
         cursor.execute("SELECT * FROM turmas ORDER BY Nome")
     turmas = cursor.fetchall()
 
-    cursor.execute(
-        """
-        SELECT * FROM modalidade
-        WHERE (id_academia IS NULL OR id_academia = %s) AND ativo = 1
-        ORDER BY nome
-        """,
-        (getattr(current_user, "id_academia", None),),
-    )
+    try:
+        cursor.execute(
+            """
+            SELECT * FROM modalidade
+            WHERE (id_academia IS NULL OR id_academia = %s) AND ativo = 1
+            ORDER BY nome
+            """,
+            (getattr(current_user, "id_academia", None),),
+        )
+    except Exception:
+        cursor.execute("SELECT * FROM modalidade WHERE ativo = 1 ORDER BY nome")
     modalidades = cursor.fetchall()
 
     # Academias disponíveis (com associação)
@@ -848,6 +920,8 @@ def cadastrar_aluno():
                 academias=academias,
                 back_url=back_url,
                 form_data=form,
+                academia_selecionada=form.get("id_academia") or request.args.get("academia_id"),
+                aluno=None,
             )
 
         if cpf_aluno_valido:
@@ -875,6 +949,8 @@ def cadastrar_aluno():
                     academias=academias,
                     back_url=back_url,
                     form_data=form,
+                    academia_selecionada=form.get("id_academia") or request.args.get("academia_id"),
+                    aluno=None,
                 )
 
         # Regra: aluno menor precisa CPF válido do responsável financeiro
@@ -906,6 +982,8 @@ def cadastrar_aluno():
                     academias=academias,
                     back_url=back_url,
                     form_data=form,
+                    academia_selecionada=form.get("id_academia") or request.args.get("academia_id"),
+                    aluno=None,
                 )
 
         if not cadastro_zempo:
@@ -1048,6 +1126,7 @@ def cadastrar_aluno():
                 back_url=back_url,
                 form_data=form,
                 academia_selecionada=academia_selecionada,
+                aluno=None,
             )
 
     academia_selecionada = request.args.get("academia_id") or getattr(current_user, "id_academia", None)
@@ -1061,6 +1140,7 @@ def cadastrar_aluno():
         academias=academias,
         back_url=back_url,
         academia_selecionada=academia_selecionada,
+        aluno=None,
     )
 
 

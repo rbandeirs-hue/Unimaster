@@ -7,11 +7,11 @@
 <div class="container mt-4">
     <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
         <div>
-            <a href="{{ url_for('financeiro.dashboard') }}" class="btn btn-outline-secondary btn-sm">
+            <a href="{{ url_for('financeiro.dashboard', academia_id=academia_id) if academia_id else url_for('financeiro.dashboard') }}" class="btn btn-outline-secondary btn-sm">
                 <i class="bi bi-arrow-left me-1"></i> Voltar
             </a>
         </div>
-        <a href="{{ url_for('financeiro.cadastrar_despesa') }}" class="btn btn-danger">
+        <a href="{{ url_for('financeiro.cadastrar_despesa', academia_id=academia_id) if academia_id else url_for('financeiro.cadastrar_despesa') }}" class="btn btn-danger">
             <i class="bi bi-plus-circle me-1"></i> Nova Despesa
         </a>
     </div>
@@ -19,6 +19,7 @@
     <div class="card border-0 shadow-sm mb-3">
         <div class="card-body py-3">
             <form method="GET" class="row g-2 align-items-end">
+                {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
                 <div class="col-auto">
                     <label class="form-label small mb-0">Mês</label>
                     <select name="mes" class="form-select form-select-sm" style="width: auto;">
@@ -67,7 +68,7 @@
                             <td class="d-none d-md-table-cell text-muted small">{{ d.categoria or '-' }}</td>
                             <td class="text-end text-danger fw-semibold">R$ {{ "%.2f"|format(d.valor or 0) }}</td>
                             <td class="text-end">
-                                <a href="{{ url_for('financeiro.editar_despesa', despesa_id=d.id) }}" class="btn btn-sm btn-outline-primary">Editar</a>
+                                <a href="{{ url_for('financeiro.editar_despesa', despesa_id=d.id) }}{% if academia_id %}?academia_id={{ academia_id }}{% endif %}" class="btn btn-sm btn-outline-primary">Editar</a>
                                 <form method="POST" action="{{ url_for('financeiro.excluir_despesa', despesa_id=d.id) }}" class="d-inline" onsubmit="return confirm('Excluir esta despesa?');">
                                     <button type="submit" class="btn btn-sm btn-outline-danger">Excluir</button>
                                 </form>
@@ -78,7 +79,7 @@
                 </table>
             </div>
             {% else %}
-            <p class="text-muted mb-0">Nenhuma despesa neste período. <a href="{{ url_for('financeiro.cadastrar_despesa') }}">Cadastrar despesa</a></p>
+            <p class="text-muted mb-0">Nenhuma despesa neste período. <a href="{{ url_for('financeiro.cadastrar_despesa', academia_id=academia_id) if academia_id else url_for('financeiro.cadastrar_despesa') }}">Cadastrar despesa</a></p>
             {% endif %}
         </div>
     </div>

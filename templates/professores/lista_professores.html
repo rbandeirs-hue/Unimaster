@@ -1,34 +1,129 @@
 {% extends "base.html" %}
 {% block title %}Professores — {{ academia.nome }}{% endblock %}
 {% block content %}
-<div class="container my-4">
-    {% if origin == 'gerenciamento' %}
-    <a href="{{ url_for('academia.painel_academia') }}" class="btn btn-outline-secondary mb-3">
-        <i class="bi bi-arrow-left-circle me-2"></i> Voltar ao Gerenciamento
-    </a>
-    {% else %}
-    <a href="{{ url_for('painel.home') }}" class="btn btn-outline-secondary mb-3">
-        <i class="bi bi-arrow-left-circle me-2"></i> Voltar
-    </a>
-    {% endif %}
+<style>
+.professor-card {
+  border-radius: 12px;
+  border: 1px solid #e9ecef;
+  transition: all 0.2s;
+  position: relative;
+}
+.professor-card:hover { border-color: #0d6efd; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+.professor-card .status-badge {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  font-size: 0.7rem;
+  padding: 0.25rem 0.5rem;
+}
+.professor-foto {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: linear-gradient(135deg, #e9ecef 0%, #dee2e6 100%);
+  flex-shrink: 0;
+}
+.professor-foto-placeholder {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #198754 0%, #20c997 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: 700;
+  font-size: 1.1rem;
+  flex-shrink: 0;
+}
+.professor-card .card-body { padding-top: 2.25rem; }
+.professor-card .professor-main { display: flex; align-items: center; gap: 1rem; min-width: 0; }
+.professor-card .professor-info { flex: 1; min-width: 0; }
+.professor-card .professor-info .nome { font-weight: 600; font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 0.25rem; }
+.professor-card .professor-info .dado { font-size: 0.8rem; color: #6c757d; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.professor-card .professor-info .dado i { width: 16px; margin-right: 0.25rem; opacity: 0.8; }
+.professor-card .professor-actions { display: flex; gap: 0.35rem; flex-shrink: 0; align-items: center; }
+.professor-card .professor-actions .btn,
+.professor-card .professor-actions form .btn { width: 36px; height: 36px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; }
+@media (max-width: 575.98px) {
+  .professor-card .card-body { padding: 1rem !important; padding-top: 2.25rem !important; }
+  .professor-foto, .professor-foto-placeholder { width: 48px; height: 48px; font-size: 0.95rem; }
+  .professor-card .professor-main { flex-wrap: wrap; }
+  .professor-card .professor-actions { margin-left: auto; }
+  .professor-card .professor-actions .btn,
+  .professor-card .professor-actions form .btn { width: 40px; height: 40px; min-height: 40px; }
+}
+@media (min-width: 992px) {
+  .professores-cards { display: none; }
+  .professores-table-wrap { display: block; }
+}
+@media (max-width: 991.98px) {
+  .professores-table-wrap { display: none; }
+  .professores-cards { display: flex; }
+  .container.my-4 { padding-left: 0.75rem; padding-right: 0.75rem; }
+  .professores-cards .col-12 { padding-left: 0.5rem; padding-right: 0.5rem; }
+}
+</style>
 
-    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
-        <div>
+<div class="container my-4">
+    <a href="{{ url_for('academia.painel_academia', academia_id=academia_id) if academia_id else url_for('academia.painel_academia') }}" class="btn btn-outline-secondary btn-sm mb-3">
+        <i class="bi bi-arrow-left me-1"></i><span class="d-none d-sm-inline">Voltar ao Gerenciamento</span><span class="d-inline d-sm-none">Voltar</span>
+    </a>
+
+    <div class="d-flex justify-content-between align-items-start align-items-md-center flex-wrap gap-2 mb-4">
+        <div class="min-w-0">
             <h2 class="h4 fw-bold text-dark mb-1">Professores</h2>
-            <p class="text-muted small mb-0">{{ academia.nome }} — Liste e cadastre professores.</p>
+            <p class="text-muted small mb-0 text-truncate">{{ academia.nome }}</p>
         </div>
-        <a href="{{ url_for('professores.cadastrar', academia_id=academia_id) }}{% if origin %}?origin={{ origin }}{% endif %}" class="btn btn-success">
-            <i class="bi bi-plus-circle-fill me-1"></i> Cadastrar professor
+        <a href="{{ url_for('professores.cadastrar', academia_id=academia_id) }}{% if origin %}?origin={{ origin }}{% endif %}" class="btn btn-success flex-shrink-0">
+            <i class="bi bi-person-plus-fill me-1"></i><span class="d-none d-sm-inline">Vincular usuário como professor</span><span class="d-inline d-sm-none">Novo professor</span>
         </a>
     </div>
 
-    <div class="card shadow-sm border-0">
+    {% if professores %}
+    <!-- Cards (mobile/tablet) -->
+    <div class="professores-cards row g-3 mb-4">
+        {% for p in professores %}
+        <div class="col-12 col-sm-6">
+            <div class="card professor-card h-100">
+                <span class="badge status-badge {{ 'bg-success' if p.ativo else 'bg-secondary' }}">{{ 'Ativo' if p.ativo else 'Inativo' }}</span>
+                <div class="card-body d-flex flex-column p-4">
+                    <div class="professor-main">
+                        {% if p.foto_url %}
+                        <img src="{{ p.foto_url }}" class="professor-foto" alt="">
+                        {% else %}
+                        <div class="professor-foto-placeholder">{% set parts = (p.nome or 'P').split() %}{{ (parts[0][0] ~ (parts[-1][0] if parts|length > 1 else ''))|upper }}</div>
+                        {% endif %}
+                        <div class="professor-info">
+                            <h6 class="nome text-dark">{{ p.nome }}</h6>
+                            <div class="dado"><i class="bi bi-envelope"></i>{{ p.email or '—' }}</div>
+                            <div class="dado"><i class="bi bi-telephone"></i>{{ p.telefone|telefone_br or '—' }}</div>
+                        </div>
+                        <div class="professor-actions">
+                            <a href="{{ url_for('professores.editar', professor_id=p.id) }}{% if origin %}?origin={{ origin }}{% endif %}" class="btn btn-sm btn-outline-primary" title="Editar">
+                                <i class="bi bi-pencil-fill"></i>
+                            </a>
+                            <form method="post" action="{{ url_for('professores.excluir', professor_id=p.id) }}" class="d-inline m-0" onsubmit="return confirm('Excluir este professor?');">
+                                <input type="hidden" name="origin" value="{{ origin or '' }}">
+                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Excluir"><i class="bi bi-trash-fill"></i></button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Tabela (desktop) -->
+    <div class="professores-table-wrap card shadow-sm border-0">
         <div class="card-body p-0">
-            {% if professores %}
             <div class="table-responsive">
                 <table class="table table-hover mb-0">
                     <thead class="table-light">
                         <tr>
+                            <th></th>
                             <th>Nome</th>
                             <th>Email</th>
                             <th>Telefone</th>
@@ -39,15 +134,20 @@
                     <tbody>
                         {% for p in professores %}
                         <tr>
-                            <td data-label="Nome">{{ p.nome }}</td>
-                            <td data-label="Email">{{ p.email or '-' }}</td>
-                            <td data-label="Telefone">{{ p.telefone or '-' }}</td>
-                            <td data-label="Status" class="text-center">
-                                <span class="badge {{ 'bg-success' if p.ativo else 'bg-secondary' }}">
-                                    {{ 'Ativo' if p.ativo else 'Inativo' }}
-                                </span>
+                            <td>
+                                {% if p.foto_url %}
+                                <img src="{{ p.foto_url }}" class="professor-foto" alt="" style="width:40px;height:40px;">
+                                {% else %}
+                                <div class="professor-foto-placeholder" style="width:40px;height:40px;font-size:0.9rem;">{% set parts = (p.nome or 'P').split() %}{{ (parts[0][0] ~ (parts[-1][0] if parts|length > 1 else ''))|upper }}</div>
+                                {% endif %}
                             </td>
-                            <td data-label="Ações" class="text-center">
+                            <td>{{ p.nome }}</td>
+                            <td>{{ p.email or '-' }}</td>
+                            <td>{{ p.telefone|telefone_br }}</td>
+                            <td class="text-center">
+                                <span class="badge {{ 'bg-success' if p.ativo else 'bg-secondary' }}">{{ 'Ativo' if p.ativo else 'Inativo' }}</span>
+                            </td>
+                            <td class="text-center">
                                 <a href="{{ url_for('professores.editar', professor_id=p.id) }}{% if origin %}?origin={{ origin }}{% endif %}" class="btn btn-sm btn-outline-primary">
                                     <i class="bi bi-pencil-fill"></i> Editar
                                 </a>
@@ -61,15 +161,19 @@
                     </tbody>
                 </table>
             </div>
-            {% else %}
-            <div class="p-4 text-center text-muted">
-                <p class="mb-2">Nenhum professor cadastrado nesta academia.</p>
-                <a href="{{ url_for('professores.cadastrar', academia_id=academia_id) }}{% if origin %}?origin={{ origin }}{% endif %}" class="btn btn-success">
-                    <i class="bi bi-plus-circle me-1"></i> Cadastrar o primeiro
-                </a>
-            </div>
-            {% endif %}
         </div>
     </div>
+    {% else %}
+    <div class="card shadow-sm border-0">
+        <div class="card-body p-4 p-md-5 text-center text-muted">
+            <i class="bi bi-people display-4 mb-3"></i>
+            <p class="mb-2">Nenhum professor vinculado nesta academia.</p>
+            <p class="small mb-3">Vincule um usuário do sistema como professor para começar.</p>
+            <a href="{{ url_for('professores.cadastrar', academia_id=academia_id) }}{% if origin %}?origin={{ origin }}{% endif %}" class="btn btn-success">
+                <i class="bi bi-person-plus me-1"></i> Vincular usuário como professor
+            </a>
+        </div>
+    </div>
+    {% endif %}
 </div>
 {% endblock %}

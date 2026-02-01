@@ -12,6 +12,7 @@ class Usuario(UserMixin):
         ("Associação", ["gestor_associacao"]),
         ("Academia", ["gestor_academia", "professor"]),
         ("Aluno", ["aluno"]),
+        ("Responsável", ["responsavel"]),
     ]
 
     # ======================================================
@@ -54,6 +55,7 @@ class Usuario(UserMixin):
         "gestor_academia": ["gestor_academia", "gestor academia"],
         "professor": ["professor"],
         "aluno": ["aluno"],
+        "responsavel": ["responsavel", "responsável"],
     }
 
     # ======================================================
@@ -143,6 +145,9 @@ class Usuario(UserMixin):
 
         if self.has_role("aluno"):
             return "aluno"
+
+        if self.has_role("responsavel"):
+            return "responsavel"
 
         return "desconhecido"
 

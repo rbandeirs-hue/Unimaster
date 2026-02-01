@@ -22,6 +22,7 @@ from blueprints.presencas.presencas import bp_presencas
 from blueprints.professores.routes import bp_professores
 from blueprints.configuracoes import bp_configuracoes
 from blueprints.financeiro.routes import bp_financeiro
+from blueprints.precadastro import bp_precadastro
 
 # 🔹 Modelo de Usuário (flask-login)
 from blueprints.auth.user_model import Usuario
@@ -166,6 +167,19 @@ def filtro_data_br(valor):
     return _formatar_data_br(valor)
 
 
+@app.template_filter("telefone_br")
+def filtro_telefone_br(valor):
+    """Formata telefone: (11) 99999-9999 ou (11) 3333-3333."""
+    if not valor:
+        return "-"
+    dig = "".join(filter(str.isdigit, str(valor)))
+    if len(dig) == 11 and dig[2] == "9":
+        return f"({dig[:2]}) {dig[2:7]}-{dig[7:]}"
+    if len(dig) == 10:
+        return f"({dig[:2]}) {dig[2:6]}-{dig[6:]}"
+    return valor
+
+
 # ============================================================
 # 🔹 Rota padrão
 # ============================================================
@@ -193,6 +207,7 @@ app.register_blueprint(bp_presencas)    # Presenças (registro, ata, histórico)
 app.register_blueprint(bp_professores)  # Professores (CRUD por academia)
 app.register_blueprint(bp_configuracoes)  # Configurações (admin: modalidades)
 app.register_blueprint(bp_financeiro)   # Financeiro (dashboard, descontos, mensalidades, receitas, despesas)
+app.register_blueprint(bp_precadastro)   # Pré-cadastro (por academia)
 
 
 # ============================================================

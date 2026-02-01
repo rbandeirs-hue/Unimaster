@@ -63,7 +63,8 @@ def lista(academia_id):
 
     cur.execute(
         """
-        SELECT p.id, p.nome, p.email, p.telefone, p.ativo, p.id_academia, p.id_associacao
+        SELECT p.id, p.nome, p.email, p.telefone, p.ativo, p.id_academia, p.usuario_id,
+               (SELECT a.foto FROM alunos a WHERE a.usuario_id = p.usuario_id LIMIT 1) AS foto_aluno
         FROM professores p
         WHERE p.id_academia = %s
         ORDER BY p.nome
@@ -71,6 +72,11 @@ def lista(academia_id):
         (academia_id,),
     )
     professores = cur.fetchall()
+    for p in professores:
+        p["foto_url"] = (
+            url_for("static", filename="uploads/" + p["foto_aluno"])
+            if p.get("foto_aluno") else None
+        )
     db.close()
 
     return render_template(
@@ -104,21 +110,36 @@ def cadastrar(academia_id):
     row = cur.fetchone()
     id_associacao = row.get("id_associacao") if row else None
 
+    cur.execute(
+        """SELECT id, nome, email FROM usuarios WHERE ativo = 1 AND perfil = 'Professor'
+           AND id NOT IN (SELECT usuario_id FROM professores WHERE usuario_id IS NOT NULL)
+           ORDER BY nome""",
+    )
+    usuarios = cur.fetchall()
+
     if request.method == "POST":
-        nome = (request.form.get("nome") or "").strip()
-        email = (request.form.get("email") or "").strip() or None
+        usuario_id = request.form.get("usuario_id")
+        usuario_id = int(usuario_id) if usuario_id and str(usuario_id).isdigit() else None
         telefone = (request.form.get("telefone") or "").strip() or None
+        if not usuario_id:
+            flash("Selecione um usuário para vincular como professor.", "danger")
+            db.close()
+            return redirect(url_for("professores.cadastrar", academia_id=academia_id))
+        cur.execute("SELECT nome, email FROM usuarios WHERE id = %s", (usuario_id,))
+        u = cur.fetchone()
+        nome = (u.get("nome") or "").strip() if u else ""
+        email = (u.get("email") or "").strip() or None if u else None
         if not nome:
-            flash("Nome do professor é obrigatório.", "danger")
+            flash("Usuário não encontrado.", "danger")
             db.close()
             return redirect(url_for("professores.cadastrar", academia_id=academia_id))
         try:
             cur.execute(
                 """
-                INSERT INTO professores (nome, email, telefone, id_academia, id_associacao, ativo)
-                VALUES (%s, %s, %s, %s, %s, 1)
+                INSERT INTO professores (nome, email, telefone, usuario_id, id_academia, id_associacao, ativo)
+                VALUES (%s, %s, %s, %s, %s, %s, 1)
                 """,
-                (nome, email, telefone, academia_id, id_associacao),
+                (nome, email, telefone, usuario_id, academia_id, id_associacao),
             )
             db.commit()
             flash("Professor cadastrado com sucesso.", "success")
@@ -132,14 +153,13 @@ def cadastrar(academia_id):
             flash(f"Erro ao cadastrar: {e}", "danger")
 
     db.close()
-    back_url = url_for("professores.lista", academia_id=academia_id)
-    if origin:
-        back_url += f"?origin={origin}"
+    back_url = url_for("academia.painel_academia", academia_id=academia_id)
     return render_template(
         "professores/cadastro_professor.html",
         academia=academia,
         academia_id=academia_id,
         back_url=back_url,
+        usuarios=usuarios,
     )
 
 
@@ -151,7 +171,7 @@ def editar(professor_id):
     db = get_db_connection()
     cur = db.cursor(dictionary=True)
     cur.execute(
-        "SELECT id, nome, email, telefone, ativo, id_academia, id_associacao FROM professores WHERE id = %s",
+        "SELECT id, nome, email, telefone, ativo, id_academia, id_associacao, usuario_id FROM professores WHERE id = %s",
         (professor_id,),
     )
     professor = cur.fetchone()
@@ -169,11 +189,22 @@ def editar(professor_id):
     cur.execute("SELECT id, nome FROM academias WHERE id = %s", (academia_id,))
     academia = cur.fetchone()
 
+    cur.execute(
+        """SELECT id, nome, email FROM usuarios WHERE ativo = 1
+           AND (perfil = 'Professor' OR id = %s)
+           AND (id NOT IN (SELECT usuario_id FROM professores WHERE usuario_id IS NOT NULL AND professores.id != %s) OR id = %s)
+           ORDER BY nome""",
+        (professor.get("usuario_id") or 0, professor_id, professor.get("usuario_id") or 0),
+    )
+    usuarios = cur.fetchall()
+
     if request.method == "POST":
         nome = (request.form.get("nome") or "").strip()
         email = (request.form.get("email") or "").strip() or None
         telefone = (request.form.get("telefone") or "").strip() or None
         ativo = 1 if request.form.get("ativo") == "1" else 0
+        usuario_id = request.form.get("usuario_id")
+        usuario_id = int(usuario_id) if usuario_id and str(usuario_id).isdigit() else None
         if not nome:
             flash("Nome do professor é obrigatório.", "danger")
             db.close()
@@ -181,10 +212,10 @@ def editar(professor_id):
         try:
             cur.execute(
                 """
-                UPDATE professores SET nome=%s, email=%s, telefone=%s, ativo=%s
+                UPDATE professores SET nome=%s, email=%s, telefone=%s, ativo=%s, usuario_id=%s
                 WHERE id=%s
                 """,
-                (nome, email, telefone, ativo, professor_id),
+                (nome, email, telefone, ativo, usuario_id, professor_id),
             )
             db.commit()
             flash("Professor atualizado com sucesso.", "success")
@@ -198,15 +229,14 @@ def editar(professor_id):
             flash(f"Erro ao atualizar: {e}", "danger")
 
     db.close()
-    back_url = url_for("professores.lista", academia_id=academia_id)
-    if origin:
-        back_url += f"?origin={origin}"
+    back_url = url_for("academia.painel_academia", academia_id=academia_id)
     return render_template(
         "professores/editar_professor.html",
         professor=professor,
         academia=academia,
         academia_id=academia_id,
         back_url=back_url,
+        usuarios=usuarios,
     )
 
 

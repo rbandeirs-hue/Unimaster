@@ -42,8 +42,9 @@
             {% for role in roles %}
             <div class="col-12 col-md-6">
               <div class="form-check">
-                <input class="form-check-input" type="checkbox" name="roles" id="role_{{ role.id }}"
-                       value="{{ role.id }}" {% if role.id in roles_do_usuario %}checked{% endif %}>
+                <input class="form-check-input role-cb" type="checkbox" name="roles" id="role_{{ role.id }}"
+                       value="{{ role.id }}" data-chave="{{ role.chave or role.nome|lower }}"
+                       {% if role.id in roles_do_usuario %}checked{% endif %}>
                 <label class="form-check-label" for="role_{{ role.id }}">
                   {{ role.nome }}
                 </label>
@@ -53,6 +54,48 @@
           </div>
           <div class="form-text">Marque as roles que o usuário deve ter.</div>
         </div>
+
+        {% if contexto_academia %}
+        <div id="blocoAluno" class="mb-3" style="display:none;">
+          <label for="aluno_id" class="form-label fw-semibold">Qual aluno é este usuário?</label>
+          <select class="form-select" id="aluno_id" name="aluno_id">
+            <option value="">— Selecione o aluno —</option>
+            {% for a in alunos_para_aluno %}
+            <option value="{{ a.id }}" {% if a.id == aluno_vinculado_id %}selected{% endif %}>{{ a.nome }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div id="blocoResponsavel" class="mb-3" style="display:none;">
+          <label class="form-label fw-semibold">Alunos vinculados ao responsável</label>
+          <div class="border rounded p-3" style="max-height: 200px; overflow-y: auto; background: #f8fafc;">
+            {% for a in alunos_para_responsavel %}
+            <div class="form-check mb-2">
+              <input class="form-check-input" type="checkbox" name="aluno_ids" value="{{ a.id }}" id="aluno_resp_{{ a.id }}"
+                     {% if a.id in responsavel_aluno_ids %}checked{% endif %}>
+              <label class="form-check-label" for="aluno_resp_{{ a.id }}">{{ a.nome }}</label>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+
+        {% if mostrar_academias and academias_disponiveis %}
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Academias vinculadas</label>
+          <div class="row g-2">
+            {% for ac in academias_disponiveis %}
+            <div class="col-12 col-md-6">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="academias" id="academia_{{ ac.id }}" value="{{ ac.id }}"
+                       {% if ac.id in (academias_vinculadas_ids or []) %}checked{% endif %}>
+                <label class="form-check-label" for="academia_{{ ac.id }}">{{ ac.nome }}</label>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+          <div class="form-text">Marque as academias às quais o usuário terá acesso.</div>
+        </div>
+        {% endif %}
 
         <div class="d-flex justify-content-between mt-4">
           <button type="submit" class="btn btn-warning">
@@ -70,5 +113,28 @@
 
   </div>
 </div>
+{% if contexto_academia %}
+<script>
+(function() {
+    var blocoAluno = document.getElementById('blocoAluno');
+    var blocoResponsavel = document.getElementById('blocoResponsavel');
+    function temRole(chave) {
+        var cbs = document.querySelectorAll('.role-cb:checked');
+        for (var i = 0; i < cbs.length; i++) {
+            if ((cbs[i].dataset.chave || '').toLowerCase() === chave) return true;
+        }
+        return false;
+    }
+    function atualizarBlocos() {
+        if (blocoAluno) blocoAluno.style.display = temRole('aluno') ? 'block' : 'none';
+        if (blocoResponsavel) blocoResponsavel.style.display = temRole('responsavel') ? 'block' : 'none';
+    }
+    document.querySelectorAll('.role-cb').forEach(function(cb) {
+        cb.addEventListener('change', atualizarBlocos);
+    });
+    atualizarBlocos();
+})();
+</script>
+{% endif %}
 
 {% endblock %}

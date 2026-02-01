@@ -113,8 +113,8 @@
 </style>
 
 <div class="container my-4">
-    <!-- Botão de Voltar para o Dashboard -->
-    <a href="{{ url_for('painel.home') }}" class="btn btn-outline-secondary mb-4 shadow-sm">
+    <!-- Botão de Voltar para o Gerenciamento da Academia -->
+    <a href="{{ url_for('academia.painel_academia', academia_id=academia_id) if academia_id else url_for('academia.painel_academia') }}" class="btn btn-outline-secondary mb-4 shadow-sm">
         <i class="bi bi-arrow-left-circle me-2"></i> Voltar
     </a>
     
@@ -161,49 +161,85 @@
         </form>
     </div>
 
-    <!-- Tabela de Turmas (Responsiva) -->
-    <div class="card shadow-lg border-0">
-        <div class="card-body p-0">
-            {% if turmas %}
-            <div class="table-responsive">
-                <table class="table table-hover mb-0">
-                    <thead class="table-primary text-white">
-                        <tr>
-                            <th scope="col" class="text-center">ID</th>
-                            <th scope="col">Nome</th>
-                            <th scope="col">Dias/Horário</th>
-                            <th scope="col">Professor</th>
-                            <th scope="col" class="text-center">Idades</th>
-                            <th scope="col" class="text-center">Capacidade</th>
-                            <th scope="col" class="text-center">Ações</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for turma in turmas %}
-                        <tr class="align-middle">
-                            <!-- Adicionando data-label para responsividade mobile -->
-                            <td class="text-center" data-label="ID">{{ turma.TurmaID }}</td>
-                            <td class="fw-semibold" data-label="Nome da Turma">{{ turma.Nome }}</td>
-                            <td data-label="Dias e Horário">{{ turma.DiasHorario }}</td>
-                            <td data-label="Professor">{{ turma.Professor }}</td>
-                            <td class="text-center" data-label="Faixa Etária">
-                                <span class="badge bg-secondary">{{ turma.IdadeMin }} - {{ turma.IdadeMax }}</span>
-                            </td>
-                            <td class="text-center" data-label="Capacidade">
-                                <span class="badge bg-info text-dark">{{ turma.Capacidade }}</span>
-                            </td>
-                            <td class="text-center" data-label="Ações">
-                                <a href="{{ url_for('turmas.editar_turma', turma_id=turma.TurmaID, next=request.full_path) }}"
-                                    class="btn btn-sm btn-outline-info shadow-sm" data-bs-toggle="tooltip" title="Editar Turma">
-                                    <i class="bi bi-pencil-fill"></i> Editar
-                                </a>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+    <!-- Cards de Turmas -->
+    {% if turmas %}
+    <style>
+    .turma-card { transition: transform 0.2s, box-shadow 0.2s; border-radius: 12px; overflow: hidden; }
+    .turma-card:hover { transform: translateY(-4px); box-shadow: 0 0.5rem 1rem rgba(0,0,0,0.1) !important; }
+    .turma-card .card-title { font-size: 1.1rem; line-height: 1.3; }
+    .turma-card .info-item { font-size: 0.875rem; color: #6c757d; padding: 0.25rem 0; display: flex; align-items: center; gap: 0.5rem; }
+    .turma-card .info-item i { width: 18px; color: #0dcaf0; flex-shrink: 0; }
+    .turma-card .badges-row { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.5rem; }
+    .turma-card .actions-row { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #e9ecef; }
+    .turma-card .turma-card-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem; }
+    .turma-card .turma-card-top-right { display: flex; align-items: center; gap: 0.35rem; flex-shrink: 0; }
+    .turma-card .turma-card-top-right .btn { width: 32px; height: 32px; padding: 0; display: flex; align-items: center; justify-content: center; border-radius: 8px; }
+    @media (max-width: 767.98px) {
+      .turma-card .edit-desktop { display: none !important; }
+    }
+    @media (min-width: 768px) {
+      .turma-card .edit-mobile { display: none !important; }
+    }
+    </style>
+    <div class="row g-4">
+        {% for modalidade_nome, turmas_grupo in turmas_agrupadas %}
+        <div class="col-12">
+            <h5 class="text-primary border-bottom pb-2 mb-3"><i class="bi bi-tag-fill me-2"></i>{{ modalidade_nome }}</h5>
+        </div>
+        {% for turma in turmas_grupo %}
+        <div class="col-xl-4 col-lg-4 col-md-6">
+            <div class="card h-100 shadow-sm border-info turma-card">
+                <div class="card-body p-4">
+                    <div class="turma-card-header mb-2">
+                        <h5 class="card-title fw-bold text-dark mb-0 flex-grow-1 min-w-0">{{ turma.Nome }}</h5>
+                        <div class="turma-card-top-right">
+                            {% if turma.modalidade_nome and turma.modalidade_nome != 'Sem modalidade' %}
+                            <span class="badge bg-info bg-opacity-25 text-dark">{{ turma.modalidade_nome }}</span>
+                            {% endif %}
+                            <a href="{{ url_for('turmas.editar_turma', turma_id=turma.TurmaID, next=request.full_path) }}" class="btn btn-sm btn-outline-secondary edit-mobile" title="Editar Turma">
+                                <i class="bi bi-pencil-fill"></i>
+                            </a>
+                        </div>
+                    </div>
+                    <div class="info-item">
+                        <i class="bi bi-clock-fill"></i>
+                        <span>{{ turma.DiasHorario or '—' }}</span>
+                    </div>
+                    <div class="info-item">
+                        <i class="bi bi-person-fill"></i>
+                        <span>{{ turma.professor_responsavel_nome or '—' }}</span>
+                    </div>
+                    <div class="badges-row">
+                        <span class="badge bg-secondary">{{ turma.IdadeMin }}-{{ turma.IdadeMax }} anos</span>
+                        <span class="badge {% if turma.vagas_cheia %}bg-danger{% else %}bg-success bg-opacity-75 text-dark{% endif %}">
+                            {% if turma.vagas_ilimitada %}ilimitada{% else %}{{ turma.vagas_display }}{% endif %}
+                        </span>
+                    </div>
+                    <div class="actions-row d-flex flex-wrap gap-1 align-items-center">
+                        <button type="button" class="btn btn-sm btn-success flex-grow-1 {% if not turma.pode_matricular %}disabled{% endif %}" title="{% if not turma.pode_matricular %}Vagas esgotadas{% else %}Matricular aluno{% endif %}"
+                            {% if turma.pode_matricular %}data-bs-toggle="modal" data-bs-target="#modalMatricular"{% endif %}
+                            data-turma-id="{{ turma.TurmaID }}" data-turma-nome="{{ turma.Nome }}">
+                            <i class="bi bi-person-plus-fill"></i> Matricular
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-info flex-grow-1" title="Ver alunos vinculados"
+                            data-bs-toggle="modal" data-bs-target="#modalVinculados"
+                            data-turma-id="{{ turma.TurmaID }}" data-turma-nome="{{ turma.Nome }}">
+                            <i class="bi bi-people-fill"></i> Ver alunos
+                        </button>
+                        <a href="{{ url_for('turmas.editar_turma', turma_id=turma.TurmaID, next=request.full_path) }}"
+                            class="btn btn-sm btn-outline-secondary edit-desktop" title="Editar Turma">
+                            <i class="bi bi-pencil-fill"></i>
+                        </a>
+                    </div>
+                </div>
             </div>
-            {% else %}
+        </div>
+        {% endfor %}
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="card shadow-lg border-0">
+        <div class="card-body">
             <!-- Mensagem se não houver turmas ou a busca for vazia -->
             <div class="p-5 text-center bg-light rounded-3">
                 <i class="bi bi-journal-x text-warning display-4 mb-3"></i>
@@ -216,23 +252,231 @@
                         turma</a> agora?</p>
                 {% endif %}
             </div>
-            {% endif %}
         </div>
     </div>
+    {% endif %}
 </div>
 
+<!-- Modal Matricular Aluno -->
+<div class="modal fade" id="modalMatricular" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-person-plus-fill me-2"></i>Matricular aluno em <span id="modalMatricularTurmaNome"></span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="modalMatricularLoading" class="text-center py-4">
+          <div class="spinner-border text-primary" role="status"></div>
+          <p class="mt-2 text-muted">Carregando alunos...</p>
+        </div>
+        <div id="modalMatricularLista" class="row g-2" style="display:none;"></div>
+        <div id="modalMatricularVazio" class="text-center py-4 text-muted" style="display:none;">
+          <i class="bi bi-check-circle fs-1"></i>
+          <p class="mb-0">Todos os alunos da academia já estão nesta turma.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Ver Alunos Vinculados -->
+<div class="modal fade" id="modalVinculados" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-people-fill me-2"></i>Alunos em <span id="modalVinculadosTurmaNome"></span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="modalVinculadosLoading" class="text-center py-4">
+          <div class="spinner-border text-primary" role="status"></div>
+          <p class="mt-2 text-muted">Carregando...</p>
+        </div>
+        <div id="modalVinculadosLista" class="row g-2" style="display:none;"></div>
+        <div id="modalVinculadosVazio" class="text-center py-4 text-muted" style="display:none;">
+          <i class="bi bi-person-x fs-1"></i>
+          <p class="mb-0">Nenhum aluno matriculado nesta turma.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+#modalMatricular .modal-body, #modalVinculados .modal-body {
+  max-height: 70vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+@media (max-width: 575.98px) {
+  #modalMatricular .modal-body, #modalVinculados .modal-body {
+    max-height: 60vh;
+  }
+}
+.aluno-mini-card {
+  cursor: pointer;
+  border-radius: 10px;
+  padding: 0.75rem;
+  border: 2px solid #e9ecef;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.aluno-mini-card:hover { border-color: #0d6efd; background: #f8f9fa; }
+.aluno-mini-card .foto-mini {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #e9ecef;
+}
+.aluno-mini-card .foto-mini-placeholder {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #e9ecef;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6c757d;
+}
+.aluno-mini-card .nome-mini { font-weight: 600; margin: 0; }
+.aluno-mini-card.readonly { cursor: default; }
+.aluno-mini-card.readonly:hover { border-color: #e9ecef; background: transparent; }
+</style>
+
 <script>
-    // Inicializa tooltips do Bootstrap (caso sejam usados)
     document.addEventListener('DOMContentLoaded', function () {
-        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
-        var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
-            return new bootstrap.Tooltip(tooltipTriggerEl)
-        })
+        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        tooltipTriggerList.map(function (el) { return new bootstrap.Tooltip(el); });
+
+        var urlAlunosDisponiveis = "{{ url_for('turmas.alunos_disponiveis_turma', turma_id=999) }}";
+        var urlAlunosVinculados = "{{ url_for('turmas.alunos_vinculados_turma', turma_id=999) }}";
+        var urlMatricularBase = "{{ url_for('turmas.matricular_aluno', turma_id=999, aluno_id=888) }}";
+        var matricularModal = document.getElementById('modalMatricular');
+        var vinculadosModal = document.getElementById('modalVinculados');
+
+        function renderAlunoCard(a, clickHandler, readonly) {
+            var div = document.createElement('div');
+            div.className = 'col-12 col-md-6 col-lg-4';
+            var card = document.createElement('div');
+            card.className = 'aluno-mini-card' + (readonly ? ' readonly' : '');
+            var foto = a.foto_url
+                ? '<img src="' + a.foto_url + '" class="foto-mini" alt="">'
+                : '<div class="foto-mini-placeholder"><i class="bi bi-person-fill"></i></div>';
+            card.innerHTML = foto + '<span class="nome-mini">' + (a.nome || '-') + '</span>';
+            if (clickHandler) card.addEventListener('click', function () { clickHandler(a); });
+            div.appendChild(card);
+            return div;
+        }
+
+        matricularModal.addEventListener('shown.bs.modal', function (e) {
+            var btn = e.relatedTarget;
+            if (!btn) return;
+            var turmaId = btn.getAttribute('data-turma-id');
+            var turmaNome = btn.getAttribute('data-turma-nome');
+            document.getElementById('modalMatricularTurmaNome').textContent = turmaNome;
+            document.getElementById('modalMatricularLoading').style.display = 'block';
+            document.getElementById('modalMatricularLista').style.display = 'none';
+            document.getElementById('modalMatricularVazio').style.display = 'none';
+            document.getElementById('modalMatricularVazio').innerHTML = '<i class="bi bi-check-circle fs-1"></i><p class="mb-0">Todos os alunos da academia já estão nesta turma.</p>';
+
+            fetch(urlAlunosDisponiveis.replace('999', turmaId))
+                .then(function (r) {
+                    return r.text().then(function (txt) {
+                        var data;
+                        try { data = JSON.parse(txt); } catch (e) { data = {}; }
+                        if (!r.ok) throw new Error(data.error || 'HTTP ' + r.status);
+                        return data;
+                    });
+                })
+                .then(function (alunos) {
+                    document.getElementById('modalMatricularLoading').style.display = 'none';
+                    var lista = document.getElementById('modalMatricularLista');
+                    lista.innerHTML = '';
+                    if (alunos.length === 0) {
+                        document.getElementById('modalMatricularVazio').style.display = 'block';
+                        return;
+                    }
+                    document.getElementById('modalMatricularLista').style.display = '';
+                    alunos.forEach(function (a) {
+                        var el = renderAlunoCard(a, function (aluno) {
+                            fetch(urlMatricularBase.replace('999', turmaId).replace('888', aluno.id), {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                                credentials: 'same-origin'
+                            }).then(function (res) { return res.json(); })
+                              .then(function (data) {
+                                if (data.ok) {
+                                    el.remove();
+                                    if (lista.children.length === 0) {
+                                        document.getElementById('modalMatricularLista').style.display = 'none';
+                                        document.getElementById('modalMatricularVazio').style.display = 'block';
+                                    }
+                                    if (typeof bootstrap !== 'undefined' && bootstrap.Toast) {
+                                        var t = document.createElement('div');
+                                        t.className = 'toast align-items-center text-bg-success border-0';
+                                        t.innerHTML = '<div class="d-flex"><div class="toast-body">' + (data.msg || 'Matriculado!') + '</div></div>';
+                                        document.body.appendChild(t);
+                                        new bootstrap.Toast(t, { delay: 2000 }).show();
+                                        setTimeout(function () { t.remove(); }, 2500);
+                                    }
+                                } else {
+                                    alert(data.msg || 'Erro ao matricular');
+                                }
+                              }).catch(function () { alert('Erro ao matricular'); });
+                        }, false);
+                        lista.appendChild(el);
+                    });
+                })
+                .catch(function (err) {
+                    document.getElementById('modalMatricularLoading').style.display = 'none';
+                    document.getElementById('modalMatricularVazio').innerHTML = '<p class="text-danger">Erro ao carregar alunos: ' + (err.message || '') + '</p>';
+                    document.getElementById('modalMatricularVazio').style.display = 'block';
+                });
+        });
+
+        vinculadosModal.addEventListener('shown.bs.modal', function (e) {
+            var btn = e.relatedTarget;
+            if (!btn) return;
+            var turmaId = btn.getAttribute('data-turma-id');
+            var turmaNome = btn.getAttribute('data-turma-nome');
+            document.getElementById('modalVinculadosTurmaNome').textContent = turmaNome;
+            document.getElementById('modalVinculadosLoading').style.display = 'block';
+            document.getElementById('modalVinculadosLista').style.display = 'none';
+            document.getElementById('modalVinculadosVazio').style.display = 'none';
+            document.getElementById('modalVinculadosVazio').innerHTML = '<i class="bi bi-person-x fs-1"></i><p class="mb-0">Nenhum aluno matriculado nesta turma.</p>';
+
+            fetch(urlAlunosVinculados.replace('999', turmaId))
+                .then(function (r) {
+                    return r.text().then(function (txt) {
+                        var data;
+                        try { data = JSON.parse(txt); } catch (e) { data = {}; }
+                        if (!r.ok) throw new Error(data.error || 'HTTP ' + r.status);
+                        return data;
+                    });
+                })
+                .then(function (alunos) {
+                    document.getElementById('modalVinculadosLoading').style.display = 'none';
+                    var lista = document.getElementById('modalVinculadosLista');
+                    lista.innerHTML = '';
+                    if (alunos.length === 0) {
+                        document.getElementById('modalVinculadosVazio').style.display = 'block';
+                        return;
+                    }
+                    document.getElementById('modalVinculadosLista').style.display = '';
+                    alunos.forEach(function (a) {
+                        lista.appendChild(renderAlunoCard(a, null, true));
+                    });
+                })
+                .catch(function (err) {
+                    document.getElementById('modalVinculadosLoading').style.display = 'none';
+                    document.getElementById('modalVinculadosVazio').innerHTML = '<p class="text-danger">Erro ao carregar: ' + (err.message || '') + '</p>';
+                    document.getElementById('modalVinculadosVazio').style.display = 'block';
+                });
+        });
     });
 </script>
 {% endblock %}
-
-
-Eu unifiquei o código, adicionei um pouco de **CSS customizado** e implementei a técnica de **"tabela como cards"** para garantir que a lista de turmas seja perfeitamente **responsiva** no celular!
-
-Se precisar de qualquer outra página para otimizar ou unificar, é só me dizer!

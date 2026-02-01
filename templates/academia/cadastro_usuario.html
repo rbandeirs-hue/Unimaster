@@ -53,13 +53,40 @@
                         {% for role in roles %}
                         <div class="col-12 col-md-6">
                             <div class="form-check">
-                                <input class="form-check-input" type="checkbox" name="roles" id="role_{{ role.id }}" value="{{ role.id }}">
+                                <input class="form-check-input role-cb" type="checkbox" name="roles" id="role_{{ role.id }}" value="{{ role.id }}" data-chave="{{ role.chave or role.nome|lower }}">
                                 <label class="form-check-label" for="role_{{ role.id }}">{{ role.nome }}</label>
                             </div>
                         </div>
                         {% endfor %}
                     </div>
                     <div class="form-text">Selecione pelo menos uma role.</div>
+                </div>
+
+                <div id="blocoAluno" class="mb-3" style="display:none;">
+                    <label for="aluno_id" class="form-label fw-semibold">Qual aluno é este usuário? <span class="text-danger">*</span></label>
+                    <select class="form-select" id="aluno_id" name="aluno_id">
+                        <option value="">— Selecione o aluno —</option>
+                        {% for a in alunos_para_aluno %}
+                        <option value="{{ a.id }}">{{ a.nome }}</option>
+                        {% endfor %}
+                    </select>
+                    <div class="form-text">Apenas alunos ainda sem vínculo de acesso ao sistema.</div>
+                </div>
+
+                <div id="blocoResponsavel" class="mb-3" style="display:none;">
+                    <label class="form-label fw-semibold">Alunos vinculados ao responsável</label>
+                    <div class="border rounded p-3" style="max-height: 200px; overflow-y: auto; background: #f8fafc;">
+                        {% for a in alunos_para_responsavel %}
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="checkbox" name="aluno_ids" value="{{ a.id }}" id="aluno_resp_{{ a.id }}">
+                            <label class="form-check-label" for="aluno_resp_{{ a.id }}">{{ a.nome }}</label>
+                        </div>
+                        {% endfor %}
+                        {% if not alunos_para_responsavel %}
+                        <p class="text-muted small mb-0">Nenhum aluno na academia.</p>
+                        {% endif %}
+                    </div>
+                    <div class="form-text">Marque os alunos dos quais este responsável terá acesso.</div>
                 </div>
 
                 <div class="d-flex flex-column flex-md-row justify-content-center gap-3 mt-4">
@@ -74,4 +101,73 @@
         </div>
     </div>
 </div>
+<script>
+(function() {
+    var blocoAluno = document.getElementById('blocoAluno');
+    var blocoResponsavel = document.getElementById('blocoResponsavel');
+    var selAcademia = document.getElementById('id_academia');
+    var apiUrlTpl = '{{ url_for("academia.api_alunos_para_vinculo", academia_id=999) }}';
+
+    function temRole(chave) {
+        var cbs = document.querySelectorAll('.role-cb:checked');
+        for (var i = 0; i < cbs.length; i++) {
+            if ((cbs[i].dataset.chave || '').toLowerCase() === chave) return true;
+        }
+        return false;
+    }
+    function atualizarBlocos() {
+        blocoAluno.style.display = temRole('aluno') ? 'block' : 'none';
+        blocoResponsavel.style.display = temRole('responsavel') ? 'block' : 'none';
+    }
+    document.querySelectorAll('.role-cb').forEach(function(cb) {
+        cb.addEventListener('change', atualizarBlocos);
+    });
+    atualizarBlocos();
+
+    function carregarAlunos(acadId) {
+        if (!selAcademia || !acadId) return;
+        fetch(apiUrlTpl.replace('999', String(acadId)))
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                var sel = document.getElementById('aluno_id');
+                var container = blocoResponsavel.querySelector('.border.rounded');
+                if (!sel || !container) return;
+                sel.innerHTML = '<option value="">— Selecione o aluno —</option>';
+                (data.disponiveis_aluno || []).forEach(function(a) {
+                    var opt = document.createElement('option');
+                    opt.value = a.id;
+                    opt.textContent = a.nome;
+                    sel.appendChild(opt);
+                });
+                container.innerHTML = '';
+                (data.alunos || []).forEach(function(a) {
+                    var div = document.createElement('div');
+                    div.className = 'form-check mb-2';
+                    div.innerHTML = '<input class="form-check-input" type="checkbox" name="aluno_ids" value="' + a.id + '" id="aluno_resp_' + a.id + '">' +
+                        '<label class="form-check-label" for="aluno_resp_' + a.id + '">' + (a.nome || '') + '</label>';
+                    container.appendChild(div);
+                });
+            })
+            .catch(function() {});
+    }
+    document.querySelector('form').addEventListener('submit', function(e) {
+        if (temRole('aluno')) {
+            var sid = document.getElementById('aluno_id');
+            if (!sid || !sid.value) {
+                e.preventDefault();
+                alert('Selecione o aluno quando a role Aluno estiver marcada.');
+                return false;
+            }
+        }
+    });
+
+    if (selAcademia) {
+        selAcademia.addEventListener('change', function() {
+            var v = parseInt(selAcademia.value, 10);
+            if (v) carregarAlunos(v);
+        });
+        if (selAcademia.value) carregarAlunos(parseInt(selAcademia.value, 10));
+    }
+})();
+</script>
 {% endblock %}

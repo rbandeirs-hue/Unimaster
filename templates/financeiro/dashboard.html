@@ -4,34 +4,104 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/financeiro/responsive.css') }}?v=1">
 {% endblock %}
 {% block content %}
-<div class="container mt-4">
+<div class="container mt-4 financeiro-dash">
     <a href="{{ url_for('painel.home') }}" class="btn btn-outline-secondary mb-3">
         <i class="bi bi-arrow-left me-1"></i> Voltar
     </a>
     <h2 class="h4 fw-bold mb-3">Financeiro — {{ academia_nome or 'Dashboard' }}</h2>
 
-    <div class="row g-3 mb-4">
-        <div class="col-12 col-md-4">
-            <div class="card border-0 shadow-sm border-start border-4 border-success">
-                <div class="card-body">
-                    <h6 class="text-muted">Receitas (mês)</h6>
-                    <p class="h4 mb-0 text-success">R$ {{ "%.2f" % (receitas_mes or 0) }}</p>
+    <form method="GET" class="d-flex flex-wrap align-items-center gap-2 mb-3" id="filtro-dash">
+        {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
+        <label class="form-label mb-0 small fw-semibold">Filtrar:</label>
+        <select name="mes" class="form-select form-select-sm" style="width: auto; max-width: 160px;" onchange="this.form.submit()">
+            <option value="" {% if not mes %}selected{% endif %}>Todos os meses</option>
+            {% set meses_nome = ['', 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'] %}
+            {% for m in range(1, 13) %}
+            <option value="{{ m }}" {% if mes == m %}selected{% endif %}>{{ meses_nome[m] }}</option>
+            {% endfor %}
+        </select>
+        <select name="ano" class="form-select form-select-sm" style="width: auto; max-width: 100px;" onchange="this.form.submit()">
+            {% for a in range(ano_atual, ano_atual - 6, -1) %}
+            <option value="{{ a }}" {% if ano == a %}selected{% endif %}>{{ a }}</option>
+            {% endfor %}
+        </select>
+    </form>
+
+    {% set saldo = (receitas_mes or 0) - (despesas_mes or 0) %}
+    <div class="row g-4 mb-3">
+        <div class="col-12 col-sm-6 col-lg-4 col-xl-3">
+            <div class="card shadow-sm border-success card-hover financeiro-dash-card h-100">
+                <div class="card-body text-center py-4 px-4 d-flex flex-column align-items-center justify-content-center">
+                    <i class="bi bi-cash-coin fs-1 mb-2 text-success"></i>
+                    <h6 class="fw-bold mb-2">Receitas (mês)</h6>
+                    <span class="h4 fw-bold text-success">R$ {{ "%.2f" % (receitas_mes or 0) }}</span>
                 </div>
             </div>
         </div>
-        <div class="col-12 col-md-4">
-            <div class="card border-0 shadow-sm border-start border-4 border-danger">
-                <div class="card-body">
-                    <h6 class="text-muted">Despesas (mês)</h6>
-                    <p class="h4 mb-0 text-danger">R$ {{ "%.2f" % (despesas_mes or 0) }}</p>
+        <div class="col-12 col-sm-6 col-lg-4 col-xl-3">
+            <div class="card shadow-sm border-danger card-hover financeiro-dash-card h-100">
+                <div class="card-body text-center py-4 px-4 d-flex flex-column align-items-center justify-content-center">
+                    <i class="bi bi-cash-stack fs-1 mb-2 text-danger"></i>
+                    <h6 class="fw-bold mb-2">Despesas (mês)</h6>
+                    <span class="h4 fw-bold text-danger">R$ {{ "%.2f" % (despesas_mes or 0) }}</span>
                 </div>
             </div>
         </div>
-        <div class="col-12 col-md-4">
-            <div class="card border-0 shadow-sm border-start border-4 {{ 'border-success' if (receitas_mes or 0) - (despesas_mes or 0) >= 0 else 'border-warning' }}">
-                <div class="card-body">
-                    <h6 class="text-muted">Saldo (mês)</h6>
-                    <p class="h4 mb-0 {{ 'text-success' if (receitas_mes or 0) - (despesas_mes or 0) >= 0 else 'text-warning' }}">R$ {{ "%.2f" % ((receitas_mes or 0) - (despesas_mes or 0)) }}</p>
+        <div class="col-12 col-sm-6 col-lg-4 col-xl-3">
+            <div class="card shadow-sm {{ 'border-success' if saldo >= 0 else 'border-warning' }} card-hover financeiro-dash-card h-100">
+                <div class="card-body text-center py-4 px-4 d-flex flex-column align-items-center justify-content-center">
+                    <i class="bi bi-graph-up-arrow fs-1 mb-2 {{ 'text-success' if saldo >= 0 else 'text-warning' }}"></i>
+                    <h6 class="fw-bold mb-2">Saldo (mês)</h6>
+                    <span class="h4 fw-bold {{ 'text-success' if saldo >= 0 else 'text-warning' }}">R$ {{ "%.2f" % saldo }}</span>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-sm-6 col-lg-4 col-xl-3">
+            <div class="card shadow-sm border-info card-hover financeiro-dash-card h-100">
+                <div class="card-body text-center py-4 px-4 d-flex flex-column align-items-center justify-content-center">
+                    <i class="bi bi-calendar-check fs-1 mb-2 text-info"></i>
+                    <h6 class="fw-bold mb-2">Projeção</h6>
+                    <span class="h4 fw-bold text-info">R$ {{ "%.2f" % (projecao or 0) }}</span>
+                    <small class="text-muted mt-1">Mensalidades não pagas</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-2 mb-4">
+        <div class="col-6 col-md-3">
+            <div class="card shadow-sm border-secondary financeiro-dash-mini h-100">
+                <div class="card-body text-center py-3 px-2">
+                    <i class="bi bi-calendar-plus text-secondary"></i>
+                    <div class="fw-bold mt-1">{{ msg_geradas or 0 }}</div>
+                    <small class="text-muted">Geradas</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card shadow-sm border-success financeiro-dash-mini h-100">
+                <div class="card-body text-center py-3 px-2">
+                    <i class="bi bi-check-circle text-success"></i>
+                    <div class="fw-bold mt-1">{{ msg_pagas or 0 }}</div>
+                    <small class="text-muted">Pagas</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card shadow-sm border-warning financeiro-dash-mini h-100">
+                <div class="card-body text-center py-3 px-2">
+                    <i class="bi bi-clock text-warning"></i>
+                    <div class="fw-bold mt-1">{{ msg_pendentes or 0 }}</div>
+                    <small class="text-muted">Pendentes</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card shadow-sm border-danger financeiro-dash-mini h-100">
+                <div class="card-body text-center py-3 px-2">
+                    <i class="bi bi-exclamation-triangle text-danger"></i>
+                    <div class="fw-bold mt-1">{{ msg_atrasadas or 0 }}</div>
+                    <small class="text-muted">Atrasadas</small>
                 </div>
             </div>
         </div>
@@ -42,22 +112,22 @@
             <h5 class="card-title mb-3">Módulos</h5>
             <div class="row g-2">
                 <div class="col-12 col-sm-6 col-md-4">
-                    <a href="{{ url_for('financeiro.lista_descontos') }}" class="btn btn-outline-primary w-100">
+                    <a href="{{ url_for('financeiro.lista_descontos', academia_id=academia_id) }}" class="btn btn-outline-primary w-100">
                         <i class="bi bi-percent me-2"></i> Descontos
                     </a>
                 </div>
                 <div class="col-12 col-sm-6 col-md-4">
-                    <a href="{{ url_for('financeiro.lista_mensalidades') }}" class="btn btn-outline-primary w-100">
+                    <a href="{{ url_for('financeiro.painel_mensalidades', academia_id=academia_id) }}" class="btn btn-outline-primary w-100">
                         <i class="bi bi-calendar-check me-2"></i> Mensalidades
                     </a>
                 </div>
                 <div class="col-12 col-sm-6 col-md-4">
-                    <a href="{{ url_for('financeiro.lista_receitas') }}" class="btn btn-outline-success w-100">
+                    <a href="{{ url_for('financeiro.lista_receitas', academia_id=academia_id) }}" class="btn btn-outline-success w-100">
                         <i class="bi bi-cash-coin me-2"></i> Receitas
                     </a>
                 </div>
                 <div class="col-12 col-sm-6 col-md-4">
-                    <a href="{{ url_for('financeiro.lista_despesas') }}" class="btn btn-outline-danger w-100">
+                    <a href="{{ url_for('financeiro.lista_despesas', academia_id=academia_id) }}" class="btn btn-outline-danger w-100">
                         <i class="bi bi-cash-stack me-2"></i> Despesas
                     </a>
                 </div>
@@ -65,4 +135,11 @@
         </div>
     </div>
 </div>
+<style>
+.financeiro-dash-card { transition: 0.2s ease; min-height: 140px; }
+.financeiro-dash-mini { transition: 0.2s ease; border-width: 1px; border-radius: 0.6rem; }
+.financeiro-dash-mini .card-body { font-size: 0.9rem; }
+.financeiro-dash .card { border-radius: 0.85rem; border-width: 2px; transition: 0.2s ease; }
+.financeiro-dash .card:hover, .financeiro-dash .card-hover:hover { transform: translateY(-6px); box-shadow: 0 0.75rem 1.5rem rgba(0,0,0,0.18) !important; }
+</style>
 {% endblock %}

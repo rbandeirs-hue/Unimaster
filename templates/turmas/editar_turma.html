@@ -1,89 +1,185 @@
 {% extends "base.html" %}
 {% block title %}Editar Turma{% endblock %}
 {% block content %}
-<div class="container mt-5">
-    <div class="mb-4 text-center">
-        <h2 class="display-6 fw-bold text-primary">Editar Turma</h2>
-        <p class="lead text-muted">Atualize os dados da turma selecionada.</p>
+<style>
+.turma-form-wrap { max-width: 680px; margin-left: auto; margin-right: auto; }
+@media (min-width: 576px) { .turma-form-wrap { padding-left: 0.5rem; padding-right: 0.5rem; } }
+.turma-form .form-section {
+    border-left: 3px solid #cce5ff;
+    background: linear-gradient(90deg, #f8fbff 0%, transparent 100%);
+    padding: 1rem 1.25rem;
+    margin-bottom: 1.25rem;
+    border-radius: 0 8px 8px 0;
+}
+.turma-form .form-section h6 {
+    color: #0d6efd;
+    font-weight: 600;
+    font-size: 0.9rem;
+    margin-bottom: 0.85rem;
+    letter-spacing: 0.02em;
+}
+.turma-form .auxiliar-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.75rem;
+    border-radius: 8px;
+    margin-bottom: 0.3rem;
+    transition: background 0.2s;
+}
+.turma-form .auxiliar-row:hover { background: rgba(13, 110, 253, 0.06); }
+.turma-form .auxiliar-row.d-none { display: none !important; }
+.turma-form .card { border-radius: 14px; }
+.turma-form .card-header { border-radius: 14px 14px 0 0; }
+</style>
+<div class="container py-4">
+    <div class="turma-form-wrap mb-4">
+        <a href="{{ back_url }}" class="btn btn-outline-secondary btn-sm mb-2">
+            <i class="bi bi-arrow-left me-1"></i> Voltar
+        </a>
+        <h2 class="h4 fw-bold text-primary mb-1">Editar Turma</h2>
+        <p class="text-muted small mb-0">{{ turma.Nome }} — {{ academia.nome if academia else '' }}</p>
     </div>
 
-    <div class="card shadow-lg mx-auto" style="max-width: 800px; border-radius: 1rem;">
-        <div class="card-header bg-warning text-dark" style="border-radius: 1rem 1rem 0 0;">
-            <h5 class="mb-0"><i class="bi bi-pencil-square me-2"></i> Detalhes da Turma</h5>
+    <div class="card shadow-sm border-0 turma-form turma-form-wrap" style="border-radius: 14px; overflow: hidden;">
+        <div class="card-header py-3" style="background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%); color: white; border: none;">
+            <h5 class="mb-0 fw-bold"><i class="bi bi-pencil-square me-2"></i> Detalhes da Turma</h5>
         </div>
         <div class="card-body p-4">
             <form method="POST">
                 <input type="hidden" name="next" value="{{ back_url }}">
-                <div class="mb-3">
-                    <label for="nome" class="form-label fw-semibold">Nome da Turma <span class="text-danger">*</span></label>
-                    <input type="text" id="nome" name="nome" class="form-control" required value="{{ turma.Nome }}">
-                </div>
 
-                <div class="mb-4">
-                    <label for="dias_horario" class="form-label fw-semibold">Dias e Horário <span class="text-danger">*</span></label>
-                    <input type="text" id="dias_horario" name="dias_horario" class="form-control" required value="{{ turma.DiasHorario }}">
-                </div>
-
-                <div class="row">
-                    <div class="col-md-3 mb-3">
-                        <label for="idade_min" class="form-label fw-semibold">Idade Mínima <span class="text-danger">*</span></label>
-                        <input type="number" id="idade_min" name="idade_min" class="form-control" required min="1" value="{{ turma.IdadeMin }}">
-                    </div>
-
-                    <div class="col-md-3 mb-3">
-                        <label for="idade_max" class="form-label fw-semibold">Idade Máxima <span class="text-danger">*</span></label>
-                        <input type="number" id="idade_max" name="idade_max" class="form-control" required min="1" value="{{ turma.IdadeMax }}">
-                    </div>
-
-                    <div class="col-md-6 mb-3">
-                        <label for="professor" class="form-label fw-semibold">Professor Responsável <span class="text-danger">*</span></label>
-                        <input type="text" id="professor" name="professor" class="form-control" required value="{{ turma.Professor }}">
+                <div class="form-section">
+                    <h6><i class="bi bi-tag me-1"></i> Informações básicas</h6>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label for="modalidade_id" class="form-label fw-semibold">Modalidade</label>
+                            <select id="modalidade_id" name="modalidade_id" class="form-select">
+                                <option value="">— Selecione (opcional) —</option>
+                                {% for m in modalidades %}
+                                <option value="{{ m.id }}" {% if turma_modalidade_id == m.id %}selected{% endif %}>{{ m.nome }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="nome" class="form-label fw-semibold">Nome da Turma <span class="text-danger">*</span></label>
+                            <input type="text" id="nome" name="nome" class="form-control" required value="{{ turma.Nome }}">
+                        </div>
+                        <div class="col-12">
+                            <label for="dias_horario" class="form-label fw-semibold">Dias e Horário <span class="text-danger">*</span></label>
+                            <input type="text" id="dias_horario" name="dias_horario" class="form-control" required value="{{ turma.DiasHorario }}">
+                        </div>
                     </div>
                 </div>
 
-                <div class="row">
-                    <div class="col-md-6 mb-3">
-                        <label for="classificacao" class="form-label fw-semibold">Classificação (Nível) <span class="text-danger">*</span></label>
-                        <input type="text" id="classificacao" name="classificacao" class="form-control" required value="{{ turma.Classificacao }}">
-                    </div>
-
-                    <div class="col-md-6 mb-3">
-                        <label for="capacidade" class="form-label fw-semibold">Capacidade Máxima <span class="text-danger">*</span></label>
-                        <input type="number" id="capacidade" name="capacidade" class="form-control" required min="1" value="{{ turma.Capacidade }}">
+                <div class="form-section">
+                    <h6><i class="bi bi-people me-1"></i> Faixa etária e classificação</h6>
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label for="idade_min" class="form-label fw-semibold">Idade Mín. <span class="text-danger">*</span></label>
+                            <input type="number" id="idade_min" name="idade_min" class="form-control" required min="1" value="{{ turma.IdadeMin }}">
+                        </div>
+                        <div class="col-md-4">
+                            <label for="idade_max" class="form-label fw-semibold">Idade Máx. <span class="text-danger">*</span></label>
+                            <input type="number" id="idade_max" name="idade_max" class="form-control" required min="1" value="{{ turma.IdadeMax }}">
+                        </div>
+                        <div class="col-md-4">
+                            <label for="classificacao" class="form-label fw-semibold">Classificação <span class="text-danger">*</span></label>
+                            <input type="text" id="classificacao" name="classificacao" class="form-control" required value="{{ turma.Classificacao }}">
+                        </div>
                     </div>
                 </div>
 
-                <div class="mb-4">
-                    <label for="id_academia" class="form-label fw-semibold">Academia <span class="text-danger">*</span></label>
-                    {% if academias %}
-                    <select id="id_academia" name="id_academia" class="form-select" required>
-                        <option value="" disabled {% if not academia_selecionada %}selected{% endif %}>Selecione a academia</option>
-                        {% for academia in academias %}
-                        <option value="{{ academia.id }}" {% if academia.id == academia_selecionada %}selected{% endif %}>
-                            {{ academia.nome }}
-                        </option>
+                <div class="form-section">
+                    <h6><i class="bi bi-person-badge me-1"></i> Professores</h6>
+                    <div class="mb-3">
+                        <label for="professor_responsavel_id" class="form-label fw-semibold">Professor responsável <span class="text-danger">*</span></label>
+                        <select id="professor_responsavel_id" name="professor_responsavel_id" class="form-select" required>
+                            <option value="">— Selecione —</option>
+                            {% for prof in professores %}
+                            <option value="{{ prof.id }}" {% if prof.id == professor_responsavel_id %}selected{% endif %}>{{ prof.nome }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <label class="form-label fw-semibold">Professores auxiliares</label>
+                    <div class="border rounded p-3" style="max-height: 200px; overflow-y: auto; background: #f8fafc;">
+                        {% for prof in professores %}
+                        <div class="auxiliar-row" data-prof-id="{{ prof.id }}">
+                            <span class="text-dark">{{ prof.nome }}</span>
+                            <div class="form-check form-switch mb-0">
+                                <input class="form-check-input" type="checkbox" name="professor_auxiliar_ids" value="{{ prof.id }}" id="aux_{{ prof.id }}" {% if prof.id in professor_auxiliar_ids %}checked{% endif %}>
+                                <label class="form-check-label small text-muted" for="aux_{{ prof.id }}">Auxiliar</label>
+                            </div>
+                        </div>
                         {% endfor %}
-                    </select>
-                    {% else %}
-                    <div class="alert alert-warning mb-0">Nenhuma academia disponível para esta turma.</div>
-                    {% endif %}
+                        {% if not professores %}
+                        <p class="text-muted small mb-0">Nenhum professor cadastrado.</p>
+                        {% endif %}
+                    </div>
+                    <small class="text-muted">Ative o switch para adicionar como auxiliar. O responsável não aparece na lista.</small>
                 </div>
 
-                <div class="mb-4">
-                    <label for="observacoes" class="form-label fw-semibold">Observações</label>
-                    <textarea id="observacoes" name="observacoes" class="form-control" rows="3">{{ turma.Observacoes }}</textarea>
+                <div class="form-section">
+                    <h6><i class="bi bi-gear me-1"></i> Configurações</h6>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label for="capacidade" class="form-label fw-semibold">Capacidade máxima</label>
+                            <input type="number" id="capacidade" name="capacidade" class="form-control" required min="1" value="{{ turma.Capacidade }}">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="id_academia" class="form-label fw-semibold">Academia <span class="text-danger">*</span></label>
+                            {% if academias %}
+                            <select id="id_academia" name="id_academia" class="form-select" required>
+                                <option value="" disabled {% if not academia_selecionada %}selected{% endif %}>Selecione</option>
+                                {% for academia in academias %}
+                                <option value="{{ academia.id }}" {% if academia.id == academia_selecionada %}selected{% endif %}>{{ academia.nome }}</option>
+                                {% endfor %}
+                            </select>
+                            {% else %}
+                            <div class="alert alert-warning py-2 mb-0">Nenhuma academia disponível.</div>
+                            {% endif %}
+                        </div>
+                        <div class="col-12">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" name="controla_limite" id="controla_limite" value="1" {% if turma.controla_limite %}checked{% endif %}>
+                                <label class="form-check-label" for="controla_limite">Controlar limite de vagas</label>
+                            </div>
+                            <small class="text-muted">Bloqueia novas matrículas ao atingir a capacidade.</small>
+                        </div>
+                    </div>
                 </div>
 
-                <div class="d-flex justify-content-between pt-2">
-                    <a href="{{ back_url }}" class="btn btn-outline-secondary btn-lg">
-                        <i class="bi bi-arrow-left-circle-fill me-2"></i> Voltar
-                    </a>
-                    <button type="submit" class="btn btn-success btn-lg">
-                        <i class="bi bi-save-fill me-2"></i> Salvar Alterações
-                    </button>
+                <div class="form-section">
+                    <h6><i class="bi bi-chat-text me-1"></i> Observações</h6>
+                    <textarea id="observacoes" name="observacoes" class="form-control" rows="2" placeholder="Informações adicionais sobre a turma...">{{ turma.Observacoes or '' }}</textarea>
+                </div>
+
+                <div class="d-flex justify-content-end gap-2 pt-3 border-top mt-4">
+                    <a href="{{ back_url }}" class="btn btn-outline-secondary">Cancelar</a>
+                    <button type="submit" class="btn btn-primary px-4"><i class="bi bi-check-lg me-1"></i> Salvar Alterações</button>
                 </div>
             </form>
         </div>
     </div>
 </div>
+<script>
+(function() {
+    var sel = document.getElementById('professor_responsavel_id');
+    var rows = document.querySelectorAll('.auxiliar-row[data-prof-id]');
+    function atualizarAuxiliares() {
+        var rid = sel ? sel.value : '';
+        rows.forEach(function(r) {
+            if (r.dataset.profId === rid) {
+                r.classList.add('d-none');
+                var cb = r.querySelector('input[type="checkbox"]');
+                if (cb) cb.checked = false;
+            } else {
+                r.classList.remove('d-none');
+            }
+        });
+    }
+    if (sel) sel.addEventListener('change', atualizarAuxiliares);
+    atualizarAuxiliares();
+})();
+</script>
 {% endblock %}

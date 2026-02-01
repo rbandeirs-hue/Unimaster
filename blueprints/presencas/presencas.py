@@ -11,14 +11,79 @@ import re # Necessário para o histórico/ajax se mantiver a lógica original
 # ⚠️ O nome 'presencas' será usado para referenciar as rotas: url_for('presencas.registro_presenca')
 bp_presencas = Blueprint("presencas", __name__)
 
+
+def _get_academias_presenca():
+    """Retorna (academia_id, academias) para o painel de presenças."""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(dictionary=True)
+        ids = []
+        if current_user.has_role("admin"):
+            cur.execute("SELECT id FROM academias ORDER BY nome")
+            ids = [r["id"] for r in cur.fetchall()]
+        elif current_user.has_role("gestor_federacao"):
+            cur.execute(
+                "SELECT ac.id FROM academias ac JOIN associacoes ass ON ass.id = ac.id_associacao WHERE ass.id_federacao = %s ORDER BY ac.nome",
+                (getattr(current_user, "id_federacao", None),),
+            )
+            ids = [r["id"] for r in cur.fetchall()]
+        elif current_user.has_role("gestor_associacao"):
+            cur.execute("SELECT id FROM academias WHERE id_associacao = %s ORDER BY nome", (getattr(current_user, "id_associacao", None),))
+            ids = [r["id"] for r in cur.fetchall()]
+        elif getattr(current_user, "id_academia", None):
+            ids = [current_user.id_academia]
+        cur.close()
+        conn.close()
+        if not ids:
+            return None, []
+        conn = get_db_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT id, nome FROM academias WHERE id IN (%s) ORDER BY nome" % ",".join(["%s"] * len(ids)), tuple(ids))
+        academias = cur.fetchall()
+        cur.close()
+        conn.close()
+        if len(ids) == 1:
+            return ids[0], academias
+        aid = request.args.get("academia_id", type=int) or session.get("academia_gerenciamento_id")
+        if aid and aid in ids:
+            session["academia_gerenciamento_id"] = aid
+        else:
+            session["academia_gerenciamento_id"] = ids[0]
+            aid = ids[0]
+        return aid, academias
+    except Exception:
+        return None, []
+
+
+# ======================================================
+# 🔹 Painel Presença (Módulo com 3 opções)
+# ======================================================
+@bp_presencas.route("/presencas", methods=["GET"])
+@login_required
+def painel_presenca():
+    """Hub do módulo Presença: Registrar, Relatório, Histórico."""
+    academia_id, academias = _get_academias_presenca()
+    academias = academias or []
+    modo = session.get("modo_painel")
+    back_url = (url_for("academia.painel_academia", academia_id=academia_id) if academia_id else url_for("academia.painel_academia")) if modo == "academia" else url_for("painel.home")
+    return render_template(
+        "presencas/painel_presenca.html",
+        academias=academias,
+        academia_id=academia_id,
+        back_url=back_url,
+    )
+
+
 # ======================================================
 # 🔹 Registro de Presença
 # ======================================================
 def _get_academia_filtro_presencas():
-    """Retorna academia_id para filtrar turmas (modo academia)."""
-    aid = request.args.get("academia_id", type=int) or (
-        session.get("academia_gerenciamento_id") if session.get("modo_painel") == "academia" else None
-    )
+    """Retorna academia_id para filtrar (ata, historico, registro)."""
+    aid = request.args.get("academia_id", type=int) or session.get("academia_gerenciamento_id")
+    if not aid and getattr(current_user, "id_academia", None):
+        aid = current_user.id_academia
+    if not aid:
+        aid, _ = _get_academias_presenca()
     if not aid:
         return None
     try:
@@ -111,7 +176,7 @@ def registro_presenca():
     presencas_registradas = []
     if turma_selecionada:
         try:
-            cursor.execute("SELECT id, nome FROM alunos WHERE TurmaID=%s ORDER BY nome", (turma_selecionada,))
+            cursor.execute("SELECT id, nome, foto FROM alunos WHERE TurmaID=%s ORDER BY nome", (turma_selecionada,))
             alunos = cursor.fetchall()
         except Exception:
             alunos = []
@@ -129,6 +194,7 @@ def registro_presenca():
                 presencas_registradas = []
 
     db.close()
+    back_url = url_for("presencas.painel_presenca", academia_id=academia_id) if academia_id else url_for("presencas.painel_presenca")
     return render_template(
         'registro_presenca.html',
         turmas=turmas,
@@ -137,6 +203,7 @@ def registro_presenca():
         data_presenca=data_presenca,
         presencas_registradas=presencas_registradas,
         academia_id=academia_id,
+        back_url=back_url,
     )
 
 # ======================================================
@@ -145,6 +212,8 @@ def registro_presenca():
 @bp_presencas.route('/ata_presenca', methods=['GET'])
 @login_required
 def ata_presenca():
+    academia_id = _get_academia_filtro_presencas()
+
     db = get_db_connection()
     cursor = db.cursor(dictionary=True)
 
@@ -154,13 +223,22 @@ def ata_presenca():
     turma_selecionada = int(request.args.get('turma', 0))
 
     try:
-        cursor.execute("SELECT TurmaID, Nome FROM turmas")
+        if academia_id:
+            try:
+                cursor.execute("SELECT TurmaID, Nome FROM turmas WHERE id_academia = %s ORDER BY Nome", (academia_id,))
+            except Exception:
+                cursor.execute("SELECT TurmaID, Nome FROM turmas ORDER BY Nome")
+        else:
+            cursor.execute("SELECT TurmaID, Nome FROM turmas ORDER BY Nome")
         turmas = {t['TurmaID']: t['Nome'] for t in cursor.fetchall()}
     except Exception:
         turmas = {}
 
     try:
-        cursor.execute("SELECT id, nome, TurmaID FROM alunos ORDER BY nome")
+        if academia_id:
+            cursor.execute("SELECT id, nome, TurmaID FROM alunos WHERE id_academia = %s ORDER BY nome", (academia_id,))
+        else:
+            cursor.execute("SELECT id, nome, TurmaID FROM alunos ORDER BY nome")
         alunos = cursor.fetchall()
     except Exception:
         alunos = []
@@ -172,7 +250,8 @@ def ata_presenca():
     try:
         query = """
             SELECT p.data_presenca, p.aluno_id, p.presente,
-                   COALESCE(u.nome, p.responsavel_nome, '-') AS responsavel, a.TurmaID
+                   COALESCE(u.nome, p.responsavel_nome, '-') AS responsavel, a.TurmaID,
+                   p.registrado_em
             FROM presencas p
             JOIN alunos a ON a.id = p.aluno_id
             LEFT JOIN usuarios u ON u.id = p.responsavel_id
@@ -185,6 +264,9 @@ def ata_presenca():
         if turma_selecionada != 0:
             query += " AND a.TurmaID = %s"
             params.append(turma_selecionada)
+        if academia_id:
+            query += " AND a.id_academia = %s"
+            params.append(academia_id)
         query += " ORDER BY p.data_presenca"
         cursor.execute(query, tuple(params))
         presencas = cursor.fetchall()
@@ -206,10 +288,18 @@ def ata_presenca():
             presencas_por_data[data_str][turma_id] = {
                 'presentes': [],
                 'responsavel': p.get('responsavel', '-'),
+                'registros_em': [],
                 'alunos': alunos_por_turma.get(turma_id, [])
             }
         if p.get('presente') == 1:
             presencas_por_data[data_str][turma_id]['presentes'].append(p.get('aluno_id'))
+        reg_em = p.get('registrado_em')
+        if reg_em:
+            presencas_por_data[data_str][turma_id]['registros_em'].append(reg_em)
+    for data_str, turmas_d in presencas_por_data.items():
+        for tid, reg in turmas_d.items():
+            reg['abertura_registro'] = min(reg['registros_em']) if reg.get('registros_em') else None
+            reg.pop('registros_em', None)
 
     presencas_por_mes = {}
     for data, turmas_dict in presencas_por_data.items():
@@ -229,13 +319,16 @@ def ata_presenca():
     except (ValueError, TypeError, IndexError):
         pass
 
+    back_url = url_for("presencas.painel_presenca", academia_id=academia_id) if academia_id else url_for("presencas.painel_presenca")
     return render_template('ata_presenca.html',
                             presencas_por_mes=presencas_por_mes,
                             turmas=turmas,
                             mes=mes_selecionado,
                             ano=ano_selecionado,
                             turma_id=turma_selecionada,
-                            hoje=hoje)
+                            hoje=hoje,
+                            back_url=back_url,
+                            academia_id=academia_id)
 
 # ======================================================
 # 🔹 Histórico de Presença (Lista de Cards)
@@ -243,17 +336,24 @@ def ata_presenca():
 @bp_presencas.route('/historico_presenca_lista')
 @login_required
 def historico_presenca_lista():
+    academia_id = _get_academia_filtro_presencas()
+
     db = get_db_connection()
     cursor = db.cursor(dictionary=True)
     try:
-        cursor.execute("SELECT id, nome FROM alunos ORDER BY nome")
+        if academia_id:
+            cursor.execute("SELECT id, nome FROM alunos WHERE id_academia = %s ORDER BY nome", (academia_id,))
+        else:
+            cursor.execute("SELECT id, nome FROM alunos ORDER BY nome")
         alunos = cursor.fetchall()
     except Exception:
         alunos = []
     db.close()
 
     hoje = datetime.today()
-    return render_template('historico_presenca_lista.html', alunos=alunos, hoje=hoje)
+    academia_id = _get_academia_filtro_presencas()
+    back_url = url_for("presencas.painel_presenca", academia_id=academia_id) if academia_id else url_for("presencas.painel_presenca")
+    return render_template('historico_presenca_lista.html', alunos=alunos, hoje=hoje, back_url=back_url, academia_id=academia_id)
 
 # ======================================================
 # 🔹 Histórico de Presença (Endpoint AJAX)
@@ -261,12 +361,22 @@ def historico_presenca_lista():
 @bp_presencas.route('/historico_presenca_ajax/<int:aluno_id>')
 @login_required
 def historico_presenca_ajax(aluno_id):
-    # mes=0 => todos os meses do ano informado
-    mes = int(request.args.get('mes', 0))
-    ano = int(request.args.get('ano', datetime.today().year))
+    academia_id = _get_academia_filtro_presencas()
 
     db = get_db_connection()
     cursor = db.cursor(dictionary=True)
+
+    cursor.execute("SELECT id, id_academia FROM alunos WHERE id = %s", (aluno_id,))
+    aluno = cursor.fetchone()
+    if not aluno:
+        db.close()
+        return "<p class='alert alert-warning p-2 small'>Aluno não encontrado.</p>"
+    if academia_id and aluno.get("id_academia") != academia_id:
+        db.close()
+        return "<p class='alert alert-warning p-2 small'>Acesso negado.</p>"
+
+    mes = int(request.args.get('mes', 0))
+    ano = int(request.args.get('ano', datetime.today().year))
 
     # Seleciona presenças do aluno filtrando mês/ano
     if mes == 0:

@@ -1,36 +1,57 @@
 {% extends "base.html" %}
-{% block title %}Cadastrar Professor — {{ academia.nome }}{% endblock %}
+{% block title %}Vincular usuário como professor — {{ academia.nome }}{% endblock %}
 {% block content %}
 <div class="container mt-5">
     <div class="mb-4">
         <a href="{{ back_url }}" class="btn btn-outline-secondary mb-2">
             <i class="bi bi-arrow-left-circle me-2"></i> Voltar
         </a>
-        <h2 class="h4 fw-bold text-dark">Cadastrar Professor</h2>
+        <h2 class="h4 fw-bold text-dark">Vincular usuário como professor</h2>
         <p class="text-muted small">{{ academia.nome }}</p>
     </div>
 
     <div class="card shadow-sm" style="max-width: 600px;">
         <div class="card-body p-4">
+            {% if usuarios %}
             <form method="POST">
-                <div class="mb-3">
-                    <label for="nome" class="form-label fw-semibold">Nome <span class="text-danger">*</span></label>
-                    <input type="text" id="nome" name="nome" class="form-control" required placeholder="Nome do professor">
+                <div class="mb-4">
+                    <label for="usuario_id" class="form-label fw-semibold">Selecione o usuário <span class="text-danger">*</span></label>
+                    <select id="usuario_id" name="usuario_id" class="form-select form-select-lg" required>
+                        <option value="">— Selecione um usuário —</option>
+                        {% for u in usuarios %}
+                        <option value="{{ u.id }}">{{ u.nome }} ({{ u.email or '-' }})</option>
+                        {% endfor %}
+                    </select>
+                    <small class="text-muted">Apenas usuários ainda não vinculados como professor aparecem na lista.</small>
                 </div>
                 <div class="mb-3">
-                    <label for="email" class="form-label fw-semibold">Email</label>
-                    <input type="email" id="email" name="email" class="form-control" placeholder="email@exemplo.com">
-                </div>
-                <div class="mb-3">
-                    <label for="telefone" class="form-label fw-semibold">Telefone</label>
-                    <input type="text" id="telefone" name="telefone" class="form-control" placeholder="(00) 00000-0000">
+                    <label for="telefone" class="form-label fw-semibold">Telefone (opcional)</label>
+                    <input type="text" id="telefone" name="telefone" class="form-control" placeholder="(00) 00000-0000" maxlength="15">
                 </div>
                 <div class="d-flex gap-2 pt-2">
                     <a href="{{ back_url }}" class="btn btn-outline-secondary">Cancelar</a>
-                    <button type="submit" class="btn btn-success"><i class="bi bi-save me-1"></i> Salvar</button>
+                    <button type="submit" class="btn btn-success"><i class="bi bi-person-plus-fill me-1"></i> Vincular como professor</button>
                 </div>
             </form>
+            {% else %}
+            <div class="alert alert-info mb-0">
+                <i class="bi bi-info-circle me-2"></i>
+                Todos os usuários já estão vinculados como professores ou não há usuários cadastrados.
+                <a href="{{ url_for('usuarios.lista_usuarios') }}" class="alert-link">Cadastrar novo usuário</a> primeiro.
+            </div>
+            <a href="{{ back_url }}" class="btn btn-outline-secondary mt-3">Voltar</a>
+            {% endif %}
         </div>
     </div>
 </div>
+{% if usuarios %}
+<script>
+document.getElementById('telefone').addEventListener('input', function(e) {
+    var v = e.target.value.replace(/\D/g, '');
+    if (v.length <= 2) e.target.value = v ? '(' + v : '';
+    else if (v.length <= 7) e.target.value = '(' + v.slice(0,2) + ') ' + v.slice(2);
+    else e.target.value = '(' + v.slice(0,2) + ') ' + v.slice(2,7) + '-' + v.slice(7,11);
+});
+</script>
+{% endif %}
 {% endblock %}

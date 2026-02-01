@@ -1,15 +1,88 @@
 {% extends "base.html" %}
 {% block title %}Minhas Mensalidades — Aluno{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/financeiro/responsive.css') }}?v=1">
+{% endblock %}
 {% block content %}
 <div class="container mt-4 px-2 px-sm-3">
     <a href="{{ url_for('painel_aluno.meu_perfil') }}" class="btn btn-outline-secondary btn-sm mb-3">
         <i class="bi bi-arrow-left me-1"></i> Voltar
     </a>
-    <h2 class="h5 fw-bold mb-3">Minhas Mensalidades</h2>
+    <h2 class="h4 fw-bold mb-3">Minhas Mensalidades</h2>
 
-    {% if mensalidades %}
-    <div class="card border-0 shadow-sm">
+    {# Dashboard cards #}
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body py-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span class="text-muted small">Pagas</span>
+                        <span class="badge bg-success fs-6">{{ contagens.get('pago', 0) }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body py-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span class="text-muted small">Pendentes</span>
+                        <span class="badge bg-warning text-dark fs-6">{{ contagens.get('pendente', 0) }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body py-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span class="text-muted small">Atrasadas</span>
+                        <span class="badge bg-danger fs-6">{{ contagens.get('atrasado', 0) }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body py-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span class="text-muted small">Aguardando</span>
+                        <span class="badge bg-info fs-6">{{ contagens.get('aguardando_confirmacao', 0) }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {# Filtros — ano atual já selecionado, mas pode trocar; todos os meses disponível #}
+    <form method="GET" class="row g-2 mb-3">
+        <div class="col-auto">
+            <select name="mes" class="form-select form-select-sm" style="width:auto;" onchange="this.form.submit()">
+                <option value="" {% if not mes %}selected{% endif %}>Todos os meses</option>
+                {% for i in range(1, 13) %}
+                <option value="{{ i }}" {% if mes == i %}selected{% endif %}>{{ ['','Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][i] }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-auto">
+            <select name="ano" class="form-select form-select-sm" style="width:auto;" onchange="this.form.submit()">
+                {% for a in range(ano_atual, ano_atual - 5, -1) %}
+                <option value="{{ a }}" {% if ano == a %}selected{% endif %}>{{ a }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-auto">
+            <button type="submit" class="btn btn-sm btn-outline-secondary">Filtrar</button>
+        </div>
+    </form>
+
+    {% if mensalidades or avulsas %}
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-light">
+            <h6 class="mb-0"><i class="bi bi-calendar-check me-2"></i>Mensalidades</h6>
+        </div>
         <div class="card-body p-0">
+            {% if mensalidades %}
             <div class="table-responsive">
                 <table class="table table-hover mb-0 mensalidades-table">
                     <thead class="table-light mensalidades-thead">
@@ -18,7 +91,7 @@
                             <th>Vencimento</th>
                             <th>Valor</th>
                             <th>Status</th>
-                            <th>Pagamento</th>
+                            <th>Ação</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -26,27 +99,131 @@
                         <tr>
                             <td data-label="Plano">{{ m.plano_nome or '-' }}</td>
                             <td data-label="Vencimento">{{ m.data_vencimento|data_br or '-' }}</td>
-                            <td data-label="Valor">R$ {{ "%.2f"|format(m.valor or 0) }}</td>
+                            <td data-label="Valor">
+                                {% if m.tem_desconto %}
+                                <div class="d-flex flex-column gap-1 valor-desconto-discriminado">
+                                    <span class="text-muted small"><strong>Valor integral:</strong> R$ {{ "%.2f"|format(m.valor_integral or 0) }}</span>
+                                    <span class="text-success small"><strong>Desconto{% if m.desconto_nome %} {{ m.desconto_nome }}{% endif %}:</strong> -R$ {{ "%.2f"|format(m.valor_desconto or 0) }}</span>
+                                    <span class="fw-bold text-dark"><strong>Valor a pagar:</strong> R$ {{ "%.2f"|format(m.valor_final or 0) }}</span>
+                                </div>
+                                {% else %}
+                                R$ {{ "%.2f"|format(m.valor_display if m.valor_display is defined else (m.valor or 0)) }}
+                                {% if m.valor_original is defined and m.valor_original is not none and m.valor_original != m.valor_display %}
+                                <br><small class="text-muted">(inc. juros/multa)</small>
+                                {% endif %}
+                                {% endif %}
+                            </td>
                             <td data-label="Status">
-                                <span class="badge {% if m.status == 'pago' %}bg-success{% elif m.status == 'atrasado' %}bg-danger{% else %}bg-warning text-dark{% endif %}">
-                                    {{ m.status|capitalize }}
+                                {% set se = m.status_efetivo or m.status %}
+                                <span class="badge {% if se == 'pago' %}bg-success{% elif se == 'atrasado' %}bg-danger{% elif se == 'aguardando_confirmacao' %}bg-info{% else %}bg-warning text-dark{% endif %}">
+                                    {{ 'Aguardando Confirmação' if se == 'aguardando_confirmacao' else (se|capitalize) }}
                                 </span>
                             </td>
-                            <td data-label="Pagamento">{{ m.data_pagamento|data_br or '-' }}</td>
+                            <td data-label="Ação">
+                                {% if m.status_efetivo in ['pendente','atrasado'] and m.status != 'aguardando_confirmacao' %}
+                                <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalInformar{{ m.id }}">
+                                    <i class="bi bi-upload me-1"></i> Informar
+                                </button>
+                                {% elif m.status_efetivo == 'pago' %}
+                                {% if m.comprovante_url %}
+                                <a href="{{ url_for('static', filename='uploads/' + m.comprovante_url) }}" target="_blank" class="btn btn-sm btn-outline-secondary" title="Ver comprovante">
+                                    <i class="bi bi-file-earmark-image"></i>
+                                </a>
+                                {% endif %}
+                                <span class="text-muted small ms-1">{{ m.data_pagamento|data_br if m.data_pagamento else '' }}</span>
+                                {% else %}
+                                <span class="text-muted small">{{ m.data_pagamento|data_br if m.data_pagamento else '' }}</span>
+                                {% endif %}
+                            </td>
                         </tr>
                         {% endfor %}
                     </tbody>
                 </table>
             </div>
+            {% else %}
+            <p class="text-muted p-3 mb-0">Nenhuma mensalidade encontrada para este período.</p>
+            {% endif %}
         </div>
     </div>
-    <p class="text-muted small mt-2">Exibindo as últimas 24 mensalidades.</p>
+
+    <div class="card border-0 shadow-sm">
+        <div class="card-header bg-light">
+            <h6 class="mb-0"><i class="bi bi-receipt me-2"></i>Cobranças avulsas</h6>
+        </div>
+        <div class="card-body p-0">
+            {% if avulsas %}
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Descrição</th>
+                            <th>Vencimento</th>
+                            <th>Valor</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for a in avulsas %}
+                        <tr>
+                            <td>{{ a.descricao or '-' }}</td>
+                            <td>{{ a.data_vencimento|data_br if a.data_vencimento else '-' }}</td>
+                            <td>R$ {{ "%.2f"|format(a.valor or 0) }}</td>
+                            <td>
+                                <span class="badge {% if a.status == 'pago' %}bg-success{% elif a.status == 'atrasado' %}bg-danger{% else %}bg-warning text-dark{% endif %}">
+                                    {{ a.status|capitalize }}
+                                </span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-muted p-3 mb-0">Nenhuma cobrança avulsa.</p>
+            {% endif %}
+        </div>
+    </div>
     {% else %}
-    <div class="alert alert-info">
-        <i class="bi bi-info-circle me-2"></i>Nenhuma mensalidade registrada para o seu perfil.
+    <div class="card border-0 shadow-sm">
+        <div class="card-body">
+            <p class="text-muted mb-0">Nenhuma cobrança registrada para este período.</p>
+        </div>
     </div>
     {% endif %}
 </div>
+
+{% for m in mensalidades %}
+{% if m.status_efetivo in ['pendente','atrasado'] and m.status != 'aguardando_confirmacao' %}
+<div class="modal fade" id="modalInformar{{ m.id }}" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('financeiro.informar_pagamento_mensalidade') }}" enctype="multipart/form-data">
+                <input type="hidden" name="registro_id" value="{{ m.id }}">
+                <div class="modal-header">
+                    <h5 class="modal-title">Informar Pagamento</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small">Envie o comprovante de pagamento. O status ficará como <strong>Aguardando Confirmação</strong> até o gestor validar.</p>
+                    <div class="mb-3">
+                        <label class="form-label">Comprovante (imagem ou PDF)</label>
+                        <input type="file" name="comprovante" class="form-control" accept=".png,.jpg,.jpeg,.gif,.pdf">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Comentário (opcional)</label>
+                        <textarea name="comentario" class="form-control" rows="2" placeholder="Ex: PIX realizado em..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Enviar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endfor %}
 
 <style>
 @media (max-width: 767px) {

@@ -2,12 +2,26 @@
 {% block title %}Editar Desconto{% endblock %}
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/financeiro/responsive.css') }}?v=1">
+<style>
+@media (max-width: 767.98px) {
+  .desconto-form-page .container { padding-left: 0.75rem; padding-right: 0.75rem; }
+  .desconto-form-page .financeiro-form { max-width: 100% !important; margin-left: 0 !important; margin-right: 0 !important; }
+  .desconto-form-page .card-body { padding: 1rem !important; }
+  .desconto-form-page .card-header { padding: 0.75rem 1rem !important; }
+  .desconto-form-page .card-header h5 { font-size: 1rem !important; }
+  .desconto-form-page .form-control, .desconto-form-page .form-select { font-size: 16px !important; min-height: 44px; }
+  .desconto-form-page .form-check-label { font-size: 0.95rem; }
+  .desconto-form-page .d-flex.gap-2 { flex-direction: column !important; }
+  .desconto-form-page .d-flex.gap-2 .btn { width: 100%; margin-bottom: 0.5rem; }
+  .desconto-form-page .d-flex.gap-2 .btn:last-child { margin-bottom: 0; }
+}
+</style>
 {% endblock %}
 
 {% block content %}
-<div class="container mt-4">
+<div class="container mt-4 desconto-form-page">
     <div class="mb-3">
-        <a href="{{ url_for('financeiro.lista_descontos') }}" class="btn btn-outline-secondary btn-sm">
+        <a href="{{ url_for('financeiro.lista_descontos') }}{% if academia_id %}?academia_id={{ academia_id }}{% endif %}" class="btn btn-outline-secondary btn-sm">
             <i class="bi bi-arrow-left me-1"></i> Voltar
         </a>
     </div>
@@ -38,30 +52,23 @@
                 </div>
                 {% if academias|length > 1 %}
                 <div class="mb-3">
-                    <label for="id_academia" class="form-label fw-semibold">Academia</label>
-                    <select class="form-select" id="id_academia" name="id_academia">
-                        <option value="">Todas</option>
+                    <label for="id_academia" class="form-label fw-semibold">Academia <span class="text-danger">*</span></label>
+                    <select class="form-select" id="id_academia" name="id_academia" required>
                         {% for ac in academias %}
                         <option value="{{ ac.id }}" {% if desconto.id_academia == ac.id %}selected{% endif %}>{{ ac.nome }}</option>
                         {% endfor %}
                     </select>
                 </div>
                 {% else %}
-                <input type="hidden" name="id_academia" value="{{ desconto.id_academia or (academias[0].id if academias else '') }}">
+                <input type="hidden" name="id_academia" value="{{ desconto.id_academia or (academias[0].id if academias else academia_id) }}">
                 {% endif %}
                 <div class="mb-3">
-                    <label class="form-label fw-semibold">Aplicar desconto apenas quando pagamento em dia?</label>
-                    <div class="d-flex gap-3">
-                        <div class="form-check">
-                            <input class="form-check-input" type="radio" name="aplicar_apenas_pagamento_em_dia" id="em_dia_sim" value="1" {% if desconto.get('aplicar_apenas_pagamento_em_dia', 1) != 0 %}checked{% endif %}>
-                            <label class="form-check-label" for="em_dia_sim">Sim</label>
-                        </div>
-                        <div class="form-check">
-                            <input class="form-check-input" type="radio" name="aplicar_apenas_pagamento_em_dia" id="em_dia_nao" value="0" {% if desconto.get('aplicar_apenas_pagamento_em_dia') == 0 %}checked{% endif %}>
-                            <label class="form-check-label" for="em_dia_nao">Não (aplicar sempre)</label>
-                        </div>
+                    <input type="hidden" name="aplicar_apenas_pagamento_em_dia" value="0">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" name="aplicar_apenas_pagamento_em_dia" id="aplicar_apenas_pagamento_em_dia" value="1" {% if desconto.get('aplicar_apenas_pagamento_em_dia', 1) != 0 %}checked{% endif %}>
+                        <label class="form-check-label" for="aplicar_apenas_pagamento_em_dia">Não aplicar se mensalidade estiver atrasada</label>
                     </div>
-                    <small class="text-muted">Sim = só aplica se data do pagamento ≤ vencimento. Não = aplica mesmo em atraso.</small>
+                    <small class="text-muted">Ativado: desconto só é aplicado quando o pagamento for em dia (antes do vencimento). Desativado: aplica sempre.</small>
                 </div>
                 <div class="mb-3">
                     <div class="form-check">
@@ -70,7 +77,7 @@
                     </div>
                 </div>
                 <div class="d-flex gap-2 mt-4">
-                    <a href="{{ url_for('financeiro.lista_descontos') }}" class="btn btn-outline-secondary">Cancelar</a>
+                    <a href="{{ url_for('financeiro.lista_descontos') }}{% if academia_id %}?academia_id={{ academia_id }}{% endif %}" class="btn btn-outline-secondary">Cancelar</a>
                     <button type="submit" class="btn btn-warning text-dark">Salvar</button>
                 </div>
             </form>

@@ -45,8 +45,7 @@
 
 <div class="container mt-4">
 
-    <!-- Rota Voltar Corrigida: Assumindo que 'admin.dashboard' está correta para voltar -->
-    <a href="{{ url_for('painel.home') }}" class="btn btn-secondary mb-3 shadow-sm">
+    <a href="{{ back_url or url_for('presencas.painel_presenca') }}" class="btn btn-secondary mb-3 shadow-sm">
         <i class="bi bi-arrow-left"></i> Voltar
     </a>
     <h2 class="mb-4 text-center text-primary fw-bold">📋 Ata de Presença</h2>
@@ -104,8 +103,10 @@
                             <button class="accordion-button collapsed bg-primary text-white" type="button"
                                     data-bs-toggle="collapse" data-bs-target="#{{ collapse_id }}"
                                     aria-expanded="false" aria-controls="{{ collapse_id }}">
-                                <i class="bi bi-calendar-check-fill me-2"></i> 
-                                Aula em {{ data }} - Turma: {{ turmas[turma_id_item] }} - Registrado por: {{ registro.responsavel }}
+                                <span class="d-flex flex-column flex-md-row flex-wrap gap-1 gap-md-2 align-items-start">
+                                    <span><i class="bi bi-calendar-check-fill me-2"></i> Aula em {{ data }} — Turma: {{ turmas[turma_id_item] }}</span>
+                                    <span class="small">Registrado por: {{ registro.responsavel }}{% if registro.abertura_registro %} <span class="text-white-50">•</span> aberto em {{ registro.abertura_registro.strftime('%d/%m/%Y %H:%M') }}{% endif %}</span>
+                                </span>
                             </button>
                         </h2>
                         <div id="{{ collapse_id }}" class="accordion-collapse collapse"
@@ -159,8 +160,9 @@
         const mes = mesSelect.value;
         const ano = anoSelect.value;
         const turma = turmaSelect.value;
-        // CORREÇÃO AQUI: Adicionado 'presencas.' ao url_for
-        window.location.href = `{{ url_for('presencas.ata_presenca') }}?mes=${mes}&ano=${ano}&turma=${turma}`;
+        let url = `{{ url_for('presencas.ata_presenca') }}?mes=${mes}&ano=${ano}&turma=${turma}`;
+        {% if academia_id %}url += '&academia_id={{ academia_id }}';{% endif %}
+        window.location.href = url;
     }
 
     // Adiciona o listener para atualizar a página automaticamente ao mudar o filtro

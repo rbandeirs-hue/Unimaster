@@ -51,11 +51,12 @@ def lista_usuarios():
 
     total = cursor.fetchone()["total"]
 
-    # Lista paginada
+    # Lista paginada (inclui ativo se a coluna existir)
     if busca:
         cursor.execute("""
             SELECT 
-                u.id, u.nome, u.email, u.criado_em
+                u.id, u.nome, u.email, u.criado_em,
+                COALESCE(u.ativo, 1) AS ativo
             FROM usuarios u
             WHERE nome LIKE %s OR email LIKE %s
             ORDER BY nome
@@ -63,7 +64,8 @@ def lista_usuarios():
         """, (f"%{busca}%", f"%{busca}%", por_pagina, offset))
     else:
         cursor.execute("""
-            SELECT id, nome, email, criado_em
+            SELECT id, nome, email, criado_em,
+                   COALESCE(ativo, 1) AS ativo
             FROM usuarios
             ORDER BY nome
             LIMIT %s OFFSET %s
@@ -117,12 +119,32 @@ def cadastro_usuario():
     cursor.execute("SELECT id, nome FROM roles ORDER BY nome")
     roles = cursor.fetchall()
 
+    # Academias para vínculo (admin: todas ou as suas vinculadas)
+    academias_disponiveis = []
+    cursor.execute("SELECT academia_id FROM usuarios_academias WHERE usuario_id = %s", (current_user.id,))
+    vinculadas = [r["academia_id"] for r in cursor.fetchall()]
+    if vinculadas:
+        ph = ",".join(["%s"] * len(vinculadas))
+        cursor.execute(f"SELECT id, nome FROM academias WHERE id IN ({ph}) ORDER BY nome", tuple(vinculadas))
+        academias_disponiveis = cursor.fetchall()
+    else:
+        cursor.execute("SELECT id, nome FROM academias ORDER BY nome")
+        academias_disponiveis = cursor.fetchall()
+
     if request.method == "POST":
 
-        nome = request.form.get("nome").strip()
-        email = request.form.get("email").strip()
-        senha = request.form.get("senha").strip()
+        nome = (request.form.get("nome") or "").strip()
+        email = (request.form.get("email") or "").strip()
+        senha = (request.form.get("senha") or "").strip()
         roles_escolhidas = request.form.getlist("roles")
+        academias_escolhidas = []
+        for x in request.form.getlist("academias"):
+            try:
+                aid = int(x)
+                if academias_disponiveis and any(a["id"] == aid for a in academias_disponiveis):
+                    academias_escolhidas.append(aid)
+            except (ValueError, TypeError):
+                pass
 
         if not nome or not email or not senha or not roles_escolhidas:
             flash("Preencha todos os campos e selecione ao menos uma Role.", "danger")
@@ -135,14 +157,12 @@ def cadastro_usuario():
             return redirect(url_for("usuarios.cadastro_usuario"))
 
         senha_hash = generate_password_hash(senha)
+        id_academia = academias_escolhidas[0] if academias_escolhidas else None
 
         # Inserir usuário
         cursor.execute(
-            """
-            INSERT INTO usuarios (nome, email, senha)
-            VALUES (%s, %s, %s)
-            """,
-            (nome, email, senha_hash),
+            "INSERT INTO usuarios (nome, email, senha, id_academia) VALUES (%s, %s, %s, %s)",
+            (nome, email, senha_hash, id_academia),
         )
         user_id = cursor.lastrowid
 
@@ -153,6 +173,13 @@ def cadastro_usuario():
                 VALUES (%s, %s)
             """, (user_id, role_id))
 
+        # Inserir academias vinculadas
+        for aid in academias_escolhidas:
+            cursor.execute(
+                "INSERT INTO usuarios_academias (usuario_id, academia_id) VALUES (%s, %s)",
+                (user_id, aid),
+            )
+
         db.commit()
         flash("Usuário cadastrado com sucesso!", "success")
         redirect_url = request.form.get("next") or back_url
@@ -161,7 +188,12 @@ def cadastro_usuario():
     cursor.close()
     db.close()
 
-    return render_template("usuarios/criar_usuario.html", roles=roles, back_url=back_url)
+    return render_template(
+        "usuarios/criar_usuario.html",
+        roles=roles,
+        back_url=back_url,
+        academias_disponiveis=academias_disponiveis,
+    )
 
 
 # ======================================================
@@ -169,10 +201,73 @@ def cadastro_usuario():
 # ======================================================
 def _pode_editar_usuario(usuario):
     """Verifica se o usuário logado pode editar o usuário informado."""
-    if current_user.has_role("admin"):
-        return True
-    if current_user.has_role("gestor_academia") and getattr(current_user, "id_academia", None):
-        return usuario.get("id_academia") == current_user.id_academia
+    try:
+        if current_user.has_role("admin"):
+            return True
+        if current_user.has_role("gestor_associacao") and getattr(current_user, "id_associacao", None):
+            db = get_db_connection()
+            cur = db.cursor(dictionary=True)
+            try:
+                cur.execute("SELECT academia_id FROM usuarios_academias WHERE usuario_id = %s", (current_user.id,))
+                minhas_ids = [r["academia_id"] for r in cur.fetchall()]
+            except Exception:
+                minhas_ids = []
+            try:
+                if minhas_ids:
+                    ph = ",".join(["%s"] * len(minhas_ids))
+                    cur.execute(
+                        f"SELECT 1 FROM usuarios_academias WHERE usuario_id = %s AND academia_id IN ({ph})",
+                        (usuario["id"],) + tuple(minhas_ids),
+                    )
+                    ok = cur.fetchone() is not None
+                    if not ok:
+                        ok = usuario.get("id_academia") in minhas_ids
+                else:
+                    cur.execute("""
+                        SELECT 1 FROM usuarios_academias ua
+                        JOIN academias ac ON ac.id = ua.academia_id
+                        WHERE ua.usuario_id = %s AND ac.id_associacao = %s
+                    """, (usuario["id"], current_user.id_associacao))
+                    ok = cur.fetchone() is not None
+                    if not ok:
+                        cur.execute("SELECT 1 FROM academias WHERE id = %s AND id_associacao = %s",
+                                    (usuario.get("id_academia"), current_user.id_associacao))
+                        ok = cur.fetchone() is not None
+            except Exception:
+                ok = False
+            cur.close()
+            db.close()
+            return ok
+        if current_user.has_role("gestor_academia") or current_user.has_role("professor"):
+            db = get_db_connection()
+            cur = db.cursor(dictionary=True)
+            try:
+                cur.execute("SELECT academia_id FROM usuarios_academias WHERE usuario_id = %s", (current_user.id,))
+                minhas_ids = [r["academia_id"] for r in cur.fetchall()]
+            except Exception:
+                minhas_ids = []
+            if not minhas_ids and getattr(current_user, "id_academia", None):
+                minhas_ids = [current_user.id_academia]
+            if not minhas_ids:
+                cur.close()
+                db.close()
+                return False
+            try:
+                ph = ",".join(["%s"] * len(minhas_ids))
+                cur.execute(
+                    f"SELECT 1 FROM usuarios_academias WHERE usuario_id = %s AND academia_id IN ({ph})",
+                    (usuario["id"],) + tuple(minhas_ids),
+                )
+                ok = cur.fetchone() is not None
+                if not ok:
+                    ok = usuario.get("id_academia") in minhas_ids
+            except Exception:
+                ok = False
+            cur.close()
+            db.close()
+            return ok
+    except Exception:
+        pass
     return False
 
 
@@ -199,9 +294,32 @@ def editar_usuario(user_id):
 
     back_url = request.args.get("next") or request.referrer or url_for("usuarios.lista_usuarios")
 
-    # Carregar roles disponíveis
-    cursor.execute("SELECT id, nome FROM roles ORDER BY nome")
+    # Carregar roles disponíveis (com chave para aluno/responsavel)
+    cursor.execute("SELECT id, nome, COALESCE(chave, LOWER(REPLACE(nome,' ','_'))) as chave FROM roles ORDER BY nome")
     roles = cursor.fetchall()
+
+    # Contexto academia: gestor/professor editando usuário da sua academia
+    contexto_academia = (current_user.has_role("gestor_academia") or current_user.has_role("professor")) and _pode_editar_usuario(usuario)
+    academia_id_editar = usuario.get("id_academia")
+    alunos_para_aluno = []
+    alunos_para_responsavel = []
+    aluno_vinculado_id = None
+    responsavel_aluno_ids = []
+    if contexto_academia and academia_id_editar:
+        cursor.execute(
+            """SELECT id, nome, usuario_id FROM alunos WHERE id_academia = %s AND ativo = 1 AND status = 'ativo'
+               ORDER BY nome""",
+            (academia_id_editar,),
+        )
+        todos_alunos = cursor.fetchall()
+        alunos_para_aluno = [a for a in todos_alunos if not a.get("usuario_id") or a.get("usuario_id") == user_id]
+        alunos_para_responsavel = todos_alunos
+        cursor.execute("SELECT id FROM alunos WHERE usuario_id = %s LIMIT 1", (user_id,))
+        row = cursor.fetchone()
+        if row:
+            aluno_vinculado_id = row["id"]
+        cursor.execute("SELECT aluno_id FROM responsavel_alunos WHERE usuario_id = %s", (user_id,))
+        responsavel_aluno_ids = [r["aluno_id"] for r in cursor.fetchall()]
 
     # Carregar roles do usuário
     cursor.execute("""
@@ -210,6 +328,43 @@ def editar_usuario(user_id):
         WHERE usuario_id=%s
     """, (user_id,))
     roles_do_usuario = [r["role_id"] for r in cursor.fetchall()]
+
+    # Academias vinculadas — só admin e gestor_associacao
+    mostrar_academias = current_user.has_role("admin") or current_user.has_role("gestor_associacao")
+    academias_vinculadas = []
+    academias_disponiveis = []
+
+    if mostrar_academias:
+        try:
+            cursor.execute("""
+                SELECT ua.academia_id, ac.nome
+                FROM usuarios_academias ua
+                JOIN academias ac ON ac.id = ua.academia_id
+                WHERE ua.usuario_id = %s
+                ORDER BY ac.nome
+            """, (user_id,))
+            academias_vinculadas = cursor.fetchall()
+        except Exception:
+            academias_vinculadas = []
+
+        ids_permitidos = []
+        try:
+            cursor.execute("SELECT academia_id FROM usuarios_academias WHERE usuario_id = %s", (current_user.id,))
+            vinculadas = [r["academia_id"] for r in cursor.fetchall()]
+        except Exception:
+            vinculadas = []
+        if vinculadas:
+            ids_permitidos = vinculadas
+        elif current_user.has_role("admin"):
+            cursor.execute("SELECT id FROM academias")
+            ids_permitidos = [r["id"] for r in cursor.fetchall()]
+        elif current_user.has_role("gestor_associacao") and getattr(current_user, "id_associacao", None):
+            cursor.execute("SELECT id FROM academias WHERE id_associacao = %s", (current_user.id_associacao,))
+            ids_permitidos = [r["id"] for r in cursor.fetchall()]
+        if ids_permitidos:
+            ph = ",".join(["%s"] * len(ids_permitidos))
+            cursor.execute(f"SELECT id, nome FROM academias WHERE id IN ({ph}) ORDER BY nome", tuple(ids_permitidos))
+            academias_disponiveis = cursor.fetchall()
 
     if request.method == "POST":
 
@@ -230,6 +385,57 @@ def editar_usuario(user_id):
                 VALUES (%s, %s)
             """, (user_id, role_id))
 
+        # Academias vinculadas
+        if mostrar_academias and academias_disponiveis:
+            ids_permitidos = {a["id"] for a in academias_disponiveis}
+            academias_escolhidas = []
+            for x in request.form.getlist("academias"):
+                try:
+                    aid = int(x)
+                    if aid in ids_permitidos:
+                        academias_escolhidas.append(aid)
+                except (ValueError, TypeError):
+                    pass
+
+            cursor.execute("DELETE FROM usuarios_academias WHERE usuario_id = %s", (user_id,))
+            for aid in academias_escolhidas:
+                cursor.execute(
+                    "INSERT INTO usuarios_academias (usuario_id, academia_id) VALUES (%s, %s)",
+                    (user_id, aid),
+                )
+            id_academia = academias_escolhidas[0] if academias_escolhidas else None
+            cursor.execute("UPDATE usuarios SET id_academia = %s WHERE id = %s", (id_academia, user_id))
+
+        # Vínculo aluno/responsavel (contexto academia)
+        if contexto_academia and academia_id_editar:
+            cursor.execute("SELECT id FROM roles WHERE chave = 'aluno'")
+            r_aluno = cursor.fetchone()
+            cursor.execute("SELECT id FROM roles WHERE chave = 'responsavel'")
+            r_resp = cursor.fetchone()
+            roles_str = [str(x) for x in roles_novas]
+            # Remover vínculos antigos
+            cursor.execute("UPDATE alunos SET usuario_id = NULL WHERE usuario_id = %s", (user_id,))
+            cursor.execute("DELETE FROM responsavel_alunos WHERE usuario_id = %s", (user_id,))
+            if r_aluno and str(r_aluno["id"]) in roles_str:
+                aluno_id = request.form.get("aluno_id", type=int)
+                if aluno_id:
+                    cursor.execute(
+                        "UPDATE alunos SET usuario_id = %s WHERE id = %s AND id_academia = %s",
+                        (user_id, aluno_id, academia_id_editar),
+                    )
+            if r_resp and str(r_resp.get("id", "")) in roles_str:
+                for x in request.form.getlist("aluno_ids"):
+                    try:
+                        aid = int(x)
+                        cursor.execute("SELECT 1 FROM alunos WHERE id = %s AND id_academia = %s", (aid, academia_id_editar))
+                        if cursor.fetchone():
+                            cursor.execute(
+                                "INSERT IGNORE INTO responsavel_alunos (usuario_id, aluno_id) VALUES (%s, %s)",
+                                (user_id, aid),
+                            )
+                    except (ValueError, TypeError):
+                        pass
+
         db.commit()
         flash("Usuário atualizado com sucesso!", "success")
         redirect_url = request.form.get("next") or back_url
@@ -238,12 +444,23 @@ def editar_usuario(user_id):
     cursor.close()
     db.close()
 
+    academias_vinculadas_ids = [a.get("academia_id") for a in academias_vinculadas if a.get("academia_id") is not None]
+
     return render_template(
         "usuarios/editar_usuario.html",
         usuario=usuario,
         roles=roles,
         roles_do_usuario=roles_do_usuario,
-        back_url=back_url
+        back_url=back_url,
+        mostrar_academias=mostrar_academias,
+        academias_vinculadas=academias_vinculadas,
+        academias_disponiveis=academias_disponiveis,
+        academias_vinculadas_ids=academias_vinculadas_ids,
+        contexto_academia=contexto_academia,
+        alunos_para_aluno=alunos_para_aluno,
+        alunos_para_responsavel=alunos_para_responsavel,
+        aluno_vinculado_id=aluno_vinculado_id,
+        responsavel_aluno_ids=responsavel_aluno_ids,
     )
 
 

@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}Mensalidades{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/financeiro/responsive.css') }}?v=1">
+{% endblock %}
+{% block content %}
+<div class="container mt-5">
+    <div class="mb-4">
+        {% if academias|length > 1 %}
+        <form method="GET" class="mb-3">
+            <label class="form-label small fw-semibold">Academia:</label>
+            <select name="academia_id" class="form-select form-select-sm d-inline-block w-auto" onchange="this.form.submit()">
+                {% for ac in academias %}
+                <option value="{{ ac.id }}" {% if ac.id == academia_id %}selected{% endif %}>{{ ac.nome }}</option>
+                {% endfor %}
+            </select>
+        </form>
+        {% endif %}
+        <a href="{{ url_for('financeiro.dashboard', academia_id=academia_id) if academia_id else url_for('financeiro.dashboard') }}" class="btn btn-outline-secondary btn-sm mb-2">
+            <i class="bi bi-arrow-left me-1"></i> Voltar
+        </a>
+        <h2 class="h4 fw-bold text-primary mb-1">Mensalidades</h2>
+        <p class="text-muted mb-0">Cadastro de planos, cobranças por aluno e geração de cobranças.</p>
+    </div>
+
+    <div class="row g-4">
+        <!-- Cadastro (Planos) -->
+        <div class="col-xl-4 col-lg-4 col-md-6">
+            <a href="{{ url_for('financeiro.lista_planos_mensalidades', academia_id=academia_id) if academia_id else url_for('financeiro.lista_planos_mensalidades') }}" class="card-action-link text-decoration-none">
+                <div class="card h-100 shadow-sm border-primary">
+                    <div class="card-body text-center p-4">
+                        <i class="bi bi-journal-plus display-5 mb-3 text-primary"></i>
+                        <h5 class="card-title fw-bold">Cadastro</h5>
+                        <p class="card-text small text-muted mb-0">Planos de mensalidade da academia.</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <!-- Mensalidades Alunos -->
+        <div class="col-xl-4 col-lg-4 col-md-6">
+            <a href="{{ url_for('financeiro.mensalidades_alunos', academia_id=academia_id) if academia_id else url_for('financeiro.mensalidades_alunos') }}" class="card-action-link text-decoration-none">
+                <div class="card h-100 shadow-sm border-success">
+                    <div class="card-body text-center p-4">
+                        <i class="bi bi-people-fill display-5 mb-3 text-success"></i>
+                        <h5 class="card-title fw-bold">Mensalidades Alunos</h5>
+                        <p class="card-text small text-muted mb-0">Cobranças e pagamentos por aluno.</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <!-- Gerar Cobrança -->
+        <div class="col-xl-4 col-lg-4 col-md-6">
+            <a href="{{ url_for('financeiro.gerar_cobranca', academia_id=academia_id) if academia_id else url_for('financeiro.gerar_cobranca') }}" class="card-action-link text-decoration-none">
+                <div class="card h-100 shadow-sm border-warning">
+                    <div class="card-body text-center p-4">
+                        <i class="bi bi-cash-coin display-5 mb-3 text-warning"></i>
+                        <h5 class="card-title fw-bold">Gerar Cobrança</h5>
+                        <p class="card-text small text-muted mb-0">Gerar cobranças mensais para os alunos.</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <!-- Aplicar Desconto -->
+        <div class="col-xl-4 col-lg-4 col-md-6">
+            <a href="{{ url_for('financeiro.aplicar_desconto', academia_id=academia_id) if academia_id else url_for('financeiro.aplicar_desconto') }}" class="card-action-link text-decoration-none">
+                <div class="card h-100 shadow-sm border-info">
+                    <div class="card-body text-center p-4">
+                        <i class="bi bi-percent display-5 mb-3 text-info"></i>
+                        <h5 class="card-title fw-bold">Aplicar Desconto</h5>
+                        <p class="card-text small text-muted mb-0">Vincular desconto ao aluno e aplicar no período.</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+    </div>
+</div>
+
+<style>
+.card-action-link .card { transition: transform 0.2s, box-shadow 0.2s; }
+.card-action-link:hover .card { transform: translateY(-4px); box-shadow: 0 0.5rem 1rem rgba(0,0,0,0.1) !important; }
+</style>
+{% endblock %}

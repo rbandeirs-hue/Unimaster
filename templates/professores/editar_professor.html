@@ -23,7 +23,17 @@
                 </div>
                 <div class="mb-3">
                     <label for="telefone" class="form-label fw-semibold">Telefone</label>
-                    <input type="text" id="telefone" name="telefone" class="form-control" value="{{ professor.telefone or '' }}">
+                    <input type="text" id="telefone" name="telefone" class="form-control" value="{{ professor.telefone or '' }}" maxlength="15">
+                </div>
+                <div class="mb-3">
+                    <label for="usuario_id" class="form-label fw-semibold">Vincular ao usuário</label>
+                    <select id="usuario_id" name="usuario_id" class="form-select">
+                        <option value="">— Não vincular —</option>
+                        {% for u in usuarios %}
+                        <option value="{{ u.id }}" {% if professor.usuario_id == u.id %}selected{% endif %}>{{ u.nome }} ({{ u.email or '-' }})</option>
+                        {% endfor %}
+                    </select>
+                    <small class="text-muted">Associe este professor a um usuário do sistema para acesso ao painel.</small>
                 </div>
                 <div class="mb-3">
                     <div class="form-check form-switch">
@@ -39,4 +49,12 @@
         </div>
     </div>
 </div>
+<script>
+document.getElementById('telefone').addEventListener('input', function(e) {
+    var v = e.target.value.replace(/\D/g, '');
+    if (v.length <= 2) e.target.value = v ? '(' + v : '';
+    else if (v.length <= 7) e.target.value = '(' + v.slice(0,2) + ') ' + v.slice(2);
+    else e.target.value = '(' + v.slice(0,2) + ') ' + v.slice(2,7) + '-' + v.slice(7,11);
+});
+</script>
 {% endblock %}

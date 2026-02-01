@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Presença{% endblock %}
+{% block content %}
+
+<div class="container mt-5">
+    <div class="mb-4">
+        {% if academias|length > 1 %}
+        <form method="GET" class="mb-3">
+            <label class="form-label small fw-semibold">Academia:</label>
+            <select name="academia_id" class="form-select form-select-sm d-inline-block w-auto" onchange="this.form.submit()">
+                {% for ac in academias %}
+                <option value="{{ ac.id }}" {% if ac.id == academia_id %}selected{% endif %}>{{ ac.nome }}</option>
+                {% endfor %}
+            </select>
+        </form>
+        {% endif %}
+        <a href="{{ back_url }}" class="btn btn-outline-secondary btn-sm mb-2">
+            <i class="bi bi-arrow-left me-1"></i> Voltar
+        </a>
+        <h2 class="h4 fw-bold text-primary mb-1">Presença</h2>
+        <p class="text-muted mb-0">Registro e relatórios de frequência.</p>
+    </div>
+
+    <div class="row g-4">
+        <!-- Registrar Presença -->
+        <div class="col-xl-4 col-lg-4 col-md-6">
+            <a href="{{ url_for('presencas.registro_presenca', academia_id=academia_id) if academia_id else url_for('presencas.registro_presenca') }}" class="card-action-link text-decoration-none">
+                <div class="card h-100 shadow-sm border-secondary">
+                    <div class="card-body text-center p-4">
+                        <i class="bi bi-clipboard-check-fill display-5 mb-3 text-secondary"></i>
+                        <h5 class="card-title fw-bold">Registrar Presença</h5>
+                        <p class="card-text small text-muted mb-0">Registro de presença nas turmas.</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <!-- Relatório de Frequência -->
+        <div class="col-xl-4 col-lg-4 col-md-6">
+            <a href="{{ url_for('presencas.ata_presenca', academia_id=academia_id) if academia_id else url_for('presencas.ata_presenca') }}" class="card-action-link text-decoration-none">
+                <div class="card h-100 shadow-sm border-info">
+                    <div class="card-body text-center p-4">
+                        <i class="bi bi-file-text display-5 mb-3 text-info"></i>
+                        <h5 class="card-title fw-bold">Relatório de Frequência</h5>
+                        <p class="card-text small text-muted mb-0">Ata e relatório de presenças.</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <!-- Histórico de Frequência -->
+        <div class="col-xl-4 col-lg-4 col-md-6">
+            <a href="{{ url_for('presencas.historico_presenca_lista', academia_id=academia_id) if academia_id else url_for('presencas.historico_presenca_lista') }}" class="card-action-link text-decoration-none">
+                <div class="card h-100 shadow-sm border-primary">
+                    <div class="card-body text-center p-4">
+                        <i class="bi bi-clock-history display-5 mb-3 text-primary"></i>
+                        <h5 class="card-title fw-bold">Histórico de Frequência</h5>
+                        <p class="card-text small text-muted mb-0">Histórico de presença por aluno.</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+    </div>
+</div>
+
+<style>
+.card-action-link .card { transition: transform 0.2s, box-shadow 0.2s; }
+.card-action-link:hover .card { transform: translateY(-4px); box-shadow: 0 0.5rem 1rem rgba(0,0,0,0.1) !important; }
+</style>
+
+{% endblock %}

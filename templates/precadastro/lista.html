@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% block title %}Pré-cadastro — {{ academia_nome }}{% endblock %}
+{% block content %}
+<div class="container my-4 my-md-5">
+  <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4 gap-3">
+    <div>
+      <a href="{{ url_for('academia.painel_academia') }}" class="btn btn-outline-secondary btn-sm mb-2">
+        <i class="bi bi-arrow-left me-1"></i> Voltar
+      </a>
+      <h2 class="h4 fw-bold text-primary mb-0">
+        <i class="bi bi-person-plus-fill me-2"></i> Pré-cadastro — {{ academia_nome or 'Academia' }}
+      </h2>
+    </div>
+  </div>
+
+  {% if academias|length > 1 %}
+  <div class="mb-3">
+    <form method="GET" class="d-flex align-items-center gap-2 flex-wrap">
+      <label class="form-label mb-0 small">Academia:</label>
+      <select name="academia_id" class="form-select form-select-sm" style="max-width: 260px;" onchange="this.form.submit()">
+        {% for ac in academias %}
+        <option value="{{ ac.id }}" {% if ac.id == academia_id %}selected{% endif %}>{{ ac.nome }}</option>
+        {% endfor %}
+      </select>
+      <input type="hidden" name="busca" value="{{ busca or '' }}">
+    </form>
+  </div>
+  {% endif %}
+
+  <div class="card bg-light border-0 mb-4">
+    <div class="card-body py-3">
+      <label class="form-label small fw-semibold mb-2"><i class="bi bi-link-45deg me-1"></i> Link para pré-cadastro (compartilhe com interessados)</label>
+      <div class="input-group input-group-sm">
+        <input type="text" class="form-control font-monospace" id="linkPrecad" value="{{ link_publico }}" readonly>
+        <button type="button" class="btn btn-outline-primary" id="btnCopiarLink" title="Copiar link">
+          <i class="bi bi-clipboard"></i> Copiar
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <form method="GET" action="{{ url_for('precadastro.lista') }}" class="d-flex gap-2 mb-4">
+    {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
+    <input type="text" class="form-control form-control-sm" name="busca" placeholder="Buscar por nome, e-mail, telefone ou CPF..." value="{{ busca or '' }}" style="max-width: 320px;">
+    <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-search me-1"></i> Buscar</button>
+  </form>
+
+  <div class="table-responsive">
+    <table class="table table-hover align-middle">
+      <thead class="table-light">
+        <tr>
+          <th style="width: 50px;"></th>
+          <th>Nome</th>
+          <th class="d-none d-md-table-cell">E-mail</th>
+          <th class="d-none d-lg-table-cell">Telefone</th>
+          <th class="d-none d-lg-table-cell">Data nasc.</th>
+          <th class="text-end">Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if precadastros %}
+        {% for p in precadastros %}
+        <tr>
+          <td>
+            {% if p.foto %}
+            <img src="{{ url_for('static', filename='uploads/precadastro/' ~ p.foto) }}" alt="" class="rounded-circle" style="width: 36px; height: 36px; object-fit: cover;">
+            {% else %}
+            <div class="rounded-circle bg-secondary d-flex align-items-center justify-content-center text-white" style="width: 36px; height: 36px; font-size: 0.9rem;">
+              <i class="bi bi-person-fill"></i>
+            </div>
+            {% endif %}
+          </td>
+          <td><strong>{{ p.nome }}</strong></td>
+          <td class="d-none d-md-table-cell">{{ p.email or '—' }}</td>
+          <td class="d-none d-lg-table-cell">{{ p.telefone or '—' }}</td>
+          <td class="d-none d-lg-table-cell">{{ p.data_nascimento|data_br if p.data_nascimento else '—' }}</td>
+          <td class="text-end">
+            <a href="{{ url_for('precadastro.editar', precadastro_id=p.id) }}" class="btn btn-outline-primary btn-sm" title="Editar">
+              <i class="bi bi-pencil-fill"></i>
+            </a>
+            <form method="POST" action="{{ url_for('precadastro.promover', precadastro_id=p.id) }}" class="d-inline" onsubmit="return confirm('Promover {{ p.nome }} a aluno?');">
+              <button type="submit" class="btn btn-outline-success btn-sm" title="Promover a aluno">
+                <i class="bi bi-person-check-fill"></i> Promover
+              </button>
+            </form>
+            <form method="POST" action="{{ url_for('precadastro.excluir', precadastro_id=p.id) }}" class="d-inline" onsubmit="return confirm('Excluir o pré-cadastro de {{ p.nome }}? Esta ação não pode ser desfeita.');">
+              <button type="submit" class="btn btn-outline-danger btn-sm" title="Excluir">
+                <i class="bi bi-trash-fill"></i>
+              </button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+        {% else %}
+        <tr>
+          <td colspan="6" class="text-center py-5 text-muted">
+            Nenhum pré-cadastro nesta academia.
+          </td>
+        </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if total_paginas > 1 %}
+  <nav class="mt-4">
+    <ul class="pagination justify-content-center pagination-sm">
+      <li class="page-item {% if pagina_atual == 1 %}disabled{% endif %}">
+        <a class="page-link" href="{{ url_for('precadastro.lista', busca=busca, academia_id=academia_id, page=pagina_atual-1) }}">Anterior</a>
+      </li>
+      {% for p in range(1, total_paginas + 1) %}
+      <li class="page-item {% if p == pagina_atual %}active{% endif %}">
+        <a class="page-link" href="{{ url_for('precadastro.lista', busca=busca, academia_id=academia_id, page=p) }}">{{ p }}</a>
+      </li>
+      {% endfor %}
+      <li class="page-item {% if pagina_atual == total_paginas %}disabled{% endif %}">
+        <a class="page-link" href="{{ url_for('precadastro.lista', busca=busca, academia_id=academia_id, page=pagina_atual+1) }}">Próximo</a>
+      </li>
+    </ul>
+  </nav>
+  {% endif %}
+</div>
+<script>
+document.getElementById('btnCopiarLink')?.addEventListener('click', function() {
+  const inp = document.getElementById('linkPrecad');
+  const url = inp.value;
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(url).then(() => { this.querySelector('i').className = 'bi bi-check'; setTimeout(() => { this.querySelector('i').className = 'bi bi-clipboard'; }, 2000); });
+  } else {
+    inp.select();
+    document.execCommand('copy');
+    this.querySelector('i').className = 'bi bi-check';
+    setTimeout(() => { this.querySelector('i').className = 'bi bi-clipboard'; }, 2000);
+  }
+});
+</script>
+{% endblock %}

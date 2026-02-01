@@ -6,6 +6,11 @@
 
 {% block content %}
 <div class="container mt-4">
+    <div class="mb-3">
+        <a href="{{ url_for('financeiro.lista_planos_mensalidades', academia_id=academia_id) if academia_id else url_for('financeiro.lista_planos_mensalidades') }}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrow-left me-1"></i> Voltar
+        </a>
+    </div>
     <div class="card shadow-lg border-0 mx-auto financeiro-form" style="max-width: 600px;">
         <div class="card-header bg-warning text-dark">
             <h5 class="mb-0"><i class="bi bi-pencil-square me-2"></i> Editar Mensalidade</h5>
@@ -26,17 +31,24 @@
                 </div>
                 {% if academias|length > 1 %}
                 <div class="mb-3">
-                    <label for="id_academia" class="form-label fw-semibold">Academia</label>
-                    <select class="form-select" id="id_academia" name="id_academia">
-                        <option value="">Todas as academias</option>
+                    <label for="id_academia" class="form-label fw-semibold">Academia <span class="text-danger">*</span></label>
+                    <select class="form-select" id="id_academia" name="id_academia" required>
                         {% for ac in academias %}
                         <option value="{{ ac.id }}" {% if mensalidade.id_academia == ac.id %}selected{% endif %}>{{ ac.nome }}</option>
                         {% endfor %}
                     </select>
                 </div>
                 {% else %}
-                <input type="hidden" name="id_academia" value="{{ academias[0].id if academias else '' }}">
+                <input type="hidden" name="id_academia" value="{{ academias[0].id if academias else academia_id }}">
                 {% endif %}
+                <div class="mb-3">
+                    <input type="hidden" name="aplicar_juros_multas" value="0">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" name="aplicar_juros_multas" id="aplicar_juros_multas" value="1" {% if mensalidade.get('aplicar_juros_multas', 0) %}checked{% endif %}>
+                        <label class="form-check-label" for="aplicar_juros_multas">Ativar juros e multas por atraso</label>
+                    </div>
+                    <small class="text-muted">Multa: 2% ao mês. Juros: 0,033% ao dia (~1% ao mês). O valor será ajustado automaticamente na visão do aluno quando houver atraso.</small>
+                </div>
                 <div class="mb-3">
                     <div class="form-check">
                         <input class="form-check-input" type="checkbox" id="ativo" name="ativo" value="1" {% if mensalidade.ativo %}checked{% endif %}>
@@ -44,7 +56,7 @@
                     </div>
                 </div>
                 <div class="d-flex gap-2 mt-4">
-                    <a href="{{ url_for('financeiro.lista_mensalidades') }}" class="btn btn-outline-secondary">Cancelar</a>
+                    <a href="{{ url_for('financeiro.lista_planos_mensalidades', academia_id=academia_id) if academia_id else url_for('financeiro.lista_planos_mensalidades') }}" class="btn btn-outline-secondary">Cancelar</a>
                     <button type="submit" class="btn btn-warning">Salvar</button>
                 </div>
             </form>

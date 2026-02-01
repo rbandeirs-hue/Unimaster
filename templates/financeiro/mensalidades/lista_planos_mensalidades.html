@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Cadastro — Planos de Mensalidade{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/financeiro/responsive.css') }}?v=1">
+{% endblock %}
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+        <a href="{{ url_for('financeiro.painel_mensalidades', academia_id=academia_id) if academia_id else url_for('financeiro.painel_mensalidades') }}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left me-1"></i> Voltar
+        </a>
+        <a href="{{ url_for('financeiro.cadastrar_mensalidade') }}{% if academia_id %}?academia_id={{ academia_id }}{% endif %}" class="btn btn-primary">
+            <i class="bi bi-plus-lg me-1"></i> Nova Mensalidade
+        </a>
+    </div>
+    <h2 class="h4 fw-bold mb-3">Cadastro — Planos de Mensalidade</h2>
+
+    <div class="card border-0 shadow-sm">
+        <div class="card-body">
+            {% if mensalidades %}
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Nome</th>
+                            <th>Valor</th>
+                            <th>Juros/Multa</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for m in mensalidades %}
+                        <tr>
+                            <td>{{ m.nome }}</td>
+                            <td>R$ {{ "%.2f" % (m.valor or 0) }}</td>
+                            <td>{% if m.get('aplicar_juros_multas') %}<span class="badge bg-success">Sim</span>{% else %}<span class="badge bg-secondary">Não</span>{% endif %}</td>
+                            <td>
+                                <a href="{{ url_for('financeiro.editar_mensalidade', mensalidade_id=m.id) }}{% if academia_id %}?academia_id={{ academia_id }}{% endif %}" class="btn btn-sm btn-outline-primary">Editar</a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-muted mb-0">Nenhum plano de mensalidade cadastrado.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

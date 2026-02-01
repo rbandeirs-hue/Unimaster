@@ -5,7 +5,7 @@
 from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify, session
 from flask_login import login_required, current_user
 from config import get_db_connection
-from datetime import datetime
+from datetime import datetime, date
 
 
 bp_painel_aluno = Blueprint(
@@ -179,32 +179,211 @@ def _stats_painel_aluno(aluno):
     return stats
 
 
+def _calcular_valor_com_juros_multas(ma, hoje=None):
+    """Calcula valor ajustado com multa (2%/mês) e juros (0,033%/dia) quando atrasado."""
+    hoje = hoje or date.today()
+    if ma.get("status") == "pago" or not ma.get("aplicar_juros_multas"):
+        return float(ma.get("valor") or 0), None
+    try:
+        venc = ma.get("data_vencimento")
+        if isinstance(venc, str):
+            venc = datetime.strptime(venc[:10], "%Y-%m-%d").date()
+        if venc >= hoje:
+            return float(ma.get("valor") or 0), None
+    except Exception:
+        return float(ma.get("valor") or 0), None
+    valor = float(ma.get("valor") or 0)
+    dias = (hoje - venc).days
+    if dias <= 0:
+        return valor, None
+    pct_multa = float(ma.get("percentual_multa_mes") or 2) / 100
+    pct_juros_dia = float(ma.get("percentual_juros_dia") or 0.0333) / 100
+    meses = dias / 30.0
+    multa = valor * pct_multa * meses
+    juros = valor * pct_juros_dia * dias
+    return round(valor + multa + juros, 2), round(valor, 2)
+
+
+def _status_efetivo_painel(status, data_venc, status_pagamento=None):
+    """Pendente_aprovacao -> aguardando_confirmacao. Pendente vencido -> atrasado."""
+    if status_pagamento == "pendente_aprovacao":
+        return "aguardando_confirmacao"
+    if status and status not in ("pendente",):
+        return status
+    try:
+        venc = data_venc if isinstance(data_venc, date) else (date.fromisoformat(str(data_venc)[:10]) if data_venc else None)
+        if venc and venc < date.today():
+            return "atrasado"
+    except Exception:
+        pass
+    return status or "pendente"
+
+
 @bp_painel_aluno.route("/mensalidades")
 @login_required
 @_aluno_required
 def minhas_mensalidades(aluno):
+    from blueprints.financeiro.routes import _valor_com_desconto
+
+    mes_arg = request.args.get("mes", type=int)
+    mes = mes_arg if (mes_arg and 1 <= mes_arg <= 12) else None
+    ano_arg = request.args.get("ano", type=int)
+    ano = ano_arg if (ano_arg and 2000 <= ano_arg <= 2100) else date.today().year
+
     conn = get_db_connection()
-    cur = conn.cursor(dictionary=True)
+    cur = conn.cursor()
     try:
-        cur.execute("""
+        cur.execute(
+            "UPDATE mensalidade_aluno SET status = 'atrasado' WHERE aluno_id = %s AND status = 'pendente' AND data_vencimento < CURDATE()",
+            (aluno["id"],),
+        )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+    cur.close()
+    cur = conn.cursor(dictionary=True)
+    hoje = date.today()
+    id_academia = aluno.get("id_academia")
+
+    if mes:
+        where_clause = "ma.aluno_id = %s AND MONTH(ma.data_vencimento) = %s AND YEAR(ma.data_vencimento) = %s AND ma.status != 'cancelado'"
+        params = (aluno["id"], mes, ano)
+    else:
+        where_clause = "ma.aluno_id = %s AND YEAR(ma.data_vencimento) = %s AND ma.status != 'cancelado'"
+        params = (aluno["id"], ano)
+    try:
+        cur.execute(f"""
             SELECT ma.id, ma.data_vencimento, ma.data_pagamento, ma.valor, ma.valor_pago, ma.status,
-                   m.nome as plano_nome
+                   ma.status_pagamento, ma.comprovante_url, ma.observacoes,
+                   ma.valor_original, ma.desconto_aplicado, ma.id_desconto,
+                   m.nome as plano_nome, m.id_academia,
+                   COALESCE(m.aplicar_juros_multas, 0) AS aplicar_juros_multas,
+                   COALESCE(m.percentual_multa_mes, 2) AS percentual_multa_mes,
+                   COALESCE(m.percentual_juros_dia, 0.0333) AS percentual_juros_dia
             FROM mensalidade_aluno ma
             JOIN mensalidades m ON m.id = ma.mensalidade_id
-            WHERE ma.aluno_id = %s
+            WHERE {where_clause}
             ORDER BY ma.data_vencimento DESC
-            LIMIT 24
-        """, (aluno["id"],))
-        mensalidades = cur.fetchall()
+            LIMIT 200
+        """, params)
+        rows = cur.fetchall()
     except Exception:
-        mensalidades = []
+        try:
+            if mes:
+                cur.execute("""
+                    SELECT ma.id, ma.data_vencimento, ma.data_pagamento, ma.valor, ma.valor_pago, ma.status,
+                           ma.observacoes, ma.status_pagamento, ma.comprovante_url,
+                           m.nome as plano_nome, m.id_academia
+                    FROM mensalidade_aluno ma
+                    JOIN mensalidades m ON m.id = ma.mensalidade_id
+                    WHERE ma.aluno_id = %s AND MONTH(ma.data_vencimento) = %s AND YEAR(ma.data_vencimento) = %s
+                    ORDER BY ma.data_vencimento DESC
+                    LIMIT 200
+                """, (aluno["id"], mes, ano))
+            else:
+                cur.execute("""
+                    SELECT ma.id, ma.data_vencimento, ma.data_pagamento, ma.valor, ma.valor_pago, ma.status,
+                           ma.observacoes, ma.status_pagamento, ma.comprovante_url,
+                           m.nome as plano_nome, m.id_academia
+                    FROM mensalidade_aluno ma
+                    JOIN mensalidades m ON m.id = ma.mensalidade_id
+                    WHERE ma.aluno_id = %s AND YEAR(ma.data_vencimento) = %s
+                    ORDER BY ma.data_vencimento DESC
+                    LIMIT 200
+                """, (aluno["id"], ano))
+            rows = cur.fetchall()
+            for r in rows:
+                r.setdefault("aplicar_juros_multas", 0)
+                r.setdefault("percentual_multa_mes", 2)
+                r.setdefault("percentual_juros_dia", 0.0333)
+                r.setdefault("status_pagamento", None)
+                r.setdefault("comprovante_url", None)
+                r.setdefault("valor_original", None)
+                r.setdefault("desconto_aplicado", 0)
+                r.setdefault("id_desconto", None)
+        except Exception:
+            rows = []
+
+    all_for_contagens = []
+    try:
+        if mes:
+            cur.execute("""
+                SELECT ma.id, ma.status, ma.status_pagamento, ma.data_vencimento
+                FROM mensalidade_aluno ma
+                WHERE ma.aluno_id = %s AND MONTH(ma.data_vencimento) = %s AND YEAR(ma.data_vencimento) = %s AND ma.status != 'cancelado'
+            """, (aluno["id"], mes, ano))
+        else:
+            cur.execute("""
+                SELECT ma.id, ma.status, ma.status_pagamento, ma.data_vencimento
+                FROM mensalidade_aluno ma
+                WHERE ma.aluno_id = %s AND YEAR(ma.data_vencimento) = %s AND ma.status != 'cancelado'
+            """, (aluno["id"], ano))
+        all_for_contagens = cur.fetchall()
+    except Exception:
+        pass
+
+    contagens = {"pago": 0, "pendente": 0, "atrasado": 0, "aguardando_confirmacao": 0}
+    for r in all_for_contagens:
+        se = _status_efetivo_painel(r.get("status"), r.get("data_vencimento"), r.get("status_pagamento"))
+        contagens[se] = contagens.get(se, 0) + 1
+
+    mensalidades = []
+    for ma in rows:
+        valor_display, valor_original = _calcular_valor_com_juros_multas(ma, hoje)
+        ma["valor_display"] = valor_display
+        ma["valor_original"] = valor_original
+        ma["status_efetivo"] = _status_efetivo_painel(ma.get("status"), ma.get("data_vencimento"), ma.get("status_pagamento"))
+        ma["comentario_informado"] = ma.get("comentario_informado") or ma.get("observacoes")
+        id_acad = ma.get("id_academia") or id_academia
+        if id_acad:
+            vi, vd, vf, desconto_nome = _valor_com_desconto(ma, aluno["id"], id_acad, hoje)
+            ma["valor_integral"] = vi
+            ma["valor_desconto"] = vd
+            ma["valor_final"] = vf
+            ma["desconto_nome"] = desconto_nome
+            ma["tem_desconto"] = vd > 0
+        else:
+            ma["valor_integral"] = valor_display
+            ma["valor_desconto"] = 0
+            ma["valor_final"] = valor_display
+            ma["tem_desconto"] = False
+        mensalidades.append(ma)
+
+    avulsas = []
+    try:
+        if mes:
+            cur.execute("""
+                SELECT id, descricao, valor, data_vencimento, data_pagamento, status
+                FROM cobranca_avulsa
+                WHERE aluno_id = %s AND status != 'cancelado'
+                AND MONTH(data_vencimento) = %s AND YEAR(data_vencimento) = %s
+                ORDER BY data_vencimento DESC
+            """, (aluno["id"], mes, ano))
+        else:
+            cur.execute("""
+                SELECT id, descricao, valor, data_vencimento, data_pagamento, status
+                FROM cobranca_avulsa
+                WHERE aluno_id = %s AND status != 'cancelado'
+                AND YEAR(data_vencimento) = %s
+                ORDER BY data_vencimento DESC
+            """, (aluno["id"], ano))
+        avulsas = cur.fetchall()
+    except Exception:
+        pass
+
     cur.close()
     conn.close()
+
     return render_template(
         "painel_aluno/minhas_mensalidades.html",
         usuario=current_user,
         aluno=aluno,
-        mensalidades=mensalidades
+        mensalidades=mensalidades,
+        avulsas=avulsas,
+        contagens=contagens,
+        mes=mes,
+        ano=ano,
+        ano_atual=date.today().year,
     )
 
 

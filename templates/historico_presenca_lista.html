@@ -2,79 +2,69 @@
 {% block title %}Histórico de Presença{% endblock %}
 {% block content %}
 <style>
-    .accordion-item {
+    .historico-card-mini {
         border: 1px solid #dee2e6;
         border-radius: 0.5rem;
-        margin-bottom: 1rem;
+        transition: box-shadow 0.2s, border-color 0.2s;
     }
-    .accordion-button {
-        padding: 1rem 1.25rem;
-        font-weight: bold;
+    .historico-card-mini:hover { border-color: var(--bs-primary); box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+    .historico-card-mini .btn-toggle {
+        padding: 0.5rem 0.75rem;
+        font-size: 0.9rem;
+        text-align: left;
+        background: #f8f9fa;
+        border: none;
+        border-radius: 0.5rem;
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
     }
-    .accordion-button:not(.collapsed) {
-        background-color: var(--bs-primary);
-        color: white;
-        box-shadow: none;
-    }
-    .filtro-container {
-        border-bottom: 1px solid #eee;
-        padding-bottom: 10px;
-    }
-    @media (max-width: 576px) {
-        .accordion-body .filtro-mes, .accordion-body .filtro-ano {
-            width: 100% !important;
-        }
-        .d-flex.gap-2.flex-wrap {
-            flex-direction: column;
-        }
+    .historico-card-mini .btn-toggle:hover { background: #e9ecef; }
+    .historico-card-mini .btn-toggle.collapsed .bi-chevron-down { transform: rotate(-90deg); }
+    .historico-card-mini .btn-toggle .bi-chevron-down { transition: transform 0.2s; }
+    .historico-card-mini .collapse-body { padding: 0.75rem; background: #fff; border-top: 1px solid #eee; font-size: 0.85rem; }
+    @media (max-width: 767px) {
+        .historico-card-mini .btn-toggle { padding: 0.4rem 0.6rem; font-size: 0.85rem; }
+        .historico-card-mini .collapse-body { padding: 0.5rem; }
     }
 </style>
 
 <div class="container mt-4">
     <h2 class="mb-4 text-center text-primary fw-bold">🧾 Histórico de Presença</h2>
-    <a href="{{ url_for('painel.home') }}" class="btn btn-secondary mb-3 shadow-sm">
+    <a href="{{ back_url or url_for('presencas.painel_presenca') }}" class="btn btn-secondary mb-3 shadow-sm">
         <i class="bi bi-arrow-left"></i> Voltar
     </a>
 
-    <div class="accordion" id="accordionHistorico">
-        {% set meses = ["Todos os meses","Janeiro","Fevereiro","Março","Abril","Maio","Junho",
-                        "Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"] %}
-        
+    {% set meses = ["Todos os meses","Janeiro","Fevereiro","Março","Abril","Maio","Junho",
+                    "Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"] %}
+    <div class="d-flex flex-wrap gap-2 align-items-center mb-3 p-3 bg-light rounded">
+        <label class="form-label mb-0 small fw-semibold">Filtrar:</label>
+        <select id="filtro-mes" class="form-select form-select-sm" style="max-width:140px;">
+            {% for i in range(0,13) %}
+            <option value="{{ i }}" {% if i == hoje.month %}selected{% endif %}>{{ meses[i] }}</option>
+            {% endfor %}
+        </select>
+        <input type="number" id="filtro-ano" class="form-control form-control-sm" style="max-width:90px;" min="2000" max="2100" value="{{ hoje.year }}">
+    </div>
+
+    <div class="row g-2" id="accordionHistorico">
         {% for aluno in alunos %}
             {% set collapse_id = "collapse_" ~ aluno.id %}
-            {% set heading_id = "heading_" ~ aluno.id %}
             
-            <div class="accordion-item mb-3 shadow-sm">
-                <h2 class="accordion-header" id="{{ heading_id }}">
-                    <button class="accordion-button collapsed" type="button"
-                            data-bs-toggle="collapse"
-                            data-bs-target="#{{ collapse_id }}"
-                            aria-expanded="false"
-                            aria-controls="{{ collapse_id }}">
-                        <i class="bi bi-person-circle me-2"></i> {{ aluno.nome }}
+            <div class="col-12 col-md-4 col-lg-3">
+                <div class="historico-card-mini">
+                    <button class="btn-toggle collapsed" type="button" data-bs-toggle="collapse"
+                            data-bs-target="#{{ collapse_id }}" aria-expanded="false" aria-controls="{{ collapse_id }}">
+                        <span class="text-truncate"><i class="bi bi-person-circle me-1 small"></i>{{ aluno.nome }}</span>
+                        <i class="bi bi-chevron-down small"></i>
                     </button>
-                </h2>
-                <div id="{{ collapse_id }}" class="accordion-collapse collapse"
-                     aria-labelledby="{{ heading_id }}" data-bs-parent="#accordionHistorico">
-                    <div class="accordion-body">
-                        <!-- filtros internos -->
-                        <div class="filtro-container mb-3 d-flex gap-3 flex-wrap align-items-center">
-                            <label class="form-label mb-0 small text-muted">Filtrar por:</label>
-                            <select class="form-select form-select-sm filtro-mes" style="max-width:160px;">
-                                {% for i in range(0,13) %}
-                                    <option value="{{ i }}" {% if i == hoje.month and loop.first is not sameas true %}selected{% endif %}>
-                                        {{ meses[i] }}
-                                    </option>
-                                {% endfor %}
-                            </select>
-                            <input type="number" class="form-control form-control-sm filtro-ano"
-                                    style="max-width:110px;" min="2000" max="2100" value="{{ hoje.year }}">
-                        </div>
-
-                        <div class="historico-conteudo mt-2" id="historico-{{ aluno.id }}">
-                            <div class="text-center text-muted small p-3">
-                                <i class="bi bi-arrow-down-circle me-1"></i>
-                                Selecione os filtros e abra o painel para carregar o histórico.
+                    <div id="{{ collapse_id }}" class="collapse">
+                        <div class="collapse-body">
+                            <div class="historico-conteudo" id="historico-{{ aluno.id }}">
+                                <div class="text-center text-muted small py-2">
+                                    <i class="bi bi-arrow-down-circle me-1"></i> Abra para carregar.
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -104,8 +94,9 @@ document.addEventListener("DOMContentLoaded", function() {
         // 1. Substitui o placeholder 'ALUNO_ID' pelo ID real do aluno
         const urlWithId = baseAjaxUrl.replace('ALUNO_ID', alunoId);
         
-        // 2. Adiciona os parâmetros de consulta (mes e ano)
-        const finalUrl = `${urlWithId}?mes=${encodeURIComponent(mes)}&ano=${encodeURIComponent(ano)}`;
+        // 2. Adiciona os parâmetros de consulta (mes, ano e academia_id)
+        let finalUrl = `${urlWithId}?mes=${encodeURIComponent(mes)}&ano=${encodeURIComponent(ano)}`;
+        {% if academia_id %}finalUrl += '&academia_id={{ academia_id }}';{% endif %}
         
         // 3. Realiza o fetch
         fetch(finalUrl)
@@ -122,35 +113,35 @@ document.addEventListener("DOMContentLoaded", function() {
             });
     }
 
-    // Dispara o AJAX quando o painel do aluno é aberto
-    document.querySelectorAll('.accordion-collapse').forEach(collapse => {
+    function getFiltros() {
+        return {
+            mes: document.getElementById('filtro-mes').value,
+            ano: document.getElementById('filtro-ano').value
+        };
+    }
+
+    function recarregarCardsAbertos() {
+        document.querySelectorAll('.collapse.show').forEach(collapse => {
+            if (!collapse.id || !collapse.id.startsWith('collapse_')) return;
+            const alunoId = collapse.id.replace('collapse_', '');
+            const { mes, ano } = getFiltros();
+            const target = collapse.querySelector('.historico-conteudo');
+            if (target) carregarHistorico(alunoId, mes, ano, target);
+        });
+    }
+
+    document.querySelectorAll('.collapse').forEach(collapse => {
+        if (!collapse.id || !collapse.id.startsWith('collapse_')) return;
         collapse.addEventListener('show.bs.collapse', function() {
-            const card = this;
-            const alunoId = card.id.replace('collapse_', '');
-            
-            const mes = card.querySelector('.filtro-mes').value;
-            const ano = card.querySelector('.filtro-ano').value;
-            const target = card.querySelector('.historico-conteudo');
-            
+            const alunoId = this.id.replace('collapse_', '');
+            const { mes, ano } = getFiltros();
+            const target = this.querySelector('.historico-conteudo');
             carregarHistorico(alunoId, mes, ano, target);
         });
     });
 
-    // Atualiza o conteúdo se filtros internos mudarem e o card estiver ABERTO
-    document.querySelectorAll('.filtro-mes, .filtro-ano').forEach(el => {
-        el.addEventListener('change', function() {
-            const cardBody = this.closest('.accordion-body');
-            const collapse = this.closest('.accordion-collapse');
-            
-            if (collapse.classList.contains('show')) {
-                const alunoId = collapse.id.replace('collapse_', '');
-                const mes = cardBody.querySelector('.filtro-mes').value;
-                const ano = cardBody.querySelector('.filtro-ano').value;
-                const target = cardBody.querySelector('.historico-conteudo');
-                carregarHistorico(alunoId, mes, ano, target);
-            }
-        });
-    });
+    document.getElementById('filtro-mes').addEventListener('change', recarregarCardsAbertos);
+    document.getElementById('filtro-ano').addEventListener('change', recarregarCardsAbertos);
 
 });
 </script>

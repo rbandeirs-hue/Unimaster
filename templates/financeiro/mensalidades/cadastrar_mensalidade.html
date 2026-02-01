@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Cadastrar Plano de Mensalidade{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/financeiro/responsive.css') }}?v=1">
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="mb-3">
+        <a href="{{ url_for('financeiro.lista_planos_mensalidades') }}{% if academia_id %}?academia_id={{ academia_id }}{% endif %}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrow-left me-1"></i> Voltar
+        </a>
+    </div>
+    <div class="card shadow-lg border-0 mx-auto financeiro-form" style="max-width: 600px;">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0"><i class="bi bi-journal-plus me-2"></i> Novo Plano de Mensalidade</h5>
+        </div>
+        <div class="card-body p-4">
+            <form method="POST">
+                <div class="mb-3">
+                    <label for="nome" class="form-label fw-semibold">Nome <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="nome" name="nome" required placeholder="Ex: Mensalidade Judô">
+                </div>
+                <div class="mb-3">
+                    <label for="descricao" class="form-label fw-semibold">Descrição</label>
+                    <textarea class="form-control" id="descricao" name="descricao" rows="2" placeholder="Descrição opcional"></textarea>
+                </div>
+                <div class="mb-3">
+                    <label for="valor" class="form-label fw-semibold">Valor (R$) <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="valor" name="valor" required placeholder="0,00" pattern="[0-9]+([,\.][0-9]{2})?">
+                </div>
+                {% if academias|length > 1 %}
+                <div class="mb-3">
+                    <label for="id_academia" class="form-label fw-semibold">Academia <span class="text-danger">*</span></label>
+                    <select class="form-select" id="id_academia" name="id_academia" required>
+                        {% for ac in academias %}
+                        <option value="{{ ac.id }}" {% if ac.id == academia_id %}selected{% endif %}>{{ ac.nome }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {% else %}
+                <input type="hidden" name="id_academia" value="{{ academias[0].id if academias else academia_id }}">
+                {% endif %}
+                <div class="mb-3">
+                    <input type="hidden" name="aplicar_juros_multas" value="0">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" name="aplicar_juros_multas" id="aplicar_juros_multas" value="1">
+                        <label class="form-check-label" for="aplicar_juros_multas">Ativar juros e multas por atraso</label>
+                    </div>
+                    <small class="text-muted">Multa: 2% ao mês. Juros: 0,033% ao dia (~1% ao mês). O valor será ajustado automaticamente na visão do aluno quando houver atraso.</small>
+                </div>
+                <div class="mb-3">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="ativo" id="ativo" value="1" checked>
+                        <label class="form-check-label" for="ativo">Ativo</label>
+                    </div>
+                </div>
+                <div class="d-flex gap-2 mt-4">
+                    <a href="{{ url_for('financeiro.lista_planos_mensalidades') }}{% if academia_id %}?academia_id={{ academia_id }}{% endif %}" class="btn btn-outline-secondary">Cancelar</a>
+                    <button type="submit" class="btn btn-primary">Cadastrar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

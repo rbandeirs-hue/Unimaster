@@ -2,24 +2,79 @@
 {% block title %}Descontos{% endblock %}
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/financeiro/responsive.css') }}?v=1">
+<style>
+.descontos-page .desconto-card { border-radius: 12px; border: 1px solid #e9ecef; transition: all 0.2s; }
+.descontos-page .desconto-card:hover { border-color: #ffc107; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+.descontos-page .desconto-card .desconto-nome { font-weight: 600; font-size: 1rem; }
+.descontos-page .desconto-card .desconto-meta { font-size: 0.85rem; color: #6c757d; }
+.descontos-page .desconto-card .desconto-valor { font-weight: 600; color: #198754; }
+@media (max-width: 767.98px) {
+  .descontos-page .container { padding-left: 0.75rem; padding-right: 0.75rem; }
+  .descontos-page .desconto-card .card-body { padding: 1rem !important; }
+  .descontos-page .desconto-card .btn { min-height: 44px; min-width: 44px; }
+  .descontos-page .d-flex.flex-wrap.justify-content-between { flex-direction: column !important; align-items: stretch !important; }
+  .descontos-page .d-flex.flex-wrap.justify-content-between .btn { width: 100%; }
+  .descontos-page h2 { font-size: 1.25rem !important; }
+}
+@media (min-width: 768px) {
+  .descontos-page .descontos-cards { display: none; }
+  .descontos-page .descontos-table-wrap { display: block; }
+}
+@media (max-width: 767.98px) {
+  .descontos-page .descontos-table-wrap { display: none; }
+  .descontos-page .descontos-cards { display: block; }
+}
+</style>
 {% endblock %}
 {% block content %}
-<div class="container mt-4">
-    <a href="{{ url_for('financeiro.dashboard') }}" class="btn btn-outline-secondary mb-3">
-        <i class="bi bi-arrow-left me-1"></i> Voltar
-    </a>
+<div class="container mt-4 descontos-page">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+        <div>
+            <a href="{{ url_for('financeiro.dashboard') }}{% if academia_id %}?academia_id={{ academia_id }}{% endif %}" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left me-1"></i>Voltar
+            </a>
+        </div>
+        <a href="{{ url_for('financeiro.cadastrar_desconto') }}{% if academia_id %}?academia_id={{ academia_id }}{% endif %}" class="btn btn-warning">
+            <i class="bi bi-plus-lg me-1"></i><span class="d-none d-sm-inline">Cadastrar Desconto</span><span class="d-inline d-sm-none">Novo</span>
+        </a>
+    </div>
     <h2 class="h4 fw-bold mb-3">Descontos</h2>
 
-    <div class="card border-0 shadow-sm">
+    {% if descontos %}
+    <!-- Cards (mobile) -->
+    <div class="descontos-cards row g-3 mb-4">
+        {% for d in descontos %}
+        <div class="col-12">
+            <div class="card desconto-card border-0 shadow-sm">
+                <div class="card-body d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <div class="min-w-0 flex-grow-1">
+                        <div class="desconto-nome">{{ d.nome }}</div>
+                        <div class="desconto-meta d-flex flex-wrap gap-2 mt-1">
+                            <span>{{ d.tipo or 'percentual' }}</span>
+                            <span class="desconto-valor">{{ "%.2f" % (d.valor or 0) }}{{ '%' if (d.tipo or '') == 'percentual' else ' R$' }}</span>
+                            {% if d.get('aplicar_apenas_pagamento_em_dia', 1) %}<span class="badge bg-success">Só em dia</span>{% else %}<span class="badge bg-secondary">Sempre</span>{% endif %}
+                        </div>
+                    </div>
+                    <a href="{{ url_for('financeiro.editar_desconto', desconto_id=d.id) }}{% if academia_id %}?academia_id={{ academia_id }}{% endif %}" class="btn btn-sm btn-outline-primary flex-shrink-0">
+                        <i class="bi bi-pencil-fill"></i><span class="d-none d-sm-inline ms-1">Editar</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Tabela (desktop) -->
+    <div class="descontos-table-wrap card border-0 shadow-sm">
         <div class="card-body">
-            {% if descontos %}
             <div class="table-responsive">
-                <table class="table table-hover">
+                <table class="table table-hover mb-0">
                     <thead>
                         <tr>
                             <th>Nome</th>
                             <th>Tipo</th>
                             <th>Valor</th>
+                            <th>Não aplicar se atrasada</th>
                             <th>Ações</th>
                         </tr>
                     </thead>
@@ -29,18 +84,23 @@
                             <td>{{ d.nome }}</td>
                             <td>{{ d.tipo or 'percentual' }}</td>
                             <td>{{ "%.2f" % (d.valor or 0) }}{{ '%' if (d.tipo or '') == 'percentual' else ' R$' }}</td>
+                            <td>{% if d.get('aplicar_apenas_pagamento_em_dia', 1) %}<span class="badge bg-success">Sim</span>{% else %}<span class="badge bg-secondary">Não</span>{% endif %}</td>
                             <td>
-                                <a href="{{ url_for('financeiro.editar_desconto', desconto_id=d.id) }}" class="btn btn-sm btn-outline-primary">Editar</a>
+                                <a href="{{ url_for('financeiro.editar_desconto', desconto_id=d.id) }}{% if academia_id %}?academia_id={{ academia_id }}{% endif %}" class="btn btn-sm btn-outline-primary">Editar</a>
                             </td>
                         </tr>
                         {% endfor %}
                     </tbody>
                 </table>
             </div>
-            {% else %}
-            <p class="text-muted mb-0">Nenhum desconto cadastrado.</p>
-            {% endif %}
         </div>
     </div>
+    {% else %}
+    <div class="card border-0 shadow-sm">
+        <div class="card-body">
+            <p class="text-muted mb-0">Nenhum desconto cadastrado.</p>
+        </div>
+    </div>
+    {% endif %}
 </div>
 {% endblock %}

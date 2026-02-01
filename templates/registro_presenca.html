@@ -1,10 +1,19 @@
 {% extends "base.html" %}
 {% block content %}
+<style>
+.registro-aluno-card { cursor: pointer; transition: background 0.2s, border-color 0.2s; }
+.registro-aluno-card:hover { background: #fff9e6; border-color: #ffc107 !important; }
+.registro-aluno-card:has(input:checked) { background: #fff3cd; border-color: #ffc107 !important; }
+.registro-aluno-foto { width: 56px; height: 56px; object-fit: cover; border: 2px solid #e9ecef; }
+.registro-aluno-foto-placeholder { background: #f8f9fa; font-size: 1.5rem; }
+.registro-aluno-nome { word-break: break-word; line-height: 1.2; }
+.registro-aluno-card .form-check-input { margin-top: 0.25rem; flex-shrink: 0; }
+</style>
 <div class="row justify-content-center">
   <div class="col-md-8 col-sm-12">
 
     <!-- Botão Voltar -->
-    <a href="{{ url_for('painel.home') }}" class="btn btn-secondary mb-3">← Voltar</a>
+    <a href="{{ back_url or url_for('presencas.painel_presenca') }}" class="btn btn-secondary mb-3"><i class="bi bi-arrow-left me-1"></i> Voltar</a>
 
     <div class="card shadow">
       <div class="card-header bg-warning text-dark">
@@ -40,17 +49,22 @@
 
           <div class="mb-3">
             <label class="form-label">Selecione os alunos presentes:</label>
-            <div class="row">
+            <div class="row g-3">
               {% for aluno in alunos %}
-              <div class="col-6 col-md-4">
-                <div class="form-check">
-                  <input class="form-check-input" type="checkbox" name="aluno_id"
+              <div class="col-6 col-md-4 col-lg-3">
+                <label class="registro-aluno-card form-check position-relative d-flex flex-column align-items-center text-center p-3 border rounded-3 mb-0 h-100" for="aluno{{ aluno.id }}">
+                  <input class="form-check-input position-absolute top-0 end-0 m-2" type="checkbox" name="aluno_id"
                          value="{{ aluno.id }}" id="aluno{{ aluno.id }}"
                          {% if aluno.id in presencas_registradas %}checked{% endif %}>
-                  <label class="form-check-label" for="aluno{{ aluno.id }}">
-                    {{ aluno.nome }}
-                  </label>
-                </div>
+                  {% if aluno.foto %}
+                  <img src="{{ url_for('static', filename='uploads/' + aluno.foto) }}" alt="" class="registro-aluno-foto rounded-circle mb-2">
+                  {% else %}
+                  <div class="registro-aluno-foto registro-aluno-foto-placeholder rounded-circle mb-2 d-flex align-items-center justify-content-center">
+                    <i class="bi bi-person-fill text-secondary"></i>
+                  </div>
+                  {% endif %}
+                  <span class="registro-aluno-nome small fw-semibold">{{ aluno.nome }}</span>
+                </label>
               </div>
               {% endfor %}
             </div>

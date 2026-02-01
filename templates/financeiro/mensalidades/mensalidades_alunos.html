@@ -1,0 +1,299 @@
+{% extends "base.html" %}
+{% block title %}Mensalidades Alunos{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/financeiro/responsive.css') }}?v=1">
+{% endblock %}
+{% block content %}
+<div class="container mt-4">
+    {% if academias and academias|length > 1 %}
+    <form method="GET" class="mb-3">
+        <label class="form-label small fw-semibold">Academia:</label>
+        <select name="academia_id" class="form-select form-select-sm d-inline-block w-auto" onchange="this.form.submit()">
+            {% for ac in academias %}
+            <option value="{{ ac.id }}" {% if ac.id == academia_id %}selected{% endif %}>{{ ac.nome }}</option>
+            {% endfor %}
+        </select>
+        <input type="hidden" name="mes" value="{{ mes or '' }}">
+        <input type="hidden" name="ano" value="{{ ano or '' }}">
+        <input type="hidden" name="busca" value="{{ busca or '' }}">
+        {% if filtro_status %}<input type="hidden" name="status" value="{{ filtro_status }}">{% endif %}
+    </form>
+    {% endif %}
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+        <a href="{{ url_for('financeiro.painel_mensalidades', academia_id=academia_id) if academia_id else url_for('financeiro.painel_mensalidades') }}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left me-1"></i> Voltar
+        </a>
+        <div class="d-flex gap-2">
+            <a href="{{ url_for('financeiro.aplicar_desconto', academia_id=academia_id) if academia_id else url_for('financeiro.aplicar_desconto') }}" class="btn btn-outline-info">
+                <i class="bi bi-percent me-1"></i> Aplicar Desconto
+            </a>
+            <a href="{{ url_for('financeiro.gerar_cobranca', academia_id=academia_id) if academia_id else url_for('financeiro.gerar_cobranca') }}" class="btn btn-primary">
+                <i class="bi bi-plus-lg me-1"></i> Gerar Cobrança
+            </a>
+        </div>
+    </div>
+    <h2 class="h4 fw-bold mb-3">Mensalidades por Aluno</h2>
+
+    {# Dashboard cards — clicáveis para filtrar por status (clicar novamente remove filtro) #}
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-3">
+            <a href="{{ url_for('financeiro.mensalidades_alunos', academia_id=academia_id, mes=mes, ano=ano, busca=busca or '', status='pago' if filtro_status != 'pago' else None) }}" class="text-decoration-none">
+            <div class="card border-0 shadow-sm h-100 {% if filtro_status == 'pago' %}border-2 border-success{% endif %}" style="cursor:pointer; transition: all 0.2s;">
+                <div class="card-body py-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span class="text-muted small">Pagas</span>
+                        <span class="badge bg-success fs-6">{{ contagens.get('pago', 0) }}</span>
+                    </div>
+                </div>
+            </div>
+            </a>
+        </div>
+        <div class="col-6 col-md-3">
+            <a href="{{ url_for('financeiro.mensalidades_alunos', academia_id=academia_id, mes=mes, ano=ano, busca=busca or '', status='pendente' if filtro_status != 'pendente' else None) }}" class="text-decoration-none">
+            <div class="card border-0 shadow-sm h-100 {% if filtro_status == 'pendente' %}border-2 border-warning{% endif %}" style="cursor:pointer; transition: all 0.2s;">
+                <div class="card-body py-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span class="text-muted small">Pendentes</span>
+                        <span class="badge bg-warning text-dark fs-6">{{ contagens.get('pendente', 0) }}</span>
+                    </div>
+                </div>
+            </div>
+            </a>
+        </div>
+        <div class="col-6 col-md-3">
+            <a href="{{ url_for('financeiro.mensalidades_alunos', academia_id=academia_id, mes=mes, ano=ano, busca=busca or '', status='atrasado' if filtro_status != 'atrasado' else None) }}" class="text-decoration-none">
+            <div class="card border-0 shadow-sm h-100 {% if filtro_status == 'atrasado' %}border-2 border-danger{% endif %}" style="cursor:pointer; transition: all 0.2s;">
+                <div class="card-body py-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span class="text-muted small">Atrasadas</span>
+                        <span class="badge bg-danger fs-6">{{ contagens.get('atrasado', 0) }}</span>
+                    </div>
+                </div>
+            </div>
+            </a>
+        </div>
+        <div class="col-6 col-md-3">
+            <a href="{{ url_for('financeiro.mensalidades_alunos', academia_id=academia_id, mes=mes, ano=ano, busca=busca or '', status='aguardando_confirmacao' if filtro_status != 'aguardando_confirmacao' else None) }}" class="text-decoration-none">
+            <div class="card border-0 shadow-sm h-100 {% if filtro_status == 'aguardando_confirmacao' %}border-2 border-info{% endif %}" style="cursor:pointer; transition: all 0.2s;">
+                <div class="card-body py-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span class="text-muted small">Aguardando</span>
+                        <span class="badge bg-info fs-6">{{ contagens.get('aguardando_confirmacao', 0) }}</span>
+                    </div>
+                </div>
+            </div>
+            </a>
+        </div>
+    </div>
+
+    {# Filtros #}
+    <form method="GET" class="row g-2 mb-3">
+        <input type="hidden" name="academia_id" value="{{ academia_id }}">
+        {% if filtro_status %}<input type="hidden" name="status" value="{{ filtro_status }}">{% endif %}
+        <div class="col-auto">
+            <select name="mes" class="form-select form-select-sm" style="width:auto;">
+                {% for i in range(1, 13) %}
+                <option value="{{ i }}" {% if mes == i %}selected{% endif %}>{{ ['','Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][i] }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-auto">
+            <select name="ano" class="form-select form-select-sm" style="width:auto;">
+                {% for a in range(ano_atual, ano_atual - 5, -1) %}
+                <option value="{{ a }}" {% if ano == a %}selected{% endif %}>{{ a }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-auto">
+            <input type="text" name="busca" class="form-control form-control-sm" placeholder="Buscar aluno..." value="{{ busca or '' }}" style="min-width:140px;">
+        </div>
+        <div class="col-auto">
+            <button type="submit" class="btn btn-sm btn-outline-secondary">Filtrar</button>
+        </div>
+    </form>
+
+    {% if filtro_status %}
+    <p class="text-muted small mb-2">
+        <span class="badge bg-secondary me-1">Filtro:</span>
+        {{ 'Aguardando Confirmação' if filtro_status == 'aguardando_confirmacao' else filtro_status|capitalize }}
+        <a href="{{ url_for('financeiro.mensalidades_alunos', academia_id=academia_id, mes=mes, ano=ano, busca=busca or '') }}" class="ms-2 small">Limpar</a>
+    </p>
+    {% endif %}
+
+    {% if mensalidades or avulsas %}
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-light">
+            <h6 class="mb-0"><i class="bi bi-calendar-check me-2"></i>Mensalidades</h6>
+        </div>
+        <div class="card-body p-0">
+            {% if mensalidades %}
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Aluno</th>
+                            <th>Turma</th>
+                            <th>Plano</th>
+                            <th>Vencimento</th>
+                            <th>Valor</th>
+                            <th>Status</th>
+                            <th>Ação</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for m in mensalidades %}
+                        <tr>
+                            <td>{{ m.aluno_nome }}</td>
+                            <td>{{ m.turma_nome or '-' }}</td>
+                            <td>{{ m.plano_nome }}</td>
+                            <td>{{ m.data_vencimento|data_br if m.data_vencimento else '-' }}</td>
+                            <td>
+                                {% if m.tem_desconto %}
+                                <div class="d-flex flex-column gap-1">
+                                    <span class="text-muted small"><strong>Valor integral:</strong> R$ {{ "%.2f"|format(m.valor_integral or 0) }}</span>
+                                    <span class="text-success small"><strong>Desconto{% if m.desconto_nome %} {{ m.desconto_nome }}{% endif %}:</strong> -R$ {{ "%.2f"|format(m.valor_desconto or 0) }}</span>
+                                    <span class="fw-bold text-dark"><strong>Valor a pagar:</strong> R$ {{ "%.2f"|format(m.valor_final or 0) }}</span>
+                                </div>
+                                {% else %}
+                                R$ {{ "%.2f"|format(m.valor or 0) }}
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="badge {% if m.status_efetivo == 'pago' %}bg-success{% elif m.status_efetivo == 'atrasado' %}bg-danger{% elif m.status_efetivo == 'aguardando_confirmacao' %}bg-info{% else %}bg-warning text-dark{% endif %}">
+                                    {{ 'Aguardando Confirmação' if m.status_efetivo == 'aguardando_confirmacao' else (m.status_efetivo|capitalize) }}
+                                </span>
+                            </td>
+                            <td>
+                                {% if m.status_efetivo in ['pendente', 'atrasado'] %}
+                                <form method="POST" action="{{ url_for('financeiro.cancelar_cobranca') }}" class="d-inline">
+                                    <input type="hidden" name="tipo" value="mensalidade_aluno">
+                                    <input type="hidden" name="registro_id" value="{{ m.id }}">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Cancelar esta mensalidade?');">
+                                        <i class="bi bi-x-circle"></i> Cancelar
+                                    </button>
+                                </form>
+                                {% elif m.status_efetivo == 'aguardando_confirmacao' %}
+                                <button type="button" class="btn btn-sm btn-info" data-bs-toggle="modal" data-bs-target="#modalConfirmar{{ m.id }}">
+                                    <i class="bi bi-check-circle"></i> Confirmar
+                                </button>
+                                {% else %}
+                                {% if m.comprovante_url %}
+                                <a href="{{ url_for('static', filename='uploads/' + m.comprovante_url) }}" target="_blank" class="btn btn-sm btn-outline-secondary" title="Ver comprovante">
+                                    <i class="bi bi-file-earmark-image"></i>
+                                </a>
+                                {% endif %}
+                                <span class="text-muted small ms-1">{{ m.data_pagamento|data_br if m.data_pagamento else '' }}</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-muted p-3 mb-0">Nenhuma mensalidade encontrada.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm">
+        <div class="card-header bg-light">
+            <h6 class="mb-0"><i class="bi bi-receipt me-2"></i>Cobranças avulsas</h6>
+        </div>
+        <div class="card-body p-0">
+            {% if avulsas %}
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Aluno</th>
+                            <th>Descrição</th>
+                            <th>Vencimento</th>
+                            <th>Valor</th>
+                            <th>Status</th>
+                            <th>Ação</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for a in avulsas %}
+                        <tr>
+                            <td>{{ a.aluno_nome }}</td>
+                            <td>{{ a.descricao or '-' }}</td>
+                            <td>{{ a.data_vencimento|data_br if a.data_vencimento else '-' }}</td>
+                            <td>R$ {{ "%.2f"|format(a.valor or 0) }}</td>
+                            <td>
+                                <span class="badge {% if a.status == 'pago' %}bg-success{% elif a.status == 'atrasado' %}bg-danger{% else %}bg-warning text-dark{% endif %}">
+                                    {{ a.status|capitalize }}
+                                </span>
+                            </td>
+                            <td>
+                                {% if a.status in ['pendente', 'atrasado'] %}
+                                <form method="POST" action="{{ url_for('financeiro.cancelar_cobranca') }}" class="d-inline">
+                                    <input type="hidden" name="tipo" value="cobranca_avulsa">
+                                    <input type="hidden" name="registro_id" value="{{ a.id }}">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Cancelar esta cobrança?');">
+                                        <i class="bi bi-x-circle"></i> Cancelar
+                                    </button>
+                                </form>
+                                {% else %}
+                                <span class="text-muted small">{{ a.data_pagamento|data_br if a.data_pagamento else '' }}</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-muted p-3 mb-0">Nenhuma cobrança avulsa.</p>
+            {% endif %}
+        </div>
+    </div>
+    {% else %}
+    <div class="card border-0 shadow-sm">
+        <div class="card-body">
+            <p class="text-muted mb-0">Nenhuma cobrança registrada. <a href="{{ url_for('financeiro.gerar_cobranca', academia_id=academia_id) }}">Gerar cobrança</a>.</p>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+{# Modais Confirmar Pagamento #}
+{% for m in mensalidades %}
+{% if m.status_efetivo == 'aguardando_confirmacao' %}
+<div class="modal fade" id="modalConfirmar{{ m.id }}" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Confirmar Pagamento — {{ m.aluno_nome }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                {% if m.comprovante_url %}
+                <p class="fw-semibold mb-1">Comprovante:</p>
+                <a href="{{ url_for('static', filename='uploads/' + m.comprovante_url) }}" target="_blank" class="d-block mb-3">
+                    <i class="bi bi-file-earmark-image me-1"></i> Abrir em nova aba
+                </a>
+                {% endif %}
+                {% if m.comentario_informado %}
+                <p class="fw-semibold mb-1">Comentário do aluno:</p>
+                <p class="text-muted small mb-3">{{ m.comentario_informado }}</p>
+                {% endif %}
+                <p class="mb-0">Valor: <strong>R$ {{ "%.2f"|format(m.valor_final if m.tem_desconto else m.valor) }}</strong></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <form method="POST" action="{{ url_for('financeiro.confirmar_pagamento_mensalidade', registro_id=m.id) }}" class="d-inline">
+                    <button type="submit" class="btn btn-success">Confirmar Pagamento</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endfor %}
+
+<style>
+.row.g-3.mb-4 a .card:hover { transform: translateY(-2px); box-shadow: 0 0.25rem 0.5rem rgba(0,0,0,0.1) !important; }
+</style>
+{% endblock %}

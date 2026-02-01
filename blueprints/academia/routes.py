@@ -1,6 +1,6 @@
 # blueprints/academia/routes.py
 from datetime import date
-from flask import Blueprint, render_template, redirect, url_for, flash, session, request
+from flask import Blueprint, render_template, redirect, url_for, flash, session, request, jsonify
 from flask_login import login_required, current_user
 from config import get_db_connection
 from werkzeug.security import generate_password_hash
@@ -285,10 +285,20 @@ def cadastro_usuario():
 
     conn = get_db_connection()
     cur = conn.cursor(dictionary=True)
-    cur.execute("SELECT id, nome FROM roles WHERE nome IN ('aluno', 'professor', 'gestor_academia') ORDER BY nome")
+    cur.execute("SELECT id, nome, COALESCE(chave, LOWER(REPLACE(nome,' ','_'))) as chave FROM roles WHERE chave IN ('aluno', 'professor', 'gestor_academia', 'responsavel') ORDER BY nome")
     roles_academia = cur.fetchall()
-    cur.execute("SELECT id, nome FROM roles ORDER BY nome")
+    cur.execute("SELECT id, nome, COALESCE(chave, LOWER(REPLACE(nome,' ','_'))) as chave FROM roles ORDER BY nome")
     roles_todas = cur.fetchall()
+
+    # Alunos da academia: para Aluno (sem usuario_id), para Responsável (todos)
+    cur.execute(
+        """SELECT id, nome, usuario_id FROM alunos WHERE id_academia = %s AND ativo = 1 AND status = 'ativo'
+           ORDER BY nome""",
+        (academia_id,),
+    )
+    todos_alunos = cur.fetchall()
+    alunos_para_aluno = [a for a in todos_alunos if not a.get("usuario_id")]
+    alunos_para_responsavel = todos_alunos
     cur.close()
     conn.close()
 
@@ -324,6 +334,40 @@ def cadastro_usuario():
         user_id = cur.lastrowid
         for rid in roles_escolhidas:
             cur.execute("INSERT INTO roles_usuario (usuario_id, role_id) VALUES (%s, %s)", (user_id, rid))
+
+        # Vínculo academia
+        cur.execute("INSERT INTO usuarios_academias (usuario_id, academia_id) VALUES (%s, %s)", (user_id, academia_id))
+
+        # Role aluno: vincular usuário a um aluno (alunos.usuario_id)
+        cur.execute("SELECT id FROM roles WHERE chave = 'aluno'")
+        r_aluno = cur.fetchone()
+        if r_aluno and str(r_aluno["id"]) in roles_escolhidas:
+            aluno_id = request.form.get("aluno_id", type=int)
+            if aluno_id:
+                cur.execute(
+                    "UPDATE alunos SET usuario_id = %s WHERE id = %s AND id_academia = %s AND usuario_id IS NULL",
+                    (user_id, aluno_id, academia_id),
+                )
+
+        # Role responsavel: vincular a vários alunos (responsavel_alunos)
+        cur.execute("SELECT id FROM roles WHERE chave = 'responsavel'")
+        r_resp = cur.fetchone()
+        if r_resp and str(r_resp["id"]) in roles_escolhidas:
+            for x in request.form.getlist("aluno_ids"):
+                try:
+                    aid = int(x)
+                    cur.execute(
+                        "SELECT 1 FROM alunos WHERE id = %s AND id_academia = %s",
+                        (aid, academia_id),
+                    )
+                    if cur.fetchone():
+                        cur.execute(
+                            "INSERT IGNORE INTO responsavel_alunos (usuario_id, aluno_id) VALUES (%s, %s)",
+                            (user_id, aid),
+                        )
+                except (ValueError, TypeError):
+                    pass
+
         conn.commit()
         cur.close()
         conn.close()
@@ -335,8 +379,31 @@ def cadastro_usuario():
         roles=roles_academia if len(roles_academia) >= 2 else roles_todas,
         academias=academias,
         academia_id=academia_id,
+        alunos_para_aluno=alunos_para_aluno,
+        alunos_para_responsavel=alunos_para_responsavel,
         back_url=back_url,
     )
+
+
+@academia_bp.route("/<int:academia_id>/alunos-para-vinculo")
+@login_required
+def api_alunos_para_vinculo(academia_id):
+    """Retorna alunos da academia para vincular em usuário (aluno ou responsável)."""
+    ids = _get_academias_ids()
+    if academia_id not in ids:
+        return jsonify({"alunos": [], "disponiveis_aluno": []})
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    cur.execute(
+        """SELECT id, nome, usuario_id FROM alunos WHERE id_academia = %s AND ativo = 1 AND status = 'ativo'
+           ORDER BY nome""",
+        (academia_id,),
+    )
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    disponiveis_aluno = [{"id": r["id"], "nome": r["nome"]} for r in rows if not r.get("usuario_id")]
+    return jsonify({"alunos": rows, "disponiveis_aluno": disponiveis_aluno})
 
 
 @academia_bp.route("/usuarios/<int:user_id>/toggle-ativo", methods=["POST"])

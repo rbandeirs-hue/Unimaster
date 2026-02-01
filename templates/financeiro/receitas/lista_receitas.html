@@ -7,11 +7,11 @@
 <div class="container mt-4">
     <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
         <div>
-            <a href="{{ url_for('financeiro.dashboard') }}" class="btn btn-outline-secondary btn-sm">
+            <a href="{{ url_for('financeiro.dashboard', academia_id=academia_id) if academia_id else url_for('financeiro.dashboard') }}" class="btn btn-outline-secondary btn-sm">
                 <i class="bi bi-arrow-left me-1"></i> Voltar
             </a>
         </div>
-        <a href="{{ url_for('financeiro.cadastrar_receita') }}" class="btn btn-success">
+        <a href="{{ url_for('financeiro.cadastrar_receita', academia_id=academia_id) if academia_id else url_for('financeiro.cadastrar_receita') }}" class="btn btn-success">
             <i class="bi bi-plus-circle me-1"></i> Nova Receita
         </a>
     </div>
@@ -19,6 +19,7 @@
     <div class="card border-0 shadow-sm mb-3">
         <div class="card-body py-3">
             <form method="GET" class="row g-2 align-items-end">
+                {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
                 <div class="col-auto">
                     <label class="form-label small mb-0">Mês</label>
                     <select name="mes" class="form-select form-select-sm" style="width: auto;">
@@ -67,10 +68,14 @@
                             <td class="d-none d-md-table-cell text-muted small">{{ r.categoria or '-' }}</td>
                             <td class="text-end text-success fw-semibold">R$ {{ "%.2f"|format(r.valor or 0) }}</td>
                             <td class="text-end">
-                                <a href="{{ url_for('financeiro.editar_receita', receita_id=r.id) }}" class="btn btn-sm btn-outline-primary">Editar</a>
+                                {% if r.id_mensalidade_aluno or r.id_cobranca_avulsa %}
+                                <span class="text-muted small" title="Receita de pagamento confirmado — não pode ser alterada ou excluída">Pagamento confirmado</span>
+                                {% else %}
+                                <a href="{{ url_for('financeiro.editar_receita', receita_id=r.id) }}{% if academia_id %}?academia_id={{ academia_id }}{% endif %}" class="btn btn-sm btn-outline-primary">Editar</a>
                                 <form method="POST" action="{{ url_for('financeiro.excluir_receita', receita_id=r.id) }}" class="d-inline" onsubmit="return confirm('Excluir esta receita?');">
                                     <button type="submit" class="btn btn-sm btn-outline-danger">Excluir</button>
                                 </form>
+                                {% endif %}
                             </td>
                         </tr>
                         {% endfor %}
