@@ -5,7 +5,7 @@
 {% endblock %}
 {% block content %}
 <div class="container mt-4 px-2 px-sm-3">
-    <a href="{{ url_for('painel_aluno.meu_perfil') }}" class="btn btn-outline-secondary btn-sm mb-3">
+    <a href="{{ voltar_url|default(url_for('painel_aluno.meu_perfil')) }}" class="btn btn-outline-secondary btn-sm mb-3">
         <i class="bi bi-arrow-left me-1"></i> Voltar
     </a>
     <h2 class="h4 fw-bold mb-3">Minhas Mensalidades</h2>
@@ -56,6 +56,7 @@
 
     {# Filtros — ano atual já selecionado, mas pode trocar; todos os meses disponível #}
     <form method="GET" class="row g-2 mb-3">
+        {% if voltar_url and aluno %}<input type="hidden" name="aluno_id" value="{{ aluno.id }}">{% endif %}
         <div class="col-auto">
             <select name="mes" class="form-select form-select-sm" style="width:auto;" onchange="this.form.submit()">
                 <option value="" {% if not mes %}selected{% endif %}>Todos os meses</option>

@@ -2,7 +2,7 @@
 {% block title %}Minha Turma{% endblock %}
 {% block content %}
 <div class="container mt-4 px-2 px-sm-3">
-    <a href="{{ url_for('painel_aluno.meu_perfil') if current_user.has_role('aluno') else url_for('painel.home') }}" class="btn btn-outline-secondary btn-sm mb-3">
+    <a href="{{ voltar_url|default(url_for('painel_aluno.meu_perfil') if current_user.has_role('aluno') else url_for('painel.home')) }}" class="btn btn-outline-secondary btn-sm mb-3">
         <i class="bi bi-arrow-left me-1"></i> Voltar
     </a>
     <h2 class="h5 fw-bold mb-3">Minha Turma</h2>
@@ -11,7 +11,7 @@
     {% if turmas_com_alunos|length > 1 %}
     <div class="mb-4">
         <label class="form-label small fw-semibold">Selecionar turma</label>
-        <select id="seletor-turma" class="form-select form-select-sm" style="max-width: 320px;">
+        <select id="seletor-turma" class="form-select form-select-sm" style="max-width: 320px;" data-base-url="{% if voltar_url and aluno %}{{ url_for('painel_responsavel.minha_turma', aluno_id=aluno.id) }}{% else %}{{ url_for('painel_aluno.minha_turma') }}{% endif %}">
             <option value="">Todas as turmas</option>
             {% for turma, alunos in turmas_com_alunos %}
             <option value="{{ turma.TurmaID }}" {% if turma_selecionada_id == turma.TurmaID %}selected{% endif %}>
@@ -38,7 +38,7 @@
             </div>
         </div>
 
-        {% if alunos_turma and (current_user.has_role('professor') or current_user.has_role('admin') or current_user.has_role('aluno')) %}
+        {% if alunos_turma and (current_user.has_role('professor') or current_user.has_role('admin') or current_user.has_role('aluno') or current_user.has_role('responsavel')) %}
         <div class="alunos-da-turma">
             <h6 class="fw-bold mb-2">Alunos da turma</h6>
             <div class="mb-2">
@@ -116,13 +116,14 @@
     var seletor = document.getElementById('seletor-turma');
     var secoes = document.querySelectorAll('.turma-secao');
     if (seletor) {
+        var baseUrl = seletor.getAttribute('data-base-url') || "{{ url_for('painel_aluno.minha_turma') }}";
         seletor.addEventListener('change', function() {
             var val = this.value;
             if (val) {
-                window.location.href = "{{ url_for('painel_aluno.minha_turma') }}?turma_id=" + val;
+                window.location.href = baseUrl + (baseUrl.indexOf('?') >= 0 ? '&' : '?') + "turma_id=" + val;
             } else {
                 secoes.forEach(function(s) { s.style.display = ''; });
-                window.location.href = "{{ url_for('painel_aluno.minha_turma') }}";
+                window.location.href = baseUrl;
             }
         });
     }

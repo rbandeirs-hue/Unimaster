@@ -24,10 +24,17 @@ bp_alunos = Blueprint("alunos", __name__, url_prefix="/alunos")
 
 
 def _get_academias_ids():
-    """IDs de academias acessíveis pelo usuário (para filtro em modo academia)."""
+    """IDs de academias acessíveis (prioridade: usuarios_academias, alinhado ao gerenciamento)."""
     try:
         conn = get_db_connection()
         cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT academia_id FROM usuarios_academias WHERE usuario_id = %s ORDER BY academia_id", (current_user.id,))
+        vinculadas = [r["academia_id"] for r in cur.fetchall()]
+        if vinculadas:
+            cur.close()
+            conn.close()
+            return vinculadas
+        ids = []
         if current_user.has_role("admin"):
             cur.execute("SELECT id FROM academias ORDER BY nome")
             ids = [r["id"] for r in cur.fetchall()]
@@ -54,6 +61,20 @@ def _get_academias_ids():
 # ======================================================
 # FUNÇÕES UTILITÁRIAS
 # ======================================================
+
+def _eh_responsavel_aluno(cursor, usuario_id, aluno_id):
+    """Verifica se o usuário é responsável pelo aluno (via responsavel_alunos)."""
+    if not usuario_id or not aluno_id:
+        return False
+    try:
+        cursor.execute(
+            "SELECT 1 FROM responsavel_alunos WHERE usuario_id = %s AND aluno_id = %s LIMIT 1",
+            (usuario_id, aluno_id),
+        )
+        return cursor.fetchone() is not None
+    except Exception:
+        return False
+
 
 def allowed_file(filename):
     ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif"}
@@ -216,11 +237,11 @@ def lista_alunos():
     # 🔐 RBAC — CONTROLE DE ACESSO POR ROLE
     # ======================================================
     # Se em modo academia com academia_id selecionada, filtra por ela
-    academia_filtro = request.args.get("academia_id", type=int) or (
-        session.get("academia_gerenciamento_id") if session.get("modo_painel") == "academia" else None
-    )
+    academia_filtro = request.args.get("academia_id", type=int) or session.get("academia_gerenciamento_id")
     ids_acessiveis = _get_academias_ids()
     if academia_filtro and academia_filtro in ids_acessiveis:
+        session["academia_gerenciamento_id"] = academia_filtro
+        session["finance_academia_id"] = academia_filtro
         query += " AND a.id_academia = %s"
         params.append(academia_filtro)
     # SUPERUSER (admin) → vê tudo (só quando não tem filtro de academia)
@@ -740,9 +761,13 @@ def cadastrar_aluno():
     cursor.execute("SELECT * FROM graduacao ORDER BY id")
     graduacoes = cursor.fetchall()
 
-    acad_filtro = request.args.get("academia_id", type=int) or (session.get("academia_gerenciamento_id") if session.get("modo_painel") == "academia" else None)
+    acad_filtro = request.args.get("academia_id", type=int) or session.get("academia_gerenciamento_id")
+    ids_acad = _get_academias_ids()
+    if acad_filtro and acad_filtro in ids_acad:
+        session["academia_gerenciamento_id"] = acad_filtro
+        session["finance_academia_id"] = acad_filtro
     try:
-        if acad_filtro and acad_filtro in _get_academias_ids():
+        if acad_filtro and acad_filtro in ids_acad:
             cursor.execute("SELECT * FROM turmas WHERE id_academia = %s ORDER BY Nome", (acad_filtro,))
         else:
             cursor.execute("SELECT * FROM turmas ORDER BY Nome")
@@ -750,6 +775,7 @@ def cadastrar_aluno():
         cursor.execute("SELECT * FROM turmas ORDER BY Nome")
     turmas = cursor.fetchall()
 
+    id_acad_modalidade = acad_filtro or (ids_acad[0] if ids_acad else None) or getattr(current_user, "id_academia", None)
     try:
         cursor.execute(
             """
@@ -757,7 +783,7 @@ def cadastrar_aluno():
             WHERE (id_academia IS NULL OR id_academia = %s) AND ativo = 1
             ORDER BY nome
             """,
-            (getattr(current_user, "id_academia", None),),
+            (id_acad_modalidade,),
         )
     except Exception:
         cursor.execute("SELECT * FROM modalidade WHERE ativo = 1 ORDER BY nome")
@@ -799,6 +825,20 @@ def cadastrar_aluno():
                 ORDER BY ac.nome
                 """,
                 (getattr(current_user, "id_associacao", 0),),
+            )
+        elif current_user.has_role("gestor_academia") and ids_acad:
+            # Gestor: academias de usuarios_academias ou id_academia
+            ph = ",".join(["%s"] * len(ids_acad))
+            cursor.execute(
+                f"""
+                SELECT ac.id, ac.nome AS academia_nome, ass.nome AS associacao_nome,
+                       ass.id AS associacao_id, ass.id_federacao
+                FROM academias ac
+                LEFT JOIN associacoes ass ON ass.id = ac.id_associacao
+                WHERE ac.id IN ({ph})
+                ORDER BY ac.nome
+                """,
+                tuple(ids_acad),
             )
         else:
             cursor.execute(
@@ -1129,7 +1169,12 @@ def cadastrar_aluno():
                 aluno=None,
             )
 
-    academia_selecionada = request.args.get("academia_id") or getattr(current_user, "id_academia", None)
+    academia_selecionada = (
+        request.args.get("academia_id")
+        or session.get("academia_gerenciamento_id")
+        or (ids_acad[0] if ids_acad else None)
+        or getattr(current_user, "id_academia", None)
+    )
 
     db.close()
     return render_template(
@@ -1200,6 +1245,10 @@ def editar_aluno(aluno_id):
             current_user.has_role("aluno")
             and aluno.get("usuario_id") == current_user.id
         )
+        or (
+            current_user.has_role("responsavel")
+            and _eh_responsavel_aluno(cursor, current_user.id, aluno_id)
+        )
     )
 
     if not pode_editar:
@@ -1207,6 +1256,8 @@ def editar_aluno(aluno_id):
         db.close()
         if current_user.has_role("aluno"):
             return redirect(url_for("painel_aluno.painel"))
+        if current_user.has_role("responsavel"):
+            return redirect(url_for("painel_responsavel.meu_perfil"))
         return redirect(url_for("alunos.lista_alunos"))
 
     graduacoes = []
@@ -1271,7 +1322,14 @@ def editar_aluno(aluno_id):
         sexo = form.get("sexo") or None
         data_matricula = aluno.get("data_matricula")
         graduacao_id = form.get("graduacao_id") or None
-        turmas_ids = [int(x) for x in form.getlist("turmas_ids") if x and str(x).isdigit()]
+        # Turma e modalidade: só gestor/academy pode alterar; aluno/responsavel mantêm os atuais
+        pode_alterar_turma_mod = current_user.has_role("admin") or current_user.has_role("gestor_academia")
+        if pode_alterar_turma_mod:
+            turmas_ids = [int(x) for x in form.getlist("turmas_ids") if x and str(x).isdigit()]
+        else:
+            turmas_ids = aluno.get("turmas_ids") or []
+            if not turmas_ids and aluno.get("TurmaID"):
+                turmas_ids = [aluno["TurmaID"]]
         TurmaID = turmas_ids[0] if turmas_ids else form.get("TurmaID") or None
 
         nacionalidade = form.get("nacionalidade") or None
@@ -1320,7 +1378,10 @@ def editar_aluno(aluno_id):
 
         observacoes = form.get("observacoes") or None
 
-        modalidades_ids = request.form.getlist("aluno_modalidade_ids")
+        if pode_alterar_turma_mod:
+            modalidades_ids = request.form.getlist("aluno_modalidade_ids")
+        else:
+            modalidades_ids = [str(x) for x in (aluno.get("modalidades_ids") or [])]
 
         # Foto
         foto_dataurl = form.get("foto")
@@ -1468,6 +1529,18 @@ def editar_aluno(aluno_id):
             db.rollback()
             flash(f"Erro ao atualizar aluno: {e}", "danger")
 
+    # Para aluno/responsável: exibir turmas e modalidades em texto (somente leitura)
+    turmas_ids = aluno.get("turmas_ids") or []
+    if not turmas_ids and aluno.get("TurmaID"):
+        turmas_ids = [aluno["TurmaID"]]
+    turmas_display = ", ".join(
+        t.get("Nome", "") or "" for t in turmas if t.get("TurmaID") in turmas_ids
+    ) if turmas else "—"
+    modalidades_ids = aluno.get("modalidades_ids") or []
+    modalidades_display = ", ".join(
+        m.get("nome", "") or "" for m in modalidades if m.get("id") in modalidades_ids
+    ) if modalidades else "—"
+
     db.close()
     return render_template(
         "alunos/editar_aluno.html",
@@ -1475,6 +1548,8 @@ def editar_aluno(aluno_id):
         graduacoes=graduacoes,
         turmas=turmas,
         modalidades=modalidades,
+        turmas_display=turmas_display,
+        modalidades_display=modalidades_display,
         back_url=back_url,
     )
 

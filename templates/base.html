@@ -64,54 +64,36 @@
     </div>
     {% endif %}
 
-    <!-- 🔹 Painel/Dash — aluno e academia têm Dash próprio -->
-    <a class="nav-link {% if request.endpoint == 'painel.home' or request.endpoint == 'painel.escolher_modo' or (session.get('modo_painel') == 'aluno' and request.endpoint == 'painel_aluno.painel') or (session.get('modo_painel') == 'academia' and request.endpoint == 'academia.dash') %}active{% endif %}"
-       href="{{ url_for('painel_aluno.painel') if session.get('modo_painel') == 'aluno' else (url_for('academia.dash') if session.get('modo_painel') == 'academia' else url_for('painel.home')) }}">
-      <i class="bi bi-speedometer2"></i> {{ 'Dash' if session.get('modo_painel') in ('aluno', 'academia') else 'Painel' }}
+    <!-- 🔹 Painel — todos os modos têm painel próprio (exceto responsavel: só Meu perfil) -->
+    {% if session.get('modo_painel') != 'responsavel' %}
+    <a class="nav-link {% if request.endpoint == 'painel.home' or request.endpoint == 'painel.escolher_modo' or request.endpoint == 'painel._redirect_admin' or (session.get('modo_painel') == 'aluno' and request.endpoint == 'painel_aluno.painel') or (session.get('modo_painel') == 'academia' and request.endpoint == 'academia.dash') or (session.get('modo_painel') == 'associacao' and request.endpoint == 'associacao.painel_associacao') or (session.get('modo_painel') == 'federacao' and request.endpoint == 'federacao.painel_federacao') %}active{% endif %}"
+       href="{{ url_for('painel_aluno.painel') if session.get('modo_painel') == 'aluno' else (url_for('academia.dash') if session.get('modo_painel') == 'academia' else (url_for('associacao.painel_associacao') if session.get('modo_painel') == 'associacao' else (url_for('federacao.painel_federacao') if session.get('modo_painel') == 'federacao' else url_for('painel.home')))) }}">
+      <i class="bi bi-speedometer2"></i> Painel
     </a>
+    {% endif %}
 
     <!-- ====================================================== -->
     <!-- Menus por modo: só exibe o menu do modo acessado        -->
     <!-- ====================================================== -->
     <!-- 👑 MODO ADMIN -->
     {% if session.get('modo_painel') == 'admin' and current_user.has_role('admin') %}
-      <a class="nav-link" href="{{ url_for('federacao.painel_federacao') }}">
-        <i class="bi bi-diagram-3"></i> Associações
+      <a class="nav-link {% if request.endpoint == 'painel.gerenciamento_admin' %}active{% endif %}" href="{{ url_for('painel.gerenciamento_admin') }}">
+        <i class="bi bi-gear"></i> Gerenciamento
       </a>
-      <a class="nav-link" href="{{ url_for('associacao.painel_associacao') }}">
-        <i class="bi bi-people"></i> Academias
-      </a>
-      <a class="nav-link" href="{{ url_for('alunos.lista_alunos') }}">
-        <i class="bi bi-people-fill"></i> Alunos
-      </a>
-      <a class="nav-link" href="{{ url_for('cadastros.hub') }}">
-        <i class="bi bi-person-lines-fill"></i> Cadastros
-      </a>
-      <a class="nav-link" href="{{ url_for('academia.painel_academia') }}"><i class="bi bi-gear"></i> Gerenciamento</a>
-      <a class="nav-link" href="{{ url_for('financeiro.dashboard') }}"><i class="bi bi-cash-coin"></i> Financeiro</a>
-      <a class="nav-link" href="{{ url_for('configuracoes.hub') }}"><i class="bi bi-sliders"></i> Configurações</a>
     {% endif %}
 
     <!-- 🟦 MODO FEDERAÇÃO -->
     {% if session.get('modo_painel') == 'federacao' and current_user.has_role('gestor_federacao') %}
-      <a class="nav-link" href="{{ url_for('federacao.painel_federacao') }}">
-        <i class="bi bi-diagram-3"></i> Associações
+      <a class="nav-link {% if request.endpoint == 'federacao.gerenciamento_federacao' %}active{% endif %}" href="{{ url_for('federacao.gerenciamento_federacao') }}">
+        <i class="bi bi-gear"></i> Gerenciamento
       </a>
-      <a class="nav-link" href="{{ url_for('alunos.lista_alunos') }}">
-        <i class="bi bi-people-fill"></i> Alunos
-      </a>
-      <a class="nav-link" href="{{ url_for('financeiro.dashboard') }}"><i class="bi bi-cash-coin"></i> Financeiro</a>
     {% endif %}
 
     <!-- 🟩 MODO ASSOCIAÇÃO -->
     {% if session.get('modo_painel') == 'associacao' and current_user.has_role('gestor_associacao') %}
-      <a class="nav-link" href="{{ url_for('associacao.painel_associacao') }}">
-        <i class="bi bi-people"></i> Academias
+      <a class="nav-link {% if request.endpoint == 'associacao.gerenciamento_associacao' %}active{% endif %}" href="{{ url_for('associacao.gerenciamento_associacao') }}">
+        <i class="bi bi-gear"></i> Gerenciamento
       </a>
-      <a class="nav-link" href="{{ url_for('alunos.lista_alunos') }}">
-        <i class="bi bi-people-fill"></i> Alunos
-      </a>
-      <a class="nav-link" href="{{ url_for('financeiro.dashboard') }}"><i class="bi bi-cash-coin"></i> Financeiro</a>
     {% endif %}
 
     <!-- 🟧 MODO ACADEMIA -->
@@ -126,6 +108,14 @@
     <!-- ====================================================== -->
     {% if session.get('modo_painel') == 'aluno' %}
       <a class="nav-link {% if request.endpoint == 'painel_aluno.meu_perfil' %}active{% endif %}" href="{{ url_for('painel_aluno.meu_perfil') }}">
+        <i class="bi bi-person-badge"></i> Meu Perfil
+      </a>
+    {% endif %}
+
+    <!-- 🟣 MODO RESPONSÁVEL — SÓ MEU PERFIL (dados do(s) aluno(s)) -->
+    <!-- ====================================================== -->
+    {% if session.get('modo_painel') == 'responsavel' %}
+      <a class="nav-link {% if request.endpoint == 'painel_responsavel.meu_perfil' or request.endpoint == 'painel_responsavel.painel' %}active{% endif %}" href="{{ url_for('painel_responsavel.meu_perfil') }}">
         <i class="bi bi-person-badge"></i> Meu Perfil
       </a>
     {% endif %}

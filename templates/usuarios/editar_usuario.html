@@ -3,6 +3,14 @@
 
 {% block content %}
 
+<style>
+  #miniaturaUsuario { width: 120px; height: 120px; object-fit: cover; border-radius: 50%; border: 3px solid #ffc107; }
+  .camera-modal-usuario { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; justify-content: center; align-items: center; background: rgba(0,0,0,.9); z-index: 9999; }
+  .camera-content-usuario { width: 90%; max-width: 480px; text-align: center; }
+  .camera-content-usuario video, .camera-content-usuario canvas { width: 100%; border-radius: 10px; border: 2px solid #ddd; margin-bottom: 10px; }
+  .camera-content-usuario .btn { margin: 5px; }
+</style>
+
 <div class="container mt-4">
   <div class="card shadow-lg border-0 mx-auto" style="max-width: 650px;">
 
@@ -14,8 +22,33 @@
 
     <div class="card-body p-4">
 
-      <form method="POST">
+      <form method="POST" enctype="multipart/form-data">
         <input type="hidden" name="next" value="{{ back_url }}">
+
+        <!-- Foto -->
+        <div class="mb-4">
+          <label class="form-label fw-semibold"><i class="bi bi-camera-fill me-1"></i> Foto</label>
+          <div class="d-flex flex-wrap align-items-start gap-4">
+            <div class="text-center">
+              <img id="miniaturaUsuario" src="{{ url_for('static', filename='uploads/' + usuario.foto) if usuario.get('foto') else '' }}"
+                   class="{{ 'd-block' if usuario.foto else 'd-none' }} mx-auto"
+                   alt="Foto" onerror="this.style.display='none'">
+              <div id="placeholderFoto" class="{{ 'd-none' if usuario.get('foto') else 'd-flex' }} align-items-center justify-content-center bg-light rounded-circle mx-auto" style="width:120px;height:120px;">
+                <i class="bi bi-person-fill text-muted" style="font-size:3rem;"></i>
+              </div>
+              <input type="hidden" name="foto" id="fotoInputUsuario">
+            </div>
+            <div class="flex-grow-1">
+              <button type="button" class="btn btn-primary btn-sm mb-2" id="btnAbrirCameraUsuario">
+                <i class="bi bi-camera-fill me-1"></i> Tirar da câmera
+              </button>
+              <div class="mb-2">
+                <label class="form-label small mb-0">ou escolher arquivo</label>
+                <input type="file" name="foto_arquivo" class="form-control form-control-sm" accept="image/*" id="fotoArquivoUsuario">
+              </div>
+            </div>
+          </div>
+        </div>
 
         <!-- Nome (somente leitura) -->
         <div class="mb-3">
@@ -137,4 +170,97 @@
 </script>
 {% endif %}
 
+<!-- Modal Câmera -->
+<div class="camera-modal-usuario d-flex" id="cameraModalUsuario">
+  <div class="camera-content-usuario bg-dark p-3 rounded">
+    <video id="cameraVideoUsuario" autoplay playsinline></video>
+    <canvas id="cameraCanvasUsuario" style="display:none;"></canvas>
+    <div>
+      <button type="button" class="btn btn-success btn-sm" id="btnCapturarUsuario">Capturar</button>
+      <button type="button" class="btn btn-primary btn-sm" id="btnConfirmarFotoUsuario" style="display:none;">Confirmar</button>
+      <button type="button" class="btn btn-warning btn-sm" style="display:none;" id="btnTirarNovamenteUsuario">Refazer</button>
+      <button type="button" class="btn btn-danger btn-sm" id="btnFecharCameraUsuario">Fechar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  var miniatura = document.getElementById('miniaturaUsuario');
+  var placeholder = document.getElementById('placeholderFoto');
+  var fotoInput = document.getElementById('fotoInputUsuario');
+  var fotoArquivo = document.getElementById('fotoArquivoUsuario');
+
+  function mostrarPreview(src) {
+    if (miniatura) {
+      miniatura.src = src;
+      miniatura.classList.remove('d-none');
+    }
+    if (placeholder) placeholder.classList.add('d-none');
+  }
+
+  fotoArquivo && fotoArquivo.addEventListener('change', function() {
+    var f = this.files[0];
+    if (f && f.type.indexOf('image') === 0) {
+      var r = new FileReader();
+      r.onload = function() { mostrarPreview(r.result); };
+      r.readAsDataURL(f);
+      if (fotoInput) fotoInput.value = '';
+    }
+  });
+
+  var streamUsuario;
+  var modalCam = document.getElementById('cameraModalUsuario');
+  var videoCam = document.getElementById('cameraVideoUsuario');
+  var canvasCam = document.getElementById('cameraCanvasUsuario');
+
+  document.getElementById('btnAbrirCameraUsuario').addEventListener('click', async function() {
+    try {
+      streamUsuario = await navigator.mediaDevices.getUserMedia({ video: true });
+      videoCam.srcObject = streamUsuario;
+      modalCam.style.display = 'flex';
+      canvasCam.style.display = 'none';
+      videoCam.style.display = 'block';
+      document.getElementById('btnCapturarUsuario').style.display = 'inline-block';
+      document.getElementById('btnConfirmarFotoUsuario').style.display = 'none';
+      document.getElementById('btnTirarNovamenteUsuario').style.display = 'none';
+    } catch (e) {
+      alert('Não foi possível acessar a câmera.');
+    }
+  });
+
+  document.getElementById('btnFecharCameraUsuario').addEventListener('click', function() {
+    modalCam.style.display = 'none';
+    if (streamUsuario) streamUsuario.getTracks().forEach(function(t) { t.stop(); });
+  });
+
+  document.getElementById('btnCapturarUsuario').addEventListener('click', function() {
+    canvasCam.width = videoCam.videoWidth;
+    canvasCam.height = videoCam.videoHeight;
+    canvasCam.getContext('2d').drawImage(videoCam, 0, 0);
+    canvasCam.style.display = 'block';
+    videoCam.style.display = 'none';
+    document.getElementById('btnCapturarUsuario').style.display = 'none';
+    document.getElementById('btnConfirmarFotoUsuario').style.display = 'inline-block';
+    document.getElementById('btnTirarNovamenteUsuario').style.display = 'inline-block';
+  });
+
+  document.getElementById('btnTirarNovamenteUsuario').addEventListener('click', function() {
+    canvasCam.style.display = 'none';
+    videoCam.style.display = 'block';
+    document.getElementById('btnCapturarUsuario').style.display = 'inline-block';
+    document.getElementById('btnConfirmarFotoUsuario').style.display = 'none';
+    document.getElementById('btnTirarNovamenteUsuario').style.display = 'none';
+  });
+
+  document.getElementById('btnConfirmarFotoUsuario').addEventListener('click', function() {
+    var dataURL = canvasCam.toDataURL('image/png');
+    if (fotoInput) fotoInput.value = dataURL;
+    mostrarPreview(dataURL);
+    if (fotoArquivo) fotoArquivo.value = '';
+    modalCam.style.display = 'none';
+    if (streamUsuario) streamUsuario.getTracks().forEach(function(t) { t.stop(); });
+  });
+})();
+</script>
 {% endblock %}

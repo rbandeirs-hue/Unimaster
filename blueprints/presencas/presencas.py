@@ -18,6 +18,28 @@ def _get_academias_presenca():
         conn = get_db_connection()
         cur = conn.cursor(dictionary=True)
         ids = []
+        cur.execute("SELECT academia_id FROM usuarios_academias WHERE usuario_id = %s ORDER BY academia_id", (current_user.id,))
+        vinculadas = [r["academia_id"] for r in cur.fetchall()]
+        if vinculadas:
+            cur.close()
+            conn.close()
+            conn = get_db_connection()
+            cur = conn.cursor(dictionary=True)
+            cur.execute("SELECT id, nome FROM academias WHERE id IN (%s) ORDER BY nome" % ",".join(["%s"] * len(vinculadas)), tuple(vinculadas))
+            academias = cur.fetchall()
+            cur.close()
+            conn.close()
+            if len(vinculadas) == 1:
+                return vinculadas[0], academias
+            aid = request.args.get("academia_id", type=int) or session.get("academia_gerenciamento_id")
+            if aid and aid in vinculadas:
+                session["academia_gerenciamento_id"] = aid
+                session["finance_academia_id"] = aid
+            else:
+                aid = vinculadas[0]
+                session["academia_gerenciamento_id"] = aid
+                session["finance_academia_id"] = aid
+            return aid, academias
         if current_user.has_role("admin"):
             cur.execute("SELECT id FROM academias ORDER BY nome")
             ids = [r["id"] for r in cur.fetchall()]
@@ -47,9 +69,11 @@ def _get_academias_presenca():
         aid = request.args.get("academia_id", type=int) or session.get("academia_gerenciamento_id")
         if aid and aid in ids:
             session["academia_gerenciamento_id"] = aid
+            session["finance_academia_id"] = aid
         else:
-            session["academia_gerenciamento_id"] = ids[0]
             aid = ids[0]
+            session["academia_gerenciamento_id"] = aid
+            session["finance_academia_id"] = aid
         return aid, academias
     except Exception:
         return None, []
@@ -79,7 +103,7 @@ def painel_presenca():
 # ======================================================
 def _get_academia_filtro_presencas():
     """Retorna academia_id para filtrar (ata, historico, registro)."""
-    aid = request.args.get("academia_id", type=int) or session.get("academia_gerenciamento_id")
+    aid = request.args.get("academia_id", type=int) or request.form.get("academia_id", type=int) or session.get("academia_gerenciamento_id")
     if not aid and getattr(current_user, "id_academia", None):
         aid = current_user.id_academia
     if not aid:
@@ -89,6 +113,12 @@ def _get_academia_filtro_presencas():
     try:
         conn = get_db_connection()
         cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT academia_id FROM usuarios_academias WHERE usuario_id = %s", (current_user.id,))
+        vinculadas = [r["academia_id"] for r in cur.fetchall()]
+        if vinculadas and aid in vinculadas:
+            cur.close()
+            conn.close()
+            return aid
         if current_user.has_role("admin"):
             cur.execute("SELECT 1 FROM academias WHERE id = %s", (aid,))
         elif current_user.has_role("gestor_federacao"):
@@ -140,10 +170,22 @@ def registro_presenca():
             alunos_selecionados = []
 
         try:
-            cursor.execute("SELECT id FROM alunos WHERE TurmaID=%s", (turma_selecionada,))
+            if academia_id:
+                cursor.execute(
+                    """SELECT a.id FROM alunos a
+                       LEFT JOIN aluno_turmas at ON at.aluno_id = a.id AND at.TurmaID = %s
+                       WHERE (at.TurmaID IS NOT NULL OR a.TurmaID = %s) AND a.id_academia = %s""",
+                    (turma_selecionada, turma_selecionada, academia_id),
+                )
+            else:
+                cursor.execute("SELECT id FROM alunos WHERE TurmaID=%s", (turma_selecionada,))
             todos_alunos = [row['id'] for row in cursor.fetchall()]
         except Exception:
-            todos_alunos = []
+            try:
+                cursor.execute("SELECT id FROM alunos WHERE TurmaID=%s", (turma_selecionada,))
+                todos_alunos = [row['id'] for row in cursor.fetchall()]
+            except Exception:
+                todos_alunos = []
 
         try:
             for aluno_id in todos_alunos:
@@ -174,12 +216,32 @@ def registro_presenca():
 
     alunos = []
     presencas_registradas = []
+    if turma_selecionada and academia_id:
+        try:
+            cursor.execute("SELECT TurmaID FROM turmas WHERE TurmaID = %s AND id_academia = %s", (turma_selecionada, academia_id))
+            if not cursor.fetchone():
+                turma_selecionada = None
+        except Exception:
+            turma_selecionada = None
     if turma_selecionada:
         try:
-            cursor.execute("SELECT id, nome, foto FROM alunos WHERE TurmaID=%s ORDER BY nome", (turma_selecionada,))
+            if academia_id:
+                cursor.execute(
+                    """SELECT a.id, a.nome, a.foto FROM alunos a
+                       LEFT JOIN aluno_turmas at ON at.aluno_id = a.id AND at.TurmaID = %s
+                       WHERE (at.TurmaID IS NOT NULL OR a.TurmaID = %s) AND a.id_academia = %s
+                       ORDER BY a.nome""",
+                    (turma_selecionada, turma_selecionada, academia_id),
+                )
+            else:
+                cursor.execute("SELECT id, nome, foto FROM alunos WHERE TurmaID=%s ORDER BY nome", (turma_selecionada,))
             alunos = cursor.fetchall()
         except Exception:
-            alunos = []
+            try:
+                cursor.execute("SELECT id, nome, foto FROM alunos WHERE TurmaID=%s ORDER BY nome", (turma_selecionada,))
+                alunos = cursor.fetchall()
+            except Exception:
+                alunos = []
 
         if alunos:
             try:

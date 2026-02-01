@@ -31,7 +31,7 @@ def get_contexto_logo_e_nome(current_user, session):
         return None, "Judo Academy", None
 
     modo = session.get("modo_painel") if session else None
-    if not modo or modo not in ("admin", "federacao", "associacao", "academia", "aluno"):
+    if not modo or modo not in ("admin", "federacao", "associacao", "academia", "aluno", "responsavel"):
         modo = _modo_efetivo(current_user)
 
     conn = get_db_connection()
@@ -72,6 +72,21 @@ def get_contexto_logo_e_nome(current_user, session):
                     logo = buscar_logo_url("academia", ac["id"])
                     return logo, ac["nome"] or "Academia", "academia"
 
+        if modo == "responsavel":
+            cur.execute(
+                """SELECT a.id_academia FROM alunos a
+                   JOIN responsavel_alunos ra ON ra.aluno_id = a.id
+                   WHERE ra.usuario_id = %s LIMIT 1""",
+                (current_user.id,),
+            )
+            row = cur.fetchone()
+            if row and row.get("id_academia"):
+                cur.execute("SELECT id, nome FROM academias WHERE id = %s", (row["id_academia"],))
+                ac = cur.fetchone()
+                if ac:
+                    logo = buscar_logo_url("academia", ac["id"])
+                    return logo, ac["nome"] or "Academia", "academia"
+
         # Admin sem contexto específico: tentar primeira federação
         if modo == "admin":
             cur.execute("SELECT id, nome FROM federacoes ORDER BY nome LIMIT 1")
@@ -98,4 +113,6 @@ def _modo_efetivo(current_user):
         return "academia"
     if current_user.has_role("aluno"):
         return "aluno"
+    if current_user.has_role("responsavel"):
+        return "responsavel"
     return None

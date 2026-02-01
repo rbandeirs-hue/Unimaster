@@ -371,6 +371,21 @@ def editar_usuario(user_id):
         nova_senha = request.form.get("senha")
         roles_novas = request.form.getlist("roles")
 
+        # Foto (câmera base64 ou arquivo)
+        try:
+            from blueprints.aluno.alunos import salvar_imagem_base64, salvar_arquivo_upload
+            foto_dataurl = request.form.get("foto")
+            foto_arquivo = request.files.get("foto_arquivo")
+            foto_filename = None
+            if foto_dataurl:
+                foto_filename = salvar_imagem_base64(foto_dataurl, f"usuario_{user_id}")
+            elif foto_arquivo and foto_arquivo.filename:
+                foto_filename = salvar_arquivo_upload(foto_arquivo, f"usuario_{user_id}")
+            if foto_filename:
+                cursor.execute("UPDATE usuarios SET foto = %s WHERE id = %s", (foto_filename, user_id))
+        except Exception:
+            pass
+
         # Atualizar senha
         if nova_senha:
             cursor.execute("""

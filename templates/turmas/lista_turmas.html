@@ -345,6 +345,39 @@
 .aluno-mini-card .nome-mini { font-weight: 600; margin: 0; }
 .aluno-mini-card.readonly { cursor: default; }
 .aluno-mini-card.readonly:hover { border-color: #e9ecef; background: transparent; }
+.aluno-mini-card-vinculado {
+  position: relative;
+  cursor: default;
+  border-radius: 10px;
+  padding: 0.75rem 2.5rem 0.75rem 0.75rem;
+  border: 2px solid #e9ecef;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.aluno-mini-card-vinculado .foto-mini,
+.aluno-mini-card-vinculado .foto-mini-placeholder {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #e9ecef;
+}
+.aluno-mini-card-vinculado .foto-mini-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6c757d;
+}
+.aluno-mini-card-vinculado .nome-mini { font-weight: 600; margin: 0; flex: 1; }
+.aluno-mini-card-vinculado .btn-remover-turma {
+  position: absolute;
+  top: 0.35rem;
+  right: 0.35rem;
+  padding: 0.2rem 0.35rem;
+  font-size: 0.75rem;
+  line-height: 1;
+}
 </style>
 
 <script>
@@ -355,6 +388,7 @@
         var urlAlunosDisponiveis = "{{ url_for('turmas.alunos_disponiveis_turma', turma_id=999) }}";
         var urlAlunosVinculados = "{{ url_for('turmas.alunos_vinculados_turma', turma_id=999) }}";
         var urlMatricularBase = "{{ url_for('turmas.matricular_aluno', turma_id=999, aluno_id=888) }}";
+        var urlRemoverBase = "{{ url_for('turmas.remover_aluno_turma', turma_id=999, aluno_id=888) }}";
         var matricularModal = document.getElementById('modalMatricular');
         var vinculadosModal = document.getElementById('modalVinculados');
 
@@ -368,6 +402,48 @@
                 : '<div class="foto-mini-placeholder"><i class="bi bi-person-fill"></i></div>';
             card.innerHTML = foto + '<span class="nome-mini">' + (a.nome || '-') + '</span>';
             if (clickHandler) card.addEventListener('click', function () { clickHandler(a); });
+            div.appendChild(card);
+            return div;
+        }
+
+        function renderAlunoCardComRemover(a, turmaId, onRemovido) {
+            var div = document.createElement('div');
+            div.className = 'col-12 col-md-6 col-lg-4';
+            var card = document.createElement('div');
+            card.className = 'aluno-mini-card-vinculado position-relative';
+            var foto = a.foto_url
+                ? '<img src="' + a.foto_url + '" class="foto-mini" alt="">'
+                : '<div class="foto-mini-placeholder"><i class="bi bi-person-fill"></i></div>';
+            card.innerHTML = foto + '<span class="nome-mini">' + (a.nome || '-') + '</span>' +
+                '<button type="button" class="btn-remover-turma btn btn-sm btn-outline-danger" title="Remover da turma"><i class="bi bi-x-lg"></i></button>';
+            var btn = card.querySelector('.btn-remover-turma');
+            btn.addEventListener('click', function (e) {
+                e.stopPropagation();
+                if (!confirm('Remover ' + (a.nome || 'este aluno') + ' desta turma?')) return;
+                btn.disabled = true;
+                fetch(urlRemoverBase.replace('999', turmaId).replace('888', a.id), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                    credentials: 'same-origin'
+                }).then(function (res) { return res.json(); })
+                  .then(function (data) {
+                    if (data.ok) {
+                        div.remove();
+                        if (typeof onRemovido === 'function') onRemovido();
+                        if (typeof bootstrap !== 'undefined' && bootstrap.Toast) {
+                            var t = document.createElement('div');
+                            t.className = 'toast align-items-center text-bg-success border-0';
+                            t.innerHTML = '<div class="d-flex"><div class="toast-body">' + (data.msg || 'Aluno removido.') + '</div></div>';
+                            document.body.appendChild(t);
+                            new bootstrap.Toast(t, { delay: 2000 }).show();
+                            setTimeout(function () { t.remove(); }, 2500);
+                        }
+                    } else {
+                        btn.disabled = false;
+                        alert(data.msg || 'Erro ao remover');
+                    }
+                  }).catch(function () { btn.disabled = false; alert('Erro ao remover'); });
+            });
             div.appendChild(card);
             return div;
         }
@@ -461,14 +537,20 @@
                 .then(function (alunos) {
                     document.getElementById('modalVinculadosLoading').style.display = 'none';
                     var lista = document.getElementById('modalVinculadosLista');
+                    var vazio = document.getElementById('modalVinculadosVazio');
                     lista.innerHTML = '';
                     if (alunos.length === 0) {
-                        document.getElementById('modalVinculadosVazio').style.display = 'block';
+                        vazio.style.display = 'block';
                         return;
                     }
                     document.getElementById('modalVinculadosLista').style.display = '';
                     alunos.forEach(function (a) {
-                        lista.appendChild(renderAlunoCard(a, null, true));
+                        lista.appendChild(renderAlunoCardComRemover(a, turmaId, function () {
+                            if (lista.children.length === 0) {
+                                lista.style.display = 'none';
+                                vazio.style.display = 'block';
+                            }
+                        }));
                     });
                 })
                 .catch(function (err) {

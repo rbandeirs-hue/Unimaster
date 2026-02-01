@@ -1,11 +1,22 @@
 {% extends "base.html" %}
-{% block title %}Meu Perfil – Aluno{% endblock %}
+{% block title %}Meu Perfil – {{ aluno.nome }}{% endblock %}
 
 {% block content %}
 <div class="container mt-4">
+    {% if alunos|length > 1 %}
+    <div class="mb-3">
+        <label class="form-label fw-semibold">Aluno:</label>
+        <select class="form-select form-select-sm" style="max-width: 280px;" onchange="if(this.value) window.location.href='{{ url_for('painel_responsavel.meu_perfil') }}?aluno_id='+this.value">
+            {% for a in alunos %}
+            <option value="{{ a.id }}" {% if a.id == aluno.id %}selected{% endif %}>{{ a.nome }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    {% endif %}
+
     <div class="mb-4">
         <h2 class="fw-bold text-primary">Meu Perfil</h2>
-        <p class="text-muted mb-0">Informações pessoais e atalhos rápidos</p>
+        <p class="text-muted mb-0">Informações do aluno — {{ aluno.nome }}</p>
     </div>
 
     <div class="row g-4">
@@ -30,7 +41,7 @@
                             <div class="perfil-item"><span class="perfil-label">Próxima faixa</span><span class="perfil-valor">{{ aluno.proxima_faixa|default('—') }}</span></div>
                         </div>
                         <div class="perfil-card-actions d-flex gap-2 mt-3 w-100 justify-content-center">
-                            <a href="{{ url_for('alunos.editar_aluno', aluno_id=aluno.id, next=url_for('painel_aluno.meu_perfil')) }}" class="btn btn-outline-warning btn-sm" title="Editar dados">
+                            <a href="{{ url_for('alunos.editar_aluno', aluno_id=aluno.id, next=url_for('painel_responsavel.meu_perfil', aluno_id=aluno.id)) }}" class="btn btn-outline-warning btn-sm" title="Editar dados">
                                 <i class="bi bi-pencil-fill"></i> Editar
                             </a>
                             <button type="button" class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalVerAluno" title="Ver dados completos">
@@ -46,11 +57,11 @@
         <div class="col-lg-8 col-md-7">
             <div class="row g-2">
                 <div class="col-sm-6 col-12">
-                    <a href="{{ url_for('painel_aluno.minhas_mensalidades') }}" class="text-decoration-none">
+                    <a href="{{ url_for('painel_responsavel.minhas_mensalidades', aluno_id=aluno.id) }}" class="text-decoration-none">
                         <div class="card shadow-sm border-success card-hover painel-atalho-card">
                             <div class="card-body text-center py-3 px-3 d-flex flex-column align-items-center">
                                 <i class="bi bi-calendar-check fs-3 mb-2 text-success"></i>
-                                <h6 class="fw-bold mb-1">Minhas Mensalidades</h6>
+                                <h6 class="fw-bold mb-1">Mensalidades</h6>
                                 <p class="text-muted small mb-2">Vencimentos e pagamentos</p>
                                 <span class="btn btn-success btn-sm px-3">Acessar</span>
                             </div>
@@ -58,11 +69,11 @@
                     </a>
                 </div>
                 <div class="col-sm-6 col-12">
-                    <a href="{{ url_for('painel_aluno.minha_turma') }}" class="text-decoration-none">
+                    <a href="{{ url_for('painel_responsavel.minha_turma', aluno_id=aluno.id) }}" class="text-decoration-none">
                         <div class="card shadow-sm border-info card-hover painel-atalho-card">
                             <div class="card-body text-center py-3 px-3 d-flex flex-column align-items-center">
                                 <i class="bi bi-collection fs-3 mb-2 text-info"></i>
-                                <h6 class="fw-bold mb-1">Minha Turma</h6>
+                                <h6 class="fw-bold mb-1">Turma</h6>
                                 <p class="text-muted small mb-2">Horários e informações</p>
                                 <span class="btn btn-info btn-sm text-white px-3">Acessar</span>
                             </div>
@@ -70,11 +81,11 @@
                     </a>
                 </div>
                 <div class="col-sm-6 col-12">
-                    <a href="{{ url_for('painel_aluno.minhas_presencas') }}" class="text-decoration-none">
+                    <a href="{{ url_for('painel_responsavel.minhas_presencas', aluno_id=aluno.id) }}" class="text-decoration-none">
                         <div class="card shadow-sm border-warning card-hover painel-atalho-card">
                             <div class="card-body text-center py-3 px-3 d-flex flex-column align-items-center">
                                 <i class="bi bi-clipboard-check fs-3 mb-2 text-warning"></i>
-                                <h6 class="fw-bold mb-1">Minhas Presenças</h6>
+                                <h6 class="fw-bold mb-1">Presenças</h6>
                                 <p class="text-muted small mb-2">Histórico de presença</p>
                                 <span class="btn btn-warning btn-sm text-dark px-3">Acessar</span>
                             </div>
@@ -82,11 +93,11 @@
                     </a>
                 </div>
                 <div class="col-sm-6 col-12">
-                    <a href="{{ url_for('painel_aluno.curriculo') }}" class="text-decoration-none">
+                    <a href="{{ url_for('painel_responsavel.curriculo', aluno_id=aluno.id) }}" class="text-decoration-none">
                         <div class="card shadow-sm border-secondary card-hover painel-atalho-card">
                             <div class="card-body text-center py-3 px-3 d-flex flex-column align-items-center">
                                 <i class="bi bi-file-earmark-person fs-3 mb-2 text-secondary"></i>
-                                <h6 class="fw-bold mb-1">Meu currículo</h6>
+                                <h6 class="fw-bold mb-1">Currículo</h6>
                                 <p class="text-muted small mb-2">Competições e eventos</p>
                                 <span class="btn btn-secondary btn-sm px-3">Acessar</span>
                             </div>
@@ -94,7 +105,7 @@
                     </a>
                 </div>
                 <div class="col-sm-6 col-12">
-                    <a href="{{ url_for('painel_aluno.associacao') }}" class="text-decoration-none">
+                    <a href="{{ url_for('painel_responsavel.associacao', aluno_id=aluno.id) }}" class="text-decoration-none">
                         <div class="card shadow-sm border-dark card-hover painel-atalho-card">
                             <div class="card-body text-center py-3 px-3 d-flex flex-column align-items-center">
                                 <i class="bi bi-building fs-3 mb-2 text-dark"></i>
@@ -152,7 +163,7 @@
         </div>
       </div>
       <div class="modal-footer border-0 bg-light">
-        <a href="{{ url_for('alunos.editar_aluno', aluno_id=aluno.id, next=url_for('painel_aluno.meu_perfil')) }}" class="btn btn-warning"><i class="bi bi-pencil me-1"></i> Editar</a>
+        <a href="{{ url_for('alunos.editar_aluno', aluno_id=aluno.id, next=url_for('painel_responsavel.meu_perfil', aluno_id=aluno.id)) }}" class="btn btn-warning"><i class="bi bi-pencil me-1"></i> Editar</a>
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
       </div>
     </div>

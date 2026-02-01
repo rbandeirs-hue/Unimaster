@@ -1,10 +1,11 @@
 {% extends "base.html" %}
 {% block title %}Gerar Cobrança{% endblock %}
 {% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/financeiro/responsive.css') }}?v=1">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/financeiro/responsive.css') }}?v=4">
 {% endblock %}
 {% block content %}
-<div class="container mt-4">
+<div class="gerar-cobranca-page-wrapper">
+<div class="container mt-4 gerar-cobranca-page">
     <a href="{{ url_for('financeiro.painel_mensalidades', academia_id=academia_id) if academia_id else url_for('financeiro.painel_mensalidades') }}" class="btn btn-outline-secondary mb-3">
         <i class="bi bi-arrow-left me-1"></i> Voltar
     </a>
@@ -16,13 +17,13 @@
             <form method="POST" id="form-gerar-cobranca">
                 <div class="mb-4">
                     <label class="form-label fw-semibold">Tipo de cobrança</label>
-                    <div class="d-flex gap-3">
+                    <div class="d-flex flex-wrap gap-3 gerar-cobranca-tipo">
                         <div class="form-check">
-                            <input class="form-check-input" type="radio" name="tipo" id="tipo_avulso" value="avulso" checked>
+                            <input class="form-check-input" type="radio" name="tipo" id="tipo_avulso" value="avulso" {% if not filtro_turma_id %}checked{% endif %}>
                             <label class="form-check-label" for="tipo_avulso">Avulsa (uma cobrança)</label>
                         </div>
                         <div class="form-check">
-                            <input class="form-check-input" type="radio" name="tipo" id="tipo_ano" value="ano">
+                            <input class="form-check-input" type="radio" name="tipo" id="tipo_ano" value="ano" {% if filtro_turma_id %}checked{% endif %}>
                             <label class="form-check-label" for="tipo_ano">Ano (mensalidades)</label>
                         </div>
                     </div>
@@ -41,30 +42,75 @@
                 <input type="hidden" id="id_academia" name="id_academia" value="{{ academia_sel }}">
                 {% endif %}
 
-                <div class="mb-3" id="bloco_turma" style="display:none;">
-                    <label for="turma_id" class="form-label fw-semibold">Turma <span class="text-danger">*</span></label>
-                    <select class="form-select" id="turma_id" name="turma_id">
-                        <option value="">Selecione a turma</option>
-                        {% for t in turmas %}
-                        <option value="{{ t.TurmaID }}">{{ t.Nome }}</option>
-                        {% endfor %}
-                    </select>
-                    <small class="text-muted">Selecione a turma para carregar os alunos matriculados.</small>
+                <div id="bloco_ano" style="display:{% if filtro_turma_id %}block{% else %}none{% endif %};">
+                    <div class="mb-3">
+                        <label for="turma_id" class="form-label fw-semibold">Turma <span class="text-danger">*</span></label>
+                        <select class="form-select" id="turma_id" name="turma_id">
+                            <option value="">Selecione a turma</option>
+                            {% for t in turmas %}
+                            <option value="{{ t.TurmaID | default(t.turmaid) | default('') }}" {% if filtro_turma_id and (t.TurmaID | default(t.turmaid)) == filtro_turma_id %}selected{% endif %}>{{ t.Nome | default(t.nome) | default('') }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="mensalidade_id" class="form-label fw-semibold">Plano de mensalidade <span class="text-danger">*</span></label>
+                        <select class="form-select" id="mensalidade_id" name="mensalidade_id">
+                            <option value="">Selecione o plano</option>
+                            {% for p in planos %}
+                            <option value="{{ p.id }}" {% if filtro_plano_id and p.id == filtro_plano_id %}selected{% endif %}>{{ p.nome }} — R$ {{ "%.2f"|format(p.valor or 0) }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="ano_ref" class="form-label fw-semibold">Ano <span class="text-danger">*</span></label>
+                        <select class="form-select" id="ano_ref" name="ano_ref">
+                            <option value="{{ ano_atual }}" {% if (filtro_ano_ref or ano_atual) == ano_atual %}selected{% endif %}>{{ ano_atual }}</option>
+                            <option value="{{ ano_atual + 1 }}" {% if filtro_ano_ref == ano_atual + 1 %}selected{% endif %}>{{ ano_atual + 1 }}</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="mes_inicial" class="form-label fw-semibold">Gerar a partir do mês <span class="text-danger">*</span></label>
+                        <select class="form-select" id="mes_inicial" name="mes_inicial">
+                            {% for m in range(1, 13) %}
+                            <option value="{{ m }}" {% if (filtro_mes_inicial or 1) == m %}selected{% endif %}>{{ ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'][m-1] }}</option>
+                            {% endfor %}
+                        </select>
+                        <small class="text-muted">Serão geradas cobranças do mês selecionado até dezembro.</small>
+                    </div>
+                    <div class="mb-3">
+                        <label for="dia_vencimento" class="form-label fw-semibold">Dia do vencimento</label>
+                        <input type="number" class="form-control" id="dia_vencimento" name="dia_vencimento" min="1" max="28" value="10" style="max-width: 80px;">
+                    </div>
                 </div>
 
                 <div class="mb-3">
-                    <label class="form-label fw-semibold" id="label_alunos">Aluno <span class="text-danger">*</span></label>
-                    <div class="form-check mb-2" id="bloco_selecionar_todos" style="display:none;">
+                    <label class="form-label fw-semibold" id="label_alunos">Aluno(s) <span class="text-danger">*</span></label>
+                    <div class="form-check mb-2" id="bloco_selecionar_todos" style="display:{% if alunos_iniciais and alunos_iniciais|length > 1 %}block{% else %}none{% endif %};">
                         <input class="form-check-input" type="checkbox" id="selecionar_todos">
                         <label class="form-check-label fw-semibold" for="selecionar_todos">Selecionar todos</label>
                     </div>
-                    <div id="lista_alunos" class="border rounded p-3" style="max-height: 220px; overflow-y: auto; background: var(--bs-tertiary-bg, #f8f9fa);">
-                        <div class="text-muted text-center py-3">Carregando...</div>
+                    <div id="lista_alunos" class="border rounded p-3 gerar-cobranca-lista-alunos" style="max-height: 220px; overflow-y: auto; background: var(--bs-tertiary-bg, #f8f9fa);">
+                        {% if alunos_iniciais %}
+                        {% for a in alunos_iniciais %}
+                        <div class="form-check gerar-cobranca-item-aluno{% if a.disabled %} text-muted{% endif %}">
+                            <input type="checkbox" class="form-check-input cb-aluno" name="aluno_id" value="{{ a.id }}" id="aluno_{{ a.id }}"{% if a.disabled %} disabled{% endif %}>
+                            <label class="form-check-label" for="aluno_{{ a.id }}">{{ a.nome }}{% if a.disabled %}<small class="text-muted d-block">(já possui mensalidade no período)</small>{% endif %}</label>
+                        </div>
+                        {% endfor %}
+                        {% else %}
+                        <div class="text-muted text-center py-3">
+                            {% if filtro_turma_id %}
+                            Nenhum aluno na turma ou todos já possuem mensalidade no período.
+                            {% else %}
+                            Nenhum aluno cadastrado nesta academia.
+                            {% endif %}
+                        </div>
+                        {% endif %}
                     </div>
-                    <small class="text-muted" id="hint_alunos">Selecione um aluno para cobrança avulsa.</small>
+                    <small class="text-muted" id="hint_alunos">Modo Ano: selecione turma e plano para exibir os alunos.</small>
                 </div>
 
-                <div id="bloco_avulso">
+                <div id="bloco_avulso" style="display:{% if filtro_turma_id %}none{% else %}block{% endif %};">
                     <div class="mb-3">
                         <label for="descricao" class="form-label fw-semibold">Descrição</label>
                         <input type="text" class="form-control" id="descricao" name="descricao" placeholder="Ex: Material, evento, etc.">
@@ -79,221 +125,150 @@
                     </div>
                 </div>
 
-                <div id="bloco_ano" style="display:none;">
-                    <div class="mb-3">
-                        <label for="mensalidade_id" class="form-label fw-semibold">Plano de mensalidade <span class="text-danger">*</span></label>
-                        <select class="form-select" id="mensalidade_id" name="mensalidade_id">
-                            <option value="">Selecione o plano</option>
-                            {% for p in planos %}
-                            <option value="{{ p.id }}">{{ p.nome }} — R$ {{ "%.2f"|format(p.valor or 0) }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="mb-3">
-                        <label for="ano_ref" class="form-label fw-semibold">Ano <span class="text-danger">*</span></label>
-                        <select class="form-select" id="ano_ref" name="ano_ref">
-                            <option value="{{ ano_atual }}">{{ ano_atual }}</option>
-                            <option value="{{ ano_atual + 1 }}">{{ ano_atual + 1 }}</option>
-                        </select>
-                    </div>
-                    <div class="mb-3">
-                        <label for="mes_inicial" class="form-label fw-semibold">Gerar a partir do mês <span class="text-danger">*</span></label>
-                        <select class="form-select" id="mes_inicial" name="mes_inicial">
-                            <option value="1">Janeiro</option>
-                            <option value="2">Fevereiro</option>
-                            <option value="3">Março</option>
-                            <option value="4">Abril</option>
-                            <option value="5">Maio</option>
-                            <option value="6">Junho</option>
-                            <option value="7">Julho</option>
-                            <option value="8">Agosto</option>
-                            <option value="9">Setembro</option>
-                            <option value="10">Outubro</option>
-                            <option value="11">Novembro</option>
-                            <option value="12">Dezembro</option>
-                        </select>
-                        <small class="text-muted">Serão geradas cobranças do mês selecionado até dezembro.</small>
-                    </div>
-                    <div class="mb-3">
-                        <label for="dia_vencimento" class="form-label fw-semibold">Dia do vencimento</label>
-                        <input type="number" class="form-control" id="dia_vencimento" name="dia_vencimento" min="1" max="28" value="10" style="max-width: 80px;">
-                    </div>
-                </div>
-
-                <button type="submit" class="btn btn-primary">
+                <button type="submit" class="btn btn-primary btn-gerar-cobranca">
                     <i class="bi bi-check-lg me-1"></i> Gerar Cobrança
                 </button>
             </form>
         </div>
     </div>
 </div>
+</div>
 
 <script>
 (function() {
-    const academiaSelect = document.getElementById('id_academia');
-    const listaAlunos = document.getElementById('lista_alunos');
-    const selecionarTodos = document.getElementById('selecionar_todos');
-    const blocoSelecionarTodos = document.getElementById('bloco_selecionar_todos');
-    const tipoAvulso = document.getElementById('tipo_avulso');
-    const tipoAno = document.getElementById('tipo_ano');
-    const blocoAvulso = document.getElementById('bloco_avulso');
-    const blocoAno = document.getElementById('bloco_ano');
-    const valorInput = document.getElementById('valor');
-    const mensalidadeSelect = document.getElementById('mensalidade_id');
-    const turmaSelect = document.getElementById('turma_id');
-    const blocoTurma = document.getElementById('bloco_turma');
-    const labelAlunos = document.getElementById('label_alunos');
-    const hintAlunos = document.getElementById('hint_alunos');
+    var baseUrl = "{{ url_for('financeiro.gerar_cobranca') }}";
+    var academiaSel = "{{ academia_sel or '' }}";
+    var listaAlunos = document.getElementById('lista_alunos');
+    var tipoAvulso = document.getElementById('tipo_avulso');
+    var tipoAno = document.getElementById('tipo_ano');
+    var blocoAvulso = document.getElementById('bloco_avulso');
+    var blocoAno = document.getElementById('bloco_ano');
+    var turmaSelect = document.getElementById('turma_id');
+    var mensalidadeSelect = document.getElementById('mensalidade_id');
+    var anoRefSelect = document.getElementById('ano_ref');
+    var mesInicialSelect = document.getElementById('mes_inicial');
+    var academiaSelect = document.getElementById('id_academia');
+    var selecionarTodos = document.getElementById('selecionar_todos');
+    var blocoSelecionarTodos = document.getElementById('bloco_selecionar_todos');
 
-    function getCheckboxes() {
-        return listaAlunos.querySelectorAll('input[name="aluno_id"]');
+    function getAcadId() {
+        var el = academiaSelect || document.querySelector('input[name="id_academia"]');
+        return el ? (el.value || '').trim() : academiaSel;
     }
 
-    function getSelectedIds() {
-        return Array.from(getCheckboxes()).filter(cb => cb.checked).map(cb => cb.value);
-    }
-
-    function carregarAlunos() {
-        const acadId = (academiaSelect ? academiaSelect.value : (document.querySelector('input[name="id_academia"]') || {}).value || '').toString().trim();
-        if (!acadId) {
-            listaAlunos.innerHTML = '<div class="text-muted text-center py-3">Selecione a academia.</div>';
-            return;
+    function recarregarComFiltros() {
+        var acad = getAcadId();
+        var url = baseUrl + '?academia_id=' + encodeURIComponent(acad);
+        if (tipoAno && tipoAno.checked && turmaSelect && turmaSelect.value) {
+            url += '&turma_id=' + encodeURIComponent(turmaSelect.value);
+            if (mensalidadeSelect && mensalidadeSelect.value) {
+                url += '&plano_id=' + encodeURIComponent(mensalidadeSelect.value);
+            }
+            if (anoRefSelect && anoRefSelect.value) {
+                url += '&ano_ref=' + encodeURIComponent(anoRefSelect.value);
+            }
+            if (mesInicialSelect && mesInicialSelect.value) {
+                url += '&mes_inicial=' + encodeURIComponent(mesInicialSelect.value);
+            }
         }
-        const turmaId = tipoAno.checked && turmaSelect ? (turmaSelect.value || '').trim() : '';
-        if (tipoAno.checked && !turmaId) {
-            listaAlunos.innerHTML = '<div class="text-muted text-center py-3">Selecione a turma para carregar os alunos.</div>';
-            return;
-        }
-        listaAlunos.innerHTML = '<div class="text-muted text-center py-3">Carregando...</div>';
-        let url = "{{ url_for('financeiro.alunos_por_academia', acad_id=0) }}".replace('/0', '/' + acadId);
-        if (turmaId) url += '?turma_id=' + encodeURIComponent(turmaId);
-        fetch(url, { credentials: 'same-origin' })
-            .then(r => {
-                if (!r.ok) throw new Error('Erro ' + r.status);
-                return r.json();
-            })
-            .then(alunos => {
-                listaAlunos.innerHTML = '';
-                selecionarTodos.checked = false;
-                if (alunos.length === 0) {
-                    listaAlunos.innerHTML = '<div class="text-muted text-center py-3">Nenhum aluno encontrado</div>';
-                } else {
-                    alunos.forEach(a => {
-                        const div = document.createElement('div');
-                        div.className = 'form-check';
-                        const cb = document.createElement('input');
-                        cb.type = 'checkbox';
-                        cb.className = 'form-check-input cb-aluno';
-                        cb.name = 'aluno_id';
-                        cb.value = a.id;
-                        cb.id = 'aluno_' + a.id;
-                        const lbl = document.createElement('label');
-                        lbl.className = 'form-check-label';
-                        lbl.htmlFor = cb.id;
-                        lbl.textContent = a.nome;
-                        div.appendChild(cb);
-                        div.appendChild(lbl);
-                        listaAlunos.appendChild(div);
-                        if (tipoAvulso.checked) {
-                            cb.addEventListener('change', function() {
-                                if (this.checked) {
-                                    getCheckboxes().forEach(c => { if (c !== this) c.checked = false; });
-                                    selecionarTodos.checked = false;
-                                }
-                            });
-                        }
-                    });
-                    toggleBlocos();
-                }
-            })
-            .catch((err) => { 
-                console.error('Erro carregarAlunos:', err);
-                listaAlunos.innerHTML = '<div class="text-muted text-center py-3 text-danger">Erro ao carregar alunos. Verifique se está logado.</div>';
-            });
+        window.location.href = url;
     }
 
     function toggleBlocos() {
-        const isAvulso = tipoAvulso.checked;
-        blocoAvulso.style.display = isAvulso ? 'block' : 'none';
-        blocoAno.style.display = isAvulso ? 'none' : 'block';
-        if (blocoTurma) blocoTurma.style.display = isAvulso ? 'none' : 'block';
-        blocoSelecionarTodos.style.display = (isAvulso || listaAlunos.querySelectorAll('.cb-aluno').length === 0) ? 'none' : 'block';
-        if (isAvulso) {
-            valorInput.required = true;
-            mensalidadeSelect.required = false;
-            if (turmaSelect) turmaSelect.required = false;
-            labelAlunos.innerHTML = 'Aluno <span class="text-danger">*</span>';
-            hintAlunos.textContent = 'Selecione um aluno para cobrança avulsa.';
-            selecionarTodos.checked = false;
-            carregarAlunos();
-        } else {
-            valorInput.required = false;
-            mensalidadeSelect.required = true;
-            if (turmaSelect) turmaSelect.required = true;
-            labelAlunos.innerHTML = 'Aluno(s) <span class="text-danger">*</span>';
-            hintAlunos.textContent = 'Selecione a turma acima e marque os alunos. Use "Selecionar todos" para marcar todos.';
-            carregarAlunos();
+        var isAvulso = tipoAvulso && tipoAvulso.checked;
+        if (blocoAvulso) blocoAvulso.style.display = isAvulso ? 'block' : 'none';
+        if (blocoAno) blocoAno.style.display = isAvulso ? 'none' : 'block';
+        if (blocoSelecionarTodos && listaAlunos) {
+            var n = listaAlunos.querySelectorAll('.cb-aluno:not([disabled])').length;
+            blocoSelecionarTodos.style.display = (isAvulso || n <= 1) ? 'none' : 'block';
         }
     }
 
-    selecionarTodos.addEventListener('change', function() {
-        getCheckboxes().forEach(cb => { cb.checked = this.checked; });
+    [turmaSelect, mensalidadeSelect, anoRefSelect, mesInicialSelect].forEach(function(el) {
+        if (el) el.addEventListener('change', function() {
+            if (tipoAno && tipoAno.checked && turmaSelect && turmaSelect.value) recarregarComFiltros();
+        });
     });
+
+    if (tipoAvulso) tipoAvulso.addEventListener('change', toggleBlocos);
+    if (tipoAno) tipoAno.addEventListener('change', toggleBlocos);
+
+    if (selecionarTodos && listaAlunos) {
+        selecionarTodos.addEventListener('change', function() {
+            var chk = this.checked;
+            listaAlunos.querySelectorAll('.cb-aluno').forEach(function(cb) {
+                if (!cb.disabled) cb.checked = chk;
+            });
+        });
+    }
 
     if (academiaSelect && academiaSelect.tagName === 'SELECT') {
         academiaSelect.addEventListener('change', function() {
-            carregarAlunos();
-            const url = new URL(window.location.href);
-            url.searchParams.set('academia_id', this.value);
-            window.location.href = url.toString();
-        });
-    }
-    if (turmaSelect) {
-        turmaSelect.addEventListener('change', function() {
-            if (tipoAno.checked) carregarAlunos();
+            window.location.href = baseUrl + '?academia_id=' + encodeURIComponent(this.value);
         });
     }
 
-    tipoAvulso.addEventListener('change', toggleBlocos);
-    tipoAno.addEventListener('change', toggleBlocos);
+    var form = document.getElementById('form-gerar-cobranca');
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            var isAvulso = tipoAvulso && tipoAvulso.checked;
+            var sel = [];
+            listaAlunos.querySelectorAll('.cb-aluno:checked').forEach(function(cb) {
+                if (!cb.disabled) sel.push(cb.value);
+            });
+            if (sel.length === 0) {
+                e.preventDefault();
+                alert(isAvulso ? 'Selecione um aluno.' : 'Selecione ao menos um aluno.');
+                return false;
+            }
+            if (isAvulso && sel.length > 1) {
+                e.preventDefault();
+                alert('Para cobrança avulsa, selecione apenas um aluno.');
+                return false;
+            }
+            if (isAvulso) {
+                var valor = document.getElementById('valor');
+                if (valor && !valor.value.trim()) {
+                    e.preventDefault();
+                    alert('Informe o valor para cobrança avulsa.');
+                    return false;
+                }
+            }
+            if (tipoAno && tipoAno.checked) {
+                if (!turmaSelect || !turmaSelect.value) {
+                    e.preventDefault();
+                    alert('Selecione a turma.');
+                    return false;
+                }
+                if (!mensalidadeSelect || !mensalidadeSelect.value) {
+                    e.preventDefault();
+                    alert('Selecione o plano de mensalidade.');
+                    return false;
+                }
+            }
+        });
+    }
 
-    document.getElementById('form-gerar-cobranca').addEventListener('submit', function(e) {
-        const isAvulso = tipoAvulso.checked;
-        const selected = getSelectedIds();
-        if (selected.length === 0) {
-            e.preventDefault();
-            alert(isAvulso ? 'Selecione um aluno.' : 'Selecione ao menos um aluno.');
-            return false;
-        }
-        if (isAvulso && selected.length > 1) {
-            e.preventDefault();
-            alert('Para cobrança avulsa, selecione apenas um aluno.');
-            return false;
-        }
-        if (tipoAvulso.checked && !valorInput.value.trim()) {
-            e.preventDefault();
-            alert('Informe o valor para cobrança avulsa.');
-            return false;
-        }
-        if (tipoAno.checked && !mensalidadeSelect.value) {
-            e.preventDefault();
-            alert('Selecione o plano de mensalidade.');
-            return false;
-        }
-        if (tipoAno.checked && turmaSelect && !turmaSelect.value) {
-            e.preventDefault();
-            alert('Selecione a turma.');
-            return false;
-        }
-    });
+    var dataVenc = document.getElementById('data_vencimento');
+    if (dataVenc) {
+        var d = new Date();
+        d.setMonth(d.getMonth() + 1);
+        d.setDate(1);
+        dataVenc.value = d.toISOString ? d.toISOString().slice(0, 10) : '';
+    }
 
-    var hoje = new Date();
-    var proxMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 1);
-    document.getElementById('data_vencimento').value = proxMes.toISOString().slice(0, 10);
+    if (tipoAvulso && tipoAvulso.checked) {
+        var cbs = listaAlunos.querySelectorAll('.cb-aluno');
+        cbs.forEach(function(cb) {
+            cb.addEventListener('change', function() {
+                if (this.checked) {
+                    cbs.forEach(function(c) { if (c !== cb) c.checked = false; });
+                    if (selecionarTodos) selecionarTodos.checked = false;
+                }
+            });
+        });
+    }
 
-    document.getElementById('mes_inicial').value = (hoje.getMonth() + 1).toString();
-
-    carregarAlunos();
     toggleBlocos();
 })();
 </script>

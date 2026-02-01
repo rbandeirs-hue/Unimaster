@@ -2,7 +2,7 @@
 # blueprints/painel/routes.py (VERSÃO RBAC + MODO)
 # ======================================================
 
-from flask import Blueprint, render_template, redirect, url_for, session
+from flask import Blueprint, render_template, redirect, url_for, session, flash
 from flask_login import login_required, current_user
 from config import get_db_connection
 
@@ -36,6 +36,7 @@ MODOS = {
     "associacao": ("Associação", "associacao.painel_associacao", None),
     "academia": ("Academia", "academia.painel_academia", None),
     "aluno": ("Aluno", "painel_aluno.painel", None),
+    "responsavel": ("Responsável", "painel_responsavel.painel", None),
 }
 
 
@@ -52,6 +53,8 @@ def _modos_disponiveis():
         modos.append(("academia", "Academia"))
     if current_user.has_role("aluno"):
         modos.append(("aluno", "Aluno"))
+    if current_user.has_role("responsavel"):
+        modos.append(("responsavel", "Responsável"))
     return modos
 
 
@@ -88,6 +91,8 @@ def _redirecionar_modo(modo):
             modos = _modos_disponiveis()
             return render_template("painel/sem_aluno_vinculado.html", modos=modos)
         return redirect(url_for("painel_aluno.painel"))
+    if modo == "responsavel":
+        return redirect(url_for("painel_responsavel.painel"))
     return redirect(url_for("painel.home"))
 
 
@@ -137,3 +142,13 @@ def escolher_modo(modo):
 def _redirect_admin():
     stats = _stats_admin()
     return render_template("painel/admin.html", usuario=current_user, stats=stats)
+
+
+@painel_bp.route("/gerenciamento-admin")
+@login_required
+def gerenciamento_admin():
+    """Hub de módulos do modo administrador."""
+    if not current_user.has_role("admin"):
+        flash("Acesso negado.", "danger")
+        return redirect(url_for("painel.home"))
+    return render_template("painel/gerenciamento_admin.html")

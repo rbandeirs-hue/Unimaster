@@ -38,10 +38,17 @@ def carregar_academias_do_usuario(cursor):
 
 
 def _get_academias_ids():
-    """IDs de academias acessíveis (para filtro em modo academia)."""
+    """IDs de academias acessíveis (prioridade: usuarios_academias, alinhado ao gerenciamento)."""
     try:
         conn = get_db_connection()
         cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT academia_id FROM usuarios_academias WHERE usuario_id = %s ORDER BY academia_id", (current_user.id,))
+        vinculadas = [r["academia_id"] for r in cur.fetchall()]
+        if vinculadas:
+            cur.close()
+            conn.close()
+            return vinculadas
+        ids = []
         if current_user.has_role("admin"):
             cur.execute("SELECT id FROM academias ORDER BY nome")
             ids = [r["id"] for r in cur.fetchall()]
@@ -92,9 +99,10 @@ def painel_turmas():
 def lista_turmas():
     perfil_usuario = get_user_profile()
     ids_acessiveis = _get_academias_ids()
-    academia_filtro = request.args.get("academia_id", type=int) or (
-        session.get("academia_gerenciamento_id") if session.get("modo_painel") == "academia" else None
-    )
+    academia_filtro = request.args.get("academia_id", type=int) or session.get("academia_gerenciamento_id")
+    if academia_filtro and academia_filtro in ids_acessiveis:
+        session["academia_gerenciamento_id"] = academia_filtro
+        session["finance_academia_id"] = academia_filtro
 
     db = get_db_connection()
     cursor = db.cursor(dictionary=True)
@@ -240,11 +248,11 @@ def cadastro_turma():
     db = get_db_connection()
     cursor = db.cursor(dictionary=True)
     academias = carregar_academias_do_usuario(cursor)
-    academia_selecionada = (
-        request.args.get("academia_id", type=int)
-        or (session.get("academia_gerenciamento_id") if session.get("modo_painel") == "academia" else None)
-        or getattr(current_user, "id_academia", None)
-    )
+    ids_acad = [a["id"] for a in academias] if academias else _get_academias_ids()
+    if acad_id and ids_acad and acad_id in ids_acad:
+        session["academia_gerenciamento_id"] = acad_id
+        session["finance_academia_id"] = acad_id
+    academia_selecionada = request.args.get("academia_id", type=int) or session.get("academia_gerenciamento_id") or getattr(current_user, "id_academia", None)
 
     if request.method == 'POST':
         nome = request.form['nome'].strip()
@@ -645,3 +653,34 @@ def matricular_aluno(turma_id, aluno_id):
     db.commit()
     db.close()
     return jsonify({"ok": True, "msg": "Aluno matriculado com sucesso!"})
+
+
+# ======================================================
+# 🔹 Remover aluno da turma
+# ======================================================
+@bp_turmas.route('/turmas/<int:turma_id>/remover/<int:aluno_id>', methods=['POST'])
+@login_required
+def remover_aluno_turma(turma_id, aluno_id):
+    db = get_db_connection()
+    cursor = db.cursor(dictionary=True)
+    cursor.execute("SELECT id_academia FROM turmas WHERE TurmaID = %s", (turma_id,))
+    turma = cursor.fetchone()
+    if not turma:
+        db.close()
+        return jsonify({"ok": False, "msg": "Turma não encontrada"}), 404
+    ids_acessiveis = _get_academias_ids()
+    if turma.get("id_academia") and turma["id_academia"] not in ids_acessiveis:
+        db.close()
+        return jsonify({"ok": False, "msg": "Sem permissão"}), 403
+    cursor.execute("SELECT id, id_academia FROM alunos WHERE id = %s", (aluno_id,))
+    aluno = cursor.fetchone()
+    if not aluno or str(aluno.get("id_academia")) != str(turma.get("id_academia")):
+        db.close()
+        return jsonify({"ok": False, "msg": "Aluno não pertence à academia da turma"}), 400
+    # Remove de aluno_turmas
+    cursor.execute("DELETE FROM aluno_turmas WHERE aluno_id = %s AND TurmaID = %s", (aluno_id, turma_id))
+    # Remove legado: se aluno.TurmaID apontava para esta turma, limpar
+    cursor.execute("UPDATE alunos SET TurmaID = NULL WHERE id = %s AND TurmaID = %s", (aluno_id, turma_id))
+    db.commit()
+    db.close()
+    return jsonify({"ok": True, "msg": "Aluno removido da turma."})

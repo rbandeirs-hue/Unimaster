@@ -6,9 +6,10 @@
 {% block content %}
 <div class="container mt-4 pb-4 px-2 px-sm-3 px-md-4">
   <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3 curriculo-top-actions">
-    <a href="{{ url_for('painel_aluno.meu_perfil') }}" class="btn btn-outline-secondary btn-sm">
+    <a href="{{ voltar_url|default(url_for('painel_aluno.meu_perfil')) }}" class="btn btn-outline-secondary btn-sm">
       <i class="bi bi-arrow-left me-1"></i> Voltar ao Meu Perfil
     </a>
+    {% if not somente_leitura %}
     <div class="d-flex flex-wrap gap-2">
       <a href="{{ url_for('painel_aluno.curriculo_impressao') }}" class="btn btn-danger btn-sm" target="_blank">
         <i class="bi bi-file-pdf me-1"></i> Exportar PDF
@@ -17,9 +18,10 @@
         <i class="bi bi-gear me-1"></i> Sincronizar Zempo / Gerir
       </button>
     </div>
+    {% endif %}
   </div>
 
-  <div id="gerir-curriculo" class="collapse curriculo-no-print mb-4">
+  <div id="gerir-curriculo" class="collapse curriculo-no-print mb-4" {% if somente_leitura %}style="display:none!important;"{% endif %}>
     <div class="card shadow-sm">
       <div class="card-header bg-light py-2">
         <h6 class="mb-0 fw-bold"><i class="bi bi-link-45deg me-2"></i> Zempo — Link e sincronização</h6>
@@ -91,6 +93,7 @@
 
     <section class="cv-section">
       <h3>Participações em competições — atleta</h3>
+      {% if not somente_leitura %}
       <div class="cv-actions curriculo-no-print d-flex flex-wrap gap-2 align-items-center mb-2">
         <button type="button" class="btn btn-success btn-sm" data-bs-toggle="collapse" data-bs-target="#form-add-comp">
           <i class="bi bi-plus-circle me-1"></i> Adicionar competição
@@ -133,19 +136,20 @@
           </form>
         </div>
       </div>
+      {% endif %}
       {% if competicoes %}
       <div class="table-responsive">
         <table class="table cv-table mb-0">
           <thead class="table-light">
             <tr>
-              <th class="curriculo-no-print" style="width:2rem;"><input type="checkbox" id="check-all-comp" title="Selecionar todos"></th>
+              {% if not somente_leitura %}<th class="curriculo-no-print" style="width:2rem;"><input type="checkbox" id="check-all-comp" title="Selecionar todos"></th>{% endif %}
               <th>Colocação</th><th>Competição</th><th>Âmbito</th><th>Local</th><th>Data</th><th>Categoria</th>
             </tr>
           </thead>
           <tbody>
             {% for c in competicoes %}
             <tr>
-              <td class="curriculo-no-print" data-label=""><input type="checkbox" class="cb-comp" value="{{ c.id }}" form="form-excluir-comp" name="ids"></td>
+              {% if not somente_leitura %}<td class="curriculo-no-print" data-label=""><input type="checkbox" class="cb-comp" value="{{ c.id }}" form="form-excluir-comp" name="ids"></td>{% endif %}
               <td data-label="Colocação">{{ c.colocacao or '—' }}</td>
               <td data-label="Competição">{{ c.competicao or '—' }}</td>
               <td data-label="Âmbito">{{ c.ambito or '—' }}</td>
@@ -164,6 +168,7 @@
 
     <section class="cv-section">
       <h3>Participações em eventos</h3>
+      {% if not somente_leitura %}
       <div class="cv-actions curriculo-no-print d-flex flex-wrap gap-2 align-items-center mb-2">
         <button type="button" class="btn btn-success btn-sm" data-bs-toggle="collapse" data-bs-target="#form-add-evt">
           <i class="bi bi-plus-circle me-1"></i> Adicionar evento
@@ -202,19 +207,20 @@
           </form>
         </div>
       </div>
+      {% endif %}
       {% if eventos %}
       <div class="table-responsive">
         <table class="table cv-table mb-0">
           <thead class="table-light">
             <tr>
-              <th class="curriculo-no-print" style="width:2rem;"><input type="checkbox" id="check-all-evt" title="Selecionar todos"></th>
+              {% if not somente_leitura %}<th class="curriculo-no-print" style="width:2rem;"><input type="checkbox" id="check-all-evt" title="Selecionar todos"></th>{% endif %}
               <th>Evento</th><th>Atividade</th><th>Âmbito</th><th>Local</th><th>Data</th>
             </tr>
           </thead>
           <tbody>
             {% for e in eventos %}
             <tr>
-              <td class="curriculo-no-print" data-label=""><input type="checkbox" class="cb-evt" value="{{ e.id }}" form="form-excluir-evt" name="ids"></td>
+              {% if not somente_leitura %}<td class="curriculo-no-print" data-label=""><input type="checkbox" class="cb-evt" value="{{ e.id }}" form="form-excluir-evt" name="ids"></td>{% endif %}
               <td data-label="Evento">{{ e.evento or '—' }}</td>
               <td data-label="Atividade">{{ e.atividade or '—' }}</td>
               <td data-label="Âmbito">{{ e.ambito or '—' }}</td>

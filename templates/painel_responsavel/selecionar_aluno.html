@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Selecionar Aluno — Responsável{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="mb-4">
+        <h2 class="fw-bold text-primary">Meu Perfil</h2>
+        <p class="text-muted mb-0">Selecione o aluno para visualizar as informações</p>
+    </div>
+
+    <div class="row g-3">
+        {% for a in alunos %}
+        <div class="col-12 col-sm-6 col-md-4">
+            <a href="{{ url_for('painel_responsavel.meu_perfil', aluno_id=a.id) }}" class="text-decoration-none">
+                <div class="card shadow-sm border-primary card-hover h-100">
+                    <div class="card-body text-center p-4">
+                        {% if a.foto %}
+                        <img src="{{ url_for('static', filename='uploads/' + a.foto) }}" alt="{{ a.nome }}" class="rounded-circle mb-2" style="width: 80px; height: 80px; object-fit: cover;">
+                        {% else %}
+                        <div class="rounded-circle bg-secondary text-white d-inline-flex align-items-center justify-content-center mb-2" style="width: 80px; height: 80px; font-size: 2rem;">
+                            {{ (a.nome or '?')[0]|upper }}
+                        </div>
+                        {% endif %}
+                        <h6 class="fw-bold mb-0">{{ a.nome or 'Aluno' }}</h6>
+                        <span class="btn btn-primary btn-sm mt-2">Ver perfil</span>
+                    </div>
+                </div>
+            </a>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<style>
+.card-hover { transition: 0.2s ease; }
+.card-hover:hover { transform: translateY(-5px); box-shadow: 0 0.6rem 1.2rem rgba(0,0,0,0.15) !important; }
+</style>
+{% endblock %}

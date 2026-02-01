@@ -11,11 +11,17 @@ academia_bp = Blueprint("academia", __name__, url_prefix="/academia")
 
 
 def _get_academias_ids():
-    """Retorna IDs de academias acessíveis pelo usuário."""
+    """Retorna IDs de academias acessíveis (prioridade: usuarios_academias, igual ao financeiro)."""
     conn = get_db_connection()
     cur = conn.cursor(dictionary=True)
     ids = []
     try:
+        cur.execute("SELECT academia_id FROM usuarios_academias WHERE usuario_id = %s ORDER BY academia_id", (current_user.id,))
+        vinculadas = [r["academia_id"] for r in cur.fetchall()]
+        if vinculadas:
+            cur.close()
+            conn.close()
+            return vinculadas
         if current_user.has_role("admin"):
             cur.execute("SELECT id FROM academias ORDER BY nome")
             ids = [r["id"] for r in cur.fetchall()]
@@ -45,21 +51,29 @@ def _get_academia_filtro():
     conn = get_db_connection()
     cur = conn.cursor(dictionary=True)
     if len(ids) == 1:
-        cur.execute("SELECT id, nome FROM academias WHERE id = %s", (ids[0],))
+        aid = ids[0]
+        session["academia_gerenciamento_id"] = aid
+        session["finance_academia_id"] = aid
+        session["academia_usuarios_id"] = aid
+        cur.execute("SELECT id, nome FROM academias WHERE id = %s", (aid,))
         ac = cur.fetchone()
         cur.close()
         conn.close()
-        return ids[0], [ac] if ac else []
+        return aid, [ac] if ac else []
     aid = (
         request.args.get("academia_id", type=int)
-        or (session.get("academia_gerenciamento_id") if session.get("modo_painel") == "academia" else None)
+        or session.get("academia_gerenciamento_id")
         or session.get("academia_usuarios_id")
     )
     if aid and aid in ids:
         session["academia_usuarios_id"] = aid
+        session["academia_gerenciamento_id"] = aid
+        session["finance_academia_id"] = aid
     else:
-        session["academia_usuarios_id"] = ids[0]
         aid = ids[0]
+        session["academia_usuarios_id"] = aid
+        session["academia_gerenciamento_id"] = aid
+        session["finance_academia_id"] = aid
     conn = get_db_connection()
     cur = conn.cursor(dictionary=True)
     cur.execute("SELECT id, nome FROM academias WHERE id IN (%s) ORDER BY nome" % ",".join(["%s"] * len(ids)), tuple(ids))
@@ -85,9 +99,11 @@ def _get_academia_gerenciamento():
     aid = request.args.get("academia_id", type=int) or session.get("academia_gerenciamento_id")
     if aid and aid in ids:
         session["academia_gerenciamento_id"] = aid
+        session["finance_academia_id"] = aid
     else:
-        session["academia_gerenciamento_id"] = ids[0]
         aid = ids[0]
+        session["academia_gerenciamento_id"] = aid
+        session["finance_academia_id"] = aid
     return aid, academias
 
 

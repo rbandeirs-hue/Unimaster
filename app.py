@@ -15,6 +15,7 @@ from blueprints.federacao.routes import federacao_bp
 from blueprints.associacao.routes import associacao_bp
 from blueprints.academia.routes import academia_bp
 from blueprints.aluno import bp_alunos, bp_painel_aluno
+from blueprints.painel_responsavel import bp_painel_responsavel
 from blueprints.cadastros import cadastros_bp
 from blueprints.usuarios.routes import bp_usuarios
 from blueprints.turmas.routes import bp_turmas
@@ -125,7 +126,7 @@ def injetar_modos_e_contexto():
         from utils.contexto_logo import _modo_efetivo
         modo = session.get("modo_painel") or _modo_efetivo(current_user)
         mapeamento = {"admin": "Administrador", "federacao": "Federação",
-                      "associacao": "Associação", "academia": "Academia", "aluno": "Aluno"}
+                      "associacao": "Associação", "academia": "Academia", "aluno": "Aluno", "responsavel": "Responsável"}
         return mapeamento.get(modo, "")
 
     logo_url, contexto_nome, _ = get_contexto_logo_e_nome(current_user, session)
@@ -199,6 +200,7 @@ app.register_blueprint(academia_bp)     # Gestão da Academia
 
 app.register_blueprint(bp_alunos)       # CRUD alunos
 app.register_blueprint(bp_painel_aluno) # Painel do aluno
+app.register_blueprint(bp_painel_responsavel) # Painel do responsável
 
 app.register_blueprint(cadastros_bp)    # Hub de Cadastros
 app.register_blueprint(bp_usuarios)     # Usuários (lista/cadastro/editar/excluir)

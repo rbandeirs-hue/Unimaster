@@ -114,7 +114,9 @@ def _get_academia_filtro():
     raw = request.args.get("academia_id", type=str)
     if raw is not None:
         aid = int(raw) if raw and raw != "0" else None
-        session["academia_gerenciamento_id"] = aid
+        if aid is not None:
+            session["academia_gerenciamento_id"] = aid
+            session["finance_academia_id"] = aid
     else:
         aid = session.get("academia_gerenciamento_id")
     if aid and aid in ids:

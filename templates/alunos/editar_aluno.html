@@ -174,10 +174,12 @@
                 <!-- 4 — Classificação -->
                 <!-- ===================================================== -->
 
+                {% set pode_editar_turma_modalidade = current_user.has_role('admin') or current_user.has_role('gestor_academia') %}
                 <h6 class="border-bottom pb-2 mb-3 mt-4 text-secondary fw-bold">
-                    <i class="bi bi-person-badge me-1"></i> Turma e Modalidades
+                    <i class="bi bi-person-badge me-1"></i> {% if pode_editar_turma_modalidade %}Turma e Modalidades{% else %}Dados adicionais{% endif %}
                 </h6>
 
+                {% if pode_editar_turma_modalidade %}
                 <div class="row">
                     <div class="col-md-8 mb-3">
                         <label class="form-label fw-semibold">Turma(s)</label>
@@ -233,6 +235,51 @@
                         {% endfor %}
                     </div>
                 </div>
+                {% else %}
+                {# Aluno e responsável: exibem turma e modalidades somente leitura, e podem editar Zempo e Peso #}
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-semibold">Turma(s)</label>
+                        <input type="text" class="form-control" readonly
+                               value="{{ turmas_display or '—' }}">
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-semibold">Modalidades</label>
+                        <input type="text" class="form-control" readonly
+                               value="{{ modalidades_display or '—' }}">
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label fw-semibold">Registro Zempo nº</label>
+                        <input type="text" class="form-control" name="zempo"
+                               placeholder="Número do registro Zempo"
+                               value="{{ aluno.zempo }}">
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label fw-semibold">Data de Cadastro Zempo</label>
+                        <input type="date" class="form-control" name="data_cadastro_zempo"
+                               placeholder="Data de cadastro"
+                               value="{{ aluno.data_cadastro_zempo or '' }}">
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label fw-semibold">Peso</label>
+                        <input type="number" step="0.1" class="form-control" name="peso"
+                               placeholder="Peso (kg)"
+                               value="{{ aluno.peso }}">
+                    </div>
+                </div>
+                {# Campos hidden para manter turmas e modalidades ao enviar o form (não alteram) #}
+                {% for tid in (aluno.turmas_ids or []) %}
+                <input type="hidden" name="turmas_ids" value="{{ tid }}">
+                {% endfor %}
+                {% if not (aluno.turmas_ids or []) and aluno.TurmaID %}
+                <input type="hidden" name="turmas_ids" value="{{ aluno.TurmaID }}">
+                {% endif %}
+                {% for mid in (aluno.modalidades_ids or []) %}
+                <input type="hidden" name="aluno_modalidade_ids" value="{{ mid }}">
+                {% endfor %}
+                {% endif %}
 
                 <!-- ===================================================== -->
                 <!-- 5 — Documentos -->

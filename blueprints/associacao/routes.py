@@ -101,6 +101,18 @@ def painel_associacao():
 
 
 # =====================================================
+# 🔹 Gerenciamento da Associação (hub de módulos)
+# =====================================================
+@associacao_bp.route("/gerenciamento")
+@login_required
+def gerenciamento_associacao():
+    if not (current_user.has_role("gestor_associacao") or current_user.has_role("admin")):
+        flash("Acesso negado.", "danger")
+        return redirect(url_for("painel.home"))
+    return render_template("painel/gerenciamento_associacao.html")
+
+
+# =====================================================
 # 🔹 Cadastro de Academia
 # =====================================================
 @associacao_bp.route("/academias/cadastro", methods=["GET", "POST"])

@@ -111,6 +111,18 @@ def painel_federacao():
 
 
 # =====================================================
+# 🔹 Gerenciamento da Federação (hub de módulos)
+# =====================================================
+@federacao_bp.route("/gerenciamento")
+@login_required
+def gerenciamento_federacao():
+    if not (current_user.has_role("gestor_federacao") or current_user.has_role("admin")):
+        flash("Acesso negado.", "danger")
+        return redirect(url_for("painel.home"))
+    return render_template("painel/gerenciamento_federacao.html")
+
+
+# =====================================================
 # 🔹 Cadastro de Associação
 # =====================================================
 @federacao_bp.route("/associacoes/cadastro", methods=["GET", "POST"])

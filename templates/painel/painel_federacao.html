@@ -1,107 +1,40 @@
 {% extends "base.html" %}
-{% block title %}Painel da Federação{% endblock %}
+{% block title %}Painel — Federação{% endblock %}
 {% block content %}
-
-<div class="container mt-5">
-
-    <!-- Header -->
-    <div class="mb-4">
-        <div class="d-flex flex-column flex-md-row justify-content-between align-items-center gap-3">
-            <div class="text-center text-md-start">
-                <h2 class="display-5 fw-bold text-primary mb-1">Painel da Federação</h2>
-                <p class="lead text-muted mb-0">Selecione uma associação para visualizar suas academias e alunos.</p>
-            </div>
-            <a href="{{ url_for('federacao.cadastro_associacao', next=url_for('federacao.painel_federacao')) }}" class="btn btn-success btn-lg">
-                <i class="bi bi-plus-circle-fill me-2"></i> Nova Associação
-            </a>
-        </div>
-    </div>
-
-    <!-- DASHBOARD - RESUMO -->
-    {% if stats %}
-    <div class="row g-3 mb-4">
-        <div class="col-4 col-md-4">
-            <div class="card border-0 shadow-sm h-100 border-start border-4 border-primary">
-                <div class="card-body py-3">
-                    <h6 class="text-muted small mb-1">Associações</h6>
-                    <p class="h4 mb-0 fw-bold text-primary">{{ stats.get('associacoes', 0) }}</p>
+<div class="container mt-4 painel-academia-dash">
+    <div class="row g-4">
+        <div class="col-12 col-sm-6 col-lg-4 col-xl-3">
+            <div class="card shadow-sm border-primary card-hover painel-atalho-card h-100">
+                <div class="card-body text-center py-4 px-4 d-flex flex-column align-items-center justify-content-center">
+                    <i class="bi bi-diagram-3 fs-1 mb-2 text-primary"></i>
+                    <h6 class="fw-bold mb-2">Associações</h6>
+                    <span class="display-4 fw-bold text-primary">{{ stats.get('associacoes', 0) if stats else 0 }}</span>
                 </div>
             </div>
         </div>
-        <div class="col-4 col-md-4">
-            <div class="card border-0 shadow-sm h-100 border-start border-4 border-success">
-                <div class="card-body py-3">
-                    <h6 class="text-muted small mb-1">Academias</h6>
-                    <p class="h4 mb-0 fw-bold text-success">{{ stats.get('academias', 0) }}</p>
+        <div class="col-12 col-sm-6 col-lg-4 col-xl-3">
+            <div class="card shadow-sm border-success card-hover painel-atalho-card h-100">
+                <div class="card-body text-center py-4 px-4 d-flex flex-column align-items-center justify-content-center">
+                    <i class="bi bi-building fs-1 mb-2 text-success"></i>
+                    <h6 class="fw-bold mb-2">Academias</h6>
+                    <span class="display-4 fw-bold text-success">{{ stats.get('academias', 0) if stats else 0 }}</span>
                 </div>
             </div>
         </div>
-        <div class="col-4 col-md-4">
-            <div class="card border-0 shadow-sm h-100 border-start border-4 border-info">
-                <div class="card-body py-3">
-                    <h6 class="text-muted small mb-1">Alunos</h6>
-                    <p class="h4 mb-0 fw-bold text-info">{{ stats.get('alunos', 0) }}</p>
+        <div class="col-12 col-sm-6 col-lg-4 col-xl-3">
+            <div class="card shadow-sm border-info card-hover painel-atalho-card h-100">
+                <div class="card-body text-center py-4 px-4 d-flex flex-column align-items-center justify-content-center">
+                    <i class="bi bi-people-fill fs-1 mb-2 text-info"></i>
+                    <h6 class="fw-bold mb-2">Alunos</h6>
+                    <span class="display-4 fw-bold text-info">{{ stats.get('alunos', 0) if stats else 0 }}</span>
                 </div>
             </div>
         </div>
     </div>
-    {% endif %}
-
-    {% if associacoes %}
-    <div class="row g-4 justify-content-center">
-
-        {% for assoc in associacoes %}
-        <!-- Card da Associação -->
-        <div class="col-xl-3 col-lg-4 col-md-6 col-sm-6">
-
-            <a href="{{ url_for('associacao.painel_associacao', id=assoc.id) }}" class="card-action-link">
-
-                <div class="card h-100 shadow-sm border-primary custom-card-primary">
-                    <div class="card-body text-center p-4">
-
-                        <i class="bi bi-diagram-3-fill display-4 mb-3 text-primary"></i>
-
-                        <h5 class="card-title fw-bold">{{ assoc.nome }}</h5>
-
-                        <p class="card-text small text-muted">
-                            Clique para visualizar academias e alunos desta associação.
-                        </p>
-
-                    </div>
-                </div>
-
-            </a>
-
-        </div>
-        {% endfor %}
-
-    </div>
-
-    {% else %}
-    <div class="alert alert-info text-center mt-4">
-        Nenhuma associação cadastrada no sistema.
-    </div>
-    {% endif %}
-
 </div>
-
-<!-- Estilos dos cards (herdado do seu padrão) -->
 <style>
-    .card-action-link {
-        text-decoration: none;
-        color: inherit;
-        display: block;
-    }
-
-    .card {
-        transition: transform 0.25s ease-in-out, box-shadow 0.25s ease-in-out;
-        border-radius: 0.75rem;
-    }
-
-    .card:hover {
-        transform: translateY(-6px);
-        box-shadow: 0 1rem 1.4rem rgba(0, 0, 0, 0.15) !important;
-    }
+.painel-atalho-card { transition: 0.2s ease; min-height: 140px; }
+.painel-academia-dash .card { border-radius: 0.85rem; border-width: 2px; transition: 0.2s ease; }
+.painel-academia-dash .card:hover, .painel-academia-dash .card-hover:hover { transform: translateY(-6px); box-shadow: 0 0.75rem 1.5rem rgba(0,0,0,0.18) !important; }
 </style>
-
 {% endblock %}
