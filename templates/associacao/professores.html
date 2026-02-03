@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+{% block title %}Professores — Associação{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/financeiro/responsive.css') }}?v=1">
+<style>
+    .professor-card {
+        transition: transform 0.2s, box-shadow 0.2s;
+        height: 100%;
+    }
+    .professor-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 0.5rem 1rem rgba(0,0,0,0.1) !important;
+    }
+    .professor-foto {
+        width: 80px;
+        height: 80px;
+        object-fit: cover;
+        border: 3px solid #e9ecef;
+    }
+    .professor-foto-placeholder {
+        width: 80px;
+        height: 80px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 2rem;
+        font-weight: bold;
+        border-radius: 50%;
+    }
+    .academia-section {
+        margin-bottom: 2.5rem;
+    }
+    .academia-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 1rem 1.5rem;
+        border-radius: 12px 12px 0 0;
+        margin-bottom: 0;
+    }
+    .stats-card {
+        border-radius: 12px;
+    }
+    @media (max-width: 768px) {
+        .professor-foto, .professor-foto-placeholder {
+            width: 60px;
+            height: 60px;
+            font-size: 1.5rem;
+        }
+        .professor-card .card-body {
+            padding: 1rem !important;
+        }
+        .academia-header {
+            padding: 0.75rem 1rem;
+            font-size: 0.95rem;
+        }
+        .stats-card .card-body {
+            padding: 1rem !important;
+        }
+        .stats-card h3 {
+            font-size: 1.5rem;
+        }
+    }
+</style>
+{% endblock %}
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
+        <div>
+            {% set back_url = url_for('associacao.gerenciamento_associacao') %}
+            {% include 'components/botao_voltar.html' %}
+        </div>
+        <div>
+            <h2 class="h4 fw-bold mb-0">Professores da Associação</h2>
+            {% if associacao_nome %}
+            <p class="text-muted small mb-0">{{ associacao_nome }}</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Estatísticas no Topo -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card stats-card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="row text-center g-3">
+                        <div class="col-6 col-md-4">
+                            <h3 class="text-primary mb-0">{{ total_professores }}</h3>
+                            <p class="text-muted small mb-0">
+                                <i class="bi bi-people-fill me-1"></i>Total de Professores
+                            </p>
+                        </div>
+                        <div class="col-6 col-md-4">
+                            <h3 class="text-success mb-0">{{ total_ativos }}</h3>
+                            <p class="text-muted small mb-0">
+                                <i class="bi bi-check-circle-fill me-1"></i>Professores Ativos
+                            </p>
+                        </div>
+                        <div class="col-12 col-md-4">
+                            <h3 class="text-info mb-0">{{ total_academias }}</h3>
+                            <p class="text-muted small mb-0">
+                                <i class="bi bi-building me-1"></i>Academias
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if professores_por_academia %}
+    <!-- Professores Agrupados por Academia -->
+    {% for academia_nome, profs in professores_por_academia.items()|sort %}
+    <div class="academia-section">
+        <div class="card border-0 shadow-sm">
+            <div class="academia-header">
+                <h5 class="mb-0">
+                    <i class="bi bi-building me-2"></i>{{ academia_nome }}
+                    <span class="badge bg-light text-dark ms-2">{{ profs|length }} professor{{ 'es' if profs|length != 1 else '' }}</span>
+                </h5>
+            </div>
+            <div class="card-body p-3 p-md-4">
+                <div class="row g-3">
+                    {% for prof in profs %}
+                    <div class="col-12 col-sm-6 col-md-4 col-lg-3">
+                        <div class="card professor-card shadow-sm border h-100">
+                            <div class="card-body text-center p-3">
+                                <!-- Foto do Professor -->
+                                <div class="mb-2 d-flex justify-content-center">
+                                    {% if prof.foto_url %}
+                                    <img src="{{ prof.foto_url }}" alt="{{ prof.nome }}" class="professor-foto rounded-circle" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                    <div class="professor-foto-placeholder" style="display: none;">
+                                        {{ prof.nome[0].upper() if prof.nome else 'P' }}
+                                    </div>
+                                    {% else %}
+                                    <div class="professor-foto-placeholder">
+                                        {{ prof.nome[0].upper() if prof.nome else 'P' }}
+                                    </div>
+                                    {% endif %}
+                                </div>
+
+                                <!-- Nome -->
+                                <h6 class="card-title fw-bold mb-2 small">{{ prof.nome }}</h6>
+
+                                <!-- Informações Adicionais -->
+                                <div class="text-muted small">
+                                    {% if prof.email %}
+                                    <div class="mb-1 text-truncate" title="{{ prof.email }}">
+                                        <i class="bi bi-envelope me-1"></i>
+                                        <span style="font-size: 0.75rem;">{{ prof.email }}</span>
+                                    </div>
+                                    {% endif %}
+                                    {% if prof.telefone %}
+                                    <div class="text-truncate" title="{{ prof.telefone }}">
+                                        <i class="bi bi-telephone me-1"></i>
+                                        <span style="font-size: 0.75rem;">{{ prof.telefone }}</span>
+                                    </div>
+                                    {% endif %}
+                                </div>
+
+                                <!-- Status -->
+                                <div class="mt-2">
+                                    {% if prof.ativo %}
+                                    <span class="badge bg-success" style="font-size: 0.7rem;">
+                                        <i class="bi bi-check-circle me-1"></i> Ativo
+                                    </span>
+                                    {% else %}
+                                    <span class="badge bg-secondary" style="font-size: 0.7rem;">
+                                        <i class="bi bi-x-circle me-1"></i> Inativo
+                                    </span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+    {% else %}
+    <div class="card border-0 shadow-sm">
+        <div class="card-body text-center py-5">
+            <i class="bi bi-person-x display-1 text-muted mb-3"></i>
+            <h5 class="text-muted">Nenhum professor encontrado</h5>
+            <p class="text-muted mb-0">Não há professores vinculados às academias desta associação.</p>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

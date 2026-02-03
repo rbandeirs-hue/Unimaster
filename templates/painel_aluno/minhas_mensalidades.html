@@ -5,9 +5,10 @@
 {% endblock %}
 {% block content %}
 <div class="container mt-4 px-2 px-sm-3">
-    <a href="{{ voltar_url|default(url_for('painel_aluno.meu_perfil')) }}" class="btn btn-outline-secondary btn-sm mb-3">
-        <i class="bi bi-arrow-left me-1"></i> Voltar
-    </a>
+    {% set back_url = voltar_url|default(url_for('painel_aluno.meu_perfil')) %}
+    <div class="mb-3">
+        {% include 'components/botao_voltar.html' %}
+    </div>
     <h2 class="h4 fw-bold mb-3">Minhas Mensalidades</h2>
 
     {# Dashboard cards #}
@@ -108,9 +109,9 @@
                                     <span class="fw-bold text-dark"><strong>Valor a pagar:</strong> R$ {{ "%.2f"|format(m.valor_final or 0) }}</span>
                                 </div>
                                 {% else %}
-                                R$ {{ "%.2f"|format(m.valor_display if m.valor_display is defined else (m.valor or 0)) }}
-                                {% if m.valor_original is defined and m.valor_original is not none and m.valor_original != m.valor_display %}
-                                <br><small class="text-muted">(inc. juros/multa)</small>
+                                R$ {{ "%.2f"|format(m.valor_display or m.valor or 0) }}
+                                {% if m.tem_juros %}
+                                <br><small class="text-warning">Multa 2%: R$ {{ "%.2f"|format(m.multa_val or 0) }} · Juros 0,033%/dia: R$ {{ "%.2f"|format(m.juros_val or 0) }}</small>
                                 {% endif %}
                                 {% endif %}
                             </td>

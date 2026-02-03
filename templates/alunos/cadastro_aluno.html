@@ -1,5 +1,9 @@
 {% extends "base.html" %}
 {% block title %}{{ 'Editar' if aluno else 'Cadastrar' }} Aluno{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/photo-cropper.css') }}">
+{% endblock %}
 {% block content %}
 {% set form_data = form_data if form_data is defined else request.form %}
 {% set modalidades_sel = form_data.getlist('aluno_modalidade_ids') if form_data else [] %}
@@ -10,6 +14,41 @@
 {% set id_academia_sel = form_data.get('id_academia', '') or (academia_selecionada if academia_selecionada is defined else '') %}
 
 <style>
+    /* --------------------------------------------- */
+    /* 🔴 Campos obrigatórios - destaque em vermelho */
+    /* --------------------------------------------- */
+    .campo-obrigatorio {
+        color: #dc3545 !important;
+        font-weight: 600 !important;
+    }
+    
+    .campo-obrigatorio::after {
+        content: " *";
+        color: #dc3545;
+        font-weight: bold;
+    }
+    
+    input[required]:not(:valid):not(:placeholder-shown),
+    select[required]:not(:valid),
+    input.is-invalid,
+    select.is-invalid {
+        border-color: #dc3545 !important;
+        box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25) !important;
+    }
+    
+    input[required]:valid:not(:placeholder-shown),
+    select[required]:valid,
+    input.is-valid,
+    select.is-valid {
+        border-color: #28a745;
+        box-shadow: 0 0 0 0.2rem rgba(40, 167, 69, 0.25);
+    }
+    
+    /* Destaque para labels de campos obrigatórios */
+    label.campo-obrigatorio {
+        position: relative;
+    }
+    
     /* --------------------------------------------- */
     /* 🔵 Ajustes gerais e responsividade            */
     /* --------------------------------------------- */
@@ -133,7 +172,7 @@
 
                 <div class="row">
                     <div class="col-md-12 mb-3">
-                        <label class="form-label fw-semibold">Nome completo *</label>
+                        <label class="form-label fw-semibold campo-obrigatorio">Nome completo</label>
                         <input type="text" class="form-control" name="nome" required
                                placeholder="Nome completo"
                                value="{{ form_data.get('nome', aluno.nome if aluno else '') }}">
@@ -161,7 +200,7 @@
 
                 <div class="row">
                     <div class="col-md-6 mb-3">
-                        <label class="form-label fw-semibold">Academia *</label>
+                        <label class="form-label fw-semibold campo-obrigatorio">Academia</label>
                         {% if current_user.has_role('admin') %}
                         <select class="form-control" name="id_academia" id="id_academia" required>
                             <option value="" disabled {% if not id_academia_sel %}selected{% endif %}>Selecione a academia</option>
@@ -316,7 +355,7 @@
                     </div>
 
                     <div class="col-md-4 mb-3">
-                        <label class="form-label fw-semibold">Data de nascimento *</label>
+                        <label class="form-label fw-semibold campo-obrigatorio">Data de nascimento</label>
                         <input type="date" class="form-control" name="data_nascimento" required
                                placeholder="Selecione a data"
                                value="{{ form_data.get('data_nascimento', aluno.data_nascimento if aluno else '') }}">
@@ -440,15 +479,15 @@
 
                 <div class="row">
                     <div class="col-md-6 mb-3">
-                        <label class="form-label fw-semibold">E-mail *</label>
+                        <label class="form-label fw-semibold campo-obrigatorio">E-mail</label>
                         <input type="email" class="form-control" name="email" required
                                placeholder="email@exemplo.com"
                                value="{{ form_data.get('email', aluno.email if aluno else '') }}">
                     </div>
 
                     <div class="col-md-6 mb-3">
-                        <label class="form-label fw-semibold">Telefone Celular *</label>
-                        <input type="tel" class="form-control" name="telefone_celular"
+                        <label class="form-label fw-semibold campo-obrigatorio">Telefone Celular</label>
+                        <input type="tel" class="form-control" name="telefone_celular" required
                                data-mask="phone"
                                placeholder="(00) 00000-0000"
                                value="{{ form_data.get('telefone_celular', aluno.telefone_celular if aluno and aluno.telefone_celular else aluno.telefone if aluno and aluno.telefone else '') }}">
@@ -501,7 +540,7 @@
                 </div>
 
                 <div class="mb-3">
-                    <label class="form-label fw-semibold">Modalidades *</label>
+                    <label class="form-label fw-semibold campo-obrigatorio">Modalidades</label>
                     <div class="d-flex flex-wrap gap-3 bg-light p-3 border rounded">
                         {% for m in modalidades %}
                         <div>
@@ -583,7 +622,7 @@
                                 Câmera
                             </button>
 
-                            <input type="file" name="foto_arquivo" class="form-control" accept="image/*">
+                            <input type="file" name="foto_arquivo" id="fotoArquivoAluno" class="form-control" accept="image/*">
                         </div>
                     </div>
                 </div>
@@ -592,9 +631,8 @@
                 <!-- 🟦 Botões finais                                       -->
                 <!-- ===================================================== -->
                 <div class="d-flex justify-content-between mt-4 pt-3 border-top">
-                    <a href="{{ back_url }}" class="btn btn-outline-secondary btn-lg">
-                        <i class="bi bi-arrow-left-circle me-2"></i> Voltar
-                    </a>
+                    {% set back_url = back_url or get_back_url_default() %}
+                    {% include 'components/botao_voltar.html' %}
 
                     <button type="submit" class="btn btn-success btn-lg">
                         <i class="bi bi-save2-fill me-2"></i>
@@ -938,7 +976,66 @@
         return idade;
     }
 
+    /* ---------------------------- */
+    /* 🟦 Validação visual campos obrigatórios */
+    /* ---------------------------- */
+    function validarCampoObrigatorio(campo) {
+        if (campo.hasAttribute('required')) {
+            if (!campo.value || campo.value.trim() === '') {
+                campo.classList.add('is-invalid');
+                campo.classList.remove('is-valid');
+                return false;
+            } else {
+                campo.classList.remove('is-invalid');
+                campo.classList.add('is-valid');
+                return true;
+            }
+        }
+        return true;
+    }
+
+    // Adicionar validação em tempo real para campos obrigatórios
+    document.querySelectorAll('input[required], select[required]').forEach(function(campo) {
+        campo.addEventListener('blur', function() {
+            validarCampoObrigatorio(this);
+        });
+        campo.addEventListener('input', function() {
+            if (this.value && this.value.trim() !== '') {
+                this.classList.remove('is-invalid');
+                this.classList.add('is-valid');
+            }
+        });
+    });
+
+    // Garantir que valores vazios sejam enviados como vazio (serão convertidos para NULL no backend)
     $('#formAluno').on('submit', function (e) {
+        // Limpar valores vazios antes de enviar
+        $(this).find('input[type="text"], input[type="email"], input[type="tel"], input[type="number"], textarea').each(function() {
+            if ($(this).val() && $(this).val().trim() === '') {
+                $(this).val('');
+            }
+        });
+        
+        $(this).find('select').each(function() {
+            if ($(this).val() === '') {
+                $(this).val('');
+            }
+        });
+
+        // Validar campos obrigatórios
+        let camposInvalidos = [];
+        $(this).find('input[required], select[required]').each(function() {
+            if (!validarCampoObrigatorio(this)) {
+                camposInvalidos.push($(this).closest('.mb-3').find('label').text().replace(' *', '').trim());
+            }
+        });
+
+        if (camposInvalidos.length > 0) {
+            e.preventDefault();
+            alert('Por favor, preencha os seguintes campos obrigatórios:\n\n' + camposInvalidos.join('\n'));
+            return false;
+        }
+
         const dataNasc = $('input[name="data_nascimento"]').val();
         const idade = calcularIdade(dataNasc);
         const cpfAluno = $('input[name="cpf"]').val();
@@ -961,5 +1058,18 @@
         }
     });
 </script>
-
+{% endblock %}
+{% block extra_js %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
+<script src="{{ url_for('static', filename='js/photo-cropper.js') }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var fa = document.getElementById('fotoArquivoAluno');
+    var fi = document.getElementById('fotoInput');
+    var m = document.getElementById('miniatura');
+    if (fa && fi && m && typeof initPhotoCrop === 'function') {
+        initPhotoCrop(fa, { fotoInput: fi, miniatura: m, placeholder: null });
+    }
+});
+</script>
 {% endblock %}

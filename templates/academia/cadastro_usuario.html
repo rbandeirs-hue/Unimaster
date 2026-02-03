@@ -16,19 +16,30 @@
             <form method="POST" action="{{ url_for('academia.cadastro_usuario') }}" class="needs-validation" novalidate>
                 <input type="hidden" name="next" value="{{ back_url }}">
 
-                {% if academias|length > 1 %}
+                {% if academia_fixa %}
                 <div class="mb-3">
-                    <label for="id_academia" class="form-label fw-semibold">Academia de vínculo <span class="text-danger">*</span></label>
-                    <select class="form-select" id="id_academia" name="id_academia" required>
-                        <option value="">Selecione a academia</option>
+                    <label class="form-label fw-semibold">Academia</label>
+                    <div class="form-control bg-light" readonly>{{ academia_nome_cadastro or (academias[0].nome if academias else '') }}</div>
+                    <input type="hidden" name="id_academia" id="id_academia" value="{{ academia_id }}">
+                    <input type="hidden" name="academias" value="{{ academia_id }}">
+                </div>
+                {% elif academias|length > 1 %}
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Academia(s) de vínculo <span class="text-danger">*</span></label>
+                    <div class="border rounded p-3" style="max-height: 180px; overflow-y: auto; background: #f8fafc;">
                         {% for ac in academias %}
-                        <option value="{{ ac.id }}" {% if ac.id == academia_id %}selected{% endif %}>{{ ac.nome }}</option>
+                        <div class="form-check mb-2">
+                            <input class="form-check-input academia-cb" type="checkbox" name="academias" value="{{ ac.id }}" id="ac_{{ ac.id }}" {% if ac.id == academia_id %}checked{% endif %}>
+                            <label class="form-check-label" for="ac_{{ ac.id }}">{{ ac.nome }}</label>
+                        </div>
                         {% endfor %}
-                    </select>
-                    <div class="form-text">Escolha em qual academia o usuário terá vínculo.</div>
+                    </div>
+                    <div class="form-text">Marque uma ou mais academias para vincular o usuário.</div>
+                    <input type="hidden" name="id_academia" id="id_academia" value="{{ academia_id }}">
                 </div>
                 {% else %}
                 <input type="hidden" name="id_academia" value="{{ academia_id }}">
+                <input type="hidden" name="academias" value="{{ academia_id }}">
                 {% endif %}
 
                 <div class="mb-3">
@@ -38,13 +49,13 @@
 
                 <div class="mb-3">
                     <label for="email" class="form-label fw-semibold">E-mail</label>
-                    <input type="email" class="form-control" id="email" name="email" placeholder="exemplo@academia.com" required>
+                    <input type="email" class="form-control" id="email" name="email" placeholder="exemplo@academia.com" value="" required autocomplete="off">
                     <div class="form-text">Será o login do usuário.</div>
                 </div>
 
                 <div class="mb-3">
                     <label for="senha" class="form-label fw-semibold">Senha</label>
-                    <input type="password" class="form-control" id="senha" name="senha" required>
+                    <input type="password" class="form-control" id="senha" name="senha" value="" required autocomplete="new-password">
                 </div>
 
                 <div class="mb-3">
@@ -93,9 +104,8 @@
                     <button type="submit" class="btn btn-primary btn-lg">
                         <i class="bi bi-save me-2"></i> Cadastrar
                     </button>
-                    <a href="{{ back_url }}" class="btn btn-outline-secondary btn-lg">
-                        <i class="bi bi-arrow-left me-2"></i> Voltar
-                    </a>
+                    {% set back_url = back_url or get_back_url_default() %}
+{% include 'components/botao_voltar.html' %}
                 </div>
             </form>
         </div>
@@ -159,14 +169,29 @@
                 return false;
             }
         }
+        var acCbs = document.querySelectorAll('.academia-cb:checked');
+        if (acCbs && acCbs.length === 0 && document.querySelector('.academia-cb')) {
+            e.preventDefault();
+            alert('Selecione ao menos uma academia.');
+            return false;
+        }
+        var hid = document.getElementById('id_academia');
+        if (hid && acCbs && acCbs.length > 0) hid.value = acCbs[0].value;
     });
 
-    if (selAcademia) {
-        selAcademia.addEventListener('change', function() {
-            var v = parseInt(selAcademia.value, 10);
-            if (v) carregarAlunos(v);
-        });
-        if (selAcademia.value) carregarAlunos(parseInt(selAcademia.value, 10));
+    var acCbs = document.querySelectorAll('.academia-cb');
+    function onAcademiaChange() {
+        var first = document.querySelector('.academia-cb:checked');
+        var v = first ? parseInt(first.value, 10) : 0;
+        var hid = document.getElementById('id_academia');
+        if (hid) hid.value = v || '';
+        if (v) carregarAlunos(v);
+    }
+    if (acCbs.length) {
+        acCbs.forEach(function(cb) { cb.addEventListener('change', onAcademiaChange); });
+        onAcademiaChange();
+    } else if (selAcademia && selAcademia.value) {
+        carregarAlunos(parseInt(selAcademia.value, 10));
     }
 })();
 </script>

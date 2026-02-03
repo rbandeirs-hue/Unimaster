@@ -2,9 +2,8 @@
 {% block title %}Cadastrar Modalidade{% endblock %}
 {% block content %}
 <div class="container my-4" style="max-width: 640px;">
-    <a href="{{ url_for('configuracoes.modalidades_lista') }}" class="btn btn-outline-secondary mb-3">
-        <i class="bi bi-arrow-left-circle me-2"></i> Voltar
-    </a>
+    {% set back_url = back_url or get_back_url_default() %}
+{% include 'components/botao_voltar.html' %}
     <div class="card shadow-sm">
         <div class="card-header bg-warning text-dark">
             <h5 class="mb-0"><i class="bi bi-collection-fill me-2"></i> Cadastrar Modalidade</h5>
@@ -24,6 +23,42 @@
                         <input class="form-check-input" type="checkbox" name="ativo" id="ativo" value="1" checked>
                         <label class="form-check-label" for="ativo">Modalidade ativa</label>
                     </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Visibilidade</label>
+                    <div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" name="visibilidade" id="vis_publica" value="publica" checked>
+                            <label class="form-check-label" for="vis_publica">Pública</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" name="visibilidade" id="vis_privada" value="privada">
+                            <label class="form-check-label" for="vis_privada">Privada</label>
+                        </div>
+                    </div>
+                    <small class="text-muted">Pública: todas associações e academias veem. Privada: só a associação ou academia dona.</small>
+                </div>
+                <div class="mb-3" id="bloco_dono" style="display:none;">
+                    <label class="form-label fw-semibold">Restringir a</label>
+                    <div class="row">
+                        <div class="col-md-6 mb-2">
+                            <select name="id_associacao" id="id_associacao" class="form-select form-select-sm">
+                                <option value="">— Associação (nenhuma) —</option>
+                                {% for a in associacoes %}
+                                <option value="{{ a.id }}">{{ a.nome }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <select name="id_academia" id="id_academia" class="form-select form-select-sm">
+                                <option value="">— Academia (nenhuma) —</option>
+                                {% for ac in academias %}
+                                <option value="{{ ac.id }}">{{ ac.nome }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    <small class="text-muted">Selecione a associação ou academia dona. Só uma delas.</small>
                 </div>
                 <div class="mb-4">
                     <label class="form-label fw-semibold">Vincular às academias</label>
@@ -45,4 +80,17 @@
         </div>
     </div>
 </div>
+<script>
+document.querySelectorAll('input[name="visibilidade"]').forEach(function(r) {
+    r.addEventListener('change', function() {
+        document.getElementById('bloco_dono').style.display = this.value === 'privada' ? 'block' : 'none';
+    });
+});
+document.getElementById('id_associacao').addEventListener('change', function() {
+    if (this.value) document.getElementById('id_academia').value = '';
+});
+document.getElementById('id_academia').addEventListener('change', function() {
+    if (this.value) document.getElementById('id_associacao').value = '';
+});
+</script>
 {% endblock %}

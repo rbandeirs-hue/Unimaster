@@ -1,0 +1,271 @@
+{% extends "base.html" %}
+{% block title %}Simular Graduação Prevista{% endblock %}
+{% block content %}
+
+<div class="container mt-3 mt-md-4 px-2 px-md-3">
+    <div class="mb-3 mb-md-4">
+        {% set back_url = back_url or get_back_url_default() %}
+{% include 'components/botao_voltar.html' %}
+        <h2 class="h5 h4-md fw-bold text-primary mb-2">Simular Graduação Prevista</h2>
+        <p class="text-muted mb-0 small">Informe o mês e ano do próximo exame para calcular a previsão de graduações.</p>
+    </div>
+
+    {% if not aluno.graduacao_id %}
+    <div class="alert alert-warning">
+        <i class="bi bi-exclamation-triangle me-2"></i>
+        <strong>Atenção:</strong> Para visualizar as graduações previstas, é necessário que o aluno tenha a faixa atual cadastrada.
+    </div>
+    {% else %}
+    <!-- Formulário para informar previsão do próximo exame -->
+    <div class="card shadow-sm mb-3 mb-md-4">
+        <div class="card-header bg-info text-white">
+            <h5 class="mb-0 h6"><i class="bi bi-calendar-plus me-2"></i> Previsão para Próximo Exame</h5>
+        </div>
+        <div class="card-body p-3 p-md-4">
+            <form method="POST" action="{{ url_for('painel_aluno.simular_graduacao_prevista') }}">
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-6">
+                        <label for="previsao_mes_ano" class="form-label fw-semibold">Informe o mês e ano em que pretende realizar o próximo exame:</label>
+                        <input type="month" class="form-control" id="previsao_mes_ano" name="previsao_mes_ano" 
+                               value="{{ previsao_proximo_exame_input or '' }}" required>
+                        <small class="text-muted">A previsão será calculada a partir desta data.</small>
+                    </div>
+                    <div class="col-md-6">
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="bi bi-calculator me-2"></i> Calcular Previsão
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    {% if not previsao_proximo_exame_input %}
+    <div class="alert alert-info">
+        <i class="bi bi-info-circle me-2"></i>
+        <strong>Informe acima</strong> o mês e ano em que pretende realizar o próximo exame para visualizar as graduações previstas.
+    </div>
+    {% elif graduacoes_previstas and graduacoes_previstas|length > 0 %}
+    <!-- Informações da Graduação Atual -->
+    <div class="card shadow-sm mb-3 mb-md-4">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0 h6"><i class="bi bi-award me-2"></i> Graduação Atual</h5>
+        </div>
+        <div class="card-body p-3 p-md-4">
+            <div class="row g-2 g-md-3">
+                <div class="col-6 col-md-3">
+                    <div class="small text-muted">Faixa Atual</div>
+                    <strong>{% if aluno.faixa_nome or aluno.graduacao_nome %}{{ aluno.faixa_nome or '' }}{% if aluno.faixa_nome and aluno.graduacao_nome %} ({{ aluno.graduacao_nome }}){% elif aluno.graduacao_nome %}{{ aluno.graduacao_nome }}{% endif %}{% else %}—{% endif %}</strong>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="small text-muted">Último Exame</div>
+                    <strong>{{ aluno.ultimo_exame_faixa_formatada|default('—') }}</strong>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="small text-muted">Idade Atual</div>
+                    <strong>{{ aluno.idade_real or '—' }}{% if aluno.idade_real %} anos{% endif %}</strong>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="small text-muted">Data de Nascimento</div>
+                    <strong>{{ aluno.data_nascimento_formatada|default('—') }}</strong>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Linha do Tempo de Graduações Previstas -->
+    <div class="card shadow-sm">
+        <div class="card-header bg-success text-white">
+            <h5 class="mb-0 h6"><i class="bi bi-calendar-check me-2"></i> Graduações Previstas</h5>
+        </div>
+        <div class="card-body p-0 p-md-3">
+            <!-- Desktop: Timeline Progressiva -->
+            <div class="d-none d-md-block">
+                <div class="timeline-container">
+                    {% for prev in graduacoes_previstas %}
+                    <div class="timeline-item {% if prev.atende_idade_minima %}timeline-success{% else %}timeline-warning{% endif %}">
+                        <div class="timeline-marker">
+                            <i class="bi bi-{% if prev.atende_idade_minima %}check-circle{% else %}exclamation-triangle{% endif %}"></i>
+                        </div>
+                        <div class="timeline-content">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <div class="flex-grow-1">
+                                    <h6 class="mb-1 fw-bold">{{ prev.nome_completo }}</h6>
+                                    <div class="d-flex align-items-center text-muted small">
+                                        <i class="bi bi-calendar3 me-2"></i>
+                                        <span>{{ prev.data_prevista_formatada }}</span>
+                                    </div>
+                                </div>
+                                {% if not prev.atende_idade_minima %}
+                                    <span class="badge bg-warning text-dark ms-2">
+                                        <i class="bi bi-exclamation-triangle me-1"></i>Idade mínima: {{ prev.idade_minima }} anos
+                                    </span>
+                                {% else %}
+                                    <span class="badge bg-success ms-2">
+                                        <i class="bi bi-check-circle me-1"></i>Elegível
+                                    </span>
+                                {% endif %}
+                            </div>
+                            <div class="row g-2 small">
+                                <div class="col-md-4">
+                                    <i class="bi bi-person me-1"></i><strong>Idade prevista:</strong> {{ prev.idade_prevista or '—' }} anos
+                                </div>
+                                {% if prev.carencia_formatada and prev.carencia_formatada != 'Sem carência' %}
+                                <div class="col-md-4">
+                                    <i class="bi bi-clock me-1"></i><strong>Carência:</strong> {{ prev.carencia_formatada }}
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            <!-- Mobile: Cards Progressivos -->
+            <div class="d-md-none">
+                {% for prev in graduacoes_previstas %}
+                <div class="card border-0 border-start border-3 {% if prev.atende_idade_minima %}border-success{% else %}border-warning{% endif %} mb-3 ms-3">
+                    <div class="card-body p-3">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <div class="flex-grow-1">
+                                <h6 class="fw-bold mb-1">{{ prev.nome_completo }}</h6>
+                                <div class="d-flex align-items-center text-muted small mb-2">
+                                    <i class="bi bi-calendar3 me-2"></i>
+                                    <span>{{ prev.data_prevista_formatada }}</span>
+                                </div>
+                            </div>
+                            {% if not prev.atende_idade_minima %}
+                                <span class="badge bg-warning text-dark small">
+                                    <i class="bi bi-exclamation-triangle me-1"></i>{{ prev.idade_minima }} anos
+                                </span>
+                            {% else %}
+                                <span class="badge bg-success small">
+                                    <i class="bi bi-check-circle me-1"></i>Elegível
+                                </span>
+                            {% endif %}
+                        </div>
+                        <div class="row g-2 small">
+                            <div class="col-12">
+                                <i class="bi bi-person me-1"></i><strong>Idade prevista:</strong> {{ prev.idade_prevista or '—' }} anos
+                            </div>
+                            {% if prev.carencia_formatada and prev.carencia_formatada != 'Sem carência' %}
+                            <div class="col-12">
+                                <i class="bi bi-clock me-1"></i><strong>Carência:</strong> {{ prev.carencia_formatada }}
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="alert alert-warning">
+        <i class="bi bi-exclamation-triangle me-2"></i>
+        <strong>Não foi possível calcular as graduações previstas.</strong> Verifique se:
+        <ul class="mb-0 mt-2 small">
+            <li>A faixa atual do aluno corresponde a uma faixa cadastrada na tabela <code>faixas_judo</code> com previsão habilitada</li>
+            <li>Existem faixas posteriores à atual com previsão habilitada</li>
+            <li>Os dados da faixa atual estão corretos</li>
+        </ul>
+    </div>
+    {% endif %}
+    {% endif %}
+</div>
+
+<style>
+/* Timeline Progressiva para Desktop */
+.timeline-container {
+    position: relative;
+    padding-left: 2rem;
+}
+
+.timeline-container::before {
+    content: '';
+    position: absolute;
+    left: 0.75rem;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: linear-gradient(to bottom, #28a745 0%, #ffc107 50%, #28a745 100%);
+}
+
+.timeline-item {
+    position: relative;
+    margin-bottom: 2rem;
+    padding-left: 2rem;
+}
+
+.timeline-item:last-child {
+    margin-bottom: 0;
+}
+
+.timeline-marker {
+    position: absolute;
+    left: -1.5rem;
+    top: 0.5rem;
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    z-index: 1;
+}
+
+.timeline-success .timeline-marker {
+    background-color: #28a745;
+    color: white;
+    box-shadow: 0 0 0 4px rgba(40, 167, 69, 0.1);
+}
+
+.timeline-warning .timeline-marker {
+    background-color: #ffc107;
+    color: #212529;
+    box-shadow: 0 0 0 4px rgba(255, 193, 7, 0.1);
+}
+
+.timeline-content {
+    background: #f8f9fa;
+    border-radius: 0.5rem;
+    padding: 1rem;
+    border-left: 3px solid;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.timeline-success .timeline-content {
+    border-left-color: #28a745;
+}
+
+.timeline-warning .timeline-content {
+    border-left-color: #ffc107;
+}
+
+.timeline-item:hover .timeline-content {
+    transform: translateX(5px);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+/* Mobile Responsivo */
+@media (max-width: 767.98px) {
+    .card-body {
+        font-size: 0.9rem;
+    }
+    
+    .timeline-container {
+        padding-left: 0;
+    }
+    
+    .timeline-container::before {
+        display: none;
+    }
+    
+    .card.border-start {
+        border-left-width: 4px !important;
+    }
+}
+</style>
+
+{% endblock %}

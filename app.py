@@ -21,9 +21,16 @@ from blueprints.usuarios.routes import bp_usuarios
 from blueprints.turmas.routes import bp_turmas
 from blueprints.presencas.presencas import bp_presencas
 from blueprints.professores.routes import bp_professores
+from blueprints.professor.routes import bp_professor
 from blueprints.configuracoes import bp_configuracoes
 from blueprints.financeiro.routes import bp_financeiro
 from blueprints.precadastro import bp_precadastro
+from blueprints.solicitacoes import bp_solicitacoes
+from blueprints.calendario import bp_calendario
+from blueprints.formularios import bp_formularios
+from blueprints.eventos_competicoes import bp_eventos_competicoes
+from blueprints.visitante import bp_visitante
+from blueprints.visitante import bp_visitante
 
 # 🔹 Modelo de Usuário (flask-login)
 from blueprints.auth.user_model import Usuario
@@ -90,7 +97,8 @@ def load_user(user_id):
     id_academia=user_row.get("id_academia"),
     roles=roles,
     permissoes=permissoes,
-    menus=menus
+    menus=menus,
+    foto=user_row.get("foto")
 )
     
 
@@ -125,15 +133,47 @@ def injetar_modos_e_contexto():
             return ""
         from utils.contexto_logo import _modo_efetivo
         modo = session.get("modo_painel") or _modo_efetivo(current_user)
-        mapeamento = {"admin": "Administrador", "federacao": "Federação",
-                      "associacao": "Associação", "academia": "Academia", "aluno": "Aluno", "responsavel": "Responsável"}
+        mapeamento = {
+            "admin": "Administrador",
+            "federacao": "Federação",
+            "associacao": "Associação",
+            "academia": "Academia",
+            "professor": "Professor",
+            "aluno": "Aluno",
+            "responsavel": "Responsável",
+            "visitante": "Visitante"
+        }
         return mapeamento.get(modo, "")
+
+    def get_back_url_default():
+        """Retorna a URL padrão de retorno baseada no modo atual."""
+        if not hasattr(current_user, 'is_authenticated') or not current_user.is_authenticated:
+            return url_for("auth.login")
+        modo = session.get("modo_painel") or ""
+        if modo == "admin":
+            return url_for("painel.gerenciamento_admin")
+        elif modo == "federacao":
+            return url_for("federacao.gerenciamento_federacao")
+        elif modo == "associacao":
+            return url_for("associacao.gerenciamento_associacao")
+        elif modo == "academia":
+            return url_for("academia.painel_academia")
+        elif modo == "professor":
+            return url_for("professor.painel_professor")
+        elif modo == "aluno":
+            return url_for("painel_aluno.meu_perfil")
+        elif modo == "responsavel":
+            return url_for("painel_responsavel.meu_perfil")
+        elif modo == "visitante":
+            return url_for("visitante.painel")
+        return url_for("painel.home")
 
     logo_url, contexto_nome, _ = get_contexto_logo_e_nome(current_user, session)
     return dict(
         tem_multiplos_modos=tem_multiplos_modos,
         modos_disponiveis=modos_disponiveis,
         modo_atual_nome=modo_atual_nome,
+        get_back_url_default=get_back_url_default,
         contexto_logo_url=logo_url,
         contexto_nome=contexto_nome,
         current_year=datetime.now().year,
@@ -166,6 +206,31 @@ def _formatar_data_br(valor):
 @app.template_filter("data_br")
 def filtro_data_br(valor):
     return _formatar_data_br(valor)
+
+
+@app.template_filter("nl2br")
+def filtro_nl2br(valor):
+    """Converte quebras de linha (\n) em <br> tags HTML."""
+    if not valor:
+        return ""
+    return str(valor).replace("\n", "<br>")
+
+
+@app.template_filter("hora_fmt")
+def filtro_hora_fmt(valor):
+    """Formata hora para HH:MM (aceita time, datetime, timedelta, string)."""
+    if valor is None:
+        return ""
+    if hasattr(valor, "strftime"):
+        return valor.strftime("%H:%M")
+    if hasattr(valor, "total_seconds"):  # timedelta
+        s = int(valor.total_seconds())
+        h, m = divmod(s // 60, 60)
+        return f"{h:02d}:{m:02d}"
+    s = str(valor)
+    if len(s) >= 5 and s[2] in (":", "."):
+        return s[:5].replace(".", ":")
+    return s
 
 
 @app.template_filter("telefone_br")
@@ -207,9 +272,14 @@ app.register_blueprint(bp_usuarios)     # Usuários (lista/cadastro/editar/exclu
 app.register_blueprint(bp_turmas)       # Turmas (CRUD)
 app.register_blueprint(bp_presencas)    # Presenças (registro, ata, histórico)
 app.register_blueprint(bp_professores)  # Professores (CRUD por academia)
+app.register_blueprint(bp_professor)    # Painel Professor (presença, relatório, histórico)
 app.register_blueprint(bp_configuracoes)  # Configurações (admin: modalidades)
 app.register_blueprint(bp_financeiro)   # Financeiro (dashboard, descontos, mensalidades, receitas, despesas)
 app.register_blueprint(bp_precadastro)   # Pré-cadastro (por academia)
+app.register_blueprint(bp_solicitacoes)  # Aprovar solicitações (visita em academia)
+app.register_blueprint(bp_calendario)    # Calendário hierárquico (eventos, feriados, turmas)
+app.register_blueprint(bp_formularios)   # Formulários (federação/associação — campos do aluno)
+app.register_blueprint(bp_eventos_competicoes)  # Eventos e Competições (inscrições com formulário)
 
 
 # ============================================================

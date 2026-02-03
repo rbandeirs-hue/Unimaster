@@ -34,9 +34,8 @@
 </style>
 <div class="container py-4">
     <div class="turma-form-wrap mb-4">
-        <a href="{{ back_url }}" class="btn btn-outline-secondary btn-sm mb-2">
-            <i class="bi bi-arrow-left me-1"></i> Voltar
-        </a>
+        {% set back_url = back_url or get_back_url_default() %}
+{% include 'components/botao_voltar.html' %}
         <h2 class="h4 fw-bold text-primary mb-1">Editar Turma</h2>
         <p class="text-muted small mb-0">{{ turma.Nome }} — {{ academia.nome if academia else '' }}</p>
     </div>
@@ -60,14 +59,33 @@
                                 <option value="{{ m.id }}" {% if turma_modalidade_id == m.id %}selected{% endif %}>{{ m.nome }}</option>
                                 {% endfor %}
                             </select>
+                            <small class="text-muted">Apenas modalidades liberadas pela academia. Professores são filtrados pela modalidade.</small>
                         </div>
                         <div class="col-md-6">
                             <label for="nome" class="form-label fw-semibold">Nome da Turma <span class="text-danger">*</span></label>
                             <input type="text" id="nome" name="nome" class="form-control" required value="{{ turma.Nome }}">
                         </div>
                         <div class="col-12">
-                            <label for="dias_horario" class="form-label fw-semibold">Dias e Horário <span class="text-danger">*</span></label>
-                            <input type="text" id="dias_horario" name="dias_horario" class="form-control" required value="{{ turma.DiasHorario }}">
+                            <label class="form-label fw-semibold">Dias da semana com aula <span class="text-danger">*</span></label>
+                            <div class="d-flex flex-wrap gap-2">
+                                {% for d in [('1','Seg'),('2','Ter'),('3','Qua'),('4','Qui'),('5','Sex'),('6','Sáb'),('0','Dom')] %}
+                                <div class="form-check form-check-inline">
+                                    <input class="form-check-input" type="checkbox" name="dias_semana" value="{{ d[0] }}" id="dia_{{ d[0] }}"
+                                        {% if turma.dias_semana and d[0] in (turma.dias_semana or '').split(',') %}checked{% endif %}>
+                                    <label class="form-check-label" for="dia_{{ d[0] }}">{{ d[1] }}</label>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="hora_inicio" class="form-label fw-semibold">Hora início do treino <span class="text-danger">*</span></label>
+                            <input type="time" id="hora_inicio" name="hora_inicio" class="form-control" required
+                                value="{{ hora_inicio_display or '' }}">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="hora_fim" class="form-label fw-semibold">Hora fim do treino <span class="text-danger">*</span></label>
+                            <input type="time" id="hora_fim" name="hora_fim" class="form-control" required
+                                value="{{ hora_fim_display or '' }}">
                         </div>
                     </div>
                 </div>
@@ -97,14 +115,14 @@
                         <select id="professor_responsavel_id" name="professor_responsavel_id" class="form-select" required>
                             <option value="">— Selecione —</option>
                             {% for prof in professores %}
-                            <option value="{{ prof.id }}" {% if prof.id == professor_responsavel_id %}selected{% endif %}>{{ prof.nome }}</option>
+                            <option value="{{ prof.id }}" data-modalidades="{{ (prof_modalidades.get(prof.id, []) | map('string') | list | join(',')) or '' }}" {% if prof.id == professor_responsavel_id %}selected{% endif %}>{{ prof.nome }}</option>
                             {% endfor %}
                         </select>
                     </div>
                     <label class="form-label fw-semibold">Professores auxiliares</label>
                     <div class="border rounded p-3" style="max-height: 200px; overflow-y: auto; background: #f8fafc;">
                         {% for prof in professores %}
-                        <div class="auxiliar-row" data-prof-id="{{ prof.id }}">
+                        <div class="auxiliar-row" data-prof-id="{{ prof.id }}" data-modalidades="{{ (prof_modalidades.get(prof.id, []) | map('string') | list | join(',')) or '' }}">
                             <span class="text-dark">{{ prof.nome }}</span>
                             <div class="form-check form-switch mb-0">
                                 <input class="form-check-input" type="checkbox" name="professor_auxiliar_ids" value="{{ prof.id }}" id="aux_{{ prof.id }}" {% if prof.id in professor_auxiliar_ids %}checked{% endif %}>
@@ -164,21 +182,48 @@
 </div>
 <script>
 (function() {
-    var sel = document.getElementById('professor_responsavel_id');
+    var selProf = document.getElementById('professor_responsavel_id');
+    var selMod = document.getElementById('modalidade_id');
     var rows = document.querySelectorAll('.auxiliar-row[data-prof-id]');
+
+    function professorCompativel(elem) {
+        var modSel = selMod ? selMod.value : '';
+        if (!modSel) return true;
+        var mods = (elem.dataset.modalidades || '').split(',').filter(Boolean);
+        return mods.indexOf(modSel) >= 0;
+    }
+
+    function filtrarPorModalidade() {
+        if (selProf) {
+            [].slice.call(selProf.options).forEach(function(opt) {
+                if (!opt.value) { opt.style.display = ''; return; }
+                opt.style.display = professorCompativel(opt) ? '' : 'none';
+            });
+            var selVal = selProf.value;
+            var optSel = selProf.querySelector('option[value="' + selVal + '"]');
+            if (optSel && optSel.style.display === 'none') {
+                selProf.value = '';
+            }
+        }
+    }
+
     function atualizarAuxiliares() {
-        var rid = sel ? sel.value : '';
+        var rid = selProf ? selProf.value : '';
         rows.forEach(function(r) {
-            if (r.dataset.profId === rid) {
-                r.classList.add('d-none');
+            var ehResponsavel = r.dataset.profId === rid;
+            var semModalidade = !professorCompativel(r);
+            var ocultar = ehResponsavel || semModalidade;
+            r.classList.toggle('d-none', ocultar);
+            if (ocultar) {
                 var cb = r.querySelector('input[type="checkbox"]');
                 if (cb) cb.checked = false;
-            } else {
-                r.classList.remove('d-none');
             }
         });
     }
-    if (sel) sel.addEventListener('change', atualizarAuxiliares);
+
+    if (selMod) selMod.addEventListener('change', function() { filtrarPorModalidade(); atualizarAuxiliares(); });
+    if (selProf) selProf.addEventListener('change', atualizarAuxiliares);
+    filtrarPorModalidade();
     atualizarAuxiliares();
 })();
 </script>

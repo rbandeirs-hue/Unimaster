@@ -18,6 +18,32 @@
     </div>
 
     <div class="row g-4">
+        <!-- Eventos e Competições -->
+        <div class="col-xl-3 col-lg-4 col-md-6">
+            <a href="{{ url_for('eventos_competicoes.lista', academia_id=academia_id) }}" class="card-action-link text-decoration-none">
+                <div class="card h-100 shadow-sm border-danger">
+                    <div class="card-body text-center p-4">
+                        <i class="bi bi-trophy display-5 mb-3 text-danger"></i>
+                        <h5 class="card-title fw-bold">Eventos e Competições</h5>
+                        <p class="card-text small text-muted mb-0">Eventos para aderir e gerenciar inscrições de alunos.</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <!-- Calendário -->
+        <div class="col-xl-3 col-lg-4 col-md-6">
+            <a href="{{ url_for('calendario.index') }}" class="card-action-link text-decoration-none">
+                <div class="card h-100 shadow-sm border-info">
+                    <div class="card-body text-center p-4">
+                        <i class="bi bi-calendar-event display-5 mb-3 text-info"></i>
+                        <h5 class="card-title fw-bold">Calendário</h5>
+                        <p class="card-text small text-muted mb-0">Eventos, feriados e turmas.</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+        
         <!-- Usuários -->
         <div class="col-xl-3 col-lg-4 col-md-6">
             <a href="{{ url_for('academia.lista_usuarios', academia_id=academia_id) }}" class="card-action-link text-decoration-none">
@@ -85,6 +111,19 @@
         </div>
         {% endif %}
 
+        <!-- Aprovar Solicitações -->
+        <div class="col-xl-3 col-lg-4 col-md-6">
+            <a href="{{ url_for('solicitacoes.lista', academia_id=academia_id) }}" class="card-action-link text-decoration-none">
+                <div class="card h-100 shadow-sm border-info">
+                    <div class="card-body text-center p-4">
+                        <i class="bi bi-clipboard-check display-5 mb-3 text-info"></i>
+                        <h5 class="card-title fw-bold">Aprovar Solicitações</h5>
+                        <p class="card-text small text-muted mb-0">Visitas em academias e outros tipos de aprovação.</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+
         <!-- Presença -->
         <div class="col-xl-3 col-lg-4 col-md-6">
             <a href="{{ url_for('presencas.painel_presenca', academia_id=academia_id) }}" class="card-action-link text-decoration-none">
@@ -98,8 +137,8 @@
             </a>
         </div>
 
-        <!-- Financeiro -->
-        {% if current_user.has_role('gestor_academia') or current_user.has_role('admin') or current_user.has_role('gestor_federacao') or current_user.has_role('gestor_associacao') %}
+        <!-- Financeiro — apenas em modo academia (quem pode acessar painel academia) -->
+        {% if session.get('modo_painel') == 'academia' and (current_user.has_role('gestor_academia') or current_user.has_role('admin') or current_user.has_role('professor') or current_user.has_role('gestor_federacao') or current_user.has_role('gestor_associacao')) %}
         <div class="col-xl-3 col-lg-4 col-md-6">
             <a href="{{ url_for('financeiro.dashboard', academia_id=academia_id) }}" class="card-action-link text-decoration-none">
                 <div class="card h-100 shadow-sm border-success">
@@ -112,6 +151,32 @@
             </a>
         </div>
         {% endif %}
+
+        <!-- Visitantes -->
+        <div class="col-xl-3 col-lg-4 col-md-6">
+            <a href="{{ url_for('academia.lista_visitantes', academia_id=academia_id) }}" class="card-action-link text-decoration-none">
+                <div class="card h-100 shadow-sm border-info">
+                    <div class="card-body text-center p-4">
+                        <i class="bi bi-person-check display-5 mb-3 text-info"></i>
+                        <h5 class="card-title fw-bold">Visitantes</h5>
+                        <p class="card-text small text-muted mb-0">Histórico e aprovação de aulas experimentais.</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <!-- Configurações -->
+        <div class="col-xl-3 col-lg-4 col-md-6">
+            <a href="{{ url_for('academia.configuracoes_academia', academia_id=academia_id) }}" class="card-action-link text-decoration-none">
+                <div class="card h-100 shadow-sm border-secondary">
+                    <div class="card-body text-center p-4">
+                        <i class="bi bi-sliders display-5 mb-3 text-secondary"></i>
+                        <h5 class="card-title fw-bold">Configurações</h5>
+                        <p class="card-text small text-muted mb-0">Editar dados da academia.</p>
+                    </div>
+                </div>
+            </a>
+        </div>
     </div>
 </div>
 <style>

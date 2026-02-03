@@ -35,9 +35,30 @@ MODOS = {
     "federacao": ("Federação", "federacao.painel_federacao", None),
     "associacao": ("Associação", "associacao.painel_associacao", None),
     "academia": ("Academia", "academia.painel_academia", None),
+    "professor": ("Professor", "professor.painel_professor", None),
     "aluno": ("Aluno", "painel_aluno.painel", None),
     "responsavel": ("Responsável", "painel_responsavel.painel", None),
+    "visitante": ("Visitante", "visitante.painel", None),
 }
+
+
+def _usuario_e_professor_ou_auxiliar():
+    """True se o usuário tem registro em professores e aparece em alguma turma (responsável ou auxiliar)."""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute(
+            """SELECT 1 FROM professores p
+               INNER JOIN turma_professor tp ON tp.professor_id = p.id
+               WHERE p.usuario_id = %s AND p.ativo = 1 LIMIT 1""",
+            (current_user.id,),
+        )
+        ok = cur.fetchone() is not None
+        cur.close()
+        conn.close()
+        return ok
+    except Exception:
+        return False
 
 
 def _modos_disponiveis():
@@ -49,12 +70,16 @@ def _modos_disponiveis():
         modos.append(("federacao", "Federação"))
     if current_user.has_role("gestor_associacao"):
         modos.append(("associacao", "Associação"))
-    if current_user.has_role("gestor_academia") or current_user.has_role("professor"):
+    if current_user.has_role("gestor_academia"):
         modos.append(("academia", "Academia"))
+    if current_user.has_role("professor") or _usuario_e_professor_ou_auxiliar():
+        modos.append(("professor", "Professor"))
     if current_user.has_role("aluno"):
         modos.append(("aluno", "Aluno"))
     if current_user.has_role("responsavel"):
         modos.append(("responsavel", "Responsável"))
+    if current_user.has_role("visitante"):
+        modos.append(("visitante", "Visitante"))
     return modos
 
 
@@ -78,11 +103,15 @@ def _redirecionar_modo(modo):
         stats = _stats_admin()
         return render_template("painel/admin.html", usuario=current_user, stats=stats)
     if modo == "federacao":
-        return redirect(url_for("federacao.painel_federacao"))
+        return redirect(url_for("federacao.gerenciamento_federacao"))
     if modo == "associacao":
-        return redirect(url_for("associacao.painel_associacao"))
+        # Redireciona direto para o gerenciamento da associação
+        return redirect(url_for("associacao.gerenciamento_associacao"))
     if modo == "academia":
-        return redirect(url_for("academia.dash"))
+        # Redireciona direto para o gerenciamento da academia
+        return redirect(url_for("academia.painel_academia"))
+    if modo == "professor":
+        return redirect(url_for("professor.painel_professor"))
     if modo == "aluno":
         if not _aluno_tem_registro():
             from flask import flash
@@ -90,9 +119,12 @@ def _redirecionar_modo(modo):
             session.pop("modo_painel", None)
             modos = _modos_disponiveis()
             return render_template("painel/sem_aluno_vinculado.html", modos=modos)
-        return redirect(url_for("painel_aluno.painel"))
+        # Redireciona direto para o meu perfil do aluno
+        return redirect(url_for("painel_aluno.meu_perfil"))
     if modo == "responsavel":
         return redirect(url_for("painel_responsavel.painel"))
+    if modo == "visitante":
+        return redirect(url_for("visitante.painel"))
     return redirect(url_for("painel.home"))
 
 

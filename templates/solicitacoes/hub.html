@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Aprovar Solicitações{% endblock %}
+{% block content %}
+<div class="container mt-5">
+    <div class="mb-4">
+        {% if academias|length > 1 %}
+        <form method="GET" class="mb-3">
+            <label class="form-label small fw-semibold">Academia:</label>
+            <select name="academia_id" class="form-select form-select-sm d-inline-block w-auto" onchange="this.form.submit()">
+                {% for ac in academias %}
+                <option value="{{ ac.id }}" {% if ac.id == academia_id %}selected{% endif %}>{{ ac.nome }}</option>
+                {% endfor %}
+            </select>
+        </form>
+        {% endif %}
+        {% set back_url = back_url or get_back_url_default() %}
+{% include 'components/botao_voltar.html' %}
+        <h2 class="h4 fw-bold text-primary">Aprovar Solicitações</h2>
+        <p class="text-muted mb-0">Tipos de aprovações agrupadas. Selecione o tipo para ver as solicitações.</p>
+    </div>
+
+    <div class="row g-4">
+        <!-- Visita em Academia -->
+        <div class="col-xl-4 col-lg-4 col-md-6">
+            <a href="{{ url_for('solicitacoes.visita_lista', academia_id=academia_id) }}" class="card-action-link text-decoration-none">
+                <div class="card h-100 shadow-sm border-info">
+                    <div class="card-body text-center p-4">
+                        <i class="bi bi-geo-alt-fill display-5 mb-3 text-info"></i>
+                        <h5 class="card-title fw-bold">Visita em Academia</h5>
+                        <p class="card-text small text-muted mb-2">Alunos solicitando visita em academias da associação.</p>
+                        <div class="d-flex justify-content-center gap-3 small">
+                            <span class="badge bg-warning text-dark">Origem: {{ visita_origem }}</span>
+                            <span class="badge bg-primary">Destino: {{ visita_destino }}</span>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+    </div>
+</div>
+<style>
+.card-action-link .card { transition: transform 0.2s, box-shadow 0.2s; }
+.card-action-link:hover .card { transform: translateY(-4px); box-shadow: 0 0.5rem 1rem rgba(0,0,0,0.1) !important; }
+</style>
+{% endblock %}

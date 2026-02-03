@@ -2,9 +2,8 @@
 {% block title %}Modalidades — Configurações{% endblock %}
 {% block content %}
 <div class="container my-4">
-    <a href="{{ url_for('configuracoes.hub') }}" class="btn btn-outline-secondary mb-3">
-        <i class="bi bi-arrow-left-circle me-2"></i> Voltar
-    </a>
+    {% set back_url = back_url or get_back_url_default() %}
+{% include 'components/botao_voltar.html' %}
     <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
         <div>
             <h2 class="h4 fw-bold text-dark mb-1">Modalidades</h2>
@@ -40,8 +39,10 @@
                             </td>
                             <td data-label="Status" class="text-center">
                                 <span class="badge {{ 'bg-success' if m.ativo else 'bg-secondary' }}">{{ 'Ativa' if m.ativo else 'Inativa' }}</span>
+                                {% if m.visibilidade == 'privada' %}<span class="badge bg-warning text-dark ms-1">Privada</span>{% else %}<span class="badge bg-info ms-1">Pública</span>{% endif %}
                             </td>
                             <td data-label="Ações" class="text-center">
+                                <a href="{{ url_for('configuracoes.modalidades_editar', modalidade_id=m.id) }}" class="btn btn-sm btn-outline-secondary me-1" title="Editar"><i class="bi bi-pencil-square"></i> Editar</a>
                                 <a href="{{ url_for('configuracoes.modalidades_vincular', modalidade_id=m.id) }}" class="btn btn-sm btn-outline-primary me-1">Vincular</a>
                                 <form method="post" action="{{ url_for('configuracoes.modalidades_toggle', modalidade_id=m.id) }}" class="d-inline">
                                     {% if m.ativo %}

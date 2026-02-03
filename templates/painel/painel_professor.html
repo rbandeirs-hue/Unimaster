@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}Painel Professor — Minha Turma{% endblock %}
+{% block content %}
+<div class="container mt-5">
+    <div class="mb-4">
+        <h2 class="h4 fw-bold text-primary">
+            <i class="bi bi-person-badge-fill me-2"></i> Painel Professor
+        </h2>
+        <p class="text-muted mb-0">
+            {% if academia_nome %}
+                {{ academia_nome }} — Acesso à presença, relatório e histórico da sua turma.
+            {% else %}
+                Acesso à presença, relatório e histórico da sua turma.
+            {% endif %}
+        </p>
+    </div>
+
+    {% if turmas %}
+    <div class="mb-4">
+        <h6 class="fw-semibold text-secondary mb-2">
+            <i class="bi bi-collection-fill me-1"></i> {% if turmas|length > 1 %}Minhas Turmas{% else %}Minha Turma{% endif %}
+        </h6>
+        <div class="d-flex flex-wrap gap-2">
+            {% for t in turmas %}
+            <span class="badge bg-info">{{ t.Nome }}{% if t.dias_horario %} — {{ t.dias_horario }}{% endif %}</span>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <!-- Calendário -->
+        <div class="col-xl-4 col-lg-4 col-md-6">
+            <a href="{{ url_for('calendario.index') }}" class="card-action-link text-decoration-none">
+                <div class="card h-100 shadow-sm border-info">
+                    <div class="card-body text-center p-4">
+                        <i class="bi bi-calendar-event display-5 mb-3 text-info"></i>
+                        <h5 class="card-title fw-bold">Calendário</h5>
+                        <p class="card-text small text-muted mb-0">Eventos e aulas da academia.</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+        
+        <!-- Registrar Presença -->
+        <div class="col-xl-4 col-lg-4 col-md-6">
+            <a href="{{ url_for('presencas.registro_presenca', academia_id=academia_id) if academia_id else url_for('presencas.registro_presenca') }}" class="card-action-link text-decoration-none">
+                <div class="card h-100 shadow-sm border-secondary">
+                    <div class="card-body text-center p-4">
+                        <i class="bi bi-clipboard-check-fill display-5 mb-3 text-secondary"></i>
+                        <h5 class="card-title fw-bold">Registrar Presença</h5>
+                        <p class="card-text small text-muted mb-0">Registro de chamada da sua turma.</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <!-- Relatório de Frequência -->
+        <div class="col-xl-4 col-lg-4 col-md-6">
+            <a href="{{ url_for('presencas.ata_presenca', academia_id=academia_id) if academia_id else url_for('presencas.ata_presenca') }}" class="card-action-link text-decoration-none">
+                <div class="card h-100 shadow-sm border-info">
+                    <div class="card-body text-center p-4">
+                        <i class="bi bi-file-text display-5 mb-3 text-info"></i>
+                        <h5 class="card-title fw-bold">Relatório de Frequência</h5>
+                        <p class="card-text small text-muted mb-0">Ata e relatório de presenças da turma.</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <!-- Histórico de Frequência -->
+        <div class="col-xl-4 col-lg-4 col-md-6">
+            <a href="{{ url_for('presencas.historico_presenca_lista', academia_id=academia_id) if academia_id else url_for('presencas.historico_presenca_lista') }}" class="card-action-link text-decoration-none">
+                <div class="card h-100 shadow-sm border-primary">
+                    <div class="card-body text-center p-4">
+                        <i class="bi bi-clock-history display-5 mb-3 text-primary"></i>
+                        <h5 class="card-title fw-bold">Histórico de Frequência</h5>
+                        <p class="card-text small text-muted mb-0">Histórico de presença por aluno da turma.</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+    </div>
+    {% else %}
+    <div class="alert alert-warning">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+        Nenhuma turma vinculada. Entre em contato com o gestor da academia para ser vinculado a uma turma.
+    </div>
+    {% set back_url = back_url or get_back_url_default() %}
+{% include 'components/botao_voltar.html' %}
+    {% endif %}
+</div>
+<style>
+.card-action-link .card { transition: transform 0.2s, box-shadow 0.2s; }
+.card-action-link:hover .card { transform: translateY(-4px); box-shadow: 0 0.5rem 1rem rgba(0,0,0,0.1) !important; }
+</style>
+{% endblock %}

@@ -25,7 +25,7 @@
                         <div class="perfil-dados">
                             <div class="perfil-item"><span class="perfil-label">Academia</span><span class="perfil-valor">{{ aluno.academia_nome or '—' }}</span></div>
                             <div class="perfil-item"><span class="perfil-label">Turma</span><span class="perfil-valor">{{ aluno.turma_nome or '—' }}</span></div>
-                            <div class="perfil-item"><span class="perfil-label">Modalidades</span><span class="perfil-valor">{{ (aluno.modalidades or []) | join(', ') or '—' }}</span></div>
+                            <div class="perfil-item"><span class="perfil-label">Modalidades</span><span class="perfil-valor">{{ aluno.modalidades_nomes if (aluno.modalidades_nomes and aluno.modalidades_nomes != '-') else '—' }}</span></div>
                             <div class="perfil-item"><span class="perfil-label">Faixa</span><span class="perfil-valor">{% if aluno.faixa_nome or aluno.graduacao_nome %}{{ aluno.faixa_nome or '' }}{% if aluno.faixa_nome and aluno.graduacao_nome %} ({{ aluno.graduacao_nome }}){% elif aluno.graduacao_nome %}{{ aluno.graduacao_nome }}{% endif %}{% else %}—{% endif %}</span></div>
                             <div class="perfil-item"><span class="perfil-label">Próxima faixa</span><span class="perfil-valor">{{ aluno.proxima_faixa|default('—') }}</span></div>
                         </div>
@@ -45,6 +45,17 @@
         <!-- Coluna direita: atalhos -->
         <div class="col-lg-8 col-md-7">
             <div class="row g-2">
+                <div class="col-sm-6 col-12">
+                    <a href="{{ url_for('calendario.aluno') }}" class="text-decoration-none">
+                        <div class="card shadow-sm border-info card-hover painel-atalho-card">
+                            <div class="card-body text-center py-3 px-3 d-flex flex-column align-items-center">
+                                <i class="bi bi-calendar-event fs-3 mb-2 text-info"></i>
+                                <h6 class="fw-bold text-dark mb-0">Calendário</h6>
+                                <small class="text-muted">Eventos e aulas</small>
+                            </div>
+                        </div>
+                    </a>
+                </div>
                 <div class="col-sm-6 col-12">
                     <a href="{{ url_for('painel_aluno.minhas_mensalidades') }}" class="text-decoration-none">
                         <div class="card shadow-sm border-success card-hover painel-atalho-card">
@@ -105,6 +116,42 @@
                         </div>
                     </a>
                 </div>
+                <div class="col-sm-6 col-12">
+                    <a href="{{ url_for('eventos_competicoes.disponiveis') }}" class="text-decoration-none">
+                        <div class="card shadow-sm border-danger card-hover painel-atalho-card">
+                            <div class="card-body text-center py-3 px-3 d-flex flex-column align-items-center">
+                                <i class="bi bi-trophy fs-3 mb-2 text-danger"></i>
+                                <h6 class="fw-bold mb-1">Eventos e Competições</h6>
+                                <p class="text-muted small mb-2">Realizar inscrições</p>
+                                <span class="btn btn-danger btn-sm px-3">Acessar</span>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+                <div class="col-sm-6 col-12">
+                    <a href="{{ url_for('painel_aluno.simular_categorias') }}" class="text-decoration-none">
+                        <div class="card shadow-sm border-primary card-hover painel-atalho-card">
+                            <div class="card-body text-center py-3 px-3 d-flex flex-column align-items-center">
+                                <i class="bi bi-trophy fs-3 mb-2 text-primary"></i>
+                                <h6 class="fw-bold mb-1">Simular Categorias</h6>
+                                <p class="text-muted small mb-2">Ver categorias disponíveis</p>
+                                <span class="btn btn-primary btn-sm px-3">Acessar</span>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+                <div class="col-sm-6 col-12">
+                    <a href="{{ url_for('painel_aluno.simular_graduacao_prevista') }}" class="text-decoration-none">
+                        <div class="card shadow-sm border-info card-hover painel-atalho-card">
+                            <div class="card-body text-center py-3 px-3 d-flex flex-column align-items-center">
+                                <i class="bi bi-calendar-check fs-3 mb-2 text-info"></i>
+                                <h6 class="fw-bold mb-1">Graduação Prevista</h6>
+                                <p class="text-muted small mb-2">Linha do tempo de graduações</p>
+                                <span class="btn btn-info btn-sm px-3">Acessar</span>
+                            </div>
+                        </div>
+                    </a>
+                </div>
             </div>
         </div>
     </div>
@@ -119,36 +166,208 @@
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
-        <div class="row g-3">
-          <div class="col-12 col-md-6">
-            <div class="modal-section-perfil">
+        <!-- Indicadores de Slide -->
+        <div class="modal-slide-indicators mb-3 d-flex justify-content-center gap-2 flex-wrap">
+          <button class="slide-indicator active" data-slide="0" title="Dados Pessoais">
+            <i class="bi bi-person-vcard"></i>
+          </button>
+          <button class="slide-indicator" data-slide="1" title="Acadêmico">
+            <i class="bi bi-award"></i>
+          </button>
+          <button class="slide-indicator" data-slide="2" title="Peso & Categoria">
+            <i class="bi bi-bar-chart-line"></i>
+          </button>
+          <button class="slide-indicator" data-slide="3" title="Frequência">
+            <i class="bi bi-graph-up-arrow"></i>
+          </button>
+          <button class="slide-indicator" data-slide="4" title="Aptidão">
+            <i class="bi bi-clipboard-check"></i>
+          </button>
+          {% if aluno.observacoes %}
+          <button class="slide-indicator" data-slide="5" title="Observações">
+            <i class="bi bi-journal-text"></i>
+          </button>
+          {% endif %}
+        </div>
+
+        <!-- Container de Slides -->
+        <div class="modal-slides-container position-relative">
+          <!-- Slide 1: Dados Pessoais -->
+          <div class="modal-slide active" data-slide-index="0">
+            <div class="modal-section-perfil h-100">
               <h6><i class="bi bi-person-vcard"></i> Dados Pessoais</h6>
-              <div class="modal-info-item"><span>Nascimento</span><strong>{{ aluno.data_nascimento|data_br if aluno.data_nascimento else '—' }}</strong></div>
+              <div class="modal-info-item"><span>Nascimento</span><strong>{{ aluno.data_nascimento_formatada or (aluno.data_nascimento|data_br if aluno.data_nascimento else '—') }}{% if aluno.idade_real %} ({{ aluno.idade_real }} anos){% endif %}</strong></div>
               <div class="modal-info-item"><span>CPF</span><strong>{{ aluno.cpf or '—' }}</strong></div>
               <div class="modal-info-item"><span>Telefone</span><strong>{{ aluno.telefone_celular or aluno.telefone or '—' }}</strong></div>
               <div class="modal-info-item"><span>Email</span><strong>{{ aluno.email or '—' }}</strong></div>
               <div class="modal-info-item"><span>Responsável</span><strong>{{ aluno.responsavel_nome or aluno.responsavel or '—' }}</strong></div>
+              <div class="modal-info-item"><span>Responsável financeiro</span><strong>{{ aluno.responsavel_financeiro_nome or '—' }}</strong></div>
             </div>
           </div>
-          <div class="col-12 col-md-6">
-            <div class="modal-section-perfil">
+
+          <!-- Slide 2: Acadêmico -->
+          <div class="modal-slide" data-slide-index="1">
+            <div class="modal-section-perfil h-100">
               <h6><i class="bi bi-award"></i> Acadêmico</h6>
               <div class="modal-info-item"><span>Academia</span><strong>{{ aluno.academia_nome or '—' }}</strong></div>
               <div class="modal-info-item"><span>Turma</span><strong>{{ aluno.turma_nome or '—' }}</strong></div>
-              <div class="modal-info-item"><span>Faixa</span><strong>{% if aluno.faixa_nome or aluno.graduacao_nome %}{{ aluno.faixa_nome or '' }}{% if aluno.faixa_nome and aluno.graduacao_nome %} ({{ aluno.graduacao_nome }}){% elif aluno.graduacao_nome %}{{ aluno.graduacao_nome }}{% endif %}{% else %}—{% endif %}</strong></div>
+              <div class="modal-info-item"><span>Faixa</span><strong>{% if aluno.faixa_nome or aluno.graduacao_nome or aluno.faixa or aluno.graduacao %}{{ aluno.faixa_nome or aluno.faixa or '' }}{% if (aluno.faixa_nome or aluno.faixa) and (aluno.graduacao_nome or aluno.graduacao) %} ({{ aluno.graduacao_nome or aluno.graduacao }}){% elif aluno.graduacao_nome or aluno.graduacao %}{{ aluno.graduacao_nome or aluno.graduacao }}{% endif %}{% else %}—{% endif %}</strong></div>
               <div class="modal-info-item"><span>Próxima faixa</span><strong>{{ aluno.proxima_faixa|default('—') }}</strong></div>
-              <div class="modal-info-item"><span>Modalidades</span><strong>{{ (aluno.modalidades or []) | join(', ') or '—' }}</strong></div>
-              {% if aluno.peso %}<div class="modal-info-item"><span>Peso</span><strong>{{ aluno.peso }} kg</strong></div>{% endif %}
+              <div class="modal-info-item"><span>Último exame</span><strong>{{ aluno.ultimo_exame_faixa_formatada|default('—') }}</strong></div>
+              <div class="modal-info-item"><span>Elegível em</span><strong>{{ aluno.data_elegivel|default('—') }}</strong></div>
+              <div class="modal-info-item"><span>Modalidades</span><strong>{{ aluno.modalidades_nomes if (aluno.modalidades_nomes and aluno.modalidades_nomes != '-') else '—' }}</strong></div>
+              <div class="modal-info-item"><span>Peso</span><strong>{{ aluno.peso or '—' }}{% if aluno.peso %} kg{% endif %}</strong></div>
             </div>
           </div>
+
+          <!-- Slide 3: Peso & Categoria -->
+          <div class="modal-slide" data-slide-index="2">
+            <div class="modal-section-perfil h-100">
+              <h6><i class="bi bi-bar-chart-line"></i> Peso & Categoria</h6>
+              <div class="mb-3 text-center">
+                <div class="d-inline-block p-3 bg-light rounded border" style="min-width: 150px;">
+                  <div class="display-6 fw-bold text-primary">{{ aluno.peso or '—' }}{% if aluno.peso %}<span class="fs-5 fw-normal"> kg</span>{% endif %}</div>
+                  <div class="small text-muted">Peso</div>
+                </div>
+              </div>
+              <div class="mt-3">
+                <div class="small text-muted mb-2 fw-semibold">Categorias Disponíveis</div>
+                {% if aluno.categorias_disponiveis and aluno.categorias_disponiveis|length > 0 %}
+                  <div class="d-flex flex-column gap-2">
+                    {% for cat in aluno.categorias_disponiveis %}
+                      <div class="alert alert-info mb-0 py-2">
+                        <i class="bi bi-tag me-2"></i>
+                        {% if cat.id_classe %}<strong>{{ cat.id_classe }}</strong> - {% endif %}
+                        {{ cat.nome_categoria or cat.categoria or '-' }}
+                      </div>
+                    {% endfor %}
+                  </div>
+                {% else %}
+                  <div class="text-muted small">
+                    <i class="bi bi-info-circle me-1"></i>{{ aluno.categorias_texto or 'Não disponível' }}
+                  </div>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+
+          <!-- Slide 4: Frequência -->
+          <div class="modal-slide" data-slide-index="3">
+            <div class="modal-section-perfil h-100">
+              <h6><i class="bi bi-graph-up-arrow"></i> Frequência (Judô)</h6>
+              <div class="d-flex gap-3 flex-wrap justify-content-center mb-3">
+                <div class="text-center p-3 bg-light rounded border" style="min-width: 100px;">
+                  <div class="h4 fw-bold text-primary mb-1">{{ aluno.frequencia_ano or '—' }}{% if aluno.frequencia_ano is not none %}%{% endif %}</div>
+                  <div class="small text-muted">Ano atual</div>
+                </div>
+                <div class="text-center p-3 bg-light rounded border" style="min-width: 100px;">
+                  <div class="h4 fw-bold text-primary mb-1">{{ aluno.frequencia_mes or '—' }}{% if aluno.frequencia_mes is not none %}%{% endif %}</div>
+                  <div class="small text-muted">Mês atual</div>
+                </div>
+                <div class="text-center p-3 bg-light rounded border" style="min-width: 100px;">
+                  <div class="h4 fw-bold text-primary mb-1">{{ aluno.frequencia_desde_exame or '—' }}{% if aluno.frequencia_desde_exame is not none %}%{% endif %}</div>
+                  <div class="small text-muted">Desde exame</div>
+                </div>
+              </div>
+              {% if aluno.total_aulas_desde and aluno.total_aulas_desde > 0 %}
+              <div class="alert alert-light border mb-0">
+                <i class="bi bi-check-circle me-2"></i>
+                <strong>Presenças:</strong> {{ aluno.presentes_desde or 0 }} / {{ aluno.total_aulas_desde }} aulas
+              </div>
+              {% endif %}
+              <p class="small text-muted mb-0 mt-2 text-center">Mín. 70% desde último exame para aptidão.</p>
+            </div>
+          </div>
+
+          <!-- Slide 5: Aptidão -->
+          <div class="modal-slide" data-slide-index="4">
+            <div class="modal-section-perfil h-100">
+              <h6><i class="bi bi-clipboard-check"></i> Aptidão para Exame</h6>
+              <div class="d-flex flex-column gap-3 align-items-center">
+                <div class="w-100 text-center">
+                  <span class="badge {% if aluno.aptidao_status == 'Apto' %}bg-success{% elif aluno.aptidao_status == 'Inapto' %}bg-danger{% elif aluno.aptidao_status == 'Sem próxima faixa' %}bg-warning text-dark{% else %}bg-secondary{% endif %} py-3 px-4" style="font-size: 1.1rem;">
+                    {% if aluno.aptidao_status == 'Apto' %}
+                      <i class="bi bi-check-circle me-2"></i>APTO PARA EXAME
+                    {% elif aluno.aptidao_status == 'Inapto' %}
+                      <i class="bi bi-x-circle me-2"></i>INAPTO PARA EXAME
+                    {% elif aluno.aptidao_status == 'Sem próxima faixa' %}
+                      <i class="bi bi-info-circle me-2"></i>SEM PRÓXIMA FAIXA
+                    {% else %}
+                      <i class="bi bi-dash-circle me-2"></i>{{ aluno.aptidao_status|default('NÃO DEFINIDO') }}
+                    {% endif %}
+                  </span>
+                </div>
+                {% if aluno.proxima_faixa and aluno.proxima_faixa not in ['—', '-', ''] %}
+                <div class="w-100">
+                  <div class="alert alert-success mb-0">
+                    <i class="bi bi-trophy me-2"></i>
+                    <strong>Próxima faixa:</strong> {{ aluno.proxima_faixa }}
+                  </div>
+                </div>
+                {% endif %}
+                {% if aluno.data_elegivel and aluno.data_elegivel not in ['—', '-', ''] %}
+                <div class="w-100">
+                  <div class="alert alert-info mb-0">
+                    <i class="bi bi-calendar3 me-2"></i>
+                    <strong>Elegível em:</strong> {{ aluno.data_elegivel }}
+                  </div>
+                </div>
+                {% endif %}
+                {% if aluno.motivo and aluno.motivo.strip() and aluno.motivo.strip() not in ['—', '-', ''] %}
+                <div class="w-100">
+                  <div class="alert {% if aluno.aptidao_status == 'Inapto' %}alert-warning{% else %}alert-info{% endif %} mb-0">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    <strong>{% if aluno.aptidao_status == 'Inapto' %}Motivo da Inaptidão:{% else %}Informação:{% endif %}</strong>
+                    <div class="mt-2">
+                      {% set motivos_lista = aluno.motivo.split('; ') %}
+                      <ul class="mb-0 ps-3">
+                        {% for motivo_item in motivos_lista %}
+                        <li>{{ motivo_item }}</li>
+                        {% endfor %}
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+                {% endif %}
+                {% if aluno.frequencia_desde_exame is not none %}
+                <div class="w-100">
+                  <div class="alert alert-light border mb-0">
+                    <i class="bi bi-graph-up-arrow me-2"></i>
+                    <strong>Frequência desde último exame:</strong> {{ aluno.frequencia_desde_exame }}%
+                    {% if aluno.frequencia_desde_exame < 70 %}
+                      <span class="badge bg-danger ms-2">Abaixo do mínimo (70%)</span>
+                    {% else %}
+                      <span class="badge bg-success ms-2">Aprovado</span>
+                    {% endif %}
+                  </div>
+                </div>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+
+          <!-- Slide 6: Observações (se houver) -->
           {% if aluno.observacoes %}
-          <div class="col-12">
-            <div class="modal-section-perfil">
+          <div class="modal-slide" data-slide-index="5">
+            <div class="modal-section-perfil h-100">
               <h6><i class="bi bi-journal-text"></i> Observações</h6>
-              <p class="mb-0 text-muted small">{{ aluno.observacoes }}</p>
+              <p class="mb-0 text-muted">{{ aluno.observacoes }}</p>
             </div>
           </div>
           {% endif %}
+        </div>
+
+        <!-- Controles de Navegação -->
+        <div class="modal-slide-controls d-flex justify-content-between align-items-center mt-4">
+          <button class="btn btn-outline-primary slide-btn-prev" type="button">
+            <i class="bi bi-chevron-left me-1"></i> Anterior
+          </button>
+          <span class="slide-counter">
+            <span class="slide-current">1</span> / <span class="slide-total">{{ 5 + (1 if aluno.observacoes else 0) }}</span>
+          </span>
+          <button class="btn btn-outline-primary slide-btn-next" type="button">
+            Próximo <i class="bi bi-chevron-right ms-1"></i>
+          </button>
         </div>
       </div>
       <div class="modal-footer border-0 bg-light">
@@ -193,7 +412,8 @@
 .perfil-card-actions .btn { min-width: 90px; }
 .perfil-card-content { display: flex; flex-direction: column; align-items: center; }
 .painel-perfil-card { align-self: flex-start; }
-.painel-atalho-card { transition: 0.2s ease; }
+.painel-atalho-card { transition: 0.2s ease; min-height: 100%; }
+.painel-atalho-card .card-body { min-height: 100%; display: flex; flex-direction: column; justify-content: center; }
 .card { border-radius: 0.75rem; transition: 0.2s ease; }
 .card:hover, .card-hover:hover { transform: translateY(-5px); box-shadow: 0 0.6rem 1.2rem rgba(0,0,0,0.15) !important; }
 .perfil-foto-wrap {
@@ -208,5 +428,161 @@
 .perfil-item:last-of-type { border-bottom: none; }
 .perfil-label { font-weight: 600; color: #495057; flex-shrink: 0; }
 .perfil-valor { color: #212529; text-align: right; word-break: break-word; }
+/* Sistema de Slides */
+.modal-slide-indicators { flex-wrap: wrap; padding: 0.5rem 0; }
+.slide-indicator {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 2px solid #dee2e6;
+  background: #fff;
+  color: #6c757d;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-size: 1.1rem;
+}
+.slide-indicator:hover {
+  border-color: #0d6efd;
+  color: #0d6efd;
+  transform: scale(1.1);
+}
+.slide-indicator.active {
+  background: #0d6efd;
+  border-color: #0d6efd;
+  color: #fff;
+}
+.modal-slides-container {
+  min-height: 300px;
+  position: relative;
+  overflow: hidden;
+}
+.modal-slide {
+  display: none;
+  animation: slideIn 0.3s ease;
+}
+.modal-slide.active {
+  display: block;
+}
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+.modal-slide-controls {
+  padding: 1rem 0;
+  border-top: 1px solid #dee2e6;
+}
+.slide-counter {
+  font-weight: 600;
+  color: #495057;
+}
+.slide-btn-prev, .slide-btn-next {
+  min-width: 120px;
+}
+@media (max-width: 576px) {
+  .slide-indicator {
+    width: 35px;
+    height: 35px;
+    font-size: 0.95rem;
+  }
+  .slide-btn-prev, .slide-btn-next {
+    min-width: 100px;
+    font-size: 0.875rem;
+    padding: 0.4rem 0.6rem;
+  }
+  .modal-slides-container {
+    min-height: 250px;
+  }
+}
 </style>
+<script>
+// Sistema de Slides no Modal
+document.addEventListener('DOMContentLoaded', function() {
+  const modal = document.getElementById('modalVerAluno');
+  if (!modal) return;
+
+  const slidesContainer = modal.querySelector('.modal-slides-container');
+  const slides = slidesContainer ? slidesContainer.querySelectorAll('.modal-slide') : [];
+  const indicators = modal.querySelectorAll('.slide-indicator');
+  const prevBtn = modal.querySelector('.slide-btn-prev');
+  const nextBtn = modal.querySelector('.slide-btn-next');
+  const currentSpan = modal.querySelector('.slide-current');
+  const totalSpan = modal.querySelector('.slide-total');
+  
+  if (!slides.length) return;
+
+  let currentSlide = 0;
+  const totalSlides = slides.length;
+
+  if (totalSpan) {
+    totalSpan.textContent = totalSlides;
+  }
+
+  function updateSlide(index) {
+    if (index < 0) index = totalSlides - 1;
+    if (index >= totalSlides) index = 0;
+    
+    currentSlide = index;
+
+    slides.forEach((slide, i) => {
+      slide.classList.toggle('active', i === currentSlide);
+    });
+
+    indicators.forEach((indicator, i) => {
+      indicator.classList.toggle('active', i === currentSlide);
+    });
+
+    if (currentSpan) {
+      currentSpan.textContent = currentSlide + 1;
+    }
+
+    if (prevBtn) prevBtn.disabled = false;
+    if (nextBtn) nextBtn.disabled = false;
+  }
+
+  indicators.forEach((indicator, index) => {
+    indicator.addEventListener('click', function() {
+      updateSlide(index);
+    });
+  });
+
+  if (prevBtn) {
+    prevBtn.addEventListener('click', function() {
+      updateSlide(currentSlide - 1);
+    });
+  }
+
+  if (nextBtn) {
+    nextBtn.addEventListener('click', function() {
+      updateSlide(currentSlide + 1);
+    });
+  }
+
+  modal.addEventListener('keydown', function(e) {
+    if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      updateSlide(currentSlide - 1);
+    } else if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      updateSlide(currentSlide + 1);
+    }
+  });
+
+  const bsModal = bootstrap.Modal.getInstance(modal);
+  if (bsModal) {
+    modal.addEventListener('shown.bs.modal', function() {
+      updateSlide(0);
+      modal.focus();
+    });
+  }
+});
+</script>
 {% endblock %}

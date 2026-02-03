@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Importar calendário FPJU{% endblock %}
+{% block content %}
+<div class="container mt-4">
+    <div class="mb-4">
+        {% set back_url = back_url or get_back_url_default() %}
+{% include 'components/botao_voltar.html' %}
+        <h2 class="h4 fw-bold text-primary mb-1">Importar calendário FPJU</h2>
+        <p class="text-muted small mb-0">Faça upload de um calendário em PDF e escolha quais eventos deseja importar.</p>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-8 mx-auto">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle"></i> O sistema tenta extrair automaticamente datas e eventos do PDF.
+                        Formatos aceitos: <strong>dd/mm/aaaa</strong>, <strong>dd-mm-aaaa</strong>, <strong>dd de mês</strong> (ex: 15 de fevereiro).
+                    </div>
+
+                    <form method="POST" action="{{ url_for('calendario.sincronizar_pdf') }}" enctype="multipart/form-data">
+                        <input type="hidden" name="acao" value="upload">
+                        <div class="mb-3">
+                            <label for="arquivo_pdf" class="form-label">Arquivo PDF <span class="text-danger">*</span></label>
+                            <input type="file" name="arquivo_pdf" id="arquivo_pdf" class="form-control" accept=".pdf" required>
+                            <small class="text-muted">Tamanho máximo recomendado: 10 MB</small>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-danger">
+                                <i class="bi bi-upload"></i> Enviar e Analisar
+                            </button>
+                            <a href="{{ url_for('calendario.sincronizar') }}" class="btn btn-secondary">Cancelar</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

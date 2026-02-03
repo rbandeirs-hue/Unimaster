@@ -1,0 +1,1231 @@
+{% extends "base.html" %}
+{% block title %}Consolidar Inscrições{% if evento %} — {{ evento.nome }}{% endif %}{% endblock %}
+{% block content %}
+<div class="container mt-3 mt-md-5 px-2 px-md-3">
+    <div class="mb-3 mb-md-4">
+        {% set back_url = back_url or get_back_url_default() %}
+{% include 'components/botao_voltar.html' %}
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2 mb-2">
+            <div>
+                <h2 class="h5 h4-md fw-bold text-primary mb-1">Consolidar Inscrições{% if evento %} — {{ evento.nome }}{% endif %}</h2>
+                <p class="text-muted mb-0 small small-md">Academias com inscrições enviadas, agrupadas por categoria. Exporte em PDF ou Excel para imprimir.</p>
+            </div>
+            {% if total_geral_inscritos is defined %}
+            <div class="text-center text-md-end">
+                <div class="badge bg-primary fs-6 px-3 py-2">
+                    <i class="bi bi-people-fill me-1"></i> Total: {{ total_geral_inscritos }} inscrito(s)
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="mb-3 mb-md-4">
+        <div class="d-flex flex-column gap-2 mb-3">
+            <div class="btn-group w-100" role="group">
+                <input type="radio" class="btn-check" name="agrupamento" id="agrupamento_academia" value="academia" {% if agrupamento != 'categoria' %}checked{% endif %} onchange="atualizarAgrupamento()">
+                <label class="btn btn-outline-primary flex-fill" for="agrupamento_academia">
+                    <i class="bi bi-building me-1"></i> <span class="d-none d-sm-inline">Agrupar por </span>Academia
+                </label>
+                
+                <input type="radio" class="btn-check" name="agrupamento" id="agrupamento_categoria" value="categoria" {% if agrupamento == 'categoria' %}checked{% endif %} onchange="atualizarAgrupamento()">
+                <label class="btn btn-outline-primary flex-fill" for="agrupamento_categoria">
+                    <i class="bi bi-tag me-1"></i> <span class="d-none d-sm-inline">Agrupar por </span>Categoria
+                </label>
+            </div>
+            <a href="{{ url_for('eventos_competicoes.configurar_impressao', evento_id=evento.id) if evento else '#' }}" class="btn btn-primary w-100">
+                <i class="bi bi-printer me-1"></i> Imprimir/Exportar
+            </a>
+        </div>
+    </div>
+
+    <!-- Modal de Configuração de Exportação -->
+    <div class="modal fade" id="modalConfiguracaoExportacao" tabindex="-1" aria-labelledby="modalConfiguracaoExportacaoLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title" id="modalConfiguracaoExportacaoLabel">
+                        <i class="bi bi-gear-fill me-2"></i>Configurar Campos para Exportação
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted mb-3">
+                        <i class="bi bi-info-circle me-1"></i>
+                        Selecione os campos que deseja exportar e organize a ordem arrastando os itens.
+                    </p>
+                    <div class="alert alert-info mb-3">
+                        <i class="bi bi-info-circle me-2"></i>
+                        <strong>Como usar:</strong> Marque os campos que deseja exportar na lista abaixo. Em seguida, organize a ordem arrastando os campos selecionados.
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-md-12">
+                            <label class="form-label fw-semibold mb-2">
+                                <i class="bi bi-list-check me-1"></i>Selecione os campos para exportar:
+                            </label>
+                            <div id="campos-disponiveis" class="border rounded p-3 bg-white" style="min-height: 200px; max-height: 400px; overflow-y: auto;">
+                                {% if campos_form %}
+                                    {% for c in campos_form %}
+                                    {% if c.campo_chave %}
+                                    <div class="form-check mb-2 campo-item campo-disponivel" 
+                                         data-chave="{{ c.campo_chave }}" 
+                                         data-label="{{ c.label }}">
+                                        <input class="form-check-input campo-checkbox" 
+                                               type="checkbox" 
+                                               id="campo_{{ c.campo_chave }}" 
+                                               value="{{ c.campo_chave }}" 
+                                               checked>
+                                        <label class="form-check-label w-100 ms-2" for="campo_{{ c.campo_chave }}" style="cursor: pointer;">
+                                            <strong>{{ c.label or c.campo_chave }}</strong>
+                                            <br>
+                                            <small class="text-muted">
+                                                <code>{{ c.campo_chave }}</code>
+                                            </small>
+                                        </label>
+                                    </div>
+                                    {% endif %}
+                                    {% endfor %}
+                                {% else %}
+                                    <p class="text-muted text-center py-3">Nenhum campo disponível</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="col-md-12">
+                            <label class="form-label fw-semibold mb-2">
+                                <i class="bi bi-sort-down me-1"></i>Ordem de Exportação (arraste para reorganizar):
+                            </label>
+                            <div id="campos-selecionados" class="border rounded p-3 bg-light" style="min-height: 200px; max-height: 400px; overflow-y: auto;">
+                                <p class="text-muted small text-center mb-0 py-3">
+                                    <i class="bi bi-info-circle me-1"></i>
+                                    Os campos marcados acima aparecerão aqui. Arraste para organizar a ordem de exportação.
+                                </p>
+                            </div>
+                        </div>
+                        <div class="col-md-12 mt-3">
+                            <label class="form-label fw-semibold mb-2">
+                                <i class="bi bi-file-earmark-pdf me-1"></i>Orientacao do PDF:
+                            </label>
+                            <div class="btn-group w-100" role="group">
+                                <input type="radio" class="btn-check" name="orientacao_pdf" id="orientacao_paisagem" value="paisagem" checked>
+                                <label class="btn btn-outline-primary" for="orientacao_paisagem">
+                                    <i class="bi bi-arrows-expand me-1"></i> Paisagem
+                                </label>
+                                
+                                <input type="radio" class="btn-check" name="orientacao_pdf" id="orientacao_retrato" value="retrato">
+                                <label class="btn btn-outline-primary" for="orientacao_retrato">
+                                    <i class="bi bi-arrows-collapse me-1"></i> Retrato
+                                </label>
+                            </div>
+                            <small class="text-muted d-block mt-2">
+                                <i class="bi bi-info-circle me-1"></i>
+                                Escolha a orientação da página para exportação em PDF
+                            </small>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" onclick="resetarConfiguracao()">
+                        <i class="bi bi-arrow-counterclockwise me-1"></i> Resetar
+                    </button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-primary" onclick="salvarConfiguracaoExportacao()">
+                        <i class="bi bi-save me-1"></i> Salvar Configuração
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="conteudo-agrupado">
+    {% if agrupamento == 'categoria' %}
+        {# Agrupamento por Categoria #}
+        {% if categorias_com_inscricoes %}
+        {% for categoria, cat_data in categorias_com_inscricoes.items() %}
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-success text-white">
+                <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2">
+                    <h5 class="mb-0 h6 h5-md">
+                        <i class="bi bi-tag me-2"></i>{{ categoria }}
+                    </h5>
+                    <span class="badge bg-light text-dark">{{ cat_data.total_inscritos }} inscrito(s)</span>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                {% if cat_data.academias %}
+                {% for academia_nome, alunos in cat_data.academias.items() %}
+                <div class="border-bottom">
+                    <div class="p-2 p-md-3 bg-light">
+                        <h6 class="mb-0 small small-md">
+                            <i class="bi bi-building me-2"></i><strong>{{ academia_nome }}</strong>
+                            <span class="badge bg-secondary ms-2">{{ alunos|length }} aluno(s)</span>
+                        </h6>
+                    </div>
+                    <!-- Tabela para desktop -->
+                    <div class="table-responsive d-none d-md-block">
+                        <table class="table table-sm table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th style="width: 5%;">#</th>
+                                    {% for c in campos_form %}
+                                    {% if c.campo_chave %}
+                                    <th>{{ c.label }}</th>
+                                    {% endif %}
+                                    {% endfor %}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for aluno in alunos %}
+                                <tr>
+                                    <td>{{ loop.index }}</td>
+                                    {% for c in campos_form %}
+                                    {% if c.campo_chave %}
+                                    <td>
+                                        {% set val = (aluno.dados_form or {}).get(c.campo_chave, '') %}
+                                        {% if c.campo_chave == 'id_academia' %}
+                                            {% if val and val|string in academias_map %}
+                                                {{ academias_map[val|string] }}
+                                            {% else %}
+                                                {{ val or '-' }}
+                                            {% endif %}
+                                        {% elif c.campo_chave == 'graduacao_id' %}
+                                            {% if val and val|string in graduacoes_map %}
+                                                {{ graduacoes_map[val|string] }}
+                                            {% else %}
+                                                {{ val or '-' }}
+                                            {% endif %}
+                                        {% elif c.campo_chave == 'sexo' %}
+                                            {% if val == 'M' %}Masculino{% elif val == 'F' %}Feminino{% else %}{{ val or '-' }}{% endif %}
+                                        {% elif c.campo_chave in ['data_nascimento', 'ultimo_exame_faixa', 'rg_data_emissao', 'data_cadastro_zempo'] %}
+                                            {% if val %}
+                                                {% set data_val = val|string|truncate(10, True, '') %}
+                                                {% if data_val|length == 10 and '-' in data_val %}
+                                                    {{ data_val[8:10] }}/{{ data_val[5:7] }}/{{ data_val[0:4] }}
+                                                {% else %}
+                                                    {{ data_val }}
+                                                {% endif %}
+                                            {% else %}
+                                                -
+                                            {% endif %}
+                                        {% else %}
+                                            {{ val or '-' }}
+                                        {% endif %}
+                                    </td>
+                                    {% endif %}
+                                    {% endfor %}
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <!-- Cards para mobile -->
+                    <div class="d-md-none px-2 py-2">
+                        {% for aluno in alunos %}
+                        {% set nome_aluno = (aluno.dados_form or {}).get('nome', aluno.aluno_nome or 'Avulso') %}
+                        <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
+                            <div class="flex-grow-1">
+                                <div class="fw-semibold small">{{ nome_aluno }}</div>
+                            </div>
+                            <button type="button" class="btn btn-sm btn-outline-primary ms-2" data-bs-toggle="modal" data-bs-target="#modalDetalhesAlunoCat{{ aluno.id }}_{{ loop.index }}" title="Ver detalhes">
+                                <i class="bi bi-eye"></i>
+                            </button>
+                        </div>
+                        
+                        <!-- Modal de detalhes do aluno -->
+                        <div class="modal fade" id="modalDetalhesAlunoCat{{ aluno.id }}_{{ loop.index }}" tabindex="-1" aria-labelledby="modalDetalhesAlunoCatLabel{{ aluno.id }}_{{ loop.index }}" aria-hidden="true">
+                            <div class="modal-dialog modal-dialog-scrollable">
+                                <div class="modal-content">
+                                    <div class="modal-header bg-primary text-white">
+                                        <h5 class="modal-title" id="modalDetalhesAlunoCatLabel{{ aluno.id }}_{{ loop.index }}">
+                                            <i class="bi bi-person me-2"></i>Detalhes do Aluno
+                                        </h5>
+                                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        <div class="mb-3">
+                                            <h6 class="fw-bold text-primary">{{ nome_aluno }}</h6>
+                                        </div>
+                                        {% for c in campos_form %}
+                                        {% if c.campo_chave %}
+                                        <div class="row g-2 mb-2 border-bottom pb-2">
+                                            <div class="col-5 fw-bold small">{{ c.label }}:</div>
+                                            <div class="col-7 small">
+                                                {% set val = (aluno.dados_form or {}).get(c.campo_chave, '') %}
+                                                {% if c.campo_chave == 'id_academia' %}
+                                                    {% if val and val|string in academias_map %}
+                                                        {{ academias_map[val|string] }}
+                                                    {% else %}
+                                                        {{ val or '-' }}
+                                                    {% endif %}
+                                                {% elif c.campo_chave == 'graduacao_id' %}
+                                                    {% if val and val|string in graduacoes_map %}
+                                                        {{ graduacoes_map[val|string] }}
+                                                    {% else %}
+                                                        {{ val or '-' }}
+                                                    {% endif %}
+                                                {% elif c.campo_chave == 'sexo' %}
+                                                    {% if val == 'M' %}Masculino{% elif val == 'F' %}Feminino{% else %}{{ val or '-' }}{% endif %}
+                                                {% elif c.campo_chave in ['data_nascimento', 'ultimo_exame_faixa', 'rg_data_emissao', 'data_cadastro_zempo'] %}
+                                                    {% if val %}
+                                                        {% set data_val = val|string|truncate(10, True, '') %}
+                                                        {% if data_val|length == 10 and '-' in data_val %}
+                                                            {{ data_val[8:10] }}/{{ data_val[5:7] }}/{{ data_val[0:4] }}
+                                                        {% else %}
+                                                            {{ data_val }}
+                                                        {% endif %}
+                                                    {% else %}
+                                                        -
+                                                    {% endif %}
+                                                {% else %}
+                                                    {{ val or '-' }}
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                        {% endif %}
+                                        {% endfor %}
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endfor %}
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+        {% endif %}
+    {% else %}
+        {# Agrupamento por Academia (padrão) #}
+        {% if academias_com_inscricoes %}
+        {% for academia_id, ac_data in academias_com_inscricoes.items() %}
+        <div class="card shadow-sm mb-4">
+        <div class="card-header bg-primary text-white">
+            <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2">
+                <h5 class="mb-0 h6 h5-md">
+                    <i class="bi bi-building me-2"></i>{{ ac_data.academia_nome }}
+                </h5>
+                <span class="badge bg-light text-dark">{{ ac_data.total_inscritos }} inscrito(s)</span>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            {% if ac_data.categorias %}
+            {% for categoria, alunos in ac_data.categorias.items() %}
+            <div class="border-bottom">
+                <div class="p-2 p-md-3 bg-light">
+                    <h6 class="mb-0 small small-md">
+                        <i class="bi bi-tag me-2"></i><strong>{{ categoria }}</strong>
+                        <span class="badge bg-secondary ms-2">{{ alunos|length }} aluno(s)</span>
+                    </h6>
+                </div>
+                <!-- Tabela para desktop -->
+                <div class="table-responsive d-none d-md-block">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width: 5%;">#</th>
+                                {% for c in campos_form %}
+                                {% if c.campo_chave %}
+                                <th>{{ c.label }}</th>
+                                {% endif %}
+                                {% endfor %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for aluno in alunos %}
+                            <tr>
+                                <td>{{ loop.index }}</td>
+                                {% for c in campos_form %}
+                                {% if c.campo_chave %}
+                                <td>
+                                    {% set val = (aluno.dados_form or {}).get(c.campo_chave, '') %}
+                                    {% if c.campo_chave == 'id_academia' %}
+                                        {% if val and val|string in academias_map %}
+                                            {{ academias_map[val|string] }}
+                                        {% else %}
+                                            {{ val or '-' }}
+                                        {% endif %}
+                                    {% elif c.campo_chave == 'graduacao_id' %}
+                                        {% if val and val|string in graduacoes_map %}
+                                            {{ graduacoes_map[val|string] }}
+                                        {% else %}
+                                            {{ val or '-' }}
+                                        {% endif %}
+                                    {% elif c.campo_chave == 'sexo' %}
+                                        {% if val == 'M' %}Masculino{% elif val == 'F' %}Feminino{% else %}{{ val or '-' }}{% endif %}
+                                    {% elif c.campo_chave in ['data_nascimento', 'ultimo_exame_faixa', 'rg_data_emissao', 'data_cadastro_zempo'] %}
+                                        {% if val %}
+                                            {% set data_val = val|string|truncate(10, True, '') %}
+                                            {% if data_val|length == 10 and '-' in data_val %}
+                                                {{ data_val[8:10] }}/{{ data_val[5:7] }}/{{ data_val[0:4] }}
+                                            {% else %}
+                                                {{ data_val }}
+                                            {% endif %}
+                                        {% else %}
+                                            -
+                                        {% endif %}
+                                    {% else %}
+                                        {{ val or '-' }}
+                                    {% endif %}
+                                </td>
+                                {% endif %}
+                                {% endfor %}
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                
+                <!-- Cards para mobile -->
+                <div class="d-md-none px-2 py-2">
+                    {% for aluno in alunos %}
+                    {% set nome_aluno = (aluno.dados_form or {}).get('nome', aluno.aluno_nome or 'Avulso') %}
+                    <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
+                        <div class="flex-grow-1">
+                            <div class="fw-semibold small">{{ nome_aluno }}</div>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-primary ms-2" data-bs-toggle="modal" data-bs-target="#modalDetalhesAluno{{ aluno.id }}_{{ loop.index }}" title="Ver detalhes">
+                            <i class="bi bi-eye"></i>
+                        </button>
+                    </div>
+                    
+                    <!-- Modal de detalhes do aluno -->
+                    <div class="modal fade" id="modalDetalhesAluno{{ aluno.id }}_{{ loop.index }}" tabindex="-1" aria-labelledby="modalDetalhesAlunoLabel{{ aluno.id }}_{{ loop.index }}" aria-hidden="true">
+                        <div class="modal-dialog modal-dialog-scrollable">
+                            <div class="modal-content">
+                                <div class="modal-header bg-primary text-white">
+                                    <h5 class="modal-title" id="modalDetalhesAlunoLabel{{ aluno.id }}_{{ loop.index }}">
+                                        <i class="bi bi-person me-2"></i>Detalhes do Aluno
+                                    </h5>
+                                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <div class="mb-3">
+                                        <h6 class="fw-bold text-primary">{{ nome_aluno }}</h6>
+                                    </div>
+                                    {% for c in campos_form %}
+                                    {% if c.campo_chave %}
+                                    <div class="row g-2 mb-2 border-bottom pb-2">
+                                        <div class="col-5 fw-bold small">{{ c.label }}:</div>
+                                        <div class="col-7 small">
+                                            {% set val = (aluno.dados_form or {}).get(c.campo_chave, '') %}
+                                            {% if c.campo_chave == 'id_academia' %}
+                                                {% if val and val|string in academias_map %}
+                                                    {{ academias_map[val|string] }}
+                                                {% else %}
+                                                    {{ val or '-' }}
+                                                {% endif %}
+                                            {% elif c.campo_chave == 'graduacao_id' %}
+                                                {% if val and val|string in graduacoes_map %}
+                                                    {{ graduacoes_map[val|string] }}
+                                                {% else %}
+                                                    {{ val or '-' }}
+                                                {% endif %}
+                                            {% elif c.campo_chave == 'sexo' %}
+                                                {% if val == 'M' %}Masculino{% elif val == 'F' %}Feminino{% else %}{{ val or '-' }}{% endif %}
+                                            {% elif c.campo_chave in ['data_nascimento', 'ultimo_exame_faixa', 'rg_data_emissao', 'data_cadastro_zempo'] %}
+                                                {% if val %}
+                                                    {% set data_val = val|string|truncate(10, True, '') %}
+                                                    {% if data_val|length == 10 and '-' in data_val %}
+                                                        {{ data_val[8:10] }}/{{ data_val[5:7] }}/{{ data_val[0:4] }}
+                                                    {% else %}
+                                                        {{ data_val }}
+                                                    {% endif %}
+                                                {% else %}
+                                                    -
+                                                {% endif %}
+                                            {% else %}
+                                                {{ val or '-' }}
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                    {% endif %}
+                                    {% endfor %}
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+            {% else %}
+            <div class="p-3 text-center text-muted">
+                <i class="bi bi-inbox display-6"></i>
+                <p class="mb-0 mt-2">Nenhuma inscrição encontrada</p>
+            </div>
+            {% endif %}
+        </div>
+        <div class="card-footer bg-light">
+            <small class="text-muted">
+                <strong>Resumo:</strong>
+                {% for cat, total in ac_data.total_por_categoria.items() %}
+                {{ cat }}: {{ total }}{% if not loop.last %}, {% endif %}
+                {% endfor %}
+            </small>
+        </div>
+    </div>
+        {% endfor %}
+        {% endif %}
+    {% endif %}
+    </div>
+    
+    {% if not academias_com_inscricoes and not categorias_com_inscricoes %}
+    <div class="card shadow-sm">
+        <div class="card-body text-center py-5">
+            <i class="bi bi-inbox display-4 text-muted mb-3"></i>
+            <h5 class="text-muted">Nenhuma inscrição enviada</h5>
+            <p class="text-muted mb-0">As academias precisam enviar as inscrições para que apareçam aqui.</p>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<style>
+.card-header h5 {
+    font-size: 1.1rem;
+}
+.table th {
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+.table td {
+    font-size: 0.9rem;
+}
+.campo-item {
+    margin-bottom: 10px;
+    background: white;
+    border: 2px solid #dee2e6;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+    position: relative;
+    user-select: none;
+    padding: 12px;
+}
+.campo-disponivel {
+    cursor: pointer;
+    background: #ffffff;
+}
+.campo-disponivel:hover {
+    background: #f0f7ff;
+    border-color: #0d6efd;
+    box-shadow: 0 2px 8px rgba(13, 110, 253, 0.15);
+    transform: translateY(-2px);
+}
+.campo-disponivel:has(input:checked) {
+    background: #e7f3ff;
+    border-color: #0d6efd;
+    border-width: 2px;
+}
+.campo-item.dragging {
+    opacity: 0.6;
+    transform: scale(0.98);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+    border-color: #0d6efd;
+}
+#campos-selecionados .campo-item {
+    cursor: move;
+    background: linear-gradient(135deg, #e7f3ff 0%, #d0e7ff 100%);
+    border-color: #0d6efd;
+    border-width: 2px;
+    padding-right: 50px;
+}
+#campos-selecionados .campo-item:hover {
+    background: linear-gradient(135deg, #d0e7ff 0%, #b8dbff 100%);
+    box-shadow: 0 3px 10px rgba(13, 110, 253, 0.25);
+    transform: translateY(-2px);
+}
+.campo-item .form-check-label {
+    user-select: none;
+    cursor: pointer;
+    margin-left: 8px;
+}
+.campo-item .form-check-label strong {
+    color: #212529;
+    font-size: 0.95rem;
+}
+.campo-item .form-check-label code {
+    font-size: 0.8rem;
+    color: #6c757d;
+    background: rgba(0,0,0,0.05);
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+#campos-selecionados .campo-item .bi-grip-vertical {
+    opacity: 0.5;
+    transition: all 0.2s;
+    font-size: 1.3rem;
+    color: #6c757d;
+    cursor: move;
+}
+#campos-selecionados .campo-item:hover .bi-grip-vertical {
+    opacity: 1;
+    color: #0d6efd;
+}
+.modal-body {
+    padding: 1.5rem;
+}
+#campos-disponiveis::-webkit-scrollbar,
+#campos-selecionados::-webkit-scrollbar {
+    width: 8px;
+}
+#campos-disponiveis::-webkit-scrollbar-track,
+#campos-selecionados::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+#campos-disponiveis::-webkit-scrollbar-thumb,
+#campos-selecionados::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 4px;
+}
+#campos-disponiveis::-webkit-scrollbar-thumb:hover,
+#campos-selecionados::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
+.badge.bg-primary {
+    font-size: 0.75rem;
+    padding: 4px 8px;
+    font-weight: 600;
+}
+
+/* Estilos responsivos para mobile */
+@media (max-width: 767.98px) {
+    .container {
+        padding-left: 8px;
+        padding-right: 8px;
+    }
+    
+    .card {
+        margin-bottom: 0.75rem !important;
+        border-radius: 0.5rem;
+    }
+    
+    .card-header {
+        padding: 0.5rem 0.75rem !important;
+    }
+    
+    .card-header h5,
+    .card-header h6 {
+        font-size: 0.85rem !important;
+        line-height: 1.3;
+    }
+    
+    .card-body {
+        padding: 0 !important;
+    }
+    
+    /* Cards de aluno em mobile */
+    .d-md-none .card {
+        margin-bottom: 0.5rem !important;
+        margin-left: 0.25rem !important;
+        margin-right: 0.25rem !important;
+        border: 1px solid #dee2e6;
+    }
+    
+    .d-md-none .card-body {
+        padding: 0.5rem !important;
+    }
+    
+    .d-md-none .row {
+        margin-left: 0;
+        margin-right: 0;
+    }
+    
+    .d-md-none .col-5,
+    .d-md-none .col-7 {
+        padding-left: 0.25rem;
+        padding-right: 0.25rem;
+        font-size: 0.75rem;
+    }
+    
+    .badge.fs-6 {
+        font-size: 0.85rem !important;
+        padding: 0.5rem 0.75rem;
+    }
+    
+    /* Lista de alunos em mobile */
+    .d-md-none .border-bottom {
+        border-bottom: 1px solid #dee2e6 !important;
+    }
+    
+    .d-md-none .py-2 {
+        padding-top: 0.75rem !important;
+        padding-bottom: 0.75rem !important;
+    }
+    
+    .d-md-none .btn-sm {
+        min-width: 44px;
+        min-height: 44px;
+        padding: 0.5rem;
+    }
+    
+    .d-md-none .fw-semibold {
+        font-size: 0.9rem;
+    }
+    
+    /* Modal em mobile */
+    .modal-dialog {
+        margin: 0.5rem;
+    }
+    
+    .modal-content {
+        border-radius: 0.5rem;
+    }
+    
+    .modal-body .row {
+        margin-left: 0;
+        margin-right: 0;
+    }
+    
+    .modal-body .col-5,
+    .modal-body .col-7 {
+        padding-left: 0.5rem;
+        padding-right: 0.5rem;
+    }
+    
+    /* Botões de agrupamento */
+    .btn-group .btn {
+        min-height: 44px;
+    }
+    
+    .d-md-none .border-bottom {
+        border-bottom: 1px solid #e9ecef !important;
+        padding-bottom: 0.25rem;
+        margin-bottom: 0.25rem;
+    }
+    
+    .table {
+        font-size: 0.75rem;
+    }
+    
+    .table th {
+        font-size: 0.7rem;
+        padding: 0.5rem 0.25rem;
+        white-space: nowrap;
+    }
+    
+    .table td {
+        font-size: 0.7rem;
+        padding: 0.5rem 0.25rem;
+        word-wrap: break-word;
+        max-width: 150px;
+    }
+    
+    .table-responsive {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    
+    .badge {
+        font-size: 0.65rem;
+        padding: 0.25em 0.5em;
+    }
+    
+    .btn {
+        min-height: 44px;
+        font-size: 0.875rem;
+        padding: 0.5rem 1rem;
+    }
+    
+    .btn-group {
+        width: 100%;
+    }
+    
+    .btn-group .btn {
+        flex: 1;
+        font-size: 0.8rem;
+        padding: 0.5rem 0.75rem;
+    }
+    
+    .modal-dialog {
+        margin: 0.5rem;
+        max-width: calc(100% - 1rem);
+    }
+    
+    .modal-body {
+        padding: 1rem !important;
+    }
+    
+    .campo-item {
+        padding: 10px !important;
+        margin-bottom: 8px;
+    }
+    
+    .campo-item .form-check-label {
+        font-size: 0.85rem;
+    }
+    
+    .campo-item .form-check-label code {
+        font-size: 0.7rem;
+    }
+    
+    /* Ajustes de espaçamento */
+    .p-2 {
+        padding: 0.5rem !important;
+    }
+    
+    .mb-2 {
+        margin-bottom: 0.5rem !important;
+    }
+    
+    .my-2 {
+        margin-top: 0.5rem !important;
+        margin-bottom: 0.5rem !important;
+    }
+    
+    .mx-2 {
+        margin-left: 0.5rem !important;
+        margin-right: 0.5rem !important;
+    }
+}
+
+@media (min-width: 768px) {
+    .h4-md {
+        font-size: 1.5rem;
+    }
+    
+    .h5-md {
+        font-size: 1.25rem;
+    }
+    
+    .h6-md {
+        font-size: 1rem;
+    }
+    
+    .small-md {
+        font-size: 1rem;
+    }
+    
+    .d-flex.flex-column {
+        flex-direction: row !important;
+    }
+    
+    .btn-group.w-100 {
+        width: auto !important;
+    }
+    
+    .btn.w-100 {
+        width: auto !important;
+    }
+}
+
+/* Melhorias de toque para mobile */
+@media (hover: none) and (pointer: coarse) {
+    .btn {
+        min-height: 44px;
+    }
+    
+    .form-check-input {
+        min-width: 20px;
+        min-height: 20px;
+    }
+    
+    .table th,
+    .table td {
+        padding: 0.75rem 0.5rem;
+    }
+}
+</style>
+
+<script>
+let camposConfiguracao = [];
+let camposDisponiveis = [];
+
+function atualizarAgrupamento() {
+    const agrupamento = document.querySelector('input[name="agrupamento"]:checked').value;
+    const url = new URL(window.location.href);
+    url.searchParams.set('agrupamento', agrupamento);
+    window.location.href = url.toString();
+}
+
+// Inicializar quando o modal for aberto
+document.addEventListener('DOMContentLoaded', function() {
+    const modal = document.getElementById('modalConfiguracaoExportacao');
+    
+    // Inicializar campos disponíveis
+    const checkboxes = document.querySelectorAll('.campo-checkbox');
+    camposDisponiveis = Array.from(checkboxes).map(cb => ({
+        chave: cb.value,
+        label: cb.closest('.campo-item').dataset.label,
+        checked: cb.checked
+    }));
+    
+    // Configurar drag and drop
+    configurarDragAndDrop();
+    
+    // Atualizar lista de selecionados quando checkbox mudar
+    checkboxes.forEach(cb => {
+        cb.addEventListener('change', atualizarCamposSelecionados);
+    });
+    
+    // Quando o modal for aberto, carregar configuração e atualizar
+    if (modal) {
+        modal.addEventListener('shown.bs.modal', function() {
+            // Reconfigurar drag and drop quando modal abrir
+            configurarDragAndDrop();
+            atualizarCamposSelecionados();
+            carregarConfiguracaoSalva();
+        });
+    }
+    
+    // Inicializar campos selecionados
+    atualizarCamposSelecionados();
+});
+
+function configurarDragAndDrop() {
+    const selecionados = document.getElementById('campos-selecionados');
+    if (!selecionados) return;
+    
+    // Permitir drag apenas dos itens na área de selecionados (para reordenar)
+    const itemsSelecionados = selecionados.querySelectorAll('.campo-item');
+    
+    itemsSelecionados.forEach(item => {
+        // Remover listeners antigos
+        const newItem = item.cloneNode(true);
+        item.parentNode.replaceChild(newItem, item);
+    });
+    
+    // Adicionar listeners de drag apenas aos itens selecionados
+    selecionados.querySelectorAll('.campo-item').forEach(item => {
+        item.addEventListener('dragstart', handleDragStart);
+        item.addEventListener('dragend', handleDragEnd);
+    });
+    
+    // Permitir reordenar dentro da área de selecionados
+    selecionados.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        
+        const afterElement = getDragAfterElement(selecionados, e.clientY);
+        const dragging = document.querySelector('.dragging');
+        if (dragging && selecionados.contains(dragging)) {
+            if (afterElement == null) {
+                selecionados.appendChild(dragging);
+            } else if (afterElement !== dragging.nextSibling) {
+                selecionados.insertBefore(dragging, afterElement);
+            }
+        }
+    });
+    
+    selecionados.addEventListener('drop', function(e) {
+        e.preventDefault();
+        const dragging = document.querySelector('.dragging');
+        if (dragging) {
+            dragging.classList.remove('dragging');
+            atualizarOrdemBadges();
+        }
+    });
+}
+
+function getDragAfterElement(container, y) {
+    const draggableElements = [...container.querySelectorAll('.campo-item:not(.dragging)')];
+    return draggableElements.reduce((closest, child) => {
+        const box = child.getBoundingClientRect();
+        const offset = y - box.top - box.height / 2;
+        if (offset < 0 && offset > closest.offset) {
+            return { offset: offset, element: child };
+        } else {
+            return closest;
+        }
+    }, { offset: Number.NEGATIVE_INFINITY }).element;
+}
+
+function handleDragStart(e) {
+    const item = e.target.closest('.campo-item');
+    if (!item) return;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', item.dataset.chave || '');
+    item.classList.add('dragging');
+}
+
+function handleDragEnd(e) {
+    const item = e.target.closest('.campo-item');
+    if (item) {
+        item.classList.remove('dragging');
+    }
+}
+
+// Função handleDragOver removida - não é mais necessária
+
+// Função handleDrop removida - agora o drop é tratado diretamente no configurarDragAndDrop
+
+function atualizarOrdemBadges() {
+    const selecionados = document.getElementById('campos-selecionados');
+    if (!selecionados) return;
+    
+    const items = selecionados.querySelectorAll('.campo-item');
+    items.forEach((item, index) => {
+        let badge = item.querySelector('.badge.bg-primary');
+        if (!badge) {
+            badge = document.createElement('span');
+            badge.className = 'badge bg-primary';
+            badge.style.position = 'absolute';
+            badge.style.top = '12px';
+            badge.style.right = '12px';
+            badge.style.fontSize = '0.75rem';
+            badge.style.padding = '4px 8px';
+            badge.style.fontWeight = '600';
+            item.style.position = 'relative';
+            item.appendChild(badge);
+        }
+        badge.textContent = index + 1;
+    });
+}
+
+function atualizarCamposSelecionados() {
+    const selecionados = document.getElementById('campos-selecionados');
+    if (!selecionados) return;
+    
+    // Manter ordem existente se houver itens já organizados
+    const itemsExistentes = Array.from(selecionados.querySelectorAll('.campo-item'));
+    const chavesExistentes = itemsExistentes.map(item => item.dataset.chave);
+    
+    selecionados.innerHTML = '';
+    
+    const checkboxes = document.querySelectorAll('.campo-checkbox:checked');
+    if (checkboxes.length === 0) {
+        selecionados.innerHTML = '<p class="text-muted small text-center mb-0 py-3"><i class="bi bi-arrow-left me-1"></i>Marque os campos à esquerda e arraste para organizar a ordem</p>';
+        return;
+    }
+    
+    // Se há ordem existente, manter ela; senão, usar ordem dos checkboxes
+    const camposParaAdicionar = chavesExistentes.length > 0 
+        ? chavesExistentes.filter(chave => Array.from(checkboxes).some(cb => cb.value === chave))
+            .concat(Array.from(checkboxes).map(cb => cb.value).filter(chave => !chavesExistentes.includes(chave)))
+        : Array.from(checkboxes).map(cb => cb.value);
+    
+    camposParaAdicionar.forEach((chave, index) => {
+        const checkbox = Array.from(checkboxes).find(cb => cb.value === chave);
+        if (checkbox) {
+            const item = checkbox.closest('.campo-item');
+            const clone = item.cloneNode(true);
+            // Adicionar número de ordem visual
+            const badge = document.createElement('span');
+            badge.className = 'badge bg-primary';
+            badge.textContent = index + 1;
+            badge.style.position = 'absolute';
+            badge.style.top = '8px';
+            badge.style.right = '8px';
+            clone.style.position = 'relative';
+            clone.appendChild(badge);
+            selecionados.appendChild(clone);
+        }
+    });
+    
+    // Reconfigurar drag and drop
+    configurarDragAndDrop();
+}
+
+function carregarConfiguracaoSalva() {
+    // Buscar configuração salva do evento via AJAX
+    {% if evento and evento.id %}
+    fetch('{{ url_for("eventos_competicoes.get_configuracao_exportacao", evento_id=evento.id) }}')
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Erro ao buscar configuração');
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data && data.campos && data.campos.length > 0) {
+                camposConfiguracao = data.campos;
+                // Preservar orientacao_pdf se existir
+                if (data.orientacao_pdf) {
+                    camposConfiguracao.orientacao_pdf = data.orientacao_pdf;
+                }
+                aplicarConfiguracao();
+            }
+        })
+        .catch(error => {
+            console.log('Nenhuma configuração salva encontrada ou erro:', error);
+        });
+    {% endif %}
+}
+
+function aplicarConfiguracao() {
+    // Desmarcar todos os checkboxes primeiro
+    document.querySelectorAll('.campo-checkbox').forEach(cb => {
+        cb.checked = false;
+    });
+    
+    // Marcar checkboxes conforme configuração
+    camposConfiguracao.forEach((campo) => {
+        const checkbox = document.getElementById(`campo_${campo.chave}`);
+        if (checkbox) {
+            checkbox.checked = true;
+        }
+    });
+    
+    // Organizar ordem conforme configuração
+    const selecionados = document.getElementById('campos-selecionados');
+    selecionados.innerHTML = '';
+    
+    camposConfiguracao.forEach((campo) => {
+        const item = document.querySelector(`#campos-disponiveis [data-chave="${campo.chave}"]`);
+        if (item) {
+            const clone = item.cloneNode(true);
+            
+            // Remover checkbox do clone
+            const checkboxClone = clone.querySelector('.campo-checkbox');
+            if (checkboxClone) checkboxClone.remove();
+            
+            // Adicionar ícone de arrastar
+            const gripIcon = document.createElement('i');
+            gripIcon.className = 'bi bi-grip-vertical text-muted';
+            gripIcon.style.cssText = 'position: absolute; right: 12px; top: 50%; transform: translateY(-50%); font-size: 1.3rem; cursor: move; opacity: 0.5;';
+            clone.style.position = 'relative';
+            clone.style.paddingRight = '50px';
+            clone.appendChild(gripIcon);
+            clone.draggable = true;
+            clone.classList.remove('campo-disponivel');
+            
+            selecionados.appendChild(clone);
+        }
+    });
+    
+    // Aplicar orientação do PDF se estiver na configuração
+    if (camposConfiguracao.orientacao_pdf) {
+        const radio = document.getElementById(`orientacao_${camposConfiguracao.orientacao_pdf}`);
+        if (radio) {
+            radio.checked = true;
+        }
+    }
+    
+    // Atualizar badges de ordem
+    atualizarOrdemBadges();
+    
+    // Reconfigurar drag and drop
+    configurarDragAndDrop();
+}
+
+function salvarConfiguracaoExportacao() {
+    const selecionados = document.getElementById('campos-selecionados');
+    const campos = Array.from(selecionados.querySelectorAll('.campo-item')).map((item, index) => ({
+        chave: item.dataset.chave,
+        label: item.dataset.label,
+        ordem: index
+    }));
+    
+    if (campos.length === 0) {
+        alert('Selecione pelo menos um campo para exportar');
+        return;
+    }
+    
+    // Obter orientação do PDF selecionada
+    const orientacaoRadio = document.querySelector('input[name="orientacao_pdf"]:checked');
+    const orientacao_pdf = orientacaoRadio ? orientacaoRadio.value : 'paisagem';
+    
+    {% if evento and evento.id %}
+    // Mostrar loading
+    const btnSalvar = document.querySelector('#modalConfiguracaoExportacao .btn-primary');
+    const originalText = btnSalvar ? btnSalvar.innerHTML : 'Salvar Configuração';
+    if (btnSalvar) {
+        btnSalvar.disabled = true;
+        btnSalvar.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Salvando...';
+    }
+    
+    fetch('{{ url_for("eventos_competicoes.salvar_configuracao_exportacao", evento_id=evento.id) }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ campos: campos, orientacao_pdf: orientacao_pdf })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Mostrar mensagem de sucesso
+            const alertDiv = document.createElement('div');
+            alertDiv.className = 'alert alert-success alert-dismissible fade show';
+            alertDiv.innerHTML = '<i class="bi bi-check-circle me-2"></i>Configuração salva com sucesso!<button type="button" class="btn-close" data-bs-dismiss="alert"></button>';
+            document.querySelector('#modalConfiguracaoExportacao .modal-body').insertBefore(alertDiv, document.querySelector('#modalConfiguracaoExportacao .modal-body').firstChild);
+            camposConfiguracao = campos;
+            
+            // Fechar modal após 1 segundo
+            setTimeout(() => {
+                const modal = bootstrap.Modal.getInstance(document.getElementById('modalConfiguracaoExportacao'));
+                if (modal) modal.hide();
+            }, 1500);
+        } else {
+            alert('Erro ao salvar configuração: ' + (data.error || 'Erro desconhecido'));
+        }
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        alert('Erro ao salvar configuração');
+    })
+    .finally(() => {
+        if (btnSalvar) {
+            btnSalvar.disabled = false;
+            btnSalvar.innerHTML = originalText;
+        }
+    });
+    {% else %}
+    alert('Erro: evento não encontrado');
+    {% endif %}
+}
+
+function resetarConfiguracao() {
+    // Marcar todos os checkboxes
+    document.querySelectorAll('.campo-checkbox').forEach(cb => {
+        cb.checked = true;
+    });
+    atualizarCamposSelecionados();
+}
+
+function exportarComConfiguracao(formato) {
+    // Buscar APENAS os campos que estão na área de selecionados (ordem de exportação)
+    const selecionados = document.getElementById('campos-selecionados');
+    const itemsSelecionados = selecionados.querySelectorAll('.campo-item');
+    
+    if (itemsSelecionados.length === 0) {
+        alert('Selecione pelo menos um campo para exportar. Marque os campos e organize a ordem na área "Ordem de Exportação".');
+        return;
+    }
+    
+    // Extrair apenas as chaves dos campos que estão na área de selecionados
+    const campos = Array.from(itemsSelecionados).map(item => item.dataset.chave).filter(chave => chave);
+    
+    if (campos.length === 0) {
+        alert('Erro: nenhum campo válido encontrado para exportar.');
+        return;
+    }
+    
+    {% if evento and evento.id %}
+    // Obter orientação do PDF selecionada (apenas para PDF)
+    let orientacao = '';
+    if (formato === 'pdf') {
+        const orientacaoRadio = document.querySelector('input[name="orientacao_pdf"]:checked');
+        orientacao = orientacaoRadio ? orientacaoRadio.value : 'paisagem';
+    }
+    
+    // Criar URL com parâmetros - APENAS os campos selecionados e ordenados
+    const params = new URLSearchParams();
+    campos.forEach(chave => {
+        if (chave) {
+            params.append('campos', chave);
+        }
+    });
+    
+    // Adicionar orientação apenas para PDF
+    if (formato === 'pdf' && orientacao) {
+        params.append('orientacao', orientacao);
+    }
+    
+    const url = '{{ url_for("eventos_competicoes.exportar", evento_id=evento.id, formato="FORMATO") }}'.replace('FORMATO', formato) + '&' + params.toString();
+    
+    window.location.href = url;
+    {% else %}
+    alert('Erro: evento não encontrado');
+    {% endif %}
+}
+</script>
+{% endblock %}

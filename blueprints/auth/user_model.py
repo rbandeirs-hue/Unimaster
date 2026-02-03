@@ -29,13 +29,15 @@ class Usuario(UserMixin):
         id_academia=None,
         roles=None,
         permissoes=None,
-        menus=None
+        menus=None,
+        foto=None
     ):
         # Dados básicos
         self.id = id
         self.nome = nome
         self.email = email
         self.senha = senha
+        self.foto = foto
 
         # Hierarquia (para federacao, associação e academia)
         self.id_federacao = id_federacao
@@ -56,6 +58,7 @@ class Usuario(UserMixin):
         "professor": ["professor"],
         "aluno": ["aluno"],
         "responsavel": ["responsavel", "responsável"],
+        "visitante": ["visitante"],
     }
 
     # ======================================================
@@ -148,6 +151,9 @@ class Usuario(UserMixin):
 
         if self.has_role("responsavel"):
             return "responsavel"
+
+        if self.has_role("visitante"):
+            return "visitante"
 
         return "desconhecido"
 

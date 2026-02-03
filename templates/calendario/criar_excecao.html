@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}Criar Exceção{% endblock %}
+{% block content %}
+<div class="container mt-4">
+    <div class="mb-4">
+        <h2 class="h4 fw-bold text-primary mb-1">Criar Exceção</h2>
+        <p class="text-muted small mb-0">{{ evento.titulo }}</p>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-8 mx-auto">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle"></i> 
+                        As exceções permitem cancelar ou alterar horários de eventos recorrentes em datas específicas,
+                        como feriados ou situações especiais.
+                    </div>
+
+                    <form method="POST">
+                        <!-- Data da exceção -->
+                        <div class="mb-3">
+                            <label for="data_excecao" class="form-label">Data <span class="text-danger">*</span></label>
+                            <input type="date" name="data_excecao" id="data_excecao" class="form-control" required>
+                            <small class="text-muted">Escolha a data em que a exceção será aplicada</small>
+                        </div>
+
+                        <!-- Tipo de exceção -->
+                        <div class="mb-3">
+                            <label for="tipo" class="form-label">Tipo de Exceção</label>
+                            <select name="tipo" id="tipo" class="form-select" onchange="toggleHorarios()">
+                                <option value="cancelamento">Cancelamento</option>
+                                <option value="alteracao_horario">Alteração de Horário</option>
+                            </select>
+                        </div>
+
+                        <!-- Motivo -->
+                        <div class="mb-3">
+                            <label for="motivo" class="form-label">Motivo</label>
+                            <textarea name="motivo" id="motivo" class="form-control" rows="3" 
+                                      placeholder="Ex: Feriado Nacional, Evento Especial, etc."></textarea>
+                        </div>
+
+                        <!-- Novos horários (se alteração) -->
+                        <div id="divHorarios" style="display: none;">
+                            <div class="alert alert-warning">
+                                <i class="bi bi-clock"></i> Defina os novos horários para esta data específica
+                            </div>
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="nova_hora_inicio" class="form-label">Nova Hora Início</label>
+                                    <input type="time" name="nova_hora_inicio" id="nova_hora_inicio" class="form-control">
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="nova_hora_fim" class="form-label">Nova Hora Fim</label>
+                                    <input type="time" name="nova_hora_fim" id="nova_hora_fim" class="form-control">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Botões -->
+                        <div class="d-flex gap-2 justify-content-between">
+                            {% set back_url = url_for('calendario.visualizar', nivel=nivel, nivel_id=nivel_id) %}
+                            {% include 'components/botao_voltar.html' %}
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-check-lg"></i> Criar Exceção
+                            </button>
+                        </div>
+    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function toggleHorarios() {
+    const tipo = document.getElementById('tipo').value;
+    const divHorarios = document.getElementById('divHorarios');
+    
+    if (tipo === 'alteracao_horario') {
+        divHorarios.style.display = 'block';
+    } else {
+        divHorarios.style.display = 'none';
+    }
+}
+</script>
+{% endblock %}

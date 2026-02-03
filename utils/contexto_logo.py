@@ -31,7 +31,7 @@ def get_contexto_logo_e_nome(current_user, session):
         return None, "Judo Academy", None
 
     modo = session.get("modo_painel") if session else None
-    if not modo or modo not in ("admin", "federacao", "associacao", "academia", "aluno", "responsavel"):
+    if not modo or modo not in ("admin", "federacao", "associacao", "academia", "professor", "aluno", "responsavel"):
         modo = _modo_efetivo(current_user)
 
     conn = get_db_connection()
@@ -51,6 +51,20 @@ def get_contexto_logo_e_nome(current_user, session):
             if row:
                 logo = buscar_logo_url("associacao", row["id"])
                 return logo, row["nome"] or "Associação", "associacao"
+
+        if modo == "professor":
+            cur.execute(
+                "SELECT id_academia FROM professores WHERE usuario_id = %s AND ativo = 1 LIMIT 1",
+                (current_user.id,),
+            )
+            row = cur.fetchone()
+            if row and row.get("id_academia"):
+                cur.execute("SELECT id, nome FROM academias WHERE id = %s", (row["id_academia"],))
+                ac = cur.fetchone()
+                if ac:
+                    logo = buscar_logo_url("academia", ac["id"])
+                    return logo, ac["nome"] or "Minha Turma", "academia"
+            return None, "Professor", None
 
         if modo == "academia" and getattr(current_user, "id_academia", None):
             cur.execute("SELECT id, nome FROM academias WHERE id = %s", (current_user.id_academia,))
@@ -101,18 +115,42 @@ def get_contexto_logo_e_nome(current_user, session):
     return None, "Judo Academy", None
 
 
+def _usuario_e_professor_ou_auxiliar(current_user):
+    """True se o usuário tem registro em professores e aparece em alguma turma (responsável ou auxiliar)."""
+    try:
+        from config import get_db_connection
+        conn = get_db_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute(
+            """SELECT 1 FROM professores p
+               INNER JOIN turma_professor tp ON tp.professor_id = p.id
+               WHERE p.usuario_id = %s AND p.ativo = 1 LIMIT 1""",
+            (current_user.id,),
+        )
+        ok = cur.fetchone() is not None
+        cur.close()
+        conn.close()
+        return ok
+    except Exception:
+        return False
+
+
 def _modo_efetivo(current_user):
-    """Define o modo baseado nas roles (ordem de prioridade)."""
+    """Define o modo baseado nas roles (ordem de prioridade). Inclui professor auxiliar."""
     if current_user.has_role("admin"):
         return "admin"
     if current_user.has_role("gestor_federacao"):
         return "federacao"
     if current_user.has_role("gestor_associacao"):
         return "associacao"
-    if current_user.has_role("gestor_academia") or current_user.has_role("professor"):
+    if current_user.has_role("gestor_academia"):
         return "academia"
+    if current_user.has_role("professor") or _usuario_e_professor_ou_auxiliar(current_user):
+        return "professor"
     if current_user.has_role("aluno"):
         return "aluno"
     if current_user.has_role("responsavel"):
         return "responsavel"
+    if current_user.has_role("visitante"):
+        return "visitante"
     return None

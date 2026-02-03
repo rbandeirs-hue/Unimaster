@@ -3,10 +3,11 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Login - Judo Academy</title>
+    <title>Login - Unimaster Judô</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%23C8102E'/%3E%3Cpath d='M50 20 L60 40 L50 50 L40 40 Z' fill='white'/%3E%3Cpath d='M30 60 L50 50 L70 60 L50 80 Z' fill='white'/%3E%3C/svg%3E">
 
-    <!-- Fonte e Bootstrap -->
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+    <!-- Fontes e Bootstrap -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
 
@@ -15,74 +16,140 @@
 </head>
 
 <body>
-    <!-- 🔹 Fundo com imagem -->
-    <div class="background-overlay"></div>
+    <!-- Fundo com gradiente e padrão -->
+    <div class="login-background">
+        <div class="background-pattern"></div>
+        <div class="background-gradient"></div>
+    </div>
 
-    <!-- 🔹 Fundo animado -->
-    <div class="background-animated-overlay"></div>
-
-    <!-- 🔹 Container -->
-    <div class="container-fluid login-container">
-        <div class="col-sm-10 col-md-8 col-lg-5">
-            <div class="login-card">
-
-                <!-- Cabeçalho -->
-                <div class="card-header">
-                    {% if login_logo_url %}
-                    <img src="{{ login_logo_url }}" alt="Logo" class="login-logo-img mb-2">
-                    {% else %}
-                    <i class="bi bi-trophy-fill logo-icon"></i>
-                    {% endif %}
-                    <h3>Bem-vindo(a) à Judo Academy</h3>
-                    <p class="text-muted mb-0">Faça login para acessar o painel de gerenciamento.</p>
-                </div>
-
-                <!-- Flash -->
-                {% with messages = get_flashed_messages(with_categories=true) %}
-                {% if messages %}
-                    {% for category, message in messages %}
-                        <div class="alert alert-{{ category }} alert-dismissible fade show mt-2" role="alert">
-                            {{ message }}
-                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                        </div>
-                    {% endfor %}
-                {% endif %}
-                {% endwith %}
-
-                <!-- Form -->
-                <div class="card-body p-0 pt-3">
-                    <form method="POST">
-                        <div class="mb-3">
-                            <label for="email" class="form-label fw-bold">Email</label>
-                            <div class="input-group">
-                                <span class="input-group-text"><i class="bi bi-envelope"></i></span>
-                                <input type="email" class="form-control" id="email" name="email" required placeholder="Digite seu email">
+    <!-- Container Principal -->
+    <div class="login-wrapper">
+        <div class="container-fluid">
+            <div class="row justify-content-center align-items-center min-vh-100">
+                <div class="col-12 col-sm-10 col-md-8 col-lg-5 col-xl-4">
+                    
+                    <!-- Card de Login -->
+                    <div class="login-card">
+                        
+                        <!-- Cabeçalho -->
+                        <div class="login-header">
+                            <div class="logo-icon-container">
+                                <div class="judo-icon-wrapper">
+                                    <i class="bi bi-shield-check judo-icon"></i>
+                                </div>
                             </div>
+                            <h1 class="login-title">Unimaster Judô</h1>
+                            <p class="login-subtitle">Sistema de Gestão para Academias de Judô</p>
                         </div>
 
-                        <div class="mb-4">
-                            <label for="senha" class="form-label fw-bold">Senha</label>
-                            <div class="input-group">
-                                <span class="input-group-text"><i class="bi bi-lock"></i></span>
-                                <input type="password" class="form-control" id="senha" name="senha" required placeholder="Digite sua senha">
+                        <!-- Mensagens Flash -->
+                        {% with messages = get_flashed_messages(with_categories=true) %}
+                        {% if messages %}
+                            <div class="flash-messages">
+                                {% for category, message in messages %}
+                                    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                                        <i class="bi bi-{% if category == 'success' %}check-circle{% elif category == 'danger' %}exclamation-triangle{% elif category == 'warning' %}exclamation-circle{% else %}info-circle{% endif %}-fill me-2"></i>
+                                        {{ message }}
+                                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fechar"></button>
+                                    </div>
+                                {% endfor %}
                             </div>
+                        {% endif %}
+                        {% endwith %}
+
+                        <!-- Formulário -->
+                        <form method="POST" class="login-form">
+                            <div class="form-group">
+                                <label for="email" class="form-label">
+                                    <i class="bi bi-envelope-fill me-2"></i>E-mail
+                                </label>
+                                <div class="input-wrapper">
+                                    <i class="bi bi-envelope input-icon"></i>
+                                    <input 
+                                        type="email" 
+                                        class="form-control" 
+                                        id="email" 
+                                        name="email" 
+                                        required 
+                                        placeholder="seu@email.com"
+                                        autocomplete="email"
+                                    >
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="senha" class="form-label">
+                                    <i class="bi bi-lock-fill me-2"></i>Senha
+                                </label>
+                                <div class="input-wrapper">
+                                    <i class="bi bi-lock input-icon"></i>
+                                    <input 
+                                        type="password" 
+                                        class="form-control" 
+                                        id="senha" 
+                                        name="senha" 
+                                        required 
+                                        placeholder="Digite sua senha"
+                                        autocomplete="current-password"
+                                    >
+                                </div>
+                            </div>
+
+                            <button type="submit" class="btn-login">
+                                <span class="btn-text">Entrar no Sistema</span>
+                                <i class="bi bi-arrow-right btn-icon"></i>
+                            </button>
+                        </form>
+
+                        <!-- Link Esqueci Senha -->
+                        <div class="text-center mt-3">
+                            <a href="{{ url_for('auth.esqueci_senha') }}" class="text-decoration-none" style="color: #0d6efd;">
+                                <i class="bi bi-question-circle me-1"></i>
+                                Esqueci minha senha
+                            </a>
                         </div>
 
-                        <button type="submit" class="btn btn-primary w-100 shadow-sm">
-                            <i class="bi bi-box-arrow-in-right me-2"></i> Entrar no Sistema
-                        </button>
-                    </form>
-                </div>
+                        <!-- Rodapé -->
+                        <div class="login-footer">
+                            <p class="footer-text">
+                                <i class="bi bi-shield-check-fill me-1"></i>
+                                Sistema seguro e confiável
+                            </p>
+                            <p class="copyright">
+                                &copy; {{ current_year }} Unimaster Judô. Todos os direitos reservados.
+                            </p>
+                        </div>
 
-                <div class="text-center mt-4">
-                    <small class="text-muted">&copy; {{ current_year }} Judo Academy. Todos os direitos reservados.</small>
+                    </div>
                 </div>
-
             </div>
         </div>
     </div>
 
-    <!-- JS -->
+    <!-- JavaScript Bootstrap -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Script para melhorar UX -->
+    <script>
+        // Foco automático no primeiro campo
+        document.addEventListener('DOMContentLoaded', function() {
+            const emailInput = document.getElementById('email');
+            if (emailInput && !emailInput.value) {
+                emailInput.focus();
+            }
+        });
+
+        // Animação suave ao enviar formulário
+        const form = document.querySelector('.login-form');
+        if (form) {
+            form.addEventListener('submit', function(e) {
+                const btn = this.querySelector('.btn-login');
+                if (btn) {
+                    btn.classList.add('loading');
+                    btn.querySelector('.btn-text').textContent = 'Entrando...';
+                }
+            });
+        }
+    </script>
 </body>
 </html>

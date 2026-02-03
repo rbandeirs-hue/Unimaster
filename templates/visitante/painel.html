@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% block title %}Painel — Visitante{% endblock %}
+{% block content %}
+<div class="container mt-4">
+    <div class="mb-4">
+        <h2 class="h4 fw-bold text-primary">Painel do Visitante</h2>
+        <p class="text-muted mb-0">Gerencie suas aulas experimentais.</p>
+    </div>
+
+    {% if visitante %}
+    <!-- Card de Informações -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card shadow-sm border-0">
+                <div class="card-body">
+                    <h5 class="card-title">
+                        <i class="bi bi-person-circle me-2"></i>Informações
+                    </h5>
+                    <p class="mb-1"><strong>Nome:</strong> {{ visitante.nome }}</p>
+                    {% if visitante.email %}
+                    <p class="mb-1"><strong>Email:</strong> {{ visitante.email }}</p>
+                    {% endif %}
+                    {% if visitante.telefone %}
+                    <p class="mb-1"><strong>Telefone:</strong> {{ visitante.telefone }}</p>
+                    {% endif %}
+                    <p class="mb-0"><strong>Academia:</strong> {{ visitante.academia_nome }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card shadow-sm border-0">
+                <div class="card-body">
+                    <h5 class="card-title">
+                        <i class="bi bi-calendar-check me-2"></i>Aulas Experimentais
+                    </h5>
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span>Aulas Realizadas:</span>
+                        <strong class="text-primary">{{ total_aulas }}</strong>
+                    </div>
+                    {% if limite_aulas %}
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span>Limite:</span>
+                        <strong class="text-info">{{ limite_aulas }}</strong>
+                    </div>
+                    <div class="progress mt-2" style="height: 8px;">
+                        {% set percentual = (total_aulas / limite_aulas * 100) if limite_aulas > 0 else 0 %}
+                        <div class="progress-bar {% if percentual >= 100 %}bg-danger{% elif percentual >= 80 %}bg-warning{% else %}bg-success{% endif %}" 
+                             role="progressbar" style="width: {{ percentual }}%"></div>
+                    </div>
+                    {% if total_aulas >= limite_aulas %}
+                    <p class="text-danger small mt-2 mb-0">
+                        <i class="bi bi-exclamation-triangle me-1"></i>Você atingiu o limite de aulas experimentais.
+                    </p>
+                    {% endif %}
+                    {% else %}
+                    <p class="text-muted small mb-0">Sem limite definido</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Ações Rápidas -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <a href="{{ url_for('visitante.solicitar_aula') }}" class="card-action-link text-decoration-none">
+                <div class="card shadow-sm border-primary h-100">
+                    <div class="card-body text-center p-4">
+                        <i class="bi bi-plus-circle display-5 mb-3 text-primary"></i>
+                        <h5 class="card-title fw-bold">Solicitar Aula Experimental</h5>
+                        <p class="card-text small text-muted mb-0">Agende uma nova aula experimental.</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col-md-6">
+            <a href="{{ url_for('visitante.minhas_aulas') }}" class="card-action-link text-decoration-none">
+                <div class="card shadow-sm border-info h-100">
+                    <div class="card-body text-center p-4">
+                        <i class="bi bi-calendar-event display-5 mb-3 text-info"></i>
+                        <h5 class="card-title fw-bold">Minhas Aulas</h5>
+                        <p class="card-text small text-muted mb-0">Veja suas aulas agendadas e realizadas.</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+    </div>
+
+    <!-- Últimas Aulas Realizadas -->
+    {% if aulas_realizadas %}
+    <div class="card shadow-sm border-0">
+        <div class="card-header bg-light">
+            <h5 class="mb-0">
+                <i class="bi bi-clock-history me-2"></i>Últimas Aulas Realizadas
+            </h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Data</th>
+                            <th>Turma</th>
+                            <th>Horário</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for aula in aulas_realizadas %}
+                        <tr>
+                            <td>{{ aula.data_aula|data_br }}</td>
+                            <td>{{ aula.turma_nome }}</td>
+                            <td>{{ aula.DiasHorario or '-' }}</td>
+                            <td>
+                                {% if aula.presente %}
+                                <span class="badge bg-success">Presente</span>
+                                {% else %}
+                                <span class="badge bg-secondary">Falta</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    {% else %}
+    <div class="card shadow-sm border-0">
+        <div class="card-body text-center py-5">
+            <i class="bi bi-exclamation-triangle display-1 text-warning mb-3"></i>
+            <h5 class="text-muted">Visitante não encontrado</h5>
+            <p class="text-muted mb-0">Entre em contato com o administrador.</p>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<style>
+.card-action-link .card { transition: transform 0.2s, box-shadow 0.2s; }
+.card-action-link:hover .card { transform: translateY(-4px); box-shadow: 0 0.5rem 1rem rgba(0,0,0,0.1) !important; }
+</style>
+{% endblock %}

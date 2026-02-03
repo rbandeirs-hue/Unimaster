@@ -1,164 +1,461 @@
 /* =======================================================================
-   🔹 Estilo Modular de Login - Judo Academy
+   🔹 Estilo Profissional de Login - Unimaster Judô
+   Design moderno e profissional para sistema de gestão de judô
    ======================================================================= */
 
-/* Variáveis de Cores */
+/* ===========================
+   🔹 Variáveis CSS
+   =========================== */
 :root {
-    --primary: #0d6efd;
-    --dark-bg: #1a1e22;
-    --judo-red: #dc3545;
-    --form-bg: rgba(255, 255, 255, 0.93);
-    --shadow-light: 0 10px 30px rgba(0, 0, 0, 0.25);
+    /* Cores do Judô */
+    --judo-red: #C8102E;
+    --judo-red-dark: #A00D25;
+    --judo-red-light: #E63946;
+    --judo-white: #FFFFFF;
+    --judo-black: #1A1A1A;
+    --judo-gray: #2D3436;
+    --judo-gray-light: #636E72;
+    
+    /* Cores de UI */
+    --primary: var(--judo-red);
+    --primary-hover: var(--judo-red-dark);
+    --text-primary: #212529;
+    --text-secondary: #6C757D;
+    --border-color: #DEE2E6;
+    --bg-light: #F8F9FA;
+    --success: #28A745;
+    --danger: #DC3545;
+    --warning: #FFC107;
+    --info: #17A2B8;
+    
+    /* Sombras */
+    --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.08);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.1);
+    --shadow-lg: 0 10px 30px rgba(0, 0, 0, 0.15);
+    --shadow-xl: 0 20px 50px rgba(0, 0, 0, 0.2);
+    
+    /* Transições */
+    --transition-fast: 0.15s ease;
+    --transition-normal: 0.3s ease;
+    --transition-slow: 0.5s ease;
 }
 
 /* ===========================
-   🔹 Fundo com imagem
+   🔹 Reset e Base
    =========================== */
-body {
-    font-family: 'Poppins', sans-serif;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    min-height: 100vh;
+* {
     margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Inter', 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+    color: var(--text-primary);
+    background: var(--judo-black);
     overflow-x: hidden;
-    color: #495057;
+    min-height: 100vh;
     position: relative;
 }
 
-/* Imagem de fundo (fallback gradient se imagem não existir) */
-.background-overlay {
+/* ===========================
+   🔹 Fundo com Padrão e Gradiente
+   =========================== */
+.login-background {
     position: fixed;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    background: linear-gradient(135deg, #1a1e22 0%, #2d3436 50%, #1a1e22 100%) no-repeat center center fixed;
-    background-size: cover;
-    z-index: -2;
+    z-index: 0;
+    overflow: hidden;
 }
 
-.background-overlay {
-    background-image: url("../../img/judo-bg.jpg"), linear-gradient(135deg, #1a1e22 0%, #2d3436 50%, #1a1e22 100%);
-}
-
-/* Overlay escuro por cima da imagem */
-body::before {
-    content: "";
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.55);
-    z-index: -1;
-}
-
-/* Efeito de grade animada */
-.background-animated-overlay {
-    position: fixed;
+.background-gradient {
+    position: absolute;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    background-image: radial-gradient(circle, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+    background: linear-gradient(
+        135deg,
+        #1A1A1A 0%,
+        #2D3436 25%,
+        #1A1A1A 50%,
+        #2D3436 75%,
+        #1A1A1A 100%
+    );
+    background-size: 400% 400%;
+    animation: gradientShift 15s ease infinite;
+}
+
+@keyframes gradientShift {
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+}
+
+.background-pattern {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-image: 
+        radial-gradient(circle at 2px 2px, rgba(200, 16, 46, 0.15) 1px, transparent 0);
     background-size: 40px 40px;
-    animation: moveBackground 60s linear infinite;
-    opacity: 0.1;
-    z-index: -1;
+    opacity: 0.4;
+    animation: patternMove 20s linear infinite;
 }
 
-@keyframes moveBackground {
-    from { background-position: 0 0; }
-    to { background-position: 400px 400px; }
+@keyframes patternMove {
+    0% { background-position: 0 0; }
+    100% { background-position: 40px 40px; }
+}
+
+/* Overlay escuro */
+.login-background::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: 1;
+}
+
+/* ===========================
+   🔹 Container Principal
+   =========================== */
+.login-wrapper {
+    position: relative;
+    z-index: 10;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    padding: 2rem 1rem;
 }
 
 /* ===========================
    🔹 Card de Login
    =========================== */
-.login-container {
-    display: flex;
-    justify-content: center;
-    padding: 1rem;
-    min-height: 100vh;
-    align-items: center;
-    width: 100%;
+.login-card {
+    background: var(--judo-white);
+    border-radius: 24px;
+    padding: 3rem 2.5rem;
+    box-shadow: var(--shadow-xl);
+    position: relative;
+    overflow: hidden;
+    backdrop-filter: blur(10px);
+    transition: transform var(--transition-normal), box-shadow var(--transition-normal);
+    animation: cardFadeIn 0.6s ease-out;
 }
 
-.login-card {
-    background-color: var(--form-bg);
-    border: none;
-    border-radius: 1rem;
-    padding: 2.5rem;
-    box-shadow: var(--shadow-light);
-    z-index: 10;
-    width: 100%;
-    max-width: 420px; /* 🔹 limite da largura do card */
-    transition: transform 0.3s ease;
-    backdrop-filter: blur(6px);
+@keyframes cardFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.login-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, var(--judo-red) 0%, var(--judo-red-light) 50%, var(--judo-red) 100%);
+    background-size: 200% 100%;
+    animation: shimmer 3s linear infinite;
+}
+
+@keyframes shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
 }
 
 .login-card:hover {
-    transform: translateY(-5px);
-}
-
-/* Cabeçalho */
-.login-card .card-header {
-    background: transparent !important;
-    border-bottom: none;
-    padding: 0 0 1.5rem 0;
-    text-align: center;
-}
-
-.login-card h3 {
-    font-weight: 700;
-    color: var(--primary);
-    font-size: 1.9rem;
-    margin-bottom: 0.5rem;
-}
-
-.logo-icon {
-    font-size: 3rem;
-    color: var(--judo-red);
-    margin-bottom: 0.5rem;
-    display: block;
-}
-
-.login-logo-img {
-    width: 80px;
-    height: 80px;
-    object-fit: contain;
-    display: block;
-    margin: 0 auto 0.5rem;
-    border-radius: 8px;
-    background: rgba(255,255,255,0.9);
-    padding: 4px;
+    transform: translateY(-4px);
+    box-shadow: 0 25px 60px rgba(0, 0, 0, 0.25);
 }
 
 /* ===========================
-   🔹 Inputs e Botões
+   🔹 Cabeçalho
    =========================== */
+.login-header {
+    text-align: center;
+    margin-bottom: 2.5rem;
+}
+
+.logo-container {
+    margin-bottom: 1.5rem;
+}
+
+.login-logo {
+    width: 100px;
+    height: 100px;
+    object-fit: contain;
+    border-radius: 12px;
+    background: var(--bg-light);
+    padding: 12px;
+    box-shadow: var(--shadow-md);
+    transition: transform var(--transition-normal);
+}
+
+.login-logo:hover {
+    transform: scale(1.05);
+}
+
+.logo-icon-container {
+    margin-bottom: 1.5rem;
+    display: flex;
+    justify-content: center;
+}
+
+.judo-icon-wrapper {
+    width: 100px;
+    height: 100px;
+    background: linear-gradient(135deg, var(--judo-red) 0%, var(--judo-red-dark) 100%);
+    border-radius: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: var(--shadow-lg);
+    position: relative;
+    overflow: hidden;
+    padding: 15px;
+}
+
+.judo-icon-wrapper::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: linear-gradient(45deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+    animation: shine 3s infinite;
+}
+
+@keyframes shine {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.judo-icon {
+    font-size: 2.5rem;
+    color: var(--judo-white);
+    z-index: 1;
+    position: relative;
+}
+
+
+.login-title {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--judo-black);
+    margin-bottom: 0.5rem;
+    letter-spacing: -0.5px;
+}
+
+.login-subtitle {
+    font-size: 0.95rem;
+    color: var(--text-secondary);
+    margin-bottom: 0;
+    font-weight: 400;
+}
+
+/* ===========================
+   🔹 Mensagens Flash
+   =========================== */
+.flash-messages {
+    margin-bottom: 1.5rem;
+}
+
+.flash-messages .alert {
+    border-radius: 12px;
+    border: none;
+    padding: 0.875rem 1rem;
+    font-size: 0.9rem;
+    box-shadow: var(--shadow-sm);
+    display: flex;
+    align-items: center;
+}
+
+.flash-messages .alert i {
+    font-size: 1.1rem;
+}
+
+/* ===========================
+   🔹 Formulário
+   =========================== */
+.login-form {
+    margin-bottom: 2rem;
+}
+
+.form-group {
+    margin-bottom: 1.5rem;
+}
+
+.form-label {
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: var(--text-primary);
+    margin-bottom: 0.75rem;
+    display: flex;
+    align-items: center;
+}
+
+.form-label i {
+    color: var(--judo-red);
+    font-size: 1rem;
+}
+
+.input-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.input-icon {
+    position: absolute;
+    left: 1rem;
+    color: var(--text-secondary);
+    font-size: 1.1rem;
+    z-index: 2;
+    pointer-events: none;
+}
+
 .form-control {
-    border-radius: 0.5rem;
-    padding: 0.75rem 1rem;
-    border: 1px solid #ced4da;
-    transition: border-color 0.2s, box-shadow 0.2s;
+    width: 100%;
+    padding: 0.875rem 1rem 0.875rem 3rem;
+    font-size: 1rem;
+    border: 2px solid var(--border-color);
+    border-radius: 12px;
+    background: var(--judo-white);
+    transition: all var(--transition-fast);
+    font-family: inherit;
 }
 
 .form-control:focus {
-    border-color: var(--primary);
-    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+    outline: none;
+    border-color: var(--judo-red);
+    box-shadow: 0 0 0 4px rgba(200, 16, 46, 0.1);
+    background: var(--judo-white);
 }
 
-.btn-primary {
-    background-color: var(--primary);
-    border-color: var(--primary);
+.form-control::placeholder {
+    color: var(--text-secondary);
+    opacity: 0.6;
+}
+
+/* ===========================
+   🔹 Botão de Login
+   =========================== */
+.btn-login {
+    width: 100%;
+    padding: 1rem 2rem;
+    background: linear-gradient(135deg, var(--judo-red) 0%, var(--judo-red-dark) 100%);
+    color: var(--judo-white);
+    border: none;
+    border-radius: 12px;
+    font-size: 1rem;
     font-weight: 600;
-    padding: 0.75rem 1rem;
-    transition: all 0.2s ease;
+    cursor: pointer;
+    transition: all var(--transition-normal);
+    box-shadow: var(--shadow-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    margin-top: 0.5rem;
+    position: relative;
+    overflow: hidden;
 }
 
-.btn-primary:hover {
-    background-color: #0a58ca;
-    border-color: #0a58ca;
-    transform: scale(1.02);
+.btn-login::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+    transition: left 0.5s;
+}
+
+.btn-login:hover::before {
+    left: 100%;
+}
+
+.btn-login:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+    background: linear-gradient(135deg, var(--judo-red-dark) 0%, var(--judo-red) 100%);
+}
+
+.btn-login:active {
+    transform: translateY(0);
+    box-shadow: var(--shadow-md);
+}
+
+.btn-login.loading {
+    pointer-events: none;
+    opacity: 0.8;
+}
+
+.btn-text {
+    position: relative;
+    z-index: 1;
+}
+
+.btn-icon {
+    font-size: 1.2rem;
+    transition: transform var(--transition-fast);
+    position: relative;
+    z-index: 1;
+}
+
+.btn-login:hover .btn-icon {
+    transform: translateX(4px);
+}
+
+/* ===========================
+   🔹 Rodapé
+   =========================== */
+.login-footer {
+    text-align: center;
+    padding-top: 2rem;
+    border-top: 1px solid var(--border-color);
+}
+
+.footer-text {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+}
+
+.footer-text i {
+    color: var(--success);
+    font-size: 1rem;
+}
+
+.copyright {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-bottom: 0;
+    opacity: 0.7;
 }
 
 /* ===========================
@@ -166,9 +463,69 @@ body::before {
    =========================== */
 @media (max-width: 768px) {
     .login-card {
-        padding: 1.5rem;
+        padding: 2rem 1.5rem;
+        border-radius: 20px;
     }
-    .login-card h3 {
-        font-size: 1.6rem;
+    
+    .login-title {
+        font-size: 1.75rem;
     }
+    
+    .login-subtitle {
+        font-size: 0.875rem;
+    }
+    
+    .judo-icon-wrapper {
+        width: 80px;
+        height: 80px;
+    }
+    
+    .judo-icon {
+        font-size: 2.5rem;
+    }
+    
+    .login-logo {
+        width: 80px;
+        height: 80px;
+    }
+}
+
+@media (max-width: 576px) {
+    .login-wrapper {
+        padding: 1rem 0.5rem;
+    }
+    
+    .login-card {
+        padding: 1.5rem 1.25rem;
+    }
+    
+    .login-header {
+        margin-bottom: 2rem;
+    }
+    
+    .form-group {
+        margin-bottom: 1.25rem;
+    }
+}
+
+/* ===========================
+   🔹 Acessibilidade
+   =========================== */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}
+
+/* ===========================
+   🔹 Melhorias de Foco
+   =========================== */
+.form-control:focus-visible,
+.btn-login:focus-visible {
+    outline: 2px solid var(--judo-red);
+    outline-offset: 2px;
 }

@@ -1,7 +1,7 @@
 # ======================================================
 # 🧩 Blueprint: Usuários (TOTALMENTE AJUSTADO PARA ROLES)
 # ======================================================
-from flask import Blueprint, render_template, request, redirect, url_for, flash
+from flask import Blueprint, render_template, request, redirect, url_for, flash, session, current_app
 from flask_login import login_required, current_user
 from werkzeug.security import generate_password_hash
 from blueprints.auth.user_model import Usuario
@@ -21,6 +21,18 @@ def require_admin():
     return True
 
 
+def require_admin_or_gestor():
+    """Verifica se o usuário é admin, gestor_academia ou gestor_associacao."""
+    if not (
+        current_user.has_role("admin") or
+        current_user.has_role("gestor_academia") or
+        current_user.has_role("gestor_associacao")
+    ):
+        flash("Acesso restrito aos administradores, gestores de academia e gestores de associação.", "danger")
+        return False
+    return True
+
+
 # ======================================================
 # 🔹 LISTA DE USUÁRIOS
 # ======================================================
@@ -28,7 +40,7 @@ def require_admin():
 @login_required
 def lista_usuarios():
 
-    if not require_admin():
+    if not require_admin_or_gestor():
         return redirect(url_for("painel.home"))
 
     busca = request.args.get("busca", "").strip()
@@ -107,7 +119,7 @@ def lista_usuarios():
 @login_required
 def cadastro_usuario():
 
-    if not require_admin():
+    if not require_admin_or_gestor():
         return redirect(url_for("painel.home"))
 
     back_url = request.args.get("next") or request.referrer or url_for("usuarios.lista_usuarios")
@@ -119,17 +131,31 @@ def cadastro_usuario():
     cursor.execute("SELECT id, nome FROM roles ORDER BY nome")
     roles = cursor.fetchall()
 
-    # Academias para vínculo (admin: todas ou as suas vinculadas)
+    # Academias para vínculo
     academias_disponiveis = []
-    cursor.execute("SELECT academia_id FROM usuarios_academias WHERE usuario_id = %s", (current_user.id,))
-    vinculadas = [r["academia_id"] for r in cursor.fetchall()]
-    if vinculadas:
-        ph = ",".join(["%s"] * len(vinculadas))
-        cursor.execute(f"SELECT id, nome FROM academias WHERE id IN ({ph}) ORDER BY nome", tuple(vinculadas))
+    if current_user.has_role("admin"):
+        # Admin: todas as academias ou as suas vinculadas
+        cursor.execute("SELECT academia_id FROM usuarios_academias WHERE usuario_id = %s", (current_user.id,))
+        vinculadas = [r["academia_id"] for r in cursor.fetchall()]
+        if vinculadas:
+            ph = ",".join(["%s"] * len(vinculadas))
+            cursor.execute(f"SELECT id, nome FROM academias WHERE id IN ({ph}) ORDER BY nome", tuple(vinculadas))
+            academias_disponiveis = cursor.fetchall()
+        else:
+            cursor.execute("SELECT id, nome FROM academias ORDER BY nome")
+            academias_disponiveis = cursor.fetchall()
+    elif current_user.has_role("gestor_associacao") and getattr(current_user, "id_associacao", None):
+        # Gestor de associação: academias da sua associação
+        cursor.execute("SELECT id, nome FROM academias WHERE id_associacao = %s ORDER BY nome", (current_user.id_associacao,))
         academias_disponiveis = cursor.fetchall()
-    else:
-        cursor.execute("SELECT id, nome FROM academias ORDER BY nome")
-        academias_disponiveis = cursor.fetchall()
+    elif current_user.has_role("gestor_academia"):
+        # Gestor de academia: apenas academias vinculadas ao usuário
+        cursor.execute("SELECT academia_id FROM usuarios_academias WHERE usuario_id = %s", (current_user.id,))
+        vinculadas = [r["academia_id"] for r in cursor.fetchall()]
+        if vinculadas:
+            ph = ",".join(["%s"] * len(vinculadas))
+            cursor.execute(f"SELECT id, nome FROM academias WHERE id IN ({ph}) ORDER BY nome", tuple(vinculadas))
+            academias_disponiveis = cursor.fetchall()
 
     if request.method == "POST":
 
@@ -158,11 +184,27 @@ def cadastro_usuario():
 
         senha_hash = generate_password_hash(senha)
         id_academia = academias_escolhidas[0] if academias_escolhidas else None
+        
+        # Buscar id_associacao e id_federacao da academia selecionada (se houver)
+        id_associacao_usuario = None
+        id_federacao_usuario = None
+        if id_academia:
+            cursor.execute("""
+                SELECT ac.id_associacao, ass.id_federacao
+                FROM academias ac
+                LEFT JOIN associacoes ass ON ass.id = ac.id_associacao
+                WHERE ac.id = %s
+            """, (id_academia,))
+            acad_info = cursor.fetchone()
+            if acad_info:
+                id_associacao_usuario = acad_info.get("id_associacao")
+                id_federacao_usuario = acad_info.get("id_federacao")
 
-        # Inserir usuário
+        # Inserir usuário com id_federacao e id_associacao
         cursor.execute(
-            "INSERT INTO usuarios (nome, email, senha, id_academia) VALUES (%s, %s, %s, %s)",
-            (nome, email, senha_hash, id_academia),
+            """INSERT INTO usuarios (nome, email, senha, id_academia, id_associacao, id_federacao) 
+               VALUES (%s, %s, %s, %s, %s, %s)""",
+            (nome, email, senha_hash, id_academia, id_associacao_usuario, id_federacao_usuario),
         )
         user_id = cursor.lastrowid
 
@@ -208,31 +250,13 @@ def _pode_editar_usuario(usuario):
             db = get_db_connection()
             cur = db.cursor(dictionary=True)
             try:
-                cur.execute("SELECT academia_id FROM usuarios_academias WHERE usuario_id = %s", (current_user.id,))
-                minhas_ids = [r["academia_id"] for r in cur.fetchall()]
-            except Exception:
-                minhas_ids = []
-            try:
-                if minhas_ids:
-                    ph = ",".join(["%s"] * len(minhas_ids))
-                    cur.execute(
-                        f"SELECT 1 FROM usuarios_academias WHERE usuario_id = %s AND academia_id IN ({ph})",
-                        (usuario["id"],) + tuple(minhas_ids),
-                    )
-                    ok = cur.fetchone() is not None
-                    if not ok:
-                        ok = usuario.get("id_academia") in minhas_ids
-                else:
-                    cur.execute("""
-                        SELECT 1 FROM usuarios_academias ua
-                        JOIN academias ac ON ac.id = ua.academia_id
-                        WHERE ua.usuario_id = %s AND ac.id_associacao = %s
-                    """, (usuario["id"], current_user.id_associacao))
-                    ok = cur.fetchone() is not None
-                    if not ok:
-                        cur.execute("SELECT 1 FROM academias WHERE id = %s AND id_associacao = %s",
-                                    (usuario.get("id_academia"), current_user.id_associacao))
-                        ok = cur.fetchone() is not None
+                # Gestor de associação pode editar usuários de qualquer academia da associação
+                cur.execute("""
+                    SELECT 1 FROM usuarios_academias ua
+                    JOIN academias ac ON ac.id = ua.academia_id
+                    WHERE ua.usuario_id = %s AND ac.id_associacao = %s
+                """, (usuario["id"], current_user.id_associacao))
+                ok = cur.fetchone() is not None
             except Exception:
                 ok = False
             cur.close()
@@ -246,8 +270,6 @@ def _pode_editar_usuario(usuario):
                 minhas_ids = [r["academia_id"] for r in cur.fetchall()]
             except Exception:
                 minhas_ids = []
-            if not minhas_ids and getattr(current_user, "id_academia", None):
-                minhas_ids = [current_user.id_academia]
             if not minhas_ids:
                 cur.close()
                 db.close()
@@ -259,8 +281,6 @@ def _pode_editar_usuario(usuario):
                     (usuario["id"],) + tuple(minhas_ids),
                 )
                 ok = cur.fetchone() is not None
-                if not ok:
-                    ok = usuario.get("id_academia") in minhas_ids
             except Exception:
                 ok = False
             cur.close()
@@ -300,11 +320,21 @@ def editar_usuario(user_id):
 
     # Contexto academia: gestor/professor editando usuário da sua academia
     contexto_academia = (current_user.has_role("gestor_academia") or current_user.has_role("professor")) and _pode_editar_usuario(usuario)
-    academia_id_editar = usuario.get("id_academia")
+    cursor.execute("SELECT academia_id FROM usuarios_academias WHERE usuario_id = %s ORDER BY academia_id LIMIT 1", (user_id,))
+    row_acad = cursor.fetchone()
+    academia_id_editar = row_acad["academia_id"] if row_acad else None
     alunos_para_aluno = []
     alunos_para_responsavel = []
     aluno_vinculado_id = None
     responsavel_aluno_ids = []
+    
+    # Buscar dados do visitante se existir
+    visitante_dados = None
+    cursor.execute("SELECT * FROM visitantes WHERE usuario_id = %s LIMIT 1", (user_id,))
+    visitante_row = cursor.fetchone()
+    if visitante_row:
+        visitante_dados = visitante_row
+    
     if contexto_academia and academia_id_editar:
         cursor.execute(
             """SELECT id, nome, usuario_id FROM alunos WHERE id_academia = %s AND ativo = 1 AND status = 'ativo'
@@ -329,8 +359,16 @@ def editar_usuario(user_id):
     """, (user_id,))
     roles_do_usuario = [r["role_id"] for r in cursor.fetchall()]
 
-    # Academias vinculadas — só admin e gestor_associacao
-    mostrar_academias = current_user.has_role("admin") or current_user.has_role("gestor_associacao")
+    # Academias vinculadas: admin e gestor_associacao editam; gestor_academia vê bloqueado (somente leitura)
+    mostrar_academias = (
+        current_user.has_role("admin") or
+        current_user.has_role("gestor_associacao") or
+        current_user.has_role("gestor_academia")
+    )
+    # Bloquear academias apenas quando no modo academia; no modo associação pode alterar
+    academias_bloqueadas = (
+        session.get("modo_painel") == "academia" and current_user.has_role("gestor_academia")
+    )
     academias_vinculadas = []
     academias_disponiveis = []
 
@@ -348,19 +386,25 @@ def editar_usuario(user_id):
             academias_vinculadas = []
 
         ids_permitidos = []
-        try:
+        # gestor_associacao: sempre todas as academias da associação
+        if current_user.has_role("gestor_associacao") and getattr(current_user, "id_associacao", None):
+            cursor.execute("SELECT id FROM academias WHERE id_associacao = %s ORDER BY nome", (current_user.id_associacao,))
+            ids_permitidos = [r["id"] for r in cursor.fetchall()]
+        elif current_user.has_role("gestor_academia"):
+            # gestor_academia: apenas academias de usuarios_academias (para exibir bloqueada)
             cursor.execute("SELECT academia_id FROM usuarios_academias WHERE usuario_id = %s", (current_user.id,))
-            vinculadas = [r["academia_id"] for r in cursor.fetchall()]
-        except Exception:
-            vinculadas = []
-        if vinculadas:
-            ids_permitidos = vinculadas
-        elif current_user.has_role("admin"):
-            cursor.execute("SELECT id FROM academias")
-            ids_permitidos = [r["id"] for r in cursor.fetchall()]
-        elif current_user.has_role("gestor_associacao") and getattr(current_user, "id_associacao", None):
-            cursor.execute("SELECT id FROM academias WHERE id_associacao = %s", (current_user.id_associacao,))
-            ids_permitidos = [r["id"] for r in cursor.fetchall()]
+            ids_permitidos = [r["academia_id"] for r in cursor.fetchall()]
+        else:
+            try:
+                cursor.execute("SELECT academia_id FROM usuarios_academias WHERE usuario_id = %s", (current_user.id,))
+                vinculadas = [r["academia_id"] for r in cursor.fetchall()]
+            except Exception:
+                vinculadas = []
+            if vinculadas:
+                ids_permitidos = vinculadas
+            elif current_user.has_role("admin"):
+                cursor.execute("SELECT id FROM academias")
+                ids_permitidos = [r["id"] for r in cursor.fetchall()]
         if ids_permitidos:
             ph = ",".join(["%s"] * len(ids_permitidos))
             cursor.execute(f"SELECT id, nome FROM academias WHERE id IN ({ph}) ORDER BY nome", tuple(ids_permitidos))
@@ -392,16 +436,30 @@ def editar_usuario(user_id):
                 UPDATE usuarios SET senha=%s WHERE id=%s
             """, (generate_password_hash(nova_senha), user_id))
 
+        # Verificar se role visitante está sendo adicionada ou removida ANTES de deletar roles
+        cursor.execute("SELECT id FROM roles WHERE chave = 'visitante' OR nome = 'Visitante' LIMIT 1")
+        role_visitante = cursor.fetchone()
+        role_visitante_id = role_visitante.get("id") if role_visitante else None
+        
+        tinha_role_visitante = False
+        tem_role_visitante_agora = False
+        
+        if role_visitante_id:
+            cursor.execute("SELECT 1 FROM roles_usuario WHERE usuario_id = %s AND role_id = %s", (user_id, role_visitante_id))
+            tinha_role_visitante = cursor.fetchone() is not None
+            tem_role_visitante_agora = str(role_visitante_id) in roles_novas
+
         # Reset das roles
         cursor.execute("DELETE FROM roles_usuario WHERE usuario_id=%s", (user_id,))
+        
         for role_id in roles_novas:
             cursor.execute("""
                 INSERT INTO roles_usuario (usuario_id, role_id)
                 VALUES (%s, %s)
             """, (user_id, role_id))
 
-        # Academias vinculadas
-        if mostrar_academias and academias_disponiveis:
+        # Academias vinculadas (não atualiza se bloqueado para gestor_academia)
+        if mostrar_academias and academias_disponiveis and not academias_bloqueadas:
             ids_permitidos = {a["id"] for a in academias_disponiveis}
             academias_escolhidas = []
             for x in request.form.getlist("academias"):
@@ -420,6 +478,51 @@ def editar_usuario(user_id):
                 )
             id_academia = academias_escolhidas[0] if academias_escolhidas else None
             cursor.execute("UPDATE usuarios SET id_academia = %s WHERE id = %s", (id_academia, user_id))
+        
+        # Gerenciar registro de visitante (após atualizar academias)
+        if tem_role_visitante_agora and not tinha_role_visitante:
+            # Criar registro de visitante
+            # Buscar primeira academia vinculada ao usuário
+            cursor.execute("SELECT academia_id FROM usuarios_academias WHERE usuario_id = %s ORDER BY academia_id LIMIT 1", (user_id,))
+            acad_row = cursor.fetchone()
+            academia_id_visitante = None
+            if acad_row:
+                academia_id_visitante = acad_row["academia_id"]
+            elif usuario.get("id_academia"):
+                academia_id_visitante = usuario.get("id_academia")
+            
+            if academia_id_visitante:
+                # Buscar limite de aulas da academia
+                cursor.execute("SELECT aulas_experimentais_permitidas FROM academias WHERE id = %s", (academia_id_visitante,))
+                acad_config = cursor.fetchone()
+                limite_aulas = acad_config.get("aulas_experimentais_permitidas") if acad_config else None
+                
+                # Verificar se já existe visitante
+                cursor.execute("SELECT id FROM visitantes WHERE usuario_id = %s", (user_id,))
+                if not cursor.fetchone():
+                    cursor.execute("""
+                        INSERT INTO visitantes (nome, email, telefone, usuario_id, id_academia, aulas_experimentais_permitidas, ativo)
+                        VALUES (%s, %s, %s, %s, %s, %s, 1)
+                    """, (
+                        usuario.get("nome"),
+                        usuario.get("email"),
+                        None,  # telefone pode ser adicionado depois
+                        user_id,
+                        academia_id_visitante,
+                        limite_aulas,
+                    ))
+        elif tinha_role_visitante and not tem_role_visitante_agora:
+            # Remover role visitante - manter registro mas desativar
+            cursor.execute("UPDATE visitantes SET ativo = 0 WHERE usuario_id = %s", (user_id,))
+        elif tem_role_visitante_agora and tinha_role_visitante:
+            # Reativar visitante se estava desativado e atualizar academia se necessário
+            cursor.execute("UPDATE visitantes SET ativo = 1 WHERE usuario_id = %s", (user_id,))
+            # Atualizar academia do visitante se academias foram alteradas
+            if mostrar_academias and academias_disponiveis and not academias_bloqueadas:
+                cursor.execute("SELECT academia_id FROM usuarios_academias WHERE usuario_id = %s ORDER BY academia_id LIMIT 1", (user_id,))
+                acad_row = cursor.fetchone()
+                if acad_row:
+                    cursor.execute("UPDATE visitantes SET id_academia = %s WHERE usuario_id = %s", (acad_row["academia_id"], user_id))
 
         # Vínculo aluno/responsavel (contexto academia)
         if contexto_academia and academia_id_editar:
@@ -471,11 +574,13 @@ def editar_usuario(user_id):
         academias_vinculadas=academias_vinculadas,
         academias_disponiveis=academias_disponiveis,
         academias_vinculadas_ids=academias_vinculadas_ids,
+        academias_bloqueadas=academias_bloqueadas,
         contexto_academia=contexto_academia,
         alunos_para_aluno=alunos_para_aluno,
         alunos_para_responsavel=alunos_para_responsavel,
         aluno_vinculado_id=aluno_vinculado_id,
         responsavel_aluno_ids=responsavel_aluno_ids,
+        visitante_dados=visitante_dados,
     )
 
 
@@ -486,71 +591,198 @@ def editar_usuario(user_id):
 @login_required
 def meu_perfil():
     """Permite que o usuário logado edite seu próprio nome, e-mail e senha."""
+    from urllib.parse import urlparse
+    
     user_id = current_user.id
-    back_url = request.args.get("next") or request.referrer or url_for("painel.home")
+    next_url = request.args.get("next") or request.form.get("next")
+    
+    # Validar URL segura
+    if next_url:
+        parsed = urlparse(next_url)
+        # Permitir apenas URLs relativas ou do mesmo host
+        if parsed.netloc and parsed.netloc not in ['', 'www.rmservicosnet.com.br', 'rmservicosnet.com.br']:
+            next_url = None
+    
+    back_url = next_url or request.referrer or url_for("painel.home")
+
+    db = None
+    cursor = None
+    try:
+        db = get_db_connection()
+        cursor = db.cursor(dictionary=True)
+
+        cursor.execute("SELECT id, nome, email, foto FROM usuarios WHERE id=%s", (user_id,))
+        usuario = cursor.fetchone()
+
+        if not usuario:
+            flash("Usuário não encontrado.", "danger")
+            return redirect(url_for("painel.home"))
+
+        # Buscar aluno vinculado ao usuário (se houver)
+        cursor.execute("SELECT id, nome, foto FROM alunos WHERE usuario_id=%s LIMIT 1", (user_id,))
+        aluno_vinculado = cursor.fetchone()
+
+        if request.method == "POST":
+            nome = (request.form.get("nome") or "").strip()
+            email = (request.form.get("email") or "").strip()
+            nova_senha = request.form.get("senha") or None
+
+            erros = []
+            if not nome:
+                erros.append("Nome é obrigatório.")
+            if not email:
+                erros.append("E-mail é obrigatório.")
+
+            if erros:
+                for e in erros:
+                    flash(e, "danger")
+            else:
+                try:
+                    cursor.execute(
+                        "SELECT id FROM usuarios WHERE email=%s AND id != %s",
+                        (email, user_id),
+                    )
+                    if cursor.fetchone():
+                        flash("Este e-mail já está em uso por outro usuário.", "danger")
+                    else:
+                        # Foto (câmera base64 ou arquivo)
+                        try:
+                            from blueprints.aluno.alunos import salvar_imagem_base64, salvar_arquivo_upload
+                            foto_dataurl = request.form.get("foto")
+                            foto_arquivo = request.files.get("foto_arquivo")
+                            foto_filename = None
+                            if foto_dataurl and foto_dataurl.startswith("data:"):
+                                foto_filename = salvar_imagem_base64(foto_dataurl, f"usuario_{user_id}")
+                            elif foto_arquivo and foto_arquivo.filename:
+                                foto_filename = salvar_arquivo_upload(foto_arquivo, f"usuario_{user_id}")
+                        except Exception as e:
+                            current_app.logger.error(f"Erro ao processar foto: {e}")
+                            foto_filename = None
+
+                        if nova_senha:
+                            if foto_filename:
+                                cursor.execute(
+                                    "UPDATE usuarios SET nome=%s, email=%s, senha=%s, foto=%s WHERE id=%s",
+                                    (nome, email, generate_password_hash(nova_senha), foto_filename, user_id),
+                                )
+                            else:
+                                cursor.execute(
+                                    "UPDATE usuarios SET nome=%s, email=%s, senha=%s WHERE id=%s",
+                                    (nome, email, generate_password_hash(nova_senha), user_id),
+                                )
+                            flash("Cadastro e senha atualizados com sucesso!", "success")
+                        else:
+                            if foto_filename:
+                                cursor.execute(
+                                    "UPDATE usuarios SET nome=%s, email=%s, foto=%s WHERE id=%s",
+                                    (nome, email, foto_filename, user_id),
+                                )
+                            else:
+                                cursor.execute(
+                                    "UPDATE usuarios SET nome=%s, email=%s WHERE id=%s",
+                                    (nome, email, user_id),
+                                )
+                            flash("Cadastro atualizado com sucesso!", "success")
+                        db.commit()
+                        # Validar URL de redirecionamento
+                        redirect_url = request.form.get("next") or back_url
+                        parsed_redirect = urlparse(redirect_url)
+                        if parsed_redirect.netloc and parsed_redirect.netloc not in ['', 'www.rmservicosnet.com.br', 'rmservicosnet.com.br']:
+                            redirect_url = url_for("painel.home")
+                        return redirect(redirect_url)
+                except Exception as e:
+                    db.rollback()
+                    current_app.logger.error(f"Erro ao atualizar usuário: {e}")
+                    flash(f"Erro ao atualizar: {e}", "danger")
+
+        return render_template(
+            "usuarios/meu_perfil.html",
+            usuario=usuario,
+            aluno_vinculado=aluno_vinculado,
+            back_url=back_url,
+        )
+    except Exception as e:
+        current_app.logger.error(f"Erro em meu_perfil: {e}")
+        flash(f"Erro ao carregar página: {e}", "danger")
+        return redirect(url_for("painel.home"))
+    finally:
+        if cursor:
+            cursor.close()
+        if db:
+            db.close()
+
+
+# ======================================================
+# 🔹 SINCRONIZAR FOTO DO ALUNO PARA O USUÁRIO
+# ======================================================
+@bp_usuarios.route("/sincronizar-foto-aluno", methods=["POST"])
+@login_required
+def sincronizar_foto_aluno():
+    """Copia a foto do aluno vinculado para o usuário."""
+    user_id = current_user.id
+    back_url = request.form.get("next") or request.referrer or url_for("usuarios.meu_perfil")
 
     db = get_db_connection()
     cursor = db.cursor(dictionary=True)
 
-    cursor.execute("SELECT id, nome, email FROM usuarios WHERE id=%s", (user_id,))
-    usuario = cursor.fetchone()
+    try:
+        # Buscar aluno vinculado ao usuário
+        cursor.execute("SELECT id, nome, foto FROM alunos WHERE usuario_id=%s LIMIT 1", (user_id,))
+        aluno = cursor.fetchone()
 
-    if not usuario:
-        flash("Usuário não encontrado.", "danger")
+        if not aluno:
+            flash("Você não possui um aluno vinculado.", "warning")
+            cursor.close()
+            db.close()
+            return redirect(back_url)
+
+        if not aluno.get("foto"):
+            flash("O aluno vinculado não possui foto cadastrada.", "warning")
+            cursor.close()
+            db.close()
+            return redirect(back_url)
+
+        # Copiar o arquivo de foto do aluno para o usuário
+        import os
+        import shutil
+        from datetime import datetime
+
+        foto_aluno = aluno["foto"]
+        upload_folder = os.path.join(current_app.root_path, "static", "uploads")
+        arquivo_origem = os.path.join(upload_folder, foto_aluno)
+
+        if not os.path.exists(arquivo_origem):
+            flash("Arquivo de foto do aluno não encontrado.", "danger")
+            cursor.close()
+            db.close()
+            return redirect(back_url)
+
+        # Criar novo nome de arquivo para o usuário
+        _, ext = os.path.splitext(foto_aluno)
+        if not ext:
+            ext = ".png"
+        nova_foto = f"usuario_{user_id}_{datetime.now().strftime('%Y%m%d%H%M%S')}{ext.lower()}"
+        arquivo_destino = os.path.join(upload_folder, nova_foto)
+
+        # Copiar arquivo
+        shutil.copy2(arquivo_origem, arquivo_destino)
+
+        # Atualizar foto do usuário no banco
+        cursor.execute("UPDATE usuarios SET foto=%s WHERE id=%s", (nova_foto, user_id))
+        db.commit()
+
+        flash("Foto sincronizada com sucesso!", "success")
+        cursor.close()
         db.close()
-        return redirect(url_for("painel.home"))
+        return redirect(back_url)
 
-    if request.method == "POST":
-        nome = (request.form.get("nome") or "").strip()
-        email = (request.form.get("email") or "").strip()
-        nova_senha = request.form.get("senha") or None
-
-        erros = []
-        if not nome:
-            erros.append("Nome é obrigatório.")
-        if not email:
-            erros.append("E-mail é obrigatório.")
-
-        if erros:
-            for e in erros:
-                flash(e, "danger")
-        else:
-            try:
-                cursor.execute(
-                    "SELECT id FROM usuarios WHERE email=%s AND id != %s",
-                    (email, user_id),
-                )
-                if cursor.fetchone():
-                    flash("Este e-mail já está em uso por outro usuário.", "danger")
-                else:
-                    if nova_senha:
-                        cursor.execute(
-                            "UPDATE usuarios SET nome=%s, email=%s, senha=%s WHERE id=%s",
-                            (nome, email, generate_password_hash(nova_senha), user_id),
-                        )
-                        flash("Cadastro e senha atualizados com sucesso!", "success")
-                    else:
-                        cursor.execute(
-                            "UPDATE usuarios SET nome=%s, email=%s WHERE id=%s",
-                            (nome, email, user_id),
-                        )
-                        flash("Cadastro atualizado com sucesso!", "success")
-                    db.commit()
-                    redirect_url = request.form.get("next") or back_url
-                    db.close()
-                    return redirect(redirect_url)
-            except Exception as e:
-                db.rollback()
-                flash(f"Erro ao atualizar: {e}", "danger")
-
-    cursor.close()
-    db.close()
-
-    return render_template(
-        "usuarios/meu_perfil.html",
-        usuario=usuario,
-        back_url=back_url,
-    )
+    except Exception as e:
+        db.rollback()
+        current_app.logger.error(f"Erro ao sincronizar foto: {e}")
+        flash(f"Erro ao sincronizar foto: {e}", "danger")
+        cursor.close()
+        db.close()
+        return redirect(back_url)
 
 
 # ======================================================

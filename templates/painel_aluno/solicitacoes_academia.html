@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% block title %}Solicitações de Visita — {{ academia.nome }}{% endblock %}
+{% block content %}
+<div class="container mt-4 px-2 px-sm-3">
+    {% set back_url = url_for('painel_aluno.associacao') %}
+    {% include 'components/botao_voltar.html' %}
+    
+    <h2 class="h5 fw-bold mb-3">Solicitações de Visita</h2>
+    
+    <!-- Card da Academia -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-body">
+            <div class="row align-items-center">
+                <div class="col-md-8">
+                    <h5 class="card-title mb-2">{{ academia.nome }}</h5>
+                    {% if academia.endereco_completo %}
+                    <p class="text-muted small mb-1">
+                        <i class="bi bi-geo-alt me-1"></i> {{ academia.endereco_completo }}
+                    </p>
+                    {% endif %}
+                    {% if gestor_destino %}
+                    <p class="text-muted small mb-0">
+                        <i class="bi bi-person me-1"></i> <strong>Professor Responsável:</strong> {{ gestor_destino.nome }}
+                        {% if gestor_destino.email %}<small>({{ gestor_destino.email }})</small>{% endif %}
+                    </p>
+                    {% endif %}
+                </div>
+                <div class="col-md-4 text-md-end mt-3 mt-md-0">
+                    <a href="{{ url_for('painel_aluno.solicitar_visita', academia_destino_id=academia.id) }}" class="btn btn-primary">
+                        <i class="bi bi-plus-circle me-1"></i> Nova Solicitação
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Card da Associação -->
+    {% if associacao_endereco %}
+    <div class="card shadow-sm mb-4 border-info">
+        <div class="card-body">
+            <h6 class="card-title mb-2"><i class="bi bi-building me-1"></i> Associação: {{ academia.associacao_nome }}</h6>
+            <p class="text-muted small mb-0">
+                <i class="bi bi-geo-alt me-1"></i> {{ associacao_endereco }}
+            </p>
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- Lista de Solicitações -->
+    {% if solicitacoes %}
+    <div class="row g-3">
+        {% for sol in solicitacoes %}
+        <div class="col-12">
+            <div class="card shadow-sm h-100 {% if sol.status == 'aprovado_destino' %}border-success{% elif sol.status in ['rejeitado_origem', 'rejeitado_destino'] %}border-danger{% elif sol.status == 'pendente_origem' %}border-warning{% elif sol.status == 'pendente_destino' %}border-info{% endif %}">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-3">
+                        <div>
+                            {% if sol.status == 'aprovado_destino' %}
+                            <span class="badge bg-success fs-6"><i class="bi bi-check-circle me-1"></i> Visita Agendada</span>
+                            {% elif sol.status == 'pendente_origem' %}
+                            <span class="badge bg-warning text-dark fs-6"><i class="bi bi-clock me-1"></i> Aguardando Aprovação da Sua Academia</span>
+                            {% elif sol.status == 'pendente_destino' %}
+                            <span class="badge bg-info fs-6"><i class="bi bi-clock me-1"></i> Aguardando Aprovação da Academia Destino</span>
+                            {% elif sol.status == 'rejeitado_origem' %}
+                            <span class="badge bg-danger fs-6"><i class="bi bi-x-circle me-1"></i> Rejeitada pela Sua Academia</span>
+                            {% elif sol.status == 'rejeitado_destino' %}
+                            <span class="badge bg-danger fs-6"><i class="bi bi-x-circle me-1"></i> Rejeitada pela Academia Destino</span>
+                            {% endif %}
+                        </div>
+                        <small class="text-muted">{{ sol.criado_em.strftime('%d/%m/%Y %H:%M') if sol.criado_em else '' }}</small>
+                    </div>
+                    
+                    {% if sol.status == 'aprovado_destino' %}
+                    <div class="row g-2 mb-3">
+                        {% if sol.turma_nome %}
+                        <div class="col-md-6">
+                            <div class="d-flex align-items-center">
+                                <i class="bi bi-people me-2 text-primary"></i>
+                                <div>
+                                    <small class="text-muted d-block">Turma</small>
+                                    <strong>{{ sol.turma_nome }}</strong>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% if sol.data_visita_formatada %}
+                        <div class="col-md-6">
+                            <div class="d-flex align-items-center">
+                                <i class="bi bi-calendar me-2 text-primary"></i>
+                                <div>
+                                    <small class="text-muted d-block">Data da Visita</small>
+                                    <strong>{{ sol.data_visita_formatada }}</strong>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% if sol.hora_inicio_str and sol.hora_fim_str %}
+                        <div class="col-md-6">
+                            <div class="d-flex align-items-center">
+                                <i class="bi bi-clock me-2 text-primary"></i>
+                                <div>
+                                    <small class="text-muted d-block">Horário</small>
+                                    <strong>{{ sol.hora_inicio_str }} às {{ sol.hora_fim_str }}</strong>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                    
+                    {% if sol.observacao_origem %}
+                    <div class="alert alert-light border-start border-warning border-3 mb-2">
+                        <small><strong><i class="bi bi-info-circle me-1"></i> Observação da Sua Academia:</strong></small>
+                        <p class="mb-0 small">{{ sol.observacao_origem }}</p>
+                    </div>
+                    {% endif %}
+                    
+                    {% if sol.observacao_destino %}
+                    <div class="alert alert-light border-start border-success border-3 mb-0">
+                        <small><strong><i class="bi bi-info-circle me-1"></i> Observação da Academia Destino:</strong></small>
+                        <p class="mb-0 small">{{ sol.observacao_destino }}</p>
+                    </div>
+                    {% endif %}
+                    
+                    {% if gestor_origem and sol.status == 'pendente_origem' %}
+                    <div class="mt-3 pt-3 border-top">
+                        <small class="text-muted">
+                            <i class="bi bi-person me-1"></i> <strong>Professor Responsável da Sua Academia:</strong> {{ gestor_origem.nome }}
+                            {% if gestor_origem.email %}<small>({{ gestor_origem.email }})</small>{% endif %}
+                        </small>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="alert alert-info">
+        <i class="bi bi-info-circle me-2"></i>
+        Nenhuma solicitação encontrada para esta academia.
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

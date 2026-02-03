@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% block title %}Pré-cadastro — Associação{% endblock %}
+{% block content %}
+<div class="container mt-4">
+    <div class="mb-4">
+        {% set back_url = url_for('associacao.gerenciamento_associacao') %}
+        {% include 'components/botao_voltar.html' %}
+        <h2 class="h4 fw-bold text-primary mb-1">
+            <i class="bi bi-person-plus me-2"></i>Pré-cadastro
+        </h2>
+        <p class="text-muted mb-0">Selecione uma academia para gerar o link de pré-cadastro.</p>
+    </div>
+
+    <div class="row">
+        <!-- Seleção de Academia -->
+        <div class="col-md-5 mb-4">
+            <div class="card shadow-sm">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">
+                        <i class="bi bi-building me-2"></i>Selecione uma Academia
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <form method="GET" action="{{ url_for('associacao.precadastro') }}">
+                        <div class="mb-3">
+                            <label for="academia_id" class="form-label">Academia:</label>
+                            <select name="academia_id" id="academia_id" class="form-select" onchange="this.form.submit()">
+                                <option value="">-- Selecione uma academia --</option>
+                                {% for ac in academias %}
+                                <option value="{{ ac.id }}" {% if ac.id == academia_selecionada_id %}selected{% endif %}>
+                                    {{ ac.nome }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Link Gerado -->
+        <div class="col-md-7 mb-4">
+            {% if academia_selecionada and link_publico %}
+            <div class="card shadow-sm border-success">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0">
+                        <i class="bi bi-link-45deg me-2"></i>Link de Pré-cadastro
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="mb-2">
+                        <strong>Academia:</strong> {{ academia_selecionada.nome }}
+                    </p>
+                    <label class="form-label small fw-semibold mb-2">
+                        <i class="bi bi-link-45deg me-1"></i> Link para compartilhar:
+                    </label>
+                    <div class="input-group">
+                        <input type="text" class="form-control font-monospace" id="linkPrecad" value="{{ link_publico }}" readonly>
+                        <button type="button" class="btn btn-outline-primary" id="btnCopiarLink" title="Copiar link">
+                            <i class="bi bi-clipboard"></i> Copiar
+                        </button>
+                    </div>
+                    <small class="text-muted d-block mt-2">
+                        <i class="bi bi-info-circle me-1"></i>Compartilhe este link com interessados em se cadastrar nesta academia.
+                    </small>
+                </div>
+            </div>
+            {% elif academia_selecionada_id %}
+            <div class="card shadow-sm border-warning">
+                <div class="card-body text-center py-5">
+                    <i class="bi bi-exclamation-triangle display-4 text-warning mb-3"></i>
+                    <p class="text-muted">Academia não encontrada ou sem permissão de acesso.</p>
+                </div>
+            </div>
+            {% else %}
+            <div class="card shadow-sm border-light">
+                <div class="card-body text-center py-5">
+                    <i class="bi bi-arrow-left-circle display-4 text-muted mb-3"></i>
+                    <p class="text-muted">Selecione uma academia ao lado para gerar o link de pré-cadastro.</p>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if academias|length == 0 %}
+    <div class="alert alert-warning">
+        <i class="bi bi-exclamation-triangle me-2"></i>
+        Nenhuma academia encontrada nesta associação.
+    </div>
+    {% endif %}
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const btnCopiarLink = document.getElementById('btnCopiarLink');
+    const linkPrecad = document.getElementById('linkPrecad');
+    
+    if (btnCopiarLink && linkPrecad) {
+        btnCopiarLink.addEventListener('click', function() {
+            linkPrecad.select();
+            linkPrecad.setSelectionRange(0, 99999); // Para mobile
+            
+            try {
+                document.execCommand('copy');
+                btnCopiarLink.innerHTML = '<i class="bi bi-check"></i> Copiado!';
+                btnCopiarLink.classList.remove('btn-outline-primary');
+                btnCopiarLink.classList.add('btn-success');
+                
+                setTimeout(function() {
+                    btnCopiarLink.innerHTML = '<i class="bi bi-clipboard"></i> Copiar';
+                    btnCopiarLink.classList.remove('btn-success');
+                    btnCopiarLink.classList.add('btn-outline-primary');
+                }, 2000);
+            } catch (err) {
+                alert('Erro ao copiar. Selecione o link manualmente.');
+            }
+        });
+    }
+});
+</script>
+{% endblock %}

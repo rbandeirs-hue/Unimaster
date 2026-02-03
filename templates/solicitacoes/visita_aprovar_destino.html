@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Aprovar visita — {{ aluno.nome }}{% endblock %}
+{% block content %}
+<div class="container mt-5" style="max-width: 560px;">
+    {% set back_url = back_url or get_back_url_default() %}
+{% include 'components/botao_voltar.html' %}
+    <div class="card shadow-sm">
+        <div class="card-header bg-success text-white">
+            <h5 class="mb-0"><i class="bi bi-check-circle me-2"></i> Aprovar visita</h5>
+        </div>
+        <div class="card-body p-4">
+            <p class="mb-3"><strong>{{ aluno.nome }}</strong> solicitou visitar sua academia. {% if sol.turma_id and sol.data_visita %}O aluno escolheu turma e data — você pode confirmar ou alterar.{% else %}Defina em qual turma e em qual data.{% endif %}</p>
+            <form method="POST">
+                <div class="mb-3">
+                    <label for="turma_id" class="form-label fw-semibold">Turma <span class="text-danger">*</span></label>
+                    <select name="turma_id" id="turma_id" class="form-select" required>
+                        <option value="">— Selecione a turma —</option>
+                        {% for t in turmas %}
+                        <option value="{{ t.TurmaID }}" {% if sol.turma_id == t.TurmaID %}selected{% endif %}>
+                            {{ t.Nome }}{% if t.hora_inicio_str and t.hora_fim_str %} ({{ t.hora_inicio_str }} às {{ t.hora_fim_str }}){% endif %}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="mb-4">
+                    <label for="data_visita" class="form-label fw-semibold">Data da visita <span class="text-danger">*</span></label>
+                    <input type="date" name="data_visita" id="data_visita" class="form-control" required value="{{ request.form.get('data_visita') or (sol.data_visita.strftime('%Y-%m-%d') if sol.data_visita else '') }}">
+                    <small class="text-muted">O aluno aparecerá na lista de chamada nesta turma e data.</small>
+                </div>
+                <div class="mb-4">
+                    <label for="observacao_destino" class="form-label fw-semibold">Observação (opcional)</label>
+                    <textarea name="observacao_destino" id="observacao_destino" class="form-control" rows="3" placeholder="Adicione uma observação para o aluno ou professor de origem...">{{ request.form.get('observacao_destino') or sol.observacao_destino or '' }}</textarea>
+                    <small class="text-muted">Esta observação será visível para o aluno e o professor de origem.</small>
+                </div>
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn btn-success"><i class="bi bi-check-lg me-1"></i> Aprovar visita</button>
+                    <a href="{{ url_for('solicitacoes.visita_lista', academia_id=sol.academia_destino_id, tipo='destino') }}" class="btn btn-outline-secondary">Cancelar</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

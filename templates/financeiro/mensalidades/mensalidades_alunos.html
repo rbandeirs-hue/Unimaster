@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Mensalidades Alunos{% endblock %}
 {% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/financeiro/responsive.css') }}?v=2">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/financeiro/responsive.css') }}?v=3">
 {% endblock %}
 {% block content %}
 <div class="container mt-4 mensalidades-alunos-page">
@@ -20,9 +20,8 @@
     </form>
     {% endif %}
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3 mensalidades-alunos-header">
-        <a href="{{ url_for('financeiro.painel_mensalidades', academia_id=academia_id) if academia_id else url_for('financeiro.painel_mensalidades') }}" class="btn btn-outline-secondary btn-sm">
-            <i class="bi bi-arrow-left me-1"></i> Voltar
-        </a>
+        {% set back_url = url_for('financeiro.painel_mensalidades', academia_id=academia_id) if academia_id else url_for('financeiro.painel_mensalidades') %}
+        {% include 'components/botao_voltar.html' %}
         <div class="d-flex gap-2 flex-wrap">
             <a href="{{ url_for('financeiro.aplicar_desconto', academia_id=academia_id) if academia_id else url_for('financeiro.aplicar_desconto') }}" class="btn btn-outline-info btn-sm">
                 <i class="bi bi-percent me-1"></i> Desconto
@@ -37,7 +36,7 @@
     {# Dashboard cards — clicáveis para filtrar por status (clicar novamente remove filtro) #}
     <div class="row g-3 mb-4">
         <div class="col-6 col-md-3">
-            <a href="{{ url_for('financeiro.mensalidades_alunos', academia_id=academia_id, mes=mes, ano=ano, busca=busca or '', status='pago' if filtro_status != 'pago' else None) }}" class="text-decoration-none">
+            <a href="{{ url_for('financeiro.mensalidades_alunos', academia_id=academia_id, mes=mes or '', ano=ano, busca=busca or '', status='pago' if filtro_status != 'pago' else None) }}" class="text-decoration-none">
             <div class="card border-0 shadow-sm h-100 {% if filtro_status == 'pago' %}border-2 border-success{% endif %}" style="cursor:pointer; transition: all 0.2s;">
                 <div class="card-body py-3">
                     <div class="d-flex justify-content-between align-items-center">
@@ -49,7 +48,7 @@
             </a>
         </div>
         <div class="col-6 col-md-3">
-            <a href="{{ url_for('financeiro.mensalidades_alunos', academia_id=academia_id, mes=mes, ano=ano, busca=busca or '', status='pendente' if filtro_status != 'pendente' else None) }}" class="text-decoration-none">
+            <a href="{{ url_for('financeiro.mensalidades_alunos', academia_id=academia_id, mes=mes or '', ano=ano, busca=busca or '', status='pendente' if filtro_status != 'pendente' else None) }}" class="text-decoration-none">
             <div class="card border-0 shadow-sm h-100 {% if filtro_status == 'pendente' %}border-2 border-warning{% endif %}" style="cursor:pointer; transition: all 0.2s;">
                 <div class="card-body py-3">
                     <div class="d-flex justify-content-between align-items-center">
@@ -61,7 +60,7 @@
             </a>
         </div>
         <div class="col-6 col-md-3">
-            <a href="{{ url_for('financeiro.mensalidades_alunos', academia_id=academia_id, mes=mes, ano=ano, busca=busca or '', status='atrasado' if filtro_status != 'atrasado' else None) }}" class="text-decoration-none">
+            <a href="{{ url_for('financeiro.mensalidades_alunos', academia_id=academia_id, mes=mes or '', ano=ano, busca=busca or '', status='atrasado' if filtro_status != 'atrasado' else None) }}" class="text-decoration-none">
             <div class="card border-0 shadow-sm h-100 {% if filtro_status == 'atrasado' %}border-2 border-danger{% endif %}" style="cursor:pointer; transition: all 0.2s;">
                 <div class="card-body py-3">
                     <div class="d-flex justify-content-between align-items-center">
@@ -73,7 +72,7 @@
             </a>
         </div>
         <div class="col-6 col-md-3">
-            <a href="{{ url_for('financeiro.mensalidades_alunos', academia_id=academia_id, mes=mes, ano=ano, busca=busca or '', status='aguardando_confirmacao' if filtro_status != 'aguardando_confirmacao' else None) }}" class="text-decoration-none">
+            <a href="{{ url_for('financeiro.mensalidades_alunos', academia_id=academia_id, mes=mes or '', ano=ano, busca=busca or '', status='aguardando_confirmacao' if filtro_status != 'aguardando_confirmacao' else None) }}" class="text-decoration-none">
             <div class="card border-0 shadow-sm h-100 {% if filtro_status == 'aguardando_confirmacao' %}border-2 border-info{% endif %}" style="cursor:pointer; transition: all 0.2s;">
                 <div class="card-body py-3">
                     <div class="d-flex justify-content-between align-items-center">
@@ -92,6 +91,7 @@
         {% if filtro_status %}<input type="hidden" name="status" value="{{ filtro_status }}">{% endif %}
         <div class="col-6 col-sm-auto">
             <select name="mes" class="form-select form-select-sm">
+                <option value="" {% if not mes %}selected{% endif %}>Todos os meses</option>
                 {% for i in range(1, 13) %}
                 <option value="{{ i }}" {% if mes == i %}selected{% endif %}>{{ ['','Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][i] }}</option>
                 {% endfor %}
@@ -116,14 +116,29 @@
     <p class="text-muted small mb-2">
         <span class="badge bg-secondary me-1">Filtro:</span>
         {{ 'Aguardando Confirmação' if filtro_status == 'aguardando_confirmacao' else filtro_status|capitalize }}
-        <a href="{{ url_for('financeiro.mensalidades_alunos', academia_id=academia_id, mes=mes, ano=ano, busca=busca or '') }}" class="ms-2 small">Limpar</a>
+        <a href="{{ url_for('financeiro.mensalidades_alunos', academia_id=academia_id, mes=mes or '', ano=ano, busca=busca or '') }}" class="ms-2 small">Limpar</a>
     </p>
     {% endif %}
 
     {% if mensalidades or avulsas %}
     <div class="card border-0 shadow-sm mb-4">
-        <div class="card-header bg-light">
+        <div class="card-header bg-light d-flex flex-wrap justify-content-between align-items-center gap-2">
             <h6 class="mb-0"><i class="bi bi-calendar-check me-2"></i>Mensalidades</h6>
+            {% set mensalidades_cancelaveis = mensalidades | selectattr('status_efetivo', 'in', ['pendente', 'atrasado']) | list %}
+            {% if mensalidades_cancelaveis %}
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <div class="form-check mb-0">
+                    <input class="form-check-input" type="checkbox" id="selecionar_todas_mensalidades" title="Selecionar todas">
+                    <label class="form-check-label small" for="selecionar_todas_mensalidades">Selecionar todas</label>
+                </div>
+                <form method="POST" action="{{ url_for('financeiro.cancelar_cobrancas_lote') }}" class="d-inline" id="form-excluir-lote">
+                    <input type="hidden" name="academia_id" value="{{ academia_id }}">
+                    <button type="submit" class="btn btn-sm btn-outline-danger" id="btn-excluir-lote" disabled onclick="return confirm('Excluir as mensalidades selecionadas?');">
+                        <i class="bi bi-trash me-1"></i> Excluir selecionadas
+                    </button>
+                </form>
+            </div>
+            {% endif %}
         </div>
         <div class="card-body p-0">
             {% if mensalidades %}
@@ -133,9 +148,14 @@
                 <div class="card border mb-2 shadow-sm">
                     <div class="card-body p-3">
                         <div class="d-flex justify-content-between align-items-start mb-2">
-                            <div>
-                                <strong>{{ m.aluno_nome }}</strong>
-                                <div class="text-muted small">{{ m.turma_nome or '-' }} · {{ m.plano_nome }}</div>
+                            <div class="d-flex align-items-start gap-2">
+                                {% if m.status_efetivo in ['pendente', 'atrasado'] %}
+                                <input type="checkbox" class="form-check-input mt-1 cb-mensalidade" name="registro_id" form="form-excluir-lote" value="{{ m.id }}" id="cb_m_{{ m.id }}">
+                                {% endif %}
+                                <div>
+                                    <strong>{{ m.aluno_nome }}</strong>
+                                    <div class="text-muted small">{{ m.turma_nome or '-' }} · {{ m.plano_nome }}</div>
+                                </div>
                             </div>
                             <span class="badge {% if m.status_efetivo == 'pago' %}bg-success{% elif m.status_efetivo == 'atrasado' %}bg-danger{% elif m.status_efetivo == 'aguardando_confirmacao' %}bg-info{% else %}bg-warning text-dark{% endif %}">
                                 {{ 'Aguardando Confirmação' if m.status_efetivo == 'aguardando_confirmacao' else (m.status_efetivo|capitalize) }}
@@ -146,15 +166,37 @@
                         </div>
                         {% if m.tem_desconto %}
                         <div class="small mb-2">
-                            <span class="text-muted">Integral:</span> R$ {{ "%.2f"|format(m.valor_integral or 0) }} ·
+                            <span class="text-muted">Integral:</span> R$ {{ "%.2f"|format(m.valor_integral or 0) }}{% if m.tem_juros %} <span class="text-warning">(Multa: R$ {{ "%.2f"|format(m.multa_val or 0) }} + Juros: R$ {{ "%.2f"|format(m.juros_val or 0) }})</span>{% endif %} ·
                             <span class="text-success">Desc: -R$ {{ "%.2f"|format(m.valor_desconto or 0) }}</span><br>
                             <strong>A pagar: R$ {{ "%.2f"|format(m.valor_final or 0) }}</strong>
+                        </div>
+                        {% elif m.tem_juros %}
+                        <div class="small mb-2">
+                            <span class="text-muted">Base:</span> R$ {{ "%.2f"|format(m.valor_original or m.valor or 0) }} ·
+                            <span class="text-warning">Multa 2%: R$ {{ "%.2f"|format(m.multa_val or 0) }} · Juros 0,033%/dia: R$ {{ "%.2f"|format(m.juros_val or 0) }}</span><br>
+                            <strong>Total: R$ {{ "%.2f"|format(m.valor_final or m.valor or 0) }}</strong>
                         </div>
                         {% else %}
                         <div class="mb-2"><strong>R$ {{ "%.2f"|format(m.valor or 0) }}</strong></div>
                         {% endif %}
                         <div class="d-flex flex-column gap-1 mensalidade-acoes">
+                            {% if m.tem_juros and m.status_efetivo in ['pendente', 'atrasado', 'aguardando_confirmacao'] %}
+                            <form method="POST" action="{{ url_for('financeiro.remover_juros_mensalidade') }}" class="mb-0">
+                                <input type="hidden" name="registro_id" value="{{ m.id }}">
+                                <input type="hidden" name="academia_id" value="{{ academia_id }}">
+                                <button type="submit" class="btn btn-sm btn-outline-warning w-100" onclick="return confirm('Remover juros e multa desta mensalidade? (ex: pagou em dia mas informou fora do vencimento)');">
+                                    <i class="bi bi-dash-circle"></i> Remover juros
+                                </button>
+                            </form>
+                            {% endif %}
                             {% if m.status_efetivo in ['pendente', 'atrasado'] %}
+                            <form method="POST" action="{{ url_for('financeiro.registrar_pagamento') }}" class="mb-1">
+                                <input type="hidden" name="tipo" value="mensalidade_aluno">
+                                <input type="hidden" name="registro_id" value="{{ m.id }}">
+                                <button type="submit" class="btn btn-sm btn-success w-100" onclick="return confirm('Registrar pagamento manual desta mensalidade? Uma receita será gerada automaticamente.');">
+                                    <i class="bi bi-cash-coin"></i> Registrar Pagamento
+                                </button>
+                            </form>
                             <form method="POST" action="{{ url_for('financeiro.cancelar_cobranca') }}" class="mb-0">
                                 <input type="hidden" name="tipo" value="mensalidade_aluno">
                                 <input type="hidden" name="registro_id" value="{{ m.id }}">
@@ -167,6 +209,15 @@
                                 <i class="bi bi-check-circle"></i> Confirmar
                             </button>
                             {% else %}
+                            {% if m.status_efetivo == 'pago' %}
+                            <form method="POST" action="{{ url_for('financeiro.cancelar_pagamento') }}" class="mb-1">
+                                <input type="hidden" name="tipo" value="mensalidade_aluno">
+                                <input type="hidden" name="registro_id" value="{{ m.id }}">
+                                <button type="submit" class="btn btn-sm btn-outline-warning w-100" onclick="return confirm('Cancelar pagamento desta mensalidade? O status será revertido para pendente e a receita será cancelada.');">
+                                    <i class="bi bi-x-circle"></i> Cancelar Pagamento
+                                </button>
+                            </form>
+                            {% endif %}
                             {% if m.comprovante_url %}
                             <a href="{{ url_for('static', filename='uploads/' + m.comprovante_url) }}" target="_blank" class="btn btn-sm btn-outline-secondary" title="Ver comprovante">
                                 <i class="bi bi-file-earmark-image"></i> Comprovante
@@ -184,6 +235,9 @@
                 <table class="table table-hover mb-0">
                     <thead class="table-light">
                         <tr>
+                            {% if mensalidades_cancelaveis %}
+                            <th style="width: 36px;"><input type="checkbox" class="form-check-input" id="selecionar_todas_tabela" title="Selecionar todas"></th>
+                            {% endif %}
                             <th>Aluno</th>
                             <th>Turma</th>
                             <th>Plano</th>
@@ -196,6 +250,15 @@
                     <tbody>
                         {% for m in mensalidades %}
                         <tr>
+                            {% if mensalidades_cancelaveis %}
+                            <td>
+                                {% if m.status_efetivo in ['pendente', 'atrasado'] %}
+                                <input type="checkbox" class="form-check-input cb-mensalidade" name="registro_id" form="form-excluir-lote" value="{{ m.id }}" id="cb_t_{{ m.id }}">
+                                {% else %}
+                                <span class="text-muted">—</span>
+                                {% endif %}
+                            </td>
+                            {% endif %}
                             <td>{{ m.aluno_nome }}</td>
                             <td>{{ m.turma_nome or '-' }}</td>
                             <td>{{ m.plano_nome }}</td>
@@ -203,9 +266,15 @@
                             <td>
                                 {% if m.tem_desconto %}
                                 <div class="d-flex flex-column gap-1">
-                                    <span class="text-muted small"><strong>Valor integral:</strong> R$ {{ "%.2f"|format(m.valor_integral or 0) }}</span>
+                                    <span class="text-muted small"><strong>Valor integral:</strong> R$ {{ "%.2f"|format(m.valor_integral or 0) }}{% if m.tem_juros %} <span class="text-warning">(Multa: R$ {{ "%.2f"|format(m.multa_val or 0) }} + Juros: R$ {{ "%.2f"|format(m.juros_val or 0) }})</span>{% endif %}</span>
                                     <span class="text-success small"><strong>Desconto{% if m.desconto_nome %} {{ m.desconto_nome }}{% endif %}:</strong> -R$ {{ "%.2f"|format(m.valor_desconto or 0) }}</span>
                                     <span class="fw-bold text-dark"><strong>Valor a pagar:</strong> R$ {{ "%.2f"|format(m.valor_final or 0) }}</span>
+                                </div>
+                                {% elif m.tem_juros %}
+                                <div class="d-flex flex-column gap-1">
+                                    <span class="text-muted small"><strong>Base:</strong> R$ {{ "%.2f"|format(m.valor_original or m.valor or 0) }}</span>
+                                    <span class="text-warning small"><strong>Multa 2%:</strong> R$ {{ "%.2f"|format(m.multa_val or 0) }} · <strong>Juros 0,033%/dia:</strong> R$ {{ "%.2f"|format(m.juros_val or 0) }}</span>
+                                    <span class="fw-bold text-dark"><strong>Total:</strong> R$ {{ "%.2f"|format(m.valor_final or m.valor or 0) }}</span>
                                 </div>
                                 {% else %}
                                 R$ {{ "%.2f"|format(m.valor or 0) }}
@@ -217,7 +286,23 @@
                                 </span>
                             </td>
                             <td>
+                                {% if m.tem_juros and m.status_efetivo in ['pendente', 'atrasado', 'aguardando_confirmacao'] %}
+                                <form method="POST" action="{{ url_for('financeiro.remover_juros_mensalidade') }}" class="d-inline me-1">
+                                    <input type="hidden" name="registro_id" value="{{ m.id }}">
+                                    <input type="hidden" name="academia_id" value="{{ academia_id }}">
+                                    <button type="submit" class="btn btn-sm btn-outline-warning" onclick="return confirm('Remover juros e multa desta mensalidade? (ex: pagou em dia mas informou fora do vencimento)');">
+                                        <i class="bi bi-dash-circle"></i> Remover juros
+                                    </button>
+                                </form>
+                                {% endif %}
                                 {% if m.status_efetivo in ['pendente', 'atrasado'] %}
+                                <form method="POST" action="{{ url_for('financeiro.registrar_pagamento') }}" class="d-inline me-1">
+                                    <input type="hidden" name="tipo" value="mensalidade_aluno">
+                                    <input type="hidden" name="registro_id" value="{{ m.id }}">
+                                    <button type="submit" class="btn btn-sm btn-success" onclick="return confirm('Registrar pagamento manual desta mensalidade? Uma receita será gerada automaticamente.');">
+                                        <i class="bi bi-cash-coin"></i> Registrar Pagamento
+                                    </button>
+                                </form>
                                 <form method="POST" action="{{ url_for('financeiro.cancelar_cobranca') }}" class="d-inline">
                                     <input type="hidden" name="tipo" value="mensalidade_aluno">
                                     <input type="hidden" name="registro_id" value="{{ m.id }}">
@@ -230,6 +315,15 @@
                                     <i class="bi bi-check-circle"></i> Confirmar
                                 </button>
                                 {% else %}
+                                {% if m.status_efetivo == 'pago' %}
+                                <form method="POST" action="{{ url_for('financeiro.cancelar_pagamento') }}" class="d-inline me-1">
+                                    <input type="hidden" name="tipo" value="mensalidade_aluno">
+                                    <input type="hidden" name="registro_id" value="{{ m.id }}">
+                                    <button type="submit" class="btn btn-sm btn-outline-warning" onclick="return confirm('Cancelar pagamento desta mensalidade? O status será revertido para pendente e a receita será cancelada.');">
+                                        <i class="bi bi-x-circle"></i> Cancelar Pagamento
+                                    </button>
+                                </form>
+                                {% endif %}
                                 {% if m.comprovante_url %}
                                 <a href="{{ url_for('static', filename='uploads/' + m.comprovante_url) }}" target="_blank" class="btn btn-sm btn-outline-secondary" title="Ver comprovante">
                                     <i class="bi bi-file-earmark-image"></i>
@@ -270,6 +364,13 @@
                         <div class="mb-2"><strong>R$ {{ "%.2f"|format(a.valor or 0) }}</strong> · Venc: {{ a.data_vencimento|data_br if a.data_vencimento else '-' }}</div>
                         <div class="mensalidade-acoes">
                             {% if a.status in ['pendente', 'atrasado'] %}
+                            <form method="POST" action="{{ url_for('financeiro.registrar_pagamento') }}" class="mb-1">
+                                <input type="hidden" name="tipo" value="cobranca_avulsa">
+                                <input type="hidden" name="registro_id" value="{{ a.id }}">
+                                <button type="submit" class="btn btn-sm btn-success w-100" onclick="return confirm('Registrar pagamento manual desta cobrança? Uma receita será gerada automaticamente.');">
+                                    <i class="bi bi-cash-coin"></i> Registrar Pagamento
+                                </button>
+                            </form>
                             <form method="POST" action="{{ url_for('financeiro.cancelar_cobranca') }}" class="mb-0">
                                 <input type="hidden" name="tipo" value="cobranca_avulsa">
                                 <input type="hidden" name="registro_id" value="{{ a.id }}">
@@ -312,6 +413,13 @@
                             </td>
                             <td>
                                 {% if a.status in ['pendente', 'atrasado'] %}
+                                <form method="POST" action="{{ url_for('financeiro.registrar_pagamento') }}" class="d-inline me-1">
+                                    <input type="hidden" name="tipo" value="cobranca_avulsa">
+                                    <input type="hidden" name="registro_id" value="{{ a.id }}">
+                                    <button type="submit" class="btn btn-sm btn-success" onclick="return confirm('Registrar pagamento manual desta cobrança? Uma receita será gerada automaticamente.');">
+                                        <i class="bi bi-cash-coin"></i> Registrar Pagamento
+                                    </button>
+                                </form>
                                 <form method="POST" action="{{ url_for('financeiro.cancelar_cobranca') }}" class="d-inline">
                                     <input type="hidden" name="tipo" value="cobranca_avulsa">
                                     <input type="hidden" name="registro_id" value="{{ a.id }}">
@@ -320,6 +428,15 @@
                                     </button>
                                 </form>
                                 {% else %}
+                                {% if a.status == 'pago' %}
+                                <form method="POST" action="{{ url_for('financeiro.cancelar_pagamento') }}" class="d-inline me-1">
+                                    <input type="hidden" name="tipo" value="cobranca_avulsa">
+                                    <input type="hidden" name="registro_id" value="{{ a.id }}">
+                                    <button type="submit" class="btn btn-sm btn-outline-warning" onclick="return confirm('Cancelar pagamento desta cobrança? O status será revertido para pendente e a receita será cancelada.');">
+                                        <i class="bi bi-x-circle"></i> Cancelar Pagamento
+                                    </button>
+                                </form>
+                                {% endif %}
                                 <span class="text-muted small">{{ a.data_pagamento|data_br if a.data_pagamento else '' }}</span>
                                 {% endif %}
                             </td>
@@ -380,4 +497,31 @@
 <style>
 .row.g-3.mb-4 a .card:hover { transform: translateY(-2px); box-shadow: 0 0.25rem 0.5rem rgba(0,0,0,0.1) !important; }
 </style>
+<script>
+(function() {
+    var cbs = document.querySelectorAll('.cb-mensalidade');
+    var selTodas = document.getElementById('selecionar_todas_mensalidades');
+    var selTabela = document.getElementById('selecionar_todas_tabela');
+    var btnExcluir = document.getElementById('btn-excluir-lote');
+
+    function updateBtnExcluir() {
+        var any = Array.prototype.some.call(cbs, function(c) { return c.checked; });
+        if (btnExcluir) btnExcluir.disabled = !any;
+        if (selTodas) selTodas.checked = cbs.length > 0 && Array.prototype.every.call(cbs, function(c) { return c.checked; });
+        if (selTabela) selTabela.checked = selTodas ? selTodas.checked : false;
+    }
+
+    function selectAll(checked) {
+        Array.prototype.forEach.call(cbs, function(c) { c.checked = checked; });
+        updateBtnExcluir();
+    }
+
+    if (selTodas) selTodas.addEventListener('change', function() { selectAll(this.checked); });
+    if (selTabela) selTabela.addEventListener('change', function() { selectAll(this.checked); });
+    Array.prototype.forEach.call(cbs, function(c) {
+        c.addEventListener('change', updateBtnExcluir);
+    });
+    updateBtnExcluir();
+})();
+</script>
 {% endblock %}

@@ -14,6 +14,7 @@ from flask import (
 )
 from flask_login import login_required, current_user
 from config import get_db_connection
+from utils.modalidades import filtro_visibilidade_sql
 from datetime import datetime, date
 from dateutil.relativedelta import relativedelta
 import os
@@ -34,6 +35,11 @@ def _get_academias_ids():
             cur.close()
             conn.close()
             return vinculadas
+        # Modo academia: gestor_academia/professor só veem academias de usuarios_academias (não id_academia)
+        if session.get("modo_painel") == "academia" and (current_user.has_role("gestor_academia") or current_user.has_role("professor")):
+            cur.close()
+            conn.close()
+            return []
         ids = []
         if current_user.has_role("admin"):
             cur.execute("SELECT id FROM academias ORDER BY nome")
@@ -47,8 +53,6 @@ def _get_academias_ids():
         elif current_user.has_role("gestor_associacao"):
             cur.execute("SELECT id FROM academias WHERE id_associacao = %s ORDER BY nome", (getattr(current_user, "id_associacao", None),))
             ids = [r["id"] for r in cur.fetchall()]
-        elif getattr(current_user, "id_academia", None):
-            ids = [current_user.id_academia]
         else:
             ids = []
         cur.close()
@@ -141,6 +145,16 @@ def parse_date(valor):
     return None
 
 
+def _clean_str(valor):
+    """Retorna None se vazio, 'None', 'null' ou só espaços, senão strip do valor."""
+    if valor is None:
+        return None
+    s = str(valor).strip()
+    if not s or s.lower() in ("none", "null", "undefined"):
+        return None
+    return s
+
+
 def normalizar_cpf(valor):
     if not valor:
         return None
@@ -212,6 +226,11 @@ def lista_alunos():
     db = get_db_connection()
     cursor = db.cursor(dictionary=True)
     busca = request.args.get("busca", "").strip()
+    idade_min = request.args.get("idade_min", type=int)
+    idade_max = request.args.get("idade_max", type=int)
+    graduacao_id = request.args.get("graduacao_id", type=int)
+    peso_min = request.args.get("peso_min", type=float)
+    peso_max = request.args.get("peso_max", type=float)
     hoje = date.today()
 
     # Base
@@ -236,9 +255,22 @@ def lista_alunos():
     # ======================================================
     # 🔐 RBAC — CONTROLE DE ACESSO POR ROLE
     # ======================================================
-    # Se em modo academia com academia_id selecionada, filtra por ela
-    academia_filtro = request.args.get("academia_id", type=int) or session.get("academia_gerenciamento_id")
     ids_acessiveis = _get_academias_ids()
+    modo = session.get("modo_painel") or ""
+    # academia_id na URL: "" ou ausente = Todas; número = filtrar
+    raw_academia = request.args.get("academia_id")
+    academia_filtro = None
+    if raw_academia is not None and str(raw_academia).strip():
+        try:
+            academia_filtro = int(raw_academia)
+        except (ValueError, TypeError):
+            academia_filtro = None
+    elif raw_academia is None:
+        academia_filtro = session.get("academia_gerenciamento_id")
+    if raw_academia is not None and not str(raw_academia).strip():
+        session.pop("academia_gerenciamento_id", None)
+        session.pop("finance_academia_id", None)
+    # Se academia selecionada e válida, filtra por ela
     if academia_filtro and academia_filtro in ids_acessiveis:
         session["academia_gerenciamento_id"] = academia_filtro
         session["finance_academia_id"] = academia_filtro
@@ -248,26 +280,42 @@ def lista_alunos():
     elif current_user.has_role("admin"):
         pass
 
-    # FEDERAÇÃO → vê alunos das academias da federação
+    # FEDERAÇÃO → vê alunos das academias da federação; só alunos com modalidade ofertada pela fed E associação
     elif current_user.has_role("gestor_federacao"):
+        fid = getattr(current_user, "id_federacao", 0)
         query += """
             AND a.id_academia IN (
-                SELECT ac.id
-                FROM academias ac
-                JOIN associacoes ass2 ON ass2.id = ac.id_associacao
+                SELECT ac2.id FROM academias ac2
+                JOIN associacoes ass2 ON ass2.id = ac2.id_associacao
                 WHERE ass2.id_federacao = %s
             )
+            AND EXISTS (
+                SELECT 1 FROM aluno_modalidades am
+                INNER JOIN federacao_modalidades fm ON fm.modalidade_id = am.modalidade_id AND fm.federacao_id = %s
+                INNER JOIN associacao_modalidades asm ON asm.modalidade_id = am.modalidade_id
+                    AND asm.associacao_id = (SELECT id_associacao FROM academias WHERE id = a.id_academia LIMIT 1)
+                WHERE am.aluno_id = a.id
+            )
         """
-        params.append(getattr(current_user, "id_federacao", 0))
+        params.append(fid)
+        params.append(fid)
 
-    # ASSOCIAÇÃO → vê alunos das academias da associação
+    # ASSOCIAÇÃO → só alunos com pelo menos uma modalidade que a associação oferta (exclui sem modalidade)
     elif current_user.has_role("gestor_associacao"):
+        aid = getattr(current_user, "id_associacao", 0)
         query += """
             AND a.id_academia IN (
                 SELECT id FROM academias WHERE id_associacao = %s
             )
+            AND EXISTS (SELECT 1 FROM aluno_modalidades WHERE aluno_id = a.id)
+            AND EXISTS (
+                SELECT 1 FROM aluno_modalidades am
+                INNER JOIN associacao_modalidades asm ON asm.modalidade_id = am.modalidade_id AND asm.associacao_id = %s
+                WHERE am.aluno_id = a.id
+            )
         """
-        params.append(getattr(current_user, "id_associacao", 0))
+        params.append(aid)
+        params.append(aid)
 
     # ACADEMIA / PROFESSOR → vê alunos da própria academia
     elif current_user.has_role("gestor_academia") or current_user.has_role("professor"):
@@ -284,6 +332,31 @@ def lista_alunos():
         query += " AND a.nome LIKE %s"
         params.append(f"%{busca}%")
 
+    # Filtros dinâmicos (idade, graduação, peso)
+    if idade_min is not None and idade_max is not None:
+        query += " AND TIMESTAMPDIFF(YEAR, a.data_nascimento, CURDATE()) BETWEEN %s AND %s"
+        params.extend([idade_min, idade_max])
+    elif idade_min is not None:
+        query += " AND TIMESTAMPDIFF(YEAR, a.data_nascimento, CURDATE()) >= %s"
+        params.append(idade_min)
+    elif idade_max is not None:
+        query += " AND TIMESTAMPDIFF(YEAR, a.data_nascimento, CURDATE()) <= %s"
+        params.append(idade_max)
+
+    if graduacao_id is not None:
+        query += " AND a.graduacao_id = %s"
+        params.append(graduacao_id)
+
+    if peso_min is not None and peso_max is not None:
+        query += " AND a.peso IS NOT NULL AND a.peso BETWEEN %s AND %s"
+        params.extend([peso_min, peso_max])
+    elif peso_min is not None:
+        query += " AND a.peso IS NOT NULL AND a.peso >= %s"
+        params.append(peso_min)
+    elif peso_max is not None:
+        query += " AND a.peso IS NOT NULL AND a.peso <= %s"
+        params.append(peso_max)
+
     query += " ORDER BY a.nome"
 
     cursor.execute(query, tuple(params))
@@ -293,44 +366,15 @@ def lista_alunos():
     cursor.execute("SELECT * FROM graduacao ORDER BY id")
     faixas = cursor.fetchall()
 
-    # Carrega classes (idade) e categorias de peso
+    # Carrega categorias da tabela categorias
     cursor.execute(
         """
-        SELECT id_classe, classe, idade_min, idade_max, notas
-        FROM classes_judo
-        ORDER BY id_classe
+        SELECT id, genero, id_classe, categoria, nome_categoria, peso_min, peso_max, idade_min, idade_max
+        FROM categorias
+        ORDER BY id
         """
     )
-    classes_judo = cursor.fetchall()
-
-    cursor.execute("SHOW COLUMNS FROM categorias_peso")
-    cols_peso_raw = cursor.fetchall()
-    cols_peso_map = {}
-    for c in cols_peso_raw:
-        key = c["Field"].lower()
-        cols_peso_map[key] = c["Field"]
-        key_norm = "".join(
-            ch for ch in unicodedata.normalize("NFKD", key) if not unicodedata.combining(ch)
-        )
-        cols_peso_map.setdefault(key_norm, c["Field"])
-
-    def col_peso(nome):
-        return cols_peso_map.get(nome, nome)
-
-    cursor.execute(
-        f"""
-        SELECT {col_peso('id_peso')} AS id_peso,
-               {col_peso('genero')} AS genero,
-               {col_peso('id_classe_fk')} AS id_classe_fk,
-               {col_peso('categoria')} AS categoria,
-               {col_peso('nome_categoria')} AS nome_categoria,
-               {col_peso('peso_min')} AS peso_min,
-               {col_peso('peso_max')} AS peso_max
-        FROM categorias_peso
-        ORDER BY {col_peso('id_peso')}
-        """
-    )
-    categorias_peso = cursor.fetchall()
+    categorias = cursor.fetchall()
 
     # Aprovação especial por professor
     cursor.execute(
@@ -370,6 +414,17 @@ def lista_alunos():
                 {"id": row["id"], "nome": row["nome"]}
             )
 
+    # Modo associação: só modalidades que a associação oferta (para filtro e exibição)
+    associacao_modalidades_ids = set()
+    if modo == "associacao":
+        id_assoc = getattr(current_user, "id_associacao", None)
+        if id_assoc:
+            cursor.execute(
+                "SELECT modalidade_id FROM associacao_modalidades WHERE associacao_id = %s",
+                (id_assoc,),
+            )
+            associacao_modalidades_ids = {r["modalidade_id"] for r in cursor.fetchall()}
+
     # ======================================================
     # 🔹 CÁLCULO DE FAIXAS + MODALIDADES
     # ======================================================
@@ -378,8 +433,10 @@ def lista_alunos():
         # Mapear rua -> endereco (para templates que usam "endereco")
         aluno["endereco"] = aluno.get("rua")
 
-        # Modalidades
+        # Modalidades (modo associação: só as que a associação oferta)
         mods = modalidades_por_aluno.get(aluno["id"], [])
+        if modo == "associacao" and associacao_modalidades_ids:
+            mods = [m for m in mods if m["id"] in associacao_modalidades_ids]
         aluno["modalidades"] = mods
         aluno["modalidades_ids"] = [m["id"] for m in mods]
         aluno["modalidades_nomes"] = ", ".join(m["nome"] for m in mods) if mods else "-"
@@ -584,106 +641,49 @@ def lista_alunos():
             aluno["motivo"] = "; ".join(motivos)
 
         # ======================================================
-        # 🔹 Classes por idade + categorias de peso
+        # 🔹 Categorias baseadas na tabela categorias
         # ======================================================
-        classes_aptas = []
-        if aluno["idade_ano_civil"] is not None:
-            for c in classes_judo:
-                idade_min = c.get("idade_min")
-                idade_max = c.get("idade_max")
-                if idade_min is None:
-                    continue
-                if aluno["idade_ano_civil"] < idade_min:
-                    continue
-                if idade_max is not None and aluno["idade_ano_civil"] > idade_max:
-                    continue
-                classes_aptas.append(c)
-
-        def classe_fk_match(valor, ids_classes):
-            if not valor or not ids_classes:
-                return False
-            texto = str(valor).strip()
-            if not texto:
-                return False
-            if "-" in texto:
-                partes = [p.strip() for p in texto.split("-", 1)]
-                try:
-                    ini = int("".join(filter(str.isdigit, partes[0])))
-                    fim = int("".join(filter(str.isdigit, partes[1])))
-                    return any(ini <= cid <= fim for cid in ids_classes)
-                except Exception:
-                    return False
-            ids = []
-            for token in texto.replace(";", ",").replace(" ", ",").split(","):
-                token = token.strip()
-                if not token:
-                    continue
-                try:
-                    ids.append(int("".join(filter(str.isdigit, token))))
-                except Exception:
-                    continue
-            if ids:
-                return any(cid in ids for cid in ids_classes)
-            try:
-                return int("".join(filter(str.isdigit, texto))) in ids_classes
-            except Exception:
-                return False
-
+        # Busca categoria na tabela categorias
         categorias_match = []
         sexo = (aluno.get("sexo") or "").upper()
         peso = aluno.get("peso")
-        ids_classes = [c["id_classe"] for c in classes_aptas if c.get("id_classe") is not None]
-        if sexo in ("M", "F") and peso is not None and ids_classes:
-            for cat in categorias_peso:
+        idade_ano_civil = aluno.get("idade_ano_civil")
+        
+        if sexo in ("M", "F") and peso is not None and idade_ano_civil is not None:
+            for cat in categorias:
+                # Verifica gênero
                 if (cat.get("genero") or "").upper() != sexo:
                     continue
-                if not classe_fk_match(cat.get("id_classe_fk"), ids_classes):
+                
+                # Verifica idade
+                idade_min = cat.get("idade_min")
+                idade_max = cat.get("idade_max")
+                if idade_min is not None and idade_ano_civil < idade_min:
                     continue
+                if idade_max is not None and idade_ano_civil > idade_max:
+                    continue
+                
+                # Verifica peso
                 peso_min = cat.get("peso_min")
                 peso_max = cat.get("peso_max")
                 if peso_min is not None and peso < float(peso_min):
                     continue
                 if peso_max is not None and peso > float(peso_max):
                     continue
+                
                 categorias_match.append(cat)
 
         partes = []
-        if classes_aptas:
-            classes_txt_list = []
-            for c in classes_aptas:
-                classe_nome = c.get("classe") or "-"
-                classe_upper = str(classe_nome).upper()
-                if "/" in classe_upper:
-                    partes_classe = [p.strip() for p in classe_upper.split("/") if p.strip()]
-                    if sexo == "M":
-                        for p in partes_classe:
-                            if p.startswith("M"):
-                                classe_nome = p
-                                break
-                    elif sexo == "F":
-                        for p in partes_classe:
-                            if p.startswith("F"):
-                                classe_nome = p
-                                break
-                classes_txt_list.append(classe_nome)
-            classes_txt = ", ".join(classes_txt_list)
-            partes.append(f"Classe: {classes_txt}")
-        else:
-            if aluno["idade_ano_civil"] is None:
-                partes.append("Classe: informe data de nascimento")
-            else:
-                partes.append("Classe: não encontrada")
-
+        # Exibir classe se disponível na categoria
         if categorias_match:
             cat = categorias_match[0]
-            categoria_txt = cat.get('categoria') or ''
+            id_classe = cat.get('id_classe')
+            if id_classe:
+                partes.append(f"Classe: {id_classe}")
+            
             nome_categoria_txt = cat.get('nome_categoria') or ''
-            if categoria_txt and nome_categoria_txt:
-                partes.append(f"Categoria: {categoria_txt} - {nome_categoria_txt}")
-            elif nome_categoria_txt:
+            if nome_categoria_txt:
                 partes.append(f"Categoria: {nome_categoria_txt}")
-            elif categoria_txt:
-                partes.append(f"Categoria: {categoria_txt}")
             else:
                 partes.append("Categoria: -")
         else:
@@ -691,48 +691,415 @@ def lista_alunos():
                 partes.append("Categoria: informe o peso")
             elif sexo not in ("M", "F"):
                 partes.append("Categoria: informe o sexo")
+            elif idade_ano_civil is None:
+                partes.append("Categoria: informe data de nascimento")
             else:
                 partes.append("Categoria: não encontrada")
 
         aluno["classes_e_pesos"] = " | ".join(partes)
 
-    # Carregar academias para seletor (quando usuário tem acesso a mais de uma)
+    # Carregar academias para seletor (admin, federação, associação: sempre; academia: se > 1)
     academias = []
     academia_id_sel = None
-    if len(ids_acessiveis) > 1 and (
-        session.get("modo_painel") == "academia" or request.args.get("academia_id")
-    ):
+    mostrar_filtro_academia = (
+        len(ids_acessiveis) >= 1
+        and (modo in ("academia", "associacao", "federacao") or current_user.has_role("admin"))
+    )
+    if mostrar_filtro_academia:
         try:
             cursor.execute(
                 "SELECT id, nome FROM academias WHERE id IN (%s) ORDER BY nome" % ",".join(["%s"] * len(ids_acessiveis)),
                 tuple(ids_acessiveis),
             )
             academias = cursor.fetchall()
-            academia_id_sel = academia_filtro or ids_acessiveis[0]
+            academia_id_sel = academia_filtro if (academia_filtro and academia_filtro in ids_acessiveis) else None
         except Exception:
             pass
 
-    db.close()
+    # Verificar modo de agrupamento (apenas para modo associação)
+    agrupar_por_academia = False
+    if modo == "associacao":
+        agrupar_por_academia = request.args.get("agrupar_por") == "academia"
+    
+    # Agrupar alunos por modalidade ou por academia (modo associação)
+    alunos_agrupados = []
+    
+    if modo == "associacao" and agrupar_por_academia:
+        # Agrupar por academia no modo associação
+        acad_nome_to_alunos = {}
+        for aluno in alunos:
+            acad_nome = aluno.get("academia_nome") or "Sem academia"
+            acad_nome_to_alunos.setdefault(acad_nome, []).append(aluno)
+        
+        # Ordenar academias A-Z e alunos dentro de cada academia A-Z
+        for acad_nome in sorted(acad_nome_to_alunos.keys()):
+            lista = sorted(acad_nome_to_alunos[acad_nome], key=lambda a: (a.get("nome") or ""))
+            alunos_agrupados.append((acad_nome, lista))
+    else:
+        # Agrupar por modalidade (comportamento padrão)
+        mod_nome_to_alunos = {}
+        for aluno in alunos:
+            mods = aluno.get("modalidades") or []
+            if not mods:
+                mod_nome_to_alunos.setdefault("Sem modalidade", []).append(aluno)
+            else:
+                for m in mods:
+                    nome_mod = m.get("nome") or "Outras"
+                    mod_nome_to_alunos.setdefault(nome_mod, []).append(aluno)
+        # Ordenar: "Sem modalidade" por último
+        def _ord_modalidade(k):
+            return (1, k) if k == "Sem modalidade" else (0, k)
+        mod_keys = list(mod_nome_to_alunos.keys())
+        # Modo associação: não exibir grupo "Sem modalidade" (alunos sem modalidade já excluídos na query)
+        if modo == "associacao" and "Sem modalidade" in mod_keys:
+            mod_keys = [k for k in mod_keys if k != "Sem modalidade"]
+        for nome_mod in sorted(mod_keys, key=_ord_modalidade):
+            lista = mod_nome_to_alunos[nome_mod]
+            alunos_agrupados.append((nome_mod, sorted(lista, key=lambda a: (a.get("nome") or ""))))
 
-    back_url = request.args.get("next")
-    if not back_url:
-        ref = request.referrer or ""
-        if ref and "cadastrar_aluno" not in ref:
-            back_url = ref
-    if not back_url:
-        back_url = (
-            url_for("academia.painel_academia", academia_id=academia_id_sel)
-            if academia_id_sel and session.get("modo_painel") == "academia"
-            else url_for("painel.home")
-        )
+    # Estatísticas: total = alunos que realmente aparecem na página (após filtro de modalidade, etc.)
+    ids_na_pagina = set()
+    for _, grupo in alunos_agrupados:
+        for a in grupo:
+            ids_na_pagina.add(a.get("id"))
+    alunos_exibidos = [a for a in alunos if a.get("id") in ids_na_pagina]
+
+    stats = {
+        "total": len(alunos_exibidos),
+        "por_academia": {},
+        "por_graduacao": {},
+    }
+    for aluno in alunos_exibidos:
+        acad_nome = aluno.get("academia_nome") or "Sem academia"
+        stats["por_academia"][acad_nome] = stats["por_academia"].get(acad_nome, 0) + 1
+        grad_nome = aluno.get("faixa") or "Sem faixa"
+        if aluno.get("graduacao"):
+            grad_nome = f"{grad_nome} {aluno['graduacao']}".strip()
+        stats["por_graduacao"][grad_nome] = stats["por_graduacao"].get(grad_nome, 0) + 1
+
+    # Mostrar filtros avançados em modo associação/federação ou quando há múltiplas academias
+    mostrar_filtros_avancados = modo in ("associacao", "federacao") or len(ids_acessiveis) > 1
+
+    # Enriquecer alunos para o modal (adicionar categorias, frequência, etc.)
+    # IMPORTANTE: fazer antes de fechar a conexão do banco
+    for _, grupo_alunos in alunos_agrupados:
+        for aluno in grupo_alunos:
+            enriquecer_aluno_para_modal(aluno)
+
+    db.close()
+    
+    # Modo associação/federação: voltar sempre para o gerenciamento
+    if modo == "associacao":
+        back_url = url_for("associacao.gerenciamento_associacao")
+    elif modo == "federacao":
+        back_url = url_for("federacao.gerenciamento_federacao")
+    else:
+        back_url = request.args.get("next")
+        if not back_url:
+            ref = request.referrer or ""
+            if ref and "cadastrar_aluno" not in ref:
+                back_url = ref
+        if not back_url:
+            if academia_id_sel and modo == "academia":
+                back_url = url_for("academia.painel_academia", academia_id=academia_id_sel)
+            else:
+                back_url = url_for("painel.home")
+    modo_associacao = modo == "associacao"
+    # Modo associação: filtros sempre vazios (só placeholders)
     return render_template(
         "alunos/lista_alunos.html",
         alunos=alunos,
-        busca=busca,
+        alunos_agrupados=alunos_agrupados,
+        busca="" if modo_associacao else busca,
         back_url=back_url,
         academias=academias,
         academia_id=academia_id_sel,
+        faixas=faixas,
+        idade_min=None if modo_associacao else idade_min,
+        idade_max=None if modo_associacao else idade_max,
+        graduacao_id=None if modo_associacao else graduacao_id,
+        peso_min=None if modo_associacao else peso_min,
+        peso_max=None if modo_associacao else peso_max,
+        stats=stats,
+        mostrar_filtros_avancados=mostrar_filtros_avancados,
+        agrupar_por_academia=agrupar_por_academia if modo_associacao else False,
+        modo_associacao=modo_associacao,
     )
+
+
+def enriquecer_aluno_para_modal(aluno):
+    """Enriquece um único aluno com classes_e_pesos, aptidão, frequência etc. para o modal 'Ver dados'."""
+    if not aluno or not aluno.get("id"):
+        return
+    # Inicializar valores padrão para aptidão
+    aluno.setdefault("aptidao_status", "Não calculado")
+    aluno.setdefault("motivo", "")
+    aluno.setdefault("data_elegivel", "-")
+    aluno.setdefault("proxima_faixa", "-")
+    aluno.setdefault("frequencia_ano", None)
+    aluno.setdefault("frequencia_mes", None)
+    aluno.setdefault("frequencia_desde_exame", None)
+    aluno.setdefault("total_aulas_desde", 0)
+    aluno.setdefault("presentes_desde", 0)
+    aluno.setdefault("turma_nome", None)
+    aluno.setdefault("academia_nome", None)
+    
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    hoje = date.today()
+    try:
+        # Buscar turma e academia se não estiverem definidas
+        if not aluno.get("turma_nome") or not aluno.get("academia_nome"):
+            cursor.execute(
+                """SELECT ac.nome AS academia_nome, t.Nome AS turma_nome
+                   FROM alunos a
+                   LEFT JOIN academias ac ON ac.id = a.id_academia
+                   LEFT JOIN turmas t ON t.TurmaID = a.TurmaID
+                   WHERE a.id = %s""",
+                (aluno["id"],),
+            )
+            row = cursor.fetchone()
+            if row:
+                if not aluno.get("academia_nome"):
+                    aluno["academia_nome"] = row.get("academia_nome")
+                if not aluno.get("turma_nome"):
+                    aluno["turma_nome"] = row.get("turma_nome")
+        
+        # Se ainda não encontrou turma, tentar buscar diretamente pelo TurmaID
+        if not aluno.get("turma_nome") and aluno.get("TurmaID"):
+            cursor.execute("SELECT Nome FROM turmas WHERE TurmaID = %s", (aluno.get("TurmaID"),))
+            turma_row = cursor.fetchone()
+            if turma_row:
+                aluno["turma_nome"] = turma_row.get("Nome")
+        
+        # Se ainda não encontrou, tentar buscar via aluno_turmas
+        if not aluno.get("turma_nome"):
+            cursor.execute(
+                """SELECT t.Nome FROM aluno_turmas at
+                   INNER JOIN turmas t ON t.TurmaID = at.TurmaID
+                   WHERE at.aluno_id = %s
+                   ORDER BY at.TurmaID LIMIT 1""",
+                (aluno["id"],),
+            )
+            turma_row = cursor.fetchone()
+            if turma_row:
+                aluno["turma_nome"] = turma_row.get("Nome")
+        cursor.execute("SELECT * FROM graduacao ORDER BY id")
+        faixas = cursor.fetchall()
+        # Carrega categorias da tabela categorias
+        cursor.execute(
+            """
+            SELECT id, genero, id_classe, categoria, nome_categoria, peso_min, peso_max, idade_min, idade_max
+            FROM categorias
+            ORDER BY id
+            """
+        )
+        categorias = cursor.fetchall()
+        cursor.execute("SELECT aluno_id, faixa_aprovada, aprovado_por, data_aprovacao FROM aprovacoes_faixa_professor")
+        aprovacoes = {a["aluno_id"]: a for a in cursor.fetchall()}
+        try:
+            cursor.execute("SELECT turma_id FROM turma_modalidades WHERE modalidade_id = 1")
+            turmas_judo_ids = [r["turma_id"] for r in cursor.fetchall()]
+        except Exception:
+            turmas_judo_ids = []
+
+        cursor.execute(
+            """SELECT m.id, m.nome FROM modalidade m
+               INNER JOIN aluno_modalidades am ON am.modalidade_id = m.id
+               WHERE am.aluno_id = %s ORDER BY m.nome""",
+            (aluno["id"],),
+        )
+        mods = cursor.fetchall()
+        aluno["modalidades"] = mods
+        aluno["modalidades_nomes"] = ", ".join(m["nome"] for m in mods) if mods else "-"
+
+        nasc = parse_date(aluno.get("data_nascimento"))
+        exame = parse_date(aluno.get("ultimo_exame_faixa"))
+
+        freq_ano, freq_mes, freq_desde_exame = None, None, None
+        total_desde, presentes_desde = 0, 0
+        data_inicio_freq = exame or parse_date(aluno.get("data_matricula")) or hoje
+        if turmas_judo_ids:
+            ph = ",".join(["%s"] * len(turmas_judo_ids))
+            for label, extra_sql, extra_params in [
+                ("ano", "AND YEAR(data_presenca)=%s", [hoje.year]),
+                ("mes", "AND YEAR(data_presenca)=%s AND MONTH(data_presenca)=%s", [hoje.year, hoje.month]),
+                ("desde", "AND data_presenca >= %s AND data_presenca <= %s", [data_inicio_freq, hoje]),
+            ]:
+                cursor.execute(
+                    f"""SELECT COUNT(*) AS tot, SUM(CASE WHEN presente=1 THEN 1 ELSE 0 END) AS pres
+                        FROM presencas WHERE aluno_id=%s AND turma_id IN ({ph}) {extra_sql}""",
+                    [aluno["id"]] + turmas_judo_ids + extra_params,
+                )
+                r = cursor.fetchone()
+                if r and r.get("tot", 0) and r["tot"] > 0:
+                    pct = round((r["pres"] or 0) / r["tot"] * 100, 1)
+                    if label == "ano":
+                        freq_ano = pct
+                    elif label == "mes":
+                        freq_mes = pct
+                    else:
+                        freq_desde_exame = pct
+                        total_desde = r["tot"]
+                        presentes_desde = r["pres"] or 0
+        aluno["frequencia_ano"] = freq_ano
+        aluno["frequencia_mes"] = freq_mes
+        aluno["frequencia_desde_exame"] = freq_desde_exame
+        aluno["total_aulas_desde"] = total_desde
+        aluno["presentes_desde"] = presentes_desde
+
+        aluno["idade_real"] = (
+            hoje.year - nasc.year - ((hoje.month, hoje.day) < (nasc.month, nasc.day))
+        ) if nasc else None
+        aluno["idade_ano_civil"] = hoje.year - nasc.year if nasc else None
+        idade_civil = aluno["idade_ano_civil"] or 0
+        faixa_atual = (aluno.get("faixa") or aluno.get("faixa_nome") or "").lower()
+
+        aluno["data_nascimento_formatada"] = nasc.strftime("%d/%m/%Y") if nasc else "-"
+        aluno["ultimo_exame_faixa_formatada"] = exame.strftime("%d/%m/%Y") if exame else "-"
+
+        gid = aluno.get("graduacao_id")
+        proxima = None
+        for i, f in enumerate(faixas):
+            if f["id"] == gid and i + 1 < len(faixas):
+                proxima = faixas[i + 1]
+                break
+
+        if not proxima:
+            aluno["aptidao_status"] = "Sem próxima faixa"
+            aluno["motivo"] = "Não há próxima faixa cadastrada no sistema"
+            aluno["data_elegivel"] = "-"
+            aluno["proxima_faixa"] = "-"
+        else:
+            aluno["proxima_faixa"] = f"{proxima['faixa']} {proxima['graduacao']}"
+            idade_minima = extrair_numero(proxima.get("idade_minima"))
+            carencia_meses = extrair_numero(proxima.get("carencia_meses"))
+            carencia_dias = extrair_numero(proxima.get("carencia_dias"))
+            carencia_minima_raw = proxima.get("carencia_minima") or proxima.get("carencia")
+            anos_c, meses_c, dias_c = 0, 0, 0
+            if carencia_meses:
+                meses_c = carencia_meses
+            elif carencia_dias:
+                dias_c = carencia_dias
+            else:
+                anos_c, meses_c, dias_c = parse_carencia(carencia_minima_raw)
+            carencia_required = any([anos_c, meses_c, dias_c])
+            if carencia_required and exame:
+                delta = relativedelta(years=anos_c, months=meses_c, days=dias_c)
+                data_carencia = exame + delta
+            else:
+                data_carencia = None
+            data_idade_minima = (
+                nasc + relativedelta(years=idade_minima) if (nasc and idade_minima) else None
+            )
+            data_elegivel = (
+                max(data_carencia, data_idade_minima)
+                if (data_carencia and data_idade_minima)
+                else (data_carencia or data_idade_minima)
+            )
+            aluno["data_elegivel"] = (
+                data_elegivel.strftime("%d/%m/%Y") if data_elegivel else "-"
+            )
+            idade_ok = True if idade_minima == 0 else (
+                aluno["idade_real"] is not None and aluno["idade_real"] >= idade_minima
+            )
+            idade_data_ok = True if idade_minima == 0 else (
+                data_idade_minima is not None and hoje >= data_idade_minima
+            )
+            carencia_ok = True if not carencia_required else (
+                data_carencia is not None and hoje >= data_carencia
+            )
+            freq_val = aluno.get("frequencia_desde_exame")
+            frequencia_ok = True if freq_val is None else freq_val >= 70
+
+            if idade_ok and idade_data_ok and carencia_ok and frequencia_ok:
+                aluno["aptidao_status"] = "Apto"
+                aluno["motivo"] = ""
+            else:
+                motivos = []
+                if not idade_ok and idade_minima > 0:
+                    motivos.append(f"Idade mínima: {idade_minima} anos")
+                if not idade_data_ok and data_idade_minima:
+                    motivos.append(f"Idade mínima em {data_idade_minima.strftime('%d/%m/%Y')}")
+                if not carencia_ok and data_carencia:
+                    motivos.append(f"Carencia até {data_carencia.strftime('%d/%m/%Y')}")
+                if not frequencia_ok and freq_val is not None:
+                    motivos.append(f"Frequência desde exame: {freq_val}% (mín. 70%)")
+                if not frequencia_ok and total_desde == 0:
+                    motivos.append("Sem registro de frequência em Judô desde o último exame")
+                aluno["aptidao_status"] = "Inapto"
+                aluno["motivo"] = "; ".join(motivos)
+
+        # Busca categoria na tabela categorias usando a mesma lógica de simular_categorias
+        categorias_match = []
+        sexo = (aluno.get("sexo") or "").upper()
+        peso = aluno.get("peso")
+        idade_ano_civil = aluno.get("idade_ano_civil")
+        
+        if sexo in ("M", "F") and peso is not None and peso > 0 and idade_ano_civil is not None:
+            # Mapear M/F para MASCULINO/FEMININO
+            genero_db = "MASCULINO" if sexo == "M" else "FEMININO" if sexo == "F" else sexo
+            
+            cursor.execute("""
+                SELECT id, genero, id_classe, categoria, nome_categoria, peso_min, peso_max, idade_min, idade_max, descricao
+                FROM categorias
+                WHERE UPPER(genero) = UPPER(%s)
+                AND ativo = 1
+                AND (
+                    (idade_min IS NULL OR %s >= idade_min)
+                    AND (idade_max IS NULL OR %s <= idade_max)
+                )
+                AND (
+                    (peso_min IS NULL OR %s >= peso_min)
+                    AND (peso_max IS NULL OR %s <= peso_max)
+                )
+                ORDER BY nome_categoria
+            """, (genero_db, idade_ano_civil, idade_ano_civil, peso, peso))
+            categorias_match = cursor.fetchall()
+
+        # Preparar lista de categorias para exibição
+        categorias_lista = []
+        if categorias_match:
+            for cat in categorias_match:
+                nome_cat = cat.get("nome_categoria") or cat.get("categoria") or "-"
+                id_classe = cat.get("id_classe")
+                if id_classe:
+                    categorias_lista.append(f"{id_classe} - {nome_cat}")
+                else:
+                    categorias_lista.append(nome_cat)
+        
+        # Garantir que categorias_disponiveis seja sempre uma lista
+        aluno["categorias_disponiveis"] = categorias_match if categorias_match else []
+        
+        # Mensagem de erro se não encontrou categorias
+        if not categorias_match:
+            if peso is None or peso == 0:
+                aluno["categorias_texto"] = "Informe o peso"
+            elif sexo not in ("M", "F"):
+                aluno["categorias_texto"] = "Informe o sexo"
+            elif idade_ano_civil is None:
+                aluno["categorias_texto"] = "Informe data de nascimento"
+            else:
+                aluno["categorias_texto"] = "Nenhuma categoria encontrada"
+        else:
+            aluno["categorias_texto"] = ", ".join(categorias_lista) if categorias_lista else "Nenhuma categoria encontrada"
+        
+        aluno["classes_e_pesos"] = aluno.get("categorias_texto") or "-"
+
+        if not aluno.get("responsavel") and aluno.get("responsavel_nome"):
+            aluno["responsavel"] = aluno["responsavel_nome"]
+    except Exception as e:
+        # Em caso de erro, manter valores padrão já definidos
+        import logging
+        logging.error(f"Erro ao enriquecer aluno {aluno.get('id')}: {e}", exc_info=True)
+        # Garantir que pelo menos os valores padrão estejam definidos
+        aluno.setdefault("aptidao_status", "Erro ao calcular")
+        aluno.setdefault("motivo", "Erro ao processar dados de aptidão")
+        aluno.setdefault("data_elegivel", "-")
+        aluno.setdefault("proxima_faixa", "-")
+    finally:
+        cursor.close()
+        conn.close()
 
 
 # ======================================================
@@ -766,28 +1133,55 @@ def cadastrar_aluno():
     if acad_filtro and acad_filtro in ids_acad:
         session["academia_gerenciamento_id"] = acad_filtro
         session["finance_academia_id"] = acad_filtro
+    turmas = []
     try:
         if acad_filtro and acad_filtro in ids_acad:
+            # Filtrar por academia específica selecionada
             cursor.execute("SELECT * FROM turmas WHERE id_academia = %s ORDER BY Nome", (acad_filtro,))
-        else:
-            cursor.execute("SELECT * FROM turmas ORDER BY Nome")
+            turmas = cursor.fetchall()
+        elif ids_acad:
+            # Filtrar por todas as academias acessíveis ao usuário
+            placeholders = ",".join(["%s"] * len(ids_acad))
+            cursor.execute(f"SELECT * FROM turmas WHERE id_academia IN ({placeholders}) ORDER BY Nome", tuple(ids_acad))
+            turmas = cursor.fetchall()
+        # Se não houver academias acessíveis, turmas já está como lista vazia
     except Exception:
-        cursor.execute("SELECT * FROM turmas ORDER BY Nome")
-    turmas = cursor.fetchall()
+        # Em caso de erro, tentar filtrar pelas academias acessíveis
+        if ids_acad:
+            try:
+                placeholders = ",".join(["%s"] * len(ids_acad))
+                cursor.execute(f"SELECT * FROM turmas WHERE id_academia IN ({placeholders}) ORDER BY Nome", tuple(ids_acad))
+                turmas = cursor.fetchall()
+            except Exception:
+                turmas = []
 
     id_acad_modalidade = acad_filtro or (ids_acad[0] if ids_acad else None) or getattr(current_user, "id_academia", None)
+    modalidades = []
+    id_assoc_modalidade = None
     try:
-        cursor.execute(
-            """
-            SELECT * FROM modalidade
-            WHERE (id_academia IS NULL OR id_academia = %s) AND ativo = 1
-            ORDER BY nome
-            """,
-            (id_acad_modalidade,),
-        )
+        if id_acad_modalidade:
+            cursor.execute("SELECT id_associacao FROM academias WHERE id = %s", (id_acad_modalidade,))
+            r = cursor.fetchone()
+            id_assoc_modalidade = r.get("id_associacao") if r else None
+            extra, extra_params = filtro_visibilidade_sql(id_academia=id_acad_modalidade, id_associacao=id_assoc_modalidade)
+            cursor.execute(
+                """
+                SELECT m.id, m.nome, m.descricao, m.ativo
+                FROM modalidade m
+                INNER JOIN academia_modalidades am ON am.modalidade_id = m.id
+                WHERE am.academia_id = %s AND m.ativo = 1
+                """ + extra + """
+                ORDER BY m.nome
+                """,
+                (id_acad_modalidade,) + extra_params,
+            )
+            modalidades = cursor.fetchall()
+        else:
+            cursor.execute("SELECT id, nome, descricao, ativo FROM modalidade WHERE ativo = 1 ORDER BY nome")
+            modalidades = cursor.fetchall()
     except Exception:
-        cursor.execute("SELECT * FROM modalidade WHERE ativo = 1 ORDER BY nome")
-    modalidades = cursor.fetchall()
+        cursor.execute("SELECT id, nome, descricao, ativo FROM modalidade WHERE ativo = 1 ORDER BY nome")
+        modalidades = cursor.fetchall()
 
     # Academias disponíveis (com associação)
     academias = []
@@ -858,72 +1252,106 @@ def cadastrar_aluno():
     if request.method == "POST":
         form = request.form
 
-        nome = form.get("nome", "").strip()
+        # Garantir que valores vazios sejam None (NULL no banco)
+        nome = (form.get("nome", "") or "").strip() or None
         data_nascimento = form.get("data_nascimento") or None
+        if data_nascimento == "":
+            data_nascimento = None
         sexo = form.get("sexo") or None
+        if sexo == "":
+            sexo = None
         status = "ativo"
-        ativo = 1
+        # Campo ativo: se não informado, usa 1 (padrão da coluna não permite NULL)
+        ativo_val = form.get("ativo")
+        if ativo_val == "" or ativo_val is None:
+            ativo = 1  # Valor padrão quando não informado
+        elif ativo_val == "1" or ativo_val == "on":
+            ativo = 1
+        elif ativo_val == "0" or ativo_val == "off":
+            ativo = 0
+        else:
+            ativo = 1  # Valor padrão quando não informado
         data_matricula = date.today().strftime("%Y-%m-%d")
         graduacao_id = form.get("graduacao_id") or None
+        if graduacao_id == "":
+            graduacao_id = None
         TurmaID = form.get("TurmaID") or None
+        if TurmaID == "":
+            TurmaID = None
 
-        nacionalidade = form.get("nacionalidade") or None
-        nome_pai = form.get("nome_pai") or None
-        nome_mae = form.get("nome_mae") or None
+        # _clean_str já retorna None para valores vazios
+        nacionalidade = _clean_str(form.get("nacionalidade"))
+        nome_pai = _clean_str(form.get("nome_pai"))
+        nome_mae = _clean_str(form.get("nome_mae"))
 
         cpf = normalizar_cpf(form.get("cpf"))
-        rg = form.get("rg") or None
-        orgao_emissor = form.get("orgao_emissor") or None
+        rg = _clean_str(form.get("rg"))
+        orgao_emissor = _clean_str(form.get("orgao_emissor"))
         rg_data_emissao = form.get("rg_data_emissao") or None
+        if rg_data_emissao == "":
+            rg_data_emissao = None
 
-        cep = form.get("cep") or None
-        endereco = form.get("endereco") or None  # mapeado para 'rua'
-        numero = form.get("numero") or None
-        complemento = form.get("complemento") or None
-        bairro = form.get("bairro") or None
-        cidade = form.get("cidade") or None
-        estado = form.get("estado") or None
+        cep = _clean_str(form.get("cep"))
+        endereco = _clean_str(form.get("endereco"))  # mapeado para 'rua'
+        numero = _clean_str(form.get("numero"))
+        complemento = _clean_str(form.get("complemento"))
+        bairro = _clean_str(form.get("bairro"))
+        cidade = _clean_str(form.get("cidade"))
+        estado = _clean_str(form.get("estado"))
 
-        responsavel_nome = form.get("responsavel_nome") or None
-        responsavel_parentesco = (
-            form.get("responsavel_parentesco")
-            or form.get("responsavel_grau_parentesco")
-            or None
+        responsavel_nome = _clean_str(form.get("responsavel_nome"))
+        responsavel_parentesco = _clean_str(
+            form.get("responsavel_parentesco") or form.get("responsavel_grau_parentesco")
         )
 
-        email = form.get("email") or None
-        telefone_celular = form.get("telefone_celular") or None
-        telefone_residencial = form.get("telefone_residencial") or None
-        telefone_comercial = form.get("telefone_comercial") or None
-        telefone_outro = form.get("telefone_outro") or None
+        email = _clean_str(form.get("email"))
+        telefone_celular = _clean_str(form.get("telefone_celular"))
+        telefone_residencial = _clean_str(form.get("telefone_residencial"))
+        telefone_comercial = _clean_str(form.get("telefone_comercial"))
+        telefone_outro = _clean_str(form.get("telefone_outro"))
 
         peso_str = form.get("peso") or None
         peso = None
-        if peso_str:
-            peso = float(str(peso_str).replace(",", "."))
+        if peso_str and peso_str != "":
+            try:
+                peso = float(str(peso_str).replace(",", "."))
+            except (ValueError, TypeError):
+                peso = None
 
         ultimo_exame_faixa = form.get("ultimo_exame_faixa") or None
+        if ultimo_exame_faixa == "":
+            ultimo_exame_faixa = None
 
-        zempo = form.get("zempo") or None
+        zempo = _clean_str(form.get("zempo"))
         data_cadastro_zempo = form.get("data_cadastro_zempo") or None
-        registro_fpju = form.get("registro_fpju") or None
+        if data_cadastro_zempo == "":
+            data_cadastro_zempo = None
         cadastro_zempo = form.get("cadastro_zempo") == "1"
 
-        responsavel_financeiro_nome = form.get("responsavel_financeiro_nome") or None
+        responsavel_financeiro_nome = _clean_str(form.get("responsavel_financeiro_nome"))
         responsavel_financeiro_cpf = normalizar_cpf(form.get("responsavel_financeiro_cpf"))
 
-        observacoes = form.get("observacoes") or None
+        observacoes = _clean_str(form.get("observacoes"))
 
-        modalidades_ids = request.form.getlist("aluno_modalidade_ids")
+        id_academia = form.get("id_academia") or getattr(current_user, "id_academia", None)
+        modalidades_ids_raw = request.form.getlist("aluno_modalidade_ids")
+        # Validar: só aceitar modalidades ofertadas pela academia
+        modalidades_ids = []
+        if id_academia and modalidades_ids_raw:
+            cursor.execute(
+                "SELECT modalidade_id FROM academia_modalidades WHERE academia_id = %s",
+                (id_academia,),
+            )
+            ids_validos = {r["modalidade_id"] for r in cursor.fetchall()}
+            modalidades_ids = [int(x) for x in modalidades_ids_raw if str(x).strip().isdigit() and int(x) in ids_validos]
+        else:
+            modalidades_ids = [int(x) for x in modalidades_ids_raw if str(x).strip().isdigit()]
 
         # Foto
         foto_dataurl = form.get("foto")  # base64
         foto_arquivo = request.files.get("foto_arquivo")
-
-        id_academia = form.get("id_academia") or getattr(current_user, "id_academia", None)
         id_associacao = getattr(current_user, "id_associacao", None)
         id_federacao = getattr(current_user, "id_federacao", None)
-
         if id_academia:
             cursor.execute(
                 """
@@ -1137,12 +1565,6 @@ def cadastrar_aluno():
                     (data_cadastro_zempo, aluno_id),
                 )
 
-            if "registro_fpju" in colunas_alunos:
-                cursor_insert.execute(
-                    "UPDATE alunos SET registro_fpju=%s WHERE id=%s",
-                    (registro_fpju, aluno_id),
-                )
-
             db.commit()
             flash(f'Aluno "{nome}" cadastrado com sucesso!', "success")
             redirect_url = request.form.get("next") or back_url
@@ -1272,23 +1694,48 @@ def editar_aluno(aluno_id):
         pass
 
     try:
-        cursor.execute("SELECT * FROM turmas ORDER BY Nome")
-        turmas = cursor.fetchall()
+        # Filtrar turmas apenas das academias acessíveis ao usuário
+        ids_acad = _get_academias_ids()
+        if ids_acad:
+            # Se o aluno já tem uma academia, usar ela se estiver acessível
+            aluno_academia_id = aluno.get("id_academia")
+            if aluno_academia_id and aluno_academia_id in ids_acad:
+                cursor.execute("SELECT * FROM turmas WHERE id_academia = %s ORDER BY Nome", (aluno_academia_id,))
+            else:
+                # Filtrar por todas as academias acessíveis
+                placeholders = ",".join(["%s"] * len(ids_acad))
+                cursor.execute(f"SELECT * FROM turmas WHERE id_academia IN ({placeholders}) ORDER BY Nome", tuple(ids_acad))
+            turmas = cursor.fetchall()
+        else:
+            # Sem academias acessíveis, retornar lista vazia
+            turmas = []
     except Exception:
-        pass
+        turmas = []
 
     try:
-        cursor.execute(
-            """
-            SELECT * FROM modalidade
-            WHERE (id_academia IS NULL OR id_academia = %s) AND ativo = 1
-            ORDER BY nome
-            """,
-            (aluno.get("id_academia"),),
-        )
-        modalidades = cursor.fetchall()
+        id_acad = aluno.get("id_academia")
+        if id_acad:
+            cursor.execute("SELECT id_associacao FROM academias WHERE id = %s", (id_acad,))
+            r = cursor.fetchone()
+            id_assoc = r.get("id_associacao") if r else None
+            extra, extra_params = filtro_visibilidade_sql(id_academia=id_acad, id_associacao=id_assoc)
+            cursor.execute(
+                """
+                SELECT m.id, m.nome, m.descricao, m.ativo
+                FROM modalidade m
+                INNER JOIN academia_modalidades am ON am.modalidade_id = m.id
+                WHERE am.academia_id = %s AND m.ativo = 1
+                """ + extra + """
+                ORDER BY m.nome
+                """,
+                (id_acad,) + extra_params,
+            )
+            modalidades = cursor.fetchall()
+        else:
+            cursor.execute("SELECT id, nome, descricao, ativo FROM modalidade WHERE ativo = 1 ORDER BY nome")
+            modalidades = cursor.fetchall()
     except Exception:
-        pass
+        modalidades = []
 
     try:
         cursor.execute(
@@ -1332,35 +1779,33 @@ def editar_aluno(aluno_id):
                 turmas_ids = [aluno["TurmaID"]]
         TurmaID = turmas_ids[0] if turmas_ids else form.get("TurmaID") or None
 
-        nacionalidade = form.get("nacionalidade") or None
-        nome_pai = form.get("nome_pai") or None
-        nome_mae = form.get("nome_mae") or None
+        nacionalidade = _clean_str(form.get("nacionalidade"))
+        nome_pai = _clean_str(form.get("nome_pai"))
+        nome_mae = _clean_str(form.get("nome_mae"))
 
         cpf = normalizar_cpf(form.get("cpf"))
-        rg = form.get("rg") or None
-        orgao_emissor = form.get("orgao_emissor") or None
+        rg = _clean_str(form.get("rg"))
+        orgao_emissor = _clean_str(form.get("orgao_emissor"))
         rg_data_emissao = form.get("rg_data_emissao") or None
 
-        cep = form.get("cep") or None
-        endereco = form.get("endereco") or None  # rua
-        numero = form.get("numero") or None
-        complemento = form.get("complemento") or None
-        bairro = form.get("bairro") or None
-        cidade = form.get("cidade") or None
-        estado = form.get("estado") or None
+        cep = _clean_str(form.get("cep"))
+        endereco = _clean_str(form.get("endereco"))  # rua
+        numero = _clean_str(form.get("numero"))
+        complemento = _clean_str(form.get("complemento"))
+        bairro = _clean_str(form.get("bairro"))
+        cidade = _clean_str(form.get("cidade"))
+        estado = _clean_str(form.get("estado"))
 
-        responsavel_nome = form.get("responsavel_nome") or None
-        responsavel_parentesco = (
-            form.get("responsavel_parentesco")
-            or form.get("responsavel_grau_parentesco")
-            or None
+        responsavel_nome = _clean_str(form.get("responsavel_nome"))
+        responsavel_parentesco = _clean_str(
+            form.get("responsavel_parentesco") or form.get("responsavel_grau_parentesco")
         )
 
-        email = form.get("email") or None
-        telefone_celular = form.get("telefone_celular") or None
-        telefone_residencial = form.get("telefone_residencial") or None
-        telefone_comercial = form.get("telefone_comercial") or None
-        telefone_outro = form.get("telefone_outro") or None
+        email = _clean_str(form.get("email"))
+        telefone_celular = _clean_str(form.get("telefone_celular"))
+        telefone_residencial = _clean_str(form.get("telefone_residencial"))
+        telefone_comercial = _clean_str(form.get("telefone_comercial"))
+        telefone_outro = _clean_str(form.get("telefone_outro"))
 
         peso_str = form.get("peso") or None
         peso = None
@@ -1369,17 +1814,41 @@ def editar_aluno(aluno_id):
 
         ultimo_exame_faixa = form.get("ultimo_exame_faixa") or None
 
-        zempo = form.get("zempo") or None
+        zempo = _clean_str(form.get("zempo"))
         data_cadastro_zempo = form.get("data_cadastro_zempo") or None
-        registro_fpju = form.get("registro_fpju") or None
+        cadastro_zempo = form.get("cadastro_zempo") == "1"
+        if not cadastro_zempo:
+            zempo = None
+            data_cadastro_zempo = None
 
-        responsavel_financeiro_nome = form.get("responsavel_financeiro_nome") or None
+        responsavel_financeiro_nome = _clean_str(form.get("responsavel_financeiro_nome"))
         responsavel_financeiro_cpf = normalizar_cpf(form.get("responsavel_financeiro_cpf"))
 
-        observacoes = form.get("observacoes") or None
+        observacoes = _clean_str(form.get("observacoes"))
+        
+        # Campo ativo: se não informado, usa 1 (padrão da coluna não permite NULL)
+        ativo_val = form.get("ativo")
+        if ativo_val == "" or ativo_val is None:
+            ativo = 1  # Valor padrão quando não informado
+        elif ativo_val == "1" or ativo_val == "on":
+            ativo = 1
+        elif ativo_val == "0" or ativo_val == "off":
+            ativo = 0
+        else:
+            ativo = 1  # Valor padrão quando não informado
 
         if pode_alterar_turma_mod:
-            modalidades_ids = request.form.getlist("aluno_modalidade_ids")
+            modalidades_ids_raw = request.form.getlist("aluno_modalidade_ids")
+            id_acad = aluno.get("id_academia")
+            if id_acad:
+                cursor.execute(
+                    "SELECT modalidade_id FROM academia_modalidades WHERE academia_id = %s",
+                    (id_acad,),
+                )
+                ids_validos = {r["modalidade_id"] for r in cursor.fetchall()}
+                modalidades_ids = [str(x) for x in modalidades_ids_raw if str(x).strip().isdigit() and int(x) in ids_validos]
+            else:
+                modalidades_ids = [x for x in modalidades_ids_raw if str(x).strip()]
         else:
             modalidades_ids = [str(x) for x in (aluno.get("modalidades_ids") or [])]
 
@@ -1436,7 +1905,8 @@ def editar_aluno(aluno_id):
                     tel_outro=%s,
                     responsavel_financeiro_nome=%s,
                     responsavel_financeiro_cpf=%s,
-                    foto=%s
+                    foto=%s,
+                    ativo=%s
                 WHERE id=%s
                 """,
                 (
@@ -1474,6 +1944,7 @@ def editar_aluno(aluno_id):
                     responsavel_financeiro_nome,
                     responsavel_financeiro_cpf,
                     foto_filename,
+                    ativo,
                     aluno_id,
                 ),
             )
@@ -1482,12 +1953,6 @@ def editar_aluno(aluno_id):
                 cursor_update.execute(
                     "UPDATE alunos SET data_cadastro_zempo=%s WHERE id=%s",
                     (data_cadastro_zempo, aluno_id),
-                )
-
-            if "registro_fpju" in colunas_alunos:
-                cursor_update.execute(
-                    "UPDATE alunos SET registro_fpju=%s WHERE id=%s",
-                    (registro_fpju, aluno_id),
                 )
 
             # Atualizar modalidades N:N

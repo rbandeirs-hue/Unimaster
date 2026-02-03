@@ -1,9 +1,18 @@
 {% extends "base.html" %}
 {% block title %}Meu perfil — Editar cadastro e senha{% endblock %}
-
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/photo-cropper.css') }}">
+{% endblock %}
 {% block content %}
+<style>
+  #miniaturaMeuPerfil { width: 120px; height: 120px; object-fit: cover; border-radius: 50%; border: 3px solid #0d6efd; }
+  .camera-modal-meu-perfil { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; justify-content: center; align-items: center; background: rgba(0,0,0,.9); z-index: 9999; }
+  .camera-content-meu-perfil { width: 90%; max-width: 480px; text-align: center; }
+  .camera-content-meu-perfil video, .camera-content-meu-perfil canvas { width: 100%; border-radius: 10px; border: 2px solid #ddd; margin-bottom: 10px; }
+</style>
 <div class="container mt-4">
-  <div class="card shadow-sm border-0 mx-auto" style="max-width: 500px;">
+  <div class="card shadow-sm border-0 mx-auto" style="max-width: 550px;">
 
     <div class="card-header bg-primary text-white py-3">
       <h5 class="mb-0 fw-bold">
@@ -12,8 +21,43 @@
     </div>
 
     <div class="card-body p-4">
-      <form method="POST">
+      <form method="POST" enctype="multipart/form-data">
         <input type="hidden" name="next" value="{{ back_url }}">
+
+        <!-- Foto -->
+        <div class="mb-4">
+          <label class="form-label fw-semibold"><i class="bi bi-camera-fill me-1"></i> Foto</label>
+          <div class="d-flex flex-wrap align-items-start gap-4">
+            <div class="text-center">
+              <img id="miniaturaMeuPerfil" src="{{ url_for('static', filename='uploads/' + usuario.foto) if usuario.get('foto') else '' }}"
+                   class="{{ 'd-block' if usuario.get('foto') else 'd-none' }} mx-auto"
+                   alt="Foto" onerror="this.style.display='none'">
+              <div id="placeholderFotoMeuPerfil" class="{{ 'd-none' if usuario.get('foto') else 'd-flex' }} align-items-center justify-content-center bg-light rounded-circle mx-auto" style="width:120px;height:120px;">
+                <i class="bi bi-person-fill text-muted" style="font-size:3rem;"></i>
+              </div>
+              <input type="hidden" name="foto" id="fotoInputMeuPerfil">
+            </div>
+            <div class="flex-grow-1">
+              <button type="button" class="btn btn-primary btn-sm mb-2" id="btnAbrirCameraMeuPerfil">
+                <i class="bi bi-camera-fill me-1"></i> Tirar da câmera
+              </button>
+              <div class="mb-2">
+                <label class="form-label small mb-0">ou escolher arquivo</label>
+                <input type="file" name="foto_arquivo" class="form-control form-control-sm" accept="image/*" id="fotoArquivoMeuPerfil">
+              </div>
+              {% if aluno_vinculado and aluno_vinculado.foto %}
+              <div class="mt-2 p-2 border rounded bg-light">
+                <small class="text-muted d-block mb-1">
+                  <i class="bi bi-info-circle me-1"></i> Você possui um aluno vinculado com foto cadastrada
+                </small>
+                <button type="button" class="btn btn-success btn-sm" id="btnSincronizarFoto">
+                  <i class="bi bi-arrow-repeat me-1"></i> Sincronizar foto do aluno
+                </button>
+              </div>
+              {% endif %}
+            </div>
+          </div>
+        </div>
 
         <div class="mb-3">
           <label class="form-label fw-semibold">Nome</label>
@@ -31,16 +75,145 @@
         </div>
 
         <div class="d-flex justify-content-between gap-2">
-          <a href="{{ back_url }}" class="btn btn-outline-secondary">
-            <i class="bi bi-arrow-left me-1"></i> Voltar
-          </a>
+          {% set back_url = back_url or get_back_url_default() %}
+          {% include 'components/botao_voltar.html' %}
           <button type="submit" class="btn btn-primary">
             <i class="bi bi-check-lg me-1"></i> Salvar
           </button>
         </div>
       </form>
+
+      <!-- Formulário separado para sincronizar foto do aluno -->
+      {% if aluno_vinculado and aluno_vinculado.foto %}
+      <form method="POST" action="{{ url_for('usuarios.sincronizar_foto_aluno') }}" id="formSincronizarFoto" style="display:none;">
+        <input type="hidden" name="next" value="{{ back_url }}">
+      </form>
+      {% endif %}
     </div>
 
   </div>
 </div>
+
+<!-- Modal Câmera -->
+<div class="camera-modal-meu-perfil" id="cameraModalMeuPerfil">
+  <div class="camera-content-meu-perfil bg-dark p-3 rounded">
+    <video id="cameraVideoMeuPerfil" autoplay playsinline></video>
+    <canvas id="cameraCanvasMeuPerfil" style="display:none;"></canvas>
+    <div>
+      <button type="button" class="btn btn-success btn-sm" id="btnCapturarMeuPerfil">Capturar</button>
+      <button type="button" class="btn btn-primary btn-sm" id="btnConfirmarFotoMeuPerfil" style="display:none;">Confirmar</button>
+      <button type="button" class="btn btn-warning btn-sm" id="btnTirarNovamenteMeuPerfil" style="display:none;">Refazer</button>
+      <button type="button" class="btn btn-danger btn-sm" id="btnFecharCameraMeuPerfil">Fechar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  var miniatura = document.getElementById('miniaturaMeuPerfil');
+  var placeholder = document.getElementById('placeholderFotoMeuPerfil');
+  var fotoInput = document.getElementById('fotoInputMeuPerfil');
+  var fotoArquivo = document.getElementById('fotoArquivoMeuPerfil');
+
+  function mostrarPreview(src) {
+    if (miniatura) {
+      miniatura.src = src;
+      miniatura.classList.remove('d-none');
+    }
+    if (placeholder) placeholder.classList.add('d-none');
+  }
+
+  if (fotoArquivo) {
+    fotoArquivo.addEventListener('change', function() {
+      var f = this.files[0];
+      if (f && f.type.indexOf('image') === 0) {
+        var r = new FileReader();
+        r.onload = function() { mostrarPreview(r.result); };
+        r.readAsDataURL(f);
+        if (fotoInput) fotoInput.value = '';
+      }
+    });
+  }
+
+  var streamMeuPerfil;
+  var modalCam = document.getElementById('cameraModalMeuPerfil');
+  var videoCam = document.getElementById('cameraVideoMeuPerfil');
+  var canvasCam = document.getElementById('cameraCanvasMeuPerfil');
+
+  document.getElementById('btnAbrirCameraMeuPerfil').addEventListener('click', async function() {
+    try {
+      streamMeuPerfil = await navigator.mediaDevices.getUserMedia({ video: true });
+      videoCam.srcObject = streamMeuPerfil;
+      modalCam.style.display = 'flex';
+      canvasCam.style.display = 'none';
+      videoCam.style.display = 'block';
+      document.getElementById('btnCapturarMeuPerfil').style.display = 'inline-block';
+      document.getElementById('btnConfirmarFotoMeuPerfil').style.display = 'none';
+      document.getElementById('btnTirarNovamenteMeuPerfil').style.display = 'none';
+    } catch (e) {
+      alert('Não foi possível acessar a câmera.');
+    }
+  });
+
+  document.getElementById('btnFecharCameraMeuPerfil').addEventListener('click', function() {
+    modalCam.style.display = 'none';
+    if (streamMeuPerfil) streamMeuPerfil.getTracks().forEach(function(t) { t.stop(); });
+  });
+
+  document.getElementById('btnCapturarMeuPerfil').addEventListener('click', function() {
+    canvasCam.width = videoCam.videoWidth;
+    canvasCam.height = videoCam.videoHeight;
+    canvasCam.getContext('2d').drawImage(videoCam, 0, 0);
+    canvasCam.style.display = 'block';
+    videoCam.style.display = 'none';
+    document.getElementById('btnCapturarMeuPerfil').style.display = 'none';
+    document.getElementById('btnConfirmarFotoMeuPerfil').style.display = 'inline-block';
+    document.getElementById('btnTirarNovamenteMeuPerfil').style.display = 'inline-block';
+  });
+
+  document.getElementById('btnTirarNovamenteMeuPerfil').addEventListener('click', function() {
+    canvasCam.style.display = 'none';
+    videoCam.style.display = 'block';
+    document.getElementById('btnCapturarMeuPerfil').style.display = 'inline-block';
+    document.getElementById('btnConfirmarFotoMeuPerfil').style.display = 'none';
+    document.getElementById('btnTirarNovamenteMeuPerfil').style.display = 'none';
+  });
+
+  document.getElementById('btnConfirmarFotoMeuPerfil').addEventListener('click', function() {
+    var dataURL = canvasCam.toDataURL('image/png');
+    if (fotoInput) fotoInput.value = dataURL;
+    mostrarPreview(dataURL);
+    if (fotoArquivo) fotoArquivo.value = '';
+    modalCam.style.display = 'none';
+    if (streamMeuPerfil) streamMeuPerfil.getTracks().forEach(function(t) { t.stop(); });
+  });
+
+})();
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
+<script src="{{ url_for('static', filename='js/photo-cropper.js') }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  var fotoArquivo = document.getElementById('fotoArquivoMeuPerfil');
+  var fotoInput = document.getElementById('fotoInputMeuPerfil');
+  var miniatura = document.getElementById('miniaturaMeuPerfil');
+  var placeholder = document.getElementById('placeholderFotoMeuPerfil');
+  if (typeof initPhotoCrop === 'function' && fotoArquivo) {
+    initPhotoCrop(fotoArquivo, { fotoInput: fotoInput, miniatura: miniatura, placeholder: placeholder });
+  }
+
+  // Botão de sincronizar foto do aluno
+  var btnSincronizar = document.getElementById('btnSincronizarFoto');
+  if (btnSincronizar) {
+    btnSincronizar.addEventListener('click', function() {
+      if (confirm('Deseja sincronizar a foto do seu cadastro de aluno para o seu perfil de usuário?')) {
+        var formSincronizar = document.getElementById('formSincronizarFoto');
+        if (formSincronizar) {
+          formSincronizar.submit();
+        }
+      }
+    });
+  }
+});
+</script>
 {% endblock %}

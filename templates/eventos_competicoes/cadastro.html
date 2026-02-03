@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% block title %}Cadastrar Evento{% endblock %}
+{% block content %}
+<div class="container mt-5">
+    <div class="mb-4">
+        {% set back_url = back_url or get_back_url_default() %}
+{% include 'components/botao_voltar.html' %}
+        <h2 class="h4 fw-bold text-primary">Cadastrar Evento / Competição</h2>
+        <p class="text-muted mb-0">Informe os dados. O formulário vinculado será usado para inscrições. As academias poderão aderir ao evento.</p>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-body p-4">
+            <form method="POST" enctype="multipart/form-data">
+                <div class="mb-3">
+                    <label for="nome" class="form-label fw-semibold">Nome <span class="text-danger">*</span></label>
+                    <input type="text" id="nome" name="nome" class="form-control" required maxlength="200" placeholder="Ex: Campeonato Regional 2025">
+                </div>
+                <div class="mb-3">
+                    <label for="descricao" class="form-label fw-semibold">Descrição</label>
+                    <textarea id="descricao" name="descricao" class="form-control" rows="2" placeholder="Descrição do evento"></textarea>
+                </div>
+                <div class="mb-3">
+                    <label for="tipo" class="form-label fw-semibold">Tipo</label>
+                    <select id="tipo" name="tipo" class="form-select">
+                        <option value="evento">Evento</option>
+                        <option value="competicao">Competição</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label for="id_formulario" class="form-label fw-semibold">Formulário de inscrição</label>
+                    <select id="id_formulario" name="id_formulario" class="form-select">
+                        <option value="">— Sem formulário —</option>
+                        {% for f in formularios %}
+                        <option value="{{ f.id }}">{{ f.nome }}</option>
+                        {% endfor %}
+                    </select>
+                    <small class="text-muted">O formulário define os campos que o aluno preencherá na inscrição.</small>
+                </div>
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="data_inicio" class="form-label fw-semibold">Data/hora início</label>
+                        <input type="datetime-local" id="data_inicio" name="data_inicio" class="form-control">
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="data_fim" class="form-label fw-semibold">Data/hora fim <span class="text-danger">*</span></label>
+                        <input type="datetime-local" id="data_fim" name="data_fim" class="form-control" required>
+                        <small class="text-muted">Após esta data não será possível inscrever nem editar a lista.</small>
+                    </div>
+                </div>
+                
+                <!-- Seção de Anexos -->
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">
+                        <i class="bi bi-paperclip me-1"></i>Anexos
+                    </label>
+                    <div id="anexosContainer">
+                        <div class="anexo-item mb-2">
+                            <div class="input-group">
+                                <input type="file" name="anexos" class="form-control anexo-file" accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.zip,.rar,.txt">
+                                <input type="text" name="descricao_anexo_" class="form-control" placeholder="Descrição (opcional)" style="max-width: 200px;">
+                                <button type="button" class="btn btn-outline-danger remover-anexo" title="Remover">
+                                    <i class="bi bi-x"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline-primary mt-2" id="adicionarAnexo">
+                        <i class="bi bi-plus-circle me-1"></i>Adicionar mais anexos
+                    </button>
+                    <small class="text-muted d-block mt-1">Formatos permitidos: PDF, DOC, DOCX, XLS, XLSX, JPG, PNG, GIF, ZIP, RAR, TXT</small>
+                </div>
+                
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i> Criar Evento</button>
+                    <a href="{{ back_url }}" class="btn btn-outline-secondary">Cancelar</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const container = document.getElementById('anexosContainer');
+    const btnAdicionar = document.getElementById('adicionarAnexo');
+    let contadorAnexos = 1;
+    
+    function criarItemAnexo() {
+        const div = document.createElement('div');
+        div.className = 'anexo-item mb-2';
+        div.innerHTML = `
+            <div class="input-group">
+                <input type="file" name="anexos" class="form-control anexo-file" accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.zip,.rar,.txt">
+                <input type="text" name="descricao_anexo_" class="form-control descricao-anexo" placeholder="Descrição (opcional)" style="max-width: 200px;">
+                <button type="button" class="btn btn-outline-danger remover-anexo" title="Remover">
+                    <i class="bi bi-x"></i>
+                </button>
+            </div>
+        `;
+        
+        // Atualizar nome do campo descricao quando arquivo for selecionado
+        const fileInput = div.querySelector('.anexo-file');
+        const descInput = div.querySelector('.descricao-anexo');
+        fileInput.addEventListener('change', function() {
+            if (this.files && this.files[0]) {
+                descInput.name = 'descricao_anexo_' + this.files[0].name;
+            }
+        });
+        
+        // Remover item
+        div.querySelector('.remover-anexo').addEventListener('click', function() {
+            div.remove();
+        });
+        
+        return div;
+    }
+    
+    btnAdicionar.addEventListener('click', function() {
+        container.appendChild(criarItemAnexo());
+    });
+    
+    // Remover item inicial se necessário
+    document.querySelectorAll('.remover-anexo').forEach(btn => {
+        btn.addEventListener('click', function() {
+            this.closest('.anexo-item').remove();
+        });
+    });
+    
+    // Atualizar nome do campo descricao quando arquivo for selecionado no primeiro item
+    document.querySelector('.anexo-file').addEventListener('change', function() {
+        if (this.files && this.files[0]) {
+            const descInput = this.closest('.anexo-item').querySelector('.descricao-anexo');
+            descInput.name = 'descricao_anexo_' + this.files[0].name;
+        }
+    });
+});
+</script>
+{% endblock %}

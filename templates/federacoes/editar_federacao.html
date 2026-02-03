@@ -50,10 +50,24 @@
                     <input type="email" id="email" name="email" class="form-control" value="{{ federacao.email or '' }}">
                 </div>
 
+                <div class="mb-4">
+                    <label class="form-label fw-semibold">Modalidades oferecidas</label>
+                    <p class="small text-muted">Selecione as modalidades que a federação oferta.</p>
+                    <div class="d-flex flex-wrap gap-2">
+                        {% for m in modalidades %}
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="modalidade_ids" value="{{ m.id }}" id="mod_fed_{{ m.id }}"
+                                   {% if m.id in federacao_modalidades_ids %}checked{% endif %}>
+                            <label class="form-check-label" for="mod_fed_{{ m.id }}">{{ m.nome }}</label>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% if not modalidades %}<small class="text-muted">Nenhuma modalidade cadastrada. Cadastre em Configurações.</small>{% endif %}
+                </div>
+
                 <div class="d-flex justify-content-between pt-2">
-                    <a href="{{ back_url }}" class="btn btn-outline-secondary btn-lg">
-                        <i class="bi bi-arrow-left-circle-fill me-2"></i> Voltar
-                    </a>
+                    {% set back_url = back_url or get_back_url_default() %}
+{% include 'components/botao_voltar.html' %}
                     <button type="submit" class="btn btn-success btn-lg">
                         <i class="bi bi-save-fill me-2"></i> Salvar Alterações
                     </button>

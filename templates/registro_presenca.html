@@ -13,7 +13,8 @@
   <div class="col-md-8 col-sm-12">
 
     <!-- Botão Voltar -->
-    <a href="{{ back_url or url_for('presencas.painel_presenca') }}" class="btn btn-secondary mb-3"><i class="bi bi-arrow-left me-1"></i> Voltar</a>
+    {% set back_url = back_url or get_back_url_default() %}
+{% include 'components/botao_voltar.html' %}
 
     <div class="card shadow">
       <div class="card-header bg-warning text-dark">
@@ -54,9 +55,11 @@
             <div class="row g-3">
               {% for aluno in alunos %}
               <div class="col-6 col-md-4 col-lg-3">
-                <label class="registro-aluno-card form-check position-relative d-flex flex-column align-items-center text-center p-3 border rounded-3 mb-0 h-100" for="aluno{{ aluno.id }}">
+                <label class="registro-aluno-card form-check position-relative d-flex flex-column align-items-center text-center p-3 border rounded-3 mb-0 h-100 {% if aluno.bloqueado %}opacity-75{% endif %}" 
+                       for="aluno{{ aluno.id }}" {% if aluno.bloqueado %}style="cursor: not-allowed;"{% endif %}>
                   <input class="form-check-input position-absolute top-0 end-0 m-2" type="checkbox" name="aluno_id"
                          value="{{ aluno.id }}" id="aluno{{ aluno.id }}"
+                         {% if aluno.bloqueado %}disabled{% endif %}
                          {% if aluno.id in presencas_registradas %}checked{% endif %}>
                   {% if aluno.foto %}
                   <img src="{{ url_for('static', filename='uploads/' + aluno.foto) }}" alt="" class="registro-aluno-foto rounded-circle mb-2">
@@ -66,6 +69,12 @@
                   </div>
                   {% endif %}
                   <span class="registro-aluno-nome small fw-semibold">{{ aluno.nome }}</span>
+                  {% if aluno.visitante %}<span class="badge bg-info mt-1">Visitante</span>{% elif aluno.aluno_visita %}<span class="badge bg-warning mt-1">Aluno em Visita</span>{% endif %}
+                  {% if aluno.aluno_visita and aluno.academia_origem_nome %}<div class="small text-muted mt-1"><i class="bi bi-building me-1"></i>{{ aluno.academia_origem_nome }}</div>{% endif %}
+                  {% if aluno.visitando_outra_academia %}
+                  <span class="badge bg-secondary mt-1">Visitando</span>
+                  {% if aluno.academia_destino_nome %}<div class="small text-muted mt-1"><i class="bi bi-building me-1"></i>{{ aluno.academia_destino_nome }}</div>{% endif %}
+                  {% endif %}
                 </label>
               </div>
               {% endfor %}

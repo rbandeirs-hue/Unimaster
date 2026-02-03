@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Conflitos — Aula x Feriado{% endblock %}
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
+        <div>
+            {% set back_url = back_url or get_back_url_default() %}
+{% include 'components/botao_voltar.html' %}
+            <h2 class="h4 fw-bold text-primary mb-1">Conflitos — Aula x Feriado</h2>
+            <p class="text-muted small mb-0">{{ academia.nome if academia else 'Academia' }} — Resolva conflitos entre aulas e feriados</p>
+        </div>
+    </div>
+
+    {% if conflitos %}
+    <div class="alert alert-warning mb-3">
+        <i class="bi bi-exclamation-triangle"></i> As aulas abaixo caem em datas de feriados. 
+        Escolha se a aula será <strong>cancelada</strong> ou <strong>confirmada</strong> (haverá aula mesmo no feriado).
+    </div>
+
+    <div class="row g-3">
+        {% for c in conflitos %}
+        <div class="col-12 col-lg-6">
+            <div class="card border-warning shadow-sm h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <h6 class="card-title mb-0">{{ c.aula_titulo }}</h6>
+                        <span class="badge bg-warning text-dark">{{ c.data_conflito|data_br }}</span>
+                    </div>
+                    <p class="small text-muted mb-2">
+                        <i class="bi bi-calendar-x text-danger"></i> Conflita com: <strong>{{ c.feriado_titulo }}</strong>
+                    </p>
+                    {% if c.hora_inicio %}
+                    <p class="small mb-3">
+                        Horário da aula: {{ c.hora_inicio|hora_fmt }}{% if c.hora_fim %} – {{ c.hora_fim|hora_fmt }}{% endif %}
+                    </p>
+                    {% endif %}
+                    <div class="d-flex gap-2">
+                        <form method="POST" action="{{ url_for('calendario.resolver_conflito', conflito_id=c.id) }}" class="d-inline">
+                            <input type="hidden" name="acao" value="cancelar">
+                            <button type="submit" class="btn btn-outline-danger btn-sm">
+                                <i class="bi bi-x-circle"></i> Cancelar aula
+                            </button>
+                        </form>
+                        <form method="POST" action="{{ url_for('calendario.resolver_conflito', conflito_id=c.id) }}" class="d-inline">
+                            <input type="hidden" name="acao" value="confirmar">
+                            <button type="submit" class="btn btn-success btn-sm">
+                                <i class="bi bi-check-circle"></i> Confirmar aula
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="card shadow-sm">
+        <div class="card-body text-center py-5">
+            <i class="bi bi-check-circle display-4 text-success mb-3"></i>
+            <h5 class="text-muted">Nenhum conflito pendente</h5>
+            <p class="small text-muted mb-0">Não há aulas em conflito com feriados aguardando resolução.</p>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

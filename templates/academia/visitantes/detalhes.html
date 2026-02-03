@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% block title %}Detalhes do Visitante{% endblock %}
+{% block content %}
+<div class="container mt-4">
+    <div class="mb-4">
+        {% set back_url = url_for('academia.lista_visitantes', academia_id=academia_id) %}
+        {% include 'components/botao_voltar.html' %}
+    </div>
+
+    {% if visitante %}
+    <div class="row">
+        <div class="col-md-4">
+            <div class="card shadow-sm border-0">
+                <div class="card-body text-center">
+                    {% if visitante.foto %}
+                    <img src="{{ url_for('static', filename='uploads/' + visitante.foto) }}" 
+                         alt="{{ visitante.nome }}" 
+                         class="rounded-circle mb-3" 
+                         style="width: 120px; height: 120px; object-fit: cover;">
+                    {% else %}
+                    <div class="rounded-circle bg-secondary d-flex align-items-center justify-content-center mx-auto mb-3" 
+                         style="width: 120px; height: 120px;">
+                        <i class="bi bi-person text-white" style="font-size: 4rem;"></i>
+                    </div>
+                    {% endif %}
+                    <h4 class="fw-bold">{{ visitante.nome }}</h4>
+                    {% if visitante.usuario_email %}
+                    <p class="text-muted mb-2">{{ visitante.usuario_email }}</p>
+                    {% endif %}
+                    {% if visitante.ativo %}
+                    <span class="badge bg-success">Ativo</span>
+                    {% else %}
+                    <span class="badge bg-secondary">Inativo</span>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="card shadow-sm border-0 mt-3">
+                <div class="card-body">
+                    <h5 class="card-title fw-bold">Informações</h5>
+                    <p class="mb-2"><strong>Idade:</strong> 
+                        {% if visitante.idade %}
+                        {{ visitante.idade }} anos
+                        {% else %}
+                        <span class="text-muted">Não informada</span>
+                        {% endif %}
+                    </p>
+                    {% if visitante.telefone %}
+                    <p class="mb-2"><strong>Telefone:</strong> {{ visitante.telefone }}</p>
+                    {% endif %}
+                    {% if visitante.data_nascimento %}
+                    <p class="mb-2"><strong>Data de Nascimento:</strong> {{ visitante.data_nascimento|data_br }}</p>
+                    {% endif %}
+                    <p class="mb-2"><strong>Academia:</strong> {{ visitante.academia_nome }}</p>
+                    <p class="mb-0"><strong>Cadastrado em:</strong> {{ visitante.criado_em|data_br }}</p>
+                </div>
+            </div>
+
+            <div class="card shadow-sm border-0 mt-3">
+                <div class="card-body">
+                    <h5 class="card-title fw-bold">Aulas Experimentais</h5>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span>Realizadas:</span>
+                        <strong class="text-primary">{{ visitante.aulas_experimentais_realizadas or 0 }}</strong>
+                    </div>
+                    {% if visitante.aulas_experimentais_permitidas %}
+                    <div class="d-flex justify-content-between">
+                        <span>Limite:</span>
+                        <strong class="text-info">{{ visitante.aulas_experimentais_permitidas }}</strong>
+                    </div>
+                    {% else %}
+                    <p class="text-muted small mb-0">Sem limite definido</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-8">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0">
+                        <i class="bi bi-clock-history me-2"></i>Histórico de Aulas Experimentais
+                    </h5>
+                </div>
+                <div class="card-body">
+                    {% if historico_aulas %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Data</th>
+                                    <th>Turma</th>
+                                    <th>Horário</th>
+                                    <th>Status</th>
+                                    <th>Registrado por</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for aula in historico_aulas %}
+                                <tr>
+                                    <td>{{ aula.data_aula|data_br }}</td>
+                                    <td>{{ aula.turma_nome }}</td>
+                                    <td>{{ aula.DiasHorario or '-' }}</td>
+                                    <td>
+                                        {% if aula.presente %}
+                                        <span class="badge bg-success">Presente</span>
+                                        {% else %}
+                                        <span class="badge bg-danger">Falta</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if aula.registrado_por_nome %}
+                                        {{ aula.registrado_por_nome }}
+                                        {% else %}
+                                        <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-4">
+                        <i class="bi bi-calendar-x display-4 text-muted mb-3"></i>
+                        <p class="text-muted">Nenhuma aula experimental registrada.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="card shadow-sm border-0">
+        <div class="card-body text-center py-5">
+            <i class="bi bi-exclamation-triangle display-1 text-warning mb-3"></i>
+            <h5 class="text-muted">Visitante não encontrado</h5>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

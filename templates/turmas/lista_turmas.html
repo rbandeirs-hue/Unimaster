@@ -114,9 +114,8 @@
 
 <div class="container my-4">
     <!-- Botão de Voltar para o Gerenciamento da Academia -->
-    <a href="{{ url_for('academia.painel_academia', academia_id=academia_id) if academia_id else url_for('academia.painel_academia') }}" class="btn btn-outline-secondary mb-4 shadow-sm">
-        <i class="bi bi-arrow-left-circle me-2"></i> Voltar
-    </a>
+    {% set back_url = back_url or get_back_url_default() %}
+{% include 'components/botao_voltar.html' %}
     
     <!-- Título e Introdução -->
     <div class="d-flex justify-content-between align-items-center mb-4">
@@ -203,7 +202,7 @@
                     </div>
                     <div class="info-item">
                         <i class="bi bi-clock-fill"></i>
-                        <span>{{ turma.DiasHorario or '—' }}</span>
+                        <span>{{ turma.horario_display or turma.DiasHorario or '—' }}</span>
                     </div>
                     <div class="info-item">
                         <i class="bi bi-person-fill"></i>
@@ -266,14 +265,34 @@
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
+        <!-- Botão de alternância entre modo normal e exceção -->
+        <div class="d-flex gap-2 mb-3">
+          <button type="button" class="btn btn-sm btn-outline-primary active" id="btnModoNormal" onclick="alternarModoMatricula('normal')">
+            <i class="bi bi-list-check"></i> Normal
+          </button>
+          <button type="button" class="btn btn-sm btn-outline-warning" id="btnModoExcecao" onclick="alternarModoMatricula('excecao')">
+            <i class="bi bi-exclamation-triangle"></i> Exceção
+          </button>
+        </div>
+        
+        <!-- Campo de busca por nome (modo exceção) -->
+        <div id="buscaExcecao" style="display:none;" class="mb-3">
+          <label class="form-label small fw-semibold">Buscar aluno por nome:</label>
+          <div class="input-group">
+            <span class="input-group-text"><i class="bi bi-search"></i></span>
+            <input type="text" class="form-control" id="inputBuscaAluno" placeholder="Digite o nome do aluno..." autocomplete="off">
+          </div>
+          <small class="text-muted">Busca dinâmica - alunos independente da idade</small>
+        </div>
+        
         <div id="modalMatricularLoading" class="text-center py-4">
           <div class="spinner-border text-primary" role="status"></div>
           <p class="mt-2 text-muted">Carregando alunos...</p>
         </div>
         <div id="modalMatricularLista" class="row g-2" style="display:none;"></div>
         <div id="modalMatricularVazio" class="text-center py-4 text-muted" style="display:none;">
-          <i class="bi bi-check-circle fs-1"></i>
-          <p class="mb-0">Todos os alunos da academia já estão nesta turma.</p>
+          <i class="bi bi-person-x fs-1"></i>
+          <p class="mb-0">Nenhum aluno disponível (todos já matriculados ou fora da faixa etária).</p>
         </div>
       </div>
     </div>
@@ -389,8 +408,11 @@
         var urlAlunosVinculados = "{{ url_for('turmas.alunos_vinculados_turma', turma_id=999) }}";
         var urlMatricularBase = "{{ url_for('turmas.matricular_aluno', turma_id=999, aluno_id=888) }}";
         var urlRemoverBase = "{{ url_for('turmas.remover_aluno_turma', turma_id=999, aluno_id=888) }}";
+        var urlBuscarAlunoExcecao = "{{ url_for('turmas.buscar_aluno_excecao', turma_id=999) }}";
         var matricularModal = document.getElementById('modalMatricular');
         var vinculadosModal = document.getElementById('modalVinculados');
+        var modoMatriculaAtual = 'normal';
+        var turmaIdAtual = null;
 
         function renderAlunoCard(a, clickHandler, readonly) {
             var div = document.createElement('div');
@@ -430,13 +452,20 @@
                     if (data.ok) {
                         div.remove();
                         if (typeof onRemovido === 'function') onRemovido();
+                        var container = document.querySelector('.toast-container') || document.body;
+                        var t = document.createElement('div');
+                        t.className = 'toast align-items-center text-bg-success border-0 mb-2';
+                        t.setAttribute('role', 'alert');
+                        t.setAttribute('aria-live', 'assertive');
+                        t.setAttribute('aria-atomic', 'true');
+                        t.style.maxWidth = '280px';
+                        t.innerHTML = '<div class="d-flex"><div class="toast-body">' + (data.msg || 'Aluno removido.') + '</div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Fechar"></button></div>';
+                        container.appendChild(t);
                         if (typeof bootstrap !== 'undefined' && bootstrap.Toast) {
-                            var t = document.createElement('div');
-                            t.className = 'toast align-items-center text-bg-success border-0';
-                            t.innerHTML = '<div class="d-flex"><div class="toast-body">' + (data.msg || 'Aluno removido.') + '</div></div>';
-                            document.body.appendChild(t);
-                            new bootstrap.Toast(t, { delay: 2000 }).show();
-                            setTimeout(function () { t.remove(); }, 2500);
+                            new bootstrap.Toast(t, { delay: 3000 }).show();
+                            t.addEventListener('hidden.bs.toast', function () { t.remove(); });
+                        } else {
+                            setTimeout(function () { t.remove(); }, 3200);
                         }
                     } else {
                         btn.disabled = false;
@@ -448,17 +477,98 @@
             return div;
         }
 
-        matricularModal.addEventListener('shown.bs.modal', function (e) {
-            var btn = e.relatedTarget;
-            if (!btn) return;
-            var turmaId = btn.getAttribute('data-turma-id');
-            var turmaNome = btn.getAttribute('data-turma-nome');
-            document.getElementById('modalMatricularTurmaNome').textContent = turmaNome;
-            document.getElementById('modalMatricularLoading').style.display = 'block';
-            document.getElementById('modalMatricularLista').style.display = 'none';
-            document.getElementById('modalMatricularVazio').style.display = 'none';
-            document.getElementById('modalMatricularVazio').innerHTML = '<i class="bi bi-check-circle fs-1"></i><p class="mb-0">Todos os alunos da academia já estão nesta turma.</p>';
-
+        // Função para alternar entre modo normal e exceção
+        window.alternarModoMatricula = function(modo) {
+            modoMatriculaAtual = modo;
+            var btnNormal = document.getElementById('btnModoNormal');
+            var btnExcecao = document.getElementById('btnModoExcecao');
+            var buscaExcecao = document.getElementById('buscaExcecao');
+            var lista = document.getElementById('modalMatricularLista');
+            var vazio = document.getElementById('modalMatricularVazio');
+            var loading = document.getElementById('modalMatricularLoading');
+            
+            if (modo === 'normal') {
+                btnNormal.classList.add('active');
+                btnExcecao.classList.remove('active');
+                buscaExcecao.style.display = 'none';
+                lista.style.display = 'none';
+                vazio.style.display = 'none';
+                loading.style.display = 'block';
+                // Recarregar alunos normais
+                if (turmaIdAtual) {
+                    carregarAlunosNormais(turmaIdAtual);
+                }
+            } else {
+                btnNormal.classList.remove('active');
+                btnExcecao.classList.add('active');
+                buscaExcecao.style.display = 'block';
+                lista.style.display = 'none';
+                vazio.style.display = 'none';
+                loading.style.display = 'none';
+                document.getElementById('inputBuscaAluno').value = '';
+            }
+        };
+        
+        // Variável para controlar o timeout da busca dinâmica
+        var timeoutBusca = null;
+        
+        // Função para buscar aluno por nome (modo exceção) - busca dinâmica
+        window.buscarAlunoExcecao = function() {
+            var nome = document.getElementById('inputBuscaAluno').value.trim();
+            if (!turmaIdAtual) return;
+            
+            var lista = document.getElementById('modalMatricularLista');
+            var vazio = document.getElementById('modalMatricularVazio');
+            var loading = document.getElementById('modalMatricularLoading');
+            
+            // Se o nome tem menos de 2 caracteres, limpar resultados
+            if (!nome || nome.length < 2) {
+                lista.style.display = 'none';
+                vazio.style.display = 'none';
+                loading.style.display = 'none';
+                lista.innerHTML = '';
+                return;
+            }
+            
+            loading.style.display = 'block';
+            lista.style.display = 'none';
+            vazio.style.display = 'none';
+            
+            fetch(urlBuscarAlunoExcecao.replace('999', turmaIdAtual) + '?nome=' + encodeURIComponent(nome))
+                .then(function(r) {
+                    return r.text().then(function(txt) {
+                        var data;
+                        try { data = JSON.parse(txt); } catch (e) { data = {}; }
+                        if (!r.ok) throw new Error(data.error || 'HTTP ' + r.status);
+                        return data;
+                    });
+                })
+                .then(function(alunos) {
+                    loading.style.display = 'none';
+                    lista.innerHTML = '';
+                    if (alunos.length === 0) {
+                        vazio.innerHTML = '<i class="bi bi-person-x fs-1"></i><p class="mb-0">Nenhum aluno encontrado com esse nome.</p>';
+                        vazio.style.display = 'block';
+                        return;
+                    }
+                    lista.style.display = '';
+                    alunos.forEach(function(a) {
+                        var el = renderAlunoCard(a, function(aluno) {
+                            if (!confirm('Matricular ' + (aluno.nome || 'este aluno') + ' nesta turma? (Exceção - sem verificação de idade)')) return;
+                            matricularAlunoExcecao(turmaIdAtual, aluno.id, el, lista, vazio);
+                        }, false);
+                        lista.appendChild(el);
+                    });
+                })
+                .catch(function(err) {
+                    loading.style.display = 'none';
+                    vazio.innerHTML = '<p class="text-danger">Erro ao buscar alunos: ' + (err.message || '') + '</p>';
+                    vazio.style.display = 'block';
+                });
+        };
+        
+        // Função para carregar alunos normais
+        function carregarAlunosNormais(turmaId) {
             fetch(urlAlunosDisponiveis.replace('999', turmaId))
                 .then(function (r) {
                     return r.text().then(function (txt) {
@@ -479,30 +589,8 @@
                     document.getElementById('modalMatricularLista').style.display = '';
                     alunos.forEach(function (a) {
                         var el = renderAlunoCard(a, function (aluno) {
-                            fetch(urlMatricularBase.replace('999', turmaId).replace('888', aluno.id), {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-                                credentials: 'same-origin'
-                            }).then(function (res) { return res.json(); })
-                              .then(function (data) {
-                                if (data.ok) {
-                                    el.remove();
-                                    if (lista.children.length === 0) {
-                                        document.getElementById('modalMatricularLista').style.display = 'none';
-                                        document.getElementById('modalMatricularVazio').style.display = 'block';
-                                    }
-                                    if (typeof bootstrap !== 'undefined' && bootstrap.Toast) {
-                                        var t = document.createElement('div');
-                                        t.className = 'toast align-items-center text-bg-success border-0';
-                                        t.innerHTML = '<div class="d-flex"><div class="toast-body">' + (data.msg || 'Matriculado!') + '</div></div>';
-                                        document.body.appendChild(t);
-                                        new bootstrap.Toast(t, { delay: 2000 }).show();
-                                        setTimeout(function () { t.remove(); }, 2500);
-                                    }
-                                } else {
-                                    alert(data.msg || 'Erro ao matricular');
-                                }
-                              }).catch(function () { alert('Erro ao matricular'); });
+                            if (!confirm('Matricular ' + (aluno.nome || 'este aluno') + ' nesta turma?')) return;
+                            matricularAlunoNormal(turmaId, aluno.id, el, lista);
                         }, false);
                         lista.appendChild(el);
                     });
@@ -512,6 +600,113 @@
                     document.getElementById('modalMatricularVazio').innerHTML = '<p class="text-danger">Erro ao carregar alunos: ' + (err.message || '') + '</p>';
                     document.getElementById('modalMatricularVazio').style.display = 'block';
                 });
+        }
+        
+        // Função para matricular aluno (modo normal)
+        function matricularAlunoNormal(turmaId, alunoId, elemento, lista) {
+            fetch(urlMatricularBase.replace('999', turmaId).replace('888', alunoId), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                credentials: 'same-origin'
+            }).then(function (res) { return res.json(); })
+              .then(function (data) {
+                if (data.ok) {
+                    elemento.remove();
+                    if (lista.children.length === 0) {
+                        document.getElementById('modalMatricularLista').style.display = 'none';
+                        document.getElementById('modalMatricularVazio').style.display = 'block';
+                    }
+                    mostrarToast(data.msg || 'Aluno matriculado!', 'success');
+                } else {
+                    alert(data.msg || 'Erro ao matricular');
+                }
+              }).catch(function () { alert('Erro ao matricular'); });
+        }
+        
+        // Função para matricular aluno (modo exceção)
+        function matricularAlunoExcecao(turmaId, alunoId, elemento, lista, vazio) {
+            fetch(urlMatricularBase.replace('999', turmaId).replace('888', alunoId) + '?excecao=1', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                credentials: 'same-origin'
+            }).then(function (res) { return res.json(); })
+              .then(function (data) {
+                if (data.ok) {
+                    elemento.remove();
+                    if (lista.children.length === 0) {
+                        lista.style.display = 'none';
+                        vazio.innerHTML = '<i class="bi bi-person-x fs-1"></i><p class="mb-0">Nenhum aluno encontrado.</p>';
+                        vazio.style.display = 'block';
+                    }
+                    mostrarToast(data.msg || 'Aluno matriculado com exceção!', 'success');
+                } else {
+                    alert(data.msg || 'Erro ao matricular');
+                }
+              }).catch(function () { alert('Erro ao matricular'); });
+        }
+        
+        // Função auxiliar para mostrar toast
+        function mostrarToast(mensagem, tipo) {
+            var container = document.querySelector('.toast-container') || document.body;
+            var t = document.createElement('div');
+            t.className = 'toast align-items-center text-bg-' + (tipo || 'success') + ' border-0 mb-2';
+            t.setAttribute('role', 'alert');
+            t.setAttribute('aria-live', 'assertive');
+            t.setAttribute('aria-atomic', 'true');
+            t.style.maxWidth = '280px';
+            t.innerHTML = '<div class="d-flex"><div class="toast-body">' + mensagem + '</div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Fechar"></button></div>';
+            container.appendChild(t);
+            if (typeof bootstrap !== 'undefined' && bootstrap.Toast) {
+                new bootstrap.Toast(t, { delay: 3000 }).show();
+                t.addEventListener('hidden.bs.toast', function () { t.remove(); });
+            } else {
+                setTimeout(function () { t.remove(); }, 3200);
+            }
+        }
+        
+        // Busca dinâmica ao digitar (com debounce)
+        document.addEventListener('DOMContentLoaded', function() {
+            var inputBusca = document.getElementById('inputBuscaAluno');
+            if (inputBusca) {
+                // Busca dinâmica com debounce de 300ms
+                inputBusca.addEventListener('input', function(e) {
+                    // Limpar timeout anterior
+                    if (timeoutBusca) {
+                        clearTimeout(timeoutBusca);
+                    }
+                    
+                    // Criar novo timeout para buscar após 300ms sem digitação
+                    timeoutBusca = setTimeout(function() {
+                        buscarAlunoExcecao();
+                    }, 300);
+                });
+                
+                // Também permitir buscar ao pressionar Enter (busca imediata)
+                inputBusca.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        if (timeoutBusca) {
+                            clearTimeout(timeoutBusca);
+                        }
+                        buscarAlunoExcecao();
+                    }
+                });
+            }
+        });
+        
+        matricularModal.addEventListener('shown.bs.modal', function (e) {
+            var btn = e.relatedTarget;
+            if (!btn) return;
+            var turmaId = btn.getAttribute('data-turma-id');
+            var turmaNome = btn.getAttribute('data-turma-nome');
+            turmaIdAtual = turmaId;
+            modoMatriculaAtual = 'normal';
+            document.getElementById('modalMatricularTurmaNome').textContent = turmaNome;
+            document.getElementById('modalMatricularLoading').style.display = 'block';
+            document.getElementById('modalMatricularLista').style.display = 'none';
+            document.getElementById('modalMatricularVazio').style.display = 'none';
+            document.getElementById('modalMatricularVazio').innerHTML = '<i class="bi bi-person-x fs-1"></i><p class="mb-0">Nenhum aluno disponível (todos já matriculados ou fora da faixa etária).</p>';
+            alternarModoMatricula('normal');
+
         });
 
         vinculadosModal.addEventListener('shown.bs.modal', function (e) {

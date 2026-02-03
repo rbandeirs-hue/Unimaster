@@ -217,9 +217,107 @@
   .modal-peso-destaque .peso-val { font-size: 1.5rem; font-weight: 700; color: #2e7d32; }
   .modal-peso-destaque .peso-label { font-size: 0.7rem; color: #6c757d; text-transform: uppercase; }
   .modal-categorias { font-size: 0.9rem; color: #495057; line-height: 1.4; word-break: break-word; }
-  .modal-apto-badge { padding: 0.5rem 1rem; border-radius: 8px; font-weight: 700; }
-  .modal-apto-badge.apto { background: #d1e7dd; color: #0f5132; }
-  .modal-apto-badge.inapto { background: #f8d7da; color: #842029; }
+  .modal-apto-badge { padding: 0.5rem 1rem; border-radius: 8px; font-weight: 700; display: inline-flex; align-items: center; }
+  .modal-apto-badge.apto { background: #d1e7dd; color: #0f5132; border: 2px solid #0f5132; }
+  .modal-apto-badge.inapto { background: #f8d7da; color: #842029; border: 2px solid #842029; }
+  .modal-apto-badge.secondary { background: #e9ecef; color: #495057; border: 2px solid #495057; }
+  .modal-categorias-list { display: flex; flex-direction: column; gap: 0.5rem; }
+  .categoria-item { display: flex; align-items: center; }
+  .categoria-badge {
+    display: inline-block;
+    padding: 0.4rem 0.75rem;
+    background: #e7f3ff;
+    border: 1px solid #b3d9ff;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    color: #004085;
+    word-break: break-word;
+  }
+  .aptidao-motivo, .aptidao-data { margin-top: 0.5rem; }
+  /* Sistema de Slides */
+  .modal-slide-indicators { flex-wrap: wrap; padding: 0.5rem 0; }
+  .slide-indicator {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 2px solid #dee2e6;
+    background: #fff;
+    color: #6c757d;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 1.1rem;
+  }
+  .slide-indicator:hover {
+    border-color: #0d6efd;
+    color: #0d6efd;
+    transform: scale(1.1);
+  }
+  .slide-indicator.active {
+    background: #0d6efd;
+    border-color: #0d6efd;
+    color: #fff;
+  }
+  .modal-slides-container {
+    min-height: 300px;
+    position: relative;
+    overflow: hidden;
+  }
+  .modal-slide {
+    display: none;
+    animation: slideIn 0.3s ease;
+  }
+  .modal-slide.active {
+    display: block;
+  }
+  @keyframes slideIn {
+    from {
+      opacity: 0;
+      transform: translateX(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+  .modal-slide-controls {
+    padding: 1rem 0;
+    border-top: 1px solid #dee2e6;
+  }
+  .slide-counter {
+    font-weight: 600;
+    color: #495057;
+  }
+  .slide-btn-prev, .slide-btn-next {
+    min-width: 120px;
+  }
+  @media (max-width: 576px) {
+    .slide-indicator {
+      width: 35px;
+      height: 35px;
+      font-size: 0.95rem;
+    }
+    .slide-btn-prev, .slide-btn-next {
+      min-width: 100px;
+      font-size: 0.875rem;
+      padding: 0.4rem 0.6rem;
+    }
+    .modal-slides-container {
+      min-height: 250px;
+    }
+    .modal-apto-badge {
+      font-size: 1rem !important;
+      padding: 0.6rem 1rem !important;
+    }
+    .modal-slide .alert {
+      font-size: 0.875rem;
+    }
+    .modal-slide .alert ul {
+      font-size: 0.8rem;
+    }
+  }
   @media (max-width: 576px) {
     .alunos-header-btns .aluno-btn-text { display: none; }
     .alunos-header-btns .btn { padding: 0.5rem 0.75rem; min-width: 44px; }
@@ -232,8 +330,12 @@
     .modal-peso-destaque .peso-val { font-size: 1.25rem; }
     .modal-peso-wrap { flex-direction: column; align-items: center; text-align: center; }
     .modal-peso-wrap .flex-grow-1 { width: 100%; text-align: center; }
-    .modal-peso-wrap .modal-categorias-mobile { font-size: 0.85rem; color: #495057; margin-top: 0.75rem; }
-    .modal-peso-wrap .modal-categorias-mobile .val { display: block; margin-top: 0.2rem; }
+    .modal-categorias-list { gap: 0.4rem; }
+    .categoria-badge { font-size: 0.8rem; padding: 0.35rem 0.6rem; }
+    .modal-apto-badge { font-size: 0.875rem; padding: 0.4rem 0.8rem; }
+    .aptidao-motivo small, .aptidao-data small { font-size: 0.75rem; }
+    .modal-section { padding: 0.875rem !important; }
+    .modal-section h6 { font-size: 0.9rem; margin-bottom: 0.75rem; }
   }
 </style>
 
@@ -245,48 +347,151 @@
       <h1><i class="bi bi-people-fill"></i> Alunos</h1>
       <p class="subtitle mb-0">Gerencie e visualize os alunos cadastrados</p>
       {% if alunos %}
-      <span class="alunos-stats"><i class="bi bi-person-badge"></i> {{ alunos|length }} aluno{{ 's' if alunos|length != 1 else '' }}</span>
+      <span class="alunos-stats"><i class="bi bi-person-badge"></i> {{ stats.total }} aluno{{ 's' if stats.total != 1 else '' }}</span>
       {% endif %}
     </div>
     <div class="d-flex gap-2 alunos-header-btns">
-      <a href="{{ back_url }}" class="btn btn-outline-secondary" title="Voltar">
-        <i class="bi bi-arrow-left"></i><span class="aluno-btn-text"> Voltar</span>
-      </a>
+      {% set back_url = back_url or get_back_url_default() %}
+      {% include 'components/botao_voltar.html' %}
+      {% if not modo_associacao %}
       <a href="{{ url_for('alunos.cadastrar_aluno', academia_id=academia_id, next=request.full_path) if academia_id else url_for('alunos.cadastrar_aluno', next=request.full_path) }}" class="btn btn-warning" title="Novo Aluno">
         <i class="bi bi-plus-lg"></i><span class="aluno-btn-text"> Novo Aluno</span>
       </a>
+      {% endif %}
     </div>
   </div>
 
-  {% if academias|length > 1 %}
-  <div class="mb-3">
-    <form method="GET" class="d-flex align-items-center gap-2 flex-wrap">
-      <label class="form-label mb-0 small fw-semibold">Academia:</label>
-      <select name="academia_id" class="form-select form-select-sm" style="max-width: 280px;" onchange="this.form.submit()">
-        {% for ac in academias %}
-        <option value="{{ ac.id }}" {% if ac.id == academia_id %}selected{% endif %}>{{ ac.nome }}</option>
-        {% endfor %}
-      </select>
-      {% if busca %}<input type="hidden" name="busca" value="{{ busca }}">{% endif %}
-    </form>
+  <!-- Cards de estatísticas -->
+  {% if stats and mostrar_filtros_avancados %}
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-md-4">
+      <div class="card border-0 shadow-sm h-100 bg-primary bg-opacity-10">
+        <div class="card-body py-3 text-center">
+          <div class="display-6 fw-bold text-primary">{{ stats.total }}</div>
+          <div class="small text-muted">Total de alunos</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md-4">
+      <div class="card border-0 shadow-sm h-100 bg-success bg-opacity-10">
+        <div class="card-body py-3 text-center">
+          <div class="display-6 fw-bold text-success">{{ stats.por_academia|length }}</div>
+          <div class="small text-muted">Academias</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md-4">
+      <div class="card border-0 shadow-sm h-100 bg-info bg-opacity-10">
+        <div class="card-body py-3 text-center">
+          <div class="display-6 fw-bold text-info">{{ stats.por_graduacao|length }}</div>
+          <div class="small text-muted">Graduações</div>
+        </div>
+      </div>
+    </div>
   </div>
   {% endif %}
 
-  <!-- Busca -->
+  <!-- Filtros -->
   <div class="search-card">
-    <form method="GET" action="{{ request.path }}" class="d-flex gap-2 flex-wrap">
-      {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
-      <div class="input-group flex-grow-1" style="min-width: 200px;">
-        <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
-        <input type="text" name="busca" class="form-control border-start-0" placeholder="Buscar por nome..." value="{{ busca }}" id="searchInput">
+    <form method="GET" action="{{ request.path }}" id="formFiltros">
+      <div class="row g-3 align-items-end">
+        {% if academias %}
+        <div class="col-12 col-md-6 col-lg-2">
+          <label class="form-label small fw-semibold mb-1">Academia</label>
+          <select name="academia_id" class="form-select form-select-sm" onchange="this.form.submit()">
+            <option value="" {% if not academia_id %}selected{% endif %}>— Todas —</option>
+            {% for ac in academias %}
+            <option value="{{ ac.id }}" {% if academia_id and ac.id == academia_id %}selected{% endif %}>{{ ac.academia_nome or ac.nome }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        {% endif %}
+        <div class="col-12 col-md-6 col-lg-2">
+          <label class="form-label small fw-semibold mb-1">Busca por nome</label>
+          <input type="text" name="busca" class="form-control form-control-sm" placeholder="Nome..." value="{{ busca or '' }}" id="searchInput">
+        </div>
+        {% if mostrar_filtros_avancados %}
+        <div class="col-6 col-md-4 col-lg-2">
+          <label class="form-label small fw-semibold mb-1">Idade mín</label>
+          <input type="number" name="idade_min" class="form-control form-control-sm" placeholder="Idade mín" value="{{ idade_min if idade_min is not none else '' }}" min="0" max="120">
+        </div>
+        <div class="col-6 col-md-4 col-lg-2">
+          <label class="form-label small fw-semibold mb-1">Idade máx</label>
+          <input type="number" name="idade_max" class="form-control form-control-sm" placeholder="Idade máx" value="{{ idade_max if idade_max is not none else '' }}" min="0" max="120">
+        </div>
+        <div class="col-6 col-md-4 col-lg-2">
+          <label class="form-label small fw-semibold mb-1">Graduação</label>
+          <select name="graduacao_id" class="form-select form-select-sm">
+            <option value="">— Todas —</option>
+            {% for f in faixas %}
+            <option value="{{ f.id }}" {% if graduacao_id is not none and f.id == graduacao_id %}selected{% endif %}>{{ f.faixa }}{% if f.graduacao %} {{ f.graduacao }}{% endif %}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-6 col-md-4 col-lg-2">
+          <label class="form-label small fw-semibold mb-1">Peso mín (kg)</label>
+          <input type="number" name="peso_min" class="form-control form-control-sm" placeholder="Peso mín" value="{{ peso_min if peso_min is not none else '' }}" min="0" step="0.1">
+        </div>
+        <div class="col-6 col-md-4 col-lg-2">
+          <label class="form-label small fw-semibold mb-1">Peso máx (kg)</label>
+          <input type="number" name="peso_max" class="form-control form-control-sm" placeholder="Peso máx" value="{{ peso_max if peso_max is not none else '' }}" min="0" step="0.1">
+        </div>
+        {% endif %}
+        <div class="col-12 col-lg-auto">
+          <button type="submit" class="btn btn-primary btn-sm me-2"><i class="bi bi-funnel me-1"></i> Filtrar</button>
+          <a href="{{ request.path }}" class="btn btn-outline-secondary btn-sm">Limpar</a>
+        </div>
       </div>
-      {% if busca %}<a href="{{ request.path }}{% if academia_id %}?academia_id={{ academia_id }}{% endif %}" class="btn btn-outline-secondary">Limpar</a>{% endif %}
+      {% if academia_id and not academias %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
     </form>
   </div>
 
-  <!-- Lista -->
-  <div id="listaAlunos" class="row g-3">
-    {% for aluno in alunos|sort(attribute='nome') %}
+  <!-- Botões de agrupamento (modo associação) -->
+  {% if modo_associacao %}
+  <div class="d-flex justify-content-end gap-2 mb-3">
+    <div class="btn-group" role="group" aria-label="Agrupar alunos">
+      {% set url_base = request.path %}
+      {% set url_az = url_base %}
+      {% set url_academia = url_base + '?agrupar_por=academia' %}
+      {% if request.args %}
+        {% set query_params = [] %}
+        {% for key, value in request.args.items() %}
+          {% if key != 'agrupar_por' %}
+            {% set _ = query_params.append(key + '=' + value|string) %}
+          {% endif %}
+        {% endfor %}
+        {% if query_params %}
+          {% set url_az = url_base + '?' + query_params|join('&') %}
+          {% set url_academia = url_base + '?' + query_params|join('&') + '&agrupar_por=academia' %}
+        {% endif %}
+      {% endif %}
+      <a href="{{ url_az }}" 
+         class="btn btn-sm {% if not agrupar_por_academia %}btn-primary{% else %}btn-outline-primary{% endif %}" 
+         title="Ordenar A-Z">
+        <i class="bi bi-sort-alpha-down me-1"></i> A-Z
+      </a>
+      <a href="{{ url_academia }}" 
+         class="btn btn-sm {% if agrupar_por_academia %}btn-primary{% else %}btn-outline-primary{% endif %}" 
+         title="Agrupar por Academia">
+        <i class="bi bi-building me-1"></i> Por Academia
+      </a>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Lista agrupada por modalidade ou academia -->
+  <div id="listaAlunos">
+    {% for grupo_nome, alunos_grupo in alunos_agrupados %}
+    <div class="mb-4">
+      <h5 class="text-primary border-bottom pb-2 mb-3">
+        {% if modo_associacao and agrupar_por_academia %}
+        <i class="bi bi-building me-2"></i>{{ grupo_nome }}
+        {% else %}
+        <i class="bi bi-tag-fill me-2"></i>{{ grupo_nome }}
+        {% endif %}
+      </h5>
+      <div class="row g-3">
+    {% for aluno in alunos_grupo %}
     <div class="col-12 col-sm-6 col-xl-4">
       <div class="card aluno-card" data-nome="{{ aluno.nome|lower }}" data-faixa="{{ ((aluno.faixa or '') ~ ' ' ~ (aluno.graduacao or ''))|trim|lower }}">
         <div class="aluno-card-inner">
@@ -300,11 +505,16 @@
             <p class="aluno-meta mb-0">
               {% if aluno.faixa %}{{ aluno.faixa }}{% if aluno.graduacao %} {{ aluno.graduacao }}{% endif %}{% else %}&nbsp;{% endif %}
             </p>
+            {% if aluno.academia_nome %}
+            <p class="aluno-academia small text-muted mb-0"><i class="bi bi-building me-1"></i>{{ aluno.academia_nome }}</p>
+            {% endif %}
           </div>
           <div class="aluno-actions">
+            {% if not modo_associacao %}
             <a href="{{ url_for('alunos.editar_aluno', aluno_id=aluno.id, next=request.full_path) }}" class="btn btn-outline-warning" title="Editar">
               <i class="bi bi-pencil-fill"></i>
             </a>
+            {% endif %}
             <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalAluno{{ aluno.id }}" title="Ver detalhes">
               <i class="bi bi-eye"></i>
             </button>
@@ -322,9 +532,34 @@
             <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
           </div>
           <div class="modal-body">
-            <div class="row g-4">
-              <!-- Dados Pessoais -->
-              <div class="col-12 col-lg-4">
+            <!-- Indicadores de Slide -->
+            <div class="modal-slide-indicators mb-3 d-flex justify-content-center gap-2">
+              <button class="slide-indicator active" data-slide="0" title="Dados Pessoais">
+                <i class="bi bi-person-vcard"></i>
+              </button>
+              <button class="slide-indicator" data-slide="1" title="Acadêmico">
+                <i class="bi bi-award"></i>
+              </button>
+              <button class="slide-indicator" data-slide="2" title="Peso & Categoria">
+                <i class="bi bi-bar-chart-line"></i>
+              </button>
+              <button class="slide-indicator" data-slide="3" title="Frequência">
+                <i class="bi bi-graph-up-arrow"></i>
+              </button>
+              <button class="slide-indicator" data-slide="4" title="Aptidão">
+                <i class="bi bi-clipboard-check"></i>
+              </button>
+              {% if aluno.observacoes %}
+              <button class="slide-indicator" data-slide="5" title="Observações">
+                <i class="bi bi-journal-text"></i>
+              </button>
+              {% endif %}
+            </div>
+
+            <!-- Container de Slides -->
+            <div class="modal-slides-container position-relative">
+              <!-- Slide 1: Dados Pessoais -->
+              <div class="modal-slide active" data-slide-index="0">
                 <div class="modal-section h-100">
                   <h6><i class="bi bi-person-vcard"></i> Dados Pessoais</h6>
                   <div class="modal-info-item"><span>Nascimento</span><strong>{{ aluno.data_nascimento_formatada }}{% if aluno.idade_real %} ({{ aluno.idade_real }} anos){% endif %}</strong></div>
@@ -334,21 +569,56 @@
                   <div class="modal-info-item"><span>Responsável</span><strong>{{ aluno.responsavel or '-' }}</strong></div>
                 </div>
               </div>
-              <!-- Acadêmico -->
-              <div class="col-12 col-lg-4">
+
+              <!-- Slide 2: Acadêmico -->
+              <div class="modal-slide" data-slide-index="1">
                 <div class="modal-section h-100">
                   <h6><i class="bi bi-award"></i> Acadêmico</h6>
                   <div class="modal-info-item"><span>Faixa</span><strong>{{ aluno.faixa or '-' }}{% if aluno.graduacao %} {{ aluno.graduacao }}{% endif %}</strong></div>
                   <div class="modal-info-item"><span>Próxima faixa</span><strong>{{ aluno.proxima_faixa or '-' }}</strong></div>
                   <div class="modal-info-item"><span>Último exame</span><strong>{{ aluno.ultimo_exame_faixa_formatada or '-' }}</strong></div>
                   <div class="modal-info-item"><span>Elegível em</span><strong>{{ aluno.data_elegivel or '-' }}</strong></div>
+                  <div class="modal-info-item"><span>Academia</span><strong>{{ aluno.academia_nome or '-' }}</strong></div>
                   <div class="modal-info-item"><span>Turma</span><strong>{{ aluno.turma_nome or '-' }}</strong></div>
                   <div class="modal-info-item"><span>Modalidades</span><strong>{{ aluno.modalidades_nomes or '-' }}</strong></div>
                   <div class="modal-info-item"><span>Zempo</span><strong>{{ aluno.zempo or '-' }}</strong></div>
                 </div>
               </div>
-              <!-- Frequência & Aptidão -->
-              <div class="col-12 col-lg-4">
+
+              <!-- Slide 3: Peso & Categoria -->
+              <div class="modal-slide" data-slide-index="2">
+                <div class="modal-section h-100">
+                  <h6><i class="bi bi-bar-chart-line"></i> Peso & Categoria</h6>
+                  <div class="modal-peso-wrap">
+                    <div class="modal-peso-destaque">
+                      <div class="peso-val">{{ aluno.peso or '-' }}{% if aluno.peso %} <span class="small fw-normal">kg</span>{% endif %}</div>
+                      <div class="peso-label">Peso</div>
+                    </div>
+                  </div>
+                  <div class="mt-3">
+                    <div class="small text-muted mb-2 fw-semibold">Categorias Disponíveis</div>
+                    {% if aluno.categorias_disponiveis and aluno.categorias_disponiveis|length > 0 %}
+                      <div class="modal-categorias-list">
+                        {% for cat in aluno.categorias_disponiveis %}
+                          <div class="categoria-item">
+                            <span class="categoria-badge">
+                              {% if cat.get('id_classe') or cat.id_classe %}<strong>{{ cat.get('id_classe') or cat.id_classe }}</strong> - {% endif %}
+                              {{ cat.get('nome_categoria') or cat.nome_categoria or cat.get('categoria') or cat.categoria or '-' }}
+                            </span>
+                          </div>
+                        {% endfor %}
+                      </div>
+                    {% else %}
+                      <div class="text-muted small">
+                        <i class="bi bi-info-circle me-1"></i>{{ aluno.categorias_texto or 'Não disponível' }}
+                      </div>
+                    {% endif %}
+                  </div>
+                </div>
+              </div>
+
+              <!-- Slide 4: Frequência -->
+              <div class="modal-slide" data-slide-index="3">
                 <div class="modal-section h-100">
                   <h6><i class="bi bi-graph-up-arrow"></i> Frequência (Judô)</h6>
                   <div class="modal-freq-wrap">
@@ -366,57 +636,120 @@
                     </div>
                   </div>
                   {% if aluno.total_aulas_desde and aluno.total_aulas_desde > 0 %}
-                  <div class="modal-info-item mb-0"><span>Presenças</span><strong>{{ aluno.presentes_desde or 0 }} / {{ aluno.total_aulas_desde }} aulas</strong></div>
+                  <div class="modal-info-item mb-0 mt-2"><span>Presenças</span><strong>{{ aluno.presentes_desde or 0 }} / {{ aluno.total_aulas_desde }} aulas</strong></div>
                   {% endif %}
                   <p class="small text-muted mb-0 mt-2">Mín. 70% desde último exame para aptidão.</p>
                 </div>
-                <div class="modal-section mt-3">
-                  <h6><i class="bi bi-clipboard-check"></i> Aptidão Exame</h6>
-                  <div class="d-flex align-items-center gap-2 flex-wrap">
-                    <span class="modal-apto-badge {% if aluno.aptidao_status == 'Apto' %}apto{% else %}inapto{% endif %}">
-                      {% if aluno.aptidao_status == 'Apto' %}APTO{% elif aluno.aptidao_status == 'Inapto' %}INAPTO{% else %}{{ aluno.aptidao_status or '-' }}{% endif %}
-                    </span>
-                    {% if aluno.motivo %}<span class="small text-danger">{{ aluno.motivo }}</span>{% endif %}
-                  </div>
-                </div>
               </div>
-              <!-- Peso & Categoria -->
-              <div class="col-12 col-lg-4">
-                <div class="modal-section">
-                  <h6><i class="bi bi-bar-chart-line"></i> Peso & Categoria</h6>
-                  <div class="modal-peso-wrap">
-                    <div class="modal-peso-destaque">
-                      <div class="peso-val">{{ aluno.peso or '-' }}{% if aluno.peso %} <span class="small fw-normal">kg</span>{% endif %}</div>
-                      <div class="peso-label">Peso</div>
+
+              <!-- Slide 5: Aptidão -->
+              <div class="modal-slide" data-slide-index="4">
+                <div class="modal-section h-100">
+                  <h6><i class="bi bi-clipboard-check"></i> Aptidão para Exame</h6>
+                  <div class="d-flex flex-column gap-3 align-items-center">
+                    <!-- Status da Aptidão -->
+                    <div class="w-100 text-center">
+                      <span class="modal-apto-badge {% if aluno.aptidao_status == 'Apto' %}apto{% elif aluno.aptidao_status == 'Inapto' %}inapto{% else %}secondary{% endif %}" style="font-size: 1.2rem; padding: 0.75rem 1.5rem;">
+                        {% if aluno.aptidao_status == 'Apto' %}
+                          <i class="bi bi-check-circle me-2"></i>APTO PARA EXAME
+                        {% elif aluno.aptidao_status == 'Inapto' %}
+                          <i class="bi bi-x-circle me-2"></i>INAPTO PARA EXAME
+                        {% else %}
+                          <i class="bi bi-dash-circle me-2"></i>{{ aluno.aptidao_status or 'NÃO DEFINIDO' }}
+                        {% endif %}
+                      </span>
                     </div>
-                    <div class="flex-grow-1">
-                      <div class="small text-muted mb-1 d-none d-sm-block">Categorias</div>
-                      <div class="modal-categorias d-none d-sm-block">{{ aluno.classes_e_pesos or '-' }}</div>
-                      {% set cp_limpo = (aluno.classes_e_pesos or '')|replace('Classe: ', '')|replace('Categoria: ', '') %}
-                      {% set partes_vals = cp_limpo.split(' | ') %}
-                      <div class="modal-categorias-mobile d-sm-none">
-                        {% for v in partes_vals %}{% if v|trim %}<span class="val">{{ v|trim }}</span>{% endif %}{% endfor %}
-                        {% if not cp_limpo|trim %}<span class="val">—</span>{% endif %}
+
+                    <!-- Próxima Faixa -->
+                    {% if aluno.proxima_faixa and aluno.proxima_faixa != '-' %}
+                    <div class="w-100">
+                      <div class="alert alert-success mb-0">
+                        <i class="bi bi-trophy me-2"></i>
+                        <strong>Próxima faixa:</strong> {{ aluno.proxima_faixa }}
                       </div>
                     </div>
+                    {% endif %}
+
+                    <!-- Data Elegível -->
+                    {% if aluno.data_elegivel and aluno.data_elegivel != '-' %}
+                    <div class="w-100">
+                      <div class="alert alert-info mb-0">
+                        <i class="bi bi-calendar3 me-2"></i>
+                        <strong>Elegível em:</strong> {{ aluno.data_elegivel }}
+                      </div>
+                    </div>
+                    {% endif %}
+
+                    <!-- Motivo da Inaptidão -->
+                    {% if aluno.motivo and aluno.motivo.strip() %}
+                    <div class="w-100">
+                      <div class="alert alert-warning mb-0">
+                        <i class="bi bi-exclamation-triangle me-2"></i>
+                        <strong>Motivo da Inaptidão:</strong>
+                        <div class="mt-2">
+                          {% set motivos_lista = aluno.motivo.split('; ') %}
+                          <ul class="mb-0 ps-3">
+                            {% for motivo_item in motivos_lista %}
+                            <li><small>{{ motivo_item }}</small></li>
+                            {% endfor %}
+                          </ul>
+                        </div>
+                      </div>
+                    </div>
+                    {% endif %}
+
+                    <!-- Informações Adicionais -->
+                    {% if aluno.frequencia_desde_exame is not none %}
+                    <div class="w-100">
+                      <div class="alert alert-light border mb-0">
+                        <i class="bi bi-graph-up-arrow me-2"></i>
+                        <strong>Frequência desde último exame:</strong> {{ aluno.frequencia_desde_exame }}%
+                        {% if aluno.frequencia_desde_exame < 70 %}
+                          <span class="badge bg-danger ms-2">Abaixo do mínimo (70%)</span>
+                        {% else %}
+                          <span class="badge bg-success ms-2">Aprovado</span>
+                        {% endif %}
+                      </div>
+                    </div>
+                    {% endif %}
                   </div>
                 </div>
               </div>
+
+              <!-- Slide 6: Observações (se houver) -->
               {% if aluno.observacoes %}
-              <div class="col-12">
-                <div class="modal-section">
+              <div class="modal-slide" data-slide-index="5">
+                <div class="modal-section h-100">
                   <h6><i class="bi bi-journal-text"></i> Observações</h6>
-                  <p class="mb-0 text-muted small">{{ aluno.observacoes }}</p>
+                  <p class="mb-0 text-muted">{{ aluno.observacoes }}</p>
                 </div>
               </div>
               {% endif %}
             </div>
+
+            <!-- Controles de Navegação -->
+            <div class="modal-slide-controls d-flex justify-content-between align-items-center mt-4">
+              <button class="btn btn-outline-primary slide-btn-prev" type="button">
+                <i class="bi bi-chevron-left me-1"></i> Anterior
+              </button>
+              <span class="slide-counter">
+                <span class="slide-current">1</span> / <span class="slide-total">{{ 5 + (1 if aluno.observacoes else 0) }}</span>
+              </span>
+              <button class="btn btn-outline-primary slide-btn-next" type="button">
+                Próximo <i class="bi bi-chevron-right ms-1"></i>
+              </button>
+            </div>
           </div>
           <div class="modal-footer border-0 bg-light">
+            {% if not modo_associacao %}
             <a href="{{ url_for('alunos.editar_aluno', aluno_id=aluno.id, next=request.full_path) }}" class="btn btn-warning"><i class="bi bi-pencil me-1"></i> Editar</a>
+            {% endif %}
             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
           </div>
         </div>
+      </div>
+    </div>
+    {% endfor %}
       </div>
     </div>
     {% endfor %}
@@ -426,10 +759,12 @@
   <div class="empty-state">
     <i class="bi bi-people d-block"></i>
     <h4>Nenhum aluno encontrado</h4>
-    <p>{% if busca %}Tente outra busca ou limpe o filtro.{% else %}Cadastre o primeiro aluno para começar.{% endif %}</p>
+    <p>{% if busca or idade_min is not none or idade_max is not none or graduacao_id is not none or peso_min is not none or peso_max is not none %}Ajuste os filtros ou <a href="{{ request.path }}">limpe</a> para ver todos.{% elif modo_associacao %}Nenhum aluno com modalidade ofertada pela associação.{% else %}Cadastre o primeiro aluno para começar.{% endif %}</p>
+    {% if not modo_associacao %}
     <a href="{{ url_for('alunos.cadastrar_aluno', academia_id=academia_id, next=request.full_path) if academia_id else url_for('alunos.cadastrar_aluno', next=request.full_path) }}" class="btn btn-primary">
       <i class="bi bi-plus-lg me-1"></i> Novo Aluno
     </a>
+    {% endif %}
   </div>
   {% endif %}
 
@@ -444,6 +779,111 @@ document.getElementById("searchInput")?.addEventListener("keyup", function(e) {
     var faixa = card.dataset.faixa || "";
     var match = nome.includes(q) || faixa.includes(q);
     card.closest(".col-12").style.display = match ? "" : "none";
+  });
+});
+
+// Sistema de Slides no Modal
+document.addEventListener('DOMContentLoaded', function() {
+  // Função para inicializar slides de um modal
+  function initModalSlides(modalId) {
+    const modal = document.getElementById(modalId);
+    if (!modal) return;
+
+    const slidesContainer = modal.querySelector('.modal-slides-container');
+    const slides = slidesContainer ? slidesContainer.querySelectorAll('.modal-slide') : [];
+    const indicators = modal.querySelectorAll('.slide-indicator');
+    const prevBtn = modal.querySelector('.slide-btn-prev');
+    const nextBtn = modal.querySelector('.slide-btn-next');
+    const currentSpan = modal.querySelector('.slide-current');
+    const totalSpan = modal.querySelector('.slide-total');
+    
+    if (!slides.length) return;
+
+    let currentSlide = 0;
+    const totalSlides = slides.length;
+
+    if (totalSpan) {
+      totalSpan.textContent = totalSlides;
+    }
+
+    function updateSlide(index) {
+      // Validar índice
+      if (index < 0) index = totalSlides - 1;
+      if (index >= totalSlides) index = 0;
+      
+      currentSlide = index;
+
+      // Atualizar slides
+      slides.forEach((slide, i) => {
+        slide.classList.toggle('active', i === currentSlide);
+      });
+
+      // Atualizar indicadores
+      indicators.forEach((indicator, i) => {
+        indicator.classList.toggle('active', i === currentSlide);
+      });
+
+      // Atualizar contador
+      if (currentSpan) {
+        currentSpan.textContent = currentSlide + 1;
+      }
+
+      // Atualizar botões
+      if (prevBtn) {
+        prevBtn.disabled = false;
+      }
+      if (nextBtn) {
+        nextBtn.disabled = false;
+      }
+    }
+
+    // Event listeners para indicadores
+    indicators.forEach((indicator, index) => {
+      indicator.addEventListener('click', function() {
+        updateSlide(index);
+      });
+    });
+
+    // Event listeners para botões
+    if (prevBtn) {
+      prevBtn.addEventListener('click', function() {
+        updateSlide(currentSlide - 1);
+      });
+    }
+
+    if (nextBtn) {
+      nextBtn.addEventListener('click', function() {
+        updateSlide(currentSlide + 1);
+      });
+    }
+
+    // Navegação por teclado
+    modal.addEventListener('keydown', function(e) {
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        updateSlide(currentSlide - 1);
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        updateSlide(currentSlide + 1);
+      }
+    });
+
+    // Reset ao abrir o modal
+    const bsModal = bootstrap.Modal.getInstance(modal);
+    if (bsModal) {
+      modal.addEventListener('shown.bs.modal', function() {
+        updateSlide(0);
+        modal.focus(); // Para capturar eventos de teclado
+      });
+    }
+  }
+
+  // Inicializar slides para todos os modais de aluno
+  document.querySelectorAll('.modal-aluno').forEach(function(modal) {
+    const modalId = modal.id;
+    if (modalId) {
+      initModalSlides(modalId);
+    }
   });
 });
 </script>

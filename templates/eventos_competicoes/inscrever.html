@@ -1,0 +1,337 @@
+{% extends "base.html" %}
+{% block title %}Inscrição — {{ evento.nome }}{% endblock %}
+{% block content %}
+<div class="container mt-5">
+    <div class="mb-4">
+        {% set back_url = back_url or get_back_url_default() %}
+{% include 'components/botao_voltar.html' %}
+        <h2 class="h4 fw-bold text-primary">Inscrição — {{ evento.nome }}</h2>
+        <p class="text-muted mb-0">Aluno: {{ aluno.nome }}. Preencha todos os campos obrigatórios e confirme a inscrição.</p>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-body p-4">
+            <form method="POST" action="{{ url_for('eventos_competicoes.inscrever', evento_id=evento.id, academia_id=academia_id, aluno_id=aluno.id) }}">
+                <input type="hidden" name="academia_id" value="{{ academia_id }}">
+                <input type="hidden" name="aluno_id" value="{{ aluno.id }}">
+                {% for c in campos_form %}
+                <div class="mb-3">
+                    <label for="campo_{{ c.campo_chave }}" class="form-label fw-semibold">{{ c.label }}{% if c.campo_chave != 'categoria' %} <span class="text-danger">*</span>{% endif %}</label>
+                    {% set chave = c.campo_chave %}
+                    {% set val = valores_iniciais.get(chave, '') %}
+                    {% if chave == 'id_academia' %}
+                    <select id="campo_{{ chave }}" name="campo_{{ chave }}" class="form-select" required>
+                        <option value="{{ academia_id }}" selected>{{ academia_nome or 'Academia' }}</option>
+                    </select>
+                    <small class="form-text text-muted">Academia vinculada ao aluno</small>
+                    {% elif chave == 'sexo' %}
+                    <select id="campo_{{ chave }}" name="campo_{{ chave }}" class="form-control" required onchange="buscarCategorias()">
+                        <option value="">Selecione</option>
+                        <option value="M" {% if val == 'M' %}selected{% endif %}>Masculino</option>
+                        <option value="F" {% if val == 'F' %}selected{% endif %}>Feminino</option>
+                        <option value="O" {% if val == 'O' %}selected{% endif %}>Outro</option>
+                    </select>
+                    {% elif chave == 'graduacao_id' %}
+                    {% if graduacoes %}
+                    <select id="campo_{{ chave }}" name="campo_{{ chave }}" class="form-select" required>
+                        <option value="">Selecione</option>
+                        {% for g in graduacoes %}
+                        <option value="{{ g.id }}" {% if val|string == g.id|string %}selected{% endif %}>{{ g.faixa }} {% if g.graduacao %}{{ g.graduacao }}{% endif %} {% if g.categoria %}{{ g.categoria }}{% endif %}</option>
+                        {% endfor %}
+                    </select>
+                    {% else %}
+                    <input type="number" id="campo_{{ chave }}" name="campo_{{ chave }}" class="form-control" value="{{ val }}" required>
+                    {% endif %}
+                    {% elif chave == 'TurmaID' %}
+                    {% if turmas %}
+                    <select id="campo_{{ chave }}" name="campo_{{ chave }}" class="form-select" required>
+                        <option value="">Selecione</option>
+                        {% for t in turmas %}
+                        <option value="{{ t.TurmaID }}" {% if val|string == t.TurmaID|string %}selected{% endif %}>{{ t.Nome }} ({{ t.Classificacao or '' }}, {{ t.DiasHorario or '' }})</option>
+                        {% endfor %}
+                    </select>
+                    {% else %}
+                    <input type="number" id="campo_{{ chave }}" name="campo_{{ chave }}" class="form-control" value="{{ val }}" required>
+                    {% endif %}
+                    {% elif chave == 'data_nascimento' %}
+                    <input type="text" id="campo_{{ chave }}" name="campo_{{ chave }}" class="form-control" 
+                           value="{% if val %}{{ val|data_br }}{% endif %}" 
+                           placeholder="dd/mm/aaaa" required onchange="buscarCategorias()" 
+                           pattern="\d{2}/\d{2}/\d{4}" maxlength="10">
+                    <small class="form-text text-muted">Formato: dd/mm/aaaa</small>
+                    {% elif chave in ['ultimo_exame_faixa','rg_data_emissao','data_cadastro_zempo'] %}
+                    <input type="date" id="campo_{{ chave }}" name="campo_{{ chave }}" class="form-control" value="{{ val }}" required>
+                    {% elif chave == 'peso' %}
+                    <input type="number" step="0.1" id="campo_{{ chave }}" name="campo_{{ chave }}" class="form-control" value="{{ val }}" required onchange="buscarCategorias()" oninput="buscarCategorias()">
+                    {% elif chave == 'categoria' %}
+                    <div id="categorias-container">
+                        {% if categorias_disponiveis %}
+                        <div class="border rounded p-3" style="max-height: 300px; overflow-y: auto;">
+                            {% for cat in categorias_disponiveis %}
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" name="campo_{{ chave }}[]" value="{{ cat.nome_categoria }}" id="cat_{{ loop.index }}" 
+                                       {% if val == cat.nome_categoria or (val is iterable and cat.nome_categoria in val) %}checked{% endif %}>
+                                <label class="form-check-label" for="cat_{{ loop.index }}">
+                                    <strong>{{ cat.nome_categoria }}</strong>
+                                    {% if cat.id_classe %}<small class="text-muted">({{ cat.id_classe }})</small>{% endif %}
+                                    {% if cat.peso_min or cat.peso_max %}
+                                    <br><small class="text-muted">
+                                        Peso: {% if cat.peso_min %}{{ cat.peso_min }}kg{% endif %}{% if cat.peso_min and cat.peso_max %} - {% endif %}{% if cat.peso_max %}{{ cat.peso_max }}kg{% else %}+{% endif %}
+                                        | Idade: {% if cat.idade_min %}{{ cat.idade_min }}{% endif %}{% if cat.idade_min and cat.idade_max %} - {% endif %}{% if cat.idade_max %}{{ cat.idade_max }}{% else %}+{% endif %} anos
+                                    </small>
+                                    {% endif %}
+                                </label>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle me-1"></i> Preencha peso, data de nascimento e sexo para ver as categorias disponíveis
+                        </div>
+                        {% endif %}
+                    </div>
+                    <small class="form-text text-muted">Você pode selecionar múltiplas categorias. Cada categoria selecionada gerará uma inscrição separada.</small>
+                    <div id="categoria-status" class="mt-1"></div>
+                    {% if not categorias_disponiveis %}
+                    <script>
+                    // Tentar buscar categorias automaticamente se os dados já estão preenchidos
+                    document.addEventListener('DOMContentLoaded', function() {
+                        setTimeout(function() {
+                            const peso = document.getElementById('campo_peso')?.value;
+                            const dataNasc = document.getElementById('campo_data_nascimento')?.value;
+                            const sexo = document.getElementById('campo_sexo')?.value;
+                            if (peso && dataNasc && sexo) {
+                                buscarCategorias();
+                            }
+                        }, 300);
+                    });
+                    </script>
+                    {% endif %}
+                    {% else %}
+                    <input type="text" id="campo_{{ chave }}" name="campo_{{ chave }}" class="form-control" value="{{ val }}" required>
+                    {% endif %}
+                </div>
+                {% endfor %}
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i> Confirmar inscrição</button>
+                    <a href="{{ back_url }}" class="btn btn-outline-secondary">Cancelar</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function buscarCategorias() {
+    const peso = document.getElementById('campo_peso')?.value;
+    const dataNascInput = document.getElementById('campo_data_nascimento');
+    let dataNascimento = dataNascInput?.value;
+    // Converter data BR para ISO se necessário
+    if (dataNascimento && dataNascimento.includes('/')) {
+        const partes = dataNascimento.split('/');
+        if (partes.length === 3) {
+            dataNascimento = partes[2] + '-' + partes[1] + '-' + partes[0];
+        }
+    }
+    const sexo = document.getElementById('campo_sexo')?.value;
+    const categoriasContainer = document.getElementById('categorias-container');
+    const statusDiv = document.getElementById('categoria-status');
+    
+    if (!categoriasContainer) {
+        return;
+    }
+    
+    if (!peso || !dataNascimento || !sexo) {
+        if (statusDiv) {
+            statusDiv.innerHTML = '<small class="text-muted">Preencha peso, data de nascimento e sexo</small>';
+        }
+        categoriasContainer.innerHTML = '<div class="alert alert-info"><i class="bi bi-info-circle me-1"></i> Preencha peso, data de nascimento e sexo para ver as categorias disponíveis</div>';
+        return;
+    }
+    
+    if (statusDiv) {
+        statusDiv.innerHTML = '<small class="text-info">Buscando categorias...</small>';
+    }
+    
+    fetch('{{ url_for("eventos_competicoes.buscar_categorias") }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            peso: peso,
+            data_nascimento: dataNascimento,
+            genero: sexo
+        })
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('Erro na resposta do servidor');
+        }
+        return response.json();
+    })
+    .then(data => {
+        categoriasContainer.innerHTML = '';
+        if (statusDiv) {
+            statusDiv.innerHTML = '';
+        }
+        
+        if (data.categorias && data.categorias.length > 0) {
+            const divContainer = document.createElement('div');
+            divContainer.className = 'border rounded p-3';
+            divContainer.style.cssText = 'max-height: 300px; overflow-y: auto;';
+            
+            data.categorias.forEach((cat, index) => {
+                const formCheck = document.createElement('div');
+                formCheck.className = 'form-check mb-2';
+                
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.className = 'form-check-input';
+                checkbox.name = 'campo_categoria[]';
+                checkbox.value = cat.nome_categoria;
+                checkbox.id = 'cat_' + index;
+                
+                const label = document.createElement('label');
+                label.className = 'form-check-label';
+                label.htmlFor = 'cat_' + index;
+                
+                let labelHtml = '<strong>' + cat.nome_categoria + '</strong>';
+                if (cat.id_classe) {
+                    labelHtml += ' <small class="text-muted">(' + cat.id_classe + ')</small>';
+                }
+                if (cat.peso_min || cat.peso_max || cat.idade_min || cat.idade_max) {
+                    labelHtml += '<br><small class="text-muted">';
+                    if (cat.peso_min || cat.peso_max) {
+                        labelHtml += 'Peso: ';
+                        if (cat.peso_min) labelHtml += cat.peso_min + 'kg';
+                        if (cat.peso_min && cat.peso_max) labelHtml += ' - ';
+                        if (cat.peso_max) labelHtml += cat.peso_max + 'kg';
+                        else labelHtml += '+';
+                    }
+                    if ((cat.peso_min || cat.peso_max) && (cat.idade_min || cat.idade_max)) {
+                        labelHtml += ' | ';
+                    }
+                    if (cat.idade_min || cat.idade_max) {
+                        labelHtml += 'Idade: ';
+                        if (cat.idade_min) labelHtml += cat.idade_min;
+                        if (cat.idade_min && cat.idade_max) labelHtml += ' - ';
+                        if (cat.idade_max) labelHtml += cat.idade_max;
+                        else labelHtml += '+';
+                        labelHtml += ' anos';
+                    }
+                    labelHtml += '</small>';
+                }
+                label.innerHTML = labelHtml;
+                
+                formCheck.appendChild(checkbox);
+                formCheck.appendChild(label);
+                divContainer.appendChild(formCheck);
+            });
+            
+            categoriasContainer.appendChild(divContainer);
+            if (statusDiv) {
+                statusDiv.innerHTML = '<small class="text-success">' + data.categorias.length + ' categoria(s) encontrada(s). Selecione uma ou mais categorias.</small>';
+            }
+        } else {
+            categoriasContainer.innerHTML = '<div class="alert alert-warning"><i class="bi bi-exclamation-triangle me-1"></i> Nenhuma categoria encontrada para estes dados</div>';
+            if (statusDiv) {
+                statusDiv.innerHTML = '<small class="text-warning">Nenhuma categoria encontrada</small>';
+            }
+        }
+    })
+    .catch(error => {
+        console.error('Erro ao buscar categorias:', error);
+        categoriasContainer.innerHTML = '<div class="alert alert-danger"><i class="bi bi-exclamation-triangle me-1"></i> Erro ao buscar categorias. Tente novamente.</div>';
+        if (statusDiv) {
+            statusDiv.innerHTML = '<small class="text-danger">Erro ao buscar categorias</small>';
+        }
+    });
+}
+
+// Máscara para data brasileira (dd/mm/yyyy)
+function aplicarMascaraData(input) {
+    input.addEventListener('input', function(e) {
+        let value = e.target.value.replace(/\D/g, '');
+        if (value.length >= 2) {
+            value = value.substring(0, 2) + '/' + value.substring(2);
+        }
+        if (value.length >= 5) {
+            value = value.substring(0, 5) + '/' + value.substring(5, 9);
+        }
+        e.target.value = value;
+    });
+}
+
+// Converter data BR para YYYY-MM-DD
+function converterDataParaISO(dataBR) {
+    if (!dataBR) return '';
+    const partes = dataBR.split('/');
+    if (partes.length === 3) {
+        return partes[2] + '-' + partes[1] + '-' + partes[0];
+    }
+    return dataBR;
+}
+
+// Converter data ISO para BR (dd/mm/yyyy)
+function converterDataParaBR(dataISO) {
+    if (!dataISO) return '';
+    const partes = dataISO.split('-');
+    if (partes.length === 3) {
+        return partes[2] + '/' + partes[1] + '/' + partes[0];
+    }
+    return dataISO;
+}
+
+// Buscar categorias quando peso, data_nascimento ou sexo mudarem
+document.addEventListener('DOMContentLoaded', function() {
+    const pesoInput = document.getElementById('campo_peso');
+    const dataNascInput = document.getElementById('campo_data_nascimento');
+    const sexoSelect = document.getElementById('campo_sexo');
+    
+    // Aplicar máscara de data
+    if (dataNascInput) {
+        aplicarMascaraData(dataNascInput);
+        
+        // Converter valor inicial se estiver em formato ISO
+        if (dataNascInput.value && dataNascInput.value.includes('-')) {
+            dataNascInput.value = converterDataParaBR(dataNascInput.value);
+        }
+        
+        dataNascInput.addEventListener('change', function() {
+            buscarCategorias();
+        });
+    }
+    
+    if (pesoInput) {
+        pesoInput.addEventListener('change', buscarCategorias);
+        pesoInput.addEventListener('input', buscarCategorias);
+    }
+    if (sexoSelect) {
+        sexoSelect.addEventListener('change', buscarCategorias);
+    }
+    
+    // Converter data antes de enviar formulário
+    const form = document.querySelector('form');
+    if (form && dataNascInput) {
+        form.addEventListener('submit', function(e) {
+            if (dataNascInput.value && dataNascInput.value.includes('/')) {
+                const dataISO = converterDataParaISO(dataNascInput.value);
+                dataNascInput.value = dataISO;
+            }
+        });
+    }
+    
+    // Executar automaticamente se os campos já estão preenchidos
+    setTimeout(function() {
+        const peso = pesoInput ? pesoInput.value : '';
+        const dataNasc = dataNascInput ? dataNascInput.value : '';
+        const sexo = sexoSelect ? sexoSelect.value : '';
+        
+        if (peso && dataNasc && sexo) {
+            buscarCategorias();
+        }
+    }, 500);
+});
+</script>
+{% endblock %}

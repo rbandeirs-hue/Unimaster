@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+{% block title %}Visitantes — {{ academias[0].nome if academias else 'Academia' }}{% endblock %}
+{% block content %}
+<div class="container mt-4">
+    <div class="mb-4">
+        {% if academias|length > 1 %}
+        <form method="GET" class="mb-3">
+            <label class="form-label small fw-semibold">Academia:</label>
+            <select name="academia_id" class="form-select form-select-sm d-inline-block w-auto" onchange="this.form.submit()">
+                {% for ac in academias %}
+                <option value="{{ ac.id }}" {% if ac.id == academia_id %}selected{% endif %}>{{ ac.nome }}</option>
+                {% endfor %}
+            </select>
+        </form>
+        {% endif %}
+        {% set back_url = url_for('academia.painel_academia', academia_id=academia_id) %}
+        {% include 'components/botao_voltar.html' %}
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <h2 class="h4 fw-bold text-primary mb-1">Visitantes</h2>
+                <p class="text-muted mb-0">Histórico e gestão de visitantes.</p>
+            </div>
+            <a href="{{ url_for('academia.solicitacoes_aulas', academia_id=academia_id) }}" class="btn btn-primary">
+                <i class="bi bi-clipboard-check me-2"></i>Solicitações
+            </a>
+        </div>
+    </div>
+
+    <!-- Estatísticas -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-4">
+            <div class="card shadow-sm border-primary">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-muted mb-1">Total de Visitantes</h6>
+                            <h3 class="mb-0 fw-bold text-primary">{{ stats.total_visitantes or 0 }}</h3>
+                        </div>
+                        <i class="bi bi-people-fill display-6 text-primary opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card shadow-sm border-success">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-muted mb-1">Visitantes Ativos</h6>
+                            <h3 class="mb-0 fw-bold text-success">{{ stats.visitantes_ativos or 0 }}</h3>
+                        </div>
+                        <i class="bi bi-person-check-fill display-6 text-success opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card shadow-sm border-info">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-muted mb-1">Com Aulas Agendadas</h6>
+                            <h3 class="mb-0 fw-bold text-info">{{ stats.visitantes_com_aulas or 0 }}</h3>
+                        </div>
+                        <i class="bi bi-calendar-event display-6 text-info opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Lista de Visitantes -->
+    {% if visitantes %}
+    <div class="card shadow-sm border-0">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Foto</th>
+                            <th>Nome</th>
+                            <th>Idade</th>
+                            <th>Contato</th>
+                            <th>Aulas</th>
+                            <th>Última Aula</th>
+                            <th>Status</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for v in visitantes %}
+                        <tr>
+                            <td>
+                                {% if v.foto_url %}
+                                <img src="{{ url_for('static', filename=v.foto_url) }}" 
+                                     alt="{{ v.nome }}" 
+                                     class="rounded-circle" 
+                                     style="width: 40px; height: 40px; object-fit: cover;">
+                                {% else %}
+                                <div class="rounded-circle bg-secondary d-flex align-items-center justify-content-center" 
+                                     style="width: 40px; height: 40px;">
+                                    <i class="bi bi-person text-white"></i>
+                                </div>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <strong>{{ v.nome }}</strong>
+                                {% if v.usuario_email %}
+                                <br><small class="text-muted">{{ v.usuario_email }}</small>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if v.idade %}
+                                {{ v.idade }} anos
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if v.telefone %}
+                                {{ v.telefone }}
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="badge bg-info">{{ v.total_aulas or 0 }}</span>
+                                {% if v.total_aulas > 0 %}
+                                <br><small class="text-muted">{{ v.aulas_presentes or 0 }} presentes</small>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if v.ultima_aula %}
+                                {{ v.ultima_aula|data_br }}
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if v.ativo %}
+                                <span class="badge bg-success">Ativo</span>
+                                {% else %}
+                                <span class="badge bg-secondary">Inativo</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <a href="{{ url_for('academia.detalhes_visitante', visitante_id=v.id, academia_id=academia_id) }}" 
+                                   class="btn btn-sm btn-outline-primary">
+                                    <i class="bi bi-eye me-1"></i>Ver
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="card shadow-sm border-0">
+        <div class="card-body text-center py-5">
+            <i class="bi bi-people display-1 text-muted mb-3"></i>
+            <h5 class="text-muted">Nenhum visitante encontrado</h5>
+            <p class="text-muted mb-0">Ainda não há visitantes cadastrados nesta academia.</p>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,5 +1,9 @@
 {% extends "base.html" %}
 {% block title %}Editar Aluno{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/photo-cropper.css') }}">
+{% endblock %}
 {% block content %}
 
 <style>
@@ -197,22 +201,25 @@
                         </div>
                     </div>
 
-                    <div class="col-md-4 mb-3">
-                        <label class="form-label fw-semibold">Registro Zempo nº</label>
-                        <input type="text" class="form-control" name="zempo"
-                               placeholder="Número do registro Zempo"
-                               value="{{ aluno.zempo }}">
-                    </div>
                 </div>
-
+                <div class="form-check mb-3">
+                    <input class="form-check-input" type="checkbox" id="cadastro_zempo_gestor" name="cadastro_zempo" value="1"
+                           {% if aluno.zempo or aluno.data_cadastro_zempo %}checked{% endif %}>
+                    <label class="form-check-label fw-semibold" for="cadastro_zempo_gestor">Cadastro no Zempo</label>
+                </div>
                 <div class="row">
                     <div class="col-md-4 mb-3">
+                        <label class="form-label fw-semibold">Registro Zempo nº</label>
+                        <input type="text" class="form-control" name="zempo" id="zempo_gestor"
+                               placeholder="Número do registro Zempo"
+                               value="{{ aluno.zempo or '' }}">
+                    </div>
+                    <div class="col-md-4 mb-3">
                         <label class="form-label fw-semibold">Data de Cadastro Zempo</label>
-                        <input type="date" class="form-control" name="data_cadastro_zempo"
+                        <input type="date" class="form-control" name="data_cadastro_zempo" id="data_cadastro_zempo_gestor"
                                placeholder="Data de cadastro"
                                value="{{ aluno.data_cadastro_zempo or '' }}">
                     </div>
-
                     <div class="col-md-4 mb-3">
                         <label class="form-label fw-semibold">Peso</label>
                         <input type="number" step="0.1" class="form-control" name="peso"
@@ -249,16 +256,21 @@
                                value="{{ modalidades_display or '—' }}">
                     </div>
                 </div>
+                <div class="form-check mb-3">
+                    <input class="form-check-input" type="checkbox" id="cadastro_zempo" name="cadastro_zempo" value="1"
+                           {% if aluno.zempo or aluno.data_cadastro_zempo %}checked{% endif %}>
+                    <label class="form-check-label fw-semibold" for="cadastro_zempo">Cadastro no Zempo</label>
+                </div>
                 <div class="row">
                     <div class="col-md-4 mb-3">
                         <label class="form-label fw-semibold">Registro Zempo nº</label>
-                        <input type="text" class="form-control" name="zempo"
+                        <input type="text" class="form-control" name="zempo" id="zempo_editar"
                                placeholder="Número do registro Zempo"
-                               value="{{ aluno.zempo }}">
+                               value="{{ aluno.zempo or '' }}">
                     </div>
                     <div class="col-md-4 mb-3">
                         <label class="form-label fw-semibold">Data de Cadastro Zempo</label>
-                        <input type="date" class="form-control" name="data_cadastro_zempo"
+                        <input type="date" class="form-control" name="data_cadastro_zempo" id="data_cadastro_zempo_editar"
                                placeholder="Data de cadastro"
                                value="{{ aluno.data_cadastro_zempo or '' }}">
                     </div>
@@ -290,13 +302,6 @@
                 </h6>
 
                 <div class="row">
-                    <div class="col-md-4 mb-3">
-                        <label class="form-label fw-semibold">Registro FPJU nº</label>
-                        <input type="text" class="form-control" name="registro_fpju"
-                               placeholder="Número FPJU"
-                               value="{{ aluno.registro_fpju or '' }}">
-                    </div>
-
                     <div class="col-md-4 mb-3">
                         <label class="form-label fw-semibold">Data da Última Graduação</label>
                         <input type="date" class="form-control" name="ultimo_exame_faixa"
@@ -540,7 +545,7 @@
                                 <i class="bi bi-camera-fill"></i> Câmera
                             </button>
 
-                            <input type="file" name="foto_arquivo" class="form-control" accept="image/*">
+                            <input type="file" name="foto_arquivo" id="fotoArquivoEditarAluno" class="form-control" accept="image/*">
 
                         </div>
                     </div>
@@ -551,9 +556,8 @@
                 <!-- ===================================================== -->
 
                 <div class="d-flex justify-content-between mt-4 pt-3 border-top">
-                    <a href="{{ back_url }}" class="btn btn-outline-secondary btn-lg">
-                        <i class="bi bi-arrow-left-circle me-2"></i> Voltar
-                    </a>
+                    {% set back_url = back_url or get_back_url_default() %}
+{% include 'components/botao_voltar.html' %}
 
                     <button type="submit" class="btn btn-success btn-lg">
                         <i class="bi bi-save me-2"></i> Salvar Alterações
@@ -768,6 +772,42 @@
     document.querySelector('input[name="nome_mae"]')?.addEventListener('input', atualizarResponsavel);
     atualizarResponsavel();
 
-</script>
+    // Cadastro Zempo: habilita/desabilita campos conforme checkbox (ambas seções: gestor e aluno)
+    function atualizarCamposZempo() {
+        var ids = [
+            ['cadastro_zempo', 'zempo_editar', 'data_cadastro_zempo_editar'],
+            ['cadastro_zempo_gestor', 'zempo_gestor', 'data_cadastro_zempo_gestor']
+        ];
+        ids.forEach(function(arr) {
+            var marcado = document.getElementById(arr[0])?.checked;
+            var zempo = document.getElementById(arr[1]);
+            var dataZempo = document.getElementById(arr[2]);
+            if (!zempo || !dataZempo) return;
+            zempo.disabled = !marcado;
+            dataZempo.disabled = !marcado;
+            if (!marcado) {
+                zempo.value = '';
+                dataZempo.value = '';
+            }
+        });
+    }
+    document.getElementById('cadastro_zempo')?.addEventListener('change', atualizarCamposZempo);
+    document.getElementById('cadastro_zempo_gestor')?.addEventListener('change', atualizarCamposZempo);
+    atualizarCamposZempo();
 
+</script>
+{% endblock %}
+{% block extra_js %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
+<script src="{{ url_for('static', filename='js/photo-cropper.js') }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var fa = document.getElementById('fotoArquivoEditarAluno');
+    var fi = document.getElementById('fotoInput');
+    var m = document.getElementById('miniatura');
+    if (fa && fi && m && typeof initPhotoCrop === 'function') {
+        initPhotoCrop(fa, { fotoInput: fi, miniatura: m, placeholder: null });
+    }
+});
+</script>
 {% endblock %}

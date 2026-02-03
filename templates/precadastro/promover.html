@@ -1,0 +1,256 @@
+{% extends "base.html" %}
+{% block title %}Promover Pré-cadastro — {{ precadastro.nome }}{% endblock %}
+{% block content %}
+<div class="container my-4 my-md-5">
+  <div class="card shadow-lg border-0 rounded-3 mx-auto" style="max-width: 800px;">
+    <div class="card-header bg-primary text-white text-center py-3 rounded-top-3">
+      <h5 class="mb-0 fw-bold">
+        <i class="bi bi-person-check-fill me-2"></i> Promover Pré-cadastro
+      </h5>
+    </div>
+    <div class="card-body p-4 p-md-5">
+      <div class="alert alert-info mb-4">
+        <strong>{{ precadastro.nome }}</strong><br>
+        <small class="text-muted">
+          E-mail: {{ precadastro.email or 'Não informado' }} | 
+          Telefone: {{ precadastro.telefone or 'Não informado' }}
+        </small>
+      </div>
+
+      <form method="POST" action="{{ url_for('precadastro.promover', precadastro_id=precadastro.id) }}" class="needs-validation" novalidate>
+        <div class="mb-4">
+          <label class="form-label fw-semibold">Selecione os perfis a criar <span class="text-danger">*</span></label>
+          <div class="row g-2">
+            {% for role in roles_disponiveis %}
+            <div class="col-12 col-md-6">
+              <div class="form-check">
+                <input class="form-check-input role-cb" type="checkbox" name="roles" id="role_{{ role.id }}" 
+                       value="{{ role.id }}" data-chave="{{ role.chave or role.nome|lower }}">
+                <label class="form-check-label" for="role_{{ role.id }}">
+                  {{ role.nome }}
+                </label>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+          <div class="form-text">Marque um ou mais perfis. Você pode selecionar quantos quiser.</div>
+        </div>
+
+        <div id="blocoUsuario" class="mb-3" style="display:none;">
+          <h6 class="fw-semibold mb-3">Dados de Acesso ao Sistema</h6>
+          <div class="alert alert-info mb-3" id="infoUsuario">
+            <i class="bi bi-info-circle me-2"></i>
+            <span id="infoUsuarioTexto">Preencha os dados abaixo para criar acesso ao sistema.</span>
+          </div>
+          <div class="mb-3">
+            <label for="email_usuario" class="form-label fw-semibold">E-mail para login <span class="text-danger" id="email_required">*</span></label>
+            <input type="email" class="form-control" id="email_usuario" name="email_usuario" 
+                   value="{{ precadastro.email or precadastro.email_acesso or '' }}" 
+                   placeholder="exemplo@email.com">
+            <div class="form-text">Será usado para fazer login no sistema.</div>
+          </div>
+          <div class="mb-3">
+            <label for="senha_usuario" class="form-label fw-semibold">Senha <span class="text-danger" id="senha_required">*</span></label>
+            <input type="password" class="form-control" id="senha_usuario" name="senha_usuario" 
+                   placeholder="Mínimo 6 caracteres" minlength="6">
+            <div class="form-text">Defina uma senha segura para o usuário.</div>
+          </div>
+          <div class="form-check mb-3" id="checkCriarUsuario" style="display:none;">
+            <input class="form-check-input" type="checkbox" id="criar_usuario_check" name="criar_usuario" value="1" checked>
+            <label class="form-check-label" for="criar_usuario_check">
+              Criar usuário automaticamente com acesso ao sistema
+            </label>
+          </div>
+        </div>
+
+        <div id="blocoAluno" class="mb-3" style="display:none;">
+          <div class="alert alert-info mb-0">
+            <i class="bi bi-info-circle me-2"></i>
+            <strong>Aluno será criado automaticamente</strong><br>
+            <small>Um novo registro de aluno será criado a partir dos dados do pré-cadastro e vinculado ao usuário.</small>
+          </div>
+          <input type="hidden" name="criar_aluno" value="1">
+          <input type="hidden" name="aluno_id" id="aluno_id" value="">
+        </div>
+
+        <div id="blocoResponsavel" class="mb-3" style="display:none;">
+          <h6 class="fw-semibold mb-3">Alunos do Responsável</h6>
+          <div class="border rounded p-3" style="max-height: 250px; overflow-y: auto; background: #f8fafc;">
+            {% for a in alunos_para_responsavel %}
+            <div class="form-check mb-2">
+              <input class="form-check-input" type="checkbox" name="aluno_ids" value="{{ a.id }}" id="aluno_resp_{{ a.id }}">
+              <label class="form-check-label" for="aluno_resp_{{ a.id }}">{{ a.nome }}</label>
+            </div>
+            {% endfor %}
+            {% if not alunos_para_responsavel %}
+            <p class="text-muted small mb-0">Nenhum aluno cadastrado na academia.</p>
+            {% endif %}
+          </div>
+          <div class="form-text">Marque os alunos dos quais este responsável terá acesso.</div>
+        </div>
+
+        <div class="d-flex flex-column flex-md-row justify-content-center gap-3 mt-4">
+          <button type="submit" class="btn btn-primary btn-lg">
+            <i class="bi bi-check-circle me-2"></i> Promover
+          </button>
+          <a href="{{ url_for('precadastro.lista', academia_id=academia_id) }}" class="btn btn-outline-secondary btn-lg">
+            <i class="bi bi-arrow-left me-2"></i> Cancelar
+          </a>
+        </div>
+              {% set back_url = back_url or get_back_url_default() %}
+{% include 'components/botao_voltar.html' %}
+    </form>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+    var blocoUsuario = document.getElementById('blocoUsuario');
+    var blocoAluno = document.getElementById('blocoAluno');
+    var blocoResponsavel = document.getElementById('blocoResponsavel');
+
+    function temRole(chave) {
+        var cbs = document.querySelectorAll('.role-cb:checked');
+        for (var i = 0; i < cbs.length; i++) {
+            if ((cbs[i].dataset.chave || '').toLowerCase() === chave.toLowerCase()) return true;
+        }
+        return false;
+    }
+
+    function atualizarBlocos() {
+        var precisaUsuario = temRole('professor') || temRole('gestor_academia') || 
+                            temRole('gestor_associacao') || temRole('responsavel') || 
+                            temRole('visitante');
+        
+        // Se selecionou apenas aluno, também mostrar opção de criar usuário
+        var temAluno = temRole('aluno');
+        var mostrarUsuario = precisaUsuario || temAluno;
+        
+        blocoUsuario.style.display = mostrarUsuario ? 'block' : 'none';
+        blocoAluno.style.display = temAluno ? 'block' : 'none';
+        
+        blocoResponsavel.style.display = temRole('responsavel') ? 'block' : 'none';
+
+        // Validar campos obrigatórios
+        var emailUsuario = document.getElementById('email_usuario');
+        var senhaUsuario = document.getElementById('senha_usuario');
+        // Campos obrigatórios apenas se precisa_usuario (não apenas aluno)
+        if (emailUsuario) emailUsuario.required = precisaUsuario;
+        if (senhaUsuario) senhaUsuario.required = precisaUsuario;
+        
+        // Se apenas aluno, mostrar checkbox para criar usuário
+        var checkCriarUsuario = document.getElementById('checkCriarUsuario');
+        var infoUsuarioTexto = document.getElementById('infoUsuarioTexto');
+        var emailRequired = document.getElementById('email_required');
+        var senhaRequired = document.getElementById('senha_required');
+        
+        if (temAluno && !precisaUsuario) {
+            if (checkCriarUsuario) checkCriarUsuario.style.display = 'block';
+            if (infoUsuarioTexto) {
+                infoUsuarioTexto.textContent = 'Opcional: Preencha os dados abaixo se desejar criar acesso ao sistema para o aluno.';
+            }
+            if (emailRequired) emailRequired.style.display = 'none';
+            if (senhaRequired) senhaRequired.style.display = 'none';
+            if (emailUsuario) {
+                emailUsuario.required = false;
+                emailUsuario.placeholder = 'Opcional - será usado para login se informado';
+            }
+            if (senhaUsuario) {
+                senhaUsuario.required = false;
+                senhaUsuario.placeholder = 'Opcional - defina se quiser criar acesso ao sistema';
+            }
+        } else {
+            if (checkCriarUsuario) checkCriarUsuario.style.display = 'none';
+            if (infoUsuarioTexto) {
+                infoUsuarioTexto.textContent = 'Preencha os dados abaixo para criar acesso ao sistema.';
+            }
+            if (precisaUsuario) {
+                if (emailRequired) emailRequired.style.display = 'inline';
+                if (senhaRequired) senhaRequired.style.display = 'inline';
+                if (emailUsuario) {
+                    emailUsuario.required = true;
+                    emailUsuario.placeholder = 'exemplo@email.com';
+                }
+                if (senhaUsuario) {
+                    senhaUsuario.required = true;
+                    senhaUsuario.placeholder = 'Mínimo 6 caracteres';
+                }
+            }
+        }
+        
+        // Atualizar obrigatoriedade dos campos quando checkbox muda
+        var criarUsuarioCheck = document.getElementById('criar_usuario_check');
+        if (criarUsuarioCheck) {
+            criarUsuarioCheck.addEventListener('change', function() {
+                if (this.checked && temAluno && !precisaUsuario) {
+                    if (emailRequired) emailRequired.style.display = 'inline';
+                    if (senhaRequired) senhaRequired.style.display = 'inline';
+                    if (emailUsuario) emailUsuario.required = true;
+                    if (senhaUsuario) senhaUsuario.required = true;
+                } else if (!this.checked && temAluno && !precisaUsuario) {
+                    if (emailRequired) emailRequired.style.display = 'none';
+                    if (senhaRequired) senhaRequired.style.display = 'none';
+                    if (emailUsuario) emailUsuario.required = false;
+                    if (senhaUsuario) senhaUsuario.required = false;
+                }
+            });
+        }
+    }
+
+    document.querySelectorAll('.role-cb').forEach(function(cb) {
+        cb.addEventListener('change', atualizarBlocos);
+    });
+
+    atualizarBlocos();
+
+    // Validação do formulário
+    document.querySelector('form').addEventListener('submit', function(e) {
+        var precisaUsuario = temRole('professor') || temRole('gestor_academia') || 
+                            temRole('gestor_associacao') || temRole('responsavel') || 
+                            temRole('visitante');
+        var temAluno = temRole('aluno');
+        var mostrarUsuario = precisaUsuario || temAluno;
+        
+        if (precisaUsuario) {
+            var email = document.getElementById('email_usuario').value.trim();
+            var senha = document.getElementById('senha_usuario').value.trim();
+            if (!email) {
+                e.preventDefault();
+                alert('E-mail é obrigatório quando há perfis que requerem acesso ao sistema.');
+                return false;
+            }
+            if (!senha || senha.length < 6) {
+                e.preventDefault();
+                alert('Senha é obrigatória e deve ter no mínimo 6 caracteres.');
+                return false;
+            }
+        } else if (temAluno && mostrarUsuario) {
+            // Se apenas aluno, verificar se quer criar usuário
+            var criarUsuarioCheck = document.getElementById('criar_usuario_check');
+            if (criarUsuarioCheck && criarUsuarioCheck.checked) {
+                var email = document.getElementById('email_usuario').value.trim();
+                var senha = document.getElementById('senha_usuario').value.trim();
+                if (!email) {
+                    e.preventDefault();
+                    alert('Para criar usuário, informe o e-mail.');
+                    return false;
+                }
+                if (!senha || senha.length < 6) {
+                    e.preventDefault();
+                    alert('Para criar usuário, a senha deve ter no mínimo 6 caracteres.');
+                    return false;
+                }
+            }
+        }
+
+        var rolesChecked = document.querySelectorAll('.role-cb:checked');
+        if (rolesChecked.length === 0) {
+            e.preventDefault();
+            alert('Selecione ao menos um perfil para promover.');
+            return false;
+        }
+    });
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+{% block title %}Editar Inscrição — {{ evento.nome }}{% endblock %}
+{% block content %}
+<div class="container mt-5">
+    <div class="mb-4">
+        {% set back_url = back_url or get_back_url_default() %}
+{% include 'components/botao_voltar.html' %}
+        <h2 class="h4 fw-bold text-primary">Editar Inscrição — {{ evento.nome }}</h2>
+        <p class="text-muted mb-0">Aluno: {{ inscricao.aluno_nome or 'Avulso' }}. Atualize os dados abaixo.</p>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-body p-4">
+            <form method="POST" action="{{ url_for('eventos_competicoes.editar_inscricao', evento_id=evento.id, inscricao_id=inscricao.id, academia_id=academia_id) }}">
+                <input type="hidden" name="academia_id" value="{{ academia_id }}">
+                {% for c in campos_form %}
+                <div class="mb-3">
+                    <label for="campo_{{ c.campo_chave }}" class="form-label fw-semibold">{{ c.label }}</label>
+                    {% set chave = c.campo_chave %}
+                    {% set val = valores_iniciais.get(chave, '') %}
+                    {% if chave == 'id_academia' %}
+                    <select id="campo_{{ chave }}" name="campo_{{ chave }}" class="form-select" required>
+                        <option value="{{ academia_id }}" selected>{{ academia_nome or 'Academia' }}</option>
+                    </select>
+                    <small class="form-text text-muted">Academia vinculada ao aluno</small>
+                    {% elif chave == 'sexo' %}
+                    <select id="campo_{{ chave }}" name="campo_{{ chave }}" class="form-control">
+                        <option value="">Selecione</option>
+                        <option value="M" {% if val == 'M' %}selected{% endif %}>Masculino</option>
+                        <option value="F" {% if val == 'F' %}selected{% endif %}>Feminino</option>
+                        <option value="O" {% if val == 'O' %}selected{% endif %}>Outro</option>
+                    </select>
+                    {% elif chave == 'graduacao_id' %}
+                    {% if graduacoes %}
+                    <select id="campo_{{ chave }}" name="campo_{{ chave }}" class="form-select">
+                        <option value="">Selecione</option>
+                        {% for g in graduacoes %}
+                        <option value="{{ g.id }}" {% if val|string == g.id|string %}selected{% endif %}>{{ g.faixa }} {% if g.graduacao %}{{ g.graduacao }}{% endif %} {% if g.categoria %}{{ g.categoria }}{% endif %}</option>
+                        {% endfor %}
+                    </select>
+                    {% else %}
+                    <input type="number" id="campo_{{ chave }}" name="campo_{{ chave }}" class="form-control" value="{{ val }}">
+                    {% endif %}
+                    {% elif chave == 'TurmaID' %}
+                    {% if turmas %}
+                    <select id="campo_{{ chave }}" name="campo_{{ chave }}" class="form-select">
+                        <option value="">Selecione</option>
+                        {% for t in turmas %}
+                        <option value="{{ t.TurmaID }}" {% if val|string == t.TurmaID|string %}selected{% endif %}>{{ t.Nome }} ({{ t.Classificacao or '' }}, {{ t.DiasHorario or '' }})</option>
+                        {% endfor %}
+                    </select>
+                    {% else %}
+                    <input type="number" id="campo_{{ chave }}" name="campo_{{ chave }}" class="form-control" value="{{ val }}">
+                    {% endif %}
+                    {% elif chave == 'data_nascimento' %}
+                    <input type="text" id="campo_{{ chave }}" name="campo_{{ chave }}" class="form-control" 
+                           value="{% if val %}{{ val|data_br }}{% endif %}" 
+                           placeholder="dd/mm/aaaa" required onchange="buscarCategorias()" 
+                           pattern="\d{2}/\d{2}/\d{4}" maxlength="10">
+                    <small class="form-text text-muted">Formato: dd/mm/aaaa</small>
+                    {% elif chave in ['ultimo_exame_faixa','rg_data_emissao','data_cadastro_zempo'] %}
+                    <input type="text" id="campo_{{ chave }}" name="campo_{{ chave }}" class="form-control" 
+                           value="{% if val %}{{ val|data_br }}{% endif %}" 
+                           placeholder="dd/mm/aaaa" pattern="\d{2}/\d{2}/\d{4}" maxlength="10">
+                    <small class="form-text text-muted">Formato: dd/mm/aaaa</small>
+                    {% elif chave == 'peso' %}
+                    <input type="number" step="0.1" id="campo_{{ chave }}" name="campo_{{ chave }}" class="form-control" value="{{ val }}" onchange="buscarCategorias()">
+                    {% elif chave == 'categoria' %}
+                    <select id="campo_{{ chave }}" name="campo_{{ chave }}" class="form-select">
+                        <option value="">Selecione uma categoria</option>
+                        {% for cat in categorias_disponiveis %}
+                        <option value="{{ cat.nome_categoria }}" {% if val == cat.nome_categoria %}selected{% endif %}>{{ cat.nome_categoria }}</option>
+                        {% endfor %}
+                    </select>
+                    <small class="form-text text-muted">Preencha o peso para ver as categorias disponíveis</small>
+                    {% else %}
+                    <input type="text" id="campo_{{ chave }}" name="campo_{{ chave }}" class="form-control" value="{{ val }}">
+                    {% endif %}
+                </div>
+                {% endfor %}
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i> Salvar Alterações</button>
+                    <a href="{{ back_url }}" class="btn btn-outline-secondary">Cancelar</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+// Máscara para data brasileira (dd/mm/yyyy)
+function aplicarMascaraData(input) {
+    input.addEventListener('input', function(e) {
+        let value = e.target.value.replace(/\D/g, '');
+        if (value.length >= 2) {
+            value = value.substring(0, 2) + '/' + value.substring(2);
+        }
+        if (value.length >= 5) {
+            value = value.substring(0, 5) + '/' + value.substring(5, 9);
+        }
+        e.target.value = value;
+    });
+}
+
+// Converter data BR para YYYY-MM-DD
+function converterDataParaISO(dataBR) {
+    if (!dataBR) return '';
+    const partes = dataBR.split('/');
+    if (partes.length === 3) {
+        return partes[2] + '-' + partes[1] + '-' + partes[0];
+    }
+    return dataBR;
+}
+
+// Converter data ISO para BR (dd/mm/yyyy)
+function converterDataParaBR(dataISO) {
+    if (!dataISO) return '';
+    const partes = dataISO.split('-');
+    if (partes.length === 3) {
+        return partes[2] + '/' + partes[1] + '/' + partes[0];
+    }
+    return dataISO;
+}
+
+function buscarCategorias() {
+    const peso = document.getElementById('campo_peso')?.value;
+    const dataNascInput = document.getElementById('campo_data_nascimento');
+    let dataNascimento = dataNascInput?.value;
+    // Converter data BR para ISO se necessário
+    if (dataNascimento && dataNascimento.includes('/')) {
+        const partes = dataNascimento.split('/');
+        if (partes.length === 3) {
+            dataNascimento = partes[2] + '-' + partes[1] + '-' + partes[0];
+        }
+    }
+    const sexo = document.getElementById('campo_sexo')?.value;
+    const categoriaSelect = document.getElementById('campo_categoria');
+    
+    if (!peso || !dataNascimento || !sexo || !categoriaSelect) {
+        return;
+    }
+    
+    fetch('{{ url_for("eventos_competicoes.buscar_categorias") }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            peso: peso,
+            data_nascimento: dataNascimento,
+            genero: sexo
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        const valorAtual = categoriaSelect.value;
+        categoriaSelect.innerHTML = '<option value="">Selecione uma categoria</option>';
+        if (data.categorias && data.categorias.length > 0) {
+            data.categorias.forEach(cat => {
+                const option = document.createElement('option');
+                option.value = cat.nome_categoria;
+                option.textContent = cat.nome_categoria;
+                if (valorAtual === cat.nome_categoria) {
+                    option.selected = true;
+                }
+                categoriaSelect.appendChild(option);
+            });
+        } else {
+            const option = document.createElement('option');
+            option.value = '';
+            option.textContent = 'Nenhuma categoria disponível';
+            categoriaSelect.appendChild(option);
+        }
+    })
+    .catch(error => {
+        console.error('Erro ao buscar categorias:', error);
+    });
+}
+
+// Buscar categorias quando peso, data_nascimento ou sexo mudarem
+document.addEventListener('DOMContentLoaded', function() {
+    const pesoInput = document.getElementById('campo_peso');
+    const dataNascInput = document.getElementById('campo_data_nascimento');
+    const sexoSelect = document.getElementById('campo_sexo');
+    
+    // Aplicar máscara de data
+    if (dataNascInput) {
+        aplicarMascaraData(dataNascInput);
+        
+        // Converter valor inicial se estiver em formato ISO
+        if (dataNascInput.value && dataNascInput.value.includes('-')) {
+            dataNascInput.value = converterDataParaBR(dataNascInput.value);
+        }
+        
+        dataNascInput.addEventListener('change', buscarCategorias);
+    }
+    
+    if (pesoInput) pesoInput.addEventListener('change', buscarCategorias);
+    if (sexoSelect) sexoSelect.addEventListener('change', buscarCategorias);
+    
+    // Converter data antes de enviar formulário
+    const form = document.querySelector('form');
+    if (form && dataNascInput) {
+        form.addEventListener('submit', function(e) {
+            if (dataNascInput.value && dataNascInput.value.includes('/')) {
+                const dataISO = converterDataParaISO(dataNascInput.value);
+                dataNascInput.value = dataISO;
+            }
+        });
+    }
+});
+</script>
+{% endblock %}

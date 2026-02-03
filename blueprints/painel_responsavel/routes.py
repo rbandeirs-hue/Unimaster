@@ -13,6 +13,7 @@ from functools import wraps
 from blueprints.aluno.painel import (
     _turmas_do_aluno, _buscar_alunos_turma, _calcular_meses_filtro,
     _status_efetivo_painel, _calcular_valor_com_juros_multas,
+    _calcular_graduacao_prevista,
 )
 
 bp_painel_responsavel = Blueprint(
@@ -85,6 +86,12 @@ def _enriquecer_aluno_painel(aluno):
     conn = get_db_connection()
     cur = conn.cursor(dictionary=True)
     try:
+        # Inicializar valores padrão
+        aluno.setdefault("academia_nome", None)
+        aluno.setdefault("turma_nome", None)
+        aluno.setdefault("faixa_nome", None)
+        aluno.setdefault("graduacao_nome", None)
+        
         cur.execute(
             """SELECT ac.nome AS academia_nome, t.Nome AS turma_nome
                FROM alunos a
@@ -97,22 +104,41 @@ def _enriquecer_aluno_painel(aluno):
         if row:
             aluno["academia_nome"] = row.get("academia_nome")
             aluno["turma_nome"] = row.get("turma_nome")
+        
+        # Se não encontrou turma no JOIN, tentar buscar diretamente pelo TurmaID
+        if not aluno.get("turma_nome") and aluno.get("TurmaID"):
+            cur.execute("SELECT Nome FROM turmas WHERE TurmaID = %s", (aluno.get("TurmaID"),))
+            turma_row = cur.fetchone()
+            if turma_row:
+                aluno["turma_nome"] = turma_row.get("Nome")
+        
+        # Se ainda não encontrou, tentar buscar via aluno_turmas
+        if not aluno.get("turma_nome"):
+            cur.execute(
+                """SELECT t.Nome FROM aluno_turmas at
+                   INNER JOIN turmas t ON t.TurmaID = at.TurmaID
+                   WHERE at.aluno_id = %s
+                   ORDER BY at.TurmaID LIMIT 1""",
+                (aluno["id"],),
+            )
+            turma_row = cur.fetchone()
+            if turma_row:
+                aluno["turma_nome"] = turma_row.get("Nome")
+        
         cur.execute("SELECT faixa, graduacao FROM graduacao WHERE id = %s", (aluno.get("graduacao_id"),))
         g = cur.fetchone()
         if g:
             aluno["faixa_nome"] = g.get("faixa")
             aluno["graduacao_nome"] = g.get("graduacao")
-        aluno.setdefault("faixa_nome", None)
-        aluno.setdefault("graduacao_nome", None)
-        aluno.setdefault("academia_nome", None)
-        aluno.setdefault("turma_nome", None)
         cur.execute(
             """SELECT m.nome FROM modalidade m
                INNER JOIN aluno_modalidades am ON am.modalidade_id = m.id
                WHERE am.aluno_id = %s ORDER BY m.nome""",
             (aluno["id"],),
         )
-        aluno["modalidades"] = [r["nome"] for r in cur.fetchall()]
+        modalidades_list = [r["nome"] for r in cur.fetchall()]
+        aluno["modalidades"] = modalidades_list
+        aluno["modalidades_nomes"] = ", ".join(modalidades_list) if modalidades_list else "-"
         aluno["proxima_faixa"] = "—"
         cur.execute("SELECT id, faixa, graduacao FROM graduacao ORDER BY id")
         faixas = cur.fetchall()
@@ -163,6 +189,8 @@ def meu_perfil(alunos):
         return redirect(url_for("painel_responsavel.meu_perfil"))
 
     _enriquecer_aluno_painel(aluno)
+    from blueprints.aluno.alunos import enriquecer_aluno_para_modal
+    enriquecer_aluno_para_modal(aluno)
     return render_template(
         "painel_responsavel/meu_perfil.html",
         usuario=current_user,
@@ -225,10 +253,11 @@ def minhas_mensalidades(aluno):
             SELECT ma.id, ma.data_vencimento, ma.data_pagamento, ma.valor, ma.valor_pago, ma.status,
                    ma.status_pagamento, ma.comprovante_url, ma.observacoes,
                    ma.valor_original, ma.desconto_aplicado, ma.id_desconto,
+                   COALESCE(ma.remover_juros, 0) AS remover_juros,
                    m.nome as plano_nome, m.id_academia,
                    COALESCE(m.aplicar_juros_multas, 0) AS aplicar_juros_multas,
                    COALESCE(m.percentual_multa_mes, 2) AS percentual_multa_mes,
-                   COALESCE(m.percentual_juros_dia, 0.0333) AS percentual_juros_dia
+                   COALESCE(m.percentual_juros_dia, 0.033) AS percentual_juros_dia
             FROM mensalidade_aluno ma
             JOIN mensalidades m ON m.id = ma.mensalidade_id
             WHERE {where_clause}
@@ -262,9 +291,10 @@ def minhas_mensalidades(aluno):
                 """, (aluno["id"], ano))
             rows = cur.fetchall()
             for r in rows:
+                r.setdefault("remover_juros", 0)
                 r.setdefault("aplicar_juros_multas", 0)
                 r.setdefault("percentual_multa_mes", 2)
-                r.setdefault("percentual_juros_dia", 0.0333)
+                r.setdefault("percentual_juros_dia", 0.033)
                 r.setdefault("status_pagamento", None)
                 r.setdefault("comprovante_url", None)
                 r.setdefault("valor_original", None)
@@ -298,9 +328,12 @@ def minhas_mensalidades(aluno):
 
     mensalidades = []
     for ma in rows:
-        valor_display, valor_original = _calcular_valor_com_juros_multas(ma, hoje)
+        valor_display, valor_original, multa_val, juros_val = _calcular_valor_com_juros_multas(ma, hoje)
         ma["valor_display"] = valor_display
         ma["valor_original"] = valor_original
+        ma["multa_val"] = multa_val
+        ma["juros_val"] = juros_val
+        ma["tem_juros"] = (multa_val or 0) + (juros_val or 0) > 0
         ma["status_efetivo"] = _status_efetivo_painel(ma.get("status"), ma.get("data_vencimento"), ma.get("status_pagamento"))
         ma["comentario_informado"] = ma.get("comentario_informado") or ma.get("observacoes")
         id_acad = ma.get("id_academia") or id_academia
@@ -373,6 +406,17 @@ def minha_turma(aluno):
             cur.execute("SELECT * FROM turmas WHERE TurmaID = %s", (tid,))
             t = cur.fetchone()
             if t:
+                try:
+                    cur.execute(
+                        """SELECT p.nome FROM turma_professor tp
+                           JOIN professores p ON p.id = tp.professor_id
+                           WHERE tp.TurmaID = %s AND tp.tipo = 'responsavel' LIMIT 1""",
+                        (tid,),
+                    )
+                    row = cur.fetchone()
+                    t["Professor"] = row["nome"] if row and row.get("nome") else t.get("Professor") or "—"
+                except Exception:
+                    t["Professor"] = t.get("Professor") or "—"
                 id_acad = t.get("id_academia")
                 alns = _buscar_alunos_turma(cur, tid, id_acad)
                 turmas_com_alunos.append((t, alns))
@@ -537,6 +581,161 @@ def curriculo(aluno):
         eventos=eventos,
         voltar_url=url_for("painel_responsavel.meu_perfil", aluno_id=aluno["id"]),
         somente_leitura=True,
+    )
+
+
+@bp_painel_responsavel.route("/simular-graduacao-prevista", methods=["GET", "POST"])
+@login_required
+@_aluno_id_responsavel_required
+def simular_graduacao_prevista(aluno):
+    """Simula e exibe graduações previstas baseado na data informada pelo usuário."""
+    try:
+        session["modo_painel"] = "responsavel"
+        _enriquecer_aluno_painel(aluno)
+        from blueprints.aluno.alunos import enriquecer_aluno_para_modal
+        enriquecer_aluno_para_modal(aluno)
+        
+        graduacoes_previstas = []
+        previsao_proximo_exame = None
+        
+        if request.method == "POST":
+            # Obter mês/ano informado pelo usuário
+            previsao_mes_ano = request.form.get("previsao_mes_ano", "").strip()
+            if previsao_mes_ano:
+                try:
+                    # Converter formato YYYY-MM para date (primeiro dia do mês)
+                    from datetime import datetime
+                    previsao_proximo_exame = datetime.strptime(previsao_mes_ano + "-01", "%Y-%m-%d").date()
+                except ValueError:
+                    flash("Data inválida. Use o formato mês/ano.", "danger")
+                    return redirect(url_for("painel_responsavel.simular_graduacao_prevista", aluno_id=aluno.get("id")))
+        
+        # Não usar previsão do banco, só calcular se informado no formulário
+        if not previsao_proximo_exame:
+            graduacoes_previstas = []
+            previsao_input = None
+        else:
+            # Criar cópia do aluno com a previsão para o cálculo
+            aluno_calculo = aluno.copy()
+            aluno_calculo["previsao_proximo_exame"] = previsao_proximo_exame
+            
+            # Calcular graduações previstas usando a data informada
+            from blueprints.aluno.painel import _calcular_graduacao_prevista
+            graduacoes_previstas = _calcular_graduacao_prevista(aluno_calculo)
+            
+            # Formatar previsão para exibição no formulário
+            if isinstance(previsao_proximo_exame, date):
+                previsao_input = previsao_proximo_exame.strftime("%Y-%m")
+            else:
+                try:
+                    from datetime import datetime
+                    previsao_input = datetime.strptime(str(previsao_proximo_exame)[:10], "%Y-%m-%d").strftime("%Y-%m")
+                except:
+                    previsao_input = None
+        
+        return render_template(
+            "painel_responsavel/simular_graduacao_prevista.html",
+            aluno=aluno,
+            graduacoes_previstas=graduacoes_previstas,
+            previsao_proximo_exame_input=previsao_input,
+        )
+    except Exception as e:
+        from flask import current_app
+        current_app.logger.error(f"Erro em simular_graduacao_prevista: {e}", exc_info=True)
+        flash(f"Erro ao carregar página: {str(e)}", "danger")
+        return redirect(url_for("painel_responsavel.meu_perfil", aluno_id=aluno.get("id")))
+
+
+@bp_painel_responsavel.route("/simular-categorias", methods=["GET", "POST"])
+@login_required
+@_responsavel_required
+def simular_categorias(alunos):
+    """Simula e exibe categorias disponíveis baseado em peso, data de nascimento e sexo."""
+    session["modo_painel"] = "responsavel"
+    
+    aluno_id = request.args.get("aluno_id", type=int) or request.form.get("aluno_id", type=int)
+    aluno = None
+    
+    if aluno_id:
+        aluno = _get_aluno_responsavel(aluno_id)
+        if not aluno:
+            flash("Aluno não encontrado.", "danger")
+            return redirect(url_for("painel_responsavel.meu_perfil"))
+    elif len(alunos) == 1:
+        aluno = _get_aluno_responsavel(alunos[0]["id"])
+    
+    categorias_disponiveis = []
+    peso = None
+    data_nascimento = None
+    sexo = None
+    idade_calculada = None
+    
+    # Formatar data_nascimento do aluno para o template se não vier do POST
+    aluno_data_nasc_str = None
+    if aluno:
+        aluno_data_nasc = aluno.get("data_nascimento")
+        if aluno_data_nasc:
+            try:
+                if isinstance(aluno_data_nasc, date):
+                    aluno_data_nasc_str = aluno_data_nasc.strftime("%Y-%m-%d")
+                else:
+                    aluno_data_nasc_str = str(aluno_data_nasc)[:10]
+            except Exception:
+                aluno_data_nasc_str = None
+    
+    if request.method == "POST":
+        peso_str = request.form.get("peso", "").strip()
+        data_nascimento = request.form.get("data_nascimento", "").strip()
+        sexo = request.form.get("sexo", "").strip()
+        
+        if peso_str and data_nascimento and sexo:
+            try:
+                peso = float(peso_str)
+                nasc = datetime.strptime(data_nascimento[:10], "%Y-%m-%d").date()
+                hoje = date.today()
+                idade_calculada = hoje.year - nasc.year
+                genero_upper = sexo.upper()
+                
+                if genero_upper in ("M", "F") and peso > 0:
+                    conn = get_db_connection()
+                    cur = conn.cursor(dictionary=True)
+                    try:
+                        # Mapear M/F para MASCULINO/FEMININO
+                        genero_db = "MASCULINO" if genero_upper == "M" else "FEMININO" if genero_upper == "F" else genero_upper
+                        cur.execute("""
+                            SELECT id, genero, id_classe, categoria, nome_categoria, peso_min, peso_max, idade_min, idade_max, descricao
+                            FROM categorias
+                            WHERE UPPER(genero) = UPPER(%s)
+                            AND (
+                                (idade_min IS NULL OR %s >= idade_min)
+                                AND (idade_max IS NULL OR %s <= idade_max)
+                            )
+                            AND (
+                                (peso_min IS NULL OR %s >= peso_min)
+                                AND (peso_max IS NULL OR %s <= peso_max)
+                            )
+                            ORDER BY nome_categoria
+                        """, (genero_db, idade_calculada, idade_calculada, peso, peso))
+                        categorias_disponiveis = cur.fetchall()
+                    finally:
+                        cur.close()
+                        conn.close()
+            except Exception as e:
+                flash(f"Erro ao calcular categorias: {e}", "danger")
+    
+    # Garantir que categorias_disponiveis seja sempre uma lista
+    if categorias_disponiveis is None:
+        categorias_disponiveis = []
+    
+    return render_template(
+        "painel_responsavel/simular_categorias.html",
+        alunos=alunos,
+        aluno=aluno,
+        categorias_disponiveis=categorias_disponiveis,
+        peso=peso,
+        data_nascimento=data_nascimento or aluno_data_nasc_str,
+        sexo=sexo,
+        idade_calculada=idade_calculada,
     )
 
 

@@ -1,0 +1,288 @@
+{% extends "base.html" %}
+{% block title %}Sincronizar Eventos{% endblock %}
+{% block content %}
+<div class="container mt-3 mt-md-4 px-2 px-md-3">
+    <div class="mb-3 mb-md-4">
+        <h2 class="h5 h4-md fw-bold text-primary mb-1">Sincronizar Eventos</h2>
+        <p class="text-muted small small-md mb-0">
+            {% if nivel == 'academia' %}
+            Sincronize turmas e receba eventos aprovados da associação
+            {% else %}
+            Importe feriados nacionais, sincronize turmas ou faça upload de PDF
+            {% endif %}
+        </p>
+    </div>
+
+    <div class="row g-3 g-md-4">
+        {% if nivel != 'academia' %}
+        <!-- Sincronizar Feriados Nacionais (federação e associação) -->
+        <div class="col-12 col-lg-4">
+            <div class="card h-100 shadow-sm">
+                <div class="card-body p-3 p-md-4">
+                    <div class="text-center mb-2 mb-md-3">
+                        <i class="bi bi-star-fill display-4 display-6-md text-warning" style="font-size: 2.5rem;"></i>
+                    </div>
+                    <h5 class="card-title fw-bold h6 h5-md mb-2">Feriados Nacionais</h5>
+                    <p class="card-text text-muted small mb-3" style="font-size: 0.8rem;">
+                        Sincronize automaticamente os feriados nacionais brasileiros via API.
+                    </p>
+                    <form method="POST" action="{{ url_for('calendario.sincronizar_feriados') }}">
+                        <div class="mb-3">
+                            <label class="form-label small" style="font-size: 0.85rem;">Ano:</label>
+                            <select name="ano" class="form-select form-select-sm" style="min-height: 44px;">
+                                {% for ano in range(ano_atual - 1, ano_atual + 3) %}
+                                <option value="{{ ano }}" {% if ano == ano_atual %}selected{% endif %}>{{ ano }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-warning w-100" style="min-height: 44px;">
+                            <i class="bi bi-cloud-download"></i> Sincronizar Feriados
+                        </button>
+                            {% set back_url = back_url or get_back_url_default() %}
+{% include 'components/botao_voltar.html' %}
+    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Importar calendário FPJU (federação e associação) -->
+        <div class="col-12 col-lg-4">
+            <a href="{{ url_for('calendario.sincronizar_pdf') }}" class="text-decoration-none">
+                <div class="card h-100 shadow-sm border-danger card-hover">
+                    <div class="card-body p-3 p-md-4">
+                        <div class="text-center mb-2 mb-md-3">
+                            <i class="bi bi-file-pdf display-4 display-6-md text-danger" style="font-size: 2.5rem;"></i>
+                        </div>
+                        <h5 class="card-title fw-bold text-dark h6 h5-md mb-2">Importar calendário FPJU</h5>
+                        <p class="card-text text-muted small mb-2" style="font-size: 0.8rem;">
+                            Faça upload de um calendário em PDF e escolha quais eventos deseja importar.
+                        </p>
+                        <div class="alert alert-light small mb-3 border" style="font-size: 0.75rem; padding: 0.5rem;">
+                            <i class="bi bi-info-circle text-info"></i> Formatos: dd/mm/aaaa, dd-mm-aaaa, dd de mês
+                        </div>
+                        <span class="btn btn-danger w-100" style="min-height: 44px;">
+                            <i class="bi bi-upload"></i> Upload PDF
+                        </span>
+                    </div>
+                </div>
+            </a>
+        </div>
+        {% endif %}
+
+        <!-- Sincronizar Turmas (apenas academia) -->
+        {% if nivel == 'academia' %}
+        <div class="col-12 col-lg-4">
+            <div class="card h-100 shadow-sm">
+                <div class="card-body p-3 p-md-4">
+                    <div class="text-center mb-2 mb-md-3">
+                        <i class="bi bi-collection-fill display-4 display-6-md text-primary" style="font-size: 2.5rem;"></i>
+                    </div>
+                    <h5 class="card-title fw-bold h6 h5-md mb-2">Sincronizar Turmas</h5>
+                    <p class="card-text text-muted small mb-2" style="font-size: 0.8rem;">
+                        Crie eventos recorrentes automaticamente para todas as turmas cadastradas.
+                    </p>
+                    <form method="POST" action="{{ url_for('calendario.sincronizar_turmas') }}">
+                        <div class="alert alert-info small mb-3" style="font-size: 0.75rem; padding: 0.5rem;">
+                            <i class="bi bi-info-circle"></i> Serão criadas aulas recorrentes baseadas nos dias e horários de cada turma.
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100" style="min-height: 44px;">
+                            <i class="bi bi-arrow-repeat"></i> Sincronizar Turmas
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sincronizar eventos da sede (apenas academia) -->
+        <div class="col-12 col-lg-4">
+            <div class="card h-100 shadow-sm">
+                <div class="card-body p-3 p-md-4">
+                    <div class="text-center mb-2 mb-md-3">
+                        <i class="bi bi-building display-4 display-6-md text-success" style="font-size: 2.5rem;"></i>
+                    </div>
+                    <h5 class="card-title fw-bold h6 h5-md mb-2">Sincronizar Eventos da Sede</h5>
+                    <p class="card-text text-muted small mb-2" style="font-size: 0.8rem;">
+                        Sincronize todos os eventos e feriados do calendário da associação (sede) para sua academia.
+                    </p>
+                    <div class="alert alert-light small mb-3 border" style="font-size: 0.75rem; padding: 0.5rem;">
+                        <i class="bi bi-info-circle text-success"></i> Eventos e feriados já existentes serão ignorados (não duplica).
+                    </div>
+                    <form method="POST" action="{{ url_for('calendario.sincronizar_sede') }}">
+                        <button type="submit" class="btn btn-success w-100" style="min-height: 44px;">
+                            <i class="bi bi-cloud-download"></i> Sincronizar da Sede
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Eventos da Associação (apenas academia) -->
+        <div class="col-12 col-lg-4">
+            <a href="{{ url_for('calendario.aprovacoes') }}" class="text-decoration-none">
+                <div class="card h-100 shadow-sm border-info card-hover">
+                    <div class="card-body p-3 p-md-4">
+                        <div class="text-center mb-2 mb-md-3">
+                            <i class="bi bi-clipboard-check display-4 display-6-md text-info" style="font-size: 2.5rem;"></i>
+                        </div>
+                        <h5 class="card-title fw-bold text-dark h6 h5-md mb-2">Eventos da Associação</h5>
+                        <p class="card-text text-muted small mb-2" style="font-size: 0.8rem;">
+                            Aprove os eventos do calendário da associação para incluí-los no seu calendário.
+                        </p>
+                        <div class="alert alert-light small mb-3 border" style="font-size: 0.75rem; padding: 0.5rem;">
+                            <i class="bi bi-info-circle text-info"></i> Eventos aguardando sua aprovação
+                        </div>
+                        <span class="btn btn-info w-100" style="min-height: 44px;">
+                            <i class="bi bi-clipboard-check"></i> Aprovar Eventos
+                        </span>
+                    </div>
+                </div>
+            </a>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Histórico de Sincronizações -->
+    {% if historico %}
+    <div class="card shadow-sm mt-3 mt-md-4">
+        <div class="card-header bg-white p-3 p-md-3">
+            <h5 class="mb-0 fw-bold h6 h5-md">Histórico de Sincronizações</h5>
+        </div>
+        <!-- Tabela para desktop -->
+        <div class="card-body p-0 d-none d-md-block">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Data/Hora</th>
+                            <th>Tipo</th>
+                            <th>Arquivo/Origem</th>
+                            <th>Eventos Criados</th>
+                            <th>Por</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for sync in historico %}
+                        <tr>
+                            <td class="small">
+                                {{ sync.sincronizado_em.strftime('%d/%m/%Y %H:%M') if sync.sincronizado_em else '-' }}
+                            </td>
+                            <td>
+                                {% if sync.tipo_sincronizacao == 'api' %}
+                                <span class="badge bg-warning">API</span>
+                                {% elif sync.tipo_sincronizacao == 'pdf' %}
+                                <span class="badge bg-danger">PDF</span>
+                                {% else %}
+                                <span class="badge bg-secondary">Manual</span>
+                                {% endif %}
+                            </td>
+                            <td class="small">{{ sync.arquivo_nome }}</td>
+                            <td class="text-center">
+                                <span class="badge bg-success">{{ sync.eventos_criados }}</span>
+                            </td>
+                            <td class="small">{{ sync.sincronizado_por_nome or '-' }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <!-- Cards para mobile -->
+        <div class="card-body p-0 d-md-none">
+            {% for sync in historico %}
+            <div class="border-bottom p-3">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                    <div class="flex-grow-1">
+                        <div class="small text-muted mb-1" style="font-size: 0.75rem;">
+                            {{ sync.sincronizado_em.strftime('%d/%m/%Y %H:%M') if sync.sincronizado_em else '-' }}
+                        </div>
+                        <div class="mb-1">
+                            {% if sync.tipo_sincronizacao == 'api' %}
+                            <span class="badge bg-warning" style="font-size: 0.7rem;">API</span>
+                            {% elif sync.tipo_sincronizacao == 'pdf' %}
+                            <span class="badge bg-danger" style="font-size: 0.7rem;">PDF</span>
+                            {% else %}
+                            <span class="badge bg-secondary" style="font-size: 0.7rem;">Manual</span>
+                            {% endif %}
+                            <span class="badge bg-success ms-2" style="font-size: 0.7rem;">{{ sync.eventos_criados }} eventos</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="small text-muted mb-1" style="font-size: 0.75rem;">
+                    <strong>Arquivo:</strong> {{ sync.arquivo_nome or '-' }}
+                </div>
+                <div class="small text-muted" style="font-size: 0.75rem;">
+                    <strong>Por:</strong> {{ sync.sincronizado_por_nome or '-' }}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<style>
+@media (max-width: 767.98px) {
+    .container {
+        padding-left: 8px;
+        padding-right: 8px;
+    }
+    
+    .card {
+        margin-bottom: 0.75rem;
+        border-radius: 0.5rem;
+    }
+    
+    .card-body {
+        padding: 0.75rem !important;
+    }
+    
+    .btn {
+        font-size: 0.85rem;
+        padding: 0.5rem 0.75rem;
+        min-height: 44px;
+    }
+    
+    .form-select {
+        font-size: 0.875rem;
+        padding: 0.5rem 0.75rem;
+        min-height: 44px;
+    }
+    
+    .badge {
+        font-size: 0.65rem;
+        padding: 0.25em 0.5em;
+    }
+    
+    .small {
+        font-size: 0.75rem;
+    }
+    
+    .alert {
+        font-size: 0.75rem;
+        padding: 0.5rem;
+    }
+}
+
+@media (min-width: 768px) {
+    .h4-md {
+        font-size: 1.5rem;
+    }
+    
+    .h5-md {
+        font-size: 1.25rem;
+    }
+    
+    .h6-md {
+        font-size: 1rem;
+    }
+    
+    .small-md {
+        font-size: 1rem;
+    }
+    
+    .display-6-md {
+        font-size: 4rem;
+    }
+}
+</style>
+{% endblock %}

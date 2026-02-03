@@ -1,22 +1,47 @@
 {% extends "base.html" %}
-{% block title %}Usuários — {{ academia_nome }}{% endblock %}
+{% block title %}Usuários — {{ associacao_nome if modo_associacao else academia_nome }}{% endblock %}
 {% block content %}
 <div class="container my-4 my-md-5">
   <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4 gap-3">
     <div>
-      <a href="{{ url_for('academia.painel_academia') }}" class="btn btn-outline-secondary btn-sm mb-2">
-        <i class="bi bi-arrow-left me-1"></i> Voltar
-      </a>
+      {% if modo_associacao %}
+        {% set back_url = url_for('associacao.gerenciamento_associacao') %}
+      {% else %}
+        {% set back_url = back_url or get_back_url_default() %}
+      {% endif %}
+{% include 'components/botao_voltar.html' %}
       <h2 class="h4 fw-bold text-primary mb-0">
-        <i class="bi bi-person-lines-fill me-2"></i> Usuários — {{ academia_nome or 'Academia' }}
+        <i class="bi bi-person-lines-fill me-2"></i> Usuários
+        {% if modo_associacao and associacao_nome %}
+          — {{ associacao_nome }}
+        {% elif academia_nome %}
+          — {{ academia_nome }}
+        {% endif %}
       </h2>
+      {% if modo_associacao %}
+      <p class="text-muted small mb-0">Usuários vinculados às academias da associação.</p>
+      {% endif %}
     </div>
-    <a href="{{ url_for('academia.cadastro_usuario', next=request.full_path) }}" class="btn btn-success btn-sm">
+    <a href="{{ url_for('usuarios.cadastro_usuario', next=request.full_path) }}" class="btn btn-success btn-sm">
       <i class="bi bi-person-plus-fill me-1"></i> Novo Usuário
     </a>
   </div>
 
-  {% if academias|length > 1 %}
+  {% if modo_associacao and academias|length > 1 %}
+  <div class="mb-3">
+    <form method="GET" class="d-flex align-items-center gap-2 flex-wrap">
+      <label class="form-label mb-0 small">Filtrar por Academia:</label>
+      <select name="academia_id" class="form-select form-select-sm" style="max-width: 260px;" onchange="this.form.submit()">
+        <option value="">Todas as academias</option>
+        {% for ac in academias %}
+        <option value="{{ ac.id }}" {% if ac.id == academia_id %}selected{% endif %}>{{ ac.nome }}</option>
+        {% endfor %}
+      </select>
+      <input type="hidden" name="busca" value="{{ busca or '' }}">
+      <input type="hidden" name="origem" value="associacao">
+    </form>
+  </div>
+  {% elif academias|length > 1 %}
   <div class="mb-3">
     <form method="GET" class="d-flex align-items-center gap-2 flex-wrap">
       <label class="form-label mb-0 small">Academia:</label>
@@ -26,12 +51,19 @@
         {% endfor %}
       </select>
       <input type="hidden" name="busca" value="{{ busca or '' }}">
+      {% if request.args.get('origem') %}<input type="hidden" name="origem" value="{{ request.args.get('origem') }}">{% endif %}
     </form>
   </div>
   {% endif %}
 
   <form method="GET" action="{{ url_for('academia.lista_usuarios') }}" class="d-flex gap-2 mb-4">
-    <input type="hidden" name="academia_id" value="{{ academia_id }}">
+    {% if modo_associacao %}
+      {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
+      <input type="hidden" name="origem" value="associacao">
+    {% else %}
+      <input type="hidden" name="academia_id" value="{{ academia_id }}">
+      {% if request.args.get('origem') %}<input type="hidden" name="origem" value="{{ request.args.get('origem') }}">{% endif %}
+    {% endif %}
     <input type="text" class="form-control form-control-sm" name="busca" placeholder="Buscar por nome ou e-mail..." value="{{ busca or '' }}" style="max-width: 280px;">
     <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-search me-1"></i> Buscar</button>
   </form>
@@ -39,8 +71,20 @@
   <ul class="list-group list-group-flush">
     {% if usuarios %}
     {% for u in usuarios %}
-    <li class="list-group-item d-flex justify-content-between align-items-center px-3 py-2 border-start-0 border-end-0">
-      <span class="fw-medium">{{ u.nome }}</span>
+    <li class="list-group-item d-flex justify-content-between align-items-start px-3 py-2 border-start-0 border-end-0">
+      <div class="flex-grow-1">
+        <span class="fw-medium d-block">{{ u.nome }}</span>
+        {% if modo_associacao and u.academias_vinculadas %}
+        <small class="text-muted">
+          <i class="bi bi-building me-1"></i>{{ u.academias_vinculadas }}
+        </small>
+        {% endif %}
+        {% if u.email %}
+        <small class="text-muted d-block">
+          <i class="bi bi-envelope me-1"></i>{{ u.email }}
+        </small>
+        {% endif %}
+      </div>
       <div class="d-flex align-items-center gap-2">
         <span class="badge {{ 'bg-success' if u.ativo else 'bg-secondary' }}" style="font-size: 0.75rem;">
           {{ 'Ativo' if u.ativo else 'Inativo' }}
@@ -48,20 +92,17 @@
         <a href="{{ url_for('usuarios.editar_usuario', user_id=u.id, next=request.full_path) }}" class="btn btn-outline-primary btn-sm" title="Editar">
           <i class="bi bi-pencil-fill"></i>
         </a>
-        {% if u.id != current_user.id %}
-        <form method="POST" action="{{ url_for('academia.toggle_usuario_ativo', user_id=u.id) }}" class="d-inline" onsubmit="return confirm('Alterar status deste usuário?');">
-          <button type="submit" class="btn btn-sm {{ 'btn-outline-warning' if u.ativo else 'btn-outline-success' }}" title="{{ 'Inativar' if u.ativo else 'Ativar' }}">
-            <i class="bi {{ 'bi-pause-circle-fill' if u.ativo else 'bi-play-circle-fill' }}"></i>
-          </button>
-        </form>
-        {% endif %}
       </div>
     </li>
     {% endfor %}
     {% else %}
     <li class="list-group-item text-center py-5 text-muted">
-      Nenhum usuário nesta academia.
-      <a href="{{ url_for('academia.cadastro_usuario') }}" class="d-block mt-2">Cadastrar usuário</a>
+      {% if modo_associacao %}
+        Nenhum usuário encontrado nas academias da associação.
+      {% else %}
+        Nenhum usuário nesta academia.
+      {% endif %}
+      <a href="{{ url_for('usuarios.cadastro_usuario', next=back_url|default(request.full_path)) }}" class="d-block mt-2">Cadastrar usuário</a>
     </li>
     {% endif %}
   </ul>
@@ -70,15 +111,15 @@
   <nav class="mt-4">
     <ul class="pagination justify-content-center pagination-sm">
       <li class="page-item {% if pagina_atual == 1 %}disabled{% endif %}">
-        <a class="page-link" href="{{ url_for('academia.lista_usuarios', busca=busca, academia_id=academia_id, page=pagina_atual-1) }}">Anterior</a>
+        <a class="page-link" href="{{ url_for('academia.lista_usuarios', busca=busca, academia_id=academia_id if not modo_associacao else (academia_id if academia_id else ''), page=pagina_atual-1, origem='associacao' if modo_associacao else request.args.get('origem')) }}">Anterior</a>
       </li>
       {% for p in range(1, total_paginas + 1) %}
       <li class="page-item {% if p == pagina_atual %}active{% endif %}">
-        <a class="page-link" href="{{ url_for('academia.lista_usuarios', busca=busca, academia_id=academia_id, page=p) }}">{{ p }}</a>
+        <a class="page-link" href="{{ url_for('academia.lista_usuarios', busca=busca, academia_id=academia_id if not modo_associacao else (academia_id if academia_id else ''), page=p, origem='associacao' if modo_associacao else request.args.get('origem')) }}">{{ p }}</a>
       </li>
       {% endfor %}
       <li class="page-item {% if pagina_atual == total_paginas %}disabled{% endif %}">
-        <a class="page-link" href="{{ url_for('academia.lista_usuarios', busca=busca, academia_id=academia_id, page=pagina_atual+1) }}">Próximo</a>
+        <a class="page-link" href="{{ url_for('academia.lista_usuarios', busca=busca, academia_id=academia_id if not modo_associacao else (academia_id if academia_id else ''), page=pagina_atual+1, origem='associacao' if modo_associacao else request.args.get('origem')) }}">Próximo</a>
       </li>
     </ul>
   </nav>

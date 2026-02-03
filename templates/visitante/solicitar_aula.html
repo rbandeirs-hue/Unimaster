@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}Solicitar Aula Experimental{% endblock %}
+{% block content %}
+<div class="container mt-4">
+    <div class="mb-4">
+        {% set back_url = url_for('visitante.painel') %}
+        {% include 'components/botao_voltar.html' %}
+    </div>
+
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">
+                        <i class="bi bi-calendar-plus me-2"></i>Solicitar Aula Experimental
+                    </h5>
+                </div>
+                <div class="card-body p-4">
+                    {% if visitante %}
+                    <div class="alert alert-info mb-4">
+                        <i class="bi bi-info-circle me-2"></i>
+                        <strong>Academia:</strong> {{ visitante.academia_nome }}<br>
+                        {% if idade %}
+                        <strong>Sua idade:</strong> {{ idade }} anos
+                        {% else %}
+                        <small class="text-muted">Data de nascimento não informada - todas as turmas serão exibidas</small>
+                        {% endif %}
+                    </div>
+
+                    {% if visitante.aulas_experimentais_permitidas and visitante.aulas_experimentais_realizadas >= visitante.aulas_experimentais_permitidas %}
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle me-2"></i>
+                        Você já realizou todas as {{ visitante.aulas_experimentais_permitidas }} aulas experimentais permitidas.
+                    </div>
+                    {% else %}
+                    <form method="POST">
+                        <div class="mb-3">
+                            <label for="turma_id" class="form-label fw-bold">
+                                <i class="bi bi-people me-1"></i>Selecione a Turma
+                            </label>
+                            <select class="form-select" id="turma_id" name="turma_id" required>
+                                <option value="">-- Selecione uma turma --</option>
+                                {% for turma in turmas_disponiveis %}
+                                <option value="{{ turma.TurmaID }}">
+                                    {{ turma.Nome }}
+                                    {% if turma.DiasHorario %} - {{ turma.DiasHorario }}{% endif %}
+                                    {% if turma.IdadeMin or turma.IdadeMax %}
+                                    (Idade: {% if turma.IdadeMin %}{{ turma.IdadeMin }}{% else %}0{% endif %} a {% if turma.IdadeMax %}{{ turma.IdadeMax }}{% else %}99{% endif %} anos)
+                                    {% endif %}
+                                </option>
+                                {% endfor %}
+                            </select>
+                            {% if not turmas_disponiveis %}
+                            <div class="alert alert-warning mt-2">
+                                <i class="bi bi-exclamation-triangle me-2"></i>
+                                Nenhuma turma disponível no momento.
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="data_aula" class="form-label fw-bold">
+                                <i class="bi bi-calendar3 me-1"></i>Data da Aula
+                            </label>
+                            <input type="date" class="form-control" id="data_aula" name="data_aula" required>
+                            <small class="text-muted">Selecione a data em que deseja realizar a aula experimental.</small>
+                        </div>
+
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-check-circle me-2"></i>Solicitar Aula Experimental
+                            </button>
+                        </div>
+                    </form>
+                    {% endif %}
+                    {% else %}
+                    <div class="alert alert-danger">
+                        <i class="bi bi-exclamation-triangle me-2"></i>Visitante não encontrado.
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const dataInput = document.getElementById('data_aula');
+    if (dataInput) {
+        // Definir data mínima como hoje
+        const hoje = new Date().toISOString().split('T')[0];
+        dataInput.setAttribute('min', hoje);
+    }
+});
+</script>
+{% endblock %}

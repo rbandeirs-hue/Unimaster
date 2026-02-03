@@ -42,72 +42,13 @@ def buscar_logo_url(prefixo, entidade_id):
     return None
 
 # =====================================================
-# 🔹 Painel da Federação
+# 🔹 Painel da Federação (redirecionado para gerenciamento)
 # =====================================================
 @federacao_bp.route("/")
 @login_required
 def painel_federacao():
-
-    # 🔥 RBAC – Apenas quem é gestor da federação ou admin
-    if not (current_user.has_role("gestor_federacao") or current_user.has_role("admin")):
-        flash("Acesso negado.", "danger")
-        return redirect(url_for("painel.home"))
-
-    back_url = request.args.get("next") or request.referrer or url_for("federacao.painel_federacao")
-
-    conn = get_db_connection()
-    cur = conn.cursor(dictionary=True)
-
-    if current_user.has_role("admin"):
-        cur.execute("""
-            SELECT id, nome
-            FROM associacoes
-            ORDER BY nome
-        """)
-    else:
-        cur.execute("""
-            SELECT id, nome
-            FROM associacoes
-            WHERE id_federacao = %s
-            ORDER BY nome
-        """, (getattr(current_user, "id_federacao", None),))
-
-    associacoes = cur.fetchall()
-
-    # Dashboard: contagens
-    stats = {"associacoes": 0, "academias": 0, "alunos": 0}
-    try:
-        stats["associacoes"] = len(associacoes)
-        if current_user.has_role("admin"):
-            cur.execute("SELECT COUNT(*) as c FROM academias")
-            stats["academias"] = cur.fetchone().get("c") or 0
-            cur.execute("SELECT COUNT(*) as c FROM alunos")
-            stats["alunos"] = cur.fetchone().get("c") or 0
-        else:
-            fid = getattr(current_user, "id_federacao", None)
-            if fid:
-                cur.execute(
-                    "SELECT COUNT(*) as c FROM academias ac JOIN associacoes ass ON ass.id = ac.id_associacao WHERE ass.id_federacao = %s",
-                    (fid,),
-                )
-                stats["academias"] = cur.fetchone().get("c") or 0
-                cur.execute(
-                    "SELECT COUNT(*) as c FROM alunos a JOIN academias ac ON ac.id = a.id_academia JOIN associacoes ass ON ass.id = ac.id_associacao WHERE ass.id_federacao = %s",
-                    (fid,),
-                )
-                stats["alunos"] = cur.fetchone().get("c") or 0
-    except Exception:
-        pass
-
-    cur.close()
-    conn.close()
-
-    return render_template(
-        "painel/painel_federacao.html",
-        usuario=current_user,
-        associacoes=associacoes,
-        stats=stats,
-    )
+    # Redireciona direto para o gerenciamento da federação
+    return redirect(url_for("federacao.gerenciamento_federacao"))
 
 
 # =====================================================
@@ -123,6 +64,55 @@ def gerenciamento_federacao():
 
 
 # =====================================================
+# 🔹 Configurações da Federação
+# =====================================================
+@federacao_bp.route("/configuracoes")
+@login_required
+def configuracoes_federacao():
+    if not (current_user.has_role("gestor_federacao") or current_user.has_role("admin")):
+        flash("Acesso negado.", "danger")
+        return redirect(url_for("painel.home"))
+
+    federacao_id = request.args.get("federacao_id", type=int)
+    id_fed_user = getattr(current_user, "id_federacao", None)
+
+    if current_user.has_role("admin") and not federacao_id:
+        conn = get_db_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT id, nome FROM federacoes ORDER BY nome")
+        federacoes = cur.fetchall()
+        cur.close()
+        conn.close()
+        return render_template(
+            "painel/configuracoes_federacao.html",
+            federacao=None,
+            federacoes=federacoes,
+        )
+
+    fid = federacao_id or id_fed_user
+    if not fid:
+        flash("Selecione uma federação.", "warning")
+        return redirect(url_for("federacao.gerenciamento_federacao"))
+
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    cur.execute("SELECT id, nome FROM federacoes WHERE id = %s", (fid,))
+    federacao = cur.fetchone()
+    cur.close()
+    conn.close()
+
+    if not federacao:
+        flash("Federação não encontrada.", "danger")
+        return redirect(url_for("federacao.gerenciamento_federacao"))
+
+    return render_template(
+        "painel/configuracoes_federacao.html",
+        federacao=federacao,
+        federacoes=None,
+    )
+
+
+# =====================================================
 # 🔹 Cadastro de Associação
 # =====================================================
 @federacao_bp.route("/associacoes/cadastro", methods=["GET", "POST"])
@@ -133,6 +123,7 @@ def cadastro_associacao():
         flash("Acesso negado.", "danger")
         return redirect(url_for("painel.home"))
 
+    back_url = request.args.get("next") or request.referrer or url_for("federacao.lista_associacoes")
     conn = get_db_connection()
     cur = conn.cursor(dictionary=True)
 
@@ -146,12 +137,23 @@ def cadastro_associacao():
         cur.execute("SELECT id, nome FROM federacoes WHERE id = %s", (id_federacao_padrao,))
         federacoes = cur.fetchall()
 
+    cur.execute("SELECT id, nome FROM modalidade WHERE ativo = 1 ORDER BY nome")
+    modalidades = cur.fetchall()
+
     if request.method == "POST":
         nome = request.form.get("nome", "").strip()
         responsavel = request.form.get("responsavel", "").strip()
         email = request.form.get("email", "").strip()
         telefone = request.form.get("telefone", "").strip()
+        cep = request.form.get("cep", "").strip()
+        rua = request.form.get("rua", "").strip()
+        numero = request.form.get("numero", "").strip()
+        complemento = request.form.get("complemento", "").strip()
+        bairro = request.form.get("bairro", "").strip()
+        cidade = request.form.get("cidade", "").strip()
+        uf = request.form.get("uf", "").strip().upper()
         logo_file = request.files.get("logo")
+        modalidade_ids = [int(x) for x in request.form.getlist("modalidade_ids") if str(x).strip().isdigit()]
 
         if current_user.has_role("admin"):
             id_federacao = request.form.get("id_federacao")
@@ -164,17 +166,29 @@ def cadastro_associacao():
             flash("Selecione a federação da associação.", "danger")
         else:
             cur.execute("""
-                INSERT INTO associacoes (nome, responsavel, email, telefone, id_federacao)
-                VALUES (%s, %s, %s, %s, %s)
+                INSERT INTO associacoes (nome, responsavel, email, telefone, cep, rua, numero, complemento, bairro, cidade, uf, id_federacao)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """, (
                 nome,
                 responsavel or None,
                 email or None,
                 telefone or None,
+                cep or None,
+                rua or None,
+                numero or None,
+                complemento or None,
+                bairro or None,
+                cidade or None,
+                uf or None,
                 id_federacao
             ))
             associacao_id = cur.lastrowid
             salvar_logo(logo_file, "associacao", associacao_id)
+            for mid in modalidade_ids:
+                cur.execute(
+                    "INSERT IGNORE INTO associacao_modalidades (associacao_id, modalidade_id) VALUES (%s, %s)",
+                    (associacao_id, mid),
+                )
             conn.commit()
             cur.close()
             conn.close()
@@ -189,7 +203,8 @@ def cadastro_associacao():
         "associacoes/cadastro_associacao.html",
         federacoes=federacoes,
         id_federacao_selecionada=id_federacao_padrao,
-        back_url=back_url
+        back_url=back_url,
+        modalidades=modalidades,
     )
 
 
@@ -209,6 +224,9 @@ def cadastro_federacao():
     conn = get_db_connection()
     cur = conn.cursor(dictionary=True)
 
+    cur.execute("SELECT id, nome FROM modalidade WHERE ativo = 1 ORDER BY nome")
+    modalidades = cur.fetchall()
+
     if request.method == "POST":
         nome = request.form.get("nome", "").strip()
         sigla = request.form.get("sigla", "").strip()
@@ -216,6 +234,7 @@ def cadastro_federacao():
         email = request.form.get("email", "").strip()
         telefone = request.form.get("telefone", "").strip()
         logo_file = request.files.get("logo")
+        modalidade_ids = [int(x) for x in request.form.getlist("modalidade_ids") if str(x).strip().isdigit()]
 
         if not nome:
             flash("Informe o nome da federação.", "danger")
@@ -226,6 +245,11 @@ def cadastro_federacao():
             """, (nome, sigla or None, cnpj or None, email or None, telefone or None))
             federacao_id = cur.lastrowid
             salvar_logo(logo_file, "federacao", federacao_id)
+            for mid in modalidade_ids:
+                cur.execute(
+                    "INSERT IGNORE INTO federacao_modalidades (federacao_id, modalidade_id) VALUES (%s, %s)",
+                    (federacao_id, mid),
+                )
             conn.commit()
             cur.close()
             conn.close()
@@ -238,7 +262,8 @@ def cadastro_federacao():
 
     return render_template(
         "federacoes/cadastro_federacao.html",
-        back_url=back_url
+        back_url=back_url,
+        modalidades=modalidades,
     )
 
 
@@ -293,6 +318,11 @@ def editar_federacao(federacao_id):
         conn.close()
         return redirect(url_for("federacao.lista_federacoes"))
 
+    cur.execute("SELECT id, nome FROM modalidade WHERE ativo = 1 ORDER BY nome")
+    modalidades = cur.fetchall()
+    cur.execute("SELECT modalidade_id FROM federacao_modalidades WHERE federacao_id = %s", (federacao_id,))
+    federacao_modalidades_ids = {r["modalidade_id"] for r in cur.fetchall()}
+
     if request.method == "POST":
         nome = request.form.get("nome", "").strip()
         sigla = request.form.get("sigla", "").strip()
@@ -300,6 +330,7 @@ def editar_federacao(federacao_id):
         email = request.form.get("email", "").strip()
         telefone = request.form.get("telefone", "").strip()
         logo_file = request.files.get("logo")
+        modalidade_ids = [int(x) for x in request.form.getlist("modalidade_ids") if str(x).strip().isdigit()]
 
         if not nome:
             flash("Informe o nome da federação.", "danger")
@@ -313,6 +344,12 @@ def editar_federacao(federacao_id):
                 (nome, sigla or None, cnpj or None, email or None, telefone or None, federacao_id),
             )
             salvar_logo(logo_file, "federacao", federacao_id)
+            cur.execute("DELETE FROM federacao_modalidades WHERE federacao_id = %s", (federacao_id,))
+            for mid in modalidade_ids:
+                cur.execute(
+                    "INSERT INTO federacao_modalidades (federacao_id, modalidade_id) VALUES (%s, %s)",
+                    (federacao_id, mid),
+                )
             conn.commit()
             cur.close()
             conn.close()
@@ -329,6 +366,8 @@ def editar_federacao(federacao_id):
         federacao=federacao,
         logo_url=logo_url,
         back_url=back_url,
+        modalidades=modalidades,
+        federacao_modalidades_ids=federacao_modalidades_ids,
     )
 
 

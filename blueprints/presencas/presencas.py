@@ -12,6 +12,58 @@ import re # Necessário para o histórico/ajax se mantiver a lógica original
 bp_presencas = Blueprint("presencas", __name__)
 
 
+def _get_professor_id():
+    """Retorna (primeiro professor_id, primeiro id_academia) do current_user."""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute(
+            "SELECT id, id_academia FROM professores WHERE usuario_id = %s AND ativo = 1 LIMIT 1",
+            (current_user.id,),
+        )
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+        return (row["id"], row.get("id_academia")) if row else (None, None)
+    except Exception:
+        return (None, None)
+
+
+def _get_todos_professor_ids():
+    """Retorna lista de professor_id do current_user (pode ter mais de um por academia)."""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute(
+            "SELECT id FROM professores WHERE usuario_id = %s AND ativo = 1 ORDER BY id",
+            (current_user.id,),
+        )
+        ids = [r["id"] for r in cur.fetchall()]
+        cur.close()
+        conn.close()
+        return ids
+    except Exception:
+        return []
+
+
+def _get_ids_turmas_professor(professor_id_or_ids):
+    """Retorna set de TurmaID vinculadas ao(s) professor(es). Aceita int ou lista."""
+    ids = [professor_id_or_ids] if isinstance(professor_id_or_ids, int) else (professor_id_or_ids or [])
+    if not ids:
+        return set()
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(dictionary=True)
+        ph = ",".join(["%s"] * len(ids))
+        cur.execute("SELECT TurmaID FROM turma_professor WHERE professor_id IN (%s)" % ph, tuple(ids))
+        result = {r["TurmaID"] for r in cur.fetchall()}
+        cur.close()
+        conn.close()
+        return result
+    except Exception:
+        return set()
+
+
 def _get_academias_presenca():
     """Retorna (academia_id, academias) para o painel de presenças."""
     try:
@@ -40,6 +92,10 @@ def _get_academias_presenca():
                 session["academia_gerenciamento_id"] = aid
                 session["finance_academia_id"] = aid
             return aid, academias
+        if session.get("modo_painel") == "academia" and (current_user.has_role("gestor_academia") or current_user.has_role("professor")):
+            cur.close()
+            conn.close()
+            return None, []
         if current_user.has_role("admin"):
             cur.execute("SELECT id FROM academias ORDER BY nome")
             ids = [r["id"] for r in cur.fetchall()]
@@ -52,8 +108,12 @@ def _get_academias_presenca():
         elif current_user.has_role("gestor_associacao"):
             cur.execute("SELECT id FROM academias WHERE id_associacao = %s ORDER BY nome", (getattr(current_user, "id_associacao", None),))
             ids = [r["id"] for r in cur.fetchall()]
-        elif getattr(current_user, "id_academia", None):
-            ids = [current_user.id_academia]
+        else:
+            # Professor responsável ou auxiliar (em turma_professor)
+            cur.execute("SELECT id_academia FROM professores WHERE usuario_id = %s AND ativo = 1 AND id_academia IS NOT NULL LIMIT 1", (current_user.id,))
+            row = cur.fetchone()
+            if row and row.get("id_academia"):
+                ids = [row["id_academia"]]
         cur.close()
         conn.close()
         if not ids:
@@ -89,7 +149,12 @@ def painel_presenca():
     academia_id, academias = _get_academias_presenca()
     academias = academias or []
     modo = session.get("modo_painel")
-    back_url = (url_for("academia.painel_academia", academia_id=academia_id) if academia_id else url_for("academia.painel_academia")) if modo == "academia" else url_for("painel.home")
+    if modo == "professor":
+        back_url = url_for("professor.painel_professor")
+    elif modo == "academia":
+        back_url = url_for("academia.painel_academia", academia_id=academia_id) if academia_id else url_for("academia.painel_academia")
+    else:
+        back_url = url_for("painel.home")
     return render_template(
         "presencas/painel_presenca.html",
         academias=academias,
@@ -104,8 +169,6 @@ def painel_presenca():
 def _get_academia_filtro_presencas():
     """Retorna academia_id para filtrar (ata, historico, registro)."""
     aid = request.args.get("academia_id", type=int) or request.form.get("academia_id", type=int) or session.get("academia_gerenciamento_id")
-    if not aid and getattr(current_user, "id_academia", None):
-        aid = current_user.id_academia
     if not aid:
         aid, _ = _get_academias_presenca()
     if not aid:
@@ -128,13 +191,13 @@ def _get_academia_filtro_presencas():
             )
         elif current_user.has_role("gestor_associacao"):
             cur.execute("SELECT 1 FROM academias WHERE id = %s AND id_associacao = %s", (aid, getattr(current_user, "id_associacao", None)))
-        elif getattr(current_user, "id_academia", None) == aid:
-            cur.execute("SELECT 1 FROM academias WHERE id = %s", (aid,))
         else:
-            cur.close()
-            conn.close()
-            return None
-        ok = cur.fetchone() is not None
+            # Professor responsável ou auxiliar (qualquer um em turma_professor)
+            cur.execute("SELECT 1 FROM professores WHERE usuario_id = %s AND id_academia = %s AND ativo = 1", (current_user.id, aid))
+        if cur.fetchone():
+            ok = True
+        else:
+            ok = False
         cur.close()
         conn.close()
         return aid if ok else None
@@ -148,6 +211,11 @@ def registro_presenca():
     db = get_db_connection()
     cursor = db.cursor(dictionary=True)
     academia_id = _get_academia_filtro_presencas()
+    modo_professor = session.get("modo_painel") == "professor"
+    ids_turmas_professor = set()
+    if modo_professor:
+        ids_prof = _get_todos_professor_ids()
+        ids_turmas_professor = _get_ids_turmas_professor(ids_prof)
 
     try:
         if academia_id:
@@ -155,6 +223,8 @@ def registro_presenca():
         else:
             cursor.execute("SELECT TurmaID, Nome FROM turmas ORDER BY Nome")
         turmas = cursor.fetchall()
+        if modo_professor and ids_turmas_professor:
+            turmas = [t for t in turmas if t["TurmaID"] in ids_turmas_professor]
     except Exception:
         turmas = []
 
@@ -180,6 +250,19 @@ def registro_presenca():
             else:
                 cursor.execute("SELECT id FROM alunos WHERE TurmaID=%s", (turma_selecionada,))
             todos_alunos = [row['id'] for row in cursor.fetchall()]
+            # Buscar visitantes com aulas experimentais agendadas
+            try:
+                cursor.execute("""
+                    SELECT v.id FROM visitantes v
+                    INNER JOIN aulas_experimentais ae ON ae.visitante_id = v.id
+                    WHERE ae.turma_id = %s AND ae.data_aula = %s AND v.id_academia = %s AND v.ativo = 1
+                """, (turma_selecionada, data_presenca, academia_id))
+                for row in cursor.fetchall():
+                    vid = f"visitante_{row.get('id')}"
+                    if vid not in todos_alunos:
+                        todos_alunos.append(vid)
+            except Exception:
+                pass
         except Exception:
             try:
                 cursor.execute("SELECT id FROM alunos WHERE TurmaID=%s", (turma_selecionada,))
@@ -188,8 +271,30 @@ def registro_presenca():
                 todos_alunos = []
 
         try:
+            # Separar alunos e visitantes
+            alunos_ids = []
+            visitantes_ids = []
             for aluno_id in todos_alunos:
+                if isinstance(aluno_id, str) and aluno_id.startswith("visitante_"):
+                    visitantes_ids.append(int(aluno_id.replace("visitante_", "")))
+                else:
+                    alunos_ids.append(aluno_id)
+            
+            # Registrar presenças de alunos
+            for aluno_id in alunos_ids:
                 presente = 1 if aluno_id in alunos_selecionados else 0
+                # Verificar se é aluno em visita (registrar também na turma original dele)
+                cursor.execute("""
+                    SELECT s.academia_origem_id, a.TurmaID, a.id_academia
+                    FROM solicitacoes_aprovacao s
+                    INNER JOIN alunos a ON a.id = s.aluno_id
+                    WHERE s.aluno_id = %s AND s.data_visita = %s AND s.status = 'aprovado_destino' 
+                      AND s.tipo = 'visita' AND s.turma_id = %s
+                    LIMIT 1
+                """, (aluno_id, data_presenca, turma_selecionada))
+                visita_info = cursor.fetchone()
+                
+                # Registrar presença na turma atual (academia visitada)
                 cursor.execute("""
                     INSERT INTO presencas (aluno_id, turma_id, data_presenca, responsavel_id, responsavel_nome, presente)
                     VALUES (%s, %s, %s, %s, %s, %s)
@@ -200,6 +305,42 @@ def registro_presenca():
                         responsavel_nome = VALUES(responsavel_nome),
                         registrado_em = CURRENT_TIMESTAMP
                 """, (aluno_id, turma_selecionada, data_presenca, current_user.id, current_user.nome, presente))
+                
+                # Se é aluno em visita, registrar também na turma original dele
+                if visita_info and visita_info.get("TurmaID"):
+                    turma_original_id = visita_info["TurmaID"]
+                    cursor.execute("""
+                        INSERT INTO presencas (aluno_id, turma_id, data_presenca, responsavel_id, responsavel_nome, presente)
+                        VALUES (%s, %s, %s, %s, %s, %s)
+                        ON DUPLICATE KEY UPDATE
+                            turma_id = VALUES(turma_id),
+                            presente = VALUES(presente),
+                            responsavel_id = VALUES(responsavel_id),
+                            responsavel_nome = VALUES(responsavel_nome),
+                            registrado_em = CURRENT_TIMESTAMP
+                    """, (aluno_id, turma_original_id, data_presenca, current_user.id, current_user.nome, presente))
+            
+            # Registrar presenças de visitantes (atualizar aulas_experimentais)
+            for visitante_id in visitantes_ids:
+                presente = 1 if f"visitante_{visitante_id}" in alunos_selecionados else 0
+                # Atualizar aula experimental
+                cursor.execute("""
+                    UPDATE aulas_experimentais 
+                    SET presente = %s, registrado_por = %s
+                    WHERE visitante_id = %s AND turma_id = %s AND data_aula = %s
+                """, (presente, current_user.id, visitante_id, turma_selecionada, data_presenca))
+                
+                # Se presente, atualizar contador de aulas realizadas
+                if presente:
+                    cursor.execute("""
+                        UPDATE visitantes 
+                        SET aulas_experimentais_realizadas = (
+                            SELECT COUNT(*) FROM aulas_experimentais 
+                            WHERE visitante_id = %s AND presente = 1 AND data_aula <= CURDATE()
+                        )
+                        WHERE id = %s
+                    """, (visitante_id, visitante_id))
+            
             db.commit()
             flash("Presenças registradas com sucesso!", "success")
         except Exception as e:
@@ -223,6 +364,8 @@ def registro_presenca():
                 turma_selecionada = None
         except Exception:
             turma_selecionada = None
+    alunos = []
+    alunos_visitantes = []
     if turma_selecionada:
         try:
             if academia_id:
@@ -236,6 +379,87 @@ def registro_presenca():
             else:
                 cursor.execute("SELECT id, nome, foto FROM alunos WHERE TurmaID=%s ORDER BY nome", (turma_selecionada,))
             alunos = cursor.fetchall()
+            ids_alunos_turma = {a["id"] for a in alunos}
+            
+            # Buscar alunos da turma que estão visitando outra academia nesta data
+            alunos_visitando_outra_academia = []
+            if ids_alunos_turma:
+                try:
+                    placeholders = ",".join(["%s"] * len(ids_alunos_turma))
+                    cursor.execute(f"""
+                        SELECT a.id, a.nome, a.foto, s.id AS solicitacao_id, ac_dest.nome AS academia_destino_nome, 
+                               s.turma_id AS turma_destino_id, s.academia_destino_id
+                        FROM alunos a
+                        INNER JOIN solicitacoes_aprovacao s ON s.aluno_id = a.id
+                        INNER JOIN academias ac_dest ON ac_dest.id = s.academia_destino_id
+                        WHERE a.id IN ({placeholders}) AND s.data_visita = %s AND s.status = 'aprovado_destino' 
+                          AND s.tipo = 'visita' AND s.academia_origem_id = %s
+                        ORDER BY a.nome
+                    """, tuple(ids_alunos_turma) + (data_presenca, academia_id))
+                    alunos_visitando_raw = cursor.fetchall()
+                    for a in alunos_visitando_raw:
+                        a["visitando_outra_academia"] = True
+                        a["bloqueado"] = True  # Card bloqueado na turma original
+                        alunos_visitando_outra_academia.append(a)
+                except Exception:
+                    pass
+            
+            # Buscar visitantes com aulas experimentais agendadas e APROVADAS para esta turma e data
+            try:
+                cursor.execute("""
+                    SELECT v.id, v.nome, v.foto, ae.id AS aula_experimental_id
+                    FROM visitantes v
+                    INNER JOIN aulas_experimentais ae ON ae.visitante_id = v.id
+                    WHERE ae.turma_id = %s AND ae.data_aula = %s AND v.id_academia = %s 
+                      AND v.ativo = 1 AND ae.aprovado = 1
+                    ORDER BY v.nome
+                """, (turma_selecionada, data_presenca, academia_id))
+                visitantes_raw = cursor.fetchall()
+                for v in visitantes_raw:
+                    v["visitante"] = True
+                    v["id"] = f"visitante_{v['id']}"  # Prefixo para diferenciar de alunos
+                    alunos_visitantes.append(v)
+            except Exception:
+                pass
+            
+            # Buscar alunos com solicitações de visita APROVADAS para esta turma e data
+            try:
+                if ids_alunos_turma:
+                    # Se há alunos da turma, excluir da busca de alunos em visita
+                    placeholders = ",".join(["%s"] * len(ids_alunos_turma))
+                    cursor.execute(f"""
+                        SELECT a.id, a.nome, a.foto, s.id AS solicitacao_id, ac_orig.nome AS academia_origem_nome
+                        FROM alunos a
+                        INNER JOIN solicitacoes_aprovacao s ON s.aluno_id = a.id
+                        INNER JOIN academias ac_orig ON ac_orig.id = s.academia_origem_id
+                        WHERE s.turma_id = %s AND s.data_visita = %s AND s.academia_destino_id = %s
+                          AND s.status = 'aprovado_destino' AND s.tipo = 'visita'
+                          AND a.id NOT IN ({placeholders})
+                        ORDER BY a.nome
+                    """, (turma_selecionada, data_presenca, academia_id) + tuple(ids_alunos_turma))
+                else:
+                    # Se não há alunos da turma, buscar todos os alunos em visita
+                    cursor.execute("""
+                        SELECT a.id, a.nome, a.foto, s.id AS solicitacao_id, ac_orig.nome AS academia_origem_nome
+                        FROM alunos a
+                        INNER JOIN solicitacoes_aprovacao s ON s.aluno_id = a.id
+                        INNER JOIN academias ac_orig ON ac_orig.id = s.academia_origem_id
+                        WHERE s.turma_id = %s AND s.data_visita = %s AND s.academia_destino_id = %s
+                          AND s.status = 'aprovado_destino' AND s.tipo = 'visita'
+                        ORDER BY a.nome
+                    """, (turma_selecionada, data_presenca, academia_id))
+                alunos_visita_raw = cursor.fetchall()
+                for a in alunos_visita_raw:
+                    a["visitante"] = False  # É aluno, mas visitando outra academia
+                    a["aluno_visita"] = True  # Marca como aluno em visita
+                    alunos_visitantes.append(a)
+            except Exception as e:
+                # Se a tabela não existir ou houver erro, continua sem adicionar alunos em visita
+                pass
+            
+            # Adicionar alunos visitando outra academia (cards bloqueados)
+            alunos = alunos + alunos_visitantes + alunos_visitando_outra_academia
+            alunos.sort(key=lambda x: (x.get("nome") or "").lower())
         except Exception:
             try:
                 cursor.execute("SELECT id, nome, foto FROM alunos WHERE TurmaID=%s ORDER BY nome", (turma_selecionada,))
@@ -245,18 +469,59 @@ def registro_presenca():
 
         if alunos:
             try:
-                placeholders = ','.join(['%s'] * len(alunos))
-                aluno_ids = [a['id'] for a in alunos]
-                cursor.execute(
-                    f"SELECT aluno_id FROM presencas WHERE data_presenca=%s AND presente=1 AND aluno_id IN ({placeholders})",
-                    [data_presenca] + aluno_ids
-                )
-                presencas_registradas = [row['aluno_id'] for row in cursor.fetchall()]
+                # Separar IDs de alunos e visitantes
+                aluno_ids_numericos = []
+                visitante_ids_numericos = []
+                for a in alunos:
+                    if isinstance(a.get('id'), str) and a.get('id').startswith('visitante_'):
+                        visitante_ids_numericos.append(int(a['id'].replace('visitante_', '')))
+                    else:
+                        aluno_ids_numericos.append(a['id'])
+                
+                presencas_registradas = []
+                
+                # Buscar presenças de alunos (incluindo alunos bloqueados que estão visitando)
+                if aluno_ids_numericos:
+                    placeholders = ','.join(['%s'] * len(aluno_ids_numericos))
+                    cursor.execute(
+                        f"SELECT aluno_id FROM presencas WHERE data_presenca=%s AND presente=1 AND aluno_id IN ({placeholders})",
+                        [data_presenca] + aluno_ids_numericos
+                    )
+                    presencas_registradas.extend([row['aluno_id'] for row in cursor.fetchall()])
+                    
+                    # Para alunos bloqueados (visitando), verificar se foi registrado na academia visitada
+                    # Se sim, marcar como presente também na turma original
+                    alunos_bloqueados_ids = [a.get("id") for a in alunos if a.get("bloqueado") and a.get("visitando_outra_academia")]
+                    if alunos_bloqueados_ids:
+                        placeholders_bloq = ','.join(['%s'] * len(alunos_bloqueados_ids))
+                        cursor.execute(
+                            f"""SELECT DISTINCT aluno_id FROM presencas 
+                               WHERE aluno_id IN ({placeholders_bloq}) AND data_presenca = %s AND presente = 1""",
+                            alunos_bloqueados_ids + [data_presenca]
+                        )
+                        presencas_bloqueados = [row['aluno_id'] for row in cursor.fetchall()]
+                        for aluno_id in presencas_bloqueados:
+                            if aluno_id not in presencas_registradas:
+                                presencas_registradas.append(aluno_id)
+                
+                # Buscar presenças de visitantes (aulas experimentais)
+                if visitante_ids_numericos:
+                    placeholders = ','.join(['%s'] * len(visitante_ids_numericos))
+                    cursor.execute(
+                        f"""SELECT visitante_id FROM aulas_experimentais 
+                           WHERE data_aula=%s AND presente=1 AND visitante_id IN ({placeholders})""",
+                        [data_presenca] + visitante_ids_numericos
+                    )
+                    for row in cursor.fetchall():
+                        presencas_registradas.append(f"visitante_{row['visitante_id']}")
             except Exception:
                 presencas_registradas = []
 
     db.close()
-    back_url = url_for("presencas.painel_presenca", academia_id=academia_id) if academia_id else url_for("presencas.painel_presenca")
+    if modo_professor:
+        back_url = url_for("professor.painel_professor")
+    else:
+        back_url = url_for("presencas.painel_presenca", academia_id=academia_id) if academia_id else url_for("presencas.painel_presenca")
     return render_template(
         'registro_presenca.html',
         turmas=turmas,
@@ -275,6 +540,11 @@ def registro_presenca():
 @login_required
 def ata_presenca():
     academia_id = _get_academia_filtro_presencas()
+    modo_professor = session.get("modo_painel") == "professor"
+    ids_turmas_professor = set()
+    if modo_professor:
+        ids_prof = _get_todos_professor_ids()
+        ids_turmas_professor = _get_ids_turmas_professor(ids_prof)
 
     db = get_db_connection()
     cursor = db.cursor(dictionary=True)
@@ -292,7 +562,10 @@ def ata_presenca():
                 cursor.execute("SELECT TurmaID, Nome FROM turmas ORDER BY Nome")
         else:
             cursor.execute("SELECT TurmaID, Nome FROM turmas ORDER BY Nome")
-        turmas = {t['TurmaID']: t['Nome'] for t in cursor.fetchall()}
+        turmas_raw = cursor.fetchall()
+        if modo_professor and ids_turmas_professor:
+            turmas_raw = [t for t in turmas_raw if t['TurmaID'] in ids_turmas_professor]
+        turmas = {t['TurmaID']: t['Nome'] for t in turmas_raw}
     except Exception:
         turmas = {}
 
@@ -302,6 +575,16 @@ def ata_presenca():
         else:
             cursor.execute("SELECT id, nome, TurmaID FROM alunos ORDER BY nome")
         alunos = cursor.fetchall()
+        if modo_professor and ids_turmas_professor:
+            ph = ",".join(["%s"] * len(ids_turmas_professor))
+            ids_list = list(ids_turmas_professor)
+            cursor.execute(
+                f"""SELECT DISTINCT a.id FROM alunos a
+                   WHERE a.TurmaID IN ({ph}) OR a.id IN (SELECT aluno_id FROM aluno_turmas WHERE TurmaID IN ({ph}))""",
+                ids_list + ids_list,
+            )
+            ids_ok = {r["id"] for r in cursor.fetchall()}
+            alunos = [a for a in alunos if a["id"] in ids_ok]
     except Exception:
         alunos = []
     alunos_por_turma = {}
@@ -326,6 +609,11 @@ def ata_presenca():
         if turma_selecionada != 0:
             query += " AND a.TurmaID = %s"
             params.append(turma_selecionada)
+        if modo_professor and ids_turmas_professor:
+            ph = ",".join(["%s"] * len(ids_turmas_professor))
+            ids_list = list(ids_turmas_professor)
+            query += f" AND (a.TurmaID IN ({ph}) OR a.id IN (SELECT aluno_id FROM aluno_turmas WHERE TurmaID IN ({ph})))"
+            params.extend(ids_list + ids_list)
         if academia_id:
             query += " AND a.id_academia = %s"
             params.append(academia_id)
@@ -381,7 +669,10 @@ def ata_presenca():
     except (ValueError, TypeError, IndexError):
         pass
 
-    back_url = url_for("presencas.painel_presenca", academia_id=academia_id) if academia_id else url_for("presencas.painel_presenca")
+    if modo_professor:
+        back_url = url_for("professor.painel_professor")
+    else:
+        back_url = url_for("presencas.painel_presenca", academia_id=academia_id) if academia_id else url_for("presencas.painel_presenca")
     return render_template('ata_presenca.html',
                             presencas_por_mes=presencas_por_mes,
                             turmas=turmas,
@@ -399,6 +690,11 @@ def ata_presenca():
 @login_required
 def historico_presenca_lista():
     academia_id = _get_academia_filtro_presencas()
+    modo_professor = session.get("modo_painel") == "professor"
+    ids_turmas_professor = set()
+    if modo_professor:
+        ids_prof = _get_todos_professor_ids()
+        ids_turmas_professor = _get_ids_turmas_professor(ids_prof)
 
     db = get_db_connection()
     cursor = db.cursor(dictionary=True)
@@ -408,13 +704,25 @@ def historico_presenca_lista():
         else:
             cursor.execute("SELECT id, nome FROM alunos ORDER BY nome")
         alunos = cursor.fetchall()
+        if modo_professor and ids_turmas_professor:
+            ph = ",".join(["%s"] * len(ids_turmas_professor))
+            ids_list = list(ids_turmas_professor)
+            cursor.execute(
+                f"""SELECT DISTINCT a.id FROM alunos a
+                   WHERE a.TurmaID IN ({ph}) OR a.id IN (SELECT aluno_id FROM aluno_turmas WHERE TurmaID IN ({ph}))""",
+                ids_list + ids_list,
+            )
+            ids_ok = {r["id"] for r in cursor.fetchall()}
+            alunos = [a for a in alunos if a["id"] in ids_ok]
     except Exception:
         alunos = []
     db.close()
 
     hoje = datetime.today()
-    academia_id = _get_academia_filtro_presencas()
-    back_url = url_for("presencas.painel_presenca", academia_id=academia_id) if academia_id else url_for("presencas.painel_presenca")
+    if modo_professor:
+        back_url = url_for("professor.painel_professor")
+    else:
+        back_url = url_for("presencas.painel_presenca", academia_id=academia_id) if academia_id else url_for("presencas.painel_presenca")
     return render_template('historico_presenca_lista.html', alunos=alunos, hoje=hoje, back_url=back_url, academia_id=academia_id)
 
 # ======================================================
@@ -424,11 +732,16 @@ def historico_presenca_lista():
 @login_required
 def historico_presenca_ajax(aluno_id):
     academia_id = _get_academia_filtro_presencas()
+    modo_professor = session.get("modo_painel") == "professor"
+    ids_turmas_professor = set()
+    if modo_professor:
+        ids_prof = _get_todos_professor_ids()
+        ids_turmas_professor = _get_ids_turmas_professor(ids_prof)
 
     db = get_db_connection()
     cursor = db.cursor(dictionary=True)
 
-    cursor.execute("SELECT id, id_academia FROM alunos WHERE id = %s", (aluno_id,))
+    cursor.execute("SELECT id, id_academia, TurmaID FROM alunos WHERE id = %s", (aluno_id,))
     aluno = cursor.fetchone()
     if not aluno:
         db.close()
@@ -436,6 +749,17 @@ def historico_presenca_ajax(aluno_id):
     if academia_id and aluno.get("id_academia") != academia_id:
         db.close()
         return "<p class='alert alert-warning p-2 small'>Acesso negado.</p>"
+    if modo_professor and ids_turmas_professor:
+        aluno_turma_ok = aluno.get("TurmaID") in ids_turmas_professor
+        if not aluno_turma_ok:
+            cursor.execute(
+                "SELECT 1 FROM aluno_turmas WHERE aluno_id = %s AND TurmaID IN (%s)" % (aluno_id, ",".join(["%s"] * len(ids_turmas_professor))),
+                tuple(ids_turmas_professor),
+            )
+            aluno_turma_ok = cursor.fetchone() is not None
+        if not aluno_turma_ok:
+            db.close()
+            return "<p class='alert alert-warning p-2 small'>Acesso negado.</p>"
 
     mes = int(request.args.get('mes', 0))
     ano = int(request.args.get('ano', datetime.today().year))

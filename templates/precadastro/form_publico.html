@@ -7,6 +7,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/photo-cropper.css') }}">
     <style>
         .camera-modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.9);z-index:9999;justify-content:center;align-items:center;}
         .camera-modal.show{display:flex;}
@@ -83,7 +85,7 @@
                             <div class="flex-grow-1">
                                 <input type="hidden" name="foto" id="fotoInput">
                                 <button type="button" class="btn btn-primary btn-sm mb-2" id="btnCamera"><i class="bi bi-camera-fill me-1"></i> Câmera</button>
-                                <input type="file" class="form-control form-control-sm" name="foto_arquivo" accept="image/*">
+                                <input type="file" class="form-control form-control-sm" name="foto_arquivo" id="fotoArquivoPrecad" accept="image/*">
                             </div>
                         </div>
 
@@ -132,7 +134,9 @@
                         <button type="submit" class="btn btn-primary w-100">
                             <i class="bi bi-send me-2"></i> Enviar pré-cadastro
                         </button>
-                    </form>
+                            {% set back_url = back_url or get_back_url_default() %}
+{% include 'components/botao_voltar.html' %}
+    </form>
                     {% endif %}
                 </div>
             </div>
@@ -264,15 +268,20 @@
     document.querySelectorAll('[data-mask="cpf"]').forEach(el=>el.addEventListener('input',function(){mascaraCPF(this);}));
     document.querySelectorAll('[data-mask="phone"]').forEach(el=>el.addEventListener('input',function(){mascaraPhone(this);}));
 
-    document.querySelector('input[name="foto_arquivo"]')?.addEventListener('change', function(){
-        const f = this.files[0];
-        if(f){
-            const r = new FileReader();
-            r.onload = function(){ fotoInput.value = r.result; miniatura.src = r.result; miniatura.classList.remove('d-none'); placeholder.classList.add('d-none'); };
-            r.readAsDataURL(f);
-        }
-    });
 })();
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
+<script src="{{ url_for('static', filename='js/photo-cropper.js') }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function(){
+    var fa = document.getElementById('fotoArquivoPrecad') || document.querySelector('input[name="foto_arquivo"]');
+    var fi = document.getElementById('fotoInput');
+    var m = document.getElementById('miniatura');
+    var p = document.getElementById('miniaturaPlaceholder');
+    if (fa && fi && m && typeof initPhotoCrop === 'function') {
+        initPhotoCrop(fa, { fotoInput: fi, miniatura: m, placeholder: p });
+    }
+});
 </script>
 </body>
 </html>

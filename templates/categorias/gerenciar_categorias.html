@@ -8,20 +8,62 @@
         top: 0;
         background: #f8f9fa;
         z-index: 1;
+        font-size: 0.875rem;
+        font-weight: 600;
+        padding: 0.75rem 0.5rem;
     }
 
     .table td, .table th {
         vertical-align: middle;
+        padding: 0.5rem;
     }
 
-    .btn-editar-linha {
+    .table td input,
+    .table td select,
+    .table td textarea {
+        font-size: 0.875rem;
+    }
+
+    .btn-editar-linha,
+    .btn-salvar-linha {
         min-width: 90px;
+        font-size: 0.875rem;
     }
 
-    .textarea-notas {
+    .textarea-descricao {
         min-height: 60px;
         resize: vertical;
         white-space: pre-wrap;
+        font-size: 0.875rem;
+    }
+
+    .categoria-row-editing {
+        background-color: #fff3cd !important;
+    }
+
+    .categoria-row-editing td {
+        background-color: transparent !important;
+    }
+
+    .form-control:read-only,
+    .form-select:disabled {
+        background-color: #f8f9fa;
+        cursor: not-allowed;
+    }
+
+    .form-control:not(:read-only),
+    .form-select:not(:disabled) {
+        background-color: #fff;
+        border-color: #0d6efd;
+    }
+
+    #busca-categoria {
+        border-left: 3px solid #0d6efd;
+    }
+
+    #busca-categoria:focus {
+        border-left-color: #198754;
+        box-shadow: 0 0 0 0.2rem rgba(25, 135, 84, 0.25);
     }
 
     @media (max-width: 768px) {
@@ -55,159 +97,150 @@
     }
 </style>
 
-<div class="container mt-4">
-    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-4">
+<div class="container mt-3 mt-md-4 px-2 px-md-3">
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3 mb-md-4">
         <div>
-            <h2 class="fw-bold text-primary mb-1">Categorias</h2>
-            <p class="text-muted mb-0">Classes por idade e categorias de peso.</p>
+            <h2 class="h5 h4-md fw-bold text-primary mb-1">Categorias</h2>
+            <p class="text-muted small small-md mb-0">Gerenciar categorias de competição (gênero, idade, peso).</p>
         </div>
         <div class="d-flex flex-wrap gap-2">
-            <a href="{{ url_for('cadastros.categorias_classes') }}" class="btn btn-outline-primary btn-sm">
-                <i class="bi bi-people-fill me-1"></i> Só Idades
-            </a>
-            <a href="{{ url_for('cadastros.categorias_pesos') }}" class="btn btn-outline-success btn-sm">
-                <i class="bi bi-bar-chart-line-fill me-1"></i> Só Pesos
-            </a>
-            <a href="{{ url_for('cadastros.gerenciar_categorias') }}" class="btn btn-outline-dark btn-sm">
-                <i class="bi bi-list-check me-1"></i> Todas
-            </a>
-            <a href="{{ url_for('painel.home') }}" class="btn btn-outline-secondary btn-sm">
-                <i class="bi bi-arrow-left-circle me-1"></i> Voltar
-            </a>
+            {% set back_url = back_url or get_back_url_default() %}
+{% include 'components/botao_voltar.html' %}
         </div>
     </div>
 
-    <!-- ===================== CLASSES / IDADES ===================== -->
-    {% if show_classes %}
+    <!-- ===================== CATEGORIAS ===================== -->
     <div class="card shadow-sm mb-4">
-        <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
-            <h5 class="mb-0"><i class="bi bi-people-fill me-2"></i> Categorias por Idade</h5>
-            <button type="submit" form="form-classes" class="btn btn-light btn-sm">
-                <i class="bi bi-save2-fill me-1"></i> Salvar
-            </button>
+        <div class="card-header bg-success text-white d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <h5 class="mb-0 h6 h5-md"><i class="bi bi-trophy-fill me-2"></i> Categorias</h5>
+            <span class="badge bg-light text-dark" id="contador-categorias">{{ categorias|length }} categoria(s)</span>
         </div>
-        <div class="card-body">
-            <form id="form-classes" method="POST">
-                <input type="hidden" name="form_tipo" value="classes">
-                <div class="table-responsive">
-                    <table class="table table-hover align-middle">
-                        <thead>
-                            <tr>
-                                <th>ID</th>
-                                <th>Classe</th>
-                                <th>Idade Mín</th>
-                                <th>Idade Máx</th>
-                                <th>Notas</th>
-                                <th>Ação</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for c in classes %}
-                            <tr data-editing="0">
-                                <td data-label="ID">
-                                    <input type="hidden" name="id_classe" value="{{ c.id_classe }}">
-                                    <span class="fw-bold">{{ c.id_classe }}</span>
-                                </td>
-                                <td data-label="Classe">
-                                    <input type="text" class="form-control" name="classe"
-                                           value="{{ c.classe or '' }}" readonly>
-                                </td>
-                                <td data-label="Idade Mín">
-                                    <input type="number" class="form-control" name="idade_min"
-                                           value="{{ c.idade_min if c.idade_min is not none else '' }}" readonly>
-                                </td>
-                                <td data-label="Idade Máx">
-                                    <input type="number" class="form-control" name="idade_max"
-                                           value="{{ c.idade_max if c.idade_max is not none else '' }}" readonly>
-                                </td>
-                                <td data-label="Notas">
-                                    <textarea class="form-control textarea-notas" name="notas" readonly>{{ c.notas or '' }}</textarea>
-                                </td>
-                                <td data-label="Ação">
-                                    <button type="button" class="btn btn-outline-primary btn-sm btn-editar-linha">
-                                        Editar
-                                    </button>
-                                </td>
-                            </tr>
-                            {% else %}
-                            <tr>
-                                <td colspan="6" class="text-muted text-center">Nenhuma classe encontrada.</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
+        <div class="card-body p-3 border-bottom">
+            <div class="row g-2">
+                <div class="col-12 col-md-5">
+                    <label class="form-label small fw-bold mb-1">
+                        <i class="bi bi-search me-1"></i> Buscar Categoria
+                    </label>
+                    <input type="text" 
+                           class="form-control form-control-sm" 
+                           id="busca-categoria" 
+                           placeholder="Digite para buscar em todas as colunas..."
+                           autocomplete="off">
+                    <small class="text-muted">Busca em tempo real</small>
                 </div>
-            </form>
+                <div class="col-12 col-md-4">
+                    <label class="form-label small fw-bold mb-1">
+                        <i class="bi bi-funnel me-1"></i> Filtrar por Status
+                    </label>
+                    <select class="form-select form-select-sm" id="filtro-status">
+                        <option value="todas">Todas</option>
+                        <option value="ativas">Apenas Ativas</option>
+                        <option value="inativas">Apenas Inativas</option>
+                    </select>
+                </div>
+                <div class="col-12 col-md-3 d-flex align-items-end">
+                    <button type="button" class="btn btn-outline-secondary btn-sm w-100" id="limpar-busca">
+                        <i class="bi bi-x-circle me-1"></i> Limpar Filtros
+                    </button>
+                </div>
+            </div>
         </div>
-    </div>
-    {% endif %}
-
-    <!-- ===================== PESOS ===================== -->
-    {% if show_pesos %}
-    <div class="card shadow-sm mb-4">
-        <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
-            <h5 class="mb-0"><i class="bi bi-bar-chart-line-fill me-2"></i> Categorias de Peso</h5>
-            <button type="submit" form="form-pesos" class="btn btn-light btn-sm">
-                <i class="bi bi-save2-fill me-1"></i> Salvar
-            </button>
-        </div>
-        <div class="card-body">
-            <form id="form-pesos" method="POST">
-                <input type="hidden" name="form_tipo" value="pesos">
-                <div class="table-responsive">
-                    <table class="table table-hover align-middle">
-                        <thead>
+        <div class="card-body p-0">
+            <form id="form-categorias" method="POST">
+                <input type="hidden" name="form_tipo" value="categorias">
+                <div class="table-responsive" style="max-height: 70vh; overflow-y: auto;">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
                             <tr>
-                                <th>ID</th>
-                                <th>Gênero</th>
-                                <th>ID Classe</th>
-                                <th>Categoria</th>
-                                <th>Nome Categoria</th>
-                                <th>Peso Mín</th>
-                                <th>Peso Máx</th>
-                                <th>Ação</th>
+                                <th style="width: 60px;">ID</th>
+                                <th style="width: 100px;">Gênero</th>
+                                <th style="width: 120px;">ID Classe</th>
+                                <th style="width: 120px;">Categoria</th>
+                                <th style="min-width: 200px;">Nome Categoria</th>
+                                <th style="width: 100px;">Peso Mín</th>
+                                <th style="width: 100px;">Peso Máx</th>
+                                <th style="width: 100px;">Idade Mín</th>
+                                <th style="width: 100px;">Idade Máx</th>
+                                <th style="min-width: 200px;">Descrição</th>
+                                <th style="width: 100px;">Status</th>
+                                <th style="width: 120px;">Ação</th>
                             </tr>
                         </thead>
-                        <tbody>
-                            {% for p in pesos %}
-                            <tr data-editing="0">
+                        <tbody id="tbody-categorias">
+                            {% for cat in categorias %}
+                            <tr data-editing="0" data-categoria-id="{{ cat.id }}" class="categoria-row {% if cat.ativo is defined and not cat.ativo %}table-secondary opacity-75{% endif %}" 
+                                data-busca-text="{{ cat.id|string }} {{ (cat.genero or '')|string|upper }} {{ (cat.id_classe or '')|string }} {{ (cat.categoria or '')|string }} {{ (cat.nome_categoria or '')|string }} {{ (cat.peso_min or '')|string }} {{ (cat.peso_max or '')|string }} {{ (cat.idade_min or '')|string }} {{ (cat.idade_max or '')|string }} {{ (cat.descricao or '')|string }} {% if cat.ativo is defined %}{{ 'ativo' if cat.ativo else 'inativo' }}{% endif %}"
+                                data-ativo="{% if cat.ativo is defined %}{{ 1 if cat.ativo else 0 }}{% else %}1{% endif %}">
                                 <td data-label="ID">
-                                    <input type="hidden" name="id_peso" value="{{ p.id_peso }}">
-                                    <span class="fw-bold">{{ p.id_peso }}</span>
+                                    <input type="hidden" name="id" value="{{ cat.id }}">
+                                    <span class="fw-bold text-muted">{{ cat.id }}</span>
                                 </td>
                                 <td data-label="Gênero">
-                                    <input type="text" class="form-control" name="genero"
-                                           value="{{ p.genero or '' }}" readonly>
+                                    <select class="form-select form-select-sm" name="genero" readonly disabled>
+                                        <option value="MASCULINO" {% if cat.genero == 'MASCULINO' or cat.genero == 'M' %}selected{% endif %}>MASCULINO</option>
+                                        <option value="FEMININO" {% if cat.genero == 'FEMININO' or cat.genero == 'F' %}selected{% endif %}>FEMININO</option>
+                                    </select>
                                 </td>
                                 <td data-label="ID Classe">
-                                    <input type="text" class="form-control" name="id_classe_fk"
-                                           value="{{ p.id_classe_fk or '' }}" readonly>
+                                    <input type="text" class="form-control form-control-sm" name="id_classe"
+                                           value="{{ cat.id_classe or '' }}" readonly>
                                 </td>
                                 <td data-label="Categoria">
-                                    <input type="text" class="form-control" name="categoria"
-                                           value="{{ p.categoria or '' }}" readonly>
+                                    <input type="text" class="form-control form-control-sm" name="categoria"
+                                           value="{{ cat.categoria or '' }}" readonly>
                                 </td>
                                 <td data-label="Nome Categoria">
-                                    <input type="text" class="form-control" name="nome_categoria"
-                                           value="{{ p.nome_categoria or '' }}" readonly>
+                                    <input type="text" class="form-control form-control-sm" name="nome_categoria"
+                                           value="{{ cat.nome_categoria or '' }}" readonly>
                                 </td>
                                 <td data-label="Peso Mín">
-                                    <input type="number" step="0.01" class="form-control" name="peso_min"
-                                           value="{{ p.peso_min if p.peso_min is not none else '' }}" readonly>
+                                    <input type="number" step="0.01" class="form-control form-control-sm" name="peso_min"
+                                           value="{{ cat.peso_min if cat.peso_min is not none else '' }}" readonly>
                                 </td>
                                 <td data-label="Peso Máx">
-                                    <input type="number" step="0.01" class="form-control" name="peso_max"
-                                           value="{{ p.peso_max if p.peso_max is not none else '' }}" readonly>
+                                    <input type="number" step="0.01" class="form-control form-control-sm" name="peso_max"
+                                           value="{{ cat.peso_max if cat.peso_max is not none else '' }}" readonly>
+                                </td>
+                                <td data-label="Idade Mín">
+                                    <input type="number" class="form-control form-control-sm" name="idade_min"
+                                           value="{{ cat.idade_min if cat.idade_min is not none else '' }}" readonly>
+                                </td>
+                                <td data-label="Idade Máx">
+                                    <input type="number" class="form-control form-control-sm" name="idade_max"
+                                           value="{{ cat.idade_max if cat.idade_max is not none else '' }}" readonly>
+                                </td>
+                                <td data-label="Descrição">
+                                    <textarea class="form-control form-control-sm textarea-descricao" name="descricao" readonly>{{ cat.descricao or '' }}</textarea>
+                                </td>
+                                <td data-label="Status">
+                                    {% if cat.ativo is defined %}
+                                    <input type="hidden" name="ativo" class="campo-ativo" value="{{ 1 if cat.ativo else 0 }}" data-categoria-id="{{ cat.id }}">
+                                    {% if cat.ativo %}
+                                    <button type="button" class="btn btn-sm btn-warning btn-toggle-status" data-categoria-id="{{ cat.id }}" title="Categoria está ativa - Clique para marcar como inativa (salvará ao clicar em 'Salvar Todas as Alterações')">
+                                        <i class="bi bi-x-circle me-1"></i> Desativar
+                                    </button>
+                                    {% else %}
+                                    <button type="button" class="btn btn-sm btn-success btn-toggle-status" data-categoria-id="{{ cat.id }}" title="Categoria está inativa - Clique para marcar como ativa (salvará ao clicar em 'Salvar Todas as Alterações')">
+                                        <i class="bi bi-check-circle me-1"></i> Ativar
+                                    </button>
+                                    {% endif %}
+                                    {% else %}
+                                    <input type="hidden" name="ativo" class="campo-ativo" value="1" data-categoria-id="{{ cat.id }}">
+                                    <span class="badge bg-info">N/A</span>
+                                    {% endif %}
                                 </td>
                                 <td data-label="Ação">
                                     <button type="button" class="btn btn-outline-primary btn-sm btn-editar-linha">
-                                        Editar
+                                        <i class="bi bi-pencil me-1"></i> Editar
+                                    </button>
+                                    <button type="submit" form="form-categorias" class="btn btn-success btn-sm btn-salvar-linha d-none">
+                                        <i class="bi bi-check-lg me-1"></i> Salvar
                                     </button>
                                 </td>
                             </tr>
                             {% else %}
                             <tr>
-                                <td colspan="8" class="text-muted text-center">Nenhuma categoria de peso encontrada.</td>
+                                <td colspan="11" class="text-muted text-center py-4">Nenhuma categoria encontrada.</td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -215,32 +248,304 @@
                 </div>
             </form>
         </div>
+        <div class="card-footer bg-light d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalNovaCategoria">
+                <i class="bi bi-plus-circle-fill me-1"></i> Adicionar Nova Categoria
+            </button>
+            <button type="submit" form="form-categorias" class="btn btn-success btn-sm">
+                <i class="bi bi-save2-fill me-1"></i> Salvar Todas as Alterações
+            </button>
+        </div>
     </div>
-    {% endif %}
+</div>
+
+<!-- Modal para Adicionar Nova Categoria -->
+<div class="modal fade" id="modalNovaCategoria" tabindex="-1" aria-labelledby="modalNovaCategoriaLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="modalNovaCategoriaLabel">
+                    <i class="bi bi-plus-circle-fill me-2"></i>Adicionar Nova Categoria
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+            </div>
+            <form method="POST" id="formNovaCategoria">
+                <input type="hidden" name="form_tipo" value="nova_categoria">
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">Gênero <span class="text-danger">*</span></label>
+                            <select class="form-select" name="genero" required>
+                                <option value="">Selecione...</option>
+                                <option value="MASCULINO">MASCULINO</option>
+                                <option value="FEMININO">FEMININO</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">ID Classe</label>
+                            <input type="text" class="form-control" name="id_classe" placeholder="Ex: SUB 5">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">Categoria</label>
+                            <input type="text" class="form-control" name="categoria" placeholder="Ex: PESADO">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">Nome Categoria <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" name="nome_categoria" required placeholder="Ex: SUB 5 MASCULINO PESADO">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">Peso Mínimo (kg)</label>
+                            <input type="number" step="0.01" class="form-control" name="peso_min" placeholder="Ex: 30.01">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">Peso Máximo (kg)</label>
+                            <input type="number" step="0.01" class="form-control" name="peso_max" placeholder="Ex: 50.00">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">Idade Mínima</label>
+                            <input type="number" class="form-control" name="idade_min" placeholder="Ex: 3">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">Idade Máxima</label>
+                            <input type="number" class="form-control" name="idade_max" placeholder="Ex: 4">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label fw-bold">Descrição</label>
+                            <textarea class="form-control" name="descricao" rows="3" placeholder="Descrição da categoria..."></textarea>
+                        </div>
+                        <div class="col-12">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="ativo" value="1" id="checkAtivo" checked>
+                                <label class="form-check-label" for="checkAtivo">
+                                    Categoria ativa
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-save me-1"></i> Salvar Categoria
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
 </div>
 
 <script>
+    // Função para garantir que todos os campos sejam enviados
+    function habilitarTodosCamposParaEnvio() {
+        const form = document.getElementById("form-categorias");
+        if (!form) return;
+        
+        // Habilitar todos os campos desabilitados antes de enviar
+        form.querySelectorAll("input[disabled], textarea[disabled], select[disabled]").forEach((el) => {
+            el.removeAttribute("disabled");
+        });
+        
+        // Remover readonly de todos os campos
+        form.querySelectorAll("input[readonly], textarea[readonly]").forEach((el) => {
+            el.removeAttribute("readonly");
+        });
+    }
+
     document.querySelectorAll(".btn-editar-linha").forEach((btn) => {
         btn.addEventListener("click", () => {
             const row = btn.closest("tr");
             const editing = row.getAttribute("data-editing") === "1";
-            const inputs = row.querySelectorAll("input, textarea");
+            const inputs = row.querySelectorAll("input, textarea, select");
+            const btnSalvar = row.querySelector(".btn-salvar-linha");
 
             if (!editing) {
-                inputs.forEach((el) => el.removeAttribute("readonly"));
+                // Entrar no modo de edição
+                inputs.forEach((el) => {
+                    el.removeAttribute("readonly");
+                    el.removeAttribute("disabled");
+                });
                 row.setAttribute("data-editing", "1");
-                btn.textContent = "Pronto";
-                btn.classList.remove("btn-outline-primary");
-                btn.classList.add("btn-success");
+                row.classList.add("categoria-row-editing");
+                btn.classList.add("d-none");
+                if (btnSalvar) {
+                    btnSalvar.classList.remove("d-none");
+                }
             } else {
-                inputs.forEach((el) => el.setAttribute("readonly", "readonly"));
+                // Sair do modo de edição
+                inputs.forEach((el) => {
+                    if (el.tagName === "SELECT") {
+                        el.setAttribute("disabled", "disabled");
+                    } else {
+                        el.setAttribute("readonly", "readonly");
+                    }
+                });
                 row.setAttribute("data-editing", "0");
-                btn.textContent = "Editar";
-                btn.classList.remove("btn-success");
-                btn.classList.add("btn-outline-primary");
+                row.classList.remove("categoria-row-editing");
+                btn.classList.remove("d-none");
+                if (btnSalvar) {
+                    btnSalvar.classList.add("d-none");
+                }
             }
         });
     });
+
+    // Salvar linha individual (submete o formulário completo)
+    document.querySelectorAll(".btn-salvar-linha").forEach((btn) => {
+        btn.addEventListener("click", (e) => {
+            e.preventDefault();
+            habilitarTodosCamposParaEnvio();
+            const form = document.getElementById("form-categorias");
+            if (form) {
+                form.submit();
+            }
+        });
+    });
+
+    // Ao submeter o formulário principal, garantir que todos os campos estejam habilitados
+    document.getElementById("form-categorias").addEventListener("submit", function(e) {
+        habilitarTodosCamposParaEnvio();
+    });
+
+    // ===================== TOGGLE DE STATUS (SEM SALVAR IMEDIATAMENTE) =====================
+    document.querySelectorAll(".btn-toggle-status").forEach((btn) => {
+        btn.addEventListener("click", function() {
+            const categoriaId = this.getAttribute("data-categoria-id");
+            const campoAtivo = document.querySelector(`input.campo-ativo[data-categoria-id="${categoriaId}"]`);
+            const row = this.closest("tr");
+            
+            if (!campoAtivo) {
+                console.error("Campo ativo não encontrado para categoria", categoriaId);
+                return;
+            }
+            
+            const valorAtual = parseInt(campoAtivo.value);
+            const novoValor = valorAtual === 1 ? 0 : 1;
+            
+            // Atualizar o valor do campo hidden
+            campoAtivo.value = novoValor;
+            
+            // Atualizar o botão visualmente
+            if (novoValor === 0) {
+                // Mudou para inativo
+                this.className = "btn btn-sm btn-success btn-toggle-status";
+                this.innerHTML = '<i class="bi bi-check-circle me-1"></i> Ativar';
+                this.setAttribute("title", "Categoria marcada como inativa - Clique para marcar como ativa (salvará ao clicar em 'Salvar Todas as Alterações')");
+                row.classList.add("table-secondary", "opacity-75");
+            } else {
+                // Mudou para ativo
+                this.className = "btn btn-sm btn-warning btn-toggle-status";
+                this.innerHTML = '<i class="bi bi-x-circle me-1"></i> Desativar';
+                this.setAttribute("title", "Categoria marcada como ativa - Clique para marcar como inativa (salvará ao clicar em 'Salvar Todas as Alterações')");
+                row.classList.remove("table-secondary", "opacity-75");
+            }
+            
+            // Atualizar atributo data-ativo para o filtro funcionar
+            row.setAttribute("data-ativo", novoValor);
+            
+            // Atualizar filtro se estiver ativo
+            if (filtroStatus && filtroStatus.value !== "todas") {
+                filtrarCategorias();
+            }
+        });
+    });
+
+    // ===================== BUSCA E FILTRO DE CATEGORIAS =====================
+    const buscaInput = document.getElementById("busca-categoria");
+    const filtroStatus = document.getElementById("filtro-status");
+    const limparBuscaBtn = document.getElementById("limpar-busca");
+    const tbodyCategorias = document.getElementById("tbody-categorias");
+    const contadorCategorias = document.getElementById("contador-categorias");
+    const todasCategorias = document.querySelectorAll(".categoria-row");
+
+    function filtrarCategorias() {
+        const termoBusca = buscaInput.value.trim().toLowerCase();
+        const statusFiltro = filtroStatus ? filtroStatus.value : "todas";
+        let totalVisiveis = 0;
+
+        todasCategorias.forEach((row) => {
+            const textoBusca = row.getAttribute("data-busca-text").toLowerCase();
+            const ativoValue = row.getAttribute("data-ativo");
+            const estaAtiva = ativoValue === "1";
+            
+            // Verificar busca por texto
+            const correspondeBusca = !termoBusca || textoBusca.includes(termoBusca);
+            
+            // Verificar filtro de status
+            let correspondeStatus = true;
+            if (statusFiltro === "ativas") {
+                correspondeStatus = estaAtiva;
+            } else if (statusFiltro === "inativas") {
+                correspondeStatus = !estaAtiva;
+            }
+            
+            const corresponde = correspondeBusca && correspondeStatus;
+            
+            if (corresponde) {
+                row.style.display = "";
+                totalVisiveis++;
+            } else {
+                row.style.display = "none";
+            }
+        });
+
+        // Atualizar contador
+        const totalOriginal = todasCategorias.length;
+        const temFiltro = termoBusca || (statusFiltro !== "todas");
+        
+        if (temFiltro) {
+            contadorCategorias.textContent = `${totalVisiveis} de ${totalOriginal} categoria(s)`;
+            contadorCategorias.classList.remove("bg-light");
+            contadorCategorias.classList.add("bg-info");
+        } else {
+            contadorCategorias.textContent = `${totalOriginal} categoria(s)`;
+            contadorCategorias.classList.remove("bg-info");
+            contadorCategorias.classList.add("bg-light");
+        }
+    }
+
+    // Event listener para busca em tempo real
+    if (buscaInput) {
+        buscaInput.addEventListener("input", filtrarCategorias);
+        buscaInput.addEventListener("keyup", function(e) {
+            if (e.key === "Escape") {
+                buscaInput.value = "";
+                filtrarCategorias();
+            }
+        });
+    }
+
+    // Event listener para filtro de status
+    if (filtroStatus) {
+        filtroStatus.addEventListener("change", filtrarCategorias);
+    }
+
+    // Botão limpar filtros
+    if (limparBuscaBtn) {
+        limparBuscaBtn.addEventListener("click", function() {
+            buscaInput.value = "";
+            if (filtroStatus) {
+                filtroStatus.value = "todas";
+            }
+            filtrarCategorias();
+            buscaInput.focus();
+        });
+    }
 </script>
+
+<style>
+@media (min-width: 768px) {
+    .h4-md {
+        font-size: 1.5rem;
+    }
+    
+    .h5-md {
+        font-size: 1.25rem;
+    }
+    
+    .small-md {
+        font-size: 1rem;
+    }
+}
+</style>
 
 {% endblock %}

@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Redefinir Senha - Unimaster Judô</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%23C8102E'/%3E%3Cpath d='M50 20 L60 40 L50 50 L40 40 Z' fill='white'/%3E%3Cpath d='M30 60 L50 50 L70 60 L50 80 Z' fill='white'/%3E%3C/svg%3E">
+
+    <!-- Fontes e Bootstrap -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
+
+    <!-- CSS de Login -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/login/style.css') }}">
+    
+    <style>
+        .password-strength {
+            font-size: 0.85rem;
+            margin-top: 5px;
+        }
+        .password-strength.weak { color: #dc3545; }
+        .password-strength.medium { color: #ffc107; }
+        .password-strength.strong { color: #28a745; }
+    </style>
+</head>
+
+<body>
+    <!-- Fundo com gradiente e padrão -->
+    <div class="login-background">
+        <div class="background-pattern"></div>
+        <div class="background-gradient"></div>
+    </div>
+
+    <!-- Container Principal -->
+    <div class="login-wrapper">
+        <div class="container-fluid">
+            <div class="row justify-content-center align-items-center min-vh-100">
+                <div class="col-12 col-sm-10 col-md-8 col-lg-5 col-xl-4">
+                    
+                    <!-- Card -->
+                    <div class="login-card">
+                        
+                        <!-- Cabeçalho -->
+                        <div class="login-header">
+                            <div class="logo-icon-container">
+                                <div class="judo-icon-wrapper">
+                                    <i class="bi bi-lock-fill judo-icon"></i>
+                                </div>
+                            </div>
+                            <h1 class="login-title">Redefinir Senha</h1>
+                            {% if usuario_nome %}
+                            <p class="login-subtitle">Olá, {{ usuario_nome }}</p>
+                            {% else %}
+                            <p class="login-subtitle">Digite sua nova senha</p>
+                            {% endif %}
+                        </div>
+
+                        <!-- Mensagens Flash -->
+                        {% with messages = get_flashed_messages(with_categories=true) %}
+                        {% if messages %}
+                            <div class="flash-messages">
+                                {% for category, message in messages %}
+                                    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                                        <i class="bi bi-{% if category == 'success' %}check-circle{% elif category == 'danger' %}exclamation-triangle{% elif category == 'warning' %}exclamation-circle{% else %}info-circle{% endif %}-fill me-2"></i>
+                                        {{ message }}
+                                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fechar"></button>
+                                    </div>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                        {% endwith %}
+
+                        <!-- Formulário -->
+                        <form method="POST" class="login-form" id="formRedefinirSenha">
+                            <input type="hidden" name="token" value="{{ token }}">
+                            
+                            <div class="form-group">
+                                <label for="senha" class="form-label">
+                                    <i class="bi bi-lock-fill me-2"></i>Nova Senha
+                                </label>
+                                <div class="input-wrapper">
+                                    <i class="bi bi-lock input-icon"></i>
+                                    <input 
+                                        type="password" 
+                                        class="form-control" 
+                                        id="senha" 
+                                        name="senha" 
+                                        required 
+                                        placeholder="Mínimo 6 caracteres"
+                                        autocomplete="new-password"
+                                        minlength="6"
+                                        autofocus
+                                    >
+                                </div>
+                                <div class="password-strength" id="passwordStrength" style="display: none;"></div>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="confirmar_senha" class="form-label">
+                                    <i class="bi bi-lock-fill me-2"></i>Confirmar Nova Senha
+                                </label>
+                                <div class="input-wrapper">
+                                    <i class="bi bi-lock input-icon"></i>
+                                    <input 
+                                        type="password" 
+                                        class="form-control" 
+                                        id="confirmar_senha" 
+                                        name="confirmar_senha" 
+                                        required 
+                                        placeholder="Digite a senha novamente"
+                                        autocomplete="new-password"
+                                        minlength="6"
+                                    >
+                                </div>
+                                <div id="passwordMatch" style="font-size: 0.85rem; margin-top: 5px;"></div>
+                            </div>
+
+                            <button type="submit" class="btn-login" id="btnSubmit">
+                                <span class="btn-text">Redefinir Senha</span>
+                                <i class="bi bi-check-circle btn-icon"></i>
+                            </button>
+                        </form>
+
+                        <!-- Links -->
+                        <div class="text-center mt-4">
+                            <a href="/auth/login" class="text-decoration-none">
+                                <i class="bi bi-arrow-left me-1"></i>
+                                Voltar para o login
+                            </a>
+                        </div>
+
+                        <!-- Rodapé -->
+                        <div class="login-footer">
+                            <p class="footer-text">
+                                <i class="bi bi-shield-check-fill me-1"></i>
+                                Sistema seguro e confiável
+                            </p>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript Bootstrap -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        // Validação de senha em tempo real
+        const senhaInput = document.getElementById('senha');
+        const confirmarSenhaInput = document.getElementById('confirmar_senha');
+        const passwordStrength = document.getElementById('passwordStrength');
+        const passwordMatch = document.getElementById('passwordMatch');
+        const form = document.getElementById('formRedefinirSenha');
+        
+        function checkPasswordStrength(password) {
+            if (password.length === 0) {
+                passwordStrength.style.display = 'none';
+                return;
+            }
+            
+            passwordStrength.style.display = 'block';
+            let strength = 0;
+            
+            if (password.length >= 6) strength++;
+            if (password.length >= 8) strength++;
+            if (/[a-z]/.test(password) && /[A-Z]/.test(password)) strength++;
+            if (/[0-9]/.test(password)) strength++;
+            if (/[^a-zA-Z0-9]/.test(password)) strength++;
+            
+            if (strength <= 2) {
+                passwordStrength.textContent = 'Senha fraca';
+                passwordStrength.className = 'password-strength weak';
+            } else if (strength <= 4) {
+                passwordStrength.textContent = 'Senha média';
+                passwordStrength.className = 'password-strength medium';
+            } else {
+                passwordStrength.textContent = 'Senha forte';
+                passwordStrength.className = 'password-strength strong';
+            }
+        }
+        
+        function checkPasswordMatch() {
+            const senha = senhaInput.value;
+            const confirmar = confirmarSenhaInput.value;
+            
+            if (confirmar.length === 0) {
+                passwordMatch.textContent = '';
+                return;
+            }
+            
+            if (senha === confirmar) {
+                passwordMatch.textContent = '✓ Senhas coincidem';
+                passwordMatch.style.color = '#28a745';
+            } else {
+                passwordMatch.textContent = '✗ Senhas não coincidem';
+                passwordMatch.style.color = '#dc3545';
+            }
+        }
+        
+        senhaInput.addEventListener('input', function() {
+            checkPasswordStrength(this.value);
+            checkPasswordMatch();
+        });
+        
+        confirmarSenhaInput.addEventListener('input', checkPasswordMatch);
+        
+        form.addEventListener('submit', function(e) {
+            const senha = senhaInput.value;
+            const confirmar = confirmarSenhaInput.value;
+            
+            if (senha.length < 6) {
+                e.preventDefault();
+                alert('A senha deve ter pelo menos 6 caracteres.');
+                return false;
+            }
+            
+            if (senha !== confirmar) {
+                e.preventDefault();
+                alert('As senhas não coincidem.');
+                return false;
+            }
+        });
+    </script>
+</body>
+</html>

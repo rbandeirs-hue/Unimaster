@@ -1,6 +1,9 @@
 {% extends "base.html" %}
 {% block title %}Editar Usuário{% endblock %}
-
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/photo-cropper.css') }}">
+{% endblock %}
 {% block content %}
 
 <style>
@@ -110,23 +113,50 @@
             {% endfor %}
           </div>
         </div>
+        <div id="blocoVisitante" class="mb-3" style="display:none;">
+          <div class="alert alert-info mb-0">
+            <i class="bi bi-info-circle me-2"></i>
+            <strong>Visitante:</strong> 
+            {% if visitante_dados %}
+            Este usuário já possui registro de visitante na academia.
+            <br><small class="text-muted">
+              Aulas realizadas: {{ visitante_dados.aulas_experimentais_realizadas or 0 }}
+              {% if visitante_dados.aulas_experimentais_permitidas %}
+              / {{ visitante_dados.aulas_experimentais_permitidas }}
+              {% else %}
+              (sem limite)
+              {% endif %}
+            </small>
+            {% else %}
+            Ao salvar, será criado um registro de visitante vinculado à primeira academia do usuário.
+            {% endif %}
+          </div>
+        </div>
         {% endif %}
 
         {% if mostrar_academias and academias_disponiveis %}
         <div class="mb-3">
           <label class="form-label fw-semibold">Academias vinculadas</label>
+          {% if academias_bloqueadas %}
+          <div class="alert alert-secondary small py-2 mb-0">
+            <i class="bi bi-lock-fill me-1"></i> No modo academia não é possível alterar academias vinculadas.
+          </div>
+          {% endif %}
           <div class="row g-2">
             {% for ac in academias_disponiveis %}
             <div class="col-12 col-md-6">
               <div class="form-check">
                 <input class="form-check-input" type="checkbox" name="academias" id="academia_{{ ac.id }}" value="{{ ac.id }}"
-                       {% if ac.id in (academias_vinculadas_ids or []) %}checked{% endif %}>
-                <label class="form-check-label" for="academia_{{ ac.id }}">{{ ac.nome }}</label>
+                       {% if ac.id in (academias_vinculadas_ids or []) %}checked{% endif %}
+                       {% if academias_bloqueadas %}disabled{% endif %}>
+                <label class="form-check-label {% if academias_bloqueadas %}text-muted{% endif %}" for="academia_{{ ac.id }}">{{ ac.nome }}</label>
               </div>
             </div>
             {% endfor %}
           </div>
+          {% if not academias_bloqueadas %}
           <div class="form-text">Marque as academias às quais o usuário terá acesso.</div>
+          {% endif %}
         </div>
         {% endif %}
 
@@ -135,9 +165,8 @@
             <i class="bi bi-save me-2"></i> Salvar
           </button>
 
-          <a href="{{ back_url }}" class="btn btn-secondary">
-            <i class="bi bi-arrow-left-circle me-2"></i> Voltar
-          </a>
+          {% set back_url = back_url or get_back_url_default() %}
+          {% include 'components/botao_voltar.html' %}
         </div>
 
       </form>
@@ -158,9 +187,11 @@
         }
         return false;
     }
+    var blocoVisitante = document.getElementById('blocoVisitante');
     function atualizarBlocos() {
         if (blocoAluno) blocoAluno.style.display = temRole('aluno') ? 'block' : 'none';
         if (blocoResponsavel) blocoResponsavel.style.display = temRole('responsavel') ? 'block' : 'none';
+        if (blocoVisitante) blocoVisitante.style.display = temRole('visitante') ? 'block' : 'none';
     }
     document.querySelectorAll('.role-cb').forEach(function(cb) {
         cb.addEventListener('change', atualizarBlocos);
@@ -170,8 +201,8 @@
 </script>
 {% endif %}
 
-<!-- Modal Câmera -->
-<div class="camera-modal-usuario d-flex" id="cameraModalUsuario">
+<!-- Modal Câmera (d-flex só via JS ao abrir — senão d-flex sobrescreve display:none e modal aparece ao carregar) -->
+<div class="camera-modal-usuario" id="cameraModalUsuario">
   <div class="camera-content-usuario bg-dark p-3 rounded">
     <video id="cameraVideoUsuario" autoplay playsinline></video>
     <canvas id="cameraCanvasUsuario" style="display:none;"></canvas>
@@ -199,15 +230,6 @@
     if (placeholder) placeholder.classList.add('d-none');
   }
 
-  fotoArquivo && fotoArquivo.addEventListener('change', function() {
-    var f = this.files[0];
-    if (f && f.type.indexOf('image') === 0) {
-      var r = new FileReader();
-      r.onload = function() { mostrarPreview(r.result); };
-      r.readAsDataURL(f);
-      if (fotoInput) fotoInput.value = '';
-    }
-  });
 
   var streamUsuario;
   var modalCam = document.getElementById('cameraModalUsuario');
@@ -261,6 +283,21 @@
     modalCam.style.display = 'none';
     if (streamUsuario) streamUsuario.getTracks().forEach(function(t) { t.stop(); });
   });
+})();
+</script>
+{% endblock %}
+{% block extra_js %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
+<script src="{{ url_for('static', filename='js/photo-cropper.js') }}"></script>
+<script>
+(function(){
+  var fa = document.getElementById('fotoArquivoUsuario');
+  var fi = document.getElementById('fotoInputUsuario');
+  var m = document.getElementById('miniaturaUsuario');
+  var p = document.getElementById('placeholderFoto');
+  if (fa && fi && typeof initPhotoCrop === 'function') {
+    initPhotoCrop(fa, { fotoInput: fi, miniatura: m, placeholder: p });
+  }
 })();
 </script>
 {% endblock %}

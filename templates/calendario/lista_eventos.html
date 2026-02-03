@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% block title %}Eventos — {{ contexto.nome }}{% endblock %}
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
+        <div>
+            {% set back_url = back_url or get_back_url_default() %}
+{% include 'components/botao_voltar.html' %}
+            <h2 class="h4 fw-bold text-primary mb-1">Eventos — {{ contexto.nome }}</h2>
+            <p class="text-muted small mb-0">Lista de eventos. Eventos avulsos podem ser cancelados; aulas recorrentes usam exceção para data específica.</p>
+        </div>
+    </div>
+
+    <!-- Filtros -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-body">
+            <form method="GET" class="row g-3">
+                <div class="col-auto">
+                    <label class="form-label small">Filtrar:</label>
+                    <select name="filtro" class="form-select form-select-sm">
+                        <option value="ativos" {% if filtro == 'ativos' %}selected{% endif %}>Ativos</option>
+                        <option value="cancelados" {% if filtro == 'cancelados' %}selected{% endif %}>Cancelados</option>
+                        <option value="todos" {% if filtro == 'todos' %}selected{% endif %}>Todos</option>
+                    </select>
+                </div>
+                <div class="col-auto">
+                    <label class="form-label small">Ano:</label>
+                    <input type="number" name="ano" class="form-control form-control-sm" value="{{ ano or '' }}" placeholder="Todos" min="2020" max="2030">
+                </div>
+                <div class="col-auto">
+                    <label class="form-label small">Mês:</label>
+                    <select name="mes" class="form-select form-select-sm">
+                        <option value="">Todos</option>
+                        {% for m in range(1, 13) %}
+                        <option value="{{ m }}" {% if mes == m %}selected{% endif %}>{{ ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][m-1] }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-auto d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary btn-sm">Filtrar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    {% if eventos %}
+    <div class="card shadow-sm">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Data</th>
+                            <th>Evento</th>
+                            <th>Tipo</th>
+                            <th>Status</th>
+                            <th class="text-end">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for ev in eventos %}
+                        <tr class="{% if ev.status == 'cancelado' %}table-secondary{% endif %}">
+                            <td class="small">
+                                {{ ev.data_inicio|data_br }}{% if ev.data_fim and ev.data_fim != ev.data_inicio %} a {{ ev.data_fim|data_br }}{% endif %}
+                                {% if ev.hora_inicio %}
+                                <br><small class="text-muted">{{ ev.hora_inicio.strftime('%H:%M') if ev.hora_inicio.__class__.__name__ == 'time' else ev.hora_inicio }}{% if ev.hora_fim %} - {{ ev.hora_fim.strftime('%H:%M') if ev.hora_fim.__class__.__name__ == 'time' else ev.hora_fim }}{% endif %}</small>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <strong>{{ ev.titulo }}</strong>
+                                {% if ev.recorrente %}<span class="badge bg-info ms-1">Recorrente</span>{% endif %}
+                                {% if ev.descricao %}<br><small class="text-muted">{{ ev.descricao[:80] }}{% if ev.descricao|length > 80 %}...{% endif %}</small>{% endif %}
+                            </td>
+                            <td>
+                                <span class="badge bg-secondary">{{ ev.tipo or 'evento' }}</span>
+                            </td>
+                            <td>
+                                {% if ev.status == 'cancelado' %}
+                                <span class="badge bg-danger">Cancelado</span>
+                                {% else %}
+                                <span class="badge bg-success">Ativo</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-end">
+                                {% if ev.status == 'ativo' and not ev.feriado_nacional and ev.tipo != 'feriado' %}
+                                {% if ev.recorrente and ev.tipo == 'aula' %}
+                                <a href="{{ url_for('calendario.criar_excecao', evento_id=ev.id) }}" class="btn btn-outline-warning btn-sm" title="Cancelar aula em data específica">
+                                    <i class="bi bi-calendar-x"></i> Exceção
+                                </a>
+                                {% else %}
+                                <button type="button" class="btn btn-outline-danger btn-sm" data-bs-toggle="modal" data-bs-target="#modalCancelar{{ ev.id }}" title="Cancelar evento avulso">
+                                    <i class="bi bi-x-circle"></i> Cancelar
+                                </button>
+                                {% endif %}
+                                {% elif ev.feriado_nacional or ev.tipo == 'feriado' %}
+                                <span class="text-muted small"><i class="bi bi-lock"></i> Feriado</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+
+                        {% if ev.status == 'ativo' and not ev.feriado_nacional and ev.tipo != 'feriado' %}
+                        <div class="modal fade" id="modalCancelar{{ ev.id }}" tabindex="-1">
+                            <div class="modal-dialog">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title">Cancelar evento</h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                    </div>
+                                    <form method="POST" action="{{ url_for('calendario.cancelar_evento', evento_id=ev.id) }}">
+                                        <div class="modal-body">
+                                            <p>Deseja cancelar o evento <strong>{{ ev.titulo }}</strong>?</p>
+                                            {% if nivel == 'associacao' %}
+                                            <div class="alert alert-warning small">
+                                                <i class="bi bi-exclamation-triangle"></i> O cancelamento será propagado para todas as academias que aderiram a este evento.
+                                            </div>
+                                            {% elif nivel == 'federacao' %}
+                                            <div class="alert alert-warning small">
+                                                <i class="bi bi-exclamation-triangle"></i> O cancelamento será propagado para associações e academias que aderiram.
+                                            </div>
+                                            {% endif %}
+                                            <div class="mb-2">
+                                                <label for="motivo{{ ev.id }}" class="form-label small">Motivo (opcional):</label>
+                                                <textarea name="motivo" id="motivo{{ ev.id }}" class="form-control form-control-sm" rows="2"></textarea>
+                                            </div>
+                                        </div>
+                                        <div class="modal-footer">
+                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Não</button>
+                                            <button type="submit" class="btn btn-danger"><i class="bi bi-x-circle"></i> Sim, cancelar</button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="card shadow-sm">
+        <div class="card-body text-center py-5">
+            <i class="bi bi-calendar-x display-4 text-muted mb-3"></i>
+            <h5 class="text-muted">Nenhum evento encontrado</h5>
+            <p class="small text-muted mb-0">Ajuste os filtros ou crie um novo evento.</p>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

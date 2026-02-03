@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block title %}Minhas Aulas Experimentais{% endblock %}
+{% block content %}
+<div class="container mt-4">
+    <div class="mb-4">
+        {% set back_url = url_for('visitante.painel') %}
+        {% include 'components/botao_voltar.html' %}
+    </div>
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="h4 fw-bold mb-0">Minhas Aulas Experimentais</h2>
+        <a href="{{ url_for('visitante.solicitar_aula') }}" class="btn btn-primary">
+            <i class="bi bi-plus-circle me-2"></i>Nova Aula
+        </a>
+    </div>
+
+    {% if aulas %}
+    <div class="card shadow-sm border-0">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Data</th>
+                            <th>Turma</th>
+                            <th>Horário</th>
+                            <th>Status</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for aula in aulas %}
+                        <tr>
+                            <td>
+                                {{ aula.data_aula|data_br }}
+                                {% if aula.status_aula == 'hoje' %}
+                                <span class="badge bg-info ms-2">Hoje</span>
+                                {% elif aula.status_aula == 'agendada' %}
+                                <span class="badge bg-primary ms-2">Agendada</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ aula.turma_nome }}</td>
+                            <td>{{ aula.DiasHorario or '-' }}</td>
+                            <td>
+                                {% if aula.status_aula == 'realizada' %}
+                                    {% if aula.presente %}
+                                    <span class="badge bg-success">Presente</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">Falta</span>
+                                    {% endif %}
+                                {% else %}
+                                <span class="badge bg-secondary">Pendente</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if aula.status_aula == 'agendada' %}
+                                <button type="button" class="btn btn-sm btn-outline-danger" 
+                                        onclick="cancelarAula({{ aula.id }})">
+                                    <i class="bi bi-x-circle me-1"></i>Cancelar
+                                </button>
+                                {% else %}
+                                <span class="text-muted small">-</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="card shadow-sm border-0">
+        <div class="card-body text-center py-5">
+            <i class="bi bi-calendar-x display-1 text-muted mb-3"></i>
+            <h5 class="text-muted">Nenhuma aula experimental</h5>
+            <p class="text-muted mb-3">Você ainda não possui aulas experimentais agendadas.</p>
+            <a href="{{ url_for('visitante.solicitar_aula') }}" class="btn btn-primary">
+                <i class="bi bi-plus-circle me-2"></i>Solicitar Primeira Aula
+            </a>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+function cancelarAula(aulaId) {
+    if (!confirm('Deseja realmente cancelar esta aula experimental?')) {
+        return;
+    }
+    
+    fetch(`{{ url_for('visitante.cancelar_aula', aula_id=0) }}`.replace('0', aulaId), {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.ok) {
+            alert(data.msg);
+            location.reload();
+        } else {
+            alert('Erro: ' + data.msg);
+        }
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        alert('Erro ao cancelar aula');
+    });
+}
+</script>
+{% endblock %}

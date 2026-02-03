@@ -1,0 +1,284 @@
+{% extends "base.html" %}
+{% block title %}Solicitações de Aulas Experimentais{% endblock %}
+{% block content %}
+<div class="container mt-4">
+    <div class="mb-4">
+        {% if academias|length > 1 %}
+        <form method="GET" class="mb-3">
+            <label class="form-label small fw-semibold">Academia:</label>
+            <select name="academia_id" class="form-select form-select-sm d-inline-block w-auto" onchange="this.form.submit()">
+                {% for ac in academias %}
+                <option value="{{ ac.id }}" {% if ac.id == academia_id %}selected{% endif %}>{{ ac.nome }}</option>
+                {% endfor %}
+            </select>
+        </form>
+        {% endif %}
+        {% set back_url = url_for('academia.lista_visitantes', academia_id=academia_id) %}
+        {% include 'components/botao_voltar.html' %}
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <h2 class="h4 fw-bold text-primary mb-1">Solicitações de Aulas Experimentais</h2>
+                <p class="text-muted mb-0">Aprove ou rejeite solicitações de visitantes.</p>
+            </div>
+            <a href="{{ url_for('academia.lista_visitantes', academia_id=academia_id) }}" class="btn btn-outline-secondary">
+                <i class="bi bi-people me-2"></i>Histórico de Visitantes
+            </a>
+        </div>
+    </div>
+
+    <!-- Aulas de Hoje -->
+    {% if hoje %}
+    <div class="card shadow-sm border-warning mb-4">
+        <div class="card-header bg-warning text-dark">
+            <h5 class="mb-0">
+                <i class="bi bi-calendar-day me-2"></i>Aulas de Hoje ({{ hoje|length }})
+            </h5>
+        </div>
+        <div class="card-body">
+            <div class="row g-3">
+                {% for s in hoje %}
+                <div class="col-md-6 col-lg-4">
+                    <div class="card border-warning">
+                        <div class="card-body">
+                            <div class="d-flex align-items-center mb-2">
+                                {% if s.foto_url %}
+                                <img src="{{ url_for('static', filename=s.foto_url) }}" 
+                                     alt="{{ s.visitante_nome }}" 
+                                     class="rounded-circle me-2" 
+                                     style="width: 40px; height: 40px; object-fit: cover;">
+                                {% else %}
+                                <div class="rounded-circle bg-secondary d-flex align-items-center justify-content-center me-2" 
+                                     style="width: 40px; height: 40px;">
+                                    <i class="bi bi-person text-white"></i>
+                                </div>
+                                {% endif %}
+                                <div>
+                                    <strong>{{ s.visitante_nome }}</strong>
+                                    {% if s.idade %}
+                                    <br><small class="text-muted">{{ s.idade }} anos</small>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <p class="mb-1"><strong>Turma:</strong> {{ s.turma_nome }}</p>
+                            <p class="mb-1"><strong>Horário:</strong> {{ s.DiasHorario or '-' }}</p>
+                            <p class="mb-2"><strong>Data:</strong> {{ s.data_aula|data_br }}</p>
+                            {% if s.visitante_telefone %}
+                            <p class="mb-2 small"><i class="bi bi-telephone me-1"></i>{{ s.visitante_telefone }}</p>
+                            {% endif %}
+                            {% if s.aprovado %}
+                            <div class="mb-2">
+                                <span class="badge bg-success">
+                                    <i class="bi bi-check-circle me-1"></i>Aprovado
+                                </span>
+                            </div>
+                            {% else %}
+                            <div class="mb-2">
+                                <span class="badge bg-warning text-dark">
+                                    <i class="bi bi-clock me-1"></i>Pendente de Aprovação
+                                </span>
+                            </div>
+                            {% endif %}
+                            <div class="d-grid gap-2">
+                                {% if not s.aprovado %}
+                                <button type="button" class="btn btn-sm btn-success" 
+                                        onclick="aprovarSolicitacao({{ s.id }})">
+                                    <i class="bi bi-check-circle me-1"></i>Aprovar
+                                </button>
+                                {% endif %}
+                                <button type="button" class="btn btn-sm btn-danger" 
+                                        onclick="cancelarSolicitacao({{ s.id }})">
+                                    <i class="bi bi-x-circle me-1"></i>Cancelar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Solicitações Pendentes -->
+    {% if pendentes %}
+    <div class="card shadow-sm border-primary mb-4">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0">
+                <i class="bi bi-clock-history me-2"></i>Solicitações Pendentes ({{ pendentes|length }})
+            </h5>
+        </div>
+        <div class="card-body">
+            <div class="row g-3">
+                {% for s in pendentes %}
+                <div class="col-md-6 col-lg-4">
+                    <div class="card border-primary">
+                        <div class="card-body">
+                            <div class="d-flex align-items-center mb-2">
+                                {% if s.foto_url %}
+                                <img src="{{ url_for('static', filename=s.foto_url) }}" 
+                                     alt="{{ s.visitante_nome }}" 
+                                     class="rounded-circle me-2" 
+                                     style="width: 40px; height: 40px; object-fit: cover;">
+                                {% else %}
+                                <div class="rounded-circle bg-secondary d-flex align-items-center justify-content-center me-2" 
+                                     style="width: 40px; height: 40px;">
+                                    <i class="bi bi-person text-white"></i>
+                                </div>
+                                {% endif %}
+                                <div>
+                                    <strong>{{ s.visitante_nome }}</strong>
+                                    {% if s.idade %}
+                                    <br><small class="text-muted">{{ s.idade }} anos</small>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <p class="mb-1"><strong>Turma:</strong> {{ s.turma_nome }}</p>
+                            <p class="mb-1"><strong>Horário:</strong> {{ s.DiasHorario or '-' }}</p>
+                            <p class="mb-2"><strong>Data:</strong> {{ s.data_aula|data_br }}</p>
+                            {% if s.visitante_telefone %}
+                            <p class="mb-2 small"><i class="bi bi-telephone me-1"></i>{{ s.visitante_telefone }}</p>
+                            {% endif %}
+                            <div class="d-grid gap-2">
+                                <button type="button" class="btn btn-sm btn-success" 
+                                        onclick="aprovarSolicitacao({{ s.id }})">
+                                    <i class="bi bi-check-circle me-1"></i>Aprovar
+                                </button>
+                                <button type="button" class="btn btn-sm btn-danger" 
+                                        onclick="cancelarSolicitacao({{ s.id }})">
+                                    <i class="bi bi-x-circle me-1"></i>Rejeitar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Aulas Realizadas -->
+    {% if realizadas %}
+    <div class="card shadow-sm border-secondary">
+        <div class="card-header bg-secondary text-white">
+            <h5 class="mb-0">
+                <i class="bi bi-check-circle me-2"></i>Aulas Realizadas ({{ realizadas|length }})
+            </h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Visitante</th>
+                            <th>Turma</th>
+                            <th>Data</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for s in realizadas %}
+                        <tr>
+                            <td>
+                                <div class="d-flex align-items-center">
+                                    {% if s.foto_url %}
+                                    <img src="{{ url_for('static', filename=s.foto_url) }}" 
+                                         alt="{{ s.visitante_nome }}" 
+                                         class="rounded-circle me-2" 
+                                         style="width: 32px; height: 32px; object-fit: cover;">
+                                    {% endif %}
+                                    <div>
+                                        <strong>{{ s.visitante_nome }}</strong>
+                                        {% if s.idade %}
+                                        <br><small class="text-muted">{{ s.idade }} anos</small>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </td>
+                            <td>{{ s.turma_nome }}</td>
+                            <td>{{ s.data_aula|data_br }}</td>
+                            <td>
+                                {% if s.aprovado %}
+                                    {% if s.presente %}
+                                    <span class="badge bg-success">Presente</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">Falta</span>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="badge bg-warning text-dark">Não Aprovado</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if not pendentes and not hoje and not realizadas %}
+    <div class="card shadow-sm border-0">
+        <div class="card-body text-center py-5">
+            <i class="bi bi-clipboard-x display-1 text-muted mb-3"></i>
+            <h5 class="text-muted">Nenhuma solicitação encontrada</h5>
+            <p class="text-muted mb-0">Não há solicitações de aulas experimentais no momento.</p>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+function aprovarSolicitacao(aulaId) {
+    if (!confirm('Deseja realmente aprovar esta solicitação?')) {
+        return;
+    }
+    
+    fetch(`{{ url_for('academia.aprovar_solicitacao', aula_id=0, academia_id=academia_id) }}`.replace('0', aulaId), {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.ok) {
+            alert(data.msg);
+            location.reload();
+        } else {
+            alert('Erro: ' + data.msg);
+        }
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        alert('Erro ao aprovar solicitação');
+    });
+}
+
+function cancelarSolicitacao(aulaId) {
+    if (!confirm('Deseja realmente cancelar/rejeitar esta solicitação?')) {
+        return;
+    }
+    
+    fetch(`{{ url_for('academia.cancelar_solicitacao', aula_id=0) }}`.replace('0', aulaId), {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.ok) {
+            alert(data.msg);
+            location.reload();
+        } else {
+            alert('Erro: ' + data.msg);
+        }
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        alert('Erro ao cancelar solicitação');
+    });
+}
+</script>
+{% endblock %}

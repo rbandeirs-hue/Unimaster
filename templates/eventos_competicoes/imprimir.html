@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Imprimir Inscrições{% if evento %} — {{ evento.nome }}{% endif %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <style>
+        @media print {
+            .no-print { display: none !important; }
+            body { margin: 0; padding: 0; }
+            @page { 
+                margin: {{ ((margem_vertical or 20) / 10) }}cm {{ ((margem_horizontal or 20) / 10) }}cm;
+                size: {% if orientacao == 'retrato' %}A4 portrait{% else %}A4 landscape{% endif %};
+            }
+            .card { border: none; box-shadow: none; }
+            .card-header { background: #0d6efd !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        }
+        body {
+            font-size: {{ tamanho_fonte or 10 }}pt;
+        }
+        .print-table {
+            width: 100%;
+            font-size: {{ tamanho_fonte or 10 }}pt;
+            border-collapse: collapse;
+            table-layout: auto;
+        }
+        .print-table th,
+        .print-table td {
+            border: 1px solid #dee2e6;
+            padding: 4px 6px;
+            text-align: left;
+            white-space: normal;
+            word-wrap: break-word;
+        }
+        .print-table th {
+            background-color: #f8f9fa;
+            font-weight: 600;
+        }
+        .print-table tbody tr:nth-child(even) {
+            background-color: #f8f9fa;
+        }
+        .card-header {
+            background-color: #0d6efd;
+            color: white;
+        }
+        .no-print {
+            padding: 15px;
+            background: #f8f9fa;
+            border-bottom: 2px solid #dee2e6;
+        }
+    </style>
+</head>
+<body>
+    <div class="no-print">
+        <div class="container-fluid">
+    {% set back_url = back_url or get_back_url_default() %}
+{% include 'components/botao_voltar.html' %}
+
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h5 class="mb-0">{% if evento %}{{ evento.nome }}{% endif %}</h5>
+                    <small class="text-muted">Visualização para impressão</small>
+                </div>
+                <div>
+                    <button onclick="window.print()" class="btn btn-primary btn-sm">
+                        <i class="bi bi-printer me-1"></i> Imprimir
+                    </button>
+                    <button onclick="window.close()" class="btn btn-outline-secondary btn-sm">
+                        <i class="bi bi-x-circle me-1"></i> Fechar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container-fluid mt-3" style="transform: scale({{ (escala or 100) / 100 }}); transform-origin: top left;">
+        {% if inscricoes_para_imprimir %}
+            {# Visualização simples como a prévia #}
+            <div class="table-responsive">
+                <table class="print-table">
+                    <thead>
+                        <tr>
+                            <th style="width: auto; min-width: 30px;">#</th>
+                            {% for c in campos_form %}
+                            {% if c.campo_chave %}
+                            <th style="width: auto; white-space: nowrap;">{{ c.label }}</th>
+                            {% endif %}
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for insc in inscricoes_para_imprimir %}
+                        <tr>
+                            <td>{{ loop.index }}</td>
+                            {% for c in campos_form %}
+                            {% if c.campo_chave %}
+                            <td style="white-space: normal; word-wrap: break-word;">
+                                {% set val = (insc.dados_form or {}).get(c.campo_chave, '') %}
+                                {% if c.campo_chave == 'sexo' %}
+                                    {% if val == 'M' %}Masculino{% elif val == 'F' %}Feminino{% else %}{{ val or '-' }}{% endif %}
+                                {% elif c.campo_chave in ['data_nascimento', 'ultimo_exame_faixa', 'rg_data_emissao', 'data_cadastro_zempo'] %}
+                                    {% if val %}
+                                        {% set data_val = val|string|truncate(10, True, '') %}
+                                        {% if data_val|length == 10 and '-' in data_val %}
+                                            {{ data_val[8:10] }}/{{ data_val[5:7] }}/{{ data_val[0:4] }}
+                                        {% else %}
+                                            {{ data_val }}
+                                        {% endif %}
+                                    {% else %}
+                                        -
+                                    {% endif %}
+                                {% else %}
+                                    {{ val or '-' }}
+                                {% endif %}
+                            </td>
+                            {% endif %}
+                            {% endfor %}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% elif agrupamento == 'categoria' %}
+            {# Agrupamento por Categoria (fallback) #}
+            {% if categorias_com_inscricoes %}
+            {% for categoria, cat_data in categorias_com_inscricoes.items() %}
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="bi bi-tag me-2"></i>{{ categoria }}
+                        <span class="badge bg-light text-dark ms-2">{{ cat_data.total_inscritos }} inscrito(s)</span>
+                    </h5>
+                </div>
+                <div class="card-body p-0">
+                    {% if cat_data.academias %}
+                    {% for academia_nome, alunos in cat_data.academias.items() %}
+                    <div class="border-bottom">
+                        <div class="p-2 bg-light">
+                            <h6 class="mb-0">
+                                <i class="bi bi-building me-2"></i><strong>{{ academia_nome }}</strong>
+                                <span class="badge bg-secondary ms-2">{{ alunos|length }} aluno(s)</span>
+                            </h6>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="print-table">
+                                <thead>
+                                    <tr>
+                                        <th style="width: auto; min-width: 30px;">#</th>
+                                        {% for c in campos_form %}
+                                        {% if c.campo_chave %}
+                                        <th style="width: auto; white-space: nowrap;">{{ c.label }}</th>
+                                        {% endif %}
+                                        {% endfor %}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for aluno in alunos %}
+                                    <tr>
+                                        <td>{{ loop.index }}</td>
+                                        {% for c in campos_form %}
+                                        {% if c.campo_chave %}
+                                        <td style="white-space: normal; word-wrap: break-word;">
+                                            {% set val = (aluno.dados_form or {}).get(c.campo_chave, '') %}
+                                            {% if c.campo_chave == 'sexo' %}
+                                                {% if val == 'M' %}Masculino{% elif val == 'F' %}Feminino{% else %}{{ val or '-' }}{% endif %}
+                                            {% elif c.campo_chave in ['data_nascimento', 'ultimo_exame_faixa', 'rg_data_emissao', 'data_cadastro_zempo'] %}
+                                                {% if val %}
+                                                    {% set data_val = val|string|truncate(10, True, '') %}
+                                                    {% if data_val|length == 10 and '-' in data_val %}
+                                                        {{ data_val[8:10] }}/{{ data_val[5:7] }}/{{ data_val[0:4] }}
+                                                    {% else %}
+                                                        {{ data_val }}
+                                                    {% endif %}
+                                                {% else %}
+                                                    -
+                                                {% endif %}
+                                            {% else %}
+                                                {{ val or '-' }}
+                                            {% endif %}
+                                        </td>
+                                        {% endif %}
+                                        {% endfor %}
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    {% endfor %}
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+            {% endif %}
+        {% else %}
+            {# Agrupamento por Academia (fallback) #}
+            {% if academias_com_inscricoes %}
+            {% for academia_id, ac_data in academias_com_inscricoes.items() %}
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="bi bi-building me-2"></i>{{ ac_data.academia_nome }}
+                        <span class="badge bg-light text-dark ms-2">{{ ac_data.total_inscritos }} inscrito(s)</span>
+                    </h5>
+                </div>
+                <div class="card-body p-0">
+                    {% if ac_data.categorias %}
+                    {% for categoria, alunos in ac_data.categorias.items() %}
+                    <div class="border-bottom">
+                        <div class="p-2 bg-light">
+                            <h6 class="mb-0">
+                                <i class="bi bi-tag me-2"></i><strong>{{ categoria }}</strong>
+                                <span class="badge bg-secondary ms-2">{{ alunos|length }} aluno(s)</span>
+                            </h6>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="print-table">
+                                <thead>
+                                    <tr>
+                                        <th style="width: auto; min-width: 30px;">#</th>
+                                        {% for c in campos_form %}
+                                        {% if c.campo_chave %}
+                                        <th style="width: auto; white-space: nowrap;">{{ c.label }}</th>
+                                        {% endif %}
+                                        {% endfor %}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for aluno in alunos %}
+                                    <tr>
+                                        <td>{{ loop.index }}</td>
+                                        {% for c in campos_form %}
+                                        {% if c.campo_chave %}
+                                        <td style="white-space: normal; word-wrap: break-word;">
+                                            {% set val = (aluno.dados_form or {}).get(c.campo_chave, '') %}
+                                            {% if c.campo_chave == 'sexo' %}
+                                                {% if val == 'M' %}Masculino{% elif val == 'F' %}Feminino{% else %}{{ val or '-' }}{% endif %}
+                                            {% elif c.campo_chave in ['data_nascimento', 'ultimo_exame_faixa', 'rg_data_emissao', 'data_cadastro_zempo'] %}
+                                                {% if val %}
+                                                    {% set data_val = val|string|truncate(10, True, '') %}
+                                                    {% if data_val|length == 10 and '-' in data_val %}
+                                                        {{ data_val[8:10] }}/{{ data_val[5:7] }}/{{ data_val[0:4] }}
+                                                    {% else %}
+                                                        {{ data_val }}
+                                                    {% endif %}
+                                                {% else %}
+                                                    -
+                                                {% endif %}
+                                            {% else %}
+                                                {{ val or '-' }}
+                                            {% endif %}
+                                        </td>
+                                        {% endif %}
+                                        {% endfor %}
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    {% endfor %}
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+            {% endif %}
+        {% endif %}
+    </div>
+</body>
+</html>

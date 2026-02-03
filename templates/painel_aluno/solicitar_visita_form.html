@@ -1,0 +1,234 @@
+{% extends "base.html" %}
+{% block title %}Solicitar visita — {{ academia_destino.nome }}{% endblock %}
+{% block content %}
+<div class="container mt-4 px-2 px-sm-3" style="max-width: 560px;">
+    {% set back_url = back_url or get_back_url_default() %}
+{% include 'components/botao_voltar.html' %}
+    <div class="card shadow-sm">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0"><i class="bi bi-geo-alt me-2"></i> Solicitar visita</h5>
+        </div>
+        <div class="card-body p-4">
+            <p class="mb-3">Solicitar visita em <strong>{{ academia_destino.nome }}</strong>. Escolha a turma e a data em que pretende frequentar. Após aprovação, você aparecerá na lista de chamada.</p>
+            {% if turmas %}
+            <form method="post">
+                <div class="mb-3">
+                    <label for="turma_id" class="form-label fw-semibold">Turma <span class="text-danger">*</span></label>
+                    <select name="turma_id" id="turma_id" class="form-select" required>
+                        <option value="">— Selecione a turma —</option>
+                        {% for t in turmas %}
+                        <option value="{{ t.TurmaID }}"
+                            data-dias="{{ t.dias_semana or '' }}"
+                            data-hora-inicio="{{ t.hora_inicio_str or '' }}"
+                            data-hora-fim="{{ t.hora_fim_str or '' }}"
+                            data-dias-display="{{ t.dias_display or '' }}">
+                            {{ t.Nome }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div id="turma-info" class="alert alert-info py-2 mb-3 d-none">
+                    <i class="bi bi-calendar-week me-1"></i> <strong>Treino:</strong> <span id="turma-info-text"></span>
+                </div>
+                <div class="mb-4" id="wrap-data">
+                    <label for="data_visita" class="form-label fw-semibold">Datas da visita <span class="text-danger">*</span></label>
+                    <input type="text" id="data_visita" class="form-control" placeholder="Selecione uma ou mais datas no calendário" readonly required>
+                    <small class="text-muted d-block mt-1">
+                        <i class="bi bi-info-circle me-1"></i>Apenas datas em que a turma tem aula serão exibidas. Você pode selecionar múltiplas datas.
+                    </small>
+                    <div id="datas-selecionadas" class="mt-2"></div>
+                </div>
+                <input type="hidden" name="datas_visita" id="datas_visita_submit" value="">
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn btn-primary" id="btn-submit"><i class="bi bi-send me-1"></i> Enviar solicitação</button>
+                    <a href="{{ url_for('painel_aluno.associacao') }}" class="btn btn-outline-secondary">Cancelar</a>
+                </div>
+            </form>
+            {% else %}
+            <div class="alert alert-warning mb-0">
+                <i class="bi bi-exclamation-triangle me-2"></i>
+                Esta academia ainda não possui turmas cadastradas. Entre em contato com a academia.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+<!-- Flatpickr CSS -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<!-- Flatpickr JS -->
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/pt.js"></script>
+
+<script>
+(function() {
+    var sel = document.getElementById('turma_id');
+    var infoDiv = document.getElementById('turma-info');
+    var infoText = document.getElementById('turma-info-text');
+    var dataInput = document.getElementById('data_visita');
+    var dataSubmit = document.getElementById('datas_visita_submit');
+    var datasSelecionadasDiv = document.getElementById('datas-selecionadas');
+    var form = document.querySelector('form');
+    var flatpickrInstance = null;
+    
+    function atualizarDatasSelecionadas(selectedDates) {
+        if (!datasSelecionadasDiv) return;
+        if (selectedDates.length === 0) {
+            datasSelecionadasDiv.innerHTML = '';
+            return;
+        }
+        var html = '<div class="d-flex flex-wrap gap-2 mt-2">';
+        selectedDates.forEach(function(date) {
+            var dateStr = date.toLocaleDateString('pt-BR');
+            html += '<span class="badge bg-primary">' + dateStr + '</span>';
+        });
+        html += '</div>';
+        datasSelecionadasDiv.innerHTML = html;
+    }
+
+    function getDiasList(diasStr) {
+        if (!diasStr || !diasStr.trim()) return [];
+        return diasStr.split(',').map(function(d) { return d.trim(); }).filter(Boolean);
+    }
+
+    function proximasDatas(diasList, count) {
+        if (!diasList.length) return [];
+        var hoje = new Date();
+        hoje.setHours(0,0,0,0);
+        var result = [];
+        var d = new Date(hoje);
+        var max = 100;
+        while (result.length < count && max-- > 0) {
+            var wd = d.getDay();
+            var diaNum = (wd === 0) ? '0' : String(wd);
+            if (diasList.indexOf(diaNum) >= 0 && d.getTime() >= hoje.getTime()) {
+                result.push(d.toISOString().split('T')[0]);
+            }
+            d.setDate(d.getDate() + 1);
+        }
+        return result;
+    }
+
+    function initFlatpickr(diasList) {
+        // Destruir instância anterior se existir
+        if (flatpickrInstance) {
+            flatpickrInstance.destroy();
+            flatpickrInstance = null;
+        }
+
+        if (!diasList || diasList.length === 0) {
+            dataInput.value = '';
+            dataInput.disabled = true;
+            dataInput.placeholder = 'Selecione uma turma primeiro';
+            dataSubmit.value = '';
+            if (datasSelecionadasDiv) datasSelecionadasDiv.innerHTML = '';
+            return;
+        }
+
+        dataInput.disabled = false;
+        dataInput.placeholder = 'Clique para abrir o calendário e selecionar uma ou mais datas';
+
+        var datasDisponiveis = proximasDatas(diasList, 60); // Próximos 60 dias disponíveis
+        
+        if (datasDisponiveis.length === 0) {
+            dataInput.value = '';
+            dataInput.disabled = true;
+            dataInput.placeholder = 'Nenhuma data disponível para esta turma';
+            return;
+        }
+
+        flatpickrInstance = flatpickr(dataInput, {
+            locale: 'pt',
+            dateFormat: 'Y-m-d',
+            minDate: 'today',
+            mode: 'multiple', // Modo múltiplo para selecionar várias datas
+            enable: datasDisponiveis, // Apenas datas disponíveis serão habilitadas
+            disableMobile: false,
+            allowInput: false,
+            clickOpens: true,
+            onChange: function(selectedDates, dateStr, instance) {
+                var datasArray = selectedDates.map(function(d) {
+                    return d.toISOString().split('T')[0];
+                });
+                dataSubmit.value = datasArray.join(',');
+                atualizarDatasSelecionadas(selectedDates);
+            },
+            onReady: function(selectedDates, dateStr, instance) {
+                // Adicionar classe para estilização
+                instance.calendarContainer.classList.add('flatpickr-calendar-visita');
+            }
+        });
+    }
+
+    function onTurmaChange() {
+        var opt = sel.options[sel.selectedIndex];
+        if (!opt || !opt.value) {
+            infoDiv.classList.add('d-none');
+            dataInput.value = '';
+            dataInput.disabled = true;
+            dataInput.placeholder = 'Selecione uma turma primeiro';
+            dataSubmit.value = '';
+            if (datasSelecionadasDiv) datasSelecionadasDiv.innerHTML = '';
+            if (flatpickrInstance) {
+                flatpickrInstance.destroy();
+                flatpickrInstance = null;
+            }
+            return;
+        }
+        var dias = opt.dataset.dias || '';
+        var horaInicio = opt.dataset.horaInicio || '';
+        var horaFim = opt.dataset.horaFim || '';
+        var diasDisplay = opt.dataset.diasDisplay || '';
+
+        if (diasDisplay) {
+            var txt = diasDisplay;
+            if (horaInicio && horaFim) txt += ' — ' + horaInicio + ' às ' + horaFim;
+            infoText.textContent = txt;
+            infoDiv.classList.remove('d-none');
+        } else {
+            infoDiv.classList.add('d-none');
+        }
+
+        var diasList = getDiasList(dias);
+        initFlatpickr(diasList);
+    }
+
+    if (sel) sel.addEventListener('change', onTurmaChange);
+    onTurmaChange();
+
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            if (!dataSubmit.value || !dataSubmit.value.trim()) {
+                e.preventDefault();
+                alert('Por favor, selecione pelo menos uma data no calendário.');
+                return false;
+            }
+        });
+    }
+})();
+</script>
+
+<style>
+.flatpickr-calendar-visita {
+    font-family: inherit;
+}
+.flatpickr-calendar-visita .flatpickr-day.flatpickr-disabled,
+.flatpickr-calendar-visita .flatpickr-day.prevMonthDay.flatpickr-disabled,
+.flatpickr-calendar-visita .flatpickr-day.nextMonthDay.flatpickr-disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+.flatpickr-calendar-visita .flatpickr-day:not(.flatpickr-disabled):hover {
+    background: #0d6efd;
+    border-color: #0d6efd;
+    color: #fff;
+}
+#data_visita {
+    cursor: pointer;
+    background-color: #fff;
+}
+#data_visita:disabled {
+    cursor: not-allowed;
+    background-color: #e9ecef;
+}
+</style>
+{% endblock %}

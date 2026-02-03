@@ -197,9 +197,9 @@ def gerenciar_graduacoes():
 
 
 # ==========================================================
-# 🔹 Gerenciar Categorias (classes + pesos)
+# 🔹 Gerenciar Categorias (tabela categorias)
 # ==========================================================
-def _render_categorias(show_classes=True, show_pesos=True):
+def _render_categorias():
     def parse_int(valor):
         valor = (valor or "").strip()
         if not valor:
@@ -253,155 +253,104 @@ def _render_categorias(show_classes=True, show_pesos=True):
         cursor = db.cursor(dictionary=True)
     except Exception as e:
         flash(f"Erro ao conectar no banco: {e}", "danger")
-        return render_template("categorias/gerenciar_categorias.html", classes=[], pesos=[])
+        return render_template("categorias/gerenciar_categorias.html", categorias=[])
 
-    tabela_classes = "classes_judo"
-    tabela_pesos = "categorias_peso"
-    col_map_classes = carregar_colunas(cursor, tabela_classes)
-    col_map_pesos = carregar_colunas(cursor, tabela_pesos)
+    tabela_categorias = "categorias"
+    col_map = carregar_colunas(cursor, tabela_categorias)
 
-    cols_classes, missing_classes = resolver_colunas(
-        col_map_classes,
+    cols, missing = resolver_colunas(
+        col_map,
         {
-            "id_classe": ["id_classe", "id", "idclasse"],
-            "classe": ["classe", "nome", "descricao"],
-            "idade_min": ["idade_min", "idade_minima", "min_idade"],
-            "idade_max": ["idade_max", "idade_maxima", "max_idade"],
-            "notas": ["notas", "observacao", "obs"],
-        },
-    )
-
-    cols_pesos, missing_pesos = resolver_colunas(
-        col_map_pesos,
-        {
-            "id_peso": ["id_peso", "id", "idpeso"],
+            "id": ["id"],
             "genero": ["genero", "sexo", "gender"],
-            "id_classe_fk": ["id_classe_fk", "id_classe", "classe_id", "classe_fk"],
+            "id_classe": ["id_classe", "classe"],
             "categoria": ["categoria"],
             "nome_categoria": ["nome_categoria", "nome"],
             "peso_min": ["peso_min", "peso_minimo", "min_peso"],
             "peso_max": ["peso_max", "peso_maximo", "max_peso"],
+            "idade_min": ["idade_min", "idade_minima", "min_idade"],
+            "idade_max": ["idade_max", "idade_maxima", "max_idade"],
+            "descricao": ["descricao", "notas", "observacao", "obs"],
         },
     )
 
     if request.method == "POST":
         form_tipo = request.form.get("form_tipo")
         try:
-            if form_tipo == "classes" and show_classes and not missing_classes:
-                ids = request.form.getlist("id_classe")
-                classes = request.form.getlist("classe")
-                idades_min = request.form.getlist("idade_min")
-                idades_max = request.form.getlist("idade_max")
-                notas = request.form.getlist("notas")
-
-                total = len(ids)
-                if not all(len(lst) == total for lst in [classes, idades_min, idades_max, notas]):
-                    flash("Erro ao salvar classes: dados inconsistentes.", "danger")
-                else:
-                    for i in range(total):
-                        cursor.execute(
-                            f"""
-                            UPDATE {tabela_classes}
-                            SET {cols_classes['classe']}=%s,
-                                {cols_classes['idade_min']}=%s,
-                                {cols_classes['idade_max']}=%s,
-                                {cols_classes['notas']}=%s
-                            WHERE {cols_classes['id_classe']}=%s
-                            """,
-                            (
-                                classes[i].strip() if classes[i] else None,
-                                parse_int(idades_min[i]),
-                                parse_int(idades_max[i]),
-                                notas[i].strip() if notas[i] else None,
-                                ids[i],
-                            ),
-                        )
-                    db.commit()
-                    flash("Classes/Idades atualizadas com sucesso.", "success")
-
-            if form_tipo == "pesos" and show_pesos and not missing_pesos:
-                ids = request.form.getlist("id_peso")
+            if form_tipo == "categorias" and not missing:
+                ids = request.form.getlist("id")
                 generos = request.form.getlist("genero")
-                classes_fk = request.form.getlist("id_classe_fk")
+                id_classes = request.form.getlist("id_classe")
                 categorias = request.form.getlist("categoria")
                 nomes = request.form.getlist("nome_categoria")
                 pesos_min = request.form.getlist("peso_min")
                 pesos_max = request.form.getlist("peso_max")
+                idades_min = request.form.getlist("idade_min")
+                idades_max = request.form.getlist("idade_max")
+                descricoes = request.form.getlist("descricao")
 
                 total = len(ids)
-                if not all(len(lst) == total for lst in [generos, classes_fk, categorias, nomes, pesos_min, pesos_max]):
-                    flash("Erro ao salvar pesos: dados inconsistentes.", "danger")
+                if not all(len(lst) == total for lst in [generos, id_classes, categorias, nomes, pesos_min, pesos_max, idades_min, idades_max, descricoes]):
+                    flash("Erro ao salvar categorias: dados inconsistentes.", "danger")
                 else:
                     for i in range(total):
                         cursor.execute(
                             f"""
-                            UPDATE {tabela_pesos}
-                            SET {cols_pesos['genero']}=%s,
-                                {cols_pesos['id_classe_fk']}=%s,
-                                {cols_pesos['categoria']}=%s,
-                                {cols_pesos['nome_categoria']}=%s,
-                                {cols_pesos['peso_min']}=%s,
-                                {cols_pesos['peso_max']}=%s
-                            WHERE {cols_pesos['id_peso']}=%s
+                            UPDATE {tabela_categorias}
+                            SET {cols['genero']}=%s,
+                                {cols['id_classe']}=%s,
+                                {cols['categoria']}=%s,
+                                {cols['nome_categoria']}=%s,
+                                {cols['peso_min']}=%s,
+                                {cols['peso_max']}=%s,
+                                {cols['idade_min']}=%s,
+                                {cols['idade_max']}=%s,
+                                {cols['descricao']}=%s
+                            WHERE {cols['id']}=%s
                             """,
                             (
                                 generos[i].strip() if generos[i] else None,
-                                classes_fk[i].strip() if classes_fk[i] else None,
+                                id_classes[i].strip() if id_classes[i] else None,
                                 categorias[i].strip() if categorias[i] else None,
                                 nomes[i].strip() if nomes[i] else None,
                                 parse_float(pesos_min[i]),
                                 parse_float(pesos_max[i]),
+                                parse_int(idades_min[i]),
+                                parse_int(idades_max[i]),
+                                descricoes[i].strip() if descricoes[i] else None,
                                 ids[i],
                             ),
                         )
                     db.commit()
-                    flash("Categorias de peso atualizadas com sucesso.", "success")
+                    flash("Categorias atualizadas com sucesso.", "success")
         except Exception as e:
             db.rollback()
             flash(f"Erro ao atualizar categorias: {e}", "danger")
 
-    classes = []
-    pesos = []
+    categorias_lista = []
     try:
-        if show_classes and not missing_classes:
+        if not missing:
             cursor.execute(
                 f"""
-                SELECT {cols_classes['id_classe']} AS id_classe,
-                       {cols_classes['classe']} AS classe,
-                       {cols_classes['idade_min']} AS idade_min,
-                       {cols_classes['idade_max']} AS idade_max,
-                       {cols_classes['notas']} AS notas
-                FROM {tabela_classes}
-                ORDER BY {cols_classes['id_classe']}
+                SELECT {cols['id']} AS id,
+                       {cols['genero']} AS genero,
+                       {cols['id_classe']} AS id_classe,
+                       {cols['categoria']} AS categoria,
+                       {cols['nome_categoria']} AS nome_categoria,
+                       {cols['peso_min']} AS peso_min,
+                       {cols['peso_max']} AS peso_max,
+                       {cols['idade_min']} AS idade_min,
+                       {cols['idade_max']} AS idade_max,
+                       {cols['descricao']} AS descricao
+                FROM {tabela_categorias}
+                ORDER BY {cols['id']}
                 """
             )
-            classes = cursor.fetchall()
-        elif show_classes:
+            categorias_lista = cursor.fetchall()
+        else:
             flash(
-                "Tabela de classes/idades não encontrada ou colunas ausentes: "
-                + ", ".join(missing_classes),
-                "danger",
-            )
-
-        if show_pesos and not missing_pesos:
-            cursor.execute(
-                f"""
-                SELECT {cols_pesos['id_peso']} AS id_peso,
-                       {cols_pesos['genero']} AS genero,
-                       {cols_pesos['id_classe_fk']} AS id_classe_fk,
-                       {cols_pesos['categoria']} AS categoria,
-                       {cols_pesos['nome_categoria']} AS nome_categoria,
-                       {cols_pesos['peso_min']} AS peso_min,
-                       {cols_pesos['peso_max']} AS peso_max
-                FROM {tabela_pesos}
-                ORDER BY {cols_pesos['id_peso']}
-                """
-            )
-            pesos = cursor.fetchall()
-        elif show_pesos:
-            flash(
-                "Tabela de categorias de peso não encontrada ou colunas ausentes: "
-                + ", ".join(missing_pesos),
+                "Tabela de categorias não encontrada ou colunas ausentes: "
+                + ", ".join(missing),
                 "danger",
             )
     except Exception as e:
@@ -411,26 +360,11 @@ def _render_categorias(show_classes=True, show_pesos=True):
 
     return render_template(
         "categorias/gerenciar_categorias.html",
-        classes=classes,
-        pesos=pesos,
-        show_classes=show_classes,
-        show_pesos=show_pesos,
+        categorias=categorias_lista,
     )
 
 
 @cadastros_bp.route("/categorias", methods=["GET", "POST"])
 @role_required("admin")
 def gerenciar_categorias():
-    return _render_categorias(show_classes=True, show_pesos=True)
-
-
-@cadastros_bp.route("/categorias/classes", methods=["GET", "POST"])
-@role_required("admin")
-def categorias_classes():
-    return _render_categorias(show_classes=True, show_pesos=False)
-
-
-@cadastros_bp.route("/categorias/pesos", methods=["GET", "POST"])
-@role_required("admin")
-def categorias_pesos():
-    return _render_categorias(show_classes=False, show_pesos=True)
+    return _render_categorias()

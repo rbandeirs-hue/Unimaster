@@ -7,10 +7,11 @@ import base64
 import unicodedata
 import uuid
 from datetime import datetime, date
-from flask import Blueprint, render_template, request, redirect, url_for, flash, session, current_app
+from flask import Blueprint, render_template, request, redirect, url_for, flash, session, current_app, jsonify
 from flask_login import login_required, current_user
 from config import get_db_connection
 from math import ceil
+from werkzeug.security import generate_password_hash
 
 bp_precadastro = Blueprint("precadastro", __name__, url_prefix="/precadastro")
 
@@ -76,6 +77,11 @@ def _get_academias_ids():
             cur.close()
             conn.close()
             return vinculadas
+        # Modo academia: gestor_academia/professor só veem academias de usuarios_academias (não id_academia)
+        if session.get("modo_painel") == "academia" and (current_user.has_role("gestor_academia") or current_user.has_role("professor")):
+            cur.close()
+            conn.close()
+            return []
         ids = []
         if current_user.has_role("admin"):
             cur.execute("SELECT id FROM academias ORDER BY nome")
@@ -89,8 +95,6 @@ def _get_academias_ids():
         elif current_user.has_role("gestor_associacao"):
             cur.execute("SELECT id FROM academias WHERE id_associacao = %s ORDER BY nome", (getattr(current_user, "id_associacao", None),))
             ids = [r["id"] for r in cur.fetchall()]
-        elif getattr(current_user, "id_academia", None):
-            ids = [current_user.id_academia]
         cur.close()
         conn.close()
         return ids
@@ -506,10 +510,10 @@ def excluir(precadastro_id):
     return redirect(url_for("precadastro.lista", academia_id=academia_id))
 
 
-@bp_precadastro.route("/<int:precadastro_id>/promover", methods=["POST"])
+@bp_precadastro.route("/<int:precadastro_id>/promover", methods=["GET", "POST"])
 @login_required
 def promover(precadastro_id):
-    """Converte pré-cadastro em aluno. Requer permissão (gestor_academia, etc.)."""
+    """Promove pré-cadastro para usuário com múltiplos perfis. GET mostra formulário, POST processa."""
     conn = get_db_connection()
     cur = conn.cursor(dictionary=True)
     cur.execute("SELECT * FROM pre_cadastro WHERE id = %s", (precadastro_id,))
@@ -541,132 +545,375 @@ def promover(precadastro_id):
     id_associacao = row.get("id_associacao") if row else None
     id_federacao = row.get("id_federacao") if row else None
 
-    graduacao_id = pc.get("graduacao_id")
-    if graduacao_id and str(graduacao_id).isdigit():
-        graduacao_id = int(graduacao_id)
-    elif graduacao_id and not str(graduacao_id).isdigit():
-        graduacao_id = None
+    # Buscar roles disponíveis
+    cur.execute("""
+        SELECT id, nome, COALESCE(chave, LOWER(REPLACE(nome,' ','_'))) as chave 
+        FROM roles 
+        WHERE chave IN ('aluno', 'professor', 'gestor_academia', 'gestor_associacao', 'responsavel', 'visitante')
+           OR nome IN ('Aluno', 'Professor', 'Gestor Academia', 'Gestor Associação', 'Responsável', 'Visitante')
+        ORDER BY 
+            CASE chave
+                WHEN 'aluno' THEN 1
+                WHEN 'professor' THEN 2
+                WHEN 'gestor_academia' THEN 3
+                WHEN 'gestor_associacao' THEN 4
+                WHEN 'responsavel' THEN 5
+                WHEN 'visitante' THEN 6
+                ELSE 7
+            END
+    """)
+    roles_disponiveis = cur.fetchall()
 
-    turma_id = pc.get("TurmaID")
-    if turma_id and str(turma_id).isdigit():
-        turma_id = int(turma_id)
-    else:
-        turma_id = None
+    # Buscar alunos para vínculo (aluno e responsavel)
+    cur.execute(
+        """SELECT id, nome, usuario_id FROM alunos WHERE id_academia = %s AND ativo = 1 AND status = 'ativo'
+           ORDER BY nome""",
+        (academia_id,),
+    )
+    todos_alunos = cur.fetchall()
+    alunos_para_aluno = [a for a in todos_alunos if not a.get("usuario_id")]
+    alunos_para_responsavel = todos_alunos
 
-    telefone_principal = pc.get("telefone") or pc.get("tel_celular")
-
-    # Verificar se aluno já está cadastrado
-    cpf_precad = (pc.get("cpf") or "").strip()
-    cpf_digits = "".join(filter(str.isdigit, cpf_precad)) if cpf_precad else ""
-    nome_precad = (pc.get("nome") or "").strip()
-    data_nasc_precad = pc.get("data_nascimento")
-
-    if cpf_digits and len(cpf_digits) >= 11:
-        cur.execute(
-            """
-            SELECT id, nome FROM alunos
-            WHERE REPLACE(REPLACE(REPLACE(COALESCE(cpf,''), '.', ''), '-', ''), ' ', '') = %s
-            """,
-            (cpf_digits,),
+    if request.method == "GET":
+        cur.close()
+        conn.close()
+        return render_template(
+            "precadastro/promover.html",
+            precadastro=pc,
+            academia_id=academia_id,
+            roles_disponiveis=roles_disponiveis,
+            alunos_para_aluno=alunos_para_aluno,
+            alunos_para_responsavel=alunos_para_responsavel,
         )
-        existente = cur.fetchone()
-        if existente:
+
+    # POST: Processar promoção
+    roles_escolhidas = request.form.getlist("roles")
+    email_usuario = (request.form.get("email_usuario") or "").strip()
+    senha_usuario = (request.form.get("senha_usuario") or "").strip()
+    tem_role_aluno = any(
+        r.get("chave") == "aluno" and str(r.get("id")) in roles_escolhidas 
+        for r in roles_disponiveis
+    )
+    aluno_ids_responsavel = [int(x) for x in request.form.getlist("aluno_ids") if str(x).strip().isdigit()]
+
+    if not roles_escolhidas:
+        cur.close()
+        conn.close()
+        flash("Selecione ao menos um perfil para promover.", "danger")
+        return redirect(url_for("precadastro.promover", precadastro_id=precadastro_id))
+
+    # Se precisa criar usuário, validar email e senha
+    precisa_usuario = any(
+        r.get("chave") in ["professor", "gestor_academia", "gestor_associacao", "responsavel", "visitante"]
+        and str(r.get("id")) in roles_escolhidas
+        for r in roles_disponiveis
+    )
+    
+    # Verificar se usuário quer criar usuário mesmo quando seleciona apenas aluno
+    criar_usuario_check = request.form.get("criar_usuario") == "1"
+    tem_role_aluno_apenas = (
+        any(r.get("chave") == "aluno" and str(r.get("id")) in roles_escolhidas for r in roles_disponiveis)
+        and not precisa_usuario
+    )
+    
+    # Se apenas aluno e checkbox marcado, também precisa criar usuário
+    if tem_role_aluno_apenas and criar_usuario_check:
+        precisa_usuario = True
+    
+    if precisa_usuario:
+        if not email_usuario:
+            email_usuario = pc.get("email") or pc.get("email_acesso")
+        if not email_usuario:
             cur.close()
             conn.close()
-            flash(
-                f"Aluno já cadastrado: o CPF informado pertence a \"{existente.get('nome', '')}\" (ID {existente.get('id', '')}).",
-                "danger",
-            )
-            return redirect(url_for("precadastro.lista", academia_id=academia_id))
-    elif nome_precad:
-        cur.execute(
-            """
-            SELECT id, nome FROM alunos
-            WHERE TRIM(nome) = %s AND (data_nascimento = %s OR (%s IS NULL AND data_nascimento IS NULL))
-            """,
-            (nome_precad, data_nasc_precad, data_nasc_precad),
-        )
-        existente = cur.fetchone()
-        if existente:
+            flash("E-mail é obrigatório para criar usuário. Informe um e-mail válido.", "danger")
+            return redirect(url_for("precadastro.promover", precadastro_id=precadastro_id))
+        if not senha_usuario:
             cur.close()
             conn.close()
-            flash(
-                f"Aluno já cadastrado: existe cadastro com o mesmo nome e data de nascimento (\"{existente.get('nome', '')}\", ID {existente.get('id', '')}).",
-                "danger",
-            )
-            return redirect(url_for("precadastro.lista", academia_id=academia_id))
+            flash("Senha é obrigatória para criar usuário.", "danger")
+            return redirect(url_for("precadastro.promover", precadastro_id=precadastro_id))
 
     try:
-        cur.execute(
-            """
-            INSERT INTO alunos (
-                nome, data_nascimento, sexo, status, ativo, data_matricula,
-                graduacao_id, peso, zempo, telefone, email, observacoes, ultimo_exame_faixa,
-                TurmaID, cpf, id_academia, id_associacao, id_federacao,
-                nome_pai, nome_mae, responsavel_nome, responsavel_parentesco,
-                nacionalidade, rg, orgao_emissor, rg_data_emissao,
-                cep, rua, numero, complemento, bairro, cidade, estado,
-                tel_residencial, tel_comercial, tel_celular, tel_outro,
-                responsavel_financeiro_nome, responsavel_financeiro_cpf, foto
-            )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                %s, %s, %s, %s, %s, %s, %s)
-            """,
-            (
-                pc.get("nome"),
-                pc.get("data_nascimento"),
-                pc.get("sexo"),
-                "ativo",
-                1,
-                date.today(),
-                graduacao_id,
-                pc.get("peso"),
-                pc.get("zempo"),
-                telefone_principal,
-                pc.get("email"),
-                pc.get("observacoes"),
-                pc.get("ultimo_exame_faixa"),
-                turma_id,
-                pc.get("cpf"),
-                academia_id,
-                id_associacao,
-                id_federacao,
-                pc.get("nome_pai"),
-                pc.get("nome_mae"),
-                pc.get("responsavel_nome"),
-                pc.get("responsavel_parentesco"),
-                pc.get("nacionalidade"),
-                pc.get("rg"),
-                pc.get("orgao_emissor"),
-                pc.get("rg_data_emissao"),
-                pc.get("cep"),
-                pc.get("endereco"),
-                pc.get("numero"),
-                pc.get("complemento"),
-                pc.get("bairro"),
-                pc.get("cidade"),
-                pc.get("estado"),
-                pc.get("tel_residencial"),
-                pc.get("tel_comercial"),
-                pc.get("tel_celular"),
-                pc.get("tel_outro"),
-                pc.get("responsavel_financeiro_nome"),
-                pc.get("responsavel_financeiro_cpf"),
-                f"{UPLOAD_PRECAD}/{pc['foto']}" if pc.get("foto") else None,
-            ),
-        )
-        aluno_id = cur.lastrowid
+        usuario_id = None
+        aluno_id = None
 
+        # Criar usuário se necessário
+        if precisa_usuario:
+            # Verificar se email já existe
+            cur.execute("SELECT id FROM usuarios WHERE email = %s", (email_usuario,))
+            if cur.fetchone():
+                cur.close()
+                conn.close()
+                flash("Já existe usuário com este e-mail.", "danger")
+                return redirect(url_for("precadastro.promover", precadastro_id=precadastro_id))
+
+            cur.execute(
+                """INSERT INTO usuarios (nome, email, senha, id_academia) VALUES (%s, %s, %s, %s)""",
+                (pc.get("nome"), email_usuario, generate_password_hash(senha_usuario), academia_id),
+            )
+            usuario_id = cur.lastrowid
+
+            # Vincular roles
+            for rid in roles_escolhidas:
+                cur.execute("INSERT INTO roles_usuario (usuario_id, role_id) VALUES (%s, %s)", (usuario_id, rid))
+
+            # Vincular academia
+            cur.execute("INSERT INTO usuarios_academias (usuario_id, academia_id) VALUES (%s, %s)", (usuario_id, academia_id))
+
+        # Criar/vincular aluno se role aluno está selecionada
+        if tem_role_aluno:
+            aluno_id = None
+            
+            # Verificar se aluno já está cadastrado (por CPF ou nome+data_nasc)
+            cpf_precad = (pc.get("cpf") or "").strip()
+            cpf_digits = "".join(filter(str.isdigit, cpf_precad)) if cpf_precad else ""
+            nome_precad = (pc.get("nome") or "").strip()
+            data_nasc_precad = pc.get("data_nascimento")
+
+            aluno_existente = None
+            if cpf_digits and len(cpf_digits) >= 11:
+                cur.execute(
+                    """
+                    SELECT id, nome FROM alunos
+                    WHERE REPLACE(REPLACE(REPLACE(COALESCE(cpf,''), '.', ''), '-', ''), ' ', '') = %s
+                    """,
+                    (cpf_digits,),
+                )
+                aluno_existente = cur.fetchone()
+            elif nome_precad:
+                cur.execute(
+                    """
+                    SELECT id, nome FROM alunos
+                    WHERE TRIM(nome) = %s AND (data_nascimento = %s OR (%s IS NULL AND data_nascimento IS NULL))
+                    """,
+                    (nome_precad, data_nasc_precad, data_nasc_precad),
+                )
+                aluno_existente = cur.fetchone()
+
+            if aluno_existente:
+                # Aluno já existe - vincular usuário ao aluno existente
+                aluno_id = aluno_existente["id"]
+                if usuario_id:
+                    cur.execute(
+                        "UPDATE alunos SET usuario_id = %s WHERE id = %s AND (usuario_id IS NULL OR usuario_id = %s)",
+                        (usuario_id, aluno_id, usuario_id),
+                    )
+            else:
+                # Criar novo aluno automaticamente a partir do pré-cadastro
+                # Função auxiliar para limpar valores e converter para None
+                def _clean_value(val):
+                    """Converte valores vazios, 'None', None para NULL."""
+                    if val is None:
+                        return None
+                    if isinstance(val, str):
+                        val = val.strip()
+                        if val == "" or val.lower() in ("none", "null", "undefined", "nan"):
+                            return None
+                        # Verificar se é string "None" ou similar
+                        if val.lower() == "none":
+                            return None
+                    elif isinstance(val, (int, float)):
+                        # Manter números válidos (exceto NaN)
+                        import math
+                        if isinstance(val, float) and math.isnan(val):
+                            return None
+                        return val
+                    return val if val else None
+                
+                graduacao_id = pc.get("graduacao_id")
+                if graduacao_id and str(graduacao_id).isdigit():
+                    graduacao_id = int(graduacao_id)
+                else:
+                    graduacao_id = None
+
+                turma_id = pc.get("TurmaID")
+                if turma_id and str(turma_id).isdigit():
+                    turma_id = int(turma_id)
+                else:
+                    turma_id = None
+
+                telefone_principal = _clean_value(pc.get("telefone") or pc.get("tel_celular"))
+                
+                # Limpar peso - converter para float ou None
+                peso_val = _clean_value(pc.get("peso"))
+                peso = None
+                if peso_val:
+                    try:
+                        peso = float(str(peso_val).replace(",", "."))
+                    except (ValueError, TypeError):
+                        peso = None
+
+                cur.execute(
+                    """
+                    INSERT INTO alunos (
+                        nome, data_nascimento, sexo, status, ativo, data_matricula,
+                        graduacao_id, peso, zempo, telefone, email, observacoes, ultimo_exame_faixa,
+                        TurmaID, cpf, id_academia, id_associacao, id_federacao,
+                        nome_pai, nome_mae, responsavel_nome, responsavel_parentesco,
+                        nacionalidade, rg, orgao_emissor, rg_data_emissao,
+                        cep, rua, numero, complemento, bairro, cidade, estado,
+                        tel_residencial, tel_comercial, tel_celular, tel_outro,
+                        responsavel_financeiro_nome, responsavel_financeiro_cpf, foto, usuario_id
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                        %s, %s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (
+                        _clean_value(pc.get("nome")),
+                        _clean_value(pc.get("data_nascimento")),
+                        _clean_value(pc.get("sexo")),
+                        "ativo",
+                        1,  # Campo ativo: usar 1 como padrão (coluna não permite NULL)
+                        date.today(),
+                        graduacao_id,
+                        peso,
+                        _clean_value(pc.get("zempo")),
+                        telefone_principal,
+                        _clean_value(pc.get("email")),
+                        _clean_value(pc.get("observacoes")),
+                        _clean_value(pc.get("ultimo_exame_faixa")),
+                        turma_id,
+                        _clean_value(pc.get("cpf")),
+                        academia_id,
+                        id_associacao,
+                        id_federacao,
+                        _clean_value(pc.get("nome_pai")),
+                        _clean_value(pc.get("nome_mae")),
+                        _clean_value(pc.get("responsavel_nome")),
+                        _clean_value(pc.get("responsavel_parentesco")),
+                        _clean_value(pc.get("nacionalidade")),
+                        _clean_value(pc.get("rg")),
+                        _clean_value(pc.get("orgao_emissor")),
+                        _clean_value(pc.get("rg_data_emissao")),
+                        _clean_value(pc.get("cep")),
+                        _clean_value(pc.get("endereco")),
+                        _clean_value(pc.get("numero")),
+                        _clean_value(pc.get("complemento")),
+                        _clean_value(pc.get("bairro")),
+                        _clean_value(pc.get("cidade")),
+                        _clean_value(pc.get("estado")),
+                        _clean_value(pc.get("tel_residencial")),
+                        _clean_value(pc.get("tel_comercial")),
+                        _clean_value(pc.get("tel_celular")),
+                        _clean_value(pc.get("tel_outro")),
+                        _clean_value(pc.get("responsavel_financeiro_nome")),
+                        _clean_value(pc.get("responsavel_financeiro_cpf")),
+                        f"{UPLOAD_PRECAD}/{pc['foto']}" if pc.get("foto") else None,
+                        usuario_id,
+                    ),
+                )
+                aluno_id = cur.lastrowid
+
+                # Vincular usuário ao aluno criado
+                if usuario_id:
+                    cur.execute(
+                        "UPDATE alunos SET usuario_id = %s WHERE id = %s",
+                        (usuario_id, aluno_id),
+                    )
+
+        # Vincular responsável aos alunos selecionados
+        tem_role_responsavel = any(
+            r.get("chave") == "responsavel" and str(r.get("id")) in roles_escolhidas 
+            for r in roles_disponiveis
+        )
+        if tem_role_responsavel and usuario_id and aluno_ids_responsavel:
+            for aid in aluno_ids_responsavel:
+                cur.execute(
+                    "SELECT 1 FROM alunos WHERE id = %s AND id_academia = %s",
+                    (aid, academia_id),
+                )
+                if cur.fetchone():
+                    cur.execute(
+                        "INSERT IGNORE INTO responsavel_alunos (usuario_id, aluno_id) VALUES (%s, %s)",
+                        (usuario_id, aid),
+                    )
+
+        # Criar registro de professor se role professor está selecionada
+        tem_role_professor = any(
+            r.get("chave") == "professor" and str(r.get("id")) in roles_escolhidas 
+            for r in roles_disponiveis
+        )
+        if tem_role_professor and usuario_id:
+            # Verificar se já existe professor com este usuario_id
+            cur.execute("SELECT id FROM professores WHERE usuario_id = %s", (usuario_id,))
+            if not cur.fetchone():
+                telefone_professor = pc.get("telefone") or pc.get("tel_celular") or None
+                email_professor = email_usuario or pc.get("email") or None
+                cur.execute(
+                    """
+                    INSERT INTO professores (nome, email, telefone, usuario_id, id_academia, id_associacao, ativo)
+                    VALUES (%s, %s, %s, %s, %s, %s, 1)
+                    """,
+                    (
+                        pc.get("nome"),
+                        email_professor,
+                        telefone_professor,
+                        usuario_id,
+                        academia_id,
+                        id_associacao,
+                    ),
+                )
+
+        # Criar registro de visitante se role visitante está selecionada
+        tem_role_visitante = any(
+            r.get("chave") == "visitante" and str(r.get("id")) in roles_escolhidas 
+            for r in roles_disponiveis
+        )
+        if tem_role_visitante and usuario_id:
+            # Verificar se já existe visitante com este usuario_id
+            cur.execute("SELECT id FROM visitantes WHERE usuario_id = %s", (usuario_id,))
+            if not cur.fetchone():
+                # Buscar limite de aulas da academia
+                cur.execute("SELECT aulas_experimentais_permitidas FROM academias WHERE id = %s", (academia_id,))
+                acad_row = cur.fetchone()
+                limite_aulas = acad_row.get("aulas_experimentais_permitidas") if acad_row else None
+                
+                telefone_visitante = pc.get("telefone") or pc.get("tel_celular") or None
+                email_visitante = email_usuario or pc.get("email") or None
+                foto_visitante = f"{UPLOAD_PRECAD}/{pc['foto']}" if pc.get("foto") else None
+                
+                cur.execute(
+                    """
+                    INSERT INTO visitantes (nome, email, telefone, data_nascimento, foto, usuario_id, id_academia, aulas_experimentais_permitidas, ativo)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 1)
+                    """,
+                    (
+                        pc.get("nome"),
+                        email_visitante,
+                        telefone_visitante,
+                        pc.get("data_nascimento"),
+                        foto_visitante,
+                        usuario_id,
+                        academia_id,
+                        limite_aulas,
+                    ),
+                )
+
+        # Remover pré-cadastro
         cur.execute("DELETE FROM pre_cadastro WHERE id = %s", (precadastro_id,))
         conn.commit()
         cur.close()
         conn.close()
-        flash(f'Pré-cadastro de "{pc.get("nome")}" promovido a aluno com sucesso!', "success")
-        return redirect(url_for("alunos.editar_aluno", aluno_id=aluno_id, next=url_for("precadastro.lista", academia_id=academia_id)))
+
+        perfis_criados = []
+        for r in roles_disponiveis:
+            if str(r.get("id")) in roles_escolhidas:
+                perfis_criados.append(r.get("nome", ""))
+
+        flash(
+            f'Pré-cadastro de "{pc.get("nome")}" promovido com sucesso! Perfis criados: {", ".join(perfis_criados)}',
+            "success",
+        )
+        if aluno_id:
+            return redirect(url_for("alunos.editar_aluno", aluno_id=aluno_id, next=url_for("precadastro.lista", academia_id=academia_id)))
+        return redirect(url_for("precadastro.lista", academia_id=academia_id))
+
     except Exception as e:
         conn.rollback()
         cur.close()
         conn.close()
+        current_app.logger.error(f"Erro ao promover pré-cadastro: {e}")
         flash(f"Erro ao promover: {e}", "danger")
-        return redirect(url_for("precadastro.lista", academia_id=academia_id))
+        return redirect(url_for("precadastro.promover", precadastro_id=precadastro_id))

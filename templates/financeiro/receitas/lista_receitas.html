@@ -1,15 +1,14 @@
 {% extends "base.html" %}
 {% block title %}Receitas{% endblock %}
 {% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/financeiro/responsive.css') }}?v=1">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/financeiro/responsive.css') }}?v=2">
 {% endblock %}
 {% block content %}
 <div class="container mt-4">
     <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
         <div>
-            <a href="{{ url_for('financeiro.dashboard', academia_id=academia_id) if academia_id else url_for('financeiro.dashboard') }}" class="btn btn-outline-secondary btn-sm">
-                <i class="bi bi-arrow-left me-1"></i> Voltar
-            </a>
+            {% set back_url = url_for('financeiro.dashboard', academia_id=academia_id) if academia_id else url_for('financeiro.dashboard') %}
+            {% include 'components/botao_voltar.html' %}
         </div>
         <a href="{{ url_for('financeiro.cadastrar_receita', academia_id=academia_id) if academia_id else url_for('financeiro.cadastrar_receita') }}" class="btn btn-success">
             <i class="bi bi-plus-circle me-1"></i> Nova Receita
@@ -68,8 +67,10 @@
                             <td class="d-none d-md-table-cell text-muted small">{{ r.categoria or '-' }}</td>
                             <td class="text-end text-success fw-semibold">R$ {{ "%.2f"|format(r.valor or 0) }}</td>
                             <td class="text-end">
-                                {% if r.id_mensalidade_aluno or r.id_cobranca_avulsa %}
-                                <span class="text-muted small" title="Receita de pagamento confirmado — não pode ser alterada ou excluída">Pagamento confirmado</span>
+                                {% if (r.id_mensalidade_aluno and r.id_mensalidade_aluno != 0 and r.id_mensalidade_aluno != '0') or (r.id_cobranca_avulsa and r.id_cobranca_avulsa != 0 and r.id_cobranca_avulsa != '0') %}
+                                <span class="badge bg-info text-white" title="Receita gerada automaticamente a partir de pagamento confirmado — não pode ser editada ou excluída">
+                                    <i class="bi bi-lock-fill"></i> Gerada automaticamente
+                                </span>
                                 {% else %}
                                 <a href="{{ url_for('financeiro.editar_receita', receita_id=r.id) }}{% if academia_id %}?academia_id={{ academia_id }}{% endif %}" class="btn btn-sm btn-outline-primary">Editar</a>
                                 <form method="POST" action="{{ url_for('financeiro.excluir_receita', receita_id=r.id) }}" class="d-inline" onsubmit="return confirm('Excluir esta receita?');">

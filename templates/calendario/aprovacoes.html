@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block title %}Aprovar Eventos{% endblock %}
+{% block content %}
+<div class="container mt-4">
+    <div class="mb-4">
+        <h2 class="h4 fw-bold text-primary mb-1">Aprovar Eventos</h2>
+        <p class="text-muted small mb-0">Eventos aguardando sua aprovação</p>
+    </div>
+
+    {% if aprovacoes %}
+    <div class="row g-3">
+        {% for aprov in aprovacoes %}
+        <div class="col-lg-6">
+            <div class="card shadow-sm h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-3">
+                        <div>
+                            <h5 class="fw-bold mb-1">{{ aprov.titulo }}</h5>
+                            <span class="badge bg-info">
+                                {% if aprov.evento_nivel == 'federacao' %}Federação
+                                {% elif aprov.evento_nivel == 'associacao' %}Associação
+                                {% else %}Academia{% endif %}
+                            </span>
+                        </div>
+                        <span class="badge bg-{{ 'warning' if aprov.tipo == 'feriado' else 'primary' }}">
+                            {{ aprov.tipo|capitalize }}
+                        </span>
+                    </div>
+
+                    {% if aprov.descricao %}
+                    <p class="text-muted small mb-3">{{ aprov.descricao }}</p>
+                    {% endif %}
+
+                    <div class="mb-3">
+                        <div class="row g-2">
+                            <div class="col-6">
+                                <small class="text-muted d-block">Data Início:</small>
+                                <strong>{{ aprov.data_inicio|data_br }}</strong>
+                            </div>
+                            {% if aprov.data_fim %}
+                            <div class="col-6">
+                                <small class="text-muted d-block">Data Fim:</small>
+                                <strong>{{ aprov.data_fim|data_br }}</strong>
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        {% if aprov.hora_inicio %}
+                        <div class="row g-2 mt-2">
+                            <div class="col-6">
+                                <small class="text-muted d-block">Horário:</small>
+                                <strong>
+                                    {{ aprov.hora_inicio.strftime('%H:%M') if aprov.hora_inicio.__class__.__name__ == 'time' else aprov.hora_inicio }}
+                                    {% if aprov.hora_fim %}
+                                    - {{ aprov.hora_fim.strftime('%H:%M') if aprov.hora_fim.__class__.__name__ == 'time' else aprov.hora_fim }}
+                                    {% endif %}
+                                </strong>
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    <div class="mb-3">
+                        <small class="text-muted">Criado por: {{ aprov.criador_nome or 'Sistema' }}</small><br>
+                        <small class="text-muted">Em: {{ aprov.criado_em.strftime('%d/%m/%Y %H:%M') if aprov.criado_em else '-' }}</small>
+                    </div>
+
+                    <div class="d-flex gap-2">
+                        <form method="POST" action="{{ url_for('calendario.aprovar_evento', aprovacao_id=aprov.id) }}" class="flex-fill">
+                            <button type="submit" class="btn btn-success w-100">
+                                <i class="bi bi-check-lg"></i> Aprovar
+                            </button>
+                                {% set back_url = back_url or get_back_url_default() %}
+{% include 'components/botao_voltar.html' %}
+    </form>
+                        <button type="button" class="btn btn-danger flex-fill" data-bs-toggle="modal" data-bs-target="#modalRejeitar{{ aprov.id }}">
+                            <i class="bi bi-x-lg"></i> Rejeitar
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal de Rejeição -->
+        <div class="modal fade" id="modalRejeitar{{ aprov.id }}" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Rejeitar Evento</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <form method="POST" action="{{ url_for('calendario.rejeitar_evento', aprovacao_id=aprov.id) }}">
+                        <div class="modal-body">
+                            <p class="mb-3">Deseja rejeitar o evento <strong>{{ aprov.titulo }}</strong>?</p>
+                            <div class="mb-3">
+                                <label for="observacao{{ aprov.id }}" class="form-label">Motivo (opcional):</label>
+                                <textarea name="observacao" id="observacao{{ aprov.id }}" class="form-control" rows="3"></textarea>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                            <button type="submit" class="btn btn-danger">
+                                <i class="bi bi-x-lg"></i> Rejeitar
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="card shadow-sm">
+        <div class="card-body text-center py-5">
+            <i class="bi bi-clipboard-check display-1 text-muted mb-3"></i>
+            <h5 class="text-muted">Nenhum evento pendente de aprovação</h5>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

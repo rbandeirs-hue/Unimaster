@@ -1,5 +1,9 @@
 {% extends "base.html" %}
 {% block title %}Cadastro de Academia{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/photo-cropper.css') }}">
+{% endblock %}
 {% block content %}
 <div class="container mt-5">
     <div class="mb-4 text-center">
@@ -22,20 +26,27 @@
                 <input type="hidden" name="next" value="{{ back_url }}">
                 <div class="mb-4">
                     <label for="logo" class="form-label fw-semibold">Logo da Academia</label>
-                    <div class="mb-2">
-                        <img id="logoPreview" alt="Prévia da logo" style="width: 44px; height: 44px; object-fit: cover; border-radius: 50%; display: none;">
+                    <div class="d-flex align-items-center gap-3 mb-2">
+                        <div class="position-relative" style="width:80px;height:80px;flex-shrink:0;">
+                            <img id="logoPreview" alt="Prévia da logo"
+                                 class="position-absolute top-0 start-0 rounded-circle d-none"
+                                 style="width:80px;height:80px;object-fit:cover;border:3px solid #0dcaf0;">
+                            <div id="logoPlaceholder" class="position-absolute top-0 start-0 rounded-circle bg-light d-flex align-items-center justify-content-center text-muted" style="width:80px;height:80px;">
+                                <i class="bi bi-building fs-2"></i>
+                            </div>
+                        </div>
+                        <div class="flex-grow-1">
+                            <input type="hidden" name="logo_base64" id="logoBase64">
+                            <label class="form-label small mb-0">Escolher logo</label>
+                            <input type="file" id="logo" name="logo" class="form-control form-control-sm" accept="image/*">
+                            <small class="text-muted">Envie a logo (PNG, JPG ou GIF). Você poderá ajustar a área e o zoom.</small>
+                        </div>
                     </div>
-                    <input type="file" id="logo" name="logo" class="form-control" accept="image/*">
-                    <small class="text-muted">Envie a logo (PNG, JPG ou GIF).</small>
                 </div>
                 <div class="row">
-                    <div class="col-md-8 mb-3">
+                    <div class="col-md-12 mb-3">
                         <label for="nome" class="form-label fw-semibold">Nome da Academia <span class="text-danger">*</span></label>
                         <input type="text" id="nome" name="nome" class="form-control" required placeholder="Ex: Academia Central">
-                    </div>
-                    <div class="col-md-4 mb-3">
-                        <label for="uf" class="form-label fw-semibold">UF</label>
-                        <input type="text" id="uf" name="uf" class="form-control" maxlength="2" placeholder="Ex: SP">
                     </div>
                 </div>
 
@@ -45,8 +56,8 @@
                         <input type="text" id="responsavel" name="responsavel" class="form-control" placeholder="Nome do responsável">
                     </div>
                     <div class="col-md-6 mb-3">
-                        <label for="cidade" class="form-label fw-semibold">Cidade</label>
-                        <input type="text" id="cidade" name="cidade" class="form-control" placeholder="Ex: São Paulo">
+                        <label for="telefone" class="form-label fw-semibold">Telefone</label>
+                        <input type="text" id="telefone" name="telefone" class="form-control" placeholder="(11) 99999-9999" data-mask="phone">
                     </div>
                 </div>
 
@@ -55,9 +66,50 @@
                         <label for="email" class="form-label fw-semibold">Email</label>
                         <input type="email" id="email" name="email" class="form-control" placeholder="contato@academia.com">
                     </div>
-                    <div class="col-md-6 mb-3">
-                        <label for="telefone" class="form-label fw-semibold">Telefone</label>
-                        <input type="text" id="telefone" name="telefone" class="form-control" placeholder="(11) 99999-9999">
+                </div>
+
+                <hr class="my-4">
+                <h6 class="fw-semibold mb-3"><i class="bi bi-geo-alt me-2"></i>Endereço</h6>
+
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <label for="cep" class="form-label fw-semibold">CEP</label>
+                        <div class="input-group">
+                            <input type="text" id="cep" name="cep" class="form-control" placeholder="00000-000" maxlength="10">
+                            <button type="button" class="btn btn-outline-secondary" id="btnBuscarCEP" title="Buscar endereço pelo CEP">
+                                <i class="bi bi-search"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="col-md-8 mb-3">
+                        <label for="rua" class="form-label fw-semibold">Rua/Logradouro</label>
+                        <input type="text" id="rua" name="rua" class="form-control" placeholder="Nome da rua">
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-3 mb-3">
+                        <label for="numero" class="form-label fw-semibold">Número</label>
+                        <input type="text" id="numero" name="numero" class="form-control" placeholder="123">
+                    </div>
+                    <div class="col-md-5 mb-3">
+                        <label for="complemento" class="form-label fw-semibold">Complemento</label>
+                        <input type="text" id="complemento" name="complemento" class="form-control" placeholder="Apto, Bloco, etc.">
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label for="bairro" class="form-label fw-semibold">Bairro</label>
+                        <input type="text" id="bairro" name="bairro" class="form-control" placeholder="Nome do bairro">
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-8 mb-3">
+                        <label for="cidade" class="form-label fw-semibold">Cidade</label>
+                        <input type="text" id="cidade" name="cidade" class="form-control" placeholder="Ex: São Paulo">
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label for="uf" class="form-label fw-semibold">UF</label>
+                        <input type="text" id="uf" name="uf" class="form-control" maxlength="2" placeholder="SP" style="text-transform: uppercase;">
                     </div>
                 </div>
 
@@ -84,10 +136,54 @@
                     {% endif %}
                 </div>
 
+                <div class="mb-4">
+                    <label class="form-label fw-semibold">Modalidades ofertadas</label>
+                    <p class="small text-muted">{% if modo_associacao|default(False) %}Apenas modalidades vinculadas à sua associação.{% else %}Selecione as modalidades que a academia ofertará.{% endif %}</p>
+                    <div class="d-flex flex-wrap gap-2">
+                        {% for m in modalidades %}
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="modalidade_ids" value="{{ m.id }}" id="mod_acad_{{ m.id }}">
+                            <label class="form-check-label" for="mod_acad_{{ m.id }}">{{ m.nome }}</label>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% if not modalidades %}<small class="text-muted">Nenhuma modalidade cadastrada. Cadastre em Configurações.</small>{% endif %}
+                </div>
+
+                <hr class="my-4">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <div>
+                        <h6 class="fw-semibold mb-0"><i class="bi bi-person-badge me-2"></i>Dados do Gestor da Academia</h6>
+                        <p class="small text-muted mb-0">Será criado um usuário gestor automaticamente vinculado a esta academia.</p>
+                    </div>
+                    <button type="button" class="btn btn-outline-info btn-sm" id="btnReplicarResponsavel" title="Replicar dados do responsável">
+                        <i class="bi bi-arrow-left-right me-1"></i>Usar dados do responsável
+                    </button>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-12 mb-3">
+                        <label for="gestor_nome" class="form-label fw-semibold">Nome do Gestor <span class="text-danger">*</span></label>
+                        <input type="text" id="gestor_nome" name="gestor_nome" class="form-control" required placeholder="Nome completo do gestor" autocomplete="off" value="">
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="gestor_email" class="form-label fw-semibold">E-mail do Gestor <span class="text-danger">*</span></label>
+                        <input type="email" id="gestor_email" name="gestor_email" class="form-control" required placeholder="email@exemplo.com" autocomplete="off" value="">
+                        <small class="text-muted">Será usado para login no sistema.</small>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="gestor_senha" class="form-label fw-semibold">Senha do Gestor <span class="text-danger">*</span></label>
+                        <input type="password" id="gestor_senha" name="gestor_senha" class="form-control" required placeholder="Mínimo 6 caracteres" minlength="6" autocomplete="new-password" value="">
+                        <small class="text-muted">Mínimo de 6 caracteres.</small>
+                    </div>
+                </div>
+
                 <div class="d-flex justify-content-between pt-2">
-                    <a href="{{ back_url }}" class="btn btn-outline-secondary btn-lg">
-                        <i class="bi bi-arrow-left-circle-fill me-2"></i> Voltar
-                    </a>
+                    {% set back_url = back_url or get_back_url_default() %}
+{% include 'components/botao_voltar.html' %}
                     <button type="submit" class="btn btn-success btn-lg">
                         <i class="bi bi-save-fill me-2"></i> Salvar Academia
                     </button>
@@ -96,24 +192,146 @@
         </div>
     </div>
 </div>
+{% endblock %}
+{% block extra_js %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
+<script src="{{ url_for('static', filename='js/photo-cropper.js') }}"></script>
 <script>
-    const logoInput = document.getElementById('logo');
-    const logoPreview = document.getElementById('logoPreview');
-    if (logoInput && logoPreview) {
-        logoInput.addEventListener('change', function () {
-            const file = this.files && this.files[0];
-            if (!file) {
-                logoPreview.style.display = 'none';
-                logoPreview.removeAttribute('src');
-                return;
-            }
-            const reader = new FileReader();
-            reader.onload = function (e) {
-                logoPreview.src = e.target.result;
-                logoPreview.style.display = 'block';
-            };
-            reader.readAsDataURL(file);
-        });
+(function(){
+  var logoInput = document.getElementById('logo');
+  var logoBase64 = document.getElementById('logoBase64');
+  var logoPreview = document.getElementById('logoPreview');
+  var logoPlaceholder = document.getElementById('logoPlaceholder');
+  if (logoInput && logoBase64 && typeof initPhotoCrop === 'function') {
+    initPhotoCrop(logoInput, {
+      fotoInput: logoBase64,
+      miniatura: logoPreview,
+      placeholder: logoPlaceholder,
+      aspectRatio: 1
+    });
+  }
+})();
+
+// Máscara de telefone
+function aplicarMascaraTelefone(input) {
+    let v = input.value.replace(/\D/g, '');
+    if (v.length > 11) v = v.slice(0, 11);
+    if (v.length > 10) {
+        input.value = `(${v.slice(0, 2)}) ${v.slice(2, 7)}-${v.slice(7, 11)}`;
+    } else if (v.length > 6) {
+        input.value = `(${v.slice(0, 2)}) ${v.slice(2, 6)}-${v.slice(6)}`;
+    } else if (v.length > 2) {
+        input.value = `(${v.slice(0, 2)}) ${v.slice(2)}`;
+    } else {
+        input.value = v;
     }
+}
+
+document.querySelectorAll('input[data-mask="phone"]').forEach(function (el) {
+    el.addEventListener('input', function () {
+        aplicarMascaraTelefone(this);
+    });
+});
+
+// Máscara de CEP
+function aplicarMascaraCEP(input) {
+    let v = input.value.replace(/\D/g, '');
+    if (v.length > 8) v = v.slice(0, 8);
+    if (v.length > 5) {
+        input.value = `${v.slice(0, 5)}-${v.slice(5, 8)}`;
+    } else {
+        input.value = v;
+    }
+}
+
+const cepInput = document.getElementById('cep');
+if (cepInput) {
+    cepInput.addEventListener('input', function () {
+        aplicarMascaraCEP(this);
+    });
+}
+
+// Busca de CEP via ViaCEP
+async function buscarCEP() {
+    const cepCampo = document.getElementById('cep');
+    if (!cepCampo) return;
+
+    let cep = cepCampo.value.replace(/\D/g, '');
+    if (cep.length !== 8) {
+        alert('CEP inválido. Use 8 dígitos.');
+        return;
+    }
+
+    try {
+        const resp = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+        const dados = await resp.json();
+
+        if (dados.erro) {
+            alert('CEP não encontrado.');
+            return;
+        }
+
+        document.getElementById('rua').value = dados.logradouro || '';
+        document.getElementById('bairro').value = dados.bairro || '';
+        document.getElementById('cidade').value = dados.localidade || '';
+        document.getElementById('uf').value = dados.uf || '';
+    } catch (e) {
+        alert('Erro ao consultar CEP: ' + e.message);
+    }
+}
+
+const btnBuscarCEP = document.getElementById('btnBuscarCEP');
+if (btnBuscarCEP) {
+    btnBuscarCEP.addEventListener('click', buscarCEP);
+}
+
+if (cepInput) {
+    cepInput.addEventListener('blur', function () {
+        if (this.value.replace(/\D/g, '').length === 8) {
+            buscarCEP();
+        }
+    });
+}
+
+// Botão para replicar dados do responsável
+const btnReplicarResponsavel = document.getElementById('btnReplicarResponsavel');
+if (btnReplicarResponsavel) {
+    btnReplicarResponsavel.addEventListener('click', function() {
+        const responsavelNome = document.getElementById('responsavel').value.trim();
+        const responsavelEmail = document.getElementById('email').value.trim();
+        
+        if (!responsavelNome) {
+            alert('Preencha o campo "Responsável" antes de replicar os dados.');
+            document.getElementById('responsavel').focus();
+            return;
+        }
+        
+        if (!responsavelEmail) {
+            alert('Preencha o campo "Email" da academia antes de replicar os dados.');
+            document.getElementById('email').focus();
+            return;
+        }
+        
+        // Replicar nome e email
+        document.getElementById('gestor_nome').value = responsavelNome;
+        document.getElementById('gestor_email').value = responsavelEmail;
+        
+        // Focar no campo de senha
+        document.getElementById('gestor_senha').focus();
+        
+        // Feedback visual
+        const btn = this;
+        const originalText = btn.innerHTML;
+        btn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Dados replicados!';
+        btn.classList.remove('btn-outline-info');
+        btn.classList.add('btn-success');
+        
+        setTimeout(function() {
+            btn.innerHTML = originalText;
+            btn.classList.remove('btn-success');
+            btn.classList.add('btn-outline-info');
+        }, 2000);
+    });
+}
 </script>
 {% endblock %}

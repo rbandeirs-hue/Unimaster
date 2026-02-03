@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+{% block title %}Visitas — Aprovar Solicitações{% endblock %}
+{% block content %}
+<div class="container mt-5">
+    <div class="mb-4">
+        {% if academias|length > 1 %}
+        <form method="GET" class="mb-2">
+            <input type="hidden" name="tipo" value="{{ tipo_filtro }}">
+            <label class="form-label small fw-semibold">Academia:</label>
+            <select name="academia_id" class="form-select form-select-sm d-inline-block w-auto" onchange="this.form.submit()">
+                {% for ac in academias %}
+                <option value="{{ ac.id }}" {% if ac.id == academia_id %}selected{% endif %}>{{ ac.nome }}</option>
+                {% endfor %}
+            </select>
+        </form>
+        {% endif %}
+        {% set back_url = back_url or get_back_url_default() %}
+{% include 'components/botao_voltar.html' %}
+        <h2 class="h4 fw-bold text-primary">Visitas em Academia</h2>
+        <p class="text-muted small mb-0">{{ academia.nome if academia else '' }}</p>
+    </div>
+
+    <ul class="nav nav-tabs mb-3">
+        <li class="nav-item">
+            <a class="nav-link {% if tipo_filtro == 'origem' %}active{% endif %}" href="{{ url_for('solicitacoes.visita_lista', academia_id=academia_id, tipo='origem') }}">
+                <i class="bi bi-house-door me-1"></i> Minha academia (origem) {% if pendentes_origem %}<span class="badge bg-warning text-dark">{{ pendentes_origem }}</span>{% endif %}
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link {% if tipo_filtro == 'destino' %}active{% endif %}" href="{{ url_for('solicitacoes.visita_lista', academia_id=academia_id, tipo='destino') }}">
+                <i class="bi bi-geo-alt me-1"></i> Academia destino {% if pendentes_destino %}<span class="badge bg-primary">{{ pendentes_destino }}</span>{% endif %}
+            </a>
+        </li>
+    </ul>
+
+    {% if solicitacoes %}
+    <div class="card shadow-sm">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Aluno</th>
+                        {% if tipo_filtro == 'origem' %}<th>Academia destino</th>{% else %}<th>Academia origem</th>{% endif %}
+                        <th>Status</th>
+                        <th>Data solicitação</th>
+                        {% if tipo_filtro == 'destino' %}<th>Turma / Data</th>{% endif %}
+                        <th class="text-end">Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for s in solicitacoes %}
+                    <tr>
+                        <td class="fw-semibold">{{ s.aluno_nome }}</td>
+                        <td>{% if tipo_filtro == 'origem' %}{{ s.academia_destino_nome }}{% else %}{{ s.academia_origem_nome }}{% endif %}</td>
+                        <td>
+                            {% if s.status == 'pendente_origem' %}
+                            <span class="badge bg-warning text-dark">Aguardando sua aprovação</span>
+                            {% elif s.status == 'aprovado_origem' %}
+                            <span class="badge bg-info">Enviado ao destino</span>
+                            {% elif s.status == 'rejeitado_origem' %}
+                            <span class="badge bg-secondary">Rejeitado</span>
+                            {% elif s.status == 'pendente_destino' %}
+                            <span class="badge bg-warning text-dark">Aguardando sua aprovação</span>
+                            {% elif s.status == 'aprovado_destino' %}
+                            <span class="badge bg-success">Aprovado</span>
+                            {% elif s.status == 'rejeitado_destino' %}
+                            <span class="badge bg-secondary">Rejeitado</span>
+                            {% else %}
+                            <span class="badge bg-secondary">{{ s.status }}</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ s.criado_em.strftime('%d/%m/%Y %H:%M') if s.criado_em else '-' }}</td>
+                        {% if tipo_filtro == 'destino' %}
+                        <td>
+                            {% if s.turma_nome %}{{ s.turma_nome }}{% elif s.turma_id %}Turma ID {{ s.turma_id }}{% else %}—{% endif %}
+                            {% if s.data_visita %}<br><small>{{ s.data_visita.strftime('%d/%m/%Y') if s.data_visita else '' }}</small>{% endif %}
+                        </td>
+                        {% endif %}
+                        <td class="text-end">
+                            {% if tipo_filtro == 'origem' and s.status == 'pendente_origem' %}
+                            <button type="button" class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#modalAprovarOrigem{{ s.id }}">
+                                <i class="bi bi-check-lg"></i> Aprovar
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#modalRejeitarOrigem{{ s.id }}">
+                                <i class="bi bi-x-lg"></i> Rejeitar
+                            </button>
+                            {% elif tipo_filtro == 'destino' and s.status == 'pendente_destino' %}
+                            <a href="{{ url_for('solicitacoes.visita_aprovar_destino', sol_id=s.id) }}" class="btn btn-sm btn-success"><i class="bi bi-check-lg me-1"></i> Aprovar e definir turma</a>
+                            <button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#modalRejeitarDestino{{ s.id }}">
+                                <i class="bi bi-x-lg"></i> Rejeitar
+                            </button>
+                            {% else %}
+                            —
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% else %}
+    <div class="alert alert-info">
+        <i class="bi bi-info-circle me-2"></i>
+        {% if tipo_filtro == 'origem' %}
+        Nenhuma solicitação de visita pendente como academia de origem. Alunos da sua academia solicitam visita em outras academias da associação.
+        {% else %}
+        Nenhuma solicitação de visita pendente como academia de destino. Alunos de outras academias solicitam visitar sua academia.
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+
+<!-- Modais para aprovar/rejeitar com observação -->
+{% for s in solicitacoes %}
+{% if tipo_filtro == 'origem' and s.status == 'pendente_origem' %}
+<!-- Modal Aprovar Origem -->
+<div class="modal fade" id="modalAprovarOrigem{{ s.id }}" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title"><i class="bi bi-check-circle me-2"></i> Aprovar Solicitação</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post" action="{{ url_for('solicitacoes.visita_aprovar_origem', sol_id=s.id) }}">
+                <div class="modal-body">
+                    <p>Deseja aprovar a solicitação de visita de <strong>{{ s.aluno_nome }}</strong> para <strong>{{ s.academia_destino_nome }}</strong>?</p>
+                    <div class="mb-3">
+                        <label for="observacao_origem_aprovar{{ s.id }}" class="form-label">Observação para o professor de destino (opcional)</label>
+                        <textarea name="observacao_origem" id="observacao_origem_aprovar{{ s.id }}" class="form-control" rows="3" placeholder="Adicione uma observação que será visível para o professor de destino..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-success"><i class="bi bi-check-lg me-1"></i> Aprovar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Rejeitar Origem -->
+<div class="modal fade" id="modalRejeitarOrigem{{ s.id }}" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title"><i class="bi bi-x-circle me-2"></i> Rejeitar Solicitação</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post" action="{{ url_for('solicitacoes.visita_rejeitar_origem', sol_id=s.id) }}">
+                <div class="modal-body">
+                    <p>Deseja rejeitar a solicitação de visita de <strong>{{ s.aluno_nome }}</strong> para <strong>{{ s.academia_destino_nome }}</strong>?</p>
+                    <div class="mb-3">
+                        <label for="observacao_origem_rejeitar{{ s.id }}" class="form-label">Observação para o professor de destino (opcional)</label>
+                        <textarea name="observacao_origem" id="observacao_origem_rejeitar{{ s.id }}" class="form-control" rows="3" placeholder="Adicione uma observação explicando o motivo da rejeição..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-danger"><i class="bi bi-x-lg me-1"></i> Rejeitar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% elif tipo_filtro == 'destino' and s.status == 'pendente_destino' %}
+<!-- Modal Rejeitar Destino -->
+<div class="modal fade" id="modalRejeitarDestino{{ s.id }}" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title"><i class="bi bi-x-circle me-2"></i> Rejeitar Solicitação</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post" action="{{ url_for('solicitacoes.visita_rejeitar_destino', sol_id=s.id) }}">
+                <div class="modal-body">
+                    <p>Deseja rejeitar a solicitação de visita de <strong>{{ s.aluno_nome }}</strong> da academia <strong>{{ s.academia_origem_nome }}</strong>?</p>
+                    <div class="mb-3">
+                        <label for="observacao_destino_rejeitar{{ s.id }}" class="form-label">Observação para o aluno/professor de origem (opcional)</label>
+                        <textarea name="observacao_destino" id="observacao_destino_rejeitar{{ s.id }}" class="form-control" rows="3" placeholder="Adicione uma observação explicando o motivo da rejeição..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-danger"><i class="bi bi-x-lg me-1"></i> Rejeitar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endfor %}
+{% endblock %}

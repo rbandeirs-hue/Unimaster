@@ -131,6 +131,10 @@ def _get_academias_ids():
         if vinculadas:
             conn.close()
             return vinculadas
+        # Modo academia: gestor_academia/professor só veem academias de usuarios_academias (não id_academia)
+        if session.get("modo_painel") == "academia" and (current_user.has_role("gestor_academia") or current_user.has_role("professor")):
+            conn.close()
+            return []
         if current_user.has_role("admin"):
             cur.execute("SELECT id FROM academias")
             ids = [r["id"] for r in cur.fetchall()]
@@ -143,8 +147,6 @@ def _get_academias_ids():
         elif current_user.has_role("gestor_associacao"):
             cur.execute("SELECT id FROM academias WHERE id_associacao = %s", (getattr(current_user, "id_associacao", None),))
             ids = [r["id"] for r in cur.fetchall()]
-        elif getattr(current_user, "id_academia", None):
-            ids = [current_user.id_academia]
     except Exception:
         pass
     conn.close()
@@ -176,6 +178,40 @@ def _get_academia_id():
     session["finance_academia_id"] = aid
     session["academia_gerenciamento_id"] = aid
     return aid
+
+
+def _financeiro_exige_modo_academia():
+    """Garante que o módulo financeiro (gestão) só seja acessível em modo academia.
+    Exceção: informar_pagamento_mensalidade (usado pelo painel do aluno)."""
+    if not current_user.is_authenticated:
+        return None
+    endpoint = request.endpoint or ""
+    if endpoint == "financeiro.informar_pagamento_mensalidade":
+        return None
+    if not endpoint.startswith("financeiro."):
+        return None
+    if session.get("modo_painel") == "academia":
+        return None
+    # Redirecionar para o painel do modo atual
+    modo = session.get("modo_painel")
+    if modo == "admin":
+        return redirect(url_for("painel.gerenciamento_admin"))
+    if modo == "federacao":
+        return redirect(url_for("federacao.gerenciamento_federacao"))
+    if modo == "associacao":
+        return redirect(url_for("associacao.gerenciamento_associacao"))
+    if modo == "aluno":
+        return redirect(url_for("painel_aluno.painel"))
+    if modo == "responsavel":
+        return redirect(url_for("painel_responsavel.meu_perfil"))
+    return redirect(url_for("painel.home"))
+
+
+@bp_financeiro.before_request
+def _before_financeiro():
+    r = _financeiro_exige_modo_academia()
+    if r is not None:
+        return r
 
 
 @bp_financeiro.route("/")
@@ -580,8 +616,8 @@ def mensalidades_alunos():
 
     _atualizar_status_atrasadas(academia_id)
 
-    mes_arg = request.args.get("mes", type=int)
-    mes = mes_arg if (mes_arg and 1 <= mes_arg <= 12) else date.today().month
+    mes_arg = request.args.get("mes", default="", type=str)
+    mes = int(mes_arg) if mes_arg and str(mes_arg).isdigit() and 1 <= int(mes_arg) <= 12 else None
     ano_arg = request.args.get("ano", type=int)
     ano = ano_arg if (ano_arg and 2000 <= ano_arg <= 2100) else date.today().year
     busca = (request.args.get("busca") or "").strip()
@@ -610,7 +646,11 @@ def mensalidades_alunos():
             SELECT ma.id, ma.data_vencimento, ma.data_pagamento, ma.valor, ma.valor_pago, ma.status,
                    ma.status_pagamento, ma.comprovante_url, ma.observacoes,
                    ma.valor_original, ma.desconto_aplicado, ma.id_desconto, ma.turma_id,
+                   COALESCE(ma.remover_juros, 0) AS remover_juros,
                    m.nome as plano_nome, m.id_academia, a.id as aluno_id, a.nome as aluno_nome, a.foto as aluno_foto,
+                   COALESCE(m.aplicar_juros_multas, 0) AS aplicar_juros_multas,
+                   COALESCE(m.percentual_multa_mes, 2) AS percentual_multa_mes,
+                   COALESCE(m.percentual_juros_dia, 0.033) AS percentual_juros_dia,
                    t.Nome as turma_nome
             FROM mensalidade_aluno ma
             JOIN mensalidades m ON m.id = ma.mensalidade_id
@@ -650,6 +690,10 @@ def mensalidades_alunos():
             """, params_fb)
             rows = cur.fetchall()
             for r in rows:
+                r.setdefault("remover_juros", 0)
+                r.setdefault("aplicar_juros_multas", 0)
+                r.setdefault("percentual_multa_mes", 2)
+                r.setdefault("percentual_juros_dia", 0.033)
                 r.setdefault("status_pagamento", None)
                 r.setdefault("comprovante_url", None)
                 r.setdefault("observacoes", None)
@@ -661,11 +705,24 @@ def mensalidades_alunos():
         except Exception:
             rows = []
 
+    from blueprints.aluno.painel import _calcular_valor_com_juros_multas
+
     mensalidades = []
     for ma in rows:
+        valor_display, valor_original, multa_val, juros_val = _calcular_valor_com_juros_multas(ma, hoje)
+        ma["valor_display"] = valor_display
+        ma["valor_original"] = valor_original
+        ma["multa_val"] = multa_val
+        ma["juros_val"] = juros_val
+        ma["tem_juros"] = (multa_val or 0) + (juros_val or 0) > 0
+        ma_orig_val = ma.get("valor")
+        if ma["tem_juros"]:
+            ma["valor"] = valor_display
         ma["status_efetivo"] = _status_efetivo(ma.get("status"), ma.get("data_vencimento"), ma.get("status_pagamento"))
         ma["comentario_informado"] = ma.get("comentario_informado") or ma.get("observacoes")
         vi, vd, vf, desconto_nome = _valor_com_desconto(ma, ma.get("aluno_id"), academia_id, hoje)
+        if ma.get("tem_juros"):
+            ma["valor"] = ma_orig_val
         ma["valor_integral"] = vi
         ma["valor_desconto"] = vd
         ma["valor_final"] = vf
@@ -1655,6 +1712,168 @@ def cancelar_cobranca():
     return redirect(url_for("financeiro.mensalidades_alunos", academia_id=academia_id))
 
 
+@bp_financeiro.route("/mensalidades/cancelar-cobrancas-lote", methods=["POST"])
+@login_required
+def cancelar_cobrancas_lote():
+    """Cancela múltiplas mensalidades em lote (status pendente/atrasado)."""
+    registro_ids = request.form.getlist("registro_id", type=int)
+    academia_id = request.form.get("academia_id", type=int) or _get_academia_id()
+    if not registro_ids:
+        flash("Selecione pelo menos uma mensalidade para excluir.", "warning")
+        return redirect(request.referrer or url_for("financeiro.mensalidades_alunos", academia_id=academia_id))
+
+    ids = _get_academias_ids()
+    ph = ",".join(["%s"] * len(ids))
+    conn = get_db_connection()
+    cur = conn.cursor()
+    canceladas = 0
+    try:
+        for rid in registro_ids:
+            cur.execute(
+                f"SELECT ma.id FROM mensalidade_aluno ma JOIN mensalidades m ON m.id = ma.mensalidade_id WHERE ma.id = %s AND m.id_academia IN ({ph}) AND ma.status IN ('pendente','atrasado')",
+                (rid,) + tuple(ids),
+            )
+            if cur.fetchone():
+                cur.execute("UPDATE mensalidade_aluno SET status = 'cancelado' WHERE id = %s", (rid,))
+                canceladas += 1
+        conn.commit()
+        flash(f"{canceladas} mensalidade(s) excluída(s).", "success" if canceladas else "info")
+    except Exception as e:
+        conn.rollback()
+        flash(f"Erro: {e}", "danger")
+    conn.close()
+    ref = request.referrer or ""
+    if "mensalidades/alunos" in ref:
+        return redirect(ref)
+    return redirect(url_for("financeiro.mensalidades_alunos", academia_id=academia_id))
+
+
+@bp_financeiro.route("/mensalidades/cancelar-pagamento", methods=["POST"])
+@login_required
+def cancelar_pagamento():
+    """Cancela pagamento de mensalidade ou cobrança avulsa (reverte para pendente e cancela receita)."""
+    tipo = request.form.get("tipo")
+    registro_id = request.form.get("registro_id", type=int)
+    academia_id = _get_academia_id()
+    if not registro_id or tipo not in ("mensalidade_aluno", "cobranca_avulsa"):
+        flash("Parâmetros inválidos.", "danger")
+        return redirect(request.referrer or url_for("financeiro.mensalidades_alunos", academia_id=academia_id))
+
+    ids = _get_academias_ids()
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        ph = ",".join(["%s"] * len(ids))
+        if tipo == "mensalidade_aluno":
+            cur.execute(
+                f"SELECT ma.id FROM mensalidade_aluno ma JOIN mensalidades m ON m.id = ma.mensalidade_id WHERE ma.id = %s AND m.id_academia IN ({ph}) AND ma.status = 'pago'",
+                (registro_id,) + tuple(ids),
+            )
+        else:
+            cur.execute(
+                f"SELECT id FROM cobranca_avulsa WHERE id = %s AND id_academia IN ({ph}) AND status = 'pago'",
+                (registro_id,) + tuple(ids),
+            )
+        if not cur.fetchone():
+            flash("Cobrança não encontrada ou não está paga.", "warning")
+            conn.close()
+            return redirect(request.referrer or url_for("financeiro.mensalidades_alunos", academia_id=academia_id))
+        
+        # Excluir receita associada automaticamente
+        if tipo == "mensalidade_aluno":
+            # Buscar e excluir receita associada
+            receita = None
+            try:
+                cur.execute("SELECT id FROM receitas WHERE id_mensalidade_aluno = %s", (registro_id,))
+                receita = cur.fetchone()
+            except Exception:
+                pass
+            
+            if receita:
+                # Sempre excluir a receita ao cancelar pagamento
+                cur.execute("DELETE FROM receitas WHERE id = %s", (receita["id"],))
+            
+            # Reverter status da mensalidade
+            try:
+                cur.execute(
+                    "UPDATE mensalidade_aluno SET status='pendente', status_pagamento=NULL, data_pagamento=NULL, valor_pago=NULL WHERE id=%s",
+                    (registro_id,),
+                )
+            except Exception:
+                cur.execute(
+                    "UPDATE mensalidade_aluno SET status='pendente', data_pagamento=NULL, valor_pago=NULL WHERE id=%s",
+                    (registro_id,),
+                )
+        else:
+            # Buscar e excluir receita associada
+            receita = None
+            try:
+                cur.execute("SELECT id FROM receitas WHERE id_cobranca_avulsa = %s", (registro_id,))
+                receita = cur.fetchone()
+            except Exception:
+                pass
+            
+            if receita:
+                # Sempre excluir a receita ao cancelar pagamento
+                cur.execute("DELETE FROM receitas WHERE id = %s", (receita["id"],))
+            
+            # Reverter status da cobrança avulsa
+            cur.execute("UPDATE cobranca_avulsa SET status='pendente', data_pagamento=NULL, valor_pago=NULL WHERE id=%s", (registro_id,))
+        
+        conn.commit()
+        flash("Pagamento cancelado. Status revertido para pendente e receita excluída.", "success")
+    except Exception as e:
+        conn.rollback()
+        flash(f"Erro: {e}", "danger")
+    conn.close()
+    ref = request.referrer or ""
+    if "mensalidades/alunos" in ref or not ref:
+        return redirect(url_for("financeiro.mensalidades_alunos", academia_id=academia_id))
+    return redirect(ref)
+
+
+@bp_financeiro.route("/mensalidades/remover-juros", methods=["POST"])
+@login_required
+def remover_juros_mensalidade():
+    """Remove juros e multa de uma mensalidade (ex: pagou em dia mas informou fora do vencimento)."""
+    registro_id = request.form.get("registro_id", type=int)
+    academia_id = request.form.get("academia_id", type=int) or _get_academia_id()
+    if not registro_id:
+        flash("Parâmetros inválidos.", "danger")
+        return redirect(request.referrer or url_for("financeiro.mensalidades_alunos", academia_id=academia_id))
+
+    ids = _get_academias_ids()
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        ph = ",".join(["%s"] * len(ids))
+        cur.execute(
+            f"""SELECT ma.id FROM mensalidade_aluno ma
+                JOIN mensalidades m ON m.id = ma.mensalidade_id
+                WHERE ma.id = %s AND m.id_academia IN ({ph})
+                AND ma.status IN ('pendente','atrasado','aguardando_confirmacao')""",
+            (registro_id,) + tuple(ids),
+        )
+        if not cur.fetchone():
+            flash("Mensalidade não encontrada ou já paga.", "warning")
+            conn.close()
+            return redirect(request.referrer or url_for("financeiro.mensalidades_alunos", academia_id=academia_id))
+        cur.execute(
+            "UPDATE mensalidade_aluno SET remover_juros = 1 WHERE id = %s",
+            (registro_id,),
+        )
+        conn.commit()
+        flash("Juros e multa removidos desta mensalidade.", "success")
+    except Exception as col_err:
+        if "Unknown column 'remover_juros'" in str(col_err):
+            flash("Recurso ainda não disponível. Execute a migration add_mensalidade_aluno_remover_juros.sql", "warning")
+        else:
+            conn.rollback()
+            flash(f"Erro: {col_err}", "danger")
+    conn.close()
+    return redirect(request.referrer or url_for("financeiro.mensalidades_alunos", academia_id=academia_id))
+
+
 @bp_financeiro.route("/mensalidades/registrar-pagamento", methods=["POST"])
 @login_required
 def registrar_pagamento():
@@ -1906,20 +2125,47 @@ def lista_receitas():
     try:
         conn = get_db_connection()
         cur = conn.cursor(dictionary=True)
+        # Sempre tentar buscar os campos id_mensalidade_aluno e id_cobranca_avulsa
         try:
             cur.execute(
                 "SELECT id, descricao, valor, data, categoria, id_mensalidade_aluno, id_cobranca_avulsa FROM receitas WHERE id_academia = %s AND MONTH(data) = %s AND YEAR(data) = %s ORDER BY data DESC",
                 (academia_id, mes, ano),
             )
+            receitas = cur.fetchall()
         except Exception:
-            cur.execute(
-                "SELECT id, descricao, valor, data, categoria FROM receitas WHERE id_academia = %s AND MONTH(data) = %s AND YEAR(data) = %s ORDER BY data DESC",
-                (academia_id, mes, ano),
-            )
-        receitas = cur.fetchall()
+            # Se falhar, tentar sem esses campos e depois adicionar como None
+            try:
+                cur.execute(
+                    "SELECT id, descricao, valor, data, categoria FROM receitas WHERE id_academia = %s AND MONTH(data) = %s AND YEAR(data) = %s ORDER BY data DESC",
+                    (academia_id, mes, ano),
+                )
+                receitas = cur.fetchall()
+            except Exception:
+                receitas = []
+        
+        # Garantir que todos os registros tenham os campos id_mensalidade_aluno e id_cobranca_avulsa
+        # e normalizar valores 0, None, ou string vazia para None
         for r in receitas:
-            r.setdefault("id_mensalidade_aluno", None)
-            r.setdefault("id_cobranca_avulsa", None)
+            if "id_mensalidade_aluno" not in r:
+                r["id_mensalidade_aluno"] = None
+            else:
+                # Normalizar: None, 0, '0', '' -> None
+                val = r.get("id_mensalidade_aluno")
+                if val is None or val == 0 or val == '0' or val == '':
+                    r["id_mensalidade_aluno"] = None
+                else:
+                    r["id_mensalidade_aluno"] = int(val) if val else None
+            
+            if "id_cobranca_avulsa" not in r:
+                r["id_cobranca_avulsa"] = None
+            else:
+                # Normalizar: None, 0, '0', '' -> None
+                val = r.get("id_cobranca_avulsa")
+                if val is None or val == 0 or val == '0' or val == '':
+                    r["id_cobranca_avulsa"] = None
+                else:
+                    r["id_cobranca_avulsa"] = int(val) if val else None
+        
         total_mes = sum(float(r.get("valor") or 0) for r in receitas)
         conn.close()
     except Exception:

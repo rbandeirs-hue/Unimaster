@@ -3,9 +3,8 @@
 {% block content %}
 <div class="container mt-5">
     <div class="mb-4">
-        <a href="{{ back_url }}" class="btn btn-outline-secondary mb-2">
-            <i class="bi bi-arrow-left-circle me-2"></i> Voltar
-        </a>
+        {% set back_url = back_url or get_back_url_default() %}
+{% include 'components/botao_voltar.html' %}
         <h2 class="h4 fw-bold text-dark">Editar Professor</h2>
         <p class="text-muted small">{{ academia.nome }}</p>
     </div>
@@ -35,6 +34,21 @@
                     </select>
                     <small class="text-muted">Associe este professor a um usuário do sistema para acesso ao painel.</small>
                 </div>
+                {% if modalidades %}
+                <div class="mb-4">
+                    <label class="form-label fw-semibold">Modalidades</label>
+                    <p class="small text-muted">Selecione as modalidades que o professor ministra (liberadas pela academia).</p>
+                    <div class="d-flex flex-wrap gap-2">
+                        {% for m in modalidades %}
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="modalidade_ids" value="{{ m.id }}" id="mod_prof_{{ m.id }}"
+                                   {% if m.id in professor_modalidades_ids %}checked{% endif %}>
+                            <label class="form-check-label" for="mod_prof_{{ m.id }}">{{ m.nome }}</label>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
                 <div class="mb-3">
                     <div class="form-check form-switch">
                         <input class="form-check-input" type="checkbox" id="ativo" name="ativo" value="1" {% if professor.ativo %}checked{% endif %}>

@@ -2,18 +2,34 @@
 {% block title %}Associação — Academias{% endblock %}
 {% block content %}
 <div class="container mt-4 px-2 px-sm-3">
-    <a href="{{ voltar_url|default(url_for('painel_aluno.meu_perfil')) }}" class="btn btn-outline-secondary btn-sm mb-3">
-        <i class="bi bi-arrow-left me-1"></i> Voltar
-    </a>
+    {% set back_url = back_url or get_back_url_default() %}
+{% include 'components/botao_voltar.html' %}
     <h2 class="h5 fw-bold mb-3">Associação</h2>
     {% if associacao_nome %}
-    <p class="text-muted small mb-4">Academias vinculadas à <strong>{{ associacao_nome }}</strong></p>
+    <div class="mb-4">
+        <p class="text-muted small mb-1">Academias vinculadas à <strong>{{ associacao_nome }}</strong></p>
+        {% if associacao_endereco %}
+        <p class="text-muted small mb-0">
+            <i class="bi bi-geo-alt me-1"></i> {{ associacao_endereco }}
+        </p>
+        {% endif %}
+    </div>
     {% endif %}
 
     {% if academias %}
-    <div class="row g-3">
+    <!-- Campo de Pesquisa -->
+    <div class="mb-3">
+        <div class="input-group">
+            <span class="input-group-text"><i class="bi bi-search"></i></span>
+            <input type="text" id="filtroAcademia" class="form-control" placeholder="Pesquisar por nome de academia ou professor responsável..." autocomplete="off">
+        </div>
+    </div>
+    
+    <div class="row g-3" id="academiasContainer">
         {% for acad in academias %}
-        <div class="col-12 col-sm-6 col-md-4 col-lg-3">
+        <div class="col-12 col-sm-6 col-md-4 col-lg-3 academia-item" 
+             data-nome="{{ (acad.nome or '')|lower }}" 
+             data-professor="{{ (acad.gestor_nome or '')|lower }}">
             <div class="card shadow-sm border h-100 academia-card">
                 <div class="card-body text-center d-flex flex-column align-items-center p-3">
                     <div class="academia-logo mb-2">
@@ -27,25 +43,48 @@
                     </div>
                     <h6 class="fw-bold mb-1 text-truncate w-100" title="{{ acad.nome }}">{{ acad.nome or '—' }}</h6>
                     {% if acad.cidade or acad.uf %}
-                    <small class="text-muted d-block mb-2">{{ acad.cidade or '' }}{% if acad.cidade and acad.uf %} - {% endif %}{{ acad.uf or '' }}</small>
+                    <small class="text-muted d-block mb-1">{{ acad.cidade or '' }}{% if acad.cidade and acad.uf %} - {% endif %}{{ acad.uf or '' }}</small>
                     {% endif %}
-                    {% if acad.email %}
-                    <a href="mailto:{{ acad.email }}?subject=Solicitação de visita - {{ acad.nome or 'Academia' }}"
-                       class="btn btn-primary btn-sm w-100 mt-auto" target="_blank" rel="noopener"
-                       title="Enviar e-mail para solicitar visita">
-                        <i class="bi bi-envelope-plus me-1"></i> Solicitar visita
-                    </a>
-                    {% elif acad.telefone %}
-                    <a href="tel:{{ acad.telefone | replace(' ', '') | replace('(', '') | replace(')', '') | replace('-', '') }}"
-                       class="btn btn-primary btn-sm w-100 mt-auto" title="Ligar para solicitar visita">
-                        <i class="bi bi-telephone-plus me-1"></i> Solicitar visita
-                    </a>
-                    {% else %}
-                    <button type="button" class="btn btn-outline-secondary btn-sm w-100 mt-auto" disabled
-                            title="Academia sem contato cadastrado">
-                        <i class="bi bi-envelope-plus me-1"></i> Solicitar visita
-                    </button>
+                    {% if acad.endereco_completo %}
+                    <small class="text-muted d-block mb-1" style="font-size: 0.75rem;">
+                        <i class="bi bi-geo-alt me-1"></i> {{ acad.endereco_completo }}
+                    </small>
                     {% endif %}
+                    {% if acad.gestor_nome %}
+                    <small class="text-muted d-block mb-2" style="font-size: 0.75rem;">
+                        <i class="bi bi-person me-1"></i> <strong>Prof.:</strong> {{ acad.gestor_nome }}
+                    </small>
+                    {% endif %}
+                    
+                    <!-- Turmas com dias e horários -->
+                    {% if acad.turmas and acad.turmas|length > 0 %}
+                    <div class="w-100 mb-2" style="font-size: 0.75rem;">
+                        <div class="text-start">
+                            <strong><i class="bi bi-calendar-week me-1"></i> Horários de Treino:</strong>
+                            {% for turma in acad.turmas %}
+                            <div class="mt-1 text-muted">
+                                <span class="fw-semibold">{{ turma.nome }}:</span>
+                                {% if turma.horario %}
+                                <span>{{ turma.horario }}</span>
+                                {% endif %}
+                                {% if turma.dias %}
+                                <span class="badge bg-info ms-1">{{ turma.dias }}</span>
+                                {% endif %}
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    <div class="w-100 mb-2">
+                        <a href="{{ url_for('painel_aluno.solicitacoes_academia', academia_destino_id=acad.id) }}" class="btn btn-sm btn-outline-info w-100">
+                            <i class="bi bi-info-circle me-1"></i> Ver solicitações{% if acad.solicitacoes and acad.solicitacoes|length > 0 %} ({{ acad.solicitacoes|length }}){% endif %}
+                        </a>
+                    </div>
+                    
+                    <a href="{{ url_for('painel_aluno.solicitar_visita', academia_destino_id=acad.id) }}" class="btn btn-primary btn-sm w-100 mt-auto" title="Solicitar visita nesta academia">
+                        <i class="bi bi-geo-alt me-1"></i> Solicitar visita
+                    </a>
                 </div>
             </div>
         </div>
@@ -61,8 +100,71 @@
         {% endif %}
     </div>
     {% endif %}
+    </div>
+    {% else %}
+    <div class="alert alert-info">
+        <i class="bi bi-info-circle me-2"></i>
+        {% if not associacao_nome %}
+        Sua academia ainda não está vinculada a uma associação, ou não há outras academias cadastradas.
+        {% else %}
+        Nenhuma academia encontrada nesta associação.
+        {% endif %}
+    </div>
+    {% endif %}
 </div>
 <style>
 .academia-card { border-color: var(--dark-bg, #212529) !important; border-width: 2px; }
+.academia-item { transition: opacity 0.3s ease; }
+.academia-item.hidden { display: none; }
 </style>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const filtroInput = document.getElementById('filtroAcademia');
+    const academiasContainer = document.getElementById('academiasContainer');
+    const academiaItems = document.querySelectorAll('.academia-item');
+    
+    if (filtroInput && academiaItems.length > 0) {
+        filtroInput.addEventListener('input', function() {
+            const termo = this.value.toLowerCase().trim();
+            
+            if (!termo) {
+                // Mostrar todas as academias
+                academiaItems.forEach(item => {
+                    item.classList.remove('hidden');
+                });
+                return;
+            }
+            
+            // Filtrar academias
+            let encontradas = 0;
+            academiaItems.forEach(item => {
+                const nome = item.getAttribute('data-nome') || '';
+                const professor = item.getAttribute('data-professor') || '';
+                
+                if (nome.includes(termo) || professor.includes(termo)) {
+                    item.classList.remove('hidden');
+                    encontradas++;
+                } else {
+                    item.classList.add('hidden');
+                }
+            });
+            
+            // Mostrar mensagem se não encontrou nenhuma
+            let msgNoResults = document.getElementById('msgNoResults');
+            if (encontradas === 0 && termo) {
+                if (!msgNoResults) {
+                    msgNoResults = document.createElement('div');
+                    msgNoResults.id = 'msgNoResults';
+                    msgNoResults.className = 'alert alert-warning mt-3';
+                    msgNoResults.innerHTML = '<i class="bi bi-exclamation-triangle me-2"></i>Nenhuma academia encontrada com o termo pesquisado.';
+                    academiasContainer.parentNode.insertBefore(msgNoResults, academiasContainer.nextSibling);
+                }
+                msgNoResults.style.display = 'block';
+            } else if (msgNoResults) {
+                msgNoResults.style.display = 'none';
+            }
+        });
+    }
+});
+</script>
 {% endblock %}

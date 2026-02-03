@@ -10,129 +10,11 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
 
   <link rel="stylesheet" href="{{ url_for('static', filename='css/base/layout.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/components/botao_voltar.css') }}">
   {% block extra_css %}{% endblock %}
 </head>
 
 <body>
-
-{% if current_user.is_authenticated %}
-
-<!-- ====================================================== -->
-<!-- 🔹 SIDEBAR COM RBAC REAL                               -->
-<!-- ====================================================== -->
-<div class="sidebar" id="sidebar">
-
-  <div class="brand d-flex align-items-center gap-2 px-3">
-    {% if contexto_logo_url %}
-    <img src="{{ contexto_logo_url }}" alt="Logo" class="brand-logo" style="width: 40px; height: 40px; object-fit: contain; border-radius: 6px; background: rgba(255,255,255,0.2);">
-    {% else %}
-    <i class="bi bi-trophy-fill fs-4"></i>
-    {% endif %}
-    <strong class="brand-text text-truncate">{{ contexto_nome or 'Judo Academy' }}</strong>
-  </div>
-
-  <nav class="nav flex-column mt-3">
-    <!-- 👤 Menu mobile: usuário e modo (visível só em telas pequenas, exceto aluno) -->
-    {% if not current_user.has_role('aluno') %}
-    <div class="sidebar-mobile-user d-lg-none border-bottom border-secondary mb-2 pb-2">
-      <div class="px-3 py-2">
-        <a class="nav-link d-flex align-items-center gap-2" href="{{ url_for('usuarios.meu_perfil', next=request.url) }}">
-          <i class="bi bi-person-circle fs-4"></i>
-          <div class="text-start">
-            <span class="small fw-bold d-block">{{ current_user.nome }}</span>
-            <span class="small opacity-75">{{ modo_atual_nome() }}</span>
-          </div>
-        </a>
-        <div class="d-flex flex-column gap-1 mt-2">
-          <a class="nav-link py-2 small" href="{{ url_for('usuarios.meu_perfil', next=request.url) }}">
-            <i class="bi bi-person-lines-fill me-2"></i> Editar cadastro
-          </a>
-          {% if tem_multiplos_modos() %}
-          <div class="dropdown mt-1">
-            <a class="nav-link py-2 small dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
-              <i class="bi bi-arrow-repeat me-2"></i> Trocar modo
-            </a>
-            <ul class="dropdown-menu dropdown-menu-dark">
-              {% for modo_id, modo_nome in modos_disponiveis() %}
-              <li><a class="dropdown-item" href="{{ url_for('painel.escolher_modo', modo=modo_id) }}">{{ modo_nome }}</a></li>
-              {% endfor %}
-            </ul>
-          </div>
-          {% endif %}
-        </div>
-      </div>
-    </div>
-    {% endif %}
-
-    <!-- 🔹 Painel — todos os modos têm painel próprio (exceto responsavel: só Meu perfil) -->
-    {% if session.get('modo_painel') != 'responsavel' %}
-    <a class="nav-link {% if request.endpoint == 'painel.home' or request.endpoint == 'painel.escolher_modo' or request.endpoint == 'painel._redirect_admin' or (session.get('modo_painel') == 'aluno' and request.endpoint == 'painel_aluno.painel') or (session.get('modo_painel') == 'academia' and request.endpoint == 'academia.dash') or (session.get('modo_painel') == 'associacao' and request.endpoint == 'associacao.painel_associacao') or (session.get('modo_painel') == 'federacao' and request.endpoint == 'federacao.painel_federacao') %}active{% endif %}"
-       href="{{ url_for('painel_aluno.painel') if session.get('modo_painel') == 'aluno' else (url_for('academia.dash') if session.get('modo_painel') == 'academia' else (url_for('associacao.painel_associacao') if session.get('modo_painel') == 'associacao' else (url_for('federacao.painel_federacao') if session.get('modo_painel') == 'federacao' else url_for('painel.home')))) }}">
-      <i class="bi bi-speedometer2"></i> Painel
-    </a>
-    {% endif %}
-
-    <!-- ====================================================== -->
-    <!-- Menus por modo: só exibe o menu do modo acessado        -->
-    <!-- ====================================================== -->
-    <!-- 👑 MODO ADMIN -->
-    {% if session.get('modo_painel') == 'admin' and current_user.has_role('admin') %}
-      <a class="nav-link {% if request.endpoint == 'painel.gerenciamento_admin' %}active{% endif %}" href="{{ url_for('painel.gerenciamento_admin') }}">
-        <i class="bi bi-gear"></i> Gerenciamento
-      </a>
-    {% endif %}
-
-    <!-- 🟦 MODO FEDERAÇÃO -->
-    {% if session.get('modo_painel') == 'federacao' and current_user.has_role('gestor_federacao') %}
-      <a class="nav-link {% if request.endpoint == 'federacao.gerenciamento_federacao' %}active{% endif %}" href="{{ url_for('federacao.gerenciamento_federacao') }}">
-        <i class="bi bi-gear"></i> Gerenciamento
-      </a>
-    {% endif %}
-
-    <!-- 🟩 MODO ASSOCIAÇÃO -->
-    {% if session.get('modo_painel') == 'associacao' and current_user.has_role('gestor_associacao') %}
-      <a class="nav-link {% if request.endpoint == 'associacao.gerenciamento_associacao' %}active{% endif %}" href="{{ url_for('associacao.gerenciamento_associacao') }}">
-        <i class="bi bi-gear"></i> Gerenciamento
-      </a>
-    {% endif %}
-
-    <!-- 🟧 MODO ACADEMIA -->
-    {% if session.get('modo_painel') == 'academia' %}
-      <a class="nav-link {% if request.endpoint == 'academia.painel_academia' %}active{% endif %}" href="{{ url_for('academia.painel_academia') }}">
-        <i class="bi bi-gear"></i> Gerenciamento
-      </a>
-    {% endif %}
-
-    <!-- ====================================================== -->
-    <!-- 🟡 MODO ALUNO — MEU PERFIL (Painel já no menu geral)   -->
-    <!-- ====================================================== -->
-    {% if session.get('modo_painel') == 'aluno' %}
-      <a class="nav-link {% if request.endpoint == 'painel_aluno.meu_perfil' %}active{% endif %}" href="{{ url_for('painel_aluno.meu_perfil') }}">
-        <i class="bi bi-person-badge"></i> Meu Perfil
-      </a>
-    {% endif %}
-
-    <!-- 🟣 MODO RESPONSÁVEL — SÓ MEU PERFIL (dados do(s) aluno(s)) -->
-    <!-- ====================================================== -->
-    {% if session.get('modo_painel') == 'responsavel' %}
-      <a class="nav-link {% if request.endpoint == 'painel_responsavel.meu_perfil' or request.endpoint == 'painel_responsavel.painel' %}active{% endif %}" href="{{ url_for('painel_responsavel.meu_perfil') }}">
-        <i class="bi bi-person-badge"></i> Meu Perfil
-      </a>
-    {% endif %}
-
-  </nav>
-
-  <div class="logout mt-auto mb-3">
-    <a class="nav-link text-danger fw-bold" href="{{ url_for('auth.logout') }}">
-      <i class="bi bi-box-arrow-right"></i> Sair
-    </a>
-  </div>
-
-</div>
-<button type="button" class="sidebar-overlay" id="sidebar-overlay" onclick="toggleSidebar()" aria-label="Fechar menu"></button>
-{% endif %}
-
-
 
 <!-- ====================================================== -->
 <!-- 🔹 MAIN CONTENT                                         -->
@@ -141,12 +23,29 @@
 
   {% if current_user.is_authenticated %}
   <div class="navbar-top">
-    <button class="toggle-btn" onclick="toggleSidebar()" aria-label="Abrir menu">
-      <i class="bi bi-list"></i>
+    <!-- Logo/Brand no cabeçalho -->
+    <a href="{{ get_back_url_default() }}" class="d-flex align-items-center gap-2 text-decoration-none" style="color: inherit;" title="Voltar para página principal">
+      {% if contexto_logo_url %}
+      <img src="{{ contexto_logo_url }}" alt="Logo" class="brand-logo" style="width: 40px; height: 40px; object-fit: contain; border-radius: 6px;">
+      {% else %}
+      <i class="bi bi-trophy-fill fs-4"></i>
+      {% endif %}
+      <strong class="brand-text">{{ contexto_nome or 'Judo Academy' }}</strong>
+    </a>
+    
+    <!-- Botão Modo Noturno (Mobile) -->
+    <button class="toggle-btn d-lg-none" id="btnDarkModeMobile" onclick="toggleDarkMode()" aria-label="Alternar modo noturno">
+      <i class="bi bi-moon-fill" id="iconDarkModeMobile"></i>
     </button>
+    
     <div class="dropdown d-lg-none ms-auto">
-      <button class="toggle-btn toggle-btn-user dropdown-toggle" type="button" id="dropdownUsuarioMobile" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Conta e configurações">
+      <button class="toggle-btn toggle-btn-user dropdown-toggle d-flex align-items-center" type="button" id="dropdownUsuarioMobile" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Conta e configurações">
+        {% if current_user.foto %}
+        <img src="{{ url_for('static', filename='uploads/' + current_user.foto) }}" alt="" class="rounded-circle" style="width:36px;height:36px;object-fit:cover;" onerror="this.style.display='none';this.nextElementSibling.classList.remove('d-none');">
+        <i class="bi bi-person-circle d-none"></i>
+        {% else %}
         <i class="bi bi-person-circle"></i>
+        {% endif %}
       </button>
       <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="dropdownUsuarioMobile">
         <li><h6 class="dropdown-header">Configurações de usuário</h6></li>
@@ -160,18 +59,38 @@
         <li><h6 class="dropdown-header">Trocar modo</h6></li>
         {% for modo_id, modo_nome in modos_disponiveis() %}
         <li>
-          <a class="dropdown-item" href="{{ url_for('painel.escolher_modo', modo=modo_id) }}">
+          <a class="dropdown-item {% if session.get('modo_painel') == modo_id %}active{% endif %}" href="{{ url_for('painel.escolher_modo', modo=modo_id) }}">
+            {% if session.get('modo_painel') == modo_id %}
+            <i class="bi bi-check-circle-fill me-2 text-success"></i>
+            {% endif %}
             {{ modo_nome }}
           </a>
         </li>
         {% endfor %}
         {% endif %}
+        <li><hr class="dropdown-divider"></li>
+        <li>
+          <a class="dropdown-item text-danger" href="{{ url_for('auth.logout') }}">
+            <i class="bi bi-box-arrow-right me-2"></i> Sair
+          </a>
+        </li>
       </ul>
     </div>
 
     <div class="user-info ms-auto d-none d-lg-flex align-items-center gap-2">
+      <!-- Botão Modo Noturno (Desktop) -->
+      <button class="btn btn-link p-0 text-dark text-decoration-none d-flex align-items-center" id="btnDarkModeDesktop" onclick="toggleDarkMode()" aria-label="Alternar modo noturno" style="font-size: 1.25rem; margin-right: 0.5rem;">
+        <i class="bi bi-moon-fill" id="iconDarkModeDesktop"></i>
+      </button>
+      
       <div class="dropdown">
-        <button class="btn btn-link p-0 text-dark text-decoration-none dropdown-toggle d-flex align-items-center" type="button" id="dropdownUsuario" data-bs-toggle="dropdown" aria-expanded="false" style="line-height: 1.2;">
+        <button class="btn btn-link p-0 text-dark text-decoration-none dropdown-toggle d-flex align-items-center gap-2" type="button" id="dropdownUsuario" data-bs-toggle="dropdown" aria-expanded="false" style="line-height: 1.2;">
+          {% if current_user.foto %}
+          <img src="{{ url_for('static', filename='uploads/' + current_user.foto) }}" alt="" class="rounded-circle flex-shrink-0" style="width:36px;height:36px;object-fit:cover;" onerror="this.style.display='none';this.nextElementSibling.classList.remove('d-none');">
+          <i class="bi bi-person-circle d-none flex-shrink-0"></i>
+          {% else %}
+          <i class="bi bi-person-circle flex-shrink-0"></i>
+          {% endif %}
           <div class="text-start">
             <strong>{{ current_user.nome }}</strong><br>
             <small class="text-muted d-block text-end">{{ modo_atual_nome() }}</small>
@@ -189,21 +108,30 @@
           <li><h6 class="dropdown-header">Trocar modo</h6></li>
           {% for modo_id, modo_nome in modos_disponiveis() %}
           <li>
-            <a class="dropdown-item" href="{{ url_for('painel.escolher_modo', modo=modo_id) }}">
+            <a class="dropdown-item {% if session.get('modo_painel') == modo_id %}active{% endif %}" href="{{ url_for('painel.escolher_modo', modo=modo_id) }}">
+              {% if session.get('modo_painel') == modo_id %}
+              <i class="bi bi-check-circle-fill me-2 text-success"></i>
+              {% endif %}
               {{ modo_nome }}
             </a>
           </li>
           {% endfor %}
           {% endif %}
+          <li><hr class="dropdown-divider"></li>
+          <li>
+            <a class="dropdown-item text-danger fw-bold" href="{{ url_for('auth.logout') }}">
+              <i class="bi bi-box-arrow-right me-2"></i> Sair
+            </a>
+          </li>
         </ul>
       </div>
     </div>
   </div>
   {% endif %}
 
+  <div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 1100;" id="toast-container">
   {% with messages = get_flashed_messages(with_categories=True) %}
     {% if messages %}
-    <div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 1100;">
       {% for category, message in messages %}
         {% set cat = category or 'info' %}
         {% set bg = 'text-bg-info' %}
@@ -225,38 +153,402 @@
           </div>
         </div>
       {% endfor %}
-    </div>
     {% endif %}
   {% endwith %}
+  </div>
 
   <div class="container-fluid mt-4">
     {% block content %}{% endblock %}
   </div>
+
+  <!-- Rodapé -->
+  <footer class="footer mt-auto py-3 border-top">
+    <div class="container-fluid">
+      <div class="row align-items-center">
+        <div class="col-12 text-center">
+          <small class="text-muted">
+            &copy; {{ current_year }} {{ contexto_nome or 'Judo Academy' }}. Todos os direitos reservados.
+          </small>
+        </div>
+      </div>
+    </div>
+  </footer>
 
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 
 <script>
-function toggleSidebar() {
-    const sidebar = document.getElementById("sidebar");
-    const main = document.getElementById("main-content");
-    const overlay = document.getElementById("sidebar-overlay");
-
-    sidebar.classList.toggle("active");
-    main.classList.toggle("sidebar-active");
-    if (overlay) overlay.classList.toggle("show");
-}
-
 document.addEventListener("DOMContentLoaded", () => {
     const toastElList = document.querySelectorAll(".toast");
     toastElList.forEach((toastEl) => {
         const toast = new bootstrap.Toast(toastEl);
         toast.show();
     });
+    
+    // Inicializar modo noturno
+    initDarkMode();
 });
+
+// Função para alternar modo noturno
+function toggleDarkMode() {
+    const html = document.documentElement;
+    const isDark = html.classList.toggle('dark-mode');
+    
+    // Salvar preferência no localStorage
+    localStorage.setItem('darkMode', isDark ? 'enabled' : 'disabled');
+    
+    // Atualizar ícones
+    updateDarkModeIcons(isDark);
+}
+
+// Função para inicializar modo noturno ao carregar a página
+function initDarkMode() {
+    const darkMode = localStorage.getItem('darkMode');
+    const html = document.documentElement;
+    
+    if (darkMode === 'enabled') {
+        html.classList.add('dark-mode');
+        updateDarkModeIcons(true);
+    } else {
+        html.classList.remove('dark-mode');
+        updateDarkModeIcons(false);
+    }
+}
+
+// Função para atualizar ícones do modo noturno
+function updateDarkModeIcons(isDark) {
+    const iconMobile = document.getElementById('iconDarkModeMobile');
+    const iconDesktop = document.getElementById('iconDarkModeDesktop');
+    
+    if (iconMobile) {
+        iconMobile.className = isDark ? 'bi bi-sun-fill' : 'bi bi-moon-fill';
+    }
+    if (iconDesktop) {
+        iconDesktop.className = isDark ? 'bi bi-sun-fill' : 'bi bi-moon-fill';
+    }
+}
 </script>
 
+<style>
+/* Modo Noturno */
+:root {
+  --dark-mode-bg: #1a1a1a;
+  --dark-mode-surface: #2d2d2d;
+  --dark-mode-text: #e0e0e0;
+  --dark-mode-border: #404040;
+  --dark-mode-card: #2d2d2d;
+  --dark-mode-header: #252525;
+}
+
+.dark-mode {
+  background-color: var(--dark-mode-bg) !important;
+  color: var(--dark-mode-text) !important;
+}
+
+.dark-mode body {
+  background-color: var(--dark-mode-bg) !important;
+  color: var(--dark-mode-text) !important;
+}
+
+.dark-mode .navbar-top {
+  background-color: var(--dark-mode-header) !important;
+  border-bottom-color: var(--dark-mode-border) !important;
+}
+
+.dark-mode .main-content {
+  background-color: var(--dark-mode-bg) !important;
+}
+
+.dark-mode .card {
+  background-color: var(--dark-mode-card) !important;
+  border-color: var(--dark-mode-border) !important;
+  color: var(--dark-mode-text) !important;
+}
+
+.dark-mode .card-header {
+  background-color: var(--dark-mode-surface) !important;
+  border-bottom-color: var(--dark-mode-border) !important;
+  color: var(--dark-mode-text) !important;
+}
+
+.dark-mode .form-control,
+.dark-mode .form-select {
+  background-color: var(--dark-mode-surface) !important;
+  border-color: var(--dark-mode-border) !important;
+  color: var(--dark-mode-text) !important;
+}
+
+.dark-mode .form-control:focus,
+.dark-mode .form-select:focus {
+  background-color: var(--dark-mode-surface) !important;
+  border-color: var(--primary) !important;
+  color: var(--dark-mode-text) !important;
+}
+
+.dark-mode .btn-link {
+  color: var(--dark-mode-text) !important;
+}
+
+.dark-mode .text-dark {
+  color: var(--dark-mode-text) !important;
+}
+
+.dark-mode .text-muted {
+  color: #a0a0a0 !important;
+}
+
+.dark-mode .dropdown-menu {
+  background-color: var(--dark-mode-card) !important;
+  border-color: var(--dark-mode-border) !important;
+}
+
+.dark-mode .dropdown-item {
+  color: var(--dark-mode-text) !important;
+}
+
+.dark-mode .dropdown-item:hover {
+  background-color: var(--dark-mode-surface) !important;
+  color: var(--dark-mode-text) !important;
+}
+
+.dark-mode .table {
+  color: var(--dark-mode-text) !important;
+}
+
+.dark-mode .table-striped > tbody > tr:nth-of-type(odd) {
+  background-color: var(--dark-mode-surface) !important;
+}
+
+.dark-mode .alert {
+  background-color: var(--dark-mode-surface) !important;
+  border-color: var(--dark-mode-border) !important;
+}
+
+.dark-mode .list-group-item {
+  background-color: var(--dark-mode-card) !important;
+  border-color: var(--dark-mode-border) !important;
+  color: var(--dark-mode-text) !important;
+}
+
+.dark-mode .modal-content {
+  background-color: var(--dark-mode-card) !important;
+  color: var(--dark-mode-text) !important;
+}
+
+.dark-mode .modal-header {
+  border-bottom-color: var(--dark-mode-border) !important;
+}
+
+.dark-mode .modal-footer {
+  border-top-color: var(--dark-mode-border) !important;
+}
+
+.dark-mode #btnDarkModeDesktop,
+.dark-mode #btnDarkModeMobile {
+  color: #ffc107 !important;
+}
+
+.dark-mode #btnDarkModeDesktop:hover,
+.dark-mode #btnDarkModeMobile:hover {
+  color: #ffb300 !important;
+}
+
+/* Estilos adicionais para garantir visibilidade de texto */
+.dark-mode h1,
+.dark-mode h2,
+.dark-mode h3,
+.dark-mode h4,
+.dark-mode h5,
+.dark-mode h6 {
+  color: var(--dark-mode-text) !important;
+}
+
+.dark-mode p,
+.dark-mode span,
+.dark-mode div,
+.dark-mode label {
+  color: var(--dark-mode-text) !important;
+}
+
+.dark-mode a {
+  color: #4da3ff !important;
+}
+
+.dark-mode a:hover {
+  color: #6bb3ff !important;
+}
+
+.dark-mode .text-primary {
+  color: #4da3ff !important;
+}
+
+.dark-mode .text-secondary {
+  color: #a0a0a0 !important;
+}
+
+.dark-mode .text-success {
+  color: #6cce7a !important;
+}
+
+.dark-mode .text-danger {
+  color: #ff6b6b !important;
+}
+
+.dark-mode .text-warning {
+  color: #ffc107 !important;
+}
+
+.dark-mode .text-info {
+  color: #4da3ff !important;
+}
+
+.dark-mode .badge {
+  color: var(--dark-mode-text) !important;
+}
+
+.dark-mode .btn-outline-primary {
+  color: #4da3ff !important;
+  border-color: #4da3ff !important;
+}
+
+.dark-mode .btn-outline-primary:hover {
+  background-color: #4da3ff !important;
+  color: var(--dark-mode-bg) !important;
+}
+
+.dark-mode .btn-outline-warning {
+  color: #ffc107 !important;
+  border-color: #ffc107 !important;
+}
+
+.dark-mode .btn-outline-warning:hover {
+  background-color: #ffc107 !important;
+  color: var(--dark-mode-bg) !important;
+}
+
+.dark-mode .btn-outline-secondary {
+  color: #a0a0a0 !important;
+  border-color: #a0a0a0 !important;
+}
+
+.dark-mode .btn-outline-secondary:hover {
+  background-color: #a0a0a0 !important;
+  color: var(--dark-mode-bg) !important;
+}
+
+/* Estilos específicos do painel do aluno */
+.dark-mode .perfil-label,
+.dark-mode .perfil-valor,
+.dark-mode .modal-info-item span,
+.dark-mode .modal-info-item strong {
+  color: var(--dark-mode-text) !important;
+}
+
+.dark-mode .modal-section-perfil h6 {
+  color: #4da3ff !important;
+  border-bottom-color: var(--dark-mode-border) !important;
+}
+
+.dark-mode .modal-section-perfil .modal-info-item {
+  border-bottom-color: var(--dark-mode-border) !important;
+}
+
+.dark-mode .perfil-foto-wrap {
+  border-color: rgba(77, 163, 255, 0.3) !important;
+}
+
+.dark-mode .painel-perfil-card {
+  border-color: var(--dark-mode-border) !important;
+}
+
+.dark-mode .alert-success {
+  background-color: rgba(108, 206, 122, 0.2) !important;
+  border-color: rgba(108, 206, 122, 0.4) !important;
+  color: #6cce7a !important;
+}
+
+.dark-mode .alert-info {
+  background-color: rgba(77, 163, 255, 0.2) !important;
+  border-color: rgba(77, 163, 255, 0.4) !important;
+  color: #4da3ff !important;
+}
+
+.dark-mode .alert-warning {
+  background-color: rgba(255, 193, 7, 0.2) !important;
+  border-color: rgba(255, 193, 7, 0.4) !important;
+  color: #ffc107 !important;
+}
+
+.dark-mode .alert-light {
+  background-color: var(--dark-mode-surface) !important;
+  border-color: var(--dark-mode-border) !important;
+  color: var(--dark-mode-text) !important;
+}
+
+.dark-mode .slide-indicator {
+  background-color: var(--dark-mode-surface) !important;
+  color: var(--dark-mode-text) !important;
+  border-color: var(--dark-mode-border) !important;
+}
+
+.dark-mode .slide-indicator.active {
+  background-color: #4da3ff !important;
+  color: var(--dark-mode-bg) !important;
+  border-color: #4da3ff !important;
+}
+
+.dark-mode .card-body {
+  color: var(--dark-mode-text) !important;
+}
+
+.dark-mode .container-fluid,
+.dark-mode .container {
+  color: var(--dark-mode-text) !important;
+}
+
+.dark-mode .footer {
+  background-color: var(--dark-mode-header) !important;
+  border-top-color: var(--dark-mode-border) !important;
+}
+
+.dark-mode .footer .text-muted {
+  color: #a0a0a0 !important;
+}
+</style>
+
 {% block extra_js %}{% endblock %}
+<script>
+// Garantir que campos de email e senha em formulários de cadastro não sejam preenchidos automaticamente
+(function() {
+    // Aguardar carregamento completo da página
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', limparCamposCadastro);
+    } else {
+        limparCamposCadastro();
+    }
+    
+    function limparCamposCadastro() {
+        // Limpar campos de email e senha em formulários de cadastro de usuário
+        var forms = document.querySelectorAll('form[action*="cadastro"], form[action*="cadastro_usuario"]');
+        forms.forEach(function(form) {
+            var emailInput = form.querySelector('input[type="email"][name="email"]');
+            var senhaInput = form.querySelector('input[type="password"][name="senha"]');
+            
+            if (emailInput && !emailInput.hasAttribute('data-keep-value')) {
+                emailInput.value = '';
+                emailInput.removeAttribute('readonly');
+                emailInput.removeAttribute('disabled');
+            }
+            
+            if (senhaInput && !senhaInput.hasAttribute('data-keep-value')) {
+                senhaInput.value = '';
+                senhaInput.removeAttribute('readonly');
+                senhaInput.removeAttribute('disabled');
+            }
+        });
+    }
+})();
+</script>
 </body>
 </html>
