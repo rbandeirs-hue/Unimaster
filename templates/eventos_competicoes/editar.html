@@ -49,6 +49,28 @@
                     </div>
                 </div>
                 
+                <!-- Seção de Taxa -->
+                <div class="card border-info mb-3">
+                    <div class="card-header bg-info bg-opacity-10">
+                        <h6 class="mb-0 fw-semibold"><i class="bi bi-currency-dollar me-1"></i>Taxa de Inscrição</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="tem_taxa" name="tem_taxa" value="1" {% if evento.tem_taxa and (evento.tem_taxa == 1 or evento.tem_taxa == True) %}checked{% endif %} onchange="toggleTaxa()">
+                                <label class="form-check-label" for="tem_taxa">
+                                    Este evento tem taxa de inscrição
+                                </label>
+                            </div>
+                        </div>
+                        <div id="campo_valor_taxa" style="display: {% if evento.tem_taxa %}{% if evento.tem_taxa == 1 or evento.tem_taxa == True or evento.tem_taxa == '1' or evento.tem_taxa|int == 1 %}block{% else %}none{% endif %}{% else %}none{% endif %};">
+                            <label for="valor_taxa_sugerido" class="form-label fw-semibold">Valor sugerido (R$) <span class="text-danger">*</span></label>
+                            <input type="number" id="valor_taxa_sugerido" name="valor_taxa_sugerido" class="form-control" step="0.01" min="0" placeholder="0.00" value="{% if evento.valor_taxa_sugerido %}{{ evento.valor_taxa_sugerido }}{% endif %}">
+                            <small class="text-muted">As academias poderão confirmar este valor ou aumentar ao aderir ao evento.</small>
+                        </div>
+                    </div>
+                </div>
+                
                 <!-- Anexos Existentes -->
                 {% if anexos_existentes and anexos_existentes|length > 0 %}
                 <div class="mb-3">
@@ -169,6 +191,43 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         }
     }
+    
+    // Inicializar estado do campo de taxa ao carregar
+    const checkboxInicial = document.getElementById('tem_taxa');
+    const campoValorInicial = document.getElementById('campo_valor_taxa');
+    if (checkboxInicial && campoValorInicial) {
+        if (checkboxInicial.checked) {
+            campoValorInicial.style.display = 'block';
+            const valorInput = document.getElementById('valor_taxa_sugerido');
+            if (valorInput) valorInput.required = true;
+        } else {
+            campoValorInicial.style.display = 'none';
+            const valorInput = document.getElementById('valor_taxa_sugerido');
+            if (valorInput) valorInput.required = false;
+        }
+    }
 });
+
+// Função global para mostrar/ocultar campo de valor da taxa
+function toggleTaxa() {
+    const checkbox = document.getElementById('tem_taxa');
+    const campoValor = document.getElementById('campo_valor_taxa');
+    if (checkbox && campoValor) {
+        if (checkbox.checked) {
+            campoValor.style.display = 'block';
+            const valorInput = document.getElementById('valor_taxa_sugerido');
+            if (valorInput) {
+                valorInput.required = true;
+            }
+        } else {
+            campoValor.style.display = 'none';
+            const valorInput = document.getElementById('valor_taxa_sugerido');
+            if (valorInput) {
+                valorInput.required = false;
+                valorInput.value = '';
+            }
+        }
+    }
+}
 </script>
 {% endblock %}

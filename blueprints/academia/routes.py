@@ -777,11 +777,13 @@ def lista_usuarios():
     except Exception as e:
         flash(f"Erro ao carregar usuários: {e}", "danger")
         usuarios = []
+        total = 0
         total_paginas = 1
         academia_nome = "Academia"
         associacao_nome = None
         academias = []
         academia_id = None
+        modo_associacao = False
     finally:
         cur.close()
         conn.close()
@@ -797,6 +799,7 @@ def lista_usuarios():
         busca=busca,
         pagina_atual=page,
         total_paginas=total_paginas,
+        total_usuarios=total,
     )
 
 

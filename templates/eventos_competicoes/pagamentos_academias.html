@@ -1,0 +1,380 @@
+{% extends "base.html" %}
+{% block title %}Pagamentos — {{ evento.nome }}{% endblock %}
+{% block content %}
+<style>
+/* Responsividade para mobile */
+@media (max-width: 767.98px) {
+    .container {
+        padding-left: 0.5rem;
+        padding-right: 0.5rem;
+    }
+    
+    /* Cards de resumo financeiro empilhados */
+    .row.mb-4 .col-md-4 {
+        margin-bottom: 0.75rem;
+    }
+    
+    /* Tabela transformada em cards no mobile */
+    .table-responsive {
+        border: none;
+    }
+    
+    .table thead {
+        display: none;
+    }
+    
+    .table, .table tbody, .table tr {
+        display: block;
+        width: 100%;
+    }
+    
+    .table tbody tr {
+        margin-bottom: 1rem;
+        border: 1px solid #dee2e6;
+        border-radius: 0.5rem;
+        background-color: #fff;
+        box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+        padding: 0.75rem;
+    }
+    
+    .table tbody tr.table-light {
+        margin-top: 0.5rem;
+        margin-bottom: 0.5rem;
+        padding: 0.75rem;
+    }
+    
+    .table td {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border: none;
+        padding: 0.5rem 0;
+        text-align: left !important;
+    }
+    
+    .table td::before {
+        content: attr(data-label);
+        font-weight: 600;
+        color: #495057;
+        margin-right: 0.5rem;
+        flex-shrink: 0;
+        min-width: 40%;
+    }
+    
+    .table td.text-end {
+        justify-content: flex-start;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+    
+    .table td.text-end::before {
+        content: "Ações:";
+        width: 100%;
+        margin-bottom: 0.5rem;
+    }
+    
+    /* Botões menores e empilhados */
+    .table td .d-flex {
+        width: 100%;
+        flex-direction: column;
+        gap: 0.5rem !important;
+    }
+    
+    .table td .btn {
+        width: 100%;
+        font-size: 0.875rem;
+    }
+    
+    /* Histórico de abatimentos */
+    .table tbody tr.table-light td {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .table tbody tr.table-light td::before {
+        content: "";
+        display: none;
+    }
+    
+    .table tbody tr.table-light ul {
+        width: 100%;
+        padding-left: 1rem;
+    }
+    
+    .table tbody tr.table-light li {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+    }
+    
+    .table tbody tr.table-light li form {
+        width: 100%;
+    }
+    
+    .table tbody tr.table-light li .btn {
+        width: 100%;
+    }
+    
+    /* Modal responsivo */
+    .modal-dialog {
+        margin: 0.5rem;
+    }
+    
+    /* Header com botão consolidar */
+    .d-flex.justify-content-between {
+        flex-direction: column;
+        align-items: flex-start !important;
+    }
+    
+    .d-flex.justify-content-between .btn {
+        width: 100%;
+        margin-top: 0.75rem;
+    }
+}
+</style>
+
+<div class="container mt-3 mt-md-5">
+    <div class="mb-4">
+        {% set back_url = back_url or get_back_url_default() %}
+{% include 'components/botao_voltar.html' %}
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+            <div>
+                <h2 class="h4 fw-bold text-primary">Pagamentos das Academias</h2>
+                <p class="text-muted mb-0">{{ evento.nome }}</p>
+            </div>
+            {% if total_pendente == 0 or not total_pendente %}
+            <a href="{{ url_for('eventos_competicoes.consolidar', evento_id=evento.id) }}" class="btn btn-primary">
+                <i class="bi bi-collection me-1"></i>Consolidar
+            </a>
+            {% else %}
+            <button type="button" class="btn btn-secondary" disabled title="Quite todos os pagamentos pendentes para consolidar">
+                <i class="bi bi-collection me-1"></i>Consolidar
+            </button>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if pagamentos %}
+    <!-- Resumo Financeiro -->
+    <div class="row mb-4 g-3">
+        <div class="col-12 col-md-4">
+            <div class="card border-primary">
+                <div class="card-body text-center">
+                    <h6 class="text-muted mb-2 small small-md">Valor Total Esperado</h6>
+                    <h3 class="text-primary mb-0 h4 h3-md">R$ {{ "%.2f"|format(total_esperado or 0) }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-md-4">
+            <div class="card border-success">
+                <div class="card-body text-center">
+                    <h6 class="text-muted mb-2 small small-md">Valor Total Pago</h6>
+                    <h3 class="text-success mb-0 h4 h3-md">R$ {{ "%.2f"|format(total_pago or 0) }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-md-4">
+            <div class="card border-danger">
+                <div class="card-body text-center">
+                    <h6 class="text-muted mb-2 small small-md">Valor Total Pendente</h6>
+                    <h3 class="text-danger mb-0 h4 h3-md">R$ {{ "%.2f"|format(total_pendente or 0) }}</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="card shadow-sm">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Academia</th>
+                            <th>Inscrições Enviadas</th>
+                            <th>Valor Total Esperado</th>
+                            <th>Valor Pago</th>
+                            <th>Valor Pendente</th>
+                            <th>Status</th>
+                            <th class="text-end">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for pag in pagamentos %}
+                        <tr>
+                            <td data-label="Academia"><strong>{{ pag.academia_nome }}</strong></td>
+                            <td data-label="Inscrições Enviadas">{{ pag.total_inscricoes or 0 }}</td>
+                            <td data-label="Valor Total Esperado"><strong>R$ {{ "%.2f"|format(pag.valor_total_esperado or 0) }}</strong></td>
+                            <td data-label="Valor Pago">R$ {{ "%.2f"|format(pag.valor_pago or 0) }}</td>
+                            <td data-label="Valor Pendente">
+                                <span class="{% if pag.valor_pendente > 0 %}text-danger fw-bold{% else %}text-success{% endif %}">
+                                    R$ {{ "%.2f"|format(pag.valor_pendente or 0) }}
+                                </span>
+                            </td>
+                            <td data-label="Status">
+                                {% if pag.status == 'quitado' %}
+                                <span class="badge bg-success">Quitado</span>
+                                {% elif pag.status == 'parcial' %}
+                                <span class="badge bg-warning">Parcial</span>
+                                {% else %}
+                                <span class="badge bg-danger">Pendente</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-end" data-label="Ações">
+                                {% if pag.id %}
+                                <div class="d-flex gap-1 justify-content-end flex-wrap">
+                                    {% if pag.valor_pendente > 0 %}
+                                    <button type="button" class="btn btn-sm btn-outline-primary" 
+                                            data-bs-toggle="modal" 
+                                            data-bs-target="#modalAbatimento{{ pag.id }}"
+                                            title="Registrar abatimento parcial">
+                                        <i class="bi bi-plus-circle me-1"></i><span class="d-none d-md-inline">Abatimento</span><span class="d-md-none">Abatimento</span>
+                                    </button>
+                                    <form method="POST" action="{{ url_for('eventos_competicoes.registrar_abatimento', evento_id=evento.id, pagamento_id=pag.id) }}" class="d-inline" onsubmit="return confirm('Quitar o valor total pendente de R$ {{ (pag.valor_pendente or 0)|round(2) }}?')">
+                                        <input type="hidden" name="valor_abatimento" value="{{ pag.valor_pendente }}">
+                                        <input type="hidden" name="observacoes" value="Pagamento total quitado">
+                                        <button type="submit" class="btn btn-sm btn-success" title="Quitar valor total pendente">
+                                            <i class="bi bi-check-circle me-1"></i><span class="d-none d-md-inline">Pagar Total</span><span class="d-md-none">Total</span>
+                                        </button>
+                                    </form>
+                                    {% else %}
+                                    <form method="POST" action="{{ url_for('eventos_competicoes.confirmar_pagamento_academia', evento_id=evento.id, pagamento_id=pag.id) }}" class="d-inline">
+                                        <button type="submit" class="btn btn-sm btn-success" title="Confirmar pagamento geral">
+                                            <i class="bi bi-check-circle me-1"></i>Confirmar
+                                        </button>
+                                    </form>
+                                    {% if pag.valor_pago > 0 %}
+                                    <form method="POST" action="{{ url_for('eventos_competicoes.cancelar_pagamento_academia', evento_id=evento.id, pagamento_id=pag.id) }}" class="d-inline" onsubmit="return confirm('Cancelar pagamento? Isso reverterá o último abatimento ou pagamento total. O status voltará para pendente.')">
+                                        <button type="submit" class="btn btn-sm btn-warning" title="Cancelar pagamento - reverter para pendente">
+                                            <i class="bi bi-x-circle me-1"></i><span class="d-none d-md-inline">Cancelar Pagamento</span><span class="d-md-none">Cancelar</span>
+                                        </button>
+                                    </form>
+                                    {% endif %}
+                                    {% endif %}
+                                    <form method="POST" action="{{ url_for('eventos_competicoes.cancelar_inscricoes_academia', evento_id=evento.id) }}" class="d-inline" onsubmit="return confirm('Cancelar todas as inscrições da academia {{ pag.academia_nome }}? Isso removerá {{ pag.total_inscricoes }} inscrição(ões). Esta ação não pode ser desfeita.')">
+                                        <input type="hidden" name="academia_id" value="{{ pag.academia_id }}">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger" title="Cancelar todas as inscrições desta academia">
+                                            <i class="bi bi-trash me-1"></i><span class="d-none d-md-inline">Cancelar Inscrições</span><span class="d-md-none">Cancelar</span>
+                                        </button>
+                                    </form>
+                                </div>
+                                {% else %}
+                                <div class="d-flex gap-1 justify-content-end flex-wrap">
+                                    {% if pag.valor_total_esperado > 0 %}
+                                    <form method="POST" action="{{ url_for('eventos_competicoes.criar_registro_pagamento', evento_id=evento.id) }}" class="d-inline">
+                                        <input type="hidden" name="academia_id" value="{{ pag.academia_id }}">
+                                        <button type="submit" class="btn btn-sm btn-outline-info" title="Criar registro de pagamento para esta academia">
+                                            <i class="bi bi-plus-circle me-1"></i><span class="d-none d-md-inline">Criar Registro</span><span class="d-md-none">Criar</span>
+                                        </button>
+                                    </form>
+                                    {% else %}
+                                    <span class="text-muted small">Sem valor configurado</span>
+                                    {% endif %}
+                                    <form method="POST" action="{{ url_for('eventos_competicoes.cancelar_inscricoes_academia', evento_id=evento.id) }}" class="d-inline" onsubmit="return confirm('Cancelar todas as inscrições da academia {{ pag.academia_nome }}? Isso removerá {{ pag.total_inscricoes }} inscrição(ões). Esta ação não pode ser desfeita.')">
+                                        <input type="hidden" name="academia_id" value="{{ pag.academia_id }}">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger" title="Cancelar todas as inscrições desta academia">
+                                            <i class="bi bi-trash me-1"></i><span class="d-none d-md-inline">Cancelar Inscrições</span><span class="d-md-none">Cancelar</span>
+                                        </button>
+                                    </form>
+                                </div>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        
+                        <!-- Histórico de Abatimentos -->
+                        {% if pag.abatimentos and pag.abatimentos|length > 0 %}
+                        <tr class="table-light">
+                            <td colspan="7" class="small" data-label="">
+                                <strong>Histórico de Abatimentos:</strong>
+                                <ul class="mb-0 mt-2">
+                                    {% for abat in pag.abatimentos %}
+                                    <li class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                                        <span class="flex-grow-1">
+                                            R$ {{ "%.2f"|format(abat.valor) }} em {{ abat.data_abatimento|data_br }}
+                                            {% if abat.observacoes %} — {{ abat.observacoes }}{% endif %}
+                                        </span>
+                                        <form method="POST" action="{{ url_for('eventos_competicoes.cancelar_abatimento', evento_id=evento.id, pagamento_id=pag.id, abatimento_id=abat.id) }}" class="d-inline" onsubmit="return confirm('Cancelar este abatimento de R$ {{ '%.2f'|format(abat.valor) }}? O valor será revertido para pendente.')">
+                                            <button type="submit" class="btn btn-sm btn-outline-danger" title="Cancelar este abatimento">
+                                                <i class="bi bi-x-circle"></i>
+                                            </button>
+                                        </form>
+                                    </li>
+                                    {% endfor %}
+                                </ul>
+                            </td>
+                        </tr>
+                        {% endif %}
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Modais de Abatimento (fora da tabela) -->
+    {% for pag in pagamentos %}
+    {% if pag.id and pag.valor_pendente > 0 %}
+    <div class="modal fade" id="modalAbatimento{{ pag.id }}" tabindex="-1" aria-labelledby="modalAbatimentoLabel{{ pag.id }}" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modalAbatimentoLabel{{ pag.id }}">Registrar Abatimento</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                </div>
+                <form method="POST" action="{{ url_for('eventos_competicoes.registrar_abatimento', evento_id=evento.id, pagamento_id=pag.id) }}">
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label">Academia</label>
+                            <input type="text" class="form-control" value="{{ pag.academia_nome }}" readonly>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Valor Pendente</label>
+                            <input type="text" class="form-control" value="R$ {{ "%.2f"|format(pag.valor_pendente or 0) }}" readonly>
+                        </div>
+                        <div class="mb-3">
+                            <label for="valor_abatimento{{ pag.id }}" class="form-label">Valor do Abatimento (R$) <span class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <span class="input-group-text">R$</span>
+                                <input type="number" 
+                                       id="valor_abatimento{{ pag.id }}" 
+                                       name="valor_abatimento" 
+                                       class="form-control" 
+                                       step="0.01" 
+                                       min="0.01" 
+                                       max="{{ pag.valor_pendente }}" 
+                                       required>
+                            </div>
+                            <small class="text-muted">Máximo: R$ {{ "%.2f"|format(pag.valor_pendente or 0) }}</small>
+                        </div>
+                        <div class="mb-3">
+                            <label for="observacoes{{ pag.id }}" class="form-label">Observações</label>
+                            <textarea id="observacoes{{ pag.id }}" name="observacoes" class="form-control" rows="2"></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-primary">Registrar Abatimento</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    {% endfor %}
+    
+    {% else %}
+    <div class="card shadow-sm">
+        <div class="card-body text-center py-5">
+            <i class="bi bi-currency-dollar display-4 text-muted mb-3"></i>
+            <h5 class="text-muted">Nenhum pagamento registrado</h5>
+            <p class="text-muted mb-0">
+                {% if evento.tem_taxa and (evento.tem_taxa == 1 or evento.tem_taxa == True or evento.tem_taxa|int == 1) %}
+                Ainda não há academias que enviaram inscrições para este evento.
+                {% else %}
+                Este evento não possui taxa de inscrição configurada.
+                {% endif %}
+            </p>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

@@ -9,8 +9,83 @@
         <p class="text-muted mb-0 small small-md">Alunos inscritos neste evento. {% if encerrado %}Evento encerrado.{% else %}Você pode incluir alunos avulsos, editar ou cancelar inscrições antes de enviar.{% endif %}</p>
     </div>
 
+    {% if evento.tem_taxa and (evento.tem_taxa == 1 or evento.tem_taxa == True or evento.tem_taxa|int == 1) and tabela_pagamentos_existe %}
+    <!-- Resumo Financeiro -->
+    <div class="card shadow-sm mb-3">
+        <div class="card-header bg-light">
+            <h6 class="mb-0 fw-bold"><i class="bi bi-calculator me-2"></i>Resumo Financeiro</h6>
+        </div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-6 col-md-3">
+                    <div class="text-center">
+                        <div class="small text-muted mb-1">Total de Inscritos</div>
+                        <div class="h5 mb-0 fw-bold text-primary">{{ total_inscritos }}</div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="text-center">
+                        <div class="small text-muted mb-1">Valor a Pagar (Associação)</div>
+                        <div class="h5 mb-0 fw-bold text-danger">
+                            R$ {{ "%.2f"|format(total_a_pagar) }}
+                            {% if valor_associacao > 0 %}
+                            <br><small class="text-muted">(R$ {{ "%.2f"|format(valor_associacao) }} x {{ total_inscritos }})</small>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="text-center">
+                        <div class="small text-muted mb-1">Valor a Receber (Academia)</div>
+                        <div class="h5 mb-0 fw-bold text-success">
+                            R$ {{ "%.2f"|format(total_a_receber) }}
+                            {% if valor_academia > 0 %}
+                            <br><small class="text-muted">(R$ {{ "%.2f"|format(valor_academia) }} x {{ total_inscritos }})</small>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="text-center">
+                        {% if total_pago > 0 %}
+                        <div class="small text-muted mb-1">Receita</div>
+                        <div class="h5 mb-0 fw-bold {% if receita >= 0 %}text-success{% else %}text-danger{% endif %}">
+                            R$ {{ "%.2f"|format(receita) }}
+                        </div>
+                        {% else %}
+                        <div class="small text-muted mb-1">Receita</div>
+                        <div class="h5 mb-0 fw-bold text-muted">
+                            R$ 0,00
+                        </div>
+                        <small class="text-muted">Aguardando confirmação de pagamentos</small>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% if total_a_receber > 0 %}
+            <hr class="my-2">
+            <div class="row g-2">
+                <div class="col-6 col-md-3">
+                    <div class="text-center">
+                        <div class="small text-muted mb-1">Pagamentos Confirmados</div>
+                        <div class="h6 mb-0 fw-bold text-success">R$ {{ "%.2f"|format(total_pago) }}</div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="text-center">
+                        <div class="small text-muted mb-1">Pagamentos Pendentes</div>
+                        <div class="h6 mb-0 fw-bold text-warning">R$ {{ "%.2f"|format(total_pendente) }}</div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
     {% if not encerrado %}
     <div class="mb-3 d-flex flex-column flex-sm-row gap-2">
+        {% if not tem_inscricoes_enviadas %}
         <a href="{{ url_for('eventos_competicoes.incluir_avulso', evento_id=evento.id, academia_id=academia_id) }}" class="btn btn-success btn-sm w-100 w-sm-auto" style="min-height: 44px;">
             <i class="bi bi-person-plus me-1"></i> Incluir aluno avulso
         </a>
@@ -20,6 +95,20 @@
                 <i class="bi bi-send me-1"></i> Enviar inscrições
             </button>
         </form>
+        {% else %}
+        <div class="alert alert-info w-100 mb-0 d-flex align-items-center" style="min-height: 44px;">
+            <i class="bi bi-info-circle me-2"></i>
+            <span>Inscrições enviadas. Aguardando processamento pela associação.</span>
+        </div>
+        {% if is_associacao %}
+        <form method="POST" action="{{ url_for('eventos_competicoes.cancelar_envio', evento_id=evento.id) }}" class="d-inline w-100 w-sm-auto" onsubmit="return confirm('Cancelar envio das inscrições? Isso permitirá que a academia edite novamente.')">
+            <input type="hidden" name="academia_id" value="{{ academia_id }}">
+            <button type="submit" class="btn btn-warning btn-sm w-100" style="min-height: 44px;">
+                <i class="bi bi-x-circle me-1"></i> Cancelar Envio
+            </button>
+        </form>
+        {% endif %}
+        {% endif %}
     </div>
     {% endif %}
 
@@ -32,10 +121,9 @@
                     <tr>
                         <th>Aluno</th>
                         <th>Status</th>
+                        {% if evento.tem_taxa and (evento.tem_taxa == 1 or evento.tem_taxa == True or evento.tem_taxa|int == 1) %}<th>Pagamento</th>{% endif %}
                         <th>Dt. Inscrição</th>
                         <th>Dt. Envio</th>
-                        {% for c in campos_form %}<th>{{ c.label }}</th>{% endfor %}
-                        {% if not campos_form %}<th>Dados</th>{% endif %}
                         <th class="text-end">Ações</th>
                     </tr>
                 </thead>
@@ -56,6 +144,31 @@
                             <span class="badge bg-info">Confirmada</span>
                             {% endif %}
                         </td>
+                        {% if evento.tem_taxa and (evento.tem_taxa == 1 or evento.tem_taxa == True or evento.tem_taxa|int == 1) %}
+                        <td>
+                            {% if evento.valor_taxa and evento.valor_taxa > 0 %}
+                                {% if i.pagamento_id %}
+                                    {% if i.pago_academia %}
+                                    <span class="badge bg-success" title="Pago confirmado pela academia">
+                                        <i class="bi bi-check-circle me-1"></i>Pago
+                                    </span>
+                                    {% else %}
+                                    <span class="badge bg-warning" title="Aguardando confirmação de pagamento">
+                                        <i class="bi bi-clock me-1"></i>Pendente
+                                    </span>
+                                    {% endif %}
+                                    <br><small class="text-muted">R$ {{ "%.2f"|format(i.valor_taxa or evento.valor_taxa or 0) }}</small>
+                                {% else %}
+                                    <span class="badge bg-secondary" title="Registro de pagamento não criado">
+                                        <i class="bi bi-exclamation-circle me-1"></i>Sem registro
+                                    </span>
+                                    <br><small class="text-muted">R$ {{ "%.2f"|format(evento.valor_taxa or 0) }}</small>
+                                {% endif %}
+                            {% else %}
+                                <span class="text-muted">Sem valor</span>
+                            {% endif %}
+                        </td>
+                        {% endif %}
                         <td>
                             {% if i.created_at %}
                             {{ i.created_at|data_br }}
@@ -70,27 +183,47 @@
                             {% if _de|length > 10 %}<br><small class="text-muted">{{ _de[11:16] }}</small>{% endif %}
                             {% else %}-{% endif %}
                         </td>
-                        {% for c in campos_form %}
-                        <td>
-                            {% set v = (i.dados_form or {}).get(c.campo_chave, '-') if i.dados_form else '-' %}
-                            {% if c.campo_chave == 'data_nascimento' and v and v != '-' %}
-                                {{ v|data_br }}
-                            {% elif c.campo_chave == 'sexo' %}
-                                {% if v == 'M' %}Masculino{% elif v == 'F' %}Feminino{% else %}{{ v }}{% endif %}
-                            {% else %}
-                                {{ v }}
-                            {% endif %}
-                        </td>
-                        {% endfor %}
-                        {% if not campos_form %}<td>—</td>{% endif %}
                         <td class="text-end text-nowrap">
-                            {% if i.status != 'enviada' and not encerrado %}
-                            <a href="{{ url_for('eventos_competicoes.editar_inscricao', evento_id=evento.id, inscricao_id=i.id, academia_id=academia_id) }}" class="btn btn-outline-secondary btn-sm" title="Editar">
+                            <button type="button" class="btn btn-sm btn-outline-info me-1" data-bs-toggle="modal" data-bs-target="#modalInscricao{{ i.id }}" title="Visualizar informações completas">
+                                <i class="bi bi-eye"></i>
+                            </button>
+                            {% if i.status != 'enviada' and not encerrado and not tem_inscricoes_enviadas %}
+                            {% if evento.tem_taxa and (evento.tem_taxa == 1 or evento.tem_taxa == True or evento.tem_taxa|int == 1) %}
+                            {% if evento.valor_taxa and evento.valor_taxa > 0 %}
+                            {% if i.pagamento_id %}
+                            {% if not i.pago_academia %}
+                            <form method="POST" action="{{ url_for('eventos_competicoes.marcar_pagamento', evento_id=evento.id, inscricao_id=i.id) }}" class="d-inline">
+                                <input type="hidden" name="academia_id" value="{{ academia_id }}">
+                                <button type="submit" class="btn btn-success btn-sm me-1" title="Confirmar pagamento do aluno">
+                                    <i class="bi bi-check-circle me-1"></i>Confirmar Pagamento
+                                </button>
+                            </form>
+                            {% else %}
+                            <form method="POST" action="{{ url_for('eventos_competicoes.cancelar_pagamento', evento_id=evento.id, inscricao_id=i.id) }}" class="d-inline" onsubmit="return confirm('Cancelar confirmação de pagamento? O status voltará para pendente.')">
+                                <input type="hidden" name="academia_id" value="{{ academia_id }}">
+                                <button type="submit" class="btn btn-outline-warning btn-sm me-1" title="Cancelar confirmação de pagamento">
+                                    <i class="bi bi-x-circle me-1"></i>Cancelar Pagamento
+                                </button>
+                            </form>
+                            {% endif %}
+                            {% else %}
+                            <form method="POST" action="{{ url_for('eventos_competicoes.criar_pagamento', evento_id=evento.id, inscricao_id=i.id) }}" class="d-inline">
+                                <input type="hidden" name="academia_id" value="{{ academia_id }}">
+                                <button type="submit" class="btn btn-outline-info btn-sm me-1" title="Criar registro de pagamento">
+                                    <i class="bi bi-plus-circle me-1"></i>Criar Pagamento
+                                </button>
+                            </form>
+                            {% endif %}
+                            {% endif %}
+                            {% endif %}
+                            <a href="{{ url_for('eventos_competicoes.editar_inscricao', evento_id=evento.id, inscricao_id=i.id, academia_id=academia_id) }}" class="btn btn-outline-secondary btn-sm me-1" title="Editar">
                                 <i class="bi bi-pencil"></i>
                             </a>
-                            <form method="POST" action="{{ url_for('eventos_competicoes.cancelar_inscricao', evento_id=evento.id, inscricao_id=i.id) }}" class="d-inline" onsubmit="return confirm('Cancelar inscrição deste aluno?')">
+                            <form method="POST" action="{{ url_for('eventos_competicoes.cancelar_inscricao', evento_id=evento.id, inscricao_id=i.id) }}" class="d-inline" onsubmit="return confirm('Cancelar inscrição deste aluno?{% if i.pagamento_id and i.pago_academia %} ATENÇÃO: Esta inscrição tem pagamento confirmado. Cancele o pagamento primeiro.{% endif %}')">
                                 <input type="hidden" name="academia_id" value="{{ academia_id }}">
-                                <button type="submit" class="btn btn-outline-danger btn-sm" title="Cancelar inscrição">
+                                <button type="submit" class="btn btn-outline-danger btn-sm {% if i.pagamento_id and i.pago_academia %}disabled{% endif %}" 
+                                        title="{% if i.pagamento_id and i.pago_academia %}Cancelar pagamento primeiro{% else %}Cancelar inscrição{% endif %}"
+                                        {% if i.pagamento_id and i.pago_academia %}disabled{% endif %}>
                                     <i class="bi bi-x-lg"></i>
                                 </button>
                             </form>
@@ -125,47 +258,87 @@
                             {% else %}
                             <span class="badge bg-info" style="font-size: 0.7rem;">Confirmada</span>
                             {% endif %}
+                            {% if evento.tem_taxa and (evento.tem_taxa == 1 or evento.tem_taxa == True or evento.tem_taxa|int == 1) %}
+                            {% if evento.valor_taxa and evento.valor_taxa > 0 %}
+                                {% if i.pagamento_id %}
+                                    {% if i.pago_academia %}
+                                    <span class="badge bg-success ms-1" style="font-size: 0.7rem;">
+                                        <i class="bi bi-check-circle me-1"></i>Pago
+                                    </span>
+                                    {% else %}
+                                    <span class="badge bg-warning ms-1" style="font-size: 0.7rem;">
+                                        <i class="bi bi-clock me-1"></i>Pendente
+                                    </span>
+                                    {% endif %}
+                                    <br><small class="text-muted"><strong>R$ {{ "%.2f"|format(i.valor_taxa or evento.valor_taxa or 0) }}</strong></small>
+                                {% else %}
+                                    <span class="badge bg-secondary ms-1" style="font-size: 0.7rem;">
+                                        <i class="bi bi-exclamation-circle me-1"></i>Sem registro
+                                    </span>
+                                    <br><small class="text-muted"><strong>R$ {{ "%.2f"|format(evento.valor_taxa or 0) }}</strong></small>
+                                {% endif %}
+                            {% else %}
+                                <span class="text-muted small">Sem valor</span>
+                            {% endif %}
+                            {% endif %}
                         </div>
                     </div>
                     {% if i.status != 'enviada' and not encerrado %}
-                    <div class="d-flex gap-1">
-                        <a href="{{ url_for('eventos_competicoes.editar_inscricao', evento_id=evento.id, inscricao_id=i.id, academia_id=academia_id) }}" class="btn btn-outline-secondary btn-sm" style="min-width: 44px; min-height: 44px; padding: 0.5rem;" title="Editar">
-                            <i class="bi bi-pencil"></i>
-                        </a>
-                        <form method="POST" action="{{ url_for('eventos_competicoes.cancelar_inscricao', evento_id=evento.id, inscricao_id=i.id) }}" class="d-inline" onsubmit="return confirm('Cancelar inscrição deste aluno?')">
+                    <div class="d-flex flex-column gap-2 mt-2">
+                        {% if evento.tem_taxa and (evento.tem_taxa == 1 or evento.tem_taxa == True or evento.tem_taxa|int == 1) %}
+                        {% if evento.valor_taxa and evento.valor_taxa > 0 %}
+                        {% if i.pagamento_id %}
+                        {% if i.pago_academia and (i.pago_academia == 1 or i.pago_academia == True or i.pago_academia|int == 1) %}
+                        <form method="POST" action="{{ url_for('eventos_competicoes.cancelar_pagamento', evento_id=evento.id, inscricao_id=i.id) }}" class="d-inline w-100" onsubmit="return confirm('Cancelar confirmação de pagamento? O status voltará para pendente.')">
                             <input type="hidden" name="academia_id" value="{{ academia_id }}">
-                            <button type="submit" class="btn btn-outline-danger btn-sm" style="min-width: 44px; min-height: 44px; padding: 0.5rem;" title="Cancelar">
-                                <i class="bi bi-x-lg"></i>
+                            <button type="submit" class="btn btn-warning btn-sm w-100" style="min-height: 44px;" title="Cancelar confirmação de pagamento - voltará para pendente">
+                                <i class="bi bi-x-circle me-1"></i>Cancelar Pagamento
                             </button>
                         </form>
+                        {% else %}
+                        <form method="POST" action="{{ url_for('eventos_competicoes.marcar_pagamento', evento_id=evento.id, inscricao_id=i.id) }}" class="d-inline w-100">
+                            <input type="hidden" name="academia_id" value="{{ academia_id }}">
+                            <button type="submit" class="btn btn-success btn-sm w-100" style="min-height: 44px;" title="Confirmar pagamento do aluno">
+                                <i class="bi bi-check-circle me-1"></i>Confirmar Pagamento
+                            </button>
+                        </form>
+                        {% endif %}
+                        {% else %}
+                        <form method="POST" action="{{ url_for('eventos_competicoes.criar_pagamento', evento_id=evento.id, inscricao_id=i.id) }}" class="d-inline w-100">
+                            <input type="hidden" name="academia_id" value="{{ academia_id }}">
+                            <button type="submit" class="btn btn-outline-info btn-sm w-100" style="min-height: 44px;" title="Criar registro de pagamento">
+                                <i class="bi bi-plus-circle me-1"></i>Criar Pagamento
+                            </button>
+                        </form>
+                        {% endif %}
+                        {% endif %}
+                        {% endif %}
+                        <div class="d-flex gap-1">
+                            <a href="{{ url_for('eventos_competicoes.editar_inscricao', evento_id=evento.id, inscricao_id=i.id, academia_id=academia_id) }}" class="btn btn-outline-secondary btn-sm flex-fill" style="min-height: 44px;" title="Editar">
+                                <i class="bi bi-pencil"></i> Editar
+                            </a>
+                            <form method="POST" action="{{ url_for('eventos_competicoes.cancelar_inscricao', evento_id=evento.id, inscricao_id=i.id) }}" class="d-inline flex-fill" onsubmit="return confirm('Cancelar inscrição deste aluno?{% if i.pagamento_id and i.pago_academia %} ATENÇÃO: Esta inscrição tem pagamento confirmado. Cancele o pagamento primeiro.{% endif %}')">
+                                <input type="hidden" name="academia_id" value="{{ academia_id }}">
+                                <button type="submit" class="btn btn-outline-danger btn-sm w-100 {% if i.pagamento_id and i.pago_academia %}disabled{% endif %}" 
+                                        style="min-height: 44px;" 
+                                        title="{% if i.pagamento_id and i.pago_academia %}Cancelar pagamento primeiro{% else %}Cancelar inscrição{% endif %}"
+                                        {% if i.pagamento_id and i.pago_academia %}disabled{% endif %}>
+                                    <i class="bi bi-x-lg"></i> Cancelar
+                                </button>
+                            </form>
+                        </div>
                     </div>
                     {% endif %}
                 </div>
                 
                 <div class="small text-muted mb-2" style="font-size: 0.75rem;">
                     <div class="mb-1"><strong>Dt. Inscrição:</strong> {% if i.created_at %}{{ i.created_at|data_br }}{% set _dt = i.created_at|string %}{% if _dt|length > 10 %} {{ _dt[11:16] }}{% endif %}{% else %}-{% endif %}</div>
-                    <div><strong>Dt. Envio:</strong> {% if i.data_envio %}{{ i.data_envio|data_br }}{% set _de = i.data_envio|string %}{% if _de|length > 10 %} {{ _de[11:16] }}{% endif %}{% else %}-{% endif %}</div>
+                    <div class="mb-2"><strong>Dt. Envio:</strong> {% if i.data_envio %}{{ i.data_envio|data_br }}{% set _de = i.data_envio|string %}{% if _de|length > 10 %} {{ _de[11:16] }}{% endif %}{% else %}-{% endif %}</div>
+                    <button type="button" class="btn btn-sm btn-outline-info w-100" data-bs-toggle="modal" data-bs-target="#modalInscricao{{ i.id }}" style="min-height: 44px;">
+                        <i class="bi bi-eye me-1"></i>Visualizar Informações
+                    </button>
                 </div>
                 
-                {% if campos_form %}
-                <div class="border-top pt-2 mt-2">
-                    {% for c in campos_form %}
-                    <div class="row g-1 mb-1" style="font-size: 0.75rem;">
-                        <div class="col-5 fw-bold text-muted">{{ c.label }}:</div>
-                        <div class="col-7">
-                            {% set v = (i.dados_form or {}).get(c.campo_chave, '-') if i.dados_form else '-' %}
-                            {% if c.campo_chave == 'data_nascimento' and v and v != '-' %}
-                                {{ v|data_br }}
-                            {% elif c.campo_chave == 'sexo' %}
-                                {% if v == 'M' %}Masculino{% elif v == 'F' %}Feminino{% else %}{{ v }}{% endif %}
-                            {% else %}
-                                {{ v }}
-                            {% endif %}
-                        </div>
-                    </div>
-                    {% endfor %}
-                </div>
-                {% endif %}
             </div>
         </div>
         {% endfor %}
@@ -250,4 +423,153 @@
     }
 }
 </style>
+
+<!-- Modais de Visualização -->
+{% for i in inscricoes %}
+<div class="modal fade" id="modalInscricao{{ i.id }}" tabindex="-1" aria-labelledby="modalInscricaoLabel{{ i.id }}" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalInscricaoLabel{{ i.id }}">
+                    <i class="bi bi-person me-2"></i>Informações da Inscrição
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <h6 class="fw-bold text-primary mb-3">Dados do Aluno</h6>
+                        <table class="table table-sm table-borderless">
+                            <tr>
+                                <td class="text-muted" style="width: 40%;"><strong>Nome:</strong></td>
+                                <td>{{ i.aluno_nome or '-' }}{% if i.inclusao_avulsa %} <span class="badge bg-warning">Avulso</span>{% endif %}</td>
+                            </tr>
+                            <tr>
+                                <td class="text-muted"><strong>Status:</strong></td>
+                                <td>
+                                    {% if i.status == 'enviada' %}
+                                    <span class="badge bg-success">Enviada</span>
+                                    {% else %}
+                                    <span class="badge bg-info">Confirmada</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% if evento.tem_taxa and (evento.tem_taxa == 1 or evento.tem_taxa == True or evento.tem_taxa|int == 1) %}
+                            <tr>
+                                <td class="text-muted"><strong>Pagamento:</strong></td>
+                                <td>
+                                    {% if evento.valor_taxa and evento.valor_taxa > 0 %}
+                                        {% if i.pagamento_id %}
+                                            {% if i.pago_academia %}
+                                            <span class="badge bg-success">
+                                                <i class="bi bi-check-circle me-1"></i>Pago
+                                            </span>
+                                            {% else %}
+                                            <span class="badge bg-warning">
+                                                <i class="bi bi-clock me-1"></i>Pendente
+                                            </span>
+                                            {% endif %}
+                                            <br><small class="text-muted">R$ {{ "%.2f"|format(i.valor_taxa or evento.valor_taxa or 0) }}</small>
+                                        {% else %}
+                                            <span class="badge bg-secondary">
+                                                <i class="bi bi-exclamation-circle me-1"></i>Sem registro
+                                            </span>
+                                            <br><small class="text-muted">R$ {{ "%.2f"|format(evento.valor_taxa or 0) }}</small>
+                                        {% endif %}
+                                    {% else %}
+                                        <span class="text-muted">Sem valor</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endif %}
+                            <tr>
+                                <td class="text-muted"><strong>Dt. Inscrição:</strong></td>
+                                <td>{% if i.created_at %}{{ i.created_at|data_br }}{% set _dt = i.created_at|string %}{% if _dt|length > 10 %} {{ _dt[11:16] }}{% endif %}{% else %}-{% endif %}</td>
+                            </tr>
+                            <tr>
+                                <td class="text-muted"><strong>Dt. Envio:</strong></td>
+                                <td>{% if i.data_envio %}{{ i.data_envio|data_br }}{% set _de = i.data_envio|string %}{% if _de|length > 10 %} {{ _de[11:16] }}{% endif %}{% else %}-{% endif %}</td>
+                            </tr>
+                        </table>
+                    </div>
+                    <div class="col-md-6">
+                        <h6 class="fw-bold text-primary mb-3">Dados do Formulário</h6>
+                        {% if campos_form %}
+                        <table class="table table-sm table-borderless">
+                            {% for c in campos_form %}
+                            <tr>
+                                <td class="text-muted" style="width: 40%;"><strong>{{ c.label }}:</strong></td>
+                                <td>
+                                    {% set v = (i.dados_form or {}).get(c.campo_chave, '-') if i.dados_form else '-' %}
+                                    {% if c.campo_chave == 'data_nascimento' and v and v != '-' %}
+                                        {{ v|data_br }}
+                                    {% elif c.campo_chave == 'sexo' %}
+                                        {% if v == 'M' %}Masculino{% elif v == 'F' %}Feminino{% else %}{{ v }}{% endif %}
+                                    {% elif c.campo_chave == 'peso' and v and v != '-' %}
+                                        {{ v }} kg
+                                    {% elif c.campo_chave == 'categoria' %}
+                                        {{ v }}
+                                    {% else %}
+                                        {{ v }}
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </table>
+                        {% else %}
+                        <p class="text-muted">Nenhum campo do formulário disponível.</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                {% if i.status != 'enviada' and not encerrado and not tem_inscricoes_enviadas %}
+                <div class="me-auto">
+                    {% if evento.tem_taxa and (evento.tem_taxa == 1 or evento.tem_taxa == True or evento.tem_taxa|int == 1) %}
+                    {% if evento.valor_taxa and evento.valor_taxa > 0 %}
+                    {% if i.pagamento_id %}
+                    {% if not i.pago_academia %}
+                    <form method="POST" action="{{ url_for('eventos_competicoes.marcar_pagamento', evento_id=evento.id, inscricao_id=i.id) }}" class="d-inline">
+                        <input type="hidden" name="academia_id" value="{{ academia_id }}">
+                        <button type="submit" class="btn btn-success btn-sm" title="Confirmar pagamento do aluno">
+                            <i class="bi bi-check-circle me-1"></i>Confirmar Pagamento
+                        </button>
+                    </form>
+                    {% else %}
+                    <form method="POST" action="{{ url_for('eventos_competicoes.cancelar_pagamento', evento_id=evento.id, inscricao_id=i.id) }}" class="d-inline" onsubmit="return confirm('Cancelar confirmação de pagamento? O status voltará para pendente.')">
+                        <input type="hidden" name="academia_id" value="{{ academia_id }}">
+                        <button type="submit" class="btn btn-warning btn-sm" title="Cancelar confirmação de pagamento">
+                            <i class="bi bi-x-circle me-1"></i>Cancelar Pagamento
+                        </button>
+                    </form>
+                    {% endif %}
+                    {% else %}
+                    <form method="POST" action="{{ url_for('eventos_competicoes.criar_pagamento', evento_id=evento.id, inscricao_id=i.id) }}" class="d-inline">
+                        <input type="hidden" name="academia_id" value="{{ academia_id }}">
+                        <button type="submit" class="btn btn-outline-info btn-sm" title="Criar registro de pagamento">
+                            <i class="bi bi-plus-circle me-1"></i>Criar Pagamento
+                        </button>
+                    </form>
+                    {% endif %}
+                    {% endif %}
+                    {% endif %}
+                    <a href="{{ url_for('eventos_competicoes.editar_inscricao', evento_id=evento.id, inscricao_id=i.id, academia_id=academia_id) }}" class="btn btn-outline-secondary btn-sm" title="Editar">
+                        <i class="bi bi-pencil me-1"></i>Editar
+                    </a>
+                    <form method="POST" action="{{ url_for('eventos_competicoes.cancelar_inscricao', evento_id=evento.id, inscricao_id=i.id) }}" class="d-inline" onsubmit="return confirm('Cancelar inscrição deste aluno?{% if i.pagamento_id and i.pago_academia %} ATENÇÃO: Esta inscrição tem pagamento confirmado. Cancele o pagamento primeiro.{% endif %}')">
+                        <input type="hidden" name="academia_id" value="{{ academia_id }}">
+                        <button type="submit" class="btn btn-outline-danger btn-sm {% if i.pagamento_id and i.pago_academia %}disabled{% endif %}" 
+                                title="{% if i.pagamento_id and i.pago_academia %}Cancelar pagamento primeiro{% else %}Cancelar inscrição{% endif %}"
+                                {% if i.pagamento_id and i.pago_academia %}disabled{% endif %}>
+                            <i class="bi bi-x-lg me-1"></i>Cancelar Inscrição
+                        </button>
+                    </form>
+                </div>
+                {% endif %}
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endfor %}
 {% endblock %}

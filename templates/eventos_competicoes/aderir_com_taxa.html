@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Aderir ao Evento{% endblock %}
+{% block content %}
+<div class="container mt-5">
+    <div class="mb-4">
+        {% set back_url = back_url or get_back_url_default() %}
+{% include 'components/botao_voltar.html' %}
+        <h2 class="h4 fw-bold text-primary">Aderir ao Evento</h2>
+        <p class="text-muted mb-0">{{ evento.nome }}</p>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-body p-4">
+            {% if ja_aderiu %}
+            <div class="alert alert-warning">
+                <i class="bi bi-exclamation-triangle me-2"></i>
+                Você já aderiu a este evento. Ao alterar o valor, a adesão será atualizada.
+            </div>
+            {% else %}
+            <div class="alert alert-info">
+                <i class="bi bi-info-circle me-2"></i>
+                Este evento possui taxa de inscrição. Defina o valor que será cobrado dos alunos.
+            </div>
+            {% endif %}
+            
+            <form method="POST">
+                <input type="hidden" name="academia_id" value="{{ academia_id }}">
+                
+                <div class="mb-3">
+                    <label for="valor_taxa" class="form-label fw-semibold">
+                        Valor da Taxa que será cobrado (R$) <span class="text-danger">*</span>
+                    </label>
+                    <div class="input-group">
+                        <span class="input-group-text">R$</span>
+                        <input type="number" 
+                               id="valor_taxa" 
+                               name="valor_taxa" 
+                               class="form-control" 
+                               step="0.01" 
+                               min="{{ valor_sugerido or 0 }}" 
+                               value="{{ valor_atual or valor_sugerido or '' }}" 
+                               required>
+                    </div>
+                    {% if valor_sugerido %}
+                    <div class="mt-2 p-2 bg-light rounded">
+                        <small class="text-muted d-block mb-1">
+                            <i class="bi bi-info-circle me-1"></i><strong>Valor sugerido pela associação:</strong> R$ {{ "%.2f"|format(valor_sugerido) }}
+                        </small>
+                        <small class="text-muted d-block">
+                            Você pode <strong>confirmar este valor</strong> ou <strong>aumentar</strong> para cobrar mais caro dos seus alunos.
+                        </small>
+                    </div>
+                    {% else %}
+                    <small class="text-muted d-block mt-2">Informe o valor que será cobrado de cada aluno inscrito.</small>
+                    {% endif %}
+                </div>
+                
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn btn-success">
+                        <i class="bi bi-check-lg me-1"></i> {% if ja_aderiu %}Atualizar Valor{% else %}Confirmar Adesão{% endif %}
+                    </button>
+                    <a href="{{ back_url }}" class="btn btn-outline-secondary">Cancelar</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

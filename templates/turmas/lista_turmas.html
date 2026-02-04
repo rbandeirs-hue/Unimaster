@@ -4,135 +4,32 @@
 {% block content %}
 
 <style>
-    /* Estilos customizados para a Lista de Turmas */
     .container {
-        max-width: 1000px;
+        max-width: 1200px;
     }
-
-    .display-6 {
-        font-size: 1.8rem;
-    }
-
-    /* Estilo para a célula de ações */
-    .table-responsive .btn-outline-info {
-        transition: all 0.2s;
-    }
-
-    .table-responsive .btn-outline-info:hover {
-        background-color: #0dcaf0;
-        color: white;
-        border-color: #0dcaf0;
-    }
-
-    /* Estilo para o campo de busca */
-    .card.shadow-sm input.form-control-lg {
-        border-radius: 0.5rem;
-    }
-
-    /* Responsividade para Títulos e Botões */
-    @media (max-width: 767.98px) {
-        .display-6 {
-            font-size: 1.5rem;
-        }
-
-        /* Empilha o título e o botão Nova Turma no mobile */
-        .d-flex.justify-content-between.align-items-center.mb-4 {
-            flex-direction: column;
-            align-items: flex-start !important;
-        }
-
-        .d-flex.justify-content-between.align-items-center.mb-4 .btn-lg {
-            width: 100%;
-            margin-top: 1rem;
-        }
-
-        /* Faz os botões do filtro ocuparem a largura total no mobile */
-        .row.g-3 .col-md-4, .row.g-3 .col-md-8 {
-            width: 100% !important;
-        }
-    }
-
-    /* Melhoria da visualização da tabela no mobile (usando Cards virtuais) */
-    @media (max-width: 575.98px) {
-        .table-responsive {
-            border: none;
-        }
-
-        /* Esconde o cabeçalho da tabela no mobile */
-        .table thead {
-            display: none;
-        }
-
-        .table, .table tbody, .table tr, .table td {
-            display: block;
-            width: 100%;
-            border: none;
-        }
-
-        .table tr {
-            margin-bottom: 1rem;
-            border-bottom: 2px solid #dee2e6;
-            background-color: #fff;
-            border-radius: 0.5rem;
-            box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
-        }
-
-        .table td {
-            text-align: left !important;
-            padding: 0.75rem 1rem;
-            position: relative;
-            padding-left: 50%; /* Espaço para o label */
-        }
-
-        /* Cria o label antes do conteúdo da célula */
-        .table td::before {
-            content: attr(data-label);
-            position: absolute;
-            left: 1rem;
-            width: 45%;
-            padding-right: 10px;
-            white-space: nowrap;
-            font-weight: 700;
-            color: #495057;
-        }
-
-        /* Mapeamento de Labels para as Colunas */
-        .table td:nth-of-type(1)::before { content: "ID"; }
-        .table td:nth-of-type(2)::before { content: "Nome da Turma"; }
-        .table td:nth-of-type(3)::before { content: "Dias e Horário"; }
-        .table td:nth-of-type(4)::before { content: "Professor"; }
-        .table td:nth-of-type(5)::before { content: "Faixa Etária"; }
-        .table td:nth-of-type(6)::before { content: "Capacidade"; }
-        .table td:nth-of-type(7)::before { content: "Ações"; }
-        
-        .table td:nth-of-type(7) {
-            text-align: center !important; /* Centraliza o botão de ações */
-        }
-    }
-
 </style>
 
-<div class="container my-4">
+<div class="container my-4 px-2 px-sm-3">
     <!-- Botão de Voltar para o Gerenciamento da Academia -->
     {% set back_url = back_url or get_back_url_default() %}
 {% include 'components/botao_voltar.html' %}
     
     <!-- Título e Introdução -->
-    <div class="d-flex justify-content-between align-items-center mb-4">
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
         <div>
-            <h2 class="display-6 fw-bold text-primary">Turmas Cadastradas</h2>
-            <p class="lead text-muted">Gerencie e visualize todas as turmas ativas.</p>
+            <h2 class="h4 fw-bold mb-1">Turmas Cadastradas</h2>
+            <p class="text-muted small mb-0">Gerencie e visualize todas as turmas ativas</p>
         </div>
-        <!-- Botão para Nova Turma (Mantido no topo e estilizado) -->
-        <a href="{{ url_for('turmas.cadastro_turma', academia_id=academia_id, next=request.full_path) if (academia_id is defined and academia_id) else url_for('turmas.cadastro_turma', next=request.full_path) }}" class="btn btn-success btn-lg shadow-lg">
-            <i class="bi bi-plus-circle-fill me-2"></i> Nova Turma
+        <!-- Botão para Nova Turma -->
+        <a href="{{ url_for('turmas.cadastro_turma', academia_id=academia_id, next=request.full_path) if (academia_id is defined and academia_id) else url_for('turmas.cadastro_turma', next=request.full_path) }}" class="btn btn-sm btn-dark">
+            <i class="bi bi-plus-lg me-1"></i> Nova Turma
         </a>
     </div>
 
     {% if academias|length > 1 %}
     <div class="mb-3">
         <form method="GET" class="d-flex align-items-center gap-2 flex-wrap">
-            <label class="form-label mb-0 small fw-semibold">Academia:</label>
+            <label class="form-label mb-0 small fw-semibold text-muted">Academia:</label>
             <select name="academia_id" class="form-select form-select-sm" style="max-width: 280px;" onchange="this.form.submit()">
                 {% for ac in academias %}
                 <option value="{{ ac.id }}" {% if ac.id == academia_id %}selected{% endif %}>{{ ac.nome }}</option>
@@ -144,90 +41,181 @@
     {% endif %}
 
     <!-- Filtro de Busca -->
-    <div class="card shadow-sm mb-4 p-3 border-0">
-        <form method="GET" action="{{ url_for('turmas.lista_turmas') }}" class="row g-3 align-items-center">
+    <div class="mb-4">
+        <form method="GET" action="{{ url_for('turmas.lista_turmas') }}" class="d-flex gap-2">
             {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
-            <div class="col-md-8 col-lg-10">
-                <input type="text" name="busca" class="form-control form-control-lg"
-                    placeholder="Buscar turma pelo nome, professor ou horário..." 
-                    value="{{ busca if busca is not none }}">
-            </div>
-            <div class="col-md-4 col-lg-2">
-                <button type="submit" class="btn btn-primary w-100 btn-lg shadow-sm">
-                    <i class="bi bi-search me-1"></i> Buscar
-                </button>
-            </div>
+            <input type="text" name="busca" class="form-control form-control-sm"
+                placeholder="Buscar turma pelo nome, professor ou horário..." 
+                value="{{ busca if busca is not none }}">
+            <button type="submit" class="btn btn-sm btn-outline-dark">
+                <i class="bi bi-search"></i>
+            </button>
         </form>
     </div>
 
     <!-- Cards de Turmas -->
     {% if turmas %}
     <style>
-    .turma-card { transition: transform 0.2s, box-shadow 0.2s; border-radius: 12px; overflow: hidden; }
-    .turma-card:hover { transform: translateY(-4px); box-shadow: 0 0.5rem 1rem rgba(0,0,0,0.1) !important; }
-    .turma-card .card-title { font-size: 1.1rem; line-height: 1.3; }
-    .turma-card .info-item { font-size: 0.875rem; color: #6c757d; padding: 0.25rem 0; display: flex; align-items: center; gap: 0.5rem; }
-    .turma-card .info-item i { width: 18px; color: #0dcaf0; flex-shrink: 0; }
-    .turma-card .badges-row { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.5rem; }
-    .turma-card .actions-row { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #e9ecef; }
-    .turma-card .turma-card-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem; }
-    .turma-card .turma-card-top-right { display: flex; align-items: center; gap: 0.35rem; flex-shrink: 0; }
-    .turma-card .turma-card-top-right .btn { width: 32px; height: 32px; padding: 0; display: flex; align-items: center; justify-content: center; border-radius: 8px; }
+    .turma-card { 
+        transition: all 0.2s ease; 
+        border-radius: 10px; 
+        border-width: 2px;
+        background: #fff;
+    }
+    .turma-card:hover { 
+        transform: translateY(-4px); 
+        box-shadow: 0 8px 20px rgba(0,0,0,0.12) !important; 
+    }
+    .turma-card.border-primary { border-color: #0d6efd; }
+    .turma-card.border-info { border-color: #0dcaf0; }
+    .turma-card.border-success { border-color: #198754; }
+    .turma-card.border-warning { border-color: #ffc107; }
+    .turma-card.border-secondary { border-color: #6c757d; }
+    .turma-card .card-body { padding: 1.25rem; }
+    .turma-card .card-title { 
+        font-size: 1rem; 
+        font-weight: 600;
+        line-height: 1.4; 
+        color: #212529;
+        margin-bottom: 0.75rem;
+    }
+    .turma-card .info-item { 
+        font-size: 0.8125rem; 
+        color: #6c757d; 
+        padding: 0.375rem 0; 
+        display: flex; 
+        align-items: center; 
+        gap: 0.5rem; 
+    }
+    .turma-card .info-item i { 
+        width: 16px; 
+        color: #6c757d; 
+        flex-shrink: 0; 
+        font-size: 0.875rem;
+    }
+    .turma-card .badges-row { 
+        display: flex; 
+        flex-wrap: wrap; 
+        gap: 0.375rem; 
+        margin-top: 0.75rem; 
+    }
+    .turma-card .badge {
+        font-size: 0.75rem;
+        font-weight: 500;
+        padding: 0.25rem 0.5rem;
+        background-color: #f8f9fa;
+        color: #495057;
+        border: 1px solid #e9ecef;
+    }
+    .turma-card .actions-row { 
+        margin-top: 1rem; 
+        padding-top: 1rem; 
+        border-top: 1px solid #f1f3f5; 
+        display: flex;
+        gap: 0.375rem;
+    }
+    .turma-card .actions-row .btn {
+        font-size: 0.75rem;
+        padding: 0.375rem 0.625rem;
+        border-radius: 6px;
+        font-weight: 500;
+    }
+    .turma-card .modalidade-badge {
+        font-size: 0.6875rem;
+        padding: 0.2rem 0.4rem;
+        background-color: #f8f9fa;
+        color: #6c757d;
+        border: 1px solid #e9ecef;
+    }
+    .section-title {
+        font-size: 0.8125rem;
+        font-weight: 600;
+        color: #6c757d;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 1rem;
+        margin-top: 0.5rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 1px solid #f1f3f5;
+    }
     @media (max-width: 767.98px) {
-      .turma-card .edit-desktop { display: none !important; }
+        .turma-card .edit-desktop { display: none !important; }
+        .turma-card .actions-row {
+            flex-direction: column;
+        }
+        .turma-card .actions-row .btn {
+            width: 100%;
+        }
+        .section-title {
+            margin-top: 1.5rem;
+        }
+        .section-title:first-child {
+            margin-top: 0;
+        }
     }
     @media (min-width: 768px) {
-      .turma-card .edit-mobile { display: none !important; }
+        .turma-card .edit-mobile { display: none !important; }
     }
     </style>
-    <div class="row g-4">
+    <div class="row g-3">
         {% for modalidade_nome, turmas_grupo in turmas_agrupadas %}
         <div class="col-12">
-            <h5 class="text-primary border-bottom pb-2 mb-3"><i class="bi bi-tag-fill me-2"></i>{{ modalidade_nome }}</h5>
+            <h6 class="section-title mb-3">{{ modalidade_nome }}</h6>
         </div>
         {% for turma in turmas_grupo %}
-        <div class="col-xl-4 col-lg-4 col-md-6">
-            <div class="card h-100 shadow-sm border-info turma-card">
-                <div class="card-body p-4">
-                    <div class="turma-card-header mb-2">
-                        <h5 class="card-title fw-bold text-dark mb-0 flex-grow-1 min-w-0">{{ turma.Nome }}</h5>
-                        <div class="turma-card-top-right">
+        <div class="col-xl-4 col-lg-4 col-md-6 col-12">
+            {% set border_colors = ['border-primary', 'border-info', 'border-success', 'border-warning', 'border-secondary'] %}
+            {% set border_color = border_colors[loop.index0 % border_colors|length] %}
+            <div class="card h-100 turma-card shadow-sm {{ border_color }}">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <h5 class="card-title mb-0">{{ turma.Nome }}</h5>
+                        <div class="d-flex align-items-center gap-2">
                             {% if turma.modalidade_nome and turma.modalidade_nome != 'Sem modalidade' %}
-                            <span class="badge bg-info bg-opacity-25 text-dark">{{ turma.modalidade_nome }}</span>
+                            <span class="modalidade-badge">{{ turma.modalidade_nome }}</span>
                             {% endif %}
-                            <a href="{{ url_for('turmas.editar_turma', turma_id=turma.TurmaID, next=request.full_path) }}" class="btn btn-sm btn-outline-secondary edit-mobile" title="Editar Turma">
-                                <i class="bi bi-pencil-fill"></i>
+                            <a href="{{ url_for('turmas.editar_turma', turma_id=turma.TurmaID, next=request.full_path) }}" 
+                               class="btn btn-sm btn-link text-muted p-0 edit-mobile" 
+                               style="font-size: 0.875rem; text-decoration: none;" 
+                               title="Editar Turma">
+                                <i class="bi bi-pencil"></i>
                             </a>
                         </div>
                     </div>
                     <div class="info-item">
-                        <i class="bi bi-clock-fill"></i>
+                        <i class="bi bi-clock"></i>
                         <span>{{ turma.horario_display or turma.DiasHorario or '—' }}</span>
                     </div>
                     <div class="info-item">
-                        <i class="bi bi-person-fill"></i>
+                        <i class="bi bi-person"></i>
                         <span>{{ turma.professor_responsavel_nome or '—' }}</span>
                     </div>
                     <div class="badges-row">
-                        <span class="badge bg-secondary">{{ turma.IdadeMin }}-{{ turma.IdadeMax }} anos</span>
-                        <span class="badge {% if turma.vagas_cheia %}bg-danger{% else %}bg-success bg-opacity-75 text-dark{% endif %}">
+                        {% if turma.IdadeMin and turma.IdadeMax %}
+                        <span class="badge">{{ turma.IdadeMin }}-{{ turma.IdadeMax }} anos</span>
+                        {% endif %}
+                        <span class="badge {% if turma.vagas_cheia %}text-danger{% else %}text-success{% endif %}">
                             {% if turma.vagas_ilimitada %}ilimitada{% else %}{{ turma.vagas_display }}{% endif %}
                         </span>
                     </div>
-                    <div class="actions-row d-flex flex-wrap gap-1 align-items-center">
-                        <button type="button" class="btn btn-sm btn-success flex-grow-1 {% if not turma.pode_matricular %}disabled{% endif %}" title="{% if not turma.pode_matricular %}Vagas esgotadas{% else %}Matricular aluno{% endif %}"
+                    <div class="actions-row">
+                        <button type="button" class="btn btn-sm btn-dark flex-grow-1 {% if not turma.pode_matricular %}disabled{% endif %}" 
+                            title="{% if not turma.pode_matricular %}Vagas esgotadas{% else %}Matricular aluno{% endif %}"
                             {% if turma.pode_matricular %}data-bs-toggle="modal" data-bs-target="#modalMatricular"{% endif %}
                             data-turma-id="{{ turma.TurmaID }}" data-turma-nome="{{ turma.Nome }}">
-                            <i class="bi bi-person-plus-fill"></i> Matricular
+                            <i class="bi bi-person-plus me-1"></i> Matricular
                         </button>
-                        <button type="button" class="btn btn-sm btn-outline-info flex-grow-1" title="Ver alunos vinculados"
+                        <button type="button" class="btn btn-sm btn-outline-dark flex-grow-1" 
+                            title="Ver alunos vinculados"
                             data-bs-toggle="modal" data-bs-target="#modalVinculados"
                             data-turma-id="{{ turma.TurmaID }}" data-turma-nome="{{ turma.Nome }}">
-                            <i class="bi bi-people-fill"></i> Ver alunos
+                            <i class="bi bi-people me-1"></i> Alunos
                         </button>
                         <a href="{{ url_for('turmas.editar_turma', turma_id=turma.TurmaID, next=request.full_path) }}"
-                            class="btn btn-sm btn-outline-secondary edit-desktop" title="Editar Turma">
-                            <i class="bi bi-pencil-fill"></i>
+                            class="btn btn-sm btn-outline-dark edit-desktop" 
+                            title="Editar Turma"
+                            style="min-width: 38px;">
+                            <i class="bi bi-pencil"></i>
                         </a>
                     </div>
                 </div>
@@ -237,21 +225,14 @@
         {% endfor %}
     </div>
     {% else %}
-    <div class="card shadow-lg border-0">
-        <div class="card-body">
-            <!-- Mensagem se não houver turmas ou a busca for vazia -->
-            <div class="p-5 text-center bg-light rounded-3">
-                <i class="bi bi-journal-x text-warning display-4 mb-3"></i>
-                <p class="lead">Nenhuma turma encontrada.</p>
-                {% if busca %}
-                <p class="text-muted">Tente um termo de busca diferente ou <a
-                        href="{{ url_for('turmas.lista_turmas') }}" class="text-decoration-none fw-semibold">limpe o filtro</a>.</p>
-                {% else %}
-                <p class="text-muted">Que tal <a href="{{ url_for('turmas.cadastro_turma', next=request.full_path) }}" class="text-decoration-none fw-semibold">cadastrar a primeira
-                        turma</a> agora?</p>
-                {% endif %}
-            </div>
-        </div>
+    <div class="text-center py-5">
+        <i class="bi bi-journal-x text-muted" style="font-size: 3rem;"></i>
+        <p class="mt-3 mb-1 fw-semibold">Nenhuma turma encontrada</p>
+        {% if busca %}
+        <p class="text-muted small">Tente um termo de busca diferente ou <a href="{{ url_for('turmas.lista_turmas') }}" class="text-decoration-none">limpe o filtro</a></p>
+        {% else %}
+        <p class="text-muted small">Que tal <a href="{{ url_for('turmas.cadastro_turma', next=request.full_path) }}" class="text-decoration-none">cadastrar a primeira turma</a> agora?</p>
+        {% endif %}
     </div>
     {% endif %}
 </div>

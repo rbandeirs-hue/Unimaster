@@ -649,8 +649,8 @@ def promover(precadastro_id):
                 return redirect(url_for("precadastro.promover", precadastro_id=precadastro_id))
 
             cur.execute(
-                """INSERT INTO usuarios (nome, email, senha, id_academia) VALUES (%s, %s, %s, %s)""",
-                (pc.get("nome"), email_usuario, generate_password_hash(senha_usuario), academia_id),
+                """INSERT INTO usuarios (nome, email, senha, id_academia, id_associacao, id_federacao) VALUES (%s, %s, %s, %s, %s, %s)""",
+                (pc.get("nome"), email_usuario, generate_password_hash(senha_usuario), academia_id, id_associacao, id_federacao),
             )
             usuario_id = cur.lastrowid
 

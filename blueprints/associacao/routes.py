@@ -475,12 +475,24 @@ def cadastro_academia():
                     (academia_id, mid),
                 )
             
+            # Buscar id_associacao e id_federacao da academia criada
+            cur.execute("""
+                SELECT a.id_associacao, 
+                       ass.id_federacao
+                FROM academias a
+                LEFT JOIN associacoes ass ON ass.id = a.id_associacao
+                WHERE a.id = %s
+            """, (academia_id,))
+            acad_info = cur.fetchone()
+            id_associacao_usuario = acad_info["id_associacao"] if acad_info else None
+            id_federacao_usuario = acad_info["id_federacao"] if acad_info else None
+            
             # Criar usuário gestor
             senha_hash = generate_password_hash(gestor_senha)
             cur.execute("""
-                INSERT INTO usuarios (nome, email, senha, id_academia)
-                VALUES (%s, %s, %s, %s)
-            """, (gestor_nome, gestor_email, senha_hash, academia_id))
+                INSERT INTO usuarios (nome, email, senha, id_academia, id_associacao, id_federacao)
+                VALUES (%s, %s, %s, %s, %s, %s)
+            """, (gestor_nome, gestor_email, senha_hash, academia_id, id_associacao_usuario, id_federacao_usuario))
             gestor_user_id = cur.lastrowid
             
             # Buscar IDs das roles gestor_academia e aluno

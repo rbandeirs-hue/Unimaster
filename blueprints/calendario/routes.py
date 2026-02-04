@@ -1499,26 +1499,44 @@ def sincronizar_pdf():
                     for (acad_id,) in cur.fetchall():
                         niveis_inserir.append(('academia', acad_id))
                 
+                # Processar cada evento selecionado apenas uma vez
+                eventos_para_inserir = []
                 for idx in indices:
                     try:
                         i = int(idx)
                         if 0 <= i < len(eventos):
-                            ev = eventos[i]
-                            for niv, niv_id in niveis_inserir:
-                                cur.execute("""
-                                    SELECT id FROM eventos
-                                    WHERE titulo = %s AND data_inicio = %s AND nivel = %s AND nivel_id = %s
-                                """, (ev['titulo'], ev['data_str'], niv, niv_id))
-                                if cur.fetchone():
-                                    continue
-                                cur.execute("""
-                                    INSERT INTO eventos
-                                    (titulo, data_inicio, tipo, nivel, nivel_id, criado_por_usuario_id, origem_sincronizacao, cor)
-                                    VALUES (%s, %s, 'evento', %s, %s, %s, 'pdf', '#6f42c1')
-                                """, (ev['titulo'], ev['data_str'], niv, niv_id, current_user.id))
-                                importados += 1
+                            eventos_para_inserir.append(eventos[i])
                     except (ValueError, IndexError):
                         continue
+                
+                # Inserir cada evento único nos níveis apropriados
+                eventos_unicos_processados = set()
+                for ev in eventos_para_inserir:
+                    # Criar chave única para o evento (titulo + data)
+                    chave_evento = (ev['titulo'], ev['data_str'])
+                    
+                    # Evitar processar o mesmo evento múltiplas vezes se aparecer na lista
+                    if chave_evento in eventos_unicos_processados:
+                        continue
+                    eventos_unicos_processados.add(chave_evento)
+                    
+                    # Inserir o evento em cada nível (associação + academias)
+                    for niv, niv_id in niveis_inserir:
+                        # Verificar se já existe antes de inserir
+                        cur.execute("""
+                            SELECT id FROM eventos
+                            WHERE titulo = %s AND data_inicio = %s AND nivel = %s AND nivel_id = %s
+                        """, (ev['titulo'], ev['data_str'], niv, niv_id))
+                        if cur.fetchone():
+                            continue  # Já existe, pular
+                        
+                        # Inserir o evento
+                        cur.execute("""
+                            INSERT INTO eventos
+                            (titulo, data_inicio, tipo, nivel, nivel_id, criado_por_usuario_id, origem_sincronizacao, cor)
+                            VALUES (%s, %s, 'evento', %s, %s, %s, 'pdf', '#6f42c1')
+                        """, (ev['titulo'], ev['data_str'], niv, niv_id, current_user.id))
+                        importados += 1
                 
                 cur.execute("""
                     INSERT INTO calendario_sincronizacoes

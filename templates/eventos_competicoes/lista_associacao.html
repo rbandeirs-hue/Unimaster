@@ -27,7 +27,7 @@
                         <th>Tipo</th>
                         <th>Status</th>
                         <th>Data fim</th>
-                        <th>Formulário</th>
+                        <th>Taxa</th>
                         <th>Academias aderidas</th>
                         <th>Inscrições enviadas</th>
                         <th class="text-end">Ações</th>
@@ -46,7 +46,17 @@
                             {% endif %}
                         </td>
                         <td>{% if ev.data_fim %}{{ ev.data_fim|data_br }}{% set _s = ev.data_fim|string %}{% if _s|length > 10 %} {{ _s[11:16] }}{% endif %}{% else %}-{% endif %}</td>
-                        <td>{{ ev.formulario_nome or '-' }}</td>
+                        <td>
+                            {% if ev.tem_taxa and (ev.tem_taxa == 1 or ev.tem_taxa == True or ev.tem_taxa|int == 1) %}
+                                {% if ev.valor_taxa_sugerido %}
+                                    <span class="badge bg-info"><i class="bi bi-currency-dollar"></i> R$ {{ "%.2f"|format(ev.valor_taxa_sugerido) }}</span>
+                                {% else %}
+                                    <span class="badge bg-warning">Sem valor</span>
+                                {% endif %}
+                            {% else %}
+                                <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
                         <td>{{ ev.academias_aderidas or 0 }}</td>
                         <td>{{ ev.inscricoes_enviadas or 0 }}</td>
                         <td>
@@ -68,23 +78,31 @@
                             {% endif %}
                         </td>
                         <td class="text-end">
-                            <a href="{{ url_for('eventos_competicoes.editar', evento_id=ev.id) }}" class="btn btn-outline-secondary btn-sm me-1" title="Editar evento">
-                                <i class="bi bi-pencil"></i>
-                            </a>
-                            <form action="{{ url_for('eventos_competicoes.finalizar', evento_id=ev.id) }}" method="POST" class="d-inline">
-                                {% if ev.status == 'finalizado' %}
-                                <button type="submit" class="btn btn-outline-success btn-sm me-1" title="Reativar evento">
-                                    <i class="bi bi-play-circle"></i>
-                                </button>
+                            <div class="btn-group" role="group">
+                                <a href="{{ url_for('eventos_competicoes.editar', evento_id=ev.id) }}" class="btn btn-outline-secondary btn-sm" title="Editar evento">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                                <form action="{{ url_for('eventos_competicoes.finalizar', evento_id=ev.id) }}" method="POST" class="d-inline">
+                                    {% if ev.status == 'finalizado' %}
+                                    <button type="submit" class="btn btn-outline-success btn-sm" title="Reativar evento">
+                                        <i class="bi bi-play-circle"></i>
+                                    </button>
+                                    {% else %}
+                                    <button type="submit" class="btn btn-outline-dark btn-sm" title="Finalizar evento">
+                                        <i class="bi bi-check-circle"></i>
+                                    </button>
+                                    {% endif %}
+                                </form>
+                                {% if ev.tem_taxa and (ev.tem_taxa == 1 or ev.tem_taxa == True or ev.tem_taxa|int == 1) %}
+                                <a href="{{ url_for('eventos_competicoes.pagamentos_academias', evento_id=ev.id) }}" class="btn btn-outline-success btn-sm" title="Gerenciar pagamentos">
+                                    <i class="bi bi-currency-dollar"></i>
+                                </a>
                                 {% else %}
-                                <button type="submit" class="btn btn-outline-dark btn-sm me-1" title="Finalizar evento">
-                                    <i class="bi bi-check-circle"></i>
-                                </button>
+                                <a href="{{ url_for('eventos_competicoes.consolidar', evento_id=ev.id) }}" class="btn btn-outline-primary btn-sm" title="Consolidar inscrições">
+                                    <i class="bi bi-collection"></i>
+                                </a>
                                 {% endif %}
-                            </form>
-                            <a href="{{ url_for('eventos_competicoes.consolidar', evento_id=ev.id) }}" class="btn btn-outline-primary btn-sm" title="Consolidar inscrições">
-                                <i class="bi bi-collection"></i> Consolidar
-                            </a>
+                            </div>
                         </td>
                     </tr>
                     {% endfor %}
@@ -109,7 +127,16 @@
                 <div class="small text-muted mb-3" style="font-size: 0.8rem;">
                     <div class="mb-2"><strong>Tipo:</strong> <span class="badge bg-secondary" style="font-size: 0.7rem;">{{ ev.tipo }}</span></div>
                     <div class="mb-2"><strong>Data fim:</strong> {% if ev.data_fim %}{{ ev.data_fim|data_br }}{% set _s = ev.data_fim|string %}{% if _s|length > 10 %} {{ _s[11:16] }}{% endif %}{% else %}-{% endif %}</div>
-                    <div class="mb-2"><strong>Formulário:</strong> {{ ev.formulario_nome or '-' }}</div>
+                    {% if ev.tem_taxa and (ev.tem_taxa == 1 or ev.tem_taxa == True or ev.tem_taxa|int == 1) %}
+                    <div class="mb-2">
+                        <strong><i class="bi bi-currency-dollar me-1"></i>Taxa:</strong> 
+                        {% if ev.valor_taxa_sugerido %}
+                            <span class="badge bg-info" style="font-size: 0.7rem;">R$ {{ "%.2f"|format(ev.valor_taxa_sugerido) }}</span>
+                        {% else %}
+                            <span class="badge bg-warning" style="font-size: 0.7rem;">Sem valor</span>
+                        {% endif %}
+                    </div>
+                    {% endif %}
                     <div class="mb-2"><strong>Academias:</strong> {{ ev.academias_aderidas or 0 }}</div>
                     <div class="mb-2"><strong>Inscrições:</strong> {{ ev.inscricoes_enviadas or 0 }}</div>
                     {% if ev.anexos and ev.anexos|length > 0 %}
@@ -133,21 +160,27 @@
                     {% endif %}
                 </div>
                 <div class="d-flex flex-column gap-2 mt-3">
-                    <a href="{{ url_for('eventos_competicoes.consolidar', evento_id=ev.id) }}" class="btn btn-outline-primary btn-sm w-100" style="min-height: 44px;">
-                        <i class="bi bi-collection"></i> Consolidar
+                    {% if ev.tem_taxa and (ev.tem_taxa == 1 or ev.tem_taxa == True or ev.tem_taxa|int == 1) %}
+                    <a href="{{ url_for('eventos_competicoes.pagamentos_academias', evento_id=ev.id) }}" class="btn btn-outline-success btn-sm w-100" style="min-height: 44px;">
+                        <i class="bi bi-currency-dollar me-1"></i>Pagamentos
                     </a>
+                    {% else %}
+                    <a href="{{ url_for('eventos_competicoes.consolidar', evento_id=ev.id) }}" class="btn btn-outline-primary btn-sm w-100" style="min-height: 44px;">
+                        <i class="bi bi-collection me-1"></i>Consolidar
+                    </a>
+                    {% endif %}
                     <div class="d-flex gap-2">
                         <a href="{{ url_for('eventos_competicoes.editar', evento_id=ev.id) }}" class="btn btn-outline-secondary btn-sm flex-fill" style="min-height: 44px;">
-                            <i class="bi bi-pencil"></i> Editar
+                            <i class="bi bi-pencil me-1"></i>Editar
                         </a>
                         <form action="{{ url_for('eventos_competicoes.finalizar', evento_id=ev.id) }}" method="POST" class="d-inline flex-fill">
                             {% if ev.status == 'finalizado' %}
                             <button type="submit" class="btn btn-outline-success btn-sm w-100" style="min-height: 44px;">
-                                <i class="bi bi-play-circle"></i> Reativar
+                                <i class="bi bi-play-circle me-1"></i>Reativar
                             </button>
                             {% else %}
                             <button type="submit" class="btn btn-outline-dark btn-sm w-100" style="min-height: 44px;">
-                                <i class="bi bi-check-circle"></i> Finalizar
+                                <i class="bi bi-check-circle me-1"></i>Finalizar
                             </button>
                             {% endif %}
                         </form>

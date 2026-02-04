@@ -17,7 +17,14 @@
     {% endif %}
 
     {% if academias %}
-    <!-- Campo de Pesquisa -->
+    <!-- Botão para escolher academia e solicitar visita -->
+    <div class="mb-3">
+        <button type="button" class="btn btn-primary w-100" data-bs-toggle="modal" data-bs-target="#modalEscolherAcademia">
+            <i class="bi bi-search me-2"></i> Escolher Academia e Solicitar Visita
+        </button>
+    </div>
+    
+    <!-- Campo de Pesquisa (opcional, para filtrar visualmente) -->
     <div class="mb-3">
         <div class="input-group">
             <span class="input-group-text"><i class="bi bi-search"></i></span>
@@ -58,31 +65,22 @@
                     
                     <!-- Turmas com dias e horários -->
                     {% if acad.turmas and acad.turmas|length > 0 %}
-                    <div class="w-100 mb-2" style="font-size: 0.75rem;">
-                        <div class="text-start">
-                            <strong><i class="bi bi-calendar-week me-1"></i> Horários de Treino:</strong>
-                            {% for turma in acad.turmas %}
-                            <div class="mt-1 text-muted">
-                                <span class="fw-semibold">{{ turma.nome }}:</span>
-                                {% if turma.horario %}
-                                <span>{{ turma.horario }}</span>
-                                {% endif %}
-                                {% if turma.dias %}
-                                <span class="badge bg-info ms-1">{{ turma.dias }}</span>
-                                {% endif %}
-                            </div>
-                            {% endfor %}
-                        </div>
+                    <div class="w-100 mb-2">
+                        <button type="button" class="btn btn-sm btn-outline-primary w-100" data-bs-toggle="modal" data-bs-target="#modalHorarios{{ acad.id }}">
+                            <i class="bi bi-eye me-1"></i> Ver Horários de Treino ({{ acad.turmas|length }})
+                        </button>
                     </div>
                     {% endif %}
                     
                     <div class="w-100 mb-2">
-                        <a href="{{ url_for('painel_aluno.solicitacoes_academia', academia_destino_id=acad.id) }}" class="btn btn-sm btn-outline-info w-100">
+                        {% set solicitacoes_url = url_for('painel_aluno.solicitacoes_academia', academia_destino_id=acad.id) if not voltar_url or 'painel_responsavel' not in (voltar_url|string) else '#' %}
+                        <a href="{{ solicitacoes_url }}" class="btn btn-sm btn-outline-info w-100">
                             <i class="bi bi-info-circle me-1"></i> Ver solicitações{% if acad.solicitacoes and acad.solicitacoes|length > 0 %} ({{ acad.solicitacoes|length }}){% endif %}
                         </a>
                     </div>
                     
-                    <a href="{{ url_for('painel_aluno.solicitar_visita', academia_destino_id=acad.id) }}" class="btn btn-primary btn-sm w-100 mt-auto" title="Solicitar visita nesta academia">
+                    {% set solicitar_url = url_for('painel_aluno.solicitar_visita', academia_destino_id=acad.id) if not voltar_url or 'painel_responsavel' not in (voltar_url|string) else '#' %}
+                    <a href="{{ solicitar_url }}" class="btn btn-primary btn-sm w-100 mt-auto" title="Solicitar visita nesta academia">
                         <i class="bi bi-geo-alt me-1"></i> Solicitar visita
                     </a>
                 </div>
@@ -100,25 +98,184 @@
         {% endif %}
     </div>
     {% endif %}
-    </div>
-    {% else %}
-    <div class="alert alert-info">
-        <i class="bi bi-info-circle me-2"></i>
-        {% if not associacao_nome %}
-        Sua academia ainda não está vinculada a uma associação, ou não há outras academias cadastradas.
-        {% else %}
-        Nenhuma academia encontrada nesta associação.
-        {% endif %}
-    </div>
-    {% endif %}
 </div>
+
+<!-- Modais de Horários de Treino para cada academia -->
+{% for acad in academias %}
+{% if acad.turmas and acad.turmas|length > 0 %}
+<div class="modal fade" id="modalHorarios{{ acad.id }}" tabindex="-1" aria-labelledby="modalHorariosLabel{{ acad.id }}" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-scrollable modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="modalHorariosLabel{{ acad.id }}">
+                    <i class="bi bi-calendar-week me-2"></i> Horários de Treino - {{ acad.nome }}
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-3">
+                    {% for turma in acad.turmas %}
+                    <div class="col-12 col-md-6">
+                        <div class="card border-primary h-100 shadow-sm">
+                            <div class="card-body">
+                                <h6 class="card-title fw-bold mb-3 d-flex align-items-center">
+                                    <i class="bi bi-people-fill me-2 text-primary fs-5"></i>
+                                    <span>{{ turma.nome }}</span>
+                                </h6>
+                                {% if turma.horario %}
+                                <div class="mb-3">
+                                    <div class="d-flex align-items-center mb-2">
+                                        <i class="bi bi-clock-fill text-primary me-2"></i>
+                                        <div>
+                                            <small class="text-muted d-block" style="font-size: 0.75rem;">Horário</small>
+                                            <strong class="text-dark">{{ turma.horario }}</strong>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endif %}
+                                {% if turma.dias %}
+                                <div class="mb-2">
+                                    <div class="d-flex align-items-start">
+                                        <i class="bi bi-calendar3-fill text-primary me-2 mt-1"></i>
+                                        <div class="flex-grow-1">
+                                            <small class="text-muted d-block mb-1" style="font-size: 0.75rem;">Dias da Semana</small>
+                                            <span class="badge bg-info fs-6 px-3 py-2">{{ turma.dias }}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endif %}
+                                {% if turma.idade_min is not none or turma.idade_max is not none %}
+                                <div class="mb-3">
+                                    <div class="d-flex align-items-start">
+                                        <i class="bi bi-person-badge-fill text-primary me-2 mt-1"></i>
+                                        <div class="flex-grow-1">
+                                            <small class="text-muted d-block mb-1" style="font-size: 0.75rem;">Faixa Etária</small>
+                                            <div>
+                                                {% if turma.idade_min is not none and turma.idade_max is not none %}
+                                                <strong class="text-dark">{{ turma.idade_min }} a {{ turma.idade_max }} anos</strong>
+                                                {% elif turma.idade_min is not none %}
+                                                <strong class="text-dark">A partir de {{ turma.idade_min }} anos</strong>
+                                                {% elif turma.idade_max is not none %}
+                                                <strong class="text-dark">Até {{ turma.idade_max }} anos</strong>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endif %}
+                                {% if turma.classificacao %}
+                                <div class="mb-2">
+                                    <div class="d-flex align-items-start">
+                                        <i class="bi bi-tag-fill text-primary me-2 mt-1"></i>
+                                        <div class="flex-grow-1">
+                                            <small class="text-muted d-block mb-1" style="font-size: 0.75rem;">Classificação</small>
+                                            <span class="badge bg-success fs-6 px-3 py-2">{{ turma.classificacao }}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endfor %}
+
+<!-- Modal para escolher academia -->
+<div class="modal fade" id="modalEscolherAcademia" tabindex="-1" aria-labelledby="modalEscolherAcademiaLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalEscolherAcademiaLabel">
+                    <i class="bi bi-geo-alt me-2"></i> Escolher Academia para Solicitar Visita
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Campo de busca no modal -->
+                <div class="mb-3">
+                    <input type="text" id="buscaModalAcademia" class="form-control" placeholder="Buscar academia..." autocomplete="off">
+                </div>
+                
+                <!-- Lista de academias -->
+                <div id="listaAcademiasModal" class="list-group">
+                    {% for acad in academias %}
+                    <a href="{{ url_for('painel_aluno.solicitar_visita', academia_destino_id=acad.id) if not voltar_url or 'painel_responsavel' not in (voltar_url|string) else '#' }}" 
+                       class="list-group-item list-group-item-action academia-modal-item" 
+                       data-nome="{{ (acad.nome or '')|lower }}" 
+                       data-professor="{{ (acad.gestor_nome or '')|lower }}"
+                       {% if voltar_url and 'painel_responsavel' in (voltar_url|string) %}onclick="event.preventDefault(); alert('Funcionalidade disponível apenas para alunos.');"{% endif %}>
+                        <div class="d-flex align-items-center">
+                            <div class="flex-shrink-0 me-3">
+                                {% if acad.logo_url %}
+                                <img src="{{ acad.logo_url }}" alt="{{ acad.nome }}" class="rounded-circle" style="width: 50px; height: 50px; object-fit: cover;">
+                                {% else %}
+                                <div class="rounded-circle bg-secondary text-white d-flex align-items-center justify-content-center" style="width: 50px; height: 50px; font-size: 1.2rem; font-weight: 700;">
+                                    {{ (acad.nome or 'A')[:1] }}
+                                </div>
+                                {% endif %}
+                            </div>
+                            <div class="flex-grow-1">
+                                <h6 class="mb-1 fw-bold">{{ acad.nome or '—' }}</h6>
+                                {% if acad.cidade or acad.uf %}
+                                <small class="text-muted d-block">
+                                    <i class="bi bi-geo-alt me-1"></i> {{ acad.cidade or '' }}{% if acad.cidade and acad.uf %} - {% endif %}{{ acad.uf or '' }}
+                                </small>
+                                {% endif %}
+                                {% if acad.gestor_nome %}
+                                <small class="text-muted d-block">
+                                    <i class="bi bi-person me-1"></i> Prof.: {{ acad.gestor_nome }}
+                                </small>
+                                {% endif %}
+                                {% if acad.endereco_completo %}
+                                <small class="text-muted d-block" style="font-size: 0.75rem;">
+                                    {{ acad.endereco_completo }}
+                                </small>
+                                {% endif %}
+                            </div>
+                            <div class="flex-shrink-0">
+                                <i class="bi bi-chevron-right text-muted"></i>
+                            </div>
+                        </div>
+                    </a>
+                    {% endfor %}
+                </div>
+                
+                <!-- Mensagem quando não há resultados -->
+                <div id="msgNoResultsModal" class="alert alert-warning mt-3 d-none">
+                    <i class="bi bi-exclamation-triangle me-2"></i>Nenhuma academia encontrada com o termo pesquisado.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <style>
 .academia-card { border-color: var(--dark-bg, #212529) !important; border-width: 2px; }
 .academia-item { transition: opacity 0.3s ease; }
 .academia-item.hidden { display: none; }
+.modal-body .card { transition: transform 0.2s ease, box-shadow 0.2s ease; }
+.modal-body .card:hover { transform: translateY(-4px); box-shadow: 0 8px 20px rgba(0,0,0,0.15) !important; }
+.modal-body .card.border-primary { border-color: #0d6efd; }
+.modal-body .card.border-info { border-color: #0dcaf0; }
+.modal-body .card.border-success { border-color: #198754; }
+.modal-body .card.border-warning { border-color: #ffc107; }
+.modal-body .card.border-secondary { border-color: #6c757d; }
 </style>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    // Filtro para a lista de cards
     const filtroInput = document.getElementById('filtroAcademia');
     const academiasContainer = document.getElementById('academiasContainer');
     const academiaItems = document.querySelectorAll('.academia-item');
@@ -164,6 +321,50 @@ document.addEventListener('DOMContentLoaded', function() {
                 msgNoResults.style.display = 'none';
             }
         });
+    }
+    
+    // Filtro para o modal
+    const buscaModalInput = document.getElementById('buscaModalAcademia');
+    const listaAcademiasModal = document.getElementById('listaAcademiasModal');
+    const academiaModalItems = document.querySelectorAll('.academia-modal-item');
+    const msgNoResultsModal = document.getElementById('msgNoResultsModal');
+    
+    if (buscaModalInput && academiaModalItems.length > 0) {
+        buscaModalInput.addEventListener('input', function() {
+            const termo = this.value.toLowerCase().trim();
+            let encontradas = 0;
+            
+            academiaModalItems.forEach(item => {
+                const nome = item.getAttribute('data-nome') || '';
+                const professor = item.getAttribute('data-professor') || '';
+                
+                if (!termo || nome.includes(termo) || professor.includes(termo)) {
+                    item.style.display = '';
+                    encontradas++;
+                } else {
+                    item.style.display = 'none';
+                }
+            });
+            
+            // Mostrar/ocultar mensagem de nenhum resultado
+            if (encontradas === 0 && termo) {
+                msgNoResultsModal.classList.remove('d-none');
+            } else {
+                msgNoResultsModal.classList.add('d-none');
+            }
+        });
+        
+        // Limpar busca quando o modal é fechado
+        const modal = document.getElementById('modalEscolherAcademia');
+        if (modal) {
+            modal.addEventListener('hidden.bs.modal', function() {
+                buscaModalInput.value = '';
+                academiaModalItems.forEach(item => {
+                    item.style.display = '';
+                });
+                msgNoResultsModal.classList.add('d-none');
+            });
+        }
     }
 });
 </script>

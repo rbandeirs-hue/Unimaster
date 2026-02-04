@@ -1,30 +1,114 @@
 {% extends "base.html" %}
 {% block title %}Usuários — {{ associacao_nome if modo_associacao else academia_nome }}{% endblock %}
 {% block content %}
-<div class="container my-4 my-md-5">
-  <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4 gap-3">
-    <div>
-      {% if modo_associacao %}
-        {% set back_url = url_for('associacao.gerenciamento_associacao') %}
-      {% else %}
-        {% set back_url = back_url or get_back_url_default() %}
-      {% endif %}
-{% include 'components/botao_voltar.html' %}
-      <h2 class="h4 fw-bold text-primary mb-0">
-        <i class="bi bi-person-lines-fill me-2"></i> Usuários
-        {% if modo_associacao and associacao_nome %}
-          — {{ associacao_nome }}
-        {% elif academia_nome %}
-          — {{ academia_nome }}
+<style>
+  .usuarios-page {
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+  .usuarios-header {
+    background: #fff;
+    border: 1px solid #e9ecef;
+    border-radius: 12px;
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+  }
+  .usuarios-header h1 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: #212529;
+  }
+  .usuarios-header h1 i { color: #0d6efd; }
+  .usuarios-header .subtitle {
+    font-size: 0.9rem;
+    margin-top: 0.25rem;
+    color: #6c757d;
+  }
+  .usuarios-stats {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: #f0f7ff;
+    color: #0d6efd;
+    padding: 0.35rem 0.75rem;
+    border-radius: 999px;
+    font-size: 0.85rem;
+    margin-top: 0.5rem;
+  }
+  .search-card {
+    background: #fff;
+    border-radius: 12px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    border: 1px solid #e9ecef;
+  }
+  .search-card .form-control {
+    border-radius: 10px;
+    border: 1px solid #dee2e6;
+    padding: 0.6rem 1rem;
+  }
+  .search-card .form-control:focus {
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.15);
+  }
+  .usuario-item {
+    background: #fff;
+    border-radius: 10px;
+    border: 1px solid #e9ecef;
+    padding: 1rem 1.25rem;
+    margin-bottom: 0.75rem;
+    transition: all 0.2s ease;
+  }
+  .usuario-item:hover {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    border-color: #cfe2ff;
+    transform: translateY(-1px);
+  }
+</style>
+
+<div class="container my-4 my-md-5 usuarios-page">
+  <div class="usuarios-header">
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3">
+      <div>
+        {% if modo_associacao %}
+          {% set back_url = url_for('associacao.gerenciamento_associacao') %}
+        {% else %}
+          {% set back_url = back_url or get_back_url_default() %}
         {% endif %}
-      </h2>
-      {% if modo_associacao %}
-      <p class="text-muted small mb-0">Usuários vinculados às academias da associação.</p>
-      {% endif %}
+        {% include 'components/botao_voltar.html' %}
+        <h1>
+          <i class="bi bi-person-lines-fill"></i> Usuários
+          {% if modo_associacao and associacao_nome %}
+            — {{ associacao_nome }}
+          {% elif academia_nome %}
+            — {{ academia_nome }}
+          {% endif %}
+        </h1>
+        {% if modo_associacao %}
+        <p class="subtitle mb-0">Usuários vinculados às academias da associação.</p>
+        {% else %}
+        <p class="subtitle mb-0">Gerencie e visualize os usuários cadastrados</p>
+        {% endif %}
+        {% if usuarios %}
+        <span class="usuarios-stats">
+          <i class="bi bi-person-badge"></i> 
+          <span id="contadorUsuarios">{{ usuarios|length }}</span> usuário{{ 's' if usuarios|length != 1 else '' }}
+          {% if total_usuarios and total_usuarios > usuarios|length %}
+          <span class="text-muted">(de {{ total_usuarios }} total)</span>
+          {% endif %}
+        </span>
+        {% endif %}
+      </div>
+      <a href="{{ url_for('usuarios.cadastro_usuario', next=request.full_path) }}" class="btn btn-success">
+        <i class="bi bi-person-plus-fill me-1"></i> Novo Usuário
+      </a>
     </div>
-    <a href="{{ url_for('usuarios.cadastro_usuario', next=request.full_path) }}" class="btn btn-success btn-sm">
-      <i class="bi bi-person-plus-fill me-1"></i> Novo Usuário
-    </a>
   </div>
 
   {% if modo_associacao and academias|length > 1 %}
@@ -56,56 +140,75 @@
   </div>
   {% endif %}
 
-  <form method="GET" action="{{ url_for('academia.lista_usuarios') }}" class="d-flex gap-2 mb-4">
-    {% if modo_associacao %}
-      {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
-      <input type="hidden" name="origem" value="associacao">
-    {% else %}
-      <input type="hidden" name="academia_id" value="{{ academia_id }}">
-      {% if request.args.get('origem') %}<input type="hidden" name="origem" value="{{ request.args.get('origem') }}">{% endif %}
-    {% endif %}
-    <input type="text" class="form-control form-control-sm" name="busca" placeholder="Buscar por nome ou e-mail..." value="{{ busca or '' }}" style="max-width: 280px;">
-    <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-search me-1"></i> Buscar</button>
-  </form>
+  <div class="search-card">
+    <form method="GET" action="{{ url_for('academia.lista_usuarios') }}" id="formBuscaUsuarios">
+      {% if modo_associacao %}
+        {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
+        <input type="hidden" name="origem" value="associacao">
+      {% else %}
+        <input type="hidden" name="academia_id" value="{{ academia_id }}">
+        {% if request.args.get('origem') %}<input type="hidden" name="origem" value="{{ request.args.get('origem') }}">{% endif %}
+      {% endif %}
+      <div class="input-group">
+        <span class="input-group-text bg-white border-end-0">
+          <i class="bi bi-search text-muted"></i>
+        </span>
+        <input type="text" 
+               class="form-control border-start-0" 
+               id="inputBuscaUsuarios"
+               name="busca" 
+               placeholder="Buscar por nome ou e-mail..." 
+               value="{{ busca or '' }}" 
+               autocomplete="off">
+        <span class="input-group-text bg-white border-start-0" id="loadingBusca" style="display: none;">
+          <span class="spinner-border spinner-border-sm text-primary" role="status" aria-hidden="true"></span>
+        </span>
+      </div>
+    </form>
+  </div>
 
-  <ul class="list-group list-group-flush">
+  <div id="listaUsuarios">
     {% if usuarios %}
     {% for u in usuarios %}
-    <li class="list-group-item d-flex justify-content-between align-items-start px-3 py-2 border-start-0 border-end-0">
-      <div class="flex-grow-1">
-        <span class="fw-medium d-block">{{ u.nome }}</span>
-        {% if modo_associacao and u.academias_vinculadas %}
-        <small class="text-muted">
-          <i class="bi bi-building me-1"></i>{{ u.academias_vinculadas }}
-        </small>
-        {% endif %}
-        {% if u.email %}
-        <small class="text-muted d-block">
-          <i class="bi bi-envelope me-1"></i>{{ u.email }}
-        </small>
-        {% endif %}
+    <div class="usuario-item" data-nome="{{ (u.nome or '')|lower }}" data-email="{{ (u.email or '')|lower }}">
+      <div class="d-flex justify-content-between align-items-start">
+        <div class="flex-grow-1">
+          <div class="d-flex align-items-center gap-2 mb-1">
+            <span class="fw-semibold fs-6">{{ u.nome }}</span>
+            <span class="badge {{ 'bg-success' if u.ativo else 'bg-secondary' }}" style="font-size: 0.7rem;">
+              {{ 'Ativo' if u.ativo else 'Inativo' }}
+            </span>
+          </div>
+          {% if modo_associacao and u.academias_vinculadas %}
+          <small class="text-muted d-block mb-1">
+            <i class="bi bi-building me-1"></i>{{ u.academias_vinculadas }}
+          </small>
+          {% endif %}
+          {% if u.email %}
+          <small class="text-muted d-block">
+            <i class="bi bi-envelope me-1"></i>{{ u.email }}
+          </small>
+          {% endif %}
+        </div>
+        <div class="d-flex align-items-center gap-2">
+          <a href="{{ url_for('usuarios.editar_usuario', user_id=u.id, next=request.full_path) }}" class="btn btn-outline-primary btn-sm" title="Editar">
+            <i class="bi bi-pencil-fill"></i>
+          </a>
+        </div>
       </div>
-      <div class="d-flex align-items-center gap-2">
-        <span class="badge {{ 'bg-success' if u.ativo else 'bg-secondary' }}" style="font-size: 0.75rem;">
-          {{ 'Ativo' if u.ativo else 'Inativo' }}
-        </span>
-        <a href="{{ url_for('usuarios.editar_usuario', user_id=u.id, next=request.full_path) }}" class="btn btn-outline-primary btn-sm" title="Editar">
-          <i class="bi bi-pencil-fill"></i>
-        </a>
-      </div>
-    </li>
+    </div>
     {% endfor %}
     {% else %}
-    <li class="list-group-item text-center py-5 text-muted">
+    <div class="usuario-item text-center py-5 text-muted">
       {% if modo_associacao %}
         Nenhum usuário encontrado nas academias da associação.
       {% else %}
         Nenhum usuário nesta academia.
       {% endif %}
       <a href="{{ url_for('usuarios.cadastro_usuario', next=back_url|default(request.full_path)) }}" class="d-block mt-2">Cadastrar usuário</a>
-    </li>
+    </div>
     {% endif %}
-  </ul>
+  </div>
 
   {% if total_paginas > 1 %}
   <nav class="mt-4">
@@ -125,4 +228,72 @@
   </nav>
   {% endif %}
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const inputBusca = document.getElementById('inputBuscaUsuarios');
+    const formBusca = document.getElementById('formBuscaUsuarios');
+    const listaUsuarios = document.getElementById('listaUsuarios');
+    const contadorUsuarios = document.getElementById('contadorUsuarios');
+    const loadingBusca = document.getElementById('loadingBusca');
+    let timeoutBusca = null;
+    
+    if (!inputBusca || !listaUsuarios) return;
+    
+    // Busca dinâmica com debounce
+    inputBusca.addEventListener('input', function() {
+        const termo = this.value.toLowerCase().trim();
+        
+        // Mostrar loading
+        if (loadingBusca) loadingBusca.style.display = '';
+        
+        // Limpar timeout anterior
+        if (timeoutBusca) {
+            clearTimeout(timeoutBusca);
+        }
+        
+        // Aguardar 300ms antes de filtrar
+        timeoutBusca = setTimeout(function() {
+            const itens = listaUsuarios.querySelectorAll('.usuario-item[data-nome], .usuario-item[data-email]');
+            let encontrados = 0;
+            
+            itens.forEach(function(item) {
+                const nome = item.getAttribute('data-nome') || '';
+                const email = item.getAttribute('data-email') || '';
+                
+                if (!termo || nome.includes(termo) || email.includes(termo)) {
+                    item.style.display = '';
+                    encontrados++;
+                } else {
+                    item.style.display = 'none';
+                }
+            });
+            
+            // Atualizar contador
+            if (contadorUsuarios) {
+                contadorUsuarios.textContent = encontrados;
+            }
+            
+            // Ocultar loading
+            if (loadingBusca) loadingBusca.style.display = 'none';
+            
+            // Busca apenas visual (filtro local) - não fazer submit automático
+            // O submit será feito apenas quando pressionar Enter
+        }, 300);
+    });
+    
+    // Permitir Enter para fazer busca imediata no servidor
+    inputBusca.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            if (timeoutBusca) {
+                clearTimeout(timeoutBusca);
+            }
+            if (formBusca) {
+                formBusca.submit();
+            }
+        }
+    });
+});
+</script>
 {% endblock %}

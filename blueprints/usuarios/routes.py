@@ -477,7 +477,24 @@ def editar_usuario(user_id):
                     (user_id, aid),
                 )
             id_academia = academias_escolhidas[0] if academias_escolhidas else None
-            cursor.execute("UPDATE usuarios SET id_academia = %s WHERE id = %s", (id_academia, user_id))
+            
+            # Buscar id_associacao e id_federacao da academia selecionada (se houver)
+            id_associacao_usuario = None
+            id_federacao_usuario = None
+            if id_academia:
+                cursor.execute("""
+                    SELECT ac.id_associacao, ass.id_federacao
+                    FROM academias ac
+                    LEFT JOIN associacoes ass ON ass.id = ac.id_associacao
+                    WHERE ac.id = %s
+                """, (id_academia,))
+                acad_info = cursor.fetchone()
+                if acad_info:
+                    id_associacao_usuario = acad_info.get("id_associacao")
+                    id_federacao_usuario = acad_info.get("id_federacao")
+            
+            cursor.execute("UPDATE usuarios SET id_academia = %s, id_associacao = %s, id_federacao = %s WHERE id = %s", 
+                         (id_academia, id_associacao_usuario, id_federacao_usuario, user_id))
         
         # Gerenciar registro de visitante (após atualizar academias)
         if tem_role_visitante_agora and not tinha_role_visitante:

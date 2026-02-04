@@ -1118,6 +1118,7 @@ def associacao(aluno):
 
     academias = []
     associacao_nome = None
+    associacao_endereco = None
     conn = get_db_connection()
     cur = conn.cursor(dictionary=True)
     try:
@@ -1129,6 +1130,7 @@ def associacao(aluno):
                 "painel_aluno/associacao.html",
                 academias=[],
                 associacao_nome=None,
+                associacao_endereco=None,
                 aluno=aluno,
             )
 
@@ -1153,7 +1155,6 @@ def associacao(aluno):
         """, (id_associacao,))
         assoc = cur.fetchone()
         associacao_nome = assoc.get("nome") if assoc else None
-        associacao_endereco = None
         if assoc:
             partes_endereco = []
             if assoc.get("rua"):
@@ -1241,7 +1242,8 @@ def associacao(aluno):
             # Buscar turmas da academia com dias e horários
             try:
                 cur.execute("""
-                    SELECT t.TurmaID, t.Nome, t.hora_inicio, t.hora_fim, t.dias_semana
+                    SELECT t.TurmaID, t.Nome, t.hora_inicio, t.hora_fim, t.dias_semana, 
+                           t.IdadeMin, t.IdadeMax, t.Classificacao
                     FROM turmas t
                     WHERE t.id_academia = %s
                     ORDER BY t.Nome
@@ -1249,6 +1251,8 @@ def associacao(aluno):
                 turmas = cur.fetchall()
                 # Formatar horários e dias
                 turmas_formatadas = []
+                dias_map = {'0': 'Dom', '1': 'Seg', '2': 'Ter', '3': 'Qua', '4': 'Qui', '5': 'Sex', '6': 'Sáb'}
+                
                 for turma in turmas:
                     hora_inicio = turma.get("hora_inicio")
                     hora_fim = turma.get("hora_fim")
@@ -1266,15 +1270,55 @@ def associacao(aluno):
                             else:
                                 horario_str += f" às {str(hora_fim)[:5]}"
                     
+                    # Converter dias da semana de números para nomes
+                    dias_formatados = ""
+                    if dias_semana:
+                        dias_list = [d.strip() for d in str(dias_semana).split(',') if d.strip()]
+                        dias_nomes = [dias_map.get(d, d) for d in dias_list]
+                        dias_formatados = ", ".join(dias_nomes)
+                    
+                    # Formatar faixa etária
+                    idade_min = turma.get("IdadeMin")
+                    idade_max = turma.get("IdadeMax")
+                    # Converter para int se não for None, permitindo 0
+                    if idade_min is not None:
+                        try:
+                            idade_min = int(idade_min)
+                        except (ValueError, TypeError):
+                            idade_min = None
+                    if idade_max is not None:
+                        try:
+                            idade_max = int(idade_max)
+                        except (ValueError, TypeError):
+                            idade_max = None
+                    
+                    faixa_etaria = ""
+                    if idade_min is not None and idade_max is not None:
+                        faixa_etaria = f"{idade_min} a {idade_max} anos"
+                    elif idade_min is not None:
+                        faixa_etaria = f"A partir de {idade_min} anos"
+                    elif idade_max is not None:
+                        faixa_etaria = f"Até {idade_max} anos"
+                    
+                    classificacao = turma.get("Classificacao")
+                    classificacao = classificacao.strip() if classificacao and isinstance(classificacao, str) else (classificacao if classificacao else None)
+                    
                     turma_info = {
                         "nome": turma.get("Nome"),
                         "horario": horario_str,
-                        "dias": dias_semana or ""
+                        "dias": dias_formatados or dias_semana or "",
+                        "idade_min": idade_min,
+                        "idade_max": idade_max,
+                        "faixa_etaria": faixa_etaria,
+                        "classificacao": classificacao
                     }
                     turmas_formatadas.append(turma_info)
                 acad["turmas"] = turmas_formatadas
             except Exception as e:
-                current_app.logger.warning(f"Erro ao buscar turmas da academia {acad['id']}: {e}")
+                try:
+                    current_app.logger.warning(f"Erro ao buscar turmas da academia {acad['id']}: {e}")
+                except:
+                    pass
                 acad["turmas"] = []
             
             # Formatar endereço da academia
@@ -1300,20 +1344,25 @@ def associacao(aluno):
         # Buscar solicitações de visita para cada academia
         solicitacoes_por_academia = {}
         try:
-            cur.execute("""
-                SELECT s.*, 
-                       ac_dest.nome AS academia_destino_nome,
-                       ac_orig.nome AS academia_origem_nome,
-                       t.Nome AS turma_nome,
-                       t.hora_inicio, t.hora_fim, t.dias_semana
-                FROM solicitacoes_aprovacao s
-                INNER JOIN academias ac_dest ON ac_dest.id = s.academia_destino_id
-                INNER JOIN academias ac_orig ON ac_orig.id = s.academia_origem_id
-                LEFT JOIN turmas t ON t.TurmaID = s.turma_id
-                WHERE s.aluno_id = %s AND s.tipo = 'visita'
-                ORDER BY s.criado_em DESC
-            """, (aluno["id"],))
-            solicitacoes = cur.fetchall()
+            aluno_id = aluno.get("id")
+            if aluno_id:
+                cur.execute("""
+                    SELECT s.*, 
+                           ac_dest.nome AS academia_destino_nome,
+                           ac_orig.nome AS academia_origem_nome,
+                           t.Nome AS turma_nome,
+                           t.hora_inicio, t.hora_fim, t.dias_semana
+                    FROM solicitacoes_aprovacao s
+                    INNER JOIN academias ac_dest ON ac_dest.id = s.academia_destino_id
+                    INNER JOIN academias ac_orig ON ac_orig.id = s.academia_origem_id
+                    LEFT JOIN turmas t ON t.TurmaID = s.turma_id
+                    WHERE s.aluno_id = %s AND s.tipo = 'visita'
+                    ORDER BY s.criado_em DESC
+                """, (aluno_id,))
+                solicitacoes = cur.fetchall()
+            else:
+                solicitacoes = []
+            
             for sol in solicitacoes:
                 acad_id = sol["academia_destino_id"]
                 if acad_id not in solicitacoes_por_academia:
@@ -1330,18 +1379,49 @@ def associacao(aluno):
                     dv = sol["data_visita"]
                     sol["data_visita_formatada"] = dv.strftime("%d/%m/%Y") if hasattr(dv, "strftime") else str(dv)
                 solicitacoes_por_academia[acad_id].append(sol)
-        except Exception:
-            pass
+        except Exception as e:
+            try:
+                current_app.logger.warning(f"Erro ao buscar solicitações: {e}")
+            except:
+                pass
         
         for acad in academias:
-            acad["logo_url"] = buscar_logo_url("academia", acad["id"])
+            try:
+                acad["logo_url"] = buscar_logo_url("academia", acad["id"])
+            except:
+                acad["logo_url"] = None
             # Garantir que solicitacoes sempre seja uma lista
             acad["solicitacoes"] = solicitacoes_por_academia.get(acad["id"], []) or []
     except Exception as e:
-        current_app.logger.error(f"Erro na função associacao: {e}", exc_info=True)
-        pass
-    cur.close()
-    conn.close()
+        try:
+            import traceback
+            current_app.logger.error(f"Erro na função associacao: {e}", exc_info=True)
+            current_app.logger.error(traceback.format_exc())
+        except:
+            import traceback
+            print(f"Erro na função associacao: {e}")
+            print(traceback.format_exc())
+        # Garantir que variáveis estão definidas mesmo em caso de erro
+        if associacao_endereco is None:
+            associacao_endereco = None
+        if associacao_nome is None:
+            associacao_nome = None
+        if not isinstance(academias, list):
+            academias = []
+        # Garantir que cada academia tem solicitacoes e logo_url
+        if isinstance(academias, list):
+            for acad in academias:
+                if not isinstance(acad, dict):
+                    continue
+                if "solicitacoes" not in acad:
+                    acad["solicitacoes"] = []
+                if "logo_url" not in acad:
+                    acad["logo_url"] = None
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
 
     return render_template(
         "painel_aluno/associacao.html",
@@ -1447,7 +1527,8 @@ def solicitacoes_academia(aluno, academia_destino_id):
         """, (aluno["id"], academia_destino_id))
         solicitacoes = cur.fetchall()
         
-        # Formatar dados das solicitações
+        # Formatar dados das solicitações e verificar presença/falta
+        aluno_id = aluno.get("id")
         for sol in solicitacoes:
             if sol.get("hora_inicio"):
                 hi = sol["hora_inicio"]
@@ -1458,6 +1539,46 @@ def solicitacoes_academia(aluno, academia_destino_id):
             if sol.get("data_visita"):
                 dv = sol["data_visita"]
                 sol["data_visita_formatada"] = dv.strftime("%d/%m/%Y") if hasattr(dv, "strftime") else str(dv)
+            
+            # Verificar presença/falta na chamada para esta data
+            sol["status_presenca"] = None  # None = não registrado, True = presente, False = faltou
+            if sol.get("data_visita") and aluno_id and sol.get("status") == "aprovado_destino":
+                try:
+                    from datetime import date as date_class
+                    data_visita = sol["data_visita"]
+                    if hasattr(data_visita, "date"):
+                        data_visita_date = data_visita.date()
+                    elif isinstance(data_visita, date_class):
+                        data_visita_date = data_visita
+                    elif isinstance(data_visita, str):
+                        from datetime import datetime as dt
+                        data_visita_date = dt.strptime(data_visita[:10], "%Y-%m-%d").date()
+                    else:
+                        data_visita_date = None
+                    
+                    # Só verificar presença se a data já passou
+                    hoje = date_class.today()
+                    if data_visita_date and data_visita_date <= hoje:
+                        # Buscar presença na turma da visita
+                        turma_id_visita = sol.get("turma_id")
+                        if turma_id_visita:
+                            cur.execute("""
+                                SELECT presente 
+                                FROM presencas 
+                                WHERE aluno_id = %s 
+                                  AND data_presenca = %s 
+                                  AND turma_id = %s
+                                LIMIT 1
+                            """, (aluno_id, data_visita_date, turma_id_visita))
+                            presenca_row = cur.fetchone()
+                            if presenca_row is not None:
+                                sol["status_presenca"] = bool(presenca_row.get("presente"))
+                except Exception as e:
+                    try:
+                        current_app.logger.warning(f"Erro ao verificar presença para solicitação {sol.get('id')}: {e}")
+                    except:
+                        pass
+                    sol["status_presenca"] = None
         
         # Formatar endereço da academia destino
         partes_endereco = []

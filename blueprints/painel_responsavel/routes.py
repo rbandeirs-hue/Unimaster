@@ -3,7 +3,7 @@
 # Exibe dados do(s) aluno(s) vinculado(s) ao responsável
 # ======================================================
 
-from flask import Blueprint, render_template, redirect, url_for, flash, request, session
+from flask import Blueprint, render_template, redirect, url_for, flash, request, session, current_app
 from flask_login import login_required, current_user
 from config import get_db_connection
 from datetime import datetime, date
@@ -747,6 +747,7 @@ def associacao(aluno):
     from utils.contexto_logo import buscar_logo_url
     academias = []
     associacao_nome = None
+    associacao_endereco = None
     conn = get_db_connection()
     cur = conn.cursor(dictionary=True)
     try:
@@ -756,26 +757,281 @@ def associacao(aluno):
             row = cur.fetchone()
             id_associacao = row.get("id_associacao") if row else None
             if id_associacao:
-                cur.execute("SELECT nome FROM associacoes WHERE id = %s", (id_associacao,))
+                cur.execute("""
+                    SELECT nome, cep, rua, numero, complemento, bairro, cidade, uf
+                    FROM associacoes WHERE id = %s
+                """, (id_associacao,))
                 assoc = cur.fetchone()
                 associacao_nome = assoc.get("nome") if assoc else None
+                
+                # Formatar endereço da associação
+                if assoc:
+                    partes_endereco = []
+                    if assoc.get("rua"):
+                        partes_endereco.append(assoc["rua"])
+                        if assoc.get("numero"):
+                            partes_endereco.append(f"nº {assoc['numero']}")
+                    if assoc.get("bairro"):
+                        partes_endereco.append(assoc["bairro"])
+                    if assoc.get("cidade"):
+                        partes_endereco.append(assoc["cidade"])
+                    if assoc.get("uf"):
+                        partes_endereco.append(assoc["uf"])
+                    if assoc.get("cep"):
+                        partes_endereco.append(f"CEP: {assoc['cep']}")
+                    associacao_endereco = ", ".join(partes_endereco) if partes_endereco else None
+                
                 cur.execute("""
-                    SELECT id, nome, cidade, uf, email, telefone
-                    FROM academias WHERE id_associacao = %s
-                    ORDER BY nome
-                """, (id_associacao,))
+                    SELECT a.id, a.nome, a.cidade, a.uf, a.email, a.telefone,
+                           a.cep, a.rua, a.numero, a.complemento, a.bairro
+                    FROM academias a
+                    WHERE a.id_associacao = %s AND a.id != %s
+                    ORDER BY a.nome
+                """, (id_associacao, id_academia_aluno))
                 academias = cur.fetchall()
+                
+                # Buscar gestor/professor responsável de cada academia
                 for acad in academias:
+                    try:
+                        # Primeiro tentar buscar por gestor_academia
+                        cur.execute("""
+                            SELECT u.nome, u.email
+                            FROM usuarios u
+                            INNER JOIN usuarios_academias ua ON ua.usuario_id = u.id
+                            INNER JOIN roles_usuario ru ON ru.usuario_id = u.id
+                            INNER JOIN roles r ON r.id = ru.role_id
+                            WHERE ua.academia_id = %s 
+                              AND (
+                                r.chave = 'gestor_academia'
+                                OR r.nome = 'Gestor Academia'
+                                OR LOWER(REPLACE(r.nome, ' ', '_')) = 'gestor_academia'
+                              )
+                              AND COALESCE(u.ativo, 1) = 1
+                            LIMIT 1
+                        """, (acad["id"],))
+                        gestor = cur.fetchone()
+                        
+                        # Se não encontrou gestor, buscar professor
+                        if not gestor:
+                            cur.execute("""
+                                SELECT u.nome, u.email
+                                FROM usuarios u
+                                INNER JOIN usuarios_academias ua ON ua.usuario_id = u.id
+                                INNER JOIN roles_usuario ru ON ru.usuario_id = u.id
+                                INNER JOIN roles r ON r.id = ru.role_id
+                                WHERE ua.academia_id = %s 
+                                  AND (
+                                    r.chave = 'professor'
+                                    OR r.nome = 'Professor'
+                                    OR LOWER(REPLACE(r.nome, ' ', '_')) = 'professor'
+                                  )
+                                  AND COALESCE(u.ativo, 1) = 1
+                                LIMIT 1
+                            """, (acad["id"],))
+                            gestor = cur.fetchone()
+                        
+                        # Se ainda não encontrou, tentar buscar da tabela professores vinculada à academia
+                        if not gestor:
+                            cur.execute("""
+                                SELECT p.nome, p.email
+                                FROM professores p
+                                WHERE p.id_academia = %s 
+                                  AND COALESCE(p.ativo, 1) = 1
+                                ORDER BY p.id DESC
+                                LIMIT 1
+                            """, (acad["id"],))
+                            prof_row = cur.fetchone()
+                            if prof_row:
+                                gestor = {"nome": prof_row.get("nome"), "email": prof_row.get("email")}
+                    except Exception as e:
+                        try:
+                            current_app.logger.warning(f"Erro ao buscar gestor da academia {acad['id']}: {e}")
+                        except:
+                            pass
+                        gestor = None
+                    acad["gestor_nome"] = gestor.get("nome") if gestor else None
+                    acad["gestor_email"] = gestor.get("email") if gestor else None
+                    
+                    # Formatar endereço da academia
+                    partes_endereco = []
+                    if acad.get("rua"):
+                        partes_endereco.append(acad["rua"])
+                        if acad.get("numero"):
+                            partes_endereco.append(f"nº {acad['numero']}")
+                    if acad.get("bairro"):
+                        partes_endereco.append(acad["bairro"])
+                    cidade_uf = []
+                    if acad.get("cidade"):
+                        cidade_uf.append(acad["cidade"])
+                    if acad.get("uf"):
+                        cidade_uf.append(acad["uf"])
+                    if cidade_uf:
+                        partes_endereco.append(" - ".join(cidade_uf))
+                    if acad.get("cep"):
+                        partes_endereco.append(f"CEP: {acad['cep']}")
+                    acad["endereco_completo"] = ", ".join(partes_endereco) if partes_endereco else None
+                    
+                    # Buscar turmas da academia com dias e horários
+                    try:
+                        cur.execute("""
+                            SELECT t.TurmaID, t.Nome, t.hora_inicio, t.hora_fim, t.dias_semana, 
+                                   t.IdadeMin, t.IdadeMax, t.Classificacao
+                            FROM turmas t
+                            WHERE t.id_academia = %s
+                            ORDER BY t.Nome
+                        """, (acad["id"],))
+                        turmas = cur.fetchall()
+                        # Formatar horários e dias
+                        turmas_formatadas = []
+                        dias_map = {'0': 'Dom', '1': 'Seg', '2': 'Ter', '3': 'Qua', '4': 'Qui', '5': 'Sex', '6': 'Sáb'}
+                        
+                        for turma in turmas:
+                            hora_inicio = turma.get("hora_inicio")
+                            hora_fim = turma.get("hora_fim")
+                            dias_semana = turma.get("dias_semana")
+                            
+                            horario_str = ""
+                            if hora_inicio:
+                                if hasattr(hora_inicio, "strftime"):
+                                    horario_str = hora_inicio.strftime("%H:%M")
+                                else:
+                                    horario_str = str(hora_inicio)[:5]
+                                if hora_fim:
+                                    if hasattr(hora_fim, "strftime"):
+                                        horario_str += f" às {hora_fim.strftime('%H:%M')}"
+                                    else:
+                                        horario_str += f" às {str(hora_fim)[:5]}"
+                            
+                            # Converter dias da semana de números para nomes
+                            dias_formatados = ""
+                            if dias_semana:
+                                dias_list = [d.strip() for d in str(dias_semana).split(',') if d.strip()]
+                                dias_nomes = [dias_map.get(d, d) for d in dias_list]
+                                dias_formatados = ", ".join(dias_nomes)
+                            
+                            # Formatar faixa etária
+                            idade_min = turma.get("IdadeMin")
+                            idade_max = turma.get("IdadeMax")
+                            # Converter para int se não for None, permitindo 0
+                            if idade_min is not None:
+                                try:
+                                    idade_min = int(idade_min)
+                                except (ValueError, TypeError):
+                                    idade_min = None
+                            if idade_max is not None:
+                                try:
+                                    idade_max = int(idade_max)
+                                except (ValueError, TypeError):
+                                    idade_max = None
+                            
+                            faixa_etaria = ""
+                            if idade_min is not None and idade_max is not None:
+                                faixa_etaria = f"{idade_min} a {idade_max} anos"
+                            elif idade_min is not None:
+                                faixa_etaria = f"A partir de {idade_min} anos"
+                            elif idade_max is not None:
+                                faixa_etaria = f"Até {idade_max} anos"
+                            
+                            classificacao = turma.get("Classificacao")
+                            classificacao = classificacao.strip() if classificacao and isinstance(classificacao, str) else (classificacao if classificacao else None)
+                            
+                            turma_info = {
+                                "nome": turma.get("Nome"),
+                                "horario": horario_str,
+                                "dias": dias_formatados or dias_semana or "",
+                                "idade_min": idade_min,
+                                "idade_max": idade_max,
+                                "faixa_etaria": faixa_etaria,
+                                "classificacao": classificacao
+                            }
+                            turmas_formatadas.append(turma_info)
+                        acad["turmas"] = turmas_formatadas
+                    except Exception as e:
+                        current_app.logger.warning(f"Erro ao buscar turmas da academia {acad['id']}: {e}")
+                        acad["turmas"] = []
+                    
                     acad["logo_url"] = buscar_logo_url("academia", acad["id"])
-    except Exception:
-        pass
-    cur.close()
-    conn.close()
+                
+                # Buscar solicitações de visita para cada academia (fora do loop)
+                solicitacoes_por_academia = {}
+                try:
+                    aluno_id = aluno.get("id")
+                    if aluno_id:
+                        cur.execute("""
+                            SELECT s.*, 
+                                   ac_dest.nome AS academia_destino_nome,
+                                   ac_orig.nome AS academia_origem_nome,
+                                   t.Nome AS turma_nome,
+                                   t.hora_inicio, t.hora_fim, t.dias_semana
+                            FROM solicitacoes_aprovacao s
+                            INNER JOIN academias ac_dest ON ac_dest.id = s.academia_destino_id
+                            INNER JOIN academias ac_orig ON ac_orig.id = s.academia_origem_id
+                            LEFT JOIN turmas t ON t.TurmaID = s.turma_id
+                            WHERE s.aluno_id = %s AND s.tipo = 'visita'
+                            ORDER BY s.criado_em DESC
+                        """, (aluno_id,))
+                        solicitacoes = cur.fetchall()
+                    else:
+                        solicitacoes = []
+                    
+                    for sol in solicitacoes:
+                        acad_id = sol["academia_destino_id"]
+                        if acad_id not in solicitacoes_por_academia:
+                            solicitacoes_por_academia[acad_id] = []
+                        # Formatar hora
+                        if sol.get("hora_inicio"):
+                            hi = sol["hora_inicio"]
+                            sol["hora_inicio_str"] = hi.strftime("%H:%M") if hasattr(hi, "strftime") else str(hi)[:5]
+                        if sol.get("hora_fim"):
+                            hf = sol["hora_fim"]
+                            sol["hora_fim_str"] = hf.strftime("%H:%M") if hasattr(hf, "strftime") else str(hf)[:5]
+                        # Formatar data
+                        if sol.get("data_visita"):
+                            dv = sol["data_visita"]
+                            sol["data_visita_formatada"] = dv.strftime("%d/%m/%Y") if hasattr(dv, "strftime") else str(dv)
+                        solicitacoes_por_academia[acad_id].append(sol)
+                except Exception as e:
+                    try:
+                        current_app.logger.warning(f"Erro ao buscar solicitações: {e}")
+                    except:
+                        pass
+                
+                # Adicionar solicitações a cada academia
+                for acad in academias:
+                    # Garantir que solicitacoes sempre seja uma lista
+                    acad["solicitacoes"] = solicitacoes_por_academia.get(acad["id"], []) or []
+    except Exception as e:
+        try:
+            import traceback
+            current_app.logger.error(f"Erro na função associacao (painel_responsavel): {e}", exc_info=True)
+            current_app.logger.error(traceback.format_exc())
+        except:
+            import traceback
+            print(f"Erro na função associacao (painel_responsavel): {e}")
+            print(traceback.format_exc())
+        # Garantir que variáveis estão definidas mesmo em caso de erro
+        if associacao_endereco is None:
+            associacao_endereco = None
+        if associacao_nome is None:
+            associacao_nome = None
+        if not isinstance(academias, list):
+            academias = []
+        # Garantir que cada academia tem solicitacoes
+        for acad in academias:
+            if "solicitacoes" not in acad:
+                acad["solicitacoes"] = []
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
 
+    aluno_id = aluno.get("id") if aluno else None
     return render_template(
         "painel_aluno/associacao.html",
         academias=academias,
         associacao_nome=associacao_nome,
+        associacao_endereco=associacao_endereco,
         aluno=aluno,
-        voltar_url=url_for("painel_responsavel.meu_perfil", aluno_id=aluno["id"]),
+        voltar_url=url_for("painel_responsavel.meu_perfil", aluno_id=aluno_id) if aluno_id else url_for("painel_responsavel.meu_perfil"),
     )
