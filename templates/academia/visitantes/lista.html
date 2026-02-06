@@ -1,12 +1,15 @@
 {% extends "base.html" %}
 {% block title %}Visitantes — {{ academias[0].nome if academias else 'Academia' }}{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/academia/visitantes_responsive.css') }}">
+{% endblock %}
 {% block content %}
 <div class="container mt-4">
     <div class="mb-4">
         {% if academias|length > 1 %}
         <form method="GET" class="mb-3">
-            <label class="form-label small fw-semibold">Academia:</label>
-            <select name="academia_id" class="form-select form-select-sm d-inline-block w-auto" onchange="this.form.submit()">
+            <label class="form-label small fw-semibold d-block mb-2">Academia:</label>
+            <select name="academia_id" class="form-select form-select-sm w-100 w-md-auto" onchange="this.form.submit()">
                 {% for ac in academias %}
                 <option value="{{ ac.id }}" {% if ac.id == academia_id %}selected{% endif %}>{{ ac.nome }}</option>
                 {% endfor %}
@@ -15,20 +18,28 @@
         {% endif %}
         {% set back_url = url_for('academia.painel_academia', academia_id=academia_id) %}
         {% include 'components/botao_voltar.html' %}
-        <div class="d-flex justify-content-between align-items-center">
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3">
             <div>
                 <h2 class="h4 fw-bold text-primary mb-1">Visitantes</h2>
                 <p class="text-muted mb-0">Histórico e gestão de visitantes.</p>
             </div>
-            <a href="{{ url_for('academia.solicitacoes_aulas', academia_id=academia_id) }}" class="btn btn-primary">
-                <i class="bi bi-clipboard-check me-2"></i>Solicitações
-            </a>
+            <div class="btn-group w-100 w-md-auto">
+                <a href="{{ url_for('academia.solicitacoes_aulas', academia_id=academia_id) }}" class="btn btn-primary">
+                    <i class="bi bi-calendar-check me-2"></i>Solicitações de Aulas
+                </a>
+                <a href="{{ url_for('academia.pagamentos_diaria', academia_id=academia_id) }}" class="btn btn-outline-warning">
+                    <i class="bi bi-wallet2 me-2"></i>Pagamentos de Diária
+                </a>
+                <a href="{{ url_for('academia.solicitacoes_mensalidade', academia_id=academia_id) }}" class="btn btn-outline-success">
+                    <i class="bi bi-person-check me-2"></i>Matrículas Realizadas
+                </a>
+            </div>
         </div>
     </div>
 
     <!-- Estatísticas -->
     <div class="row g-3 mb-4">
-        <div class="col-md-4">
+        <div class="col-12 col-md-4">
             <div class="card shadow-sm border-primary">
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-center">
@@ -41,7 +52,7 @@
                 </div>
             </div>
         </div>
-        <div class="col-md-4">
+        <div class="col-12 col-md-4">
             <div class="card shadow-sm border-success">
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-center">
@@ -54,7 +65,7 @@
                 </div>
             </div>
         </div>
-        <div class="col-md-4">
+        <div class="col-12 col-md-4">
             <div class="card shadow-sm border-info">
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-center">
@@ -71,7 +82,8 @@
 
     <!-- Lista de Visitantes -->
     {% if visitantes %}
-    <div class="card shadow-sm border-0">
+    <!-- Desktop: Tabela -->
+    <div class="card shadow-sm border-0 d-none d-md-block">
         <div class="card-body">
             <div class="table-responsive">
                 <table class="table table-hover">
@@ -155,6 +167,91 @@
                 </table>
             </div>
         </div>
+    </div>
+    
+    <!-- Mobile: Cards -->
+    <div class="visitantes-mobile d-md-none">
+        {% for v in visitantes %}
+        <div class="visitante-card">
+            <div class="visitante-card-header">
+                <div class="visitante-foto">
+                    {% if v.foto_url %}
+                    <img src="{{ url_for('static', filename=v.foto_url) }}" 
+                         alt="{{ v.nome }}" 
+                         class="rounded-circle" 
+                         style="width: 50px; height: 50px; object-fit: cover;">
+                    {% else %}
+                    <div class="rounded-circle bg-secondary d-flex align-items-center justify-content-center" 
+                         style="width: 50px; height: 50px;">
+                        <i class="bi bi-person text-white"></i>
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="visitante-info">
+                    <strong>{{ v.nome }}</strong>
+                    {% if v.usuario_email %}
+                    <small>{{ v.usuario_email }}</small>
+                    {% endif %}
+                </div>
+                <div>
+                    {% if v.ativo %}
+                    <span class="badge bg-success">Ativo</span>
+                    {% else %}
+                    <span class="badge bg-secondary">Inativo</span>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <div class="visitante-detalhes">
+                <div class="visitante-detalhe-item">
+                    <span class="visitante-detalhe-label">Idade</span>
+                    <span class="visitante-detalhe-value">
+                        {% if v.idade %}
+                        {{ v.idade }} anos
+                        {% else %}
+                        <span class="text-muted">-</span>
+                        {% endif %}
+                    </span>
+                </div>
+                <div class="visitante-detalhe-item">
+                    <span class="visitante-detalhe-label">Contato</span>
+                    <span class="visitante-detalhe-value">
+                        {% if v.telefone %}
+                        {{ v.telefone }}
+                        {% else %}
+                        <span class="text-muted">-</span>
+                        {% endif %}
+                    </span>
+                </div>
+                <div class="visitante-detalhe-item">
+                    <span class="visitante-detalhe-label">Aulas</span>
+                    <span class="visitante-detalhe-value">
+                        <span class="badge bg-info">{{ v.total_aulas or 0 }}</span>
+                        {% if v.total_aulas > 0 %}
+                        <small class="text-muted d-block mt-1">{{ v.aulas_presentes or 0 }} presentes</small>
+                        {% endif %}
+                    </span>
+                </div>
+                <div class="visitante-detalhe-item">
+                    <span class="visitante-detalhe-label">Última Aula</span>
+                    <span class="visitante-detalhe-value">
+                        {% if v.ultima_aula %}
+                        {{ v.ultima_aula|data_br }}
+                        {% else %}
+                        <span class="text-muted">-</span>
+                        {% endif %}
+                    </span>
+                </div>
+            </div>
+            
+            <div class="visitante-acoes">
+                <a href="{{ url_for('academia.detalhes_visitante', visitante_id=v.id, academia_id=academia_id) }}" 
+                   class="btn btn-outline-primary">
+                    <i class="bi bi-eye me-1"></i>Ver Detalhes
+                </a>
+            </div>
+        </div>
+        {% endfor %}
     </div>
     {% else %}
     <div class="card shadow-sm border-0">

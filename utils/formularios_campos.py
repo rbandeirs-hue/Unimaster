@@ -49,6 +49,7 @@ CAMPOS_ALUNO_PADRAO = OrderedDict([
     ("telefone_outro", ("Outro Telefone", "Contato")),
     # Turma e Modalidades
     ("TurmaID", ("Turma", "Turma e Modalidades")),
+    ("professor_id", ("Professor", "Turma e Modalidades")),
     ("aluno_modalidade_ids", ("Modalidades", "Turma e Modalidades")),
     # Responsável Financeiro
     ("responsavel_financeiro_nome", ("Nome do Responsável Financeiro", "Responsável Financeiro")),

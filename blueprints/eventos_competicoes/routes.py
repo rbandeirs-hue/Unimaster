@@ -1311,6 +1311,12 @@ def editar_inscricao(evento_id, inscricao_id):
         graduacoes = cur.fetchall()
         cur.execute("SELECT TurmaID, Nome, Classificacao, DiasHorario FROM turmas WHERE id_academia = %s ORDER BY Nome", (academia_id,))
         turmas = cur.fetchall()
+        cur.execute("SELECT id, nome FROM professores WHERE id_academia = %s AND ativo = 1 ORDER BY nome", (academia_id,))
+        professores = cur.fetchall()
+        cur.execute("SELECT id, nome FROM professores WHERE id_academia = %s AND ativo = 1 ORDER BY nome", (academia_id,))
+        professores = cur.fetchall()
+        cur.execute("SELECT id, nome FROM professores WHERE id_academia = %s AND ativo = 1 ORDER BY nome", (academia_id,))
+        professores = cur.fetchall()
         
         # Buscar aluno para obter dados necessários para categorias
         aluno_edit = None
@@ -1436,7 +1442,7 @@ def editar_inscricao(evento_id, inscricao_id):
         return render_template("eventos_competicoes/editar_inscricao.html",
             evento=ev, inscricao=inscricao, academia_id=academia_id, academia_nome=academia_nome,
             campos_form=campos_form, valores_iniciais=valores_iniciais, graduacoes=graduacoes, turmas=turmas,
-            categorias_disponiveis=categorias_disponiveis, aluno=aluno_edit,
+            professores=professores, categorias_disponiveis=categorias_disponiveis, aluno=aluno_edit,
             back_url=url_for("eventos_competicoes.inscritos", evento_id=evento_id, academia_id=academia_id))
     finally:
         cur.close()
@@ -1882,8 +1888,10 @@ def cancelar_inscricao(evento_id, inscricao_id):
 @bp_eventos_competicoes.route("/<int:evento_id>/incluir-avulso", methods=["GET", "POST"])
 @login_required
 def incluir_avulso(evento_id):
-    """Gestor academia inclui aluno avulso (manual)."""
+    """Gestor academia inclui aluno avulso (manual) com formulário completo."""
     academia_id = request.args.get("academia_id", type=int) or request.form.get("academia_id", type=int)
+    aluno_id = request.args.get("aluno_id", type=int) or request.form.get("aluno_id", type=int)
+    
     if not academia_id:
         flash("Academia não informada.", "danger")
         return redirect(url_for("eventos_competicoes.lista"))
@@ -1902,31 +1910,182 @@ def incluir_avulso(evento_id):
             flash("Evento não encontrado ou encerrado.", "danger")
             return redirect(url_for("eventos_competicoes.lista"))
 
-        cur.execute("SELECT id, nome FROM alunos WHERE id_academia = %s ORDER BY nome", (academia_id,))
-        alunos = cur.fetchall()
-
-        if request.method == "POST":
-            aluno_id = request.form.get("aluno_id", type=int)
-            if aluno_id:
-                cur.execute("SELECT 1 FROM eventos_competicoes_inscricoes WHERE evento_id=%s AND academia_id=%s AND aluno_id=%s",
-                    (evento_id, academia_id, aluno_id))
-                if cur.fetchone():
-                    flash("Aluno já inscrito.", "warning")
-                else:
-                    cur.execute("""
-                        INSERT INTO eventos_competicoes_inscricoes (evento_id, academia_id, aluno_id, usuario_inscricao_id, inclusao_avulsa, status)
-                        VALUES (%s, %s, %s, %s, 1, 'confirmada')
-                    """, (evento_id, academia_id, aluno_id, current_user.id))
-                    inscricao_id = cur.lastrowid
-                    # Criar pagamento se evento tem taxa
-                    _criar_pagamento_inscricao(cur, inscricao_id, evento_id, academia_id)
-                    conn.commit()
-                    flash("Aluno incluído.", "success")
+        cur.execute("SELECT campo_chave, label, ordem FROM formularios_campos WHERE formulario_id = %s ORDER BY ordem",
+            (ev["id_formulario"] or 0,))
+        campos_form = cur.fetchall()
+        if not campos_form:
+            flash("Formulário sem campos configurados.", "warning")
             return redirect(url_for("eventos_competicoes.inscritos", evento_id=evento_id, academia_id=academia_id))
 
-        return render_template("eventos_competicoes/incluir_avulso.html",
-            evento=ev, alunos=alunos, academia_id=academia_id,
-            back_url=url_for("eventos_competicoes.inscritos", evento_id=evento_id, academia_id=academia_id))
+        # Buscar nome da academia
+        cur.execute("SELECT nome FROM academias WHERE id = %s", (academia_id,))
+        ac_row = cur.fetchone()
+        academia_nome = ac_row.get("nome") if ac_row else "Academia"
+
+        # Se não tem aluno_id, mostrar seleção de alunos
+        if not aluno_id:
+            cur.execute("SELECT id, nome FROM alunos WHERE id_academia = %s ORDER BY nome", (academia_id,))
+            alunos = cur.fetchall()
+            return render_template("eventos_competicoes/incluir_avulso.html",
+                evento=ev, alunos=alunos, academia_id=academia_id,
+                back_url=url_for("eventos_competicoes.inscritos", evento_id=evento_id, academia_id=academia_id))
+
+        # Buscar dados do aluno
+        cur.execute("SELECT * FROM alunos WHERE id = %s AND id_academia = %s", (aluno_id, academia_id))
+        aluno = cur.fetchone()
+        if not aluno:
+            flash("Aluno não encontrado.", "danger")
+            return redirect(url_for("eventos_competicoes.incluir_avulso", evento_id=evento_id, academia_id=academia_id))
+
+        # Verificar se já está inscrito
+        cur.execute("SELECT 1 FROM eventos_competicoes_inscricoes WHERE evento_id=%s AND academia_id=%s AND aluno_id=%s",
+            (evento_id, academia_id, aluno_id))
+        if cur.fetchone():
+            flash("Aluno já inscrito neste evento.", "warning")
+            return redirect(url_for("eventos_competicoes.inscritos", evento_id=evento_id, academia_id=academia_id))
+
+        # Buscar graduações e turmas
+        cur.execute("SELECT id, faixa, graduacao, categoria FROM graduacao ORDER BY id")
+        graduacoes = cur.fetchall()
+        cur.execute("SELECT TurmaID, Nome, Classificacao, DiasHorario FROM turmas WHERE id_academia = %s ORDER BY Nome", (academia_id,))
+        turmas = cur.fetchall()
+
+        # Verificar se formulário tem categoria e buscar categorias disponíveis
+        campos_chaves = [c["campo_chave"] for c in campos_form]
+        tem_categoria = "categoria" in campos_chaves
+        categorias_disponiveis = []
+        
+        if tem_categoria and aluno.get("peso") and aluno.get("data_nascimento") and aluno.get("sexo"):
+            try:
+                from datetime import datetime as dt
+                nasc = dt.strptime(str(aluno["data_nascimento"])[:10], "%Y-%m-%d").date()
+                hoje = date.today()
+                idade_ano_civil = hoje.year - nasc.year
+                genero_upper = (aluno.get("sexo") or "").upper()
+                peso_float = float(aluno.get("peso") or 0)
+                
+                if genero_upper in ("M", "F") and peso_float > 0:
+                    genero_db = "MASCULINO" if genero_upper == "M" else "FEMININO" if genero_upper == "F" else genero_upper
+                    try:
+                        cur.execute("SHOW COLUMNS FROM categorias LIKE 'id_classe'")
+                        tem_id_classe = cur.fetchone() is not None
+                    except Exception:
+                        tem_id_classe = False
+                    
+                    if tem_id_classe:
+                        cur.execute("""
+                            SELECT id, categoria, nome_categoria, id_classe, peso_min, peso_max, idade_min, idade_max
+                            FROM categorias
+                            WHERE UPPER(genero) = UPPER(%s)
+                            AND (
+                                (idade_min IS NULL OR %s >= idade_min)
+                                AND (idade_max IS NULL OR %s <= idade_max)
+                            )
+                            AND (
+                                (peso_min IS NULL OR %s >= peso_min)
+                                AND (peso_max IS NULL OR %s <= peso_max)
+                            )
+                            ORDER BY nome_categoria
+                        """, (genero_db, idade_ano_civil, idade_ano_civil, peso_float, peso_float))
+                    else:
+                        cur.execute("""
+                            SELECT id, categoria, nome_categoria, NULL as id_classe, peso_min, peso_max, idade_min, idade_max
+                            FROM categorias
+                            WHERE UPPER(genero) = UPPER(%s)
+                            AND (
+                                (idade_min IS NULL OR %s >= idade_min)
+                                AND (idade_max IS NULL OR %s <= idade_max)
+                            )
+                            AND (
+                                (peso_min IS NULL OR %s >= peso_min)
+                                AND (peso_max IS NULL OR %s <= peso_max)
+                            )
+                            ORDER BY nome_categoria
+                        """, (genero_db, idade_ano_civil, idade_ano_civil, peso_float, peso_float))
+                    categorias_disponiveis = cur.fetchall()
+            except Exception:
+                categorias_disponiveis = []
+
+        # POST: Processar formulário completo
+        if request.method == "POST" and request.form.get("formulario_completo"):
+            # Processar categorias (pode ser múltipla)
+            categorias_selecionadas = request.form.getlist("campo_categoria[]")
+            
+            # Coletar dados do formulário
+            dados = {}
+            for c in campos_form:
+                chave = c["campo_chave"]
+                if chave == "categoria":
+                    continue  # Categoria será tratada separadamente
+                val = request.form.get(f"campo_{chave}", "")
+                if isinstance(val, str):
+                    val = val.strip()
+                dados[chave] = val
+
+            # Se há categorias selecionadas, criar uma inscrição para cada uma
+            if categorias_selecionadas:
+                inscricoes_criadas = 0
+                for categoria_nome in categorias_selecionadas:
+                    dados_cat = dados.copy()
+                    dados_cat["categoria"] = categoria_nome
+                    cur.execute("""
+                        INSERT INTO eventos_competicoes_inscricoes (evento_id, academia_id, aluno_id, usuario_inscricao_id, dados_form, inclusao_avulsa, status)
+                        VALUES (%s, %s, %s, %s, %s, 1, 'confirmada')
+                    """, (evento_id, academia_id, aluno_id, current_user.id, json.dumps(dados_cat, ensure_ascii=False)))
+                    inscricao_id = cur.lastrowid
+                    _criar_pagamento_inscricao(cur, inscricao_id, evento_id, academia_id)
+                    inscricoes_criadas += 1
+                conn.commit()
+                if inscricoes_criadas > 1:
+                    flash(f"{inscricoes_criadas} inscrições criadas com sucesso! Uma para cada categoria selecionada.", "success")
+                else:
+                    flash("Inscrição criada com sucesso!", "success")
+            else:
+                # Sem categoria, criar uma inscrição normal
+                cur.execute("""
+                    INSERT INTO eventos_competicoes_inscricoes (evento_id, academia_id, aluno_id, usuario_inscricao_id, dados_form, inclusao_avulsa, status)
+                    VALUES (%s, %s, %s, %s, %s, 1, 'confirmada')
+                """, (evento_id, academia_id, aluno_id, current_user.id, json.dumps(dados, ensure_ascii=False)))
+                inscricao_id = cur.lastrowid
+                _criar_pagamento_inscricao(cur, inscricao_id, evento_id, academia_id)
+                conn.commit()
+                flash("Inscrição criada com sucesso!", "success")
+            
+            return redirect(url_for("eventos_competicoes.inscritos", evento_id=evento_id, academia_id=academia_id))
+
+        # GET: Montar valores iniciais do aluno (mapear col DB -> form)
+        REV_MAP = {"rua": "endereco", "tel_celular": "telefone_celular", "tel_residencial": "telefone_residencial",
+                   "tel_comercial": "telefone_comercial", "tel_outro": "telefone_outro", "telefone": "telefone_celular"}
+        valores_iniciais = {}
+        for c in campos_form:
+            chave = c["campo_chave"]
+            v = aluno.get(chave)
+            if v is None and chave in ("endereco",):
+                v = aluno.get("rua")
+            elif v is None and chave == "telefone_celular":
+                v = aluno.get("tel_celular") or aluno.get("telefone")
+            elif v is None and chave in ("telefone_residencial", "telefone_comercial", "telefone_outro"):
+                v = aluno.get("tel_" + chave.split("_")[1])
+            if hasattr(v, "strftime"):
+                # Para input type="text" com formato BR, converter para BR
+                v = v.strftime("%d/%m/%Y") if v else ""
+            elif chave == "id_academia":
+                # Se vier ID, usar o ID da academia atual
+                v = academia_id or v
+            elif chave == "graduacao_id" and v:
+                # Manter ID para o value (o select já mostra o nome)
+                pass
+            elif chave == "TurmaID" and v:
+                # Manter ID para o value (o select já mostra o nome)
+                pass
+            valores_iniciais[chave] = v or ""
+
+        return render_template("eventos_competicoes/incluir_avulso_form.html",
+            evento=ev, aluno=aluno, academia_id=academia_id, academia_nome=academia_nome,
+            campos_form=campos_form, valores_iniciais=valores_iniciais,
+            graduacoes=graduacoes, turmas=turmas, professores=professores,
+            categorias_disponiveis=categorias_disponiveis,
+            back_url=url_for("eventos_competicoes.incluir_avulso", evento_id=evento_id, academia_id=academia_id))
     finally:
         cur.close()
         conn.close()
@@ -2158,14 +2317,21 @@ def inscrever(evento_id):
                 flash("Você já está inscrito neste evento.", "warning")
                 return redirect(url_for("eventos_competicoes.disponiveis", academia_id=academia_id, aluno_id=aluno_id))
             
+            # Filtrar categorias duplicadas, mas permitir criar inscrições para as válidas
             categorias_duplicadas = []
+            categorias_validas = []
             if categorias_selecionadas:
                 categorias_duplicadas = [cat for cat in categorias_selecionadas if cat in categorias_ja_inscritas]
-                if categorias_duplicadas:
-                    flash(f"Você já está inscrito nas categorias: {', '.join(categorias_duplicadas)}.", "warning")
+                categorias_validas = [cat for cat in categorias_selecionadas if cat not in categorias_ja_inscritas]
+                
+                # Se todas as categorias selecionadas já estão inscritas, avisar e retornar
+                if categorias_validas == [] and categorias_duplicadas:
+                    flash(f"Você já está inscrito em todas as categorias selecionadas: {', '.join(categorias_duplicadas)}.", "warning")
                     return redirect(url_for("eventos_competicoes.disponiveis", academia_id=academia_id, aluno_id=aluno_id))
             
             inscricoes_criadas = 0
+            categorias_criadas = []
+            
             # Se não houver categoria selecionada, criar uma inscrição normal
             if not categorias_selecionadas:
                 dados = dados_base.copy()
@@ -2178,11 +2344,8 @@ def inscrever(evento_id):
                 _criar_pagamento_inscricao(cur, inscricao_id, evento_id, academia_id)
                 inscricoes_criadas = 1
             else:
-                # Criar uma inscrição para cada categoria selecionada
-                for categoria_nome in categorias_selecionadas:
-                    # Verificar novamente antes de inserir (double-check)
-                    if categoria_nome in categorias_ja_inscritas:
-                        continue  # Pular se já existe
+                # Criar uma inscrição para cada categoria válida selecionada
+                for categoria_nome in categorias_validas:
                     dados = dados_base.copy()
                     dados["categoria"] = categoria_nome
                     cur.execute("""
@@ -2193,6 +2356,7 @@ def inscrever(evento_id):
                     # Criar pagamento se evento tem taxa
                     _criar_pagamento_inscricao(cur, inscricao_id, evento_id, academia_id)
                     inscricoes_criadas += 1
+                    categorias_criadas.append(categoria_nome)
                     categorias_ja_inscritas.add(categoria_nome)  # Adicionar à lista para evitar duplicatas na mesma requisição
             
             if inscricoes_criadas == 0:
@@ -2254,8 +2418,16 @@ def inscrever(evento_id):
                     except Exception:
                         pass
             conn.commit()
-            if categorias_selecionadas and len(categorias_selecionadas) > 1:
-                flash(f"{inscricoes_criadas} inscrições realizadas com sucesso! Uma para cada categoria selecionada.", "success")
+            
+            # Mensagem de sucesso informando quantas inscrições foram criadas
+            if categorias_selecionadas:
+                if len(categorias_selecionadas) > 1:
+                    if categorias_duplicadas:
+                        flash(f"{inscricoes_criadas} inscrição(ões) criada(s) com sucesso para as categorias: {', '.join(categorias_criadas)}. As categorias {', '.join(categorias_duplicadas)} já estavam inscritas.", "success")
+                    else:
+                        flash(f"{inscricoes_criadas} inscrições realizadas com sucesso! Uma para cada categoria selecionada.", "success")
+                else:
+                    flash("Inscrição realizada com sucesso!", "success")
             else:
                 flash("Inscrição realizada com sucesso!", "success")
             return redirect(url_for("eventos_competicoes.disponiveis", academia_id=academia_id, aluno_id=aluno_id))
@@ -2297,7 +2469,8 @@ def inscrever(evento_id):
         return render_template("eventos_competicoes/inscrever.html",
             evento=ev, aluno=aluno, academia_id=academia_id, academia_nome=academia_nome,
             campos_form=campos_form, valores_iniciais=valores_iniciais,
-            graduacoes=graduacoes, turmas=turmas, categorias_disponiveis=categorias_disponiveis,
+            graduacoes=graduacoes, turmas=turmas, professores=professores,
+            categorias_disponiveis=categorias_disponiveis,
             back_url=request.referrer or url_for("painel.home"))
     finally:
         cur.close()
@@ -3754,6 +3927,7 @@ def disponiveis():
             ev["total_pagamentos"] = 0
             ev["pagamentos_pendentes"] = 0
             ev["pagamentos_pagos"] = 0
+            ev["valor_total_a_pagar"] = 0
             # Garantir que tem_taxa seja um inteiro
             if ev.get("tem_taxa"):
                 ev["tem_taxa"] = int(ev["tem_taxa"])
@@ -3829,6 +4003,13 @@ def disponiveis():
                     ev["pagamentos_pagos"] = pagamentos_pagos
                     ev["pagamentos_enviados"] = pagamentos_enviados
                     ev["pagamentos_confirmados"] = pagamentos_confirmados
+                    
+                    # Calcular valor total a pagar (valor da taxa * quantidade de pagamentos pendentes)
+                    valor_taxa = ev.get("valor_taxa") or ev.get("valor_taxa_sugerido") or 0
+                    if valor_taxa and pagamentos_pendentes > 0:
+                        ev["valor_total_a_pagar"] = float(valor_taxa) * pagamentos_pendentes
+                    else:
+                        ev["valor_total_a_pagar"] = 0
                     
                     # Determinar status principal de pagamento
                     if ev["total_pagamentos"] == 0:

@@ -31,7 +31,7 @@ def get_contexto_logo_e_nome(current_user, session):
         return None, "Judo Academy", None
 
     modo = session.get("modo_painel") if session else None
-    if not modo or modo not in ("admin", "federacao", "associacao", "academia", "professor", "aluno", "responsavel"):
+    if not modo or modo not in ("admin", "federacao", "associacao", "academia", "professor", "aluno", "responsavel", "visitante"):
         modo = _modo_efetivo(current_user)
 
     conn = get_db_connection()
@@ -100,6 +100,20 @@ def get_contexto_logo_e_nome(current_user, session):
                 if ac:
                     logo = buscar_logo_url("academia", ac["id"])
                     return logo, ac["nome"] or "Academia", "academia"
+
+        if modo == "visitante":
+            cur.execute(
+                "SELECT id_academia FROM visitantes WHERE usuario_id = %s AND ativo = 1 LIMIT 1",
+                (current_user.id,),
+            )
+            row = cur.fetchone()
+            if row and row.get("id_academia"):
+                cur.execute("SELECT id, nome FROM academias WHERE id = %s", (row["id_academia"],))
+                ac = cur.fetchone()
+                if ac:
+                    logo = buscar_logo_url("academia", ac["id"])
+                    return logo, ac["nome"] or "Academia", "academia"
+            return None, "Visitante", None
 
         # Admin sem contexto específico: tentar primeira federação
         if modo == "admin":

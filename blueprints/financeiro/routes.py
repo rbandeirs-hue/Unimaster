@@ -616,10 +616,28 @@ def mensalidades_alunos():
 
     _atualizar_status_atrasadas(academia_id)
 
+    # Aplicar mês e ano atuais como padrão quando não informados
+    hoje = date.today()
     mes_arg = request.args.get("mes", default="", type=str)
-    mes = int(mes_arg) if mes_arg and str(mes_arg).isdigit() and 1 <= int(mes_arg) <= 12 else None
+    mes_valido = int(mes_arg) if mes_arg and str(mes_arg).isdigit() and 1 <= int(mes_arg) <= 12 else None
+    mes = mes_valido if mes_valido else hoje.month
     ano_arg = request.args.get("ano", type=int)
-    ano = ano_arg if (ano_arg and 2000 <= ano_arg <= 2100) else date.today().year
+    ano_valido = ano_arg if (ano_arg and 2000 <= ano_arg <= 2100) else None
+    ano = ano_valido if ano_valido else hoje.year
+    
+    # Se mes e ano não foram informados na URL, redirecionar com os valores padrão
+    if not mes_arg and not ano_arg:
+        busca = (request.args.get("busca") or "").strip()
+        filtro_status = (request.args.get("status") or "").strip().lower()
+        if filtro_status not in ("pago", "pendente", "atrasado", "aguardando_confirmacao"):
+            filtro_status = None
+        params = {"academia_id": academia_id, "mes": mes, "ano": ano}
+        if busca:
+            params["busca"] = busca
+        if filtro_status:
+            params["status"] = filtro_status
+        return redirect(url_for("financeiro.mensalidades_alunos", **params))
+    
     busca = (request.args.get("busca") or "").strip()
     filtro_status = (request.args.get("status") or "").strip().lower()
     if filtro_status not in ("pago", "pendente", "atrasado", "aguardando_confirmacao"):
@@ -628,9 +646,9 @@ def mensalidades_alunos():
 
     conn = get_db_connection()
     cur = conn.cursor(dictionary=True)
-    hoje = date.today()
     where_ma = ["m.id_academia = %s", "ma.status != 'cancelado'"]
     params_ma = [academia_id]
+    # Sempre aplicar filtro de mês e ano (já definidos com valores padrão)
     if mes and 1 <= mes <= 12:
         where_ma.append("MONTH(ma.data_vencimento) = %s")
         params_ma.append(mes)

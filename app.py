@@ -30,7 +30,6 @@ from blueprints.calendario import bp_calendario
 from blueprints.formularios import bp_formularios
 from blueprints.eventos_competicoes import bp_eventos_competicoes
 from blueprints.visitante import bp_visitante
-from blueprints.visitante import bp_visitante
 
 # 🔹 Modelo de Usuário (flask-login)
 from blueprints.auth.user_model import Usuario
@@ -280,6 +279,7 @@ app.register_blueprint(bp_solicitacoes)  # Aprovar solicitações (visita em aca
 app.register_blueprint(bp_calendario)    # Calendário hierárquico (eventos, feriados, turmas)
 app.register_blueprint(bp_formularios)   # Formulários (federação/associação — campos do aluno)
 app.register_blueprint(bp_eventos_competicoes)  # Eventos e Competições (inscrições com formulário)
+app.register_blueprint(bp_visitante)     # Visitante (aulas experimentais)
 
 
 # ============================================================

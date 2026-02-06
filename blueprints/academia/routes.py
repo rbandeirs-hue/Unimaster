@@ -249,7 +249,7 @@ def solicitacoes_aulas():
                 s["foto_url"] = None
         
     except Exception as e:
-        flash(f"Erro ao carregar solicitações: {e}", "danger")
+        flash(f"Erro ao carregar solicitações de aulas: {e}", "danger")
         pendentes = []
         hoje = []
         realizadas = []
@@ -379,6 +379,265 @@ def cancelar_solicitacao(aula_id):
         conn.rollback()
         conn.close()
         return jsonify({"ok": False, "msg": f"Erro: {e}"}), 500
+
+
+# ======================================================
+# 🔹 Pagamentos de Diária - Listar e Aprovar
+# ======================================================
+@academia_bp.route("/visitantes/pagamentos-diaria")
+@login_required
+def pagamentos_diaria():
+    """Lista pagamentos de diária pendentes de confirmação."""
+    if not (
+        current_user.has_role("gestor_academia") or
+        current_user.has_role("professor") or
+        current_user.has_role("admin")
+    ):
+        flash("Acesso negado.", "danger")
+        return redirect(url_for("painel.home"))
+    
+    academia_id, academias = _get_academia_gerenciamento()
+    if not academia_id:
+        flash("Nenhuma academia disponível.", "warning")
+        return redirect(url_for("painel.home"))
+    
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    
+    try:
+        cur.execute("""
+            SELECT vpd.*, v.nome AS visitante_nome, v.email AS visitante_email,
+                   ae.data_aula, t.Nome AS turma_nome
+            FROM visitante_pagamentos_diaria vpd
+            INNER JOIN visitantes v ON v.id = vpd.visitante_id
+            INNER JOIN aulas_experimentais ae ON ae.id = vpd.aula_experimental_id
+            INNER JOIN turmas t ON t.TurmaID = ae.turma_id
+            WHERE v.id_academia = %s
+            ORDER BY vpd.criado_em DESC
+        """, (academia_id,))
+        pagamentos = cur.fetchall()
+    except Exception as e:
+        flash(f"Erro ao carregar pagamentos: {e}", "danger")
+        pagamentos = []
+    finally:
+        cur.close()
+        conn.close()
+    
+    return render_template("academia/visitantes/pagamentos_diaria.html",
+                         pagamentos=pagamentos, academias=academias, academia_id=academia_id)
+
+
+@academia_bp.route("/visitantes/pagamentos-diaria/<int:pagamento_id>/confirmar", methods=["POST"])
+@login_required
+def confirmar_pagamento_diaria(pagamento_id):
+    """Confirma pagamento de diária e gera receita."""
+    if not (
+        current_user.has_role("gestor_academia") or
+        current_user.has_role("professor") or
+        current_user.has_role("admin")
+    ):
+        return jsonify({"ok": False, "msg": "Acesso negado"}), 403
+    
+    academia_id, _ = _get_academia_gerenciamento()
+    if not academia_id:
+        return jsonify({"ok": False, "msg": "Academia não encontrada"}), 400
+    
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    
+    try:
+        # Buscar pagamento
+        cur.execute("""
+            SELECT vpd.*, v.id_academia, v.nome AS visitante_nome
+            FROM visitante_pagamentos_diaria vpd
+            INNER JOIN visitantes v ON v.id = vpd.visitante_id
+            WHERE vpd.id = %s AND v.id_academia = %s
+        """, (pagamento_id, academia_id))
+        pagamento = cur.fetchone()
+        
+        if not pagamento:
+            conn.close()
+            return jsonify({"ok": False, "msg": "Pagamento não encontrado"}), 404
+        
+        if pagamento["status"] != "pago":
+            conn.close()
+            return jsonify({"ok": False, "msg": "Pagamento não está aguardando confirmação"}), 400
+        
+        # Criar receita
+        hoje = date.today().strftime("%Y-%m-%d")
+        descricao = f"Diária de visitante - {pagamento['visitante_nome']}"
+        valor = float(pagamento["valor"])
+        
+        cur.execute("""
+            INSERT INTO receitas (descricao, valor, data, categoria, id_academia, criado_por)
+            VALUES (%s, %s, %s, 'Diária de Visitante', %s, %s)
+        """, (descricao, valor, hoje, academia_id, current_user.id))
+        receita_id = cur.lastrowid
+        
+        # Atualizar pagamento e aprovar aula
+        cur.execute("""
+            UPDATE visitante_pagamentos_diaria 
+            SET status = 'confirmado', pagamento_confirmado_em = NOW(), 
+                confirmado_por = %s, receita_id = %s
+            WHERE id = %s
+        """, (current_user.id, receita_id, pagamento_id))
+        
+        # Aprovar aula experimental
+        cur.execute("""
+            UPDATE aulas_experimentais 
+            SET aprovado = 1 
+            WHERE id = %s
+        """, (pagamento["aula_experimental_id"],))
+        
+        conn.commit()
+        conn.close()
+        return jsonify({"ok": True, "msg": "Pagamento confirmado e receita gerada com sucesso!"})
+        
+    except Exception as e:
+        conn.rollback()
+        conn.close()
+        return jsonify({"ok": False, "msg": f"Erro: {e}"}), 500
+
+
+# ======================================================
+# 🔹 Matrículas Realizadas - Listar e Aprovar
+# ======================================================
+@academia_bp.route("/visitantes/solicitacoes-mensalidade")
+@login_required
+def solicitacoes_mensalidade():
+    """Lista matrículas realizadas pendentes de aprovação."""
+    if not (
+        current_user.has_role("gestor_academia") or
+        current_user.has_role("admin")
+    ):
+        flash("Acesso negado.", "danger")
+        return redirect(url_for("painel.home"))
+    
+    academia_id, academias = _get_academia_gerenciamento()
+    if not academia_id:
+        flash("Nenhuma academia disponível.", "warning")
+        return redirect(url_for("painel.home"))
+    
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    
+    try:
+        cur.execute("""
+            SELECT vsm.*, v.nome AS visitante_nome, v.email AS visitante_email,
+                   v.usuario_id, v.id_academia, m.nome AS mensalidade_nome, m.valor AS mensalidade_valor
+            FROM visitante_solicitacoes_mensalidade vsm
+            INNER JOIN visitantes v ON v.id = vsm.visitante_id
+            INNER JOIN mensalidades m ON m.id = vsm.mensalidade_id
+            WHERE v.id_academia = %s AND vsm.status = 'pendente'
+            ORDER BY vsm.solicitado_em DESC
+        """, (academia_id,))
+        solicitacoes = cur.fetchall()
+    except Exception as e:
+        flash(f"Erro ao carregar matrículas: {e}", "danger")
+        solicitacoes = []
+    finally:
+        cur.close()
+        conn.close()
+    
+    return render_template("academia/visitantes/solicitacoes_mensalidade.html",
+                         solicitacoes=solicitacoes, academias=academias, academia_id=academia_id)
+
+
+@academia_bp.route("/visitantes/solicitacoes-mensalidade/<int:solicitacao_id>/aprovar", methods=["POST"])
+@login_required
+def aprovar_solicitacao_mensalidade(solicitacao_id):
+    """Aprova matrícula e promove visitante a aluno."""
+    if not (
+        current_user.has_role("gestor_academia") or
+        current_user.has_role("admin")
+    ):
+        return jsonify({"ok": False, "msg": "Acesso negado"}), 403
+    
+    academia_id, _ = _get_academia_gerenciamento()
+    if not academia_id:
+        return jsonify({"ok": False, "msg": "Academia não encontrada"}), 400
+    
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    
+    try:
+        # Buscar solicitação
+        cur.execute("""
+            SELECT vsm.*, v.*, m.valor AS mensalidade_valor, m.nome AS mensalidade_nome
+            FROM visitante_solicitacoes_mensalidade vsm
+            INNER JOIN visitantes v ON v.id = vsm.visitante_id
+            INNER JOIN mensalidades m ON m.id = vsm.mensalidade_id
+            WHERE vsm.id = %s AND v.id_academia = %s AND vsm.status = 'pendente'
+        """, (solicitacao_id, academia_id))
+        solicitacao = cur.fetchone()
+        
+        if not solicitacao:
+            conn.close()
+            return jsonify({"ok": False, "msg": "Solicitação não encontrada"}), 404
+        
+        # Criar registro de aluno
+        from datetime import datetime
+        hoje = date.today()
+        ano_atual = hoje.year
+        
+        cur.execute("""
+            INSERT INTO alunos (nome, email, telefone, data_nascimento, foto, usuario_id, id_academia, ativo)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, 1)
+        """, (
+            solicitacao["nome"],
+            solicitacao.get("email"),
+            solicitacao.get("telefone"),
+            solicitacao.get("data_nascimento"),
+            solicitacao.get("foto"),
+            solicitacao["usuario_id"],
+            academia_id
+        ))
+        aluno_id = cur.lastrowid
+        
+        # Vincular mensalidade ao aluno
+        cur.execute("""
+            INSERT INTO mensalidade_aluno (mensalidade_id, aluno_id, valor, status)
+            VALUES (%s, %s, %s, 'pendente')
+        """, (solicitacao["mensalidade_id"], aluno_id, solicitacao["mensalidade_valor"]))
+        
+        # Gerar mensalidades até o final do ano
+        mes_atual = hoje.month
+        for mes in range(mes_atual, 13):  # De mes_atual até dezembro
+            data_vencimento = date(ano_atual, mes, 1)
+            cur.execute("""
+                INSERT INTO mensalidade_aluno (mensalidade_id, aluno_id, valor, status, data_vencimento)
+                VALUES (%s, %s, %s, 'pendente', %s)
+            """, (solicitacao["mensalidade_id"], aluno_id, solicitacao["mensalidade_valor"], data_vencimento))
+        
+        # Adicionar role "aluno" ao usuário
+        cur.execute("SELECT id FROM roles WHERE chave = 'aluno' LIMIT 1")
+        role_aluno = cur.fetchone()
+        if role_aluno:
+            cur.execute("""
+                INSERT IGNORE INTO roles_usuario (usuario_id, role_id)
+                VALUES (%s, %s)
+            """, (solicitacao["usuario_id"], role_aluno["id"]))
+        
+        # Atualizar solicitação
+        cur.execute("""
+            UPDATE visitante_solicitacoes_mensalidade 
+            SET status = 'aprovado', aprovado_em = NOW(), aprovado_por = %s
+            WHERE id = %s
+        """, (current_user.id, solicitacao_id))
+        
+        # Desativar visitante (agora é aluno)
+        cur.execute("UPDATE visitantes SET ativo = 0 WHERE id = %s", (solicitacao["visitante_id"],))
+        
+        conn.commit()
+        conn.close()
+        return jsonify({"ok": True, "msg": "Visitante promovido a aluno com sucesso! Mensalidades geradas até o final do ano."})
+        
+    except Exception as e:
+        conn.rollback()
+        conn.close()
+        return jsonify({"ok": False, "msg": f"Erro: {e}"}), 500
+
+
 def _get_academias_ids():
     """Retorna IDs de academias acessíveis (prioridade: usuarios_academias, igual ao financeiro)."""
     conn = get_db_connection()
@@ -604,7 +863,17 @@ def lista_usuarios():
     )
     
     busca = request.args.get("busca", "").strip()
-    page = int(request.args.get("page", 1))
+    # Quando há busca na URL mas não há parâmetro 'page', resetar para página 1
+    # Isso garante que a busca seja aplicada em toda a base antes da paginação
+    tem_busca = bool(busca)
+    tem_page_param = "page" in request.args
+    
+    if tem_busca and not tem_page_param:
+        # Nova busca: resetar para página 1
+        page = 1
+    else:
+        page = int(request.args.get("page", 1))
+    
     por_pagina = 10
     offset = (page - 1) * por_pagina
     
@@ -840,11 +1109,22 @@ def configuracoes_academia():
             else:
                 aulas_permitidas = None
             
+            valor_diaria = request.form.get("valor_diaria_visitante", "").strip()
+            if valor_diaria == "":
+                valor_diaria = None
+            else:
+                try:
+                    valor_diaria = float(valor_diaria)
+                    if valor_diaria < 0:
+                        valor_diaria = None
+                except ValueError:
+                    valor_diaria = None
+            
             cur.execute("""
                 UPDATE academias 
-                SET aulas_experimentais_permitidas = %s 
+                SET aulas_experimentais_permitidas = %s, valor_diaria_visitante = %s
                 WHERE id = %s
-            """, (aulas_permitidas, academia_id))
+            """, (aulas_permitidas, valor_diaria, academia_id))
             conn.commit()
             flash("Configurações salvas com sucesso!", "success")
         

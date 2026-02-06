@@ -8,10 +8,27 @@
 
 <style>
   #miniaturaUsuario { width: 120px; height: 120px; object-fit: cover; border-radius: 50%; border: 3px solid #ffc107; }
-  .camera-modal-usuario { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; justify-content: center; align-items: center; background: rgba(0,0,0,.9); z-index: 9999; }
+  .camera-modal-usuario { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; justify-content: center; align-items: center; background: rgba(0,0,0,.9); z-index: 9999; padding: 10px; }
   .camera-content-usuario { width: 90%; max-width: 480px; text-align: center; }
-  .camera-content-usuario video, .camera-content-usuario canvas { width: 100%; border-radius: 10px; border: 2px solid #ddd; margin-bottom: 10px; }
+  .camera-content-usuario video, .camera-content-usuario canvas { 
+    width: 100%; 
+    max-width: 100%;
+    height: auto;
+    max-height: 70vh;
+    border-radius: 10px; 
+    border: 2px solid #ddd; 
+    margin-bottom: 10px;
+    object-fit: contain;
+    background: #000;
+  }
   .camera-content-usuario .btn { margin: 5px; }
+  @media (max-width: 768px) {
+    .camera-modal-usuario { padding: 10px; }
+    .camera-content-usuario { width: 100%; max-width: 100%; }
+    .camera-content-usuario video, .camera-content-usuario canvas { max-height: 60vh; }
+    .camera-content-usuario .btn { flex: 1 1 auto; min-width: 80px; font-size: 0.85rem; padding: 0.4rem; margin: 3px; }
+    .camera-content-usuario > div { display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; }
+  }
 </style>
 
 <div class="container mt-4">
@@ -210,6 +227,9 @@
       <button type="button" class="btn btn-success btn-sm" id="btnCapturarUsuario">Capturar</button>
       <button type="button" class="btn btn-primary btn-sm" id="btnConfirmarFotoUsuario" style="display:none;">Confirmar</button>
       <button type="button" class="btn btn-warning btn-sm" style="display:none;" id="btnTirarNovamenteUsuario">Refazer</button>
+      <button type="button" class="btn btn-info btn-sm text-white" id="btnTrocarCameraUsuario" style="display:none;">
+        <span id="btnTrocarCameraTextUsuario">Trocar Câmera</span>
+      </button>
       <button type="button" class="btn btn-danger btn-sm" id="btnFecharCameraUsuario">Fechar</button>
     </div>
   </div>
@@ -231,48 +251,347 @@
   }
 
 
-  var streamUsuario;
-  var modalCam = document.getElementById('cameraModalUsuario');
-  var videoCam = document.getElementById('cameraVideoUsuario');
-  var canvasCam = document.getElementById('cameraCanvasUsuario');
+  var streamUsuario, devicesUsuario = [], currentIndexUsuario = 0, isFrontCameraUsuario = false;
+  var usingFrontCameraUsuario = true;
+  var frontCamerasUsuario = [], backCamerasUsuario = [], currentDeviceIdUsuario = null;
 
-  document.getElementById('btnAbrirCameraUsuario').addEventListener('click', async function() {
+  async function listarCamerasUsuario() {
     try {
-      streamUsuario = await navigator.mediaDevices.getUserMedia({ video: true });
+      // Solicitar permissão primeiro para obter labels dos dispositivos
+      try {
+        await navigator.mediaDevices.getUserMedia({ video: true });
+      } catch (e) {
+        console.error('Erro ao solicitar permissão:', e);
+      }
+      const medias = await navigator.mediaDevices.enumerateDevices();
+      devicesUsuario = medias.filter(d => d.kind === "videoinput");
+      
+      // Classificar câmeras em frontais e traseiras
+      frontCamerasUsuario = [];
+      backCamerasUsuario = [];
+      for (var i = 0; i < devicesUsuario.length; i++) {
+        var device = devicesUsuario[i];
+        var label = device.label.toLowerCase();
+        if (label.includes('front') || label.includes('facing') || label.includes('user')) {
+          frontCamerasUsuario.push(device);
+        } else {
+          backCamerasUsuario.push(device);
+        }
+      }
+      
+      // Mostrar botão se houver múltiplas câmeras (mesmo que não identifiquemos claramente quais são frontais/traseiras)
+      var temAmbas = frontCamerasUsuario.length > 0 && backCamerasUsuario.length > 0;
+      var temMultiplas = devicesUsuario.length > 1;
+      var btnTrocar = document.getElementById('btnTrocarCameraUsuario');
+      if (btnTrocar) btnTrocar.style.display = temMultiplas ? 'inline-block' : 'none';
+      
+      // Se não identificamos ambas, definir texto padrão
+      if (!temAmbas && temMultiplas) {
+        var btnText = document.getElementById('btnTrocarCameraTextUsuario');
+        if (btnText) {
+          btnText.textContent = 'Trocar Câmera';
+        }
+      }
+    } catch (e) {
+      console.error('Erro ao listar câmeras:', e);
+    }
+  }
+
+  function atualizarTextoBotaoTrocarCameraUsuario() {
+    var btnText = document.getElementById('btnTrocarCameraTextUsuario');
+    if (btnText) {
+      var temAmbas = frontCamerasUsuario.length > 0 && backCamerasUsuario.length > 0;
+      if (temAmbas) {
+        // Se identificamos ambas, usar texto dinâmico
+        if (isFrontCameraUsuario) {
+          btnText.textContent = 'Câmera Traseira';
+        } else {
+          btnText.textContent = 'Câmera Dianteira';
+        }
+      } else {
+        // Caso contrário, usar texto genérico
+        btnText.textContent = 'Trocar Câmera';
+      }
+    }
+  }
+
+  async function abrirCameraUsuario(deviceId = null) {
+    var modalCam = document.getElementById('cameraModalUsuario');
+    var videoCam = document.getElementById('cameraVideoUsuario');
+    
+    // Parar stream anterior completamente
+    if (streamUsuario) {
+      try {
+        streamUsuario.getTracks().forEach(function(t) {
+          t.stop();
+        });
+      } catch (e) {
+        console.warn('Erro ao parar tracks:', e);
+      }
+      streamUsuario = null;
+    }
+    
+    // Limpar srcObject antes de iniciar novo stream
+    videoCam.srcObject = null;
+    
+    // Aguardar um pouco mais para garantir que o stream anterior foi completamente liberado
+    await new Promise(function(resolve) { setTimeout(resolve, 300); });
+
+    var constraints = { video: true };
+    var triedExact = false;
+    if (deviceId) {
+      // Verificar se o deviceId ainda existe na lista
+      var deviceExists = devicesUsuario.some(function(d) { return d.deviceId === deviceId; });
+      if (deviceExists) {
+        // Tentar primeiro com exact, se falhar tentar com ideal
+        constraints.video = { deviceId: { exact: deviceId } };
+        triedExact = true;
+      } else {
+        console.warn('DeviceId não encontrado, usando câmera padrão');
+      }
+    }
+
+    try {
+      streamUsuario = await navigator.mediaDevices.getUserMedia(constraints);
       videoCam.srcObject = streamUsuario;
+
+      // Detectar tipo de câmera após stream estar ativo
+      var track = streamUsuario.getVideoTracks()[0];
+      if (track) {
+        var settings = track.getSettings();
+        currentDeviceIdUsuario = settings.deviceId;
+        
+        if (settings.facingMode === 'user') {
+          isFrontCameraUsuario = true;
+        } else if (settings.facingMode === 'environment') {
+          isFrontCameraUsuario = false;
+        } else {
+          // Fallback: verificar se está na lista de frontais ou traseiras
+          var device = devicesUsuario.find(function(d) { return d.deviceId === currentDeviceIdUsuario; });
+          if (device) {
+            var isInFront = frontCamerasUsuario.some(function(d) { return d.deviceId === currentDeviceIdUsuario; });
+            var isInBack = backCamerasUsuario.some(function(d) { return d.deviceId === currentDeviceIdUsuario; });
+            if (isInFront) {
+              isFrontCameraUsuario = true;
+            } else if (isInBack) {
+              isFrontCameraUsuario = false;
+            } else {
+              // Tentar detectar pelo label
+              var label = device.label.toLowerCase();
+              isFrontCameraUsuario = label.includes('front') || label.includes('facing') || label.includes('user');
+            }
+          } else {
+            isFrontCameraUsuario = false;
+          }
+        }
+        
+        // Aplicar transformação apenas para câmera frontal
+        if (isFrontCameraUsuario) {
+          videoCam.style.transform = 'scaleX(-1)';
+        } else {
+          videoCam.style.transform = 'scaleX(1)';
+        }
+      }
+
       modalCam.style.display = 'flex';
-      canvasCam.style.display = 'none';
+      document.getElementById('cameraCanvasUsuario').style.display = 'none';
       videoCam.style.display = 'block';
       document.getElementById('btnCapturarUsuario').style.display = 'inline-block';
       document.getElementById('btnConfirmarFotoUsuario').style.display = 'none';
       document.getElementById('btnTirarNovamenteUsuario').style.display = 'none';
     } catch (e) {
-      alert('Não foi possível acessar a câmera.');
+      console.error('Erro ao acessar câmera com constraints:', e);
+      
+      // Se tentou com exact e falhou, tentar com ideal
+      if (triedExact && deviceId) {
+        try {
+          constraints.video = { deviceId: { ideal: deviceId } };
+          streamUsuario = await navigator.mediaDevices.getUserMedia(constraints);
+          videoCam.srcObject = streamUsuario;
+          
+          var track = streamUsuario.getVideoTracks()[0];
+          if (track) {
+            var settings = track.getSettings();
+            currentDeviceIdUsuario = settings.deviceId;
+            
+            if (settings.facingMode === 'user') {
+              isFrontCameraUsuario = true;
+            } else if (settings.facingMode === 'environment') {
+              isFrontCameraUsuario = false;
+            } else {
+              var device = devicesUsuario.find(function(d) { return d.deviceId === currentDeviceIdUsuario; });
+              if (device) {
+                var isInFront = frontCamerasUsuario.some(function(d) { return d.deviceId === currentDeviceIdUsuario; });
+                var isInBack = backCamerasUsuario.some(function(d) { return d.deviceId === currentDeviceIdUsuario; });
+                if (isInFront) {
+                  isFrontCameraUsuario = true;
+                } else if (isInBack) {
+                  isFrontCameraUsuario = false;
+                } else {
+                  var label = device.label.toLowerCase();
+                  isFrontCameraUsuario = label.includes('front') || label.includes('facing') || label.includes('user');
+                }
+              } else {
+                isFrontCameraUsuario = false;
+              }
+            }
+          }
+          
+          if (isFrontCameraUsuario) {
+            videoCam.style.transform = 'scaleX(-1)';
+          } else {
+            videoCam.style.transform = 'scaleX(1)';
+          }
+
+          atualizarTextoBotaoTrocarCameraUsuario();
+          modalCam.style.display = 'flex';
+          document.getElementById('cameraCanvasUsuario').style.display = 'none';
+          videoCam.style.display = 'block';
+          document.getElementById('btnCapturarUsuario').style.display = 'inline-block';
+          document.getElementById('btnConfirmarFotoUsuario').style.display = 'none';
+          document.getElementById('btnTirarNovamenteUsuario').style.display = 'none';
+          return;
+        } catch (e2) {
+          console.error('Erro ao acessar câmera com ideal:', e2);
+          // Se ainda falhar, tentar sem especificar deviceId
+          try {
+            constraints.video = true;
+            streamUsuario = await navigator.mediaDevices.getUserMedia(constraints);
+            videoCam.srcObject = streamUsuario;
+            
+            var track = streamUsuario.getVideoTracks()[0];
+            if (track) {
+              var settings = track.getSettings();
+              currentDeviceIdUsuario = settings.deviceId;
+              isFrontCameraUsuario = settings.facingMode === 'user';
+            }
+            
+            if (isFrontCameraUsuario) {
+              videoCam.style.transform = 'scaleX(-1)';
+            } else {
+              videoCam.style.transform = 'scaleX(1)';
+            }
+            
+            atualizarTextoBotaoTrocarCameraUsuario();
+            modalCam.style.display = 'flex';
+            document.getElementById('cameraCanvasUsuario').style.display = 'none';
+            videoCam.style.display = 'block';
+            document.getElementById('btnCapturarUsuario').style.display = 'inline-block';
+            document.getElementById('btnConfirmarFotoUsuario').style.display = 'none';
+            document.getElementById('btnTirarNovamenteUsuario').style.display = 'none';
+            return;
+          } catch (e3) {
+            console.error('Erro ao acessar câmera padrão:', e3);
+          }
+        }
+      }
+      
+      alert('Não foi possível acessar a câmera: ' + e.message);
     }
+  }
+
+  async function startCameraUsuario() {
+    if (streamUsuario) {
+      try {
+        streamUsuario.getTracks().forEach(function(t) { t.stop(); });
+      } catch (e) {
+        console.warn('Erro ao parar tracks:', e);
+      }
+      streamUsuario = null;
+    }
+
+    var videoCam = document.getElementById('cameraVideoUsuario');
+    videoCam.srcObject = null;
+    await new Promise(function(resolve) { setTimeout(resolve, 300); });
+
+    var constraints = {
+      video: { facingMode: usingFrontCameraUsuario ? 'user' : 'environment' },
+      audio: false
+    };
+
+    try {
+      streamUsuario = await navigator.mediaDevices.getUserMedia(constraints);
+      videoCam.srcObject = streamUsuario;
+      isFrontCameraUsuario = usingFrontCameraUsuario;
+      videoCam.style.transform = isFrontCameraUsuario ? 'scaleX(-1)' : 'scaleX(1)';
+      atualizarTextoBotaoTrocarCameraUsuario();
+      var btnTrocar = document.getElementById('btnTrocarCameraUsuario');
+      if (btnTrocar) btnTrocar.style.display = 'inline-block';
+      document.getElementById('cameraModalUsuario').style.display = 'flex';
+      document.getElementById('cameraCanvasUsuario').style.display = 'none';
+      videoCam.style.display = 'block';
+      document.getElementById('btnCapturarUsuario').style.display = 'inline-block';
+      document.getElementById('btnConfirmarFotoUsuario').style.display = 'none';
+      document.getElementById('btnTirarNovamenteUsuario').style.display = 'none';
+    } catch (e) {
+      await listarCamerasUsuario();
+      await abrirCameraUsuario(devicesUsuario[0]?.deviceId);
+    }
+  }
+
+  document.getElementById('btnAbrirCameraUsuario').addEventListener('click', async function() {
+    usingFrontCameraUsuario = true;
+    await startCameraUsuario();
   });
 
+  var btnTrocarUsuario = document.getElementById('btnTrocarCameraUsuario');
+  if (btnTrocarUsuario) {
+    btnTrocarUsuario.addEventListener('click', async function() {
+      usingFrontCameraUsuario = !usingFrontCameraUsuario;
+      await startCameraUsuario();
+    });
+  }
+
   document.getElementById('btnFecharCameraUsuario').addEventListener('click', function() {
+    var modalCam = document.getElementById('cameraModalUsuario');
+    var videoCam = document.getElementById('cameraVideoUsuario');
     modalCam.style.display = 'none';
     if (streamUsuario) streamUsuario.getTracks().forEach(function(t) { t.stop(); });
+    videoCam.style.transform = '';
   });
 
   document.getElementById('btnCapturarUsuario').addEventListener('click', function() {
+    var videoCam = document.getElementById('cameraVideoUsuario');
+    var canvasCam = document.getElementById('cameraCanvasUsuario');
+    var ctx = canvasCam.getContext('2d');
+
     canvasCam.width = videoCam.videoWidth;
     canvasCam.height = videoCam.videoHeight;
-    canvasCam.getContext('2d').drawImage(videoCam, 0, 0);
+
+    // Aplicar mesma transformação ao capturar (espelhar se for câmera frontal)
+    if (isFrontCameraUsuario) {
+      ctx.translate(canvasCam.width, 0);
+      ctx.scale(-1, 1);
+    }
+    ctx.drawImage(videoCam, 0, 0);
+
     canvasCam.style.display = 'block';
     videoCam.style.display = 'none';
     document.getElementById('btnCapturarUsuario').style.display = 'none';
     document.getElementById('btnConfirmarFotoUsuario').style.display = 'inline-block';
     document.getElementById('btnTirarNovamenteUsuario').style.display = 'inline-block';
+    var btnTrocar = document.getElementById('btnTrocarCameraUsuario');
+    if (btnTrocar) btnTrocar.style.display = 'none';
   });
 
   document.getElementById('btnTirarNovamenteUsuario').addEventListener('click', function() {
+    var videoCam = document.getElementById('cameraVideoUsuario');
+    var canvasCam = document.getElementById('cameraCanvasUsuario');
     canvasCam.style.display = 'none';
     videoCam.style.display = 'block';
     document.getElementById('btnCapturarUsuario').style.display = 'inline-block';
     document.getElementById('btnConfirmarFotoUsuario').style.display = 'none';
     document.getElementById('btnTirarNovamenteUsuario').style.display = 'none';
+    // Restaurar transformação do video
+    if (isFrontCameraUsuario) {
+      videoCam.style.transform = 'scaleX(-1)';
+    } else {
+      videoCam.style.transform = 'scaleX(1)';
+    }
+    var temMultiplas = devicesUsuario.length > 1;
+    var btnTrocar = document.getElementById('btnTrocarCameraUsuario');
+    if (btnTrocar) btnTrocar.style.display = temMultiplas ? 'inline-block' : 'none';
+    atualizarTextoBotaoTrocarCameraUsuario();
   });
 
   document.getElementById('btnConfirmarFotoUsuario').addEventListener('click', function() {

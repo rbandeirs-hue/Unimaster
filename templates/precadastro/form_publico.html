@@ -72,7 +72,10 @@
                             </div>
                             <div class="col-md-6 mb-3">
                                 <label class="form-label fw-semibold">E-mail</label>
-                                <input type="email" class="form-control" name="email" placeholder="email@exemplo.com" value="{{ form.get('email','') }}">
+                                <input type="email" class="form-control" name="email" id="emailInput" placeholder="email@exemplo.com" value="{{ form.get('email','') }}">
+                                <div class="invalid-feedback" id="emailFeedback" style="display:none;">
+                                    Este e-mail já está cadastrado. Por favor, utilize outro e-mail.
+                                </div>
                             </div>
                         </div>
 
@@ -104,6 +107,9 @@
                         <div id="blocoEmailAcesso" class="mb-3" style="display:{% if form.get('acesso_sistema')=='responsavel' %}block{% else %}none{% endif %};">
                             <label class="form-label fw-semibold">E-mail para criar acesso *</label>
                             <input type="email" class="form-control" name="email_acesso" id="emailAcesso" placeholder="email@exemplo.com" value="{{ form.get('email_acesso', form.get('email','')) }}">
+                            <div class="invalid-feedback" id="emailAcessoFeedback" style="display:none;">
+                                Este e-mail já está cadastrado. Por favor, utilize outro e-mail.
+                            </div>
                             <small class="text-muted">Será usado para login no sistema (quem terá o acesso).</small>
                         </div>
 
@@ -150,6 +156,7 @@
         <canvas id="cameraCanvas" style="display:none;"></canvas>
         <div class="cam-btns">
             <button type="button" class="btn btn-success" id="btnCapturar"><i class="bi bi-camera me-1"></i> Capturar</button>
+            <button type="button" class="btn btn-info text-white" id="btnTrocarCamera"><i class="bi bi-arrow-repeat me-1"></i> <span id="btnTrocarCameraText">Trocar Câmera</span></button>
             <button type="button" class="btn btn-primary d-none" id="btnConfirmar"><i class="bi bi-check me-1"></i> Confirmar</button>
             <button type="button" class="btn btn-warning d-none" id="btnRefazer"><i class="bi bi-arrow-clockwise me-1"></i> Refazer</button>
             <button type="button" class="btn btn-danger" id="btnFechar"><i class="bi bi-x me-1"></i> Fechar</button>
@@ -161,6 +168,14 @@
 <script>
 (function(){
     let stream;
+    let devices = [];
+    let frontCameras = [];
+    let backCameras = [];
+    let currentDeviceId = null;
+    let isFrontCamera = false;
+    let usingFrontCamera = true;
+    let currentIndex = 0;
+    
     const modal = document.getElementById('cameraModal');
     const video = document.getElementById('cameraVideo');
     const canvas = document.getElementById('cameraCanvas');
@@ -176,12 +191,264 @@
     const cpfAluno = document.getElementById('cpfAluno');
     const emailGeral = document.querySelector('input[name="email"]');
 
+    async function listarCameras() {
+        try {
+            await navigator.mediaDevices.getUserMedia({ video: true });
+            const medias = await navigator.mediaDevices.enumerateDevices();
+            devices = medias.filter(d => d.kind === "videoinput");
+            
+            frontCameras = [];
+            backCameras = [];
+            for (let device of devices) {
+                const label = device.label.toLowerCase();
+                if (label.includes('front') || label.includes('facing') || label.includes('user')) {
+                    frontCameras.push(device);
+                } else {
+                    backCameras.push(device);
+                }
+            }
+            
+            const btnTrocar = document.getElementById('btnTrocarCamera');
+            if (btnTrocar) {
+                btnTrocar.classList.remove('d-none');
+            }
+        } catch (e) {
+            console.error('Erro ao listar câmeras:', e);
+        }
+    }
+
+    function atualizarTextoBotaoTrocarCamera() {
+        const btnText = document.getElementById('btnTrocarCameraText');
+        if (btnText) {
+            const temAmbas = frontCameras.length > 0 && backCameras.length > 0;
+            if (temAmbas) {
+                if (isFrontCamera) {
+                    btnText.textContent = 'Câmera Traseira';
+                } else {
+                    btnText.textContent = 'Câmera Dianteira';
+                }
+            } else {
+                btnText.textContent = 'Trocar Câmera';
+            }
+        }
+    }
+
+    async function abrirCameraModal(deviceId = null) {
+        if (stream) {
+            try {
+                stream.getTracks().forEach(t => t.stop());
+            } catch (e) {
+                console.warn('Erro ao parar tracks:', e);
+            }
+            stream = null;
+        }
+        
+        video.srcObject = null;
+        await new Promise(resolve => setTimeout(resolve, 300));
+
+        let constraints = { video: true };
+        let triedExact = false;
+
+        if (deviceId) {
+            const deviceExists = devices.some(d => d.deviceId === deviceId);
+            if (deviceExists) {
+                constraints.video = { deviceId: { exact: deviceId } };
+                triedExact = true;
+            }
+        }
+
+        try {
+            stream = await navigator.mediaDevices.getUserMedia(constraints);
+            video.srcObject = stream;
+
+            const track = stream.getVideoTracks()[0];
+            if (track) {
+                const settings = track.getSettings();
+                currentDeviceId = settings.deviceId;
+                
+                if (settings.facingMode === 'user') {
+                    isFrontCamera = true;
+                } else if (settings.facingMode === 'environment') {
+                    isFrontCamera = false;
+                } else {
+                    const device = devices.find(d => d.deviceId === currentDeviceId);
+                    if (device) {
+                        const isInFront = frontCameras.some(d => d.deviceId === currentDeviceId);
+                        const isInBack = backCameras.some(d => d.deviceId === currentDeviceId);
+                        if (isInFront) {
+                            isFrontCamera = true;
+                        } else if (isInBack) {
+                            isFrontCamera = false;
+                        } else {
+                            const label = device.label.toLowerCase();
+                            isFrontCamera = label.includes('front') || label.includes('facing') || label.includes('user');
+                        }
+                    } else {
+                        isFrontCamera = false;
+                    }
+                }
+            } else {
+                isFrontCamera = false;
+            }
+
+            if (isFrontCamera) {
+                video.style.transform = 'scaleX(-1)';
+            } else {
+                video.style.transform = 'scaleX(1)';
+            }
+
+            atualizarTextoBotaoTrocarCamera();
+            const btnTrocar = document.getElementById('btnTrocarCamera');
+            if (btnTrocar) {
+                btnTrocar.classList.remove('d-none');
+            }
+
+            modal.classList.add('show');
+        } catch (e) {
+            console.error('Erro ao acessar câmera com constraints:', e);
+            
+            if (triedExact && deviceId) {
+                try {
+                    constraints.video = { deviceId: { ideal: deviceId } };
+                    stream = await navigator.mediaDevices.getUserMedia(constraints);
+                    video.srcObject = stream;
+                    
+                    const track = stream.getVideoTracks()[0];
+                    if (track) {
+                        const settings = track.getSettings();
+                        currentDeviceId = settings.deviceId;
+                        isFrontCamera = settings.facingMode === 'user';
+                    }
+                    
+                    if (isFrontCamera) {
+                        video.style.transform = 'scaleX(-1)';
+                    } else {
+                        video.style.transform = 'scaleX(1)';
+                    }
+                    
+                    atualizarTextoBotaoTrocarCamera();
+                    const btnTrocar = document.getElementById('btnTrocarCamera');
+                    if (btnTrocar) {
+                        btnTrocar.classList.remove('d-none');
+                    }
+                    
+                    modal.classList.add('show');
+                    return;
+                } catch (e2) {
+                    console.error('Erro ao acessar câmera com ideal:', e2);
+                    try {
+                        constraints.video = true;
+                        stream = await navigator.mediaDevices.getUserMedia(constraints);
+                        video.srcObject = stream;
+                        
+                        const track = stream.getVideoTracks()[0];
+                        if (track) {
+                            const settings = track.getSettings();
+                            currentDeviceId = settings.deviceId;
+                            isFrontCamera = settings.facingMode === 'user';
+                        }
+                        
+                        if (isFrontCamera) {
+                            video.style.transform = 'scaleX(-1)';
+                        } else {
+                            video.style.transform = 'scaleX(1)';
+                        }
+                        
+                        atualizarTextoBotaoTrocarCamera();
+                        const btnTrocar = document.getElementById('btnTrocarCamera');
+                        if (btnTrocar) {
+                            btnTrocar.classList.remove('d-none');
+                        }
+                        
+                        modal.classList.add('show');
+                        return;
+                    } catch (e3) {
+                        console.error('Erro ao acessar câmera padrão:', e3);
+                    }
+                }
+            }
+            
+            alert('Não foi possível acessar a câmera: ' + e.message);
+        }
+    }
+
+    async function startCamera() {
+        if (stream) {
+            try {
+                stream.getTracks().forEach(t => t.stop());
+            } catch (e) {
+                console.warn('Erro ao parar tracks:', e);
+            }
+            stream = null;
+        }
+
+        const constraints = {
+            video: { facingMode: usingFrontCamera ? 'user' : 'environment' },
+            audio: false
+        };
+
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+        video.srcObject = stream;
+        isFrontCamera = usingFrontCamera;
+        video.style.transform = isFrontCamera ? 'scaleX(-1)' : 'scaleX(1)';
+        atualizarTextoBotaoTrocarCamera();
+
+        const btnTrocar = document.getElementById('btnTrocarCamera');
+        if (btnTrocar) {
+            btnTrocar.classList.remove('d-none');
+        }
+
+        modal.classList.add('show');
+    }
+
     document.getElementById('btnCamera').onclick = async function(){
         try{
-            stream = await navigator.mediaDevices.getUserMedia({video:true});
-            video.srcObject = stream;
-            modal.classList.add('show');
-        }catch(e){ alert('Não foi possível acessar a câmera: '+e.message); }
+            await startCamera();
+        }catch(e){
+            alert('Não foi possível acessar a câmera: '+e.message);
+        }
+    };
+
+    async function abrirCameraComFacing(facingMode) {
+        if (stream) {
+            try {
+                stream.getTracks().forEach(t => t.stop());
+            } catch (e) {
+                console.warn('Erro ao parar tracks:', e);
+            }
+            stream = null;
+        }
+        video.srcObject = null;
+        await new Promise(resolve => setTimeout(resolve, 300));
+
+        const attempts = [
+            { video: { facingMode: { exact: facingMode } } },
+            { video: { facingMode: { ideal: facingMode } } },
+            { video: { facingMode: facingMode } },
+            { video: { advanced: [{ facingMode: facingMode }] } }
+        ];
+
+        let lastError = null;
+        for (const constraints of attempts) {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia(constraints);
+                video.srcObject = stream;
+                isFrontCamera = facingMode === 'user';
+                video.style.transform = isFrontCamera ? 'scaleX(-1)' : 'scaleX(1)';
+                atualizarTextoBotaoTrocarCamera();
+                modal.classList.add('show');
+                return;
+            } catch (e) {
+                lastError = e;
+            }
+        }
+
+        throw lastError || new Error('Falha ao alternar câmera');
+    }
+
+    document.getElementById('btnTrocarCamera').onclick = function(){
+        usingFrontCamera = !usingFrontCamera;
+        startCamera();
     };
     document.getElementById('btnFechar').onclick = function(){
         modal.classList.remove('show');
@@ -190,10 +457,19 @@
     document.getElementById('btnCapturar').onclick = function(){
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
-        canvas.getContext('2d').drawImage(video,0,0);
+        const ctx = canvas.getContext('2d');
+        
+        // Aplicar mesma transformação ao capturar (espelhar se for câmera frontal)
+        if (isFrontCamera) {
+            ctx.translate(canvas.width, 0);
+            ctx.scale(-1, 1);
+        }
+        ctx.drawImage(video, 0, 0);
+        
         canvas.style.display = 'block';
         video.style.display = 'none';
         document.getElementById('btnCapturar').classList.add('d-none');
+        document.getElementById('btnTrocarCamera').classList.add('d-none');
         document.getElementById('btnConfirmar').classList.remove('d-none');
         document.getElementById('btnRefazer').classList.remove('d-none');
     };
@@ -201,8 +477,19 @@
         canvas.style.display = 'none';
         video.style.display = 'block';
         document.getElementById('btnCapturar').classList.remove('d-none');
+        const btnTrocar = document.getElementById('btnTrocarCamera');
+        if (btnTrocar) {
+            btnTrocar.classList.remove('d-none');
+        }
         document.getElementById('btnConfirmar').classList.add('d-none');
         document.getElementById('btnRefazer').classList.add('d-none');
+        
+        // Restaurar transformação do video
+        if (isFrontCamera) {
+            video.style.transform = 'scaleX(-1)';
+        } else {
+            video.style.transform = 'scaleX(1)';
+        }
     };
     document.getElementById('btnConfirmar').onclick = function(){
         const dataURL = canvas.toDataURL('image/png');
@@ -267,6 +554,118 @@
     }
     document.querySelectorAll('[data-mask="cpf"]').forEach(el=>el.addEventListener('input',function(){mascaraCPF(this);}));
     document.querySelectorAll('[data-mask="phone"]').forEach(el=>el.addEventListener('input',function(){mascaraPhone(this);}));
+
+    // Validação de email duplicado
+    let emailCheckTimeout;
+    const emailInput = document.getElementById('emailInput');
+    const emailFeedback = document.getElementById('emailFeedback');
+    const emailAcessoInput = document.getElementById('emailAcesso');
+    const emailAcessoFeedback = document.getElementById('emailAcessoFeedback');
+
+    function verificarEmail(email, callback) {
+        if (!email || email.length < 5 || !email.includes('@')) {
+            callback(false);
+            return;
+        }
+        const url = '/precadastro/verificar-email';
+        fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ email: email })
+        })
+        .then(response => response.json())
+        .then(data => {
+            callback(data.existe);
+        })
+        .catch(error => {
+            console.error('Erro ao verificar email:', error);
+            callback(false);
+        });
+    }
+
+    function mostrarErroEmail(input, feedback) {
+        input.classList.add('is-invalid');
+        feedback.style.display = 'block';
+    }
+
+    function removerErroEmail(input, feedback) {
+        input.classList.remove('is-invalid');
+        feedback.style.display = 'none';
+    }
+
+    if (emailInput) {
+        emailInput.addEventListener('blur', function() {
+            const email = this.value.trim();
+            if (email) {
+                clearTimeout(emailCheckTimeout);
+                emailCheckTimeout = setTimeout(() => {
+                    verificarEmail(email, function(existe) {
+                        if (existe) {
+                            mostrarErroEmail(emailInput, emailFeedback);
+                        } else {
+                            removerErroEmail(emailInput, emailFeedback);
+                        }
+                    });
+                }, 500);
+            } else {
+                removerErroEmail(emailInput, emailFeedback);
+            }
+        });
+
+        emailInput.addEventListener('input', function() {
+            removerErroEmail(emailInput, emailFeedback);
+        });
+    }
+
+    if (emailAcessoInput) {
+        emailAcessoInput.addEventListener('blur', function() {
+            const email = this.value.trim();
+            if (email) {
+                clearTimeout(emailCheckTimeout);
+                emailCheckTimeout = setTimeout(() => {
+                    verificarEmail(email, function(existe) {
+                        if (existe) {
+                            mostrarErroEmail(emailAcessoInput, emailAcessoFeedback);
+                        } else {
+                            removerErroEmail(emailAcessoInput, emailAcessoFeedback);
+                        }
+                    });
+                }, 500);
+            } else {
+                removerErroEmail(emailAcessoInput, emailAcessoFeedback);
+            }
+        });
+
+        emailAcessoInput.addEventListener('input', function() {
+            removerErroEmail(emailAcessoInput, emailAcessoFeedback);
+        });
+    }
+
+    // Validar antes de enviar o formulário
+    const formPrecad = document.getElementById('formPrecad');
+    if (formPrecad) {
+        formPrecad.addEventListener('submit', function(e) {
+            const emailValue = emailInput ? emailInput.value.trim() : '';
+            const emailAcessoValue = emailAcessoInput ? emailAcessoInput.value.trim() : '';
+            let temErro = false;
+
+            if (emailValue && emailInput.classList.contains('is-invalid')) {
+                temErro = true;
+            }
+
+            if (emailAcessoValue && emailAcessoInput.classList.contains('is-invalid')) {
+                temErro = true;
+            }
+
+            if (temErro) {
+                e.preventDefault();
+                alert('Por favor, corrija os erros antes de enviar o formulário.');
+                return false;
+            }
+        });
+    }
 
 })();
 </script>

@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Realizar Matrícula{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/visitante/responsive.css') }}">
+{% endblock %}
+{% block content %}
+<div class="container mt-4">
+    <div class="mb-4">
+        {% set back_url = url_for('visitante.painel') %}
+        {% include 'components/botao_voltar.html' %}
+    </div>
+
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">
+                        <i class="bi bi-calendar-check me-2"></i>Realizar Matrícula
+                    </h5>
+                </div>
+                <div class="card-body p-3 p-md-4">
+                    <div class="alert alert-info mb-3 mb-md-4">
+                        <i class="bi bi-info-circle me-2"></i>
+                        <div>
+                            Ao realizar sua matrícula e ter sua solicitação aprovada pela academia, você será promovido a aluno e terá mensalidades geradas automaticamente até o final do ano.
+                        </div>
+                    </div>
+
+                    {% if mensalidades %}
+                    <form method="POST">
+                        <div class="mb-3">
+                            <label for="mensalidade_id" class="form-label fw-bold">
+                                <i class="bi bi-list-check me-1"></i>Selecione a Mensalidade
+                            </label>
+                            <select class="form-select" id="mensalidade_id" name="mensalidade_id" required>
+                                <option value="">-- Selecione uma mensalidade --</option>
+                                {% for mensalidade in mensalidades %}
+                                <option value="{{ mensalidade.id }}">
+                                    {{ mensalidade.nome }} - R$ {{ "%.2f"|format(mensalidade.valor) }}
+                                    {% if mensalidade.descricao %}
+                                    ({{ mensalidade.descricao }})
+                                    {% endif %}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="observacoes" class="form-label">
+                                <i class="bi bi-chat-left-text me-1"></i>Observações (opcional)
+                            </label>
+                            <textarea class="form-control" id="observacoes" name="observacoes" rows="3" 
+                                      placeholder="Informações adicionais sobre sua solicitação..."></textarea>
+                        </div>
+
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-send me-2"></i>Realizar Matrícula
+                            </button>
+                        </div>
+                    </form>
+                    {% else %}
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle me-2"></i>
+                        Nenhuma mensalidade disponível no momento. Entre em contato com a academia.
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

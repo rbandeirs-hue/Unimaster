@@ -1,5 +1,8 @@
 {% extends "base.html" %}
 {% block title %}Painel — Visitante{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/visitante/responsive.css') }}">
+{% endblock %}
 {% block content %}
 <div class="container mt-4">
     <div class="mb-4">
@@ -9,8 +12,8 @@
 
     {% if visitante %}
     <!-- Card de Informações -->
-    <div class="row mb-4">
-        <div class="col-md-6">
+    <div class="row mb-4 g-3">
+        <div class="col-12 col-md-6">
             <div class="card shadow-sm border-0">
                 <div class="card-body">
                     <h5 class="card-title">
@@ -27,7 +30,7 @@
                 </div>
             </div>
         </div>
-        <div class="col-md-6">
+        <div class="col-12 col-md-6">
             <div class="card shadow-sm border-0">
                 <div class="card-body">
                     <h5 class="card-title">
@@ -61,8 +64,20 @@
     </div>
 
     <!-- Ações Rápidas -->
-    <div class="row mb-4">
-        <div class="col-md-6">
+    <div class="row mb-4 g-3">
+        <div class="col-12 col-md-4">
+            {% if aula_pendente %}
+            <div class="card shadow-sm border-secondary h-100" style="opacity: 0.6;">
+                <div class="card-body text-center p-4">
+                    <i class="bi bi-lock display-5 mb-3 text-secondary"></i>
+                    <h5 class="card-title fw-bold">Solicitar Aula Experimental</h5>
+                    <p class="card-text small text-danger mb-0">
+                        Você já possui uma aula agendada para {{ aula_pendente.data_aula|data_br }}. 
+                        Aguarde a conclusão ou cancele para solicitar uma nova.
+                    </p>
+                </div>
+            </div>
+            {% else %}
             <a href="{{ url_for('visitante.solicitar_aula') }}" class="card-action-link text-decoration-none">
                 <div class="card shadow-sm border-primary h-100">
                     <div class="card-body text-center p-4">
@@ -72,14 +87,26 @@
                     </div>
                 </div>
             </a>
+            {% endif %}
         </div>
-        <div class="col-md-6">
+        <div class="col-12 col-md-4">
             <a href="{{ url_for('visitante.minhas_aulas') }}" class="card-action-link text-decoration-none">
                 <div class="card shadow-sm border-info h-100">
                     <div class="card-body text-center p-4">
                         <i class="bi bi-calendar-event display-5 mb-3 text-info"></i>
                         <h5 class="card-title fw-bold">Minhas Aulas</h5>
                         <p class="card-text small text-muted mb-0">Veja suas aulas agendadas e realizadas.</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col-12 col-md-4">
+            <a href="{{ url_for('visitante.solicitar_mensalidade') }}" class="card-action-link text-decoration-none">
+                <div class="card shadow-sm border-success h-100">
+                    <div class="card-body text-center p-4">
+                        <i class="bi bi-person-check display-5 mb-3 text-success"></i>
+                        <h5 class="card-title fw-bold">Realizar Matrícula</h5>
+                        <p class="card-text small text-muted mb-0">Torne-se aluno e tenha acesso completo.</p>
                     </div>
                 </div>
             </a>
@@ -95,7 +122,8 @@
             </h5>
         </div>
         <div class="card-body">
-            <div class="table-responsive">
+            <!-- Desktop: Tabela -->
+            <div class="table-responsive d-none d-md-block">
                 <table class="table table-hover">
                     <thead>
                         <tr>
@@ -115,13 +143,37 @@
                                 {% if aula.presente %}
                                 <span class="badge bg-success">Presente</span>
                                 {% else %}
-                                <span class="badge bg-secondary">Falta</span>
+                                <span class="badge bg-danger">Falta</span>
                                 {% endif %}
                             </td>
                         </tr>
                         {% endfor %}
                     </tbody>
                 </table>
+            </div>
+            
+            <!-- Mobile: Cards -->
+            <div class="d-md-none">
+                {% for aula in aulas_realizadas %}
+                <div class="card mb-3 border">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <div>
+                                <strong class="d-block">{{ aula.turma_nome }}</strong>
+                                <small class="text-muted">{{ aula.data_aula|data_br }}</small>
+                            </div>
+                            {% if aula.presente %}
+                            <span class="badge bg-success">Presente</span>
+                            {% else %}
+                            <span class="badge bg-danger">Falta</span>
+                            {% endif %}
+                        </div>
+                        {% if aula.DiasHorario %}
+                        <p class="mb-0 small"><i class="bi bi-clock me-1"></i>{{ aula.DiasHorario }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
             </div>
         </div>
     </div>

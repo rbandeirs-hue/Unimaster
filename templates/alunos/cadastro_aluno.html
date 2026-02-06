@@ -110,9 +110,40 @@
     .camera-content video,
     .camera-content canvas {
         width: 100%;
+        max-width: 100%;
+        height: auto;
+        max-height: 70vh;
         border-radius: 10px;
         border: 2px solid #ddd;
         margin-bottom: 10px;
+        object-fit: contain;
+        background: #000;
+    }
+    
+    @media (max-width: 768px) {
+        .camera-modal {
+            padding: 10px;
+        }
+        .camera-content {
+            width: 100%;
+            max-width: 100%;
+        }
+        .camera-content video,
+        .camera-content canvas {
+            max-height: 60vh;
+        }
+        .camera-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 5px;
+        }
+        .camera-buttons button {
+            flex: 1 1 auto;
+            min-width: 100px;
+            font-size: 0.9rem;
+            padding: 0.5rem;
+        }
     }
 
     .camera-buttons button {
@@ -668,8 +699,8 @@
                 <i class="bi bi-arrow-clockwise"></i> Refazer
             </button>
 
-            <button class="btn btn-info text-white" id="btnTrocarCameraModal" style="display:none;">
-                <i class="bi bi-arrow-repeat"></i> Trocar
+            <button class="btn btn-info text-white" id="btnTrocarCameraModal">
+                <i class="bi bi-arrow-repeat"></i> <span id="btnTrocarCameraText">Trocar Câmera</span>
             </button>
 
             <button class="btn btn-danger" id="btnFecharModal">
@@ -686,61 +717,308 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.4/jquery.min.js"></script>
 
 <script>
-    let stream, devices = [], currentIndex = 0;
+    let stream, devices = [], currentIndex = 0, isFrontCamera = false;
+    let usingFrontCamera = true;
+    let frontCameras = [], backCameras = [], currentDeviceId = null;
 
     async function listarCameras() {
+        // Solicitar permissão primeiro para obter labels dos dispositivos
+        try {
+            await navigator.mediaDevices.getUserMedia({ video: true });
+        } catch (e) {
+            console.error('Erro ao solicitar permissão:', e);
+        }
         const medias = await navigator.mediaDevices.enumerateDevices();
         devices = medias.filter(d => d.kind === "videoinput");
-        $('#btnTrocarCameraModal').toggle(devices.length > 1);
+        
+        // Classificar câmeras em frontais e traseiras
+        frontCameras = [];
+        backCameras = [];
+        for (let device of devices) {
+            const label = device.label.toLowerCase();
+            if (label.includes('front') || label.includes('facing') || label.includes('user')) {
+                frontCameras.push(device);
+            } else {
+                backCameras.push(device);
+            }
+        }
+        
+        // Mostrar botão se houver múltiplas câmeras (mesmo que não identifiquemos claramente quais são frontais/traseiras)
+        // Se identificamos ambas, usa a lógica de texto dinâmico. Caso contrário, mostra "Trocar Câmera"
+        const temAmbas = frontCameras.length > 0 && backCameras.length > 0;
+        const temMultiplas = devices.length > 1;
+        
+        $('#btnTrocarCameraModal').css('display', 'inline-block !important');
+        
+        // Se não identificamos ambas, definir texto padrão
+        if (!temAmbas && temMultiplas) {
+            const btnText = document.getElementById('btnTrocarCameraText');
+            if (btnText) {
+                btnText.textContent = 'Trocar Câmera';
+            }
+        }
     }
 
     async function abrirCameraModal(deviceId = null) {
-        if (stream) stream.getTracks().forEach(t => t.stop());
+        let video = document.getElementById("cameraVideo");
+        
+        // Parar stream anterior completamente
+        if (stream) {
+            try {
+                stream.getTracks().forEach(t => {
+                    t.stop();
+                });
+            } catch (e) {
+                console.warn('Erro ao parar tracks:', e);
+            }
+            stream = null;
+        }
+        
+        // Limpar srcObject antes de iniciar novo stream
+        video.srcObject = null;
+        
+        // Aguardar um pouco mais para garantir que o stream anterior foi completamente liberado
+        await new Promise(resolve => setTimeout(resolve, 300));
 
         let constraints = { video: true };
+        let triedExact = false;
 
         if (deviceId) {
-            constraints.video = { deviceId: { exact: deviceId } };
+            // Verificar se o deviceId ainda existe na lista
+            const deviceExists = devices.some(d => d.deviceId === deviceId);
+            if (deviceExists) {
+                // Tentar primeiro com exact, se falhar tentar com ideal
+                constraints.video = { deviceId: { exact: deviceId } };
+                triedExact = true;
+            } else {
+                console.warn('DeviceId não encontrado, usando câmera padrão');
+            }
         }
 
-        stream = await navigator.mediaDevices.getUserMedia(constraints);
-        document.getElementById("cameraVideo").srcObject = stream;
+        try {
+            stream = await navigator.mediaDevices.getUserMedia(constraints);
+            video.srcObject = stream;
 
-        $('#cameraModal').fadeIn();
+            // Detectar tipo de câmera após stream estar ativo
+            const track = stream.getVideoTracks()[0];
+            if (track) {
+                const settings = track.getSettings();
+                currentDeviceId = settings.deviceId;
+                
+                // Se facingMode é 'user', é frontal. Se 'environment' ou não definido, tentar detectar pelo label
+                if (settings.facingMode === 'user') {
+                    isFrontCamera = true;
+                } else if (settings.facingMode === 'environment') {
+                    isFrontCamera = false;
+                } else {
+                    // Fallback: verificar se está na lista de frontais ou traseiras
+                    const device = devices.find(d => d.deviceId === currentDeviceId);
+                    if (device) {
+                        const isInFront = frontCameras.some(d => d.deviceId === currentDeviceId);
+                        const isInBack = backCameras.some(d => d.deviceId === currentDeviceId);
+                        if (isInFront) {
+                            isFrontCamera = true;
+                        } else if (isInBack) {
+                            isFrontCamera = false;
+                        } else {
+                            // Tentar detectar pelo label
+                            const label = device.label.toLowerCase();
+                            isFrontCamera = label.includes('front') || label.includes('facing') || label.includes('user');
+                        }
+                    } else {
+                        isFrontCamera = false;
+                    }
+                }
+            } else {
+                isFrontCamera = false;
+            }
+
+            // Aplicar transformação apenas para câmera frontal (espelhar horizontalmente)
+            if (isFrontCamera) {
+                video.style.transform = 'scaleX(-1)';
+            } else {
+                video.style.transform = 'scaleX(1)';
+            }
+
+            // Atualizar texto do botão de trocar câmera
+            atualizarTextoBotaoTrocarCamera();
+            
+            // Garantir que o botão seja mostrado ao abrir a câmera
+            $('#btnTrocarCameraModal').css('display', 'inline-block !important');
+
+            $('#cameraModal').fadeIn(function() {
+                // Garantir novamente após o modal abrir completamente
+                $('#btnTrocarCameraModal').css('display', 'inline-block !important');
+            });
+        } catch (e) {
+            console.error('Erro ao acessar câmera com constraints:', e);
+            
+            // Se tentou com exact e falhou, tentar com ideal
+            if (triedExact && deviceId) {
+                try {
+                    constraints.video = { deviceId: { ideal: deviceId } };
+                    stream = await navigator.mediaDevices.getUserMedia(constraints);
+                    video.srcObject = stream;
+                    
+                    // Detectar tipo de câmera após stream estar ativo
+                    const track = stream.getVideoTracks()[0];
+                    if (track) {
+                        const settings = track.getSettings();
+                        currentDeviceId = settings.deviceId;
+                        
+                        if (settings.facingMode === 'user') {
+                            isFrontCamera = true;
+                        } else if (settings.facingMode === 'environment') {
+                            isFrontCamera = false;
+                        } else {
+                            const device = devices.find(d => d.deviceId === currentDeviceId);
+                            if (device) {
+                                const isInFront = frontCameras.some(d => d.deviceId === currentDeviceId);
+                                const isInBack = backCameras.some(d => d.deviceId === currentDeviceId);
+                                if (isInFront) {
+                                    isFrontCamera = true;
+                                } else if (isInBack) {
+                                    isFrontCamera = false;
+                                } else {
+                                    const label = device.label.toLowerCase();
+                                    isFrontCamera = label.includes('front') || label.includes('facing') || label.includes('user');
+                                }
+                            } else {
+                                isFrontCamera = false;
+                            }
+                        }
+                    } else {
+                        isFrontCamera = false;
+                    }
+
+                    if (isFrontCamera) {
+                        video.style.transform = 'scaleX(-1)';
+                    } else {
+                        video.style.transform = 'scaleX(1)';
+                    }
+
+                    $('#cameraModal').fadeIn();
+                    return;
+                } catch (e2) {
+                    console.error('Erro ao acessar câmera com ideal:', e2);
+                    // Se ainda falhar, tentar sem especificar deviceId
+                    try {
+                        constraints.video = true;
+                        stream = await navigator.mediaDevices.getUserMedia(constraints);
+                        video.srcObject = stream;
+                        
+                        const track = stream.getVideoTracks()[0];
+                        if (track) {
+                            const settings = track.getSettings();
+                            currentDeviceId = settings.deviceId;
+                            isFrontCamera = settings.facingMode === 'user';
+                        }
+                        
+                        if (isFrontCamera) {
+                            video.style.transform = 'scaleX(-1)';
+                        } else {
+                            video.style.transform = 'scaleX(1)';
+                        }
+                        
+                        atualizarTextoBotaoTrocarCamera();
+                        const temMultiplas2 = devices.length > 1;
+                        if (temMultiplas2) {
+                            $('#btnTrocarCameraModal').css('display', 'inline-block !important');
+                        } else {
+                            $('#btnTrocarCameraModal').css('display', 'none !important');
+                        }
+                        $('#cameraModal').fadeIn(function() {
+                            if (temMultiplas2) {
+                                $('#btnTrocarCameraModal').css('display', 'inline-block !important');
+                            }
+                        });
+                        return;
+                    } catch (e3) {
+                        console.error('Erro ao acessar câmera padrão:', e3);
+                    }
+                }
+            }
+            
+            alert('Não foi possível acessar a câmera: ' + e.message);
+        }
+    }
+
+    async function startCamera() {
+        if (stream) {
+            try {
+                stream.getTracks().forEach(t => t.stop());
+            } catch (e) {
+                console.warn('Erro ao parar tracks:', e);
+            }
+            stream = null;
+        }
+
+        const video = document.getElementById("cameraVideo");
+        video.srcObject = null;
+        await new Promise(resolve => setTimeout(resolve, 300));
+
+        const constraints = {
+            video: { facingMode: usingFrontCamera ? 'user' : 'environment' },
+            audio: false
+        };
+
+        try {
+            stream = await navigator.mediaDevices.getUserMedia(constraints);
+            video.srcObject = stream;
+            isFrontCamera = usingFrontCamera;
+            video.style.transform = isFrontCamera ? 'scaleX(-1)' : 'scaleX(1)';
+            atualizarTextoBotaoTrocarCamera();
+            $('#btnTrocarCameraModal').css('display', 'inline-block !important');
+            $('#cameraModal').fadeIn();
+        } catch (e) {
+            // fallback para lógica existente
+            await listarCameras();
+            await abrirCameraModal(devices[0]?.deviceId);
+        }
     }
 
     $("#btnAbrirCamera").click(async function () {
         try {
-            await listarCameras();
-            await abrirCameraModal(devices[0]?.deviceId);
+            usingFrontCamera = true;
+            await startCamera();
         } catch (e) {
             alert("Não foi possível acessar a câmera: " + e.message);
         }
     });
 
     $("#btnTrocarCameraModal").click(async function () {
-        currentIndex = (currentIndex + 1) % devices.length;
-        await abrirCameraModal(devices[currentIndex].deviceId);
+        usingFrontCamera = !usingFrontCamera;
+        await startCamera();
     });
 
     $("#btnFecharModal").click(function () {
         $("#cameraModal").fadeOut();
         if (stream) stream.getTracks().forEach(t => t.stop());
+        let video = document.getElementById("cameraVideo");
+        video.style.transform = '';
     });
 
     $("#btnCapturar").click(function () {
         let video = document.getElementById("cameraVideo");
         let canvas = document.getElementById("cameraCanvas");
+        let ctx = canvas.getContext("2d");
 
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
 
-        canvas.getContext("2d").drawImage(video, 0, 0);
+        // Aplicar mesma transformação ao capturar (espelhar se for câmera frontal)
+        if (isFrontCamera) {
+            ctx.translate(canvas.width, 0);
+            ctx.scale(-1, 1);
+        }
+        ctx.drawImage(video, 0, 0);
 
         $("#cameraCanvas").show();
         $("#cameraVideo").hide();
         $("#btnConfirmarFoto, #btnTirarNovamente").show();
-        $("#btnCapturar, #btnTrocarCameraModal").hide();
+        $("#btnCapturar").hide();
+        // Ocultar botão de trocar ao capturar (será mostrado novamente ao refazer)
+        $("#btnTrocarCameraModal").hide();
     });
 
     $("#btnTirarNovamente").click(function () {
@@ -748,7 +1026,15 @@
         $("#cameraVideo").show();
         $("#btnConfirmarFoto, #btnTirarNovamente").hide();
         $("#btnCapturar").show();
-        $("#btnTrocarCameraModal").toggle(devices.length > 1);
+        $("#btnTrocarCameraModal").css('display', 'inline-block !important');
+        atualizarTextoBotaoTrocarCamera();
+        // Restaurar transformação do video
+        let video = document.getElementById("cameraVideo");
+        if (isFrontCamera) {
+            video.style.transform = 'scaleX(-1)';
+        } else {
+            video.style.transform = 'scaleX(1)';
+        }
     });
 
     $("#btnConfirmarFoto").click(function () {

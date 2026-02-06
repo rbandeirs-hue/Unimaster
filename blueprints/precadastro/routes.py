@@ -257,6 +257,72 @@ def form_publico(academia_slug):
         responsavel_eh_proprio = 1 if form.get("responsavel_eh_proprio") == "1" else 0
         email_acesso = (form.get("email_acesso") or "").strip() or None
 
+        # Verificar se o email já existe (em pre_cadastro ou usuarios)
+        if email:
+            conn_check = get_db_connection()
+            cur_check = conn_check.cursor(dictionary=True)
+            cur_check.execute("SELECT id FROM pre_cadastro WHERE LOWER(email) = %s", (email.lower(),))
+            if cur_check.fetchone():
+                cur_check.close()
+                conn_check.close()
+                flash("Este e-mail já está cadastrado. Por favor, utilize outro e-mail.", "danger")
+                return render_template(
+                    "precadastro/form_publico.html",
+                    academia_id=academia_id,
+                    academia_nome=academia_nome,
+                    academia_slug=academia_slug,
+                    form=form,
+                    sucesso=False,
+                )
+            cur_check.execute("SELECT id FROM usuarios WHERE LOWER(email) = %s", (email.lower(),))
+            if cur_check.fetchone():
+                cur_check.close()
+                conn_check.close()
+                flash("Este e-mail já está cadastrado. Por favor, utilize outro e-mail.", "danger")
+                return render_template(
+                    "precadastro/form_publico.html",
+                    academia_id=academia_id,
+                    academia_nome=academia_nome,
+                    academia_slug=academia_slug,
+                    form=form,
+                    sucesso=False,
+                )
+            cur_check.close()
+            conn_check.close()
+
+        # Verificar se o email_acesso já existe (quando é responsável)
+        if email_acesso:
+            conn_check = get_db_connection()
+            cur_check = conn_check.cursor(dictionary=True)
+            cur_check.execute("SELECT id FROM pre_cadastro WHERE LOWER(email_acesso) = %s", (email_acesso.lower(),))
+            if cur_check.fetchone():
+                cur_check.close()
+                conn_check.close()
+                flash("Este e-mail de acesso já está cadastrado. Por favor, utilize outro e-mail.", "danger")
+                return render_template(
+                    "precadastro/form_publico.html",
+                    academia_id=academia_id,
+                    academia_nome=academia_nome,
+                    academia_slug=academia_slug,
+                    form=form,
+                    sucesso=False,
+                )
+            cur_check.execute("SELECT id FROM usuarios WHERE LOWER(email) = %s", (email_acesso.lower(),))
+            if cur_check.fetchone():
+                cur_check.close()
+                conn_check.close()
+                flash("Este e-mail de acesso já está cadastrado. Por favor, utilize outro e-mail.", "danger")
+                return render_template(
+                    "precadastro/form_publico.html",
+                    academia_id=academia_id,
+                    academia_nome=academia_nome,
+                    academia_slug=academia_slug,
+                    form=form,
+                    sucesso=False,
+                )
+            cur_check.close()
+            conn_check.close()
+
         resp_nome = (form.get("responsavel_financeiro_nome") or "").strip() or None
         resp_cpf = (form.get("responsavel_financeiro_cpf") or "").strip() or None
         if responsavel_eh_proprio:
@@ -337,6 +403,38 @@ def form_publico(academia_slug):
         form=request.form,
         sucesso=False,
     )
+
+
+@bp_precadastro.route("/verificar-email", methods=["POST"])
+def verificar_email():
+    """Verifica se um email já existe (AJAX)."""
+    from flask import jsonify
+    data = request.get_json()
+    email = (data.get("email") or "").strip().lower() if data else ""
+    
+    if not email:
+        return jsonify({"existe": False})
+    
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    
+    # Verificar em pre_cadastro
+    cur.execute("SELECT id FROM pre_cadastro WHERE LOWER(email) = %s", (email,))
+    if cur.fetchone():
+        cur.close()
+        conn.close()
+        return jsonify({"existe": True})
+    
+    # Verificar em usuarios
+    cur.execute("SELECT id FROM usuarios WHERE LOWER(email) = %s", (email,))
+    if cur.fetchone():
+        cur.close()
+        conn.close()
+        return jsonify({"existe": True})
+    
+    cur.close()
+    conn.close()
+    return jsonify({"existe": False})
 
 
 @bp_precadastro.route("/editar/<int:precadastro_id>", methods=["GET", "POST"])

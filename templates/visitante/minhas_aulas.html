@@ -1,5 +1,8 @@
 {% extends "base.html" %}
 {% block title %}Minhas Aulas Experimentais{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/visitante/responsive.css') }}">
+{% endblock %}
 {% block content %}
 <div class="container mt-4">
     <div class="mb-4">
@@ -7,30 +10,40 @@
         {% include 'components/botao_voltar.html' %}
     </div>
 
-    <div class="d-flex justify-content-between align-items-center mb-4">
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4 gap-3">
         <h2 class="h4 fw-bold mb-0">Minhas Aulas Experimentais</h2>
-        <a href="{{ url_for('visitante.solicitar_aula') }}" class="btn btn-primary">
+        <a href="{{ url_for('visitante.solicitar_aula') }}" class="btn btn-primary w-100 w-md-auto">
             <i class="bi bi-plus-circle me-2"></i>Nova Aula
         </a>
     </div>
 
     {% if aulas %}
-    <div class="card shadow-sm border-0">
+    <!-- Desktop: Tabela -->
+    <div class="card shadow-sm border-0 d-none d-md-block">
         <div class="card-body">
             <div class="table-responsive">
                 <table class="table table-hover">
                     <thead>
                         <tr>
+                            <th>Aula</th>
                             <th>Data</th>
                             <th>Turma</th>
                             <th>Horário</th>
                             <th>Status</th>
+                            <th>Pagamento</th>
                             <th>Ações</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for aula in aulas %}
                         <tr>
+                            <td>
+                                {% if aula.limite_aulas %}
+                                <span class="badge bg-info">{{ aula.numero_aula }}/{{ aula.limite_aulas }}</span>
+                                {% else %}
+                                <span class="badge bg-secondary">{{ aula.numero_aula }}</span>
+                                {% endif %}
+                            </td>
                             <td>
                                 {{ aula.data_aula|data_br }}
                                 {% if aula.status_aula == 'hoje' %}
@@ -42,18 +55,48 @@
                             <td>{{ aula.turma_nome }}</td>
                             <td>{{ aula.DiasHorario or '-' }}</td>
                             <td>
-                                {% if aula.status_aula == 'realizada' %}
-                                    {% if aula.presente %}
-                                    <span class="badge bg-success">Presente</span>
+                                {% if aula.aprovado %}
+                                    {% if aula.status_aula == 'realizada' %}
+                                        {% if aula.presente %}
+                                        <span class="badge bg-success">Presente</span>
+                                        {% else %}
+                                        <span class="badge bg-danger">Falta</span>
+                                        {% endif %}
+                                    {% elif aula.status_aula == 'hoje' %}
+                                    <span class="badge bg-info">Hoje</span>
                                     {% else %}
-                                    <span class="badge bg-danger">Falta</span>
+                                    <span class="badge bg-success">Aprovado</span>
                                     {% endif %}
                                 {% else %}
-                                <span class="badge bg-secondary">Pendente</span>
+                                <span class="badge bg-warning text-dark">Aguardando Aprovação</span>
                                 {% endif %}
                             </td>
                             <td>
-                                {% if aula.status_aula == 'agendada' %}
+                                {% if aula.valor_diaria %}
+                                    {% if aula.status_pagamento == 'confirmado' %}
+                                    <span class="badge bg-success">
+                                        <i class="bi bi-check-circle me-1"></i>Pago
+                                    </span>
+                                    {% elif aula.status_pagamento == 'pago' %}
+                                    <span class="badge bg-info">
+                                        <i class="bi bi-clock me-1"></i>Aguardando Confirmação
+                                    </span>
+                                    {% else %}
+                                    <span class="badge bg-warning text-dark">
+                                        <i class="bi bi-currency-dollar me-1"></i>R$ {{ "%.2f"|format(aula.valor_diaria) }}
+                                    </span>
+                                    <br>
+                                    <a href="{{ url_for('visitante.pagar_diaria', pagamento_id=aula.pagamento_id) }}" 
+                                       class="btn btn-sm btn-primary mt-1">
+                                        <i class="bi bi-upload me-1"></i>Enviar Comprovante
+                                    </a>
+                                    {% endif %}
+                                {% else %}
+                                <span class="text-muted small">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if aula.status_aula == 'agendada' or aula.status_aula == 'hoje' %}
                                 <button type="button" class="btn btn-sm btn-outline-danger" 
                                         onclick="cancelarAula({{ aula.id }})">
                                     <i class="bi bi-x-circle me-1"></i>Cancelar
@@ -68,6 +111,92 @@
                 </table>
             </div>
         </div>
+    </div>
+    
+    <!-- Mobile: Cards -->
+    <div class="d-md-none">
+        {% for aula in aulas %}
+        <div class="card shadow-sm border-0 mb-3">
+            <div class="card-body">
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div class="flex-grow-1">
+                            {% if aula.limite_aulas %}
+                            <span class="badge bg-info mb-2 d-inline-block">{{ aula.numero_aula }}/{{ aula.limite_aulas }}</span>
+                            {% else %}
+                            <span class="badge bg-secondary mb-2 d-inline-block">{{ aula.numero_aula }}</span>
+                            {% endif %}
+                            <h6 class="mb-1 fw-bold">{{ aula.turma_nome }}</h6>
+                            <small class="text-muted d-block mb-1">
+                                <i class="bi bi-calendar3 me-1"></i>{{ aula.data_aula|data_br }}
+                            </small>
+                            {% if aula.status_aula == 'hoje' %}
+                            <span class="badge bg-info mb-1 d-inline-block">Hoje</span>
+                            {% elif aula.status_aula == 'agendada' %}
+                            <span class="badge bg-primary mb-1 d-inline-block">Agendada</span>
+                            {% endif %}
+                            {% if aula.DiasHorario %}
+                            <small class="text-muted d-block">
+                                <i class="bi bi-clock me-1"></i>{{ aula.DiasHorario }}
+                            </small>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="mb-2">
+                        {% if aula.aprovado %}
+                            {% if aula.status_aula == 'realizada' %}
+                                {% if aula.presente %}
+                                <span class="badge bg-success">Presente</span>
+                                {% else %}
+                                <span class="badge bg-danger">Falta</span>
+                                {% endif %}
+                            {% elif aula.status_aula == 'hoje' %}
+                            <span class="badge bg-info">Hoje</span>
+                            {% else %}
+                            <span class="badge bg-success">Aprovado</span>
+                            {% endif %}
+                        {% else %}
+                        <span class="badge bg-warning text-dark">Aguardando Aprovação</span>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                {% if aula.valor_diaria %}
+                <div class="border-top pt-3 mt-3">
+                    <small class="text-muted d-block mb-2 fw-bold">Pagamento:</small>
+                    {% if aula.status_pagamento == 'confirmado' %}
+                    <span class="badge bg-success mb-2 d-inline-block">
+                        <i class="bi bi-check-circle me-1"></i>Pago
+                    </span>
+                    {% elif aula.status_pagamento == 'pago' %}
+                    <span class="badge bg-info mb-2 d-inline-block">
+                        <i class="bi bi-clock me-1"></i>Aguardando Confirmação
+                    </span>
+                    {% else %}
+                    <div class="mb-2">
+                        <span class="badge bg-warning text-dark d-inline-block mb-2">
+                            <i class="bi bi-currency-dollar me-1"></i>R$ {{ "%.2f"|format(aula.valor_diaria) }}
+                        </span>
+                    </div>
+                    <a href="{{ url_for('visitante.pagar_diaria', pagamento_id=aula.pagamento_id) }}" 
+                       class="btn btn-primary w-100">
+                        <i class="bi bi-upload me-1"></i>Enviar Comprovante
+                    </a>
+                    {% endif %}
+                </div>
+                {% endif %}
+                
+                {% if aula.status_aula == 'agendada' or aula.status_aula == 'hoje' %}
+                <div class="border-top pt-3 mt-3">
+                    <button type="button" class="btn btn-outline-danger w-100" 
+                            onclick="cancelarAula({{ aula.id }})">
+                        <i class="bi bi-x-circle me-1"></i>Cancelar Aula
+                    </button>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
     </div>
     {% else %}
     <div class="card shadow-sm border-0">

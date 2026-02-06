@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block title %}Pagamentos de Diária{% endblock %}
+{% block content %}
+<div class="container mt-4">
+    <div class="mb-4">
+        {% if academias|length > 1 %}
+        <form method="GET" class="mb-3">
+            <label class="form-label small fw-semibold">Academia:</label>
+            <select name="academia_id" class="form-select form-select-sm d-inline-block w-auto" onchange="this.form.submit()">
+                {% for ac in academias %}
+                <option value="{{ ac.id }}" {% if ac.id == academia_id %}selected{% endif %}>{{ ac.nome }}</option>
+                {% endfor %}
+            </select>
+        </form>
+        {% endif %}
+        {% set back_url = url_for('academia.lista_visitantes', academia_id=academia_id) %}
+        {% include 'components/botao_voltar.html' %}
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <h2 class="h4 fw-bold text-primary mb-1">Pagamentos de Diária</h2>
+                <p class="text-muted mb-0">Confirme os pagamentos de diária dos visitantes.</p>
+            </div>
+        </div>
+    </div>
+
+    {% if pagamentos %}
+    <div class="card shadow-sm border-0">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Visitante</th>
+                            <th>Turma</th>
+                            <th>Data da Aula</th>
+                            <th>Valor</th>
+                            <th>Status</th>
+                            <th>Comprovante</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for pag in pagamentos %}
+                        <tr>
+                            <td>
+                                <strong>{{ pag.visitante_nome }}</strong><br>
+                                <small class="text-muted">{{ pag.visitante_email }}</small>
+                            </td>
+                            <td>{{ pag.turma_nome }}</td>
+                            <td>{{ pag.data_aula|data_br }}</td>
+                            <td><strong>R$ {{ "%.2f"|format(pag.valor) }}</strong></td>
+                            <td>
+                                {% if pag.status == 'confirmado' %}
+                                <span class="badge bg-success">Confirmado</span>
+                                {% elif pag.status == 'pago' %}
+                                <span class="badge bg-info">Aguardando Confirmação</span>
+                                {% else %}
+                                <span class="badge bg-warning text-dark">Pendente</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if pag.comprovante %}
+                                <a href="{{ url_for('static', filename=pag.comprovante) }}" target="_blank" 
+                                   class="btn btn-sm btn-outline-primary">
+                                    <i class="bi bi-eye me-1"></i>Ver
+                                </a>
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if pag.status == 'pago' %}
+                                <button type="button" class="btn btn-sm btn-success" 
+                                        onclick="confirmarPagamento({{ pag.id }})">
+                                    <i class="bi bi-check-circle me-1"></i>Confirmar
+                                </button>
+                                {% else %}
+                                <span class="text-muted small">-</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="card shadow-sm border-0">
+        <div class="card-body text-center py-5">
+            <i class="bi bi-wallet2 display-1 text-muted mb-3"></i>
+            <h5 class="text-muted">Nenhum pagamento encontrado</h5>
+            <p class="text-muted mb-0">Não há pagamentos de diária no momento.</p>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+function confirmarPagamento(pagamentoId) {
+    if (!confirm('Deseja realmente confirmar este pagamento? Uma receita será gerada automaticamente.')) {
+        return;
+    }
+    
+    fetch(`{{ url_for('academia.confirmar_pagamento_diaria', pagamento_id=0, academia_id=academia_id) }}`.replace('0', pagamentoId), {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.ok) {
+            alert(data.msg);
+            location.reload();
+        } else {
+            alert('Erro: ' + data.msg);
+        }
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        alert('Erro ao confirmar pagamento');
+    });
+}
+</script>
+{% endblock %}

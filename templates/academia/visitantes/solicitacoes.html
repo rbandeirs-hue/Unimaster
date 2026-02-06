@@ -1,12 +1,15 @@
 {% extends "base.html" %}
 {% block title %}Solicitações de Aulas Experimentais{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/academia/solicitacoes_responsive.css') }}">
+{% endblock %}
 {% block content %}
 <div class="container mt-4">
     <div class="mb-4">
         {% if academias|length > 1 %}
         <form method="GET" class="mb-3">
-            <label class="form-label small fw-semibold">Academia:</label>
-            <select name="academia_id" class="form-select form-select-sm d-inline-block w-auto" onchange="this.form.submit()">
+            <label class="form-label small fw-semibold d-block mb-2">Academia:</label>
+            <select name="academia_id" class="form-select form-select-sm w-100 w-md-auto" onchange="this.form.submit()">
                 {% for ac in academias %}
                 <option value="{{ ac.id }}" {% if ac.id == academia_id %}selected{% endif %}>{{ ac.nome }}</option>
                 {% endfor %}
@@ -15,12 +18,12 @@
         {% endif %}
         {% set back_url = url_for('academia.lista_visitantes', academia_id=academia_id) %}
         {% include 'components/botao_voltar.html' %}
-        <div class="d-flex justify-content-between align-items-center">
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3">
             <div>
                 <h2 class="h4 fw-bold text-primary mb-1">Solicitações de Aulas Experimentais</h2>
                 <p class="text-muted mb-0">Aprove ou rejeite solicitações de visitantes.</p>
             </div>
-            <a href="{{ url_for('academia.lista_visitantes', academia_id=academia_id) }}" class="btn btn-outline-secondary">
+            <a href="{{ url_for('academia.lista_visitantes', academia_id=academia_id) }}" class="btn btn-outline-secondary w-100 w-md-auto">
                 <i class="bi bi-people me-2"></i>Histórico de Visitantes
             </a>
         </div>
@@ -37,7 +40,7 @@
         <div class="card-body">
             <div class="row g-3">
                 {% for s in hoje %}
-                <div class="col-md-6 col-lg-4">
+                <div class="col-12 col-md-6 col-lg-4">
                     <div class="card border-warning">
                         <div class="card-body">
                             <div class="d-flex align-items-center mb-2">
@@ -110,7 +113,7 @@
         <div class="card-body">
             <div class="row g-3">
                 {% for s in pendentes %}
-                <div class="col-md-6 col-lg-4">
+                <div class="col-12 col-md-6 col-lg-4">
                     <div class="card border-primary">
                         <div class="card-body">
                             <div class="d-flex align-items-center mb-2">
@@ -166,7 +169,8 @@
             </h5>
         </div>
         <div class="card-body">
-            <div class="table-responsive">
+            <!-- Desktop: Tabela -->
+            <div class="table-responsive d-none d-md-block">
                 <table class="table table-hover">
                     <thead>
                         <tr>
@@ -212,6 +216,57 @@
                         {% endfor %}
                     </tbody>
                 </table>
+            </div>
+            
+            <!-- Mobile: Cards -->
+            <div class="aulas-realizadas-mobile d-md-none">
+                {% for s in realizadas %}
+                <div class="aula-realizada-card">
+                    <div class="aula-realizada-header">
+                        <div class="aula-realizada-foto">
+                            {% if s.foto_url %}
+                            <img src="{{ url_for('static', filename=s.foto_url) }}" 
+                                 alt="{{ s.visitante_nome }}" 
+                                 class="rounded-circle" 
+                                 style="width: 45px; height: 45px; object-fit: cover;">
+                            {% else %}
+                            <div class="rounded-circle bg-secondary d-flex align-items-center justify-content-center" 
+                                 style="width: 45px; height: 45px;">
+                                <i class="bi bi-person text-white"></i>
+                            </div>
+                            {% endif %}
+                        </div>
+                        <div class="aula-realizada-info">
+                            <strong>{{ s.visitante_nome }}</strong>
+                            {% if s.idade %}
+                            <small>{{ s.idade }} anos</small>
+                            {% endif %}
+                        </div>
+                        <div class="aula-realizada-status">
+                            {% if s.aprovado %}
+                                {% if s.presente %}
+                                <span class="badge bg-success">Presente</span>
+                                {% else %}
+                                <span class="badge bg-danger">Falta</span>
+                                {% endif %}
+                            {% else %}
+                                <span class="badge bg-warning text-dark">Não Aprovado</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <div class="aula-realizada-detalhes">
+                        <div class="aula-realizada-detalhe-item">
+                            <span class="aula-realizada-detalhe-label">Turma</span>
+                            <span class="aula-realizada-detalhe-value">{{ s.turma_nome }}</span>
+                        </div>
+                        <div class="aula-realizada-detalhe-item">
+                            <span class="aula-realizada-detalhe-label">Data</span>
+                            <span class="aula-realizada-detalhe-value">{{ s.data_aula|data_br }}</span>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
             </div>
         </div>
     </div>

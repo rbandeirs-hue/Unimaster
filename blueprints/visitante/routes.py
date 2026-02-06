@@ -37,6 +37,68 @@ def _get_academia_id():
     return getattr(current_user, "id_academia", None) or session.get("academia_id")
 
 
+def _criar_visitante_automatico(conn, cur):
+    """Cria registro de visitante automaticamente se não existir."""
+    try:
+        # Verificar se já existe visitante (ativo ou inativo)
+        cur.execute("SELECT id FROM visitantes WHERE usuario_id = %s LIMIT 1", (current_user.id,))
+        visitante_existente = cur.fetchone()
+        if visitante_existente:
+            # Se existe mas está inativo, reativar
+            cur.execute("UPDATE visitantes SET ativo = 1 WHERE usuario_id = %s", (current_user.id,))
+            conn.commit()
+            return True
+        
+        # Buscar academia vinculada ao usuário
+        academia_id = None
+        
+        # Primeiro: verificar usuarios_academias (prioridade)
+        cur.execute("SELECT academia_id FROM usuarios_academias WHERE usuario_id = %s ORDER BY academia_id LIMIT 1", (current_user.id,))
+        acad_row = cur.fetchone()
+        if acad_row:
+            academia_id = acad_row["academia_id"]
+        elif getattr(current_user, "id_academia", None):
+            academia_id = current_user.id_academia
+        
+        if not academia_id:
+            return False  # Não há academia vinculada
+        
+        # Verificar se a academia existe
+        cur.execute("SELECT id, aulas_experimentais_permitidas FROM academias WHERE id = %s", (academia_id,))
+        acad_config = cur.fetchone()
+        if not acad_config:
+            return False  # Academia não existe
+        
+        limite_aulas = acad_config.get("aulas_experimentais_permitidas")
+        
+        # Buscar dados do usuário
+        cur.execute("SELECT nome, email FROM usuarios WHERE id = %s", (current_user.id,))
+        usuario = cur.fetchone()
+        
+        if not usuario or not usuario.get("nome"):
+            return False  # Usuário não encontrado ou sem nome
+        
+        # Criar registro de visitante
+        cur.execute("""
+            INSERT INTO visitantes (nome, email, telefone, usuario_id, id_academia, aulas_experimentais_permitidas, ativo)
+            VALUES (%s, %s, %s, %s, %s, %s, 1)
+        """, (
+            usuario.get("nome"),
+            usuario.get("email"),
+            None,  # telefone pode ser adicionado depois
+            current_user.id,
+            academia_id,
+            limite_aulas,
+        ))
+        
+        conn.commit()
+        return True  # Criado com sucesso
+    except Exception as e:
+        conn.rollback()
+        # Log do erro (sem usar print para produção)
+        return False
+
+
 def _salvar_foto_base64(data_url, prefixo="visitante"):
     """Salva foto a partir de dataURL (base64)."""
     if not data_url or not data_url.startswith("data:"):
@@ -86,21 +148,45 @@ def painel():
         """, (current_user.id,))
         visitante = cur.fetchone()
         
+        # Se não encontrou, tentar criar automaticamente
         if not visitante:
-            flash("Visitante não encontrado.", "danger")
-            conn.close()
-            return redirect(url_for("painel.home"))
+            resultado = _criar_visitante_automatico(conn, cur)
+            if resultado:
+                # Buscar novamente após criar
+                cur.execute("""
+                    SELECT v.*, ac.nome AS academia_nome, ac.aulas_experimentais_permitidas
+                    FROM visitantes v
+                    INNER JOIN academias ac ON ac.id = v.id_academia
+                    WHERE v.usuario_id = %s AND v.ativo = 1
+                    LIMIT 1
+                """, (current_user.id,))
+                visitante = cur.fetchone()
+            
+            if not visitante:
+                flash("Visitante não encontrado. Verifique se você está vinculado a uma academia.", "danger")
+                cur.close()
+                conn.close()
+                return redirect(url_for("painel.home"))
         
-        # Buscar aulas experimentais realizadas
+        # Buscar aulas experimentais realizadas (apenas as que já passaram)
         cur.execute("""
             SELECT ae.*, t.Nome AS turma_nome, t.DiasHorario
             FROM aulas_experimentais ae
             INNER JOIN turmas t ON t.TurmaID = ae.turma_id
-            WHERE ae.visitante_id = %s
+            WHERE ae.visitante_id = %s AND ae.data_aula < CURDATE()
             ORDER BY ae.data_aula DESC
             LIMIT 10
         """, (visitante["id"],))
         aulas_realizadas = cur.fetchall()
+        
+        # Verificar se há aula pendente/agendada
+        cur.execute("""
+            SELECT id, data_aula FROM aulas_experimentais
+            WHERE visitante_id = %s AND data_aula >= CURDATE()
+            ORDER BY data_aula ASC
+            LIMIT 1
+        """, (visitante["id"],))
+        aula_pendente = cur.fetchone()
         
         # Contar total de aulas realizadas
         total_aulas = visitante.get("aulas_experimentais_realizadas", 0)
@@ -112,6 +198,7 @@ def painel():
         aulas_realizadas = []
         total_aulas = 0
         limite_aulas = None
+        aula_pendente = None
     finally:
         cur.close()
         conn.close()
@@ -122,6 +209,7 @@ def painel():
         aulas_realizadas=aulas_realizadas,
         total_aulas=total_aulas,
         limite_aulas=limite_aulas,
+        aula_pendente=aula_pendente,
     )
 
 
@@ -150,10 +238,25 @@ def solicitar_aula():
         """, (current_user.id,))
         visitante = cur.fetchone()
         
+        # Se não encontrou, tentar criar automaticamente
         if not visitante:
-            flash("Visitante não encontrado.", "danger")
-            conn.close()
-            return redirect(url_for("visitante.painel"))
+            resultado = _criar_visitante_automatico(conn, cur)
+            if resultado:
+                # Buscar novamente após criar
+                cur.execute("""
+                    SELECT v.*, ac.nome AS academia_nome, ac.aulas_experimentais_permitidas
+                    FROM visitantes v
+                    INNER JOIN academias ac ON ac.id = v.id_academia
+                    WHERE v.usuario_id = %s AND v.ativo = 1
+                    LIMIT 1
+                """, (current_user.id,))
+                visitante = cur.fetchone()
+            
+            if not visitante:
+                flash("Visitante não encontrado. Verifique se você está vinculado a uma academia.", "danger")
+                cur.close()
+                conn.close()
+                return redirect(url_for("visitante.painel"))
         
         id_academia = visitante["id_academia"]
         data_nascimento = visitante.get("data_nascimento")
@@ -167,6 +270,21 @@ def solicitar_aula():
             flash(f"Você já realizou todas as {limite_aulas} aulas experimentais permitidas.", "warning")
             conn.close()
             return redirect(url_for("visitante.painel"))
+        
+        # Verificar se já existe aula pendente/agendada (não concluída)
+        # Uma aula está concluída quando a data já passou (data_aula < CURDATE())
+        cur.execute("""
+            SELECT id, data_aula FROM aulas_experimentais
+            WHERE visitante_id = %s AND data_aula >= CURDATE()
+            ORDER BY data_aula ASC
+            LIMIT 1
+        """, (visitante["id"],))
+        aula_pendente = cur.fetchone()
+        
+        if aula_pendente:
+            flash(f"Você já possui uma aula experimental agendada para {aula_pendente['data_aula'].strftime('%d/%m/%Y')}. Aguarde a conclusão ou cancele a aula anterior para solicitar uma nova.", "warning")
+            conn.close()
+            return redirect(url_for("visitante.minhas_aulas"))
         
         # Buscar turmas disponíveis filtradas por idade
         if idade is not None:
@@ -240,7 +358,22 @@ def solicitar_aula():
                     idade=idade,
                 )
             
-            # Verificar se já tem aula nesta turma nesta data
+            # Verificar se já tem aula pendente/agendada (não concluída)
+            # Uma aula está concluída quando a data já passou (data_aula < CURDATE())
+            cur.execute("""
+                SELECT id, data_aula FROM aulas_experimentais
+                WHERE visitante_id = %s AND data_aula >= CURDATE()
+                ORDER BY data_aula ASC
+                LIMIT 1
+            """, (visitante["id"],))
+            aula_pendente = cur.fetchone()
+            
+            if aula_pendente:
+                flash(f"Você já possui uma aula experimental agendada para {aula_pendente['data_aula'].strftime('%d/%m/%Y')}. Aguarde a conclusão ou cancele a aula anterior para solicitar uma nova.", "warning")
+                conn.close()
+                return redirect(url_for("visitante.minhas_aulas"))
+            
+            # Verificar se já tem aula nesta turma nesta data (duplicação)
             cur.execute("""
                 SELECT id FROM aulas_experimentais
                 WHERE visitante_id = %s AND turma_id = %s AND data_aula = %s
@@ -261,11 +394,37 @@ def solicitar_aula():
                 conn.close()
                 return redirect(url_for("visitante.painel"))
             
-            # Registrar aula experimental
+            # Contar total de aulas (passadas e futuras, incluindo esta)
             cur.execute("""
-                INSERT INTO aulas_experimentais (visitante_id, turma_id, data_aula, presente, registrado_por)
-                VALUES (%s, %s, %s, 0, %s)
+                SELECT COUNT(*) as total FROM aulas_experimentais 
+                WHERE visitante_id = %s
+            """, (visitante["id"],))
+            total_aulas = cur.fetchone().get("total", 0) + 1
+            
+            # Verificar se ultrapassou limite e precisa pagar diária
+            precisa_pagar_diaria = False
+            valor_diaria = None
+            if limite_aulas and total_aulas > limite_aulas:
+                # Buscar valor da diária da academia
+                cur.execute("SELECT valor_diaria_visitante FROM academias WHERE id = %s", (id_academia,))
+                acad_diaria = cur.fetchone()
+                if acad_diaria and acad_diaria.get("valor_diaria_visitante"):
+                    precisa_pagar_diaria = True
+                    valor_diaria = float(acad_diaria["valor_diaria_visitante"])
+            
+            # Registrar aula experimental (pendente de aprovação)
+            cur.execute("""
+                INSERT INTO aulas_experimentais (visitante_id, turma_id, data_aula, presente, registrado_por, aprovado)
+                VALUES (%s, %s, %s, 0, %s, 0)
             """, (visitante["id"], turma_id, data_aula, current_user.id))
+            aula_id = cur.lastrowid
+            
+            # Se precisa pagar diária, criar registro de pagamento pendente
+            if precisa_pagar_diaria and valor_diaria:
+                cur.execute("""
+                    INSERT INTO visitante_pagamentos_diaria (visitante_id, aula_experimental_id, valor, status)
+                    VALUES (%s, %s, %s, 'pendente')
+                """, (visitante["id"], aula_id, valor_diaria))
             
             # Vincular visitante à turma
             cur.execute("""
@@ -274,7 +433,12 @@ def solicitar_aula():
             """, (visitante["id"], turma_id, date.today()))
             
             conn.commit()
-            flash("Aula experimental solicitada com sucesso! Você aparecerá na chamada no dia agendado.", "success")
+            
+            if precisa_pagar_diaria:
+                flash(f"Aula experimental solicitada! Como você ultrapassou o limite de {limite_aulas} aulas gratuitas, será necessário pagar uma diária de R$ {valor_diaria:.2f}. A solicitação será analisada pela academia.", "warning")
+            else:
+                flash("Aula experimental solicitada com sucesso! Aguarde a aprovação da academia.", "success")
+            
             conn.close()
             return redirect(url_for("visitante.minhas_aulas"))
         
@@ -315,23 +479,44 @@ def minhas_aulas():
         """, (current_user.id,))
         visitante = cur.fetchone()
         
+        # Se não encontrou, tentar criar automaticamente
         if not visitante:
-            flash("Visitante não encontrado.", "danger")
-            conn.close()
-            return redirect(url_for("visitante.painel"))
+            resultado = _criar_visitante_automatico(conn, cur)
+            if resultado:
+                # Buscar novamente após criar
+                cur.execute("""
+                    SELECT id FROM visitantes WHERE usuario_id = %s AND ativo = 1 LIMIT 1
+                """, (current_user.id,))
+                visitante = cur.fetchone()
+            
+            if not visitante:
+                flash("Visitante não encontrado. Verifique se você está vinculado a uma academia.", "danger")
+                cur.close()
+                conn.close()
+                return redirect(url_for("visitante.painel"))
         
-        # Buscar aulas experimentais
+        # Buscar aulas experimentais com contador e informações de pagamento
         cur.execute("""
             SELECT ae.*, t.Nome AS turma_nome, t.DiasHorario,
                    CASE 
                        WHEN ae.data_aula < CURDATE() THEN 'realizada'
                        WHEN ae.data_aula = CURDATE() THEN 'hoje'
                        ELSE 'agendada'
-                   END AS status_aula
+                   END AS status_aula,
+                   v.aulas_experimentais_permitidas AS limite_aulas,
+                   (SELECT COUNT(*) FROM aulas_experimentais ae2 
+                    WHERE ae2.visitante_id = v.id 
+                    AND (ae2.data_aula < ae.data_aula OR (ae2.data_aula = ae.data_aula AND ae2.id <= ae.id))) AS numero_aula,
+                   vpd.id AS pagamento_id,
+                   vpd.valor AS valor_diaria,
+                   vpd.status AS status_pagamento,
+                   vpd.comprovante AS comprovante_pagamento
             FROM aulas_experimentais ae
             INNER JOIN turmas t ON t.TurmaID = ae.turma_id
+            INNER JOIN visitantes v ON v.id = ae.visitante_id
+            LEFT JOIN visitante_pagamentos_diaria vpd ON vpd.aula_experimental_id = ae.id
             WHERE ae.visitante_id = %s
-            ORDER BY ae.data_aula DESC
+            ORDER BY ae.data_aula DESC, ae.id DESC
         """, (visitante["id"],))
         aulas = cur.fetchall()
         
@@ -372,8 +557,10 @@ def cancelar_aula(aula_id):
             conn.close()
             return jsonify({"ok": False, "msg": "Aula não encontrada"}), 404
         
-        # Só pode cancelar se ainda não foi realizada (data futura)
-        if aula["data_aula"] < date.today():
+        # Só pode cancelar se ainda não foi realizada (data futura ou hoje, mas ainda não marcada como presente/falta)
+        # Verificar se a aula já passou e foi marcada
+        hoje = date.today()
+        if aula["data_aula"] < hoje:
             conn.close()
             return jsonify({"ok": False, "msg": "Não é possível cancelar uma aula já realizada"}), 400
         
@@ -398,3 +585,156 @@ def cancelar_aula(aula_id):
         conn.rollback()
         conn.close()
         return jsonify({"ok": False, "msg": f"Erro: {e}"}), 500
+
+
+# ======================================================
+# 🔹 Pagar Diária
+# ======================================================
+@bp_visitante.route("/pagar-diaria/<int:pagamento_id>", methods=["GET", "POST"])
+@login_required
+def pagar_diaria(pagamento_id):
+    """Página para visitante enviar comprovante de pagamento de diária."""
+    if not current_user.has_role("visitante"):
+        flash("Acesso negado.", "danger")
+        return redirect(url_for("painel.home"))
+    
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    
+    try:
+        # Buscar pagamento
+        cur.execute("""
+            SELECT vpd.*, v.usuario_id, ae.data_aula, t.Nome AS turma_nome
+            FROM visitante_pagamentos_diaria vpd
+            INNER JOIN visitantes v ON v.id = vpd.visitante_id
+            INNER JOIN aulas_experimentais ae ON ae.id = vpd.aula_experimental_id
+            INNER JOIN turmas t ON t.TurmaID = ae.turma_id
+            WHERE vpd.id = %s AND v.usuario_id = %s
+        """, (pagamento_id, current_user.id))
+        pagamento = cur.fetchone()
+        
+        if not pagamento:
+            flash("Pagamento não encontrado.", "danger")
+            conn.close()
+            return redirect(url_for("visitante.minhas_aulas"))
+        
+        if pagamento["status"] != "pendente":
+            flash("Este pagamento já foi processado.", "warning")
+            conn.close()
+            return redirect(url_for("visitante.minhas_aulas"))
+        
+        if request.method == "POST":
+            # Upload de comprovante
+            comprovante = None
+            if "comprovante" in request.files:
+                file = request.files["comprovante"]
+                if file and file.filename:
+                    upload_dir = os.path.join("static", "uploads", "comprovantes")
+                    os.makedirs(upload_dir, exist_ok=True)
+                    filename = f"diaria_{pagamento_id}_{uuid.uuid4().hex[:8]}.{file.filename.rsplit('.', 1)[1].lower()}"
+                    filepath = os.path.join(upload_dir, filename)
+                    file.save(filepath)
+                    comprovante = f"uploads/comprovantes/{filename}"
+            
+            observacoes = request.form.get("observacoes", "").strip() or None
+            
+            # Atualizar pagamento
+            cur.execute("""
+                UPDATE visitante_pagamentos_diaria 
+                SET comprovante = %s, observacoes = %s, status = 'pago', pagamento_informado_em = NOW()
+                WHERE id = %s
+            """, (comprovante, observacoes, pagamento_id))
+            
+            conn.commit()
+            flash("Comprovante enviado com sucesso! Aguarde a confirmação da academia.", "success")
+            conn.close()
+            return redirect(url_for("visitante.minhas_aulas"))
+        
+    except Exception as e:
+        flash(f"Erro: {e}", "danger")
+    finally:
+        cur.close()
+        conn.close()
+    
+    return render_template("visitante/pagar_diaria.html", pagamento=pagamento)
+
+
+# ======================================================
+# 🔹 Solicitar Mensalidade
+# ======================================================
+@bp_visitante.route("/solicitar-mensalidade", methods=["GET", "POST"])
+@login_required
+def solicitar_mensalidade():
+    """Página para visitante realizar matrícula e ser promovido a aluno."""
+    if not current_user.has_role("visitante"):
+        flash("Acesso negado.", "danger")
+        return redirect(url_for("painel.home"))
+    
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    
+    try:
+        # Buscar visitante
+        cur.execute("""
+            SELECT v.*, ac.nome AS academia_nome
+            FROM visitantes v
+            INNER JOIN academias ac ON ac.id = v.id_academia
+            WHERE v.usuario_id = %s AND v.ativo = 1
+            LIMIT 1
+        """, (current_user.id,))
+        visitante = cur.fetchone()
+        
+        if not visitante:
+            flash("Visitante não encontrado.", "danger")
+            conn.close()
+            return redirect(url_for("visitante.painel"))
+        
+        # Verificar se já tem solicitação pendente
+        cur.execute("""
+            SELECT id FROM visitante_solicitacoes_mensalidade 
+            WHERE visitante_id = %s AND status = 'pendente'
+        """, (visitante["id"],))
+        if cur.fetchone():
+            flash("Você já possui uma matrícula pendente.", "warning")
+            conn.close()
+            return redirect(url_for("visitante.painel"))
+        
+        # Buscar mensalidades disponíveis da academia
+        cur.execute("""
+            SELECT id, nome, descricao, valor 
+            FROM mensalidades 
+            WHERE id_academia = %s AND ativo = 1
+            ORDER BY valor ASC
+        """, (visitante["id_academia"],))
+        mensalidades = cur.fetchall()
+        
+        if request.method == "POST":
+            mensalidade_id = request.form.get("mensalidade_id", type=int)
+            observacoes = request.form.get("observacoes", "").strip() or None
+            
+            if not mensalidade_id:
+                flash("Selecione uma mensalidade.", "danger")
+                conn.close()
+                return render_template("visitante/solicitar_mensalidade.html", 
+                                      visitante=visitante, mensalidades=mensalidades)
+            
+            # Criar solicitação
+            cur.execute("""
+                INSERT INTO visitante_solicitacoes_mensalidade (visitante_id, mensalidade_id, observacoes)
+                VALUES (%s, %s, %s)
+            """, (visitante["id"], mensalidade_id, observacoes))
+            
+            conn.commit()
+            flash("Matrícula realizada com sucesso! Aguarde a aprovação da academia.", "success")
+            conn.close()
+            return redirect(url_for("visitante.painel"))
+        
+    except Exception as e:
+        flash(f"Erro: {e}", "danger")
+        mensalidades = []
+    finally:
+        cur.close()
+        conn.close()
+    
+    return render_template("visitante/solicitar_mensalidade.html", 
+                         visitante=visitante, mensalidades=mensalidades)

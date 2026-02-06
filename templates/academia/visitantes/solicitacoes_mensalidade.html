@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}Matrículas Realizadas{% endblock %}
+{% block content %}
+<div class="container mt-4">
+    <div class="mb-4">
+        {% if academias|length > 1 %}
+        <form method="GET" class="mb-3">
+            <label class="form-label small fw-semibold">Academia:</label>
+            <select name="academia_id" class="form-select form-select-sm d-inline-block w-auto" onchange="this.form.submit()">
+                {% for ac in academias %}
+                <option value="{{ ac.id }}" {% if ac.id == academia_id %}selected{% endif %}>{{ ac.nome }}</option>
+                {% endfor %}
+            </select>
+        </form>
+        {% endif %}
+        {% set back_url = url_for('academia.lista_visitantes', academia_id=academia_id) %}
+        {% include 'components/botao_voltar.html' %}
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <h2 class="h4 fw-bold text-primary mb-1">Solicitações de Mensalidade</h2>
+                <p class="text-muted mb-0">Aprove solicitações de visitantes para se tornarem alunos.</p>
+            </div>
+        </div>
+    </div>
+
+    {% if solicitacoes %}
+    <div class="card shadow-sm border-0">
+        <div class="card-body">
+            <div class="row g-3">
+                {% for sol in solicitacoes %}
+                <div class="col-md-6">
+                    <div class="card border-primary">
+                        <div class="card-body">
+                            <h5 class="card-title">{{ sol.visitante_nome }}</h5>
+                            <p class="mb-1"><strong>Email:</strong> {{ sol.visitante_email }}</p>
+                            <p class="mb-1"><strong>Mensalidade:</strong> {{ sol.mensalidade_nome }}</p>
+                            <p class="mb-1"><strong>Valor:</strong> R$ {{ "%.2f"|format(sol.mensalidade_valor) }}</p>
+                            <p class="mb-2"><strong>Solicitado em:</strong> {{ sol.solicitado_em|data_br }}</p>
+                            {% if sol.observacoes %}
+                            <p class="mb-2"><strong>Observações:</strong> {{ sol.observacoes }}</p>
+                            {% endif %}
+                            <div class="d-grid gap-2">
+                                <button type="button" class="btn btn-success" 
+                                        onclick="aprovarMensalidade({{ sol.id }})">
+                                    <i class="bi bi-check-circle me-1"></i>Aprovar e Promover a Aluno
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="card shadow-sm border-0">
+        <div class="card-body text-center py-5">
+            <i class="bi bi-calendar-x display-1 text-muted mb-3"></i>
+            <h5 class="text-muted">Nenhuma matrícula encontrada</h5>
+            <p class="text-muted mb-0">Não há matrículas pendentes no momento.</p>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+function aprovarMensalidade(solicitacaoId) {
+    if (!confirm('Deseja realmente aprovar esta solicitação? O visitante será promovido a aluno e terá mensalidades geradas até o final do ano.')) {
+        return;
+    }
+    
+    fetch(`{{ url_for('academia.aprovar_solicitacao_mensalidade', solicitacao_id=0, academia_id=academia_id) }}`.replace('0', solicitacaoId), {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.ok) {
+            alert(data.msg);
+            location.reload();
+        } else {
+            alert('Erro: ' + data.msg);
+        }
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        alert('Erro ao aprovar solicitação');
+    });
+}
+</script>
+{% endblock %}

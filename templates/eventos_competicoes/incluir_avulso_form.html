@@ -1,19 +1,20 @@
 {% extends "base.html" %}
-{% block title %}Inscrição — {{ evento.nome }}{% endblock %}
+{% block title %}Incluir Aluno Avulso — {{ evento.nome }}{% endblock %}
 {% block content %}
 <div class="container mt-5">
     <div class="mb-4">
         {% set back_url = back_url or get_back_url_default() %}
 {% include 'components/botao_voltar.html' %}
-        <h2 class="h4 fw-bold text-primary">Inscrição — {{ evento.nome }}</h2>
-        <p class="text-muted mb-0">Aluno: {{ aluno.nome }}. Preencha todos os campos obrigatórios e confirme a inscrição.</p>
+        <h2 class="h4 fw-bold text-primary">Incluir Aluno Avulso — {{ evento.nome }}</h2>
+        <p class="text-muted mb-0">Aluno: <strong>{{ aluno.nome }}</strong>. Preencha os dados do formulário e confirme a categoria.</p>
     </div>
 
     <div class="card shadow-sm">
         <div class="card-body p-4">
-            <form method="POST" action="{{ url_for('eventos_competicoes.inscrever', evento_id=evento.id, academia_id=academia_id, aluno_id=aluno.id) }}">
+            <form method="POST" action="{{ url_for('eventos_competicoes.incluir_avulso', evento_id=evento.id, academia_id=academia_id, aluno_id=aluno.id) }}">
                 <input type="hidden" name="academia_id" value="{{ academia_id }}">
                 <input type="hidden" name="aluno_id" value="{{ aluno.id }}">
+                <input type="hidden" name="formulario_completo" value="1">
                 {% for c in campos_form %}
                 <div class="mb-3">
                     <label for="campo_{{ c.campo_chave }}" class="form-label fw-semibold">{{ c.label }}{% if c.campo_chave != 'categoria' %} <span class="text-danger">*</span>{% endif %}</label>
@@ -152,11 +153,8 @@ function buscarCategorias() {
         return;
     }
     
-    // Se já há categorias carregadas do backend, não buscar novamente automaticamente
-    // Só buscar se o usuário mudou algum campo manualmente
     const categoriasJaCarregadas = categoriasContainer.getAttribute('data-categorias-carregadas') === 'true';
     if (categoriasJaCarregadas && !arguments[0]) {
-        // arguments[0] indica se foi chamado manualmente (true) ou automaticamente (false/undefined)
         return;
     }
     
@@ -164,7 +162,6 @@ function buscarCategorias() {
         if (statusDiv) {
             statusDiv.innerHTML = '<small class="text-muted">Preencha peso, data de nascimento e sexo</small>';
         }
-        // Só limpar se não houver categorias já carregadas
         if (!categoriasJaCarregadas) {
             categoriasContainer.innerHTML = '<div class="alert alert-info"><i class="bi bi-info-circle me-1"></i> Preencha peso, data de nascimento e sexo para ver as categorias disponíveis</div>';
         }
@@ -193,7 +190,6 @@ function buscarCategorias() {
         return response.json();
     })
     .then(data => {
-        // Limpar container apenas se não houver categorias já carregadas ou se foi chamado manualmente
         categoriasContainer.innerHTML = '';
         categoriasContainer.setAttribute('data-categorias-carregadas', 'false');
         if (statusDiv) {
@@ -352,7 +348,6 @@ document.addEventListener('DOMContentLoaded', function() {
         const categoriasContainer = document.getElementById('categorias-container');
         const categoriasJaCarregadas = categoriasContainer && categoriasContainer.getAttribute('data-categorias-carregadas') === 'true';
         
-        // Só buscar automaticamente se não houver categorias já carregadas do backend
         if (!categoriasJaCarregadas) {
             const peso = pesoInput ? pesoInput.value : '';
             const dataNasc = dataNascInput ? dataNascInput.value : '';
