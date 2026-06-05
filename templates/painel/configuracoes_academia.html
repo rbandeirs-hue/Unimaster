@@ -269,53 +269,90 @@
         <i class="bi bi-chevron-right cfg-item__arrow"></i>
       </a>
 
-      <!-- Cobrança digital (Asaas) -->
+      <!-- Cobrança online (gateway de pagamento) -->
+      {% set gw_atual = academia.gateway_pagamento or '' %}
+      {% set base_url = request.url_root.rstrip('/') %}
       <div class="cfg-item-form">
         <div class="cfg-item-form__head">
           <div class="cfg-item__icon cfg-item__icon--green">
             <i class="bi bi-qr-code"></i>
           </div>
           <div>
-            <p class="cfg-item__name mb-0">Cobrança digital (Asaas)</p>
-            <p class="cfg-item__desc mb-0">Gerar PIX e Boleto das mensalidades usando a conta Asaas desta academia.</p>
+            <p class="cfg-item__name mb-0">Cobrança online</p>
+            <p class="cfg-item__desc mb-0">Escolha o gateway de pagamento desta academia para gerar PIX, Boleto ou link de pagamento.</p>
           </div>
         </div>
         <form method="POST">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <input type="hidden" name="secao" value="asaas">
+          <input type="hidden" name="secao" value="online">
 
-          <div class="form-check form-switch mb-3">
-            <input class="form-check-input" type="checkbox" role="switch"
-                   id="asaas_habilitado" name="asaas_habilitado" value="1"
-                   {% if academia.asaas_habilitado %}checked{% endif %}>
-            <label class="form-check-label" for="asaas_habilitado">
-              Habilitar cobrança digital nesta academia
-            </label>
+          <div class="mb-3">
+            <label for="gateway_pagamento" class="cfg-item-form__label">Gateway de pagamento</label>
+            <select class="form-select" id="gateway_pagamento" name="gateway_pagamento" onchange="mostrarBlocoGateway(this.value)">
+              <option value="" {% if not gw_atual %}selected{% endif %}>Nenhum (desativar cobrança online)</option>
+              <option value="asaas" {% if gw_atual == 'asaas' %}selected{% endif %}>Asaas (PIX / Boleto)</option>
+              <option value="mercadopago" {% if gw_atual == 'mercadopago' %}selected{% endif %}>Mercado Pago (PIX / Boleto)</option>
+              <option value="infinitepay" {% if gw_atual == 'infinitepay' %}selected{% endif %}>InfinitePay (link de pagamento)</option>
+              <option value="cora" {% if gw_atual == 'cora' %}selected{% endif %}>Cora (em breve)</option>
+            </select>
           </div>
 
-          <div class="row g-3 mb-3">
-            <div class="col-sm-6">
-              <label for="asaas_ambiente" class="cfg-item-form__label">Ambiente</label>
-              <select class="form-select" id="asaas_ambiente" name="asaas_ambiente">
-                <option value="sandbox" {% if (academia.asaas_ambiente or 'sandbox') != 'production' %}selected{% endif %}>Sandbox (testes)</option>
-                <option value="production" {% if academia.asaas_ambiente == 'production' %}selected{% endif %}>Produção</option>
-              </select>
-            </div>
-            <div class="col-sm-6">
-              <label for="asaas_api_key" class="cfg-item-form__label">Chave de API (access token)</label>
-              <input type="password" class="form-control" id="asaas_api_key" name="asaas_api_key"
-                     autocomplete="off"
-                     placeholder="{% if asaas_chave_definida %}•••••••• (chave já configurada){% else %}Cole aqui a chave da conta Asaas{% endif %}">
-              <div class="form-text">
-                {% if asaas_chave_definida %}Deixe em branco para manter a chave atual.{% else %}Obtida no painel Asaas em Configurações → Integrações.{% endif %}
+          <!-- Asaas -->
+          <div class="gw-bloco" data-gw="asaas" style="{% if gw_atual != 'asaas' %}display:none{% endif %}">
+            <div class="row g-3 mb-3">
+              <div class="col-sm-6">
+                <label for="asaas_ambiente" class="cfg-item-form__label">Ambiente</label>
+                <select class="form-select" id="asaas_ambiente" name="asaas_ambiente">
+                  <option value="sandbox" {% if (academia.asaas_ambiente or 'sandbox') != 'production' %}selected{% endif %}>Sandbox (testes)</option>
+                  <option value="production" {% if academia.asaas_ambiente == 'production' %}selected{% endif %}>Produção</option>
+                </select>
+              </div>
+              <div class="col-sm-6">
+                <label for="asaas_api_key" class="cfg-item-form__label">Chave de API (access token)</label>
+                <input type="password" class="form-control" id="asaas_api_key" name="asaas_api_key" autocomplete="off"
+                       placeholder="{% if asaas_chave_definida %}•••••••• (já configurada){% else %}Cole a chave da conta Asaas{% endif %}">
+                <div class="form-text">{% if asaas_chave_definida %}Deixe em branco para manter a atual.{% endif %}</div>
+              </div>
+              <div class="col-12">
+                <label for="asaas_webhook_token" class="cfg-item-form__label">Token do webhook (opcional)</label>
+                <input type="text" class="form-control" id="asaas_webhook_token" name="asaas_webhook_token"
+                       value="{{ academia.asaas_webhook_token or '' }}" placeholder="Token de segurança do webhook">
+                <div class="form-text">Webhook a configurar no Asaas: <code>{{ base_url }}/financeiro/webhook/asaas</code></div>
               </div>
             </div>
-            <div class="col-12">
-              <label for="asaas_webhook_token" class="cfg-item-form__label">Token do webhook (opcional)</label>
-              <input type="text" class="form-control" id="asaas_webhook_token" name="asaas_webhook_token"
-                     value="{{ academia.asaas_webhook_token or '' }}"
-                     placeholder="Token de segurança configurado no webhook do Asaas">
-              <div class="form-text">Se preenchido, só serão aceitos webhooks que enviem este token.</div>
+          </div>
+
+          <!-- Mercado Pago -->
+          <div class="gw-bloco" data-gw="mercadopago" style="{% if gw_atual != 'mercadopago' %}display:none{% endif %}">
+            <div class="row g-3 mb-3">
+              <div class="col-12">
+                <label for="mercadopago_access_token" class="cfg-item-form__label">Access Token</label>
+                <input type="password" class="form-control" id="mercadopago_access_token" name="mercadopago_access_token" autocomplete="off"
+                       placeholder="{% if mp_token_definido %}•••••••• (já configurado){% else %}Cole o Access Token do Mercado Pago{% endif %}">
+                <div class="form-text">
+                  {% if mp_token_definido %}Deixe em branco para manter o atual. {% endif %}
+                  Obtido em Mercado Pago → Suas integrações → Credenciais. Webhook: <code>{{ base_url }}/financeiro/webhook/mercadopago</code>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- InfinitePay -->
+          <div class="gw-bloco" data-gw="infinitepay" style="{% if gw_atual != 'infinitepay' %}display:none{% endif %}">
+            <div class="row g-3 mb-3">
+              <div class="col-12">
+                <label for="infinitepay_handle" class="cfg-item-form__label">Handle (InfiniteTag)</label>
+                <input type="text" class="form-control" id="infinitepay_handle" name="infinitepay_handle"
+                       value="{{ academia.infinitepay_handle or '' }}" placeholder="Ex: $suaempresa">
+                <div class="form-text">Sua tag da InfinitePay (sem espaços). O aluno é direcionado ao checkout da InfinitePay (PIX/cartão). O webhook é configurado automaticamente.</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Cora -->
+          <div class="gw-bloco" data-gw="cora" style="{% if gw_atual != 'cora' %}display:none{% endif %}">
+            <div class="form-text text-warning mb-3">
+              <i class="bi bi-clock-history"></i> Integração Cora em breve (requer certificado digital mTLS). Selecione outro gateway por enquanto.
             </div>
           </div>
 
@@ -324,6 +361,13 @@
           </button>
         </form>
       </div>
+      <script>
+        function mostrarBlocoGateway(gw) {
+          document.querySelectorAll('.gw-bloco').forEach(function (b) {
+            b.style.display = (b.getAttribute('data-gw') === gw) ? '' : 'none';
+          });
+        }
+      </script>
     </div>
   </div>
   {% endif %}

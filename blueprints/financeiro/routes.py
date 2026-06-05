@@ -1508,13 +1508,83 @@ def _asaas_config_academia(academia_id):
         conn.close()
 
 
-def _asaas_habilitado_academia(academia_id):
-    """True se a cobrança digital (Asaas) está disponível para a academia.
+def _gateway_config_academia(academia_id):
+    """Retorna as credenciais de todos os gateways + o gateway ativo da academia."""
+    if not academia_id:
+        return None
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute(
+            """SELECT gateway_pagamento, asaas_habilitado, asaas_api_key, asaas_ambiente,
+                      asaas_webhook_token, mercadopago_access_token, infinitepay_handle
+               FROM academias WHERE id = %s""",
+            (academia_id,),
+        )
+        return cur.fetchone()
+    except Exception:
+        return None
+    finally:
+        conn.close()
 
-    Exige o flag asaas_habilitado ligado E a chave de API da própria academia.
-    """
-    cfg = _asaas_config_academia(academia_id)
-    return bool(cfg and cfg.get("asaas_habilitado") and (cfg.get("asaas_api_key") or "").strip())
+
+def _gateway_ativo(cfg):
+    """Retorna o nome do gateway ativo E configurado da academia, ou '' se nenhum."""
+    if not cfg:
+        return ""
+    g = (cfg.get("gateway_pagamento") or "").strip().lower()
+    if g == "asaas" and (cfg.get("asaas_api_key") or "").strip():
+        return "asaas"
+    if g == "mercadopago" and (cfg.get("mercadopago_access_token") or "").strip():
+        return "mercadopago"
+    if g == "infinitepay" and (cfg.get("infinitepay_handle") or "").strip():
+        return "infinitepay"
+    return ""
+
+
+def _online_habilitado_academia(academia_id):
+    """True se a academia tem algum gateway de cobrança online ativo e configurado."""
+    return bool(_gateway_ativo(_gateway_config_academia(academia_id)))
+
+
+def _emitir_cobranca_online(cfg, tipo, *, nome, cpf, email, telefone, valor, vencimento,
+                            descricao, origem, registro_id):
+    """Cria a cobrança no gateway ATIVO da academia. Retorna dict normalizado:
+    {gateway, payment_id, tipo, boleto_url, pix_qrcode, pix_copia_cola}.
+    Para InfinitePay, tipo='LINK' e boleto_url contém o link de checkout."""
+    gw = _gateway_ativo(cfg)
+    ext = f"{origem}-{registro_id}"
+    if gw == "asaas":
+        row = {
+            "nome": nome, "cpf": cpf, "email": email, "telefone": telefone,
+            "valor": valor, "data_vencimento": vencimento, "id": registro_id,
+            "asaas_api_key": cfg.get("asaas_api_key"), "asaas_ambiente": cfg.get("asaas_ambiente"),
+        }
+        r = _emitir_cobranca_asaas(row, tipo, descricao)
+    elif gw == "mercadopago":
+        from utils.mercadopago import MercadoPagoClient
+        r = MercadoPagoClient(cfg.get("mercadopago_access_token")).criar_cobranca(
+            tipo, valor, vencimento, nome, cpf, email, telefone,
+            descricao=descricao, external_reference=ext,
+        )
+    elif gw == "infinitepay":
+        from utils.infinitepay import InfinitePayClient
+        try:
+            webhook_url = url_for("financeiro.webhook_infinitepay", _external=True)
+        except Exception:
+            webhook_url = None
+        r = InfinitePayClient(cfg.get("infinitepay_handle")).criar_link(
+            valor, descricao, order_nsu=ext, webhook_url=webhook_url,
+        )
+    else:
+        raise RuntimeError("Nenhum gateway de cobrança online configurado para esta academia.")
+    r["gateway"] = gw
+    return r
+
+
+def _asaas_habilitado_academia(academia_id):
+    """Compat.: True se a academia tem cobrança online ativa (qualquer gateway)."""
+    return _online_habilitado_academia(academia_id)
 
 
 def _emitir_cobranca_asaas(row, tipo, descricao):
@@ -1565,11 +1635,9 @@ def gerar_cobranca_asaas(ma_id):
     try:
         cur.execute(
             """SELECT ma.id, ma.valor, ma.data_vencimento,
-                      a.nome, a.cpf, a.email, a.telefone, a.id_academia,
-                      ac.asaas_habilitado, ac.asaas_api_key, ac.asaas_ambiente
+                      a.nome, a.cpf, a.email, a.telefone, a.id_academia
                FROM mensalidade_aluno ma
                JOIN alunos a ON a.id = ma.aluno_id
-               JOIN academias ac ON ac.id = a.id_academia
                WHERE ma.id = %s""",
             (ma_id,),
         )
@@ -1580,25 +1648,30 @@ def gerar_cobranca_asaas(ma_id):
         if academia_id and ma["id_academia"] != academia_id and not current_user.has_role("admin"):
             flash("Sem permissão para esta cobrança.", "danger")
             return redirect(destino)
-        if not ma.get("asaas_habilitado"):
-            flash("Cobrança digital (Asaas) não está habilitada para esta academia. "
+        cfg = _gateway_config_academia(ma["id_academia"])
+        if not _gateway_ativo(cfg):
+            flash("Cobrança online não está habilitada para esta academia. "
                   "Ative em Configurações da academia → Financeiro.", "warning")
             return redirect(destino)
 
-        r = _emitir_cobranca_asaas(ma, tipo, descricao=f"Mensalidade - {ma['nome']}")
+        r = _emitir_cobranca_online(
+            cfg, tipo, nome=ma["nome"], cpf=ma["cpf"], email=ma.get("email"),
+            telefone=ma.get("telefone"), valor=ma["valor"], vencimento=ma["data_vencimento"],
+            descricao=f"Mensalidade - {ma['nome']}", origem="mensalidade", registro_id=ma_id,
+        )
         cur.execute(
             """UPDATE mensalidade_aluno
                SET asaas_payment_id=%s, asaas_tipo=%s, asaas_boleto_url=%s,
-                   asaas_pix_qrcode=%s, asaas_pix_copia_cola=%s
+                   asaas_pix_qrcode=%s, asaas_pix_copia_cola=%s, gateway=%s
                WHERE id=%s""",
-            (r["payment_id"], r["tipo"], r["boleto_url"], r["pix_qrcode"], r["pix_copia_cola"], ma_id),
+            (r["payment_id"], r["tipo"], r["boleto_url"], r["pix_qrcode"], r["pix_copia_cola"], r["gateway"], ma_id),
         )
         conn.commit()
-        flash(f"Cobrança {tipo} gerada no Asaas com sucesso.", "success")
+        flash("Cobrança online gerada com sucesso.", "success")
     except Exception as e:
         conn.rollback()
-        current_app.logger.error(f"Erro ao gerar cobrança Asaas (ma {ma_id}): {e}", exc_info=True)
-        flash(f"Erro ao gerar cobrança no Asaas: {e}", "danger")
+        current_app.logger.error(f"Erro ao gerar cobrança online (ma {ma_id}): {e}", exc_info=True)
+        flash(f"Erro ao gerar cobrança online: {e}", "danger")
     finally:
         conn.close()
     return redirect(destino)
@@ -1618,11 +1691,9 @@ def gerar_cobranca_asaas_avulsa(av_id):
     try:
         cur.execute(
             """SELECT ca.id, ca.valor, ca.data_vencimento, ca.descricao,
-                      a.nome, a.cpf, a.email, a.telefone, ca.id_academia,
-                      ac.asaas_habilitado, ac.asaas_api_key, ac.asaas_ambiente
+                      a.nome, a.cpf, a.email, a.telefone, ca.id_academia
                FROM cobranca_avulsa ca
                JOIN alunos a ON a.id = ca.aluno_id
-               JOIN academias ac ON ac.id = ca.id_academia
                WHERE ca.id = %s""",
             (av_id,),
         )
@@ -1633,26 +1704,31 @@ def gerar_cobranca_asaas_avulsa(av_id):
         if academia_id and ca["id_academia"] != academia_id and not current_user.has_role("admin"):
             flash("Sem permissão para esta cobrança.", "danger")
             return redirect(destino)
-        if not ca.get("asaas_habilitado"):
-            flash("Cobrança digital (Asaas) não está habilitada para esta academia. "
+        cfg = _gateway_config_academia(ca["id_academia"])
+        if not _gateway_ativo(cfg):
+            flash("Cobrança online não está habilitada para esta academia. "
                   "Ative em Configurações da academia → Financeiro.", "warning")
             return redirect(destino)
 
         descricao = (ca.get("descricao") or "Cobrança avulsa") + f" - {ca['nome']}"
-        r = _emitir_cobranca_asaas(ca, tipo, descricao=descricao)
+        r = _emitir_cobranca_online(
+            cfg, tipo, nome=ca["nome"], cpf=ca["cpf"], email=ca.get("email"),
+            telefone=ca.get("telefone"), valor=ca["valor"], vencimento=ca["data_vencimento"],
+            descricao=descricao, origem="avulsa", registro_id=av_id,
+        )
         cur.execute(
             """UPDATE cobranca_avulsa
                SET asaas_payment_id=%s, asaas_tipo=%s, asaas_boleto_url=%s,
-                   asaas_pix_qrcode=%s, asaas_pix_copia_cola=%s
+                   asaas_pix_qrcode=%s, asaas_pix_copia_cola=%s, gateway=%s
                WHERE id=%s""",
-            (r["payment_id"], r["tipo"], r["boleto_url"], r["pix_qrcode"], r["pix_copia_cola"], av_id),
+            (r["payment_id"], r["tipo"], r["boleto_url"], r["pix_qrcode"], r["pix_copia_cola"], r["gateway"], av_id),
         )
         conn.commit()
-        flash(f"Cobrança {tipo} gerada no Asaas com sucesso.", "success")
+        flash("Cobrança online gerada com sucesso.", "success")
     except Exception as e:
         conn.rollback()
-        current_app.logger.error(f"Erro ao gerar cobrança Asaas (avulsa {av_id}): {e}", exc_info=True)
-        flash(f"Erro ao gerar cobrança no Asaas: {e}", "danger")
+        current_app.logger.error(f"Erro ao gerar cobrança online (avulsa {av_id}): {e}", exc_info=True)
+        flash(f"Erro ao gerar cobrança online: {e}", "danger")
     finally:
         conn.close()
     return redirect(destino)
@@ -1741,6 +1817,148 @@ def webhook_asaas():
             current_app.logger.error(f"Webhook Asaas erro: {e}", exc_info=True)
         finally:
             conn.close()
+    return jsonify({"ok": True})
+
+
+def _baixar_cobranca_paga(origem, registro_id, valor_pago, gateway_nome):
+    """Dá baixa numa cobrança paga (mensalidade/avulsa) e lança a receita. Best-effort.
+
+    Confirma o status primeiro (commit) e lança a receita em transação separada,
+    de modo que falha na receita não desfaz a baixa.
+    """
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        if origem == "mensalidade":
+            cur.execute(
+                """SELECT ma.id, ma.status, ma.valor, a.id_academia
+                   FROM mensalidade_aluno ma JOIN alunos a ON a.id = ma.aluno_id
+                   WHERE ma.id = %s""",
+                (registro_id,),
+            )
+        else:
+            cur.execute(
+                "SELECT id, status, valor, id_academia FROM cobranca_avulsa WHERE id = %s",
+                (registro_id,),
+            )
+        rec = cur.fetchone()
+        if not rec or rec["status"] == "pago":
+            return
+        vp = valor_pago or rec["valor"]
+        if origem == "mensalidade":
+            cur.execute(
+                """UPDATE mensalidade_aluno
+                   SET status='pago', status_pagamento='pago', data_pagamento=CURDATE(), valor_pago=%s
+                   WHERE id=%s""",
+                (vp, rec["id"]),
+            )
+        else:
+            cur.execute(
+                "UPDATE cobranca_avulsa SET status='pago', data_pagamento=CURDATE(), valor_pago=%s WHERE id=%s",
+                (vp, rec["id"]),
+            )
+        conn.commit()
+        try:
+            if origem == "mensalidade":
+                cur.execute(
+                    """INSERT INTO receitas (descricao, valor, data, categoria, id_academia, id_mensalidade_aluno)
+                       VALUES (%s, %s, CURDATE(), 'Mensalidades', %s, %s)""",
+                    (f"Mensalidade ({gateway_nome})", vp, rec["id_academia"], rec["id"]),
+                )
+            else:
+                cur.execute(
+                    """INSERT INTO receitas (descricao, valor, data, categoria, id_academia, id_cobranca_avulsa)
+                       VALUES (%s, %s, CURDATE(), 'Cobrança avulsa', %s, %s)""",
+                    (f"Cobrança avulsa ({gateway_nome})", vp, rec["id_academia"], rec["id"]),
+                )
+            conn.commit()
+        except Exception as e2:
+            conn.rollback()
+            current_app.logger.error(f"Webhook {gateway_nome}: baixa OK, receita falhou ({origem} {registro_id}): {e2}")
+    except Exception as e:
+        conn.rollback()
+        current_app.logger.error(f"Baixa {gateway_nome} erro ({origem} {registro_id}): {e}")
+    finally:
+        conn.close()
+
+
+def _achar_cobranca_por_payment_id(payment_id, gateway):
+    """Retorna (origem, id, id_academia) da cobrança com asaas_payment_id=payment_id."""
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute(
+            """SELECT ma.id, a.id_academia FROM mensalidade_aluno ma
+               JOIN alunos a ON a.id = ma.aluno_id
+               WHERE ma.asaas_payment_id = %s LIMIT 1""",
+            (str(payment_id),),
+        )
+        r = cur.fetchone()
+        if r:
+            return ("mensalidade", r["id"], r["id_academia"])
+        cur.execute(
+            "SELECT id, id_academia FROM cobranca_avulsa WHERE asaas_payment_id = %s LIMIT 1",
+            (str(payment_id),),
+        )
+        r = cur.fetchone()
+        if r:
+            return ("avulsa", r["id"], r["id_academia"])
+        return (None, None, None)
+    finally:
+        conn.close()
+
+
+@bp_financeiro.route("/webhook/mercadopago", methods=["POST", "GET"])
+@csrf.exempt
+def webhook_mercadopago():
+    """Recebe notificações do Mercado Pago e dá baixa quando o pagamento é aprovado."""
+    data = request.get_json(silent=True) or {}
+    payment_id = (
+        (data.get("data") or {}).get("id")
+        or request.args.get("id")
+        or request.args.get("data.id")
+    )
+    topic = data.get("type") or data.get("topic") or request.args.get("topic") or request.args.get("type")
+    if not payment_id:
+        return jsonify({"ok": True})
+    if topic and "payment" not in str(topic):
+        return jsonify({"ok": True})
+    try:
+        origem, rid, id_acad = _achar_cobranca_por_payment_id(payment_id, "mercadopago")
+        if not origem:
+            return jsonify({"ok": True})
+        cfg = _gateway_config_academia(id_acad)
+        from utils.mercadopago import MercadoPagoClient
+        status = MercadoPagoClient((cfg or {}).get("mercadopago_access_token")).status_pagamento(payment_id)
+        if status in ("approved", "authorized"):
+            _baixar_cobranca_paga(origem, rid, None, "Mercado Pago")
+    except Exception as e:
+        current_app.logger.error(f"Webhook Mercado Pago erro: {e}", exc_info=True)
+    return jsonify({"ok": True})
+
+
+@bp_financeiro.route("/webhook/infinitepay", methods=["POST"])
+@csrf.exempt
+def webhook_infinitepay():
+    """Recebe o webhook da InfinitePay (link pago) e dá baixa pela referência order_nsu."""
+    data = request.get_json(silent=True) or request.form.to_dict() or {}
+    order_nsu = data.get("order_nsu") or data.get("orderNsu") or (data.get("invoice") or {}).get("order_nsu")
+    if not order_nsu or "-" not in str(order_nsu):
+        return jsonify({"ok": True})
+    origem, _, rid = str(order_nsu).rpartition("-")
+    if origem not in ("mensalidade", "avulsa") or not rid.isdigit():
+        return jsonify({"ok": True})
+    valor_pago = None
+    try:
+        cents = data.get("paid_amount") or data.get("amount")
+        if cents:
+            valor_pago = float(cents) / 100.0
+    except Exception:
+        valor_pago = None
+    try:
+        _baixar_cobranca_paga(origem, int(rid), valor_pago, "InfinitePay")
+    except Exception as e:
+        current_app.logger.error(f"Webhook InfinitePay erro: {e}", exc_info=True)
     return jsonify({"ok": True})
 
 
@@ -2341,7 +2559,7 @@ def _auto_gerar_asaas(registros, metodo):
     Retorna (geradas, ignoradas, falhas).
     """
     metodo = (metodo or "").upper()
-    if metodo not in ("PIX", "BOLETO") or not registros:
+    if metodo not in ("PIX", "BOLETO", "LINK") or not registros:
         return (0, 0, 0)
     geradas = ignoradas = falhas = 0
     conn = get_db_connection()
@@ -2352,13 +2570,9 @@ def _auto_gerar_asaas(registros, metodo):
         for reg in registros:
             acad = reg.get("id_academia")
             if acad not in cred_cache:
-                cur.execute(
-                    "SELECT asaas_habilitado, asaas_api_key, asaas_ambiente FROM academias WHERE id=%s",
-                    (acad,),
-                )
-                cred_cache[acad] = cur.fetchone() or {}
-            cred = cred_cache[acad]
-            if not (cred.get("asaas_habilitado") and (cred.get("asaas_api_key") or "").strip()):
+                cred_cache[acad] = _gateway_config_academia(acad) or {}
+            cfg = cred_cache[acad]
+            if not _gateway_ativo(cfg):
                 ignoradas += 1
                 continue
             valor = float(reg.get("valor") or 0)
@@ -2377,27 +2591,26 @@ def _auto_gerar_asaas(registros, metodo):
                 cur.execute("SELECT nome, cpf, email, telefone FROM alunos WHERE id=%s", (aid,))
                 aluno_cache[aid] = cur.fetchone() or {}
             al = aluno_cache[aid]
-            row = {
-                "id": reg["id"], "nome": al.get("nome"), "cpf": al.get("cpf"),
-                "email": al.get("email"), "telefone": al.get("telefone"),
-                "valor": valor, "data_vencimento": reg.get("data_vencimento"),
-                "asaas_api_key": cred.get("asaas_api_key"), "asaas_ambiente": cred.get("asaas_ambiente"),
-            }
             try:
-                r = _emitir_cobranca_asaas(row, metodo, descricao=reg.get("descricao") or "Cobrança")
+                r = _emitir_cobranca_online(
+                    cfg, metodo, nome=al.get("nome"), cpf=al.get("cpf"), email=al.get("email"),
+                    telefone=al.get("telefone"), valor=valor, vencimento=reg.get("data_vencimento"),
+                    descricao=reg.get("descricao") or "Cobrança",
+                    origem=reg.get("origem"), registro_id=reg["id"],
+                )
                 tabela = "mensalidade_aluno" if reg.get("origem") == "mensalidade" else "cobranca_avulsa"
                 cur.execute(
                     f"""UPDATE {tabela}
                         SET asaas_payment_id=%s, asaas_tipo=%s, asaas_boleto_url=%s,
-                            asaas_pix_qrcode=%s, asaas_pix_copia_cola=%s
+                            asaas_pix_qrcode=%s, asaas_pix_copia_cola=%s, gateway=%s
                         WHERE id=%s""",
-                    (r["payment_id"], r["tipo"], r["boleto_url"], r["pix_qrcode"], r["pix_copia_cola"], reg["id"]),
+                    (r["payment_id"], r["tipo"], r["boleto_url"], r["pix_qrcode"], r["pix_copia_cola"], r["gateway"], reg["id"]),
                 )
                 conn.commit()
                 geradas += 1
             except Exception as e:
                 conn.rollback()
-                current_app.logger.error(f"Auto Asaas falhou ({reg.get('origem')} {reg.get('id')}): {e}")
+                current_app.logger.error(f"Auto cobrança online falhou ({reg.get('origem')} {reg.get('id')}): {e}")
                 falhas += 1
     finally:
         conn.close()
@@ -2405,12 +2618,13 @@ def _auto_gerar_asaas(registros, metodo):
 
 
 def _flash_resumo_asaas(geradas, ignoradas, falhas, metodo):
+    rotulo = "link de pagamento" if metodo == "LINK" else metodo
     if geradas:
-        flash(f"Cobrança online ({metodo}) gerada para {geradas} cobrança(s). O aluno já pode pagar.", "success")
+        flash(f"Cobrança online ({rotulo}) gerada para {geradas} cobrança(s). O aluno já pode pagar.", "success")
     if ignoradas:
-        flash(f"{ignoradas} cobrança(s) sem cobrança online (valor abaixo de R$ 5,00 ou Asaas indisponível).", "warning")
+        flash(f"{ignoradas} cobrança(s) sem cobrança online (valor abaixo de R$ 5,00 ou gateway indisponível).", "warning")
     if falhas:
-        flash(f"{falhas} cobrança(s) não puderam gerar a cobrança online no Asaas (verifique CPF/dados do aluno).", "warning")
+        flash(f"{falhas} cobrança(s) não puderam gerar a cobrança online (verifique CPF/dados do aluno).", "warning")
 
 
 @bp_financeiro.route("/mensalidades/gerar-cobranca", methods=["GET", "POST"])
@@ -2483,7 +2697,7 @@ def gerar_cobranca():
                 conn.close()
                 flash("Cobrança avulsa gerada.", "success")
                 metodo = (request.form.get("asaas_metodo") or "").upper()
-                if metodo in ("PIX", "BOLETO") and av_id:
+                if metodo in ("PIX", "BOLETO", "LINK") and av_id:
                     g, ig, fl = _auto_gerar_asaas([{
                         "origem": "avulsa", "id": av_id, "aluno_id": aluno_ids[0],
                         "id_academia": id_acad, "valor": valor, "data_vencimento": data_venc,
@@ -2605,7 +2819,7 @@ def gerar_cobranca():
                         flash(f"{ja_existentes} competência(s) já possuíam cobrança e não foram duplicadas.", "warning")
                 conn.close()
                 metodo = (request.form.get("asaas_metodo") or "").upper()
-                if metodo in ("PIX", "BOLETO") and criadas_mens:
+                if metodo in ("PIX", "BOLETO", "LINK") and criadas_mens:
                     g, ig, fl = _auto_gerar_asaas(criadas_mens, metodo)
                     _flash_resumo_asaas(g, ig, fl, metodo)
                 return _redirect_after_gerar()

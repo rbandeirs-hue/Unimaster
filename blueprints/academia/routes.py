@@ -1517,36 +1517,36 @@ def configuracoes_academia():
         if request.method == "POST":
             secao = request.form.get("secao", "visitantes")
 
-            if secao == "asaas":
-                # Cobrança digital (Asaas) — credenciais próprias de cada academia.
-                asaas_habilitado = 1 if request.form.get("asaas_habilitado") else 0
+            if secao in ("asaas", "online"):
+                # Cobrança online — a academia escolhe UM gateway e informa as credenciais.
+                gateway = (request.form.get("gateway_pagamento") or "").strip().lower()
+                if gateway not in ("", "asaas", "mercadopago", "infinitepay", "cora"):
+                    gateway = ""
 
                 ambiente = (request.form.get("asaas_ambiente") or "sandbox").strip().lower()
                 if ambiente not in ("sandbox", "production"):
                     ambiente = "sandbox"
-
                 webhook_token = (request.form.get("asaas_webhook_token") or "").strip() or None
+                infinitepay_handle = (request.form.get("infinitepay_handle") or "").strip() or None
+                asaas_habilitado = 1 if gateway == "asaas" else 0
 
-                # A chave só é sobrescrita quando um novo valor é digitado; em branco
-                # mantém a chave atual (não é reexibida na tela por segurança).
-                nova_chave = (request.form.get("asaas_api_key") or "").strip()
-                if nova_chave:
-                    cur.execute(
-                        """UPDATE academias
-                           SET asaas_habilitado=%s, asaas_ambiente=%s,
-                               asaas_webhook_token=%s, asaas_api_key=%s
-                           WHERE id=%s""",
-                        (asaas_habilitado, ambiente, webhook_token, nova_chave, academia_id),
-                    )
-                else:
-                    cur.execute(
-                        """UPDATE academias
-                           SET asaas_habilitado=%s, asaas_ambiente=%s, asaas_webhook_token=%s
-                           WHERE id=%s""",
-                        (asaas_habilitado, ambiente, webhook_token, academia_id),
-                    )
+                # Campos sensíveis (chave/token) só são sobrescritos se um novo valor for digitado.
+                nova_chave_asaas = (request.form.get("asaas_api_key") or "").strip()
+                novo_token_mp = (request.form.get("mercadopago_access_token") or "").strip()
+
+                cur.execute(
+                    """UPDATE academias
+                       SET gateway_pagamento=%s, asaas_habilitado=%s, asaas_ambiente=%s,
+                           asaas_webhook_token=%s, infinitepay_handle=%s
+                       WHERE id=%s""",
+                    (gateway, asaas_habilitado, ambiente, webhook_token, infinitepay_handle, academia_id),
+                )
+                if nova_chave_asaas:
+                    cur.execute("UPDATE academias SET asaas_api_key=%s WHERE id=%s", (nova_chave_asaas, academia_id))
+                if novo_token_mp:
+                    cur.execute("UPDATE academias SET mercadopago_access_token=%s WHERE id=%s", (novo_token_mp, academia_id))
                 conn.commit()
-                flash("Configuração de cobrança digital salva com sucesso!", "success")
+                flash("Configuração de cobrança online salva com sucesso!", "success")
             else:
                 aulas_permitidas = request.form.get("aulas_experimentais_permitidas", "").strip()
                 if aulas_permitidas == "":
@@ -1592,12 +1592,14 @@ def configuracoes_academia():
         conn.close()
     
     asaas_chave_definida = bool((academia or {}).get("asaas_api_key"))
+    mp_token_definido = bool((academia or {}).get("mercadopago_access_token"))
     return render_template(
         "painel/configuracoes_academia.html",
         academia=academia,
         academias=academias,
         academia_id=academia_id,
         asaas_chave_definida=asaas_chave_definida,
+        mp_token_definido=mp_token_definido,
     )
 
 

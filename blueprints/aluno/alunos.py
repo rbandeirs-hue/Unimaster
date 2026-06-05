@@ -1902,21 +1902,34 @@ def lista_alunos():
             else:
                 back_url = url_for("painel.home")
     modo_associacao = modo == "associacao"
-    # Academias com cobrança online (Asaas) ativa — habilita o seletor PIX/Boleto no modal.
-    asaas_academias = set()
+    # Gateway de cobrança online ativo por academia (para o seletor do modal).
+    gateway_por_academia = {}
     try:
         _c = get_db_connection()
-        _cur = _c.cursor()
-        _cur.execute("SELECT id FROM academias WHERE asaas_habilitado = 1 AND asaas_api_key IS NOT NULL AND asaas_api_key <> ''")
-        asaas_academias = {row[0] for row in _cur.fetchall()}
+        _cur = _c.cursor(dictionary=True)
+        _cur.execute(
+            """SELECT id, gateway_pagamento, asaas_api_key, mercadopago_access_token, infinitepay_handle
+               FROM academias WHERE gateway_pagamento IS NOT NULL AND gateway_pagamento <> ''"""
+        )
+        for r in _cur.fetchall():
+            g = (r.get("gateway_pagamento") or "").strip().lower()
+            ok = (
+                (g == "asaas" and (r.get("asaas_api_key") or "").strip())
+                or (g == "mercadopago" and (r.get("mercadopago_access_token") or "").strip())
+                or (g == "infinitepay" and (r.get("infinitepay_handle") or "").strip())
+            )
+            if ok:
+                gateway_por_academia[r["id"]] = g
         _c.close()
     except Exception:
-        asaas_academias = set()
+        gateway_por_academia = {}
+    asaas_academias = set(gateway_por_academia.keys())
     # Modo associação: filtros sempre vazios (só placeholders)
     return render_template(
         "alunos/lista_alunos.html",
         alunos=alunos,
         asaas_academias=asaas_academias,
+        gateway_por_academia=gateway_por_academia,
         alunos_agrupados=alunos_agrupados,
         busca="" if modo_associacao else busca,
         back_url=back_url,

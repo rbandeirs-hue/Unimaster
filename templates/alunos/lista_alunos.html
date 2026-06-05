@@ -2061,13 +2061,20 @@
                 </label>
               </div>
 
-              {% if aluno.id_academia in (asaas_academias or []) %}
-              <!-- Cobrança online (Asaas) -->
+              {% set gw_aluno = (gateway_por_academia or {}).get(aluno.id_academia) %}
+              {% if gw_aluno %}
+              <!-- Cobrança online -->
               <div class="mf-section mb-3 bloco-asaas">
-                <div class="mf-section-title"><i class="bi bi-qr-code me-1"></i> Cobrança online (Asaas)</div>
+                <div class="mf-section-title"><i class="bi bi-qr-code me-1"></i> Cobrança online
+                  <span class="text-muted small">({{ {'asaas':'Asaas','mercadopago':'Mercado Pago','infinitepay':'InfinitePay'}.get(gw_aluno, gw_aluno) }})</span>
+                </div>
                 <select name="asaas_metodo_{{ aluno.id }}" class="form-select form-select-sm mf-asaas-metodo">
+                  {% if gw_aluno == 'infinitepay' %}
+                  <option value="LINK" selected>Gerar link de pagamento (PIX/cartão)</option>
+                  {% else %}
                   <option value="PIX" selected>PIX — gera QR Code para o aluno pagar</option>
                   <option value="BOLETO">Boleto — gera o link do boleto</option>
+                  {% endif %}
                   <option value="">Não gerar cobrança online</option>
                 </select>
                 <small class="text-muted d-block mt-1">A cobrança fica disponível no painel do aluno. Valores abaixo de R$ 5,00 são ignorados.</small>
