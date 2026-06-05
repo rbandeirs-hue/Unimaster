@@ -113,6 +113,134 @@ def lista_visitantes():
 
 
 # ======================================================
+# 🔹 Novo Visitante (cadastro manual pela academia)
+# ======================================================
+@academia_bp.route("/visitantes/novo", methods=["GET", "POST"])
+@login_required
+def novo_visitante():
+    """Cadastro manual de visitante pela academia, com opção de já agendar a aula experimental."""
+    from datetime import datetime
+    if not (
+        current_user.has_role("gestor_academia") or
+        current_user.has_role("professor") or
+        current_user.has_role("admin") or
+        current_user.has_role("gestor_federacao") or
+        current_user.has_role("gestor_associacao")
+    ):
+        flash("Acesso negado.", "danger")
+        return redirect(url_for("painel.home"))
+
+    academia_id, academias = _get_academia_gerenciamento()
+    if not academia_id:
+        flash("Nenhuma academia disponível.", "warning")
+        return redirect(url_for("painel.home"))
+
+    session["modo_painel"] = "academia"
+    session["academia_gerenciamento_id"] = academia_id
+
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+
+    cur.execute(
+        "SELECT TurmaID AS turma_id, Nome AS turma_nome, DiasHorario FROM turmas WHERE id_academia = %s ORDER BY Nome",
+        (academia_id,),
+    )
+    turmas = cur.fetchall()
+
+    if request.method == "POST":
+        nome = (request.form.get("nome") or "").strip()
+        email = (request.form.get("email") or "").strip() or None
+        telefone = (request.form.get("telefone") or "").strip() or None
+        data_nascimento = (request.form.get("data_nascimento") or "").strip() or None
+        turma_id = request.form.get("turma_id", type=int)
+        data_aula = (request.form.get("data_aula") or "").strip()
+
+        if not nome:
+            flash("Informe o nome do visitante.", "danger")
+            cur.close()
+            conn.close()
+            return redirect(url_for("academia.novo_visitante", academia_id=academia_id))
+
+        # Se informou turma, precisa de data (e vice-versa)
+        agendar = bool(turma_id or data_aula)
+        data_aula_obj = None
+        if agendar:
+            if not turma_id or not data_aula:
+                flash("Para agendar a aula experimental, informe turma e data.", "danger")
+                cur.close()
+                conn.close()
+                return redirect(url_for("academia.novo_visitante", academia_id=academia_id))
+            try:
+                data_aula_obj = datetime.strptime(data_aula, "%Y-%m-%d").date()
+            except Exception:
+                flash("Data da aula inválida.", "danger")
+                cur.close()
+                conn.close()
+                return redirect(url_for("academia.novo_visitante", academia_id=academia_id))
+            if not any(t["turma_id"] == turma_id for t in turmas):
+                flash("Turma inválida.", "danger")
+                cur.close()
+                conn.close()
+                return redirect(url_for("academia.novo_visitante", academia_id=academia_id))
+
+        try:
+            cur.execute(
+                "SELECT aulas_experimentais_permitidas FROM academias WHERE id = %s",
+                (academia_id,),
+            )
+            acad_cfg = cur.fetchone() or {}
+            limite_aulas = acad_cfg.get("aulas_experimentais_permitidas")
+
+            cur.execute(
+                """
+                INSERT INTO visitantes (nome, email, telefone, data_nascimento, usuario_id,
+                                        id_academia, aulas_experimentais_permitidas, ativo)
+                VALUES (%s, %s, %s, %s, NULL, %s, %s, 1)
+                """,
+                (nome, email, telefone, data_nascimento or None, academia_id, limite_aulas),
+            )
+            visitante_id = cur.lastrowid
+
+            if agendar:
+                # Cadastrada pela academia já entra aprovada
+                cur.execute(
+                    """
+                    INSERT INTO aulas_experimentais (visitante_id, turma_id, data_aula, presente, aprovado, observacoes, registrado_por)
+                    VALUES (%s, %s, %s, 0, 1, %s, %s)
+                    """,
+                    (visitante_id, turma_id, data_aula, "Cadastrado manualmente pela academia", current_user.id),
+                )
+                cur.execute(
+                    "INSERT IGNORE INTO visitante_turmas (visitante_id, turma_id, data_inscricao) VALUES (%s, %s, %s)",
+                    (visitante_id, turma_id, date.today()),
+                )
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            cur.close()
+            conn.close()
+            flash(f"Erro ao cadastrar visitante: {e}", "danger")
+            return redirect(url_for("academia.novo_visitante", academia_id=academia_id))
+
+        cur.close()
+        conn.close()
+        flash(
+            f"Visitante '{nome}' cadastrado com sucesso." + (" Aula experimental agendada." if agendar else ""),
+            "success",
+        )
+        return redirect(url_for("academia.detalhes_visitante", visitante_id=visitante_id, academia_id=academia_id))
+
+    cur.close()
+    conn.close()
+    return render_template(
+        "academia/visitantes/novo.html",
+        turmas=turmas,
+        academias=academias,
+        academia_id=academia_id,
+    )
+
+
+# ======================================================
 # 🔹 Detalhes do Visitante
 # ======================================================
 @academia_bp.route("/visitantes/<int:visitante_id>")
@@ -315,7 +443,8 @@ def aprovar_solicitacao(aula_id):
         
     except Exception as e:
         conn.close()
-        return jsonify({"ok": False, "msg": f"Erro: {e}"}), 500
+        current_app.logger.error("Erro interno: %s", e, exc_info=True)
+        return jsonify({"ok": False, "msg": "Erro interno no servidor. Tente novamente."}), 500
 
 
 # ======================================================
@@ -363,9 +492,9 @@ def cancelar_solicitacao(aula_id):
         
         # Atualizar contador de aulas realizadas
         cur.execute("""
-            UPDATE visitantes 
+            UPDATE visitantes
             SET aulas_experimentais_realizadas = (
-                SELECT COUNT(*) FROM aulas_experimentais 
+                SELECT COUNT(*) FROM aulas_experimentais
                 WHERE visitante_id = %s AND presente = 1 AND data_aula <= CURDATE()
             )
             WHERE id = %s
@@ -378,7 +507,8 @@ def cancelar_solicitacao(aula_id):
     except Exception as e:
         conn.rollback()
         conn.close()
-        return jsonify({"ok": False, "msg": f"Erro: {e}"}), 500
+        current_app.logger.error("Erro interno: %s", e, exc_info=True)
+        return jsonify({"ok": False, "msg": "Erro interno no servidor. Tente novamente."}), 500
 
 
 # ======================================================
@@ -496,7 +626,8 @@ def confirmar_pagamento_diaria(pagamento_id):
     except Exception as e:
         conn.rollback()
         conn.close()
-        return jsonify({"ok": False, "msg": f"Erro: {e}"}), 500
+        current_app.logger.error("Erro interno: %s", e, exc_info=True)
+        return jsonify({"ok": False, "msg": "Erro interno no servidor. Tente novamente."}), 500
 
 
 # ======================================================
@@ -635,7 +766,8 @@ def aprovar_solicitacao_mensalidade(solicitacao_id):
     except Exception as e:
         conn.rollback()
         conn.close()
-        return jsonify({"ok": False, "msg": f"Erro: {e}"}), 500
+        current_app.logger.error("Erro interno: %s", e, exc_info=True)
+        return jsonify({"ok": False, "msg": "Erro interno no servidor. Tente novamente."}), 500
 
 
 def _get_academias_ids():
@@ -774,6 +906,189 @@ def _get_academia_stats(academia_id=None):
 # =====================================================
 # 🔹 Dash da Academia (apenas estatísticas)
 # =====================================================
+def _kpis_mes(cur, academia_id, ano, mes):
+    """KPIs de um mês específico (alunos novos/baixas, receitas/despesas, mensalidades previsto/recebido)."""
+    import calendar
+    ini = date(ano, mes, 1)
+    fim = date(ano, mes, calendar.monthrange(ano, mes)[1])
+    k = {"ano": ano, "mes": mes}
+
+    cur.execute(
+        "SELECT COUNT(*) c FROM alunos WHERE id_academia=%s AND data_matricula BETWEEN %s AND %s",
+        (academia_id, ini, fim),
+    )
+    k["novos"] = cur.fetchone()["c"] or 0
+    cur.execute(
+        "SELECT COUNT(*) c FROM alunos WHERE id_academia=%s AND data_inativacao BETWEEN %s AND %s",
+        (academia_id, ini, fim),
+    )
+    k["baixas"] = cur.fetchone()["c"] or 0
+
+    cur.execute(
+        "SELECT COALESCE(SUM(valor),0) v FROM receitas WHERE id_academia=%s AND data BETWEEN %s AND %s",
+        (academia_id, ini, fim),
+    )
+    k["receitas"] = float(cur.fetchone()["v"] or 0)
+    cur.execute(
+        "SELECT COALESCE(SUM(valor),0) v FROM despesas WHERE id_academia=%s AND data BETWEEN %s AND %s",
+        (academia_id, ini, fim),
+    )
+    k["despesas"] = float(cur.fetchone()["v"] or 0)
+    k["saldo"] = k["receitas"] - k["despesas"]
+
+    cur.execute(
+        """SELECT COALESCE(SUM(ma.valor),0) v FROM mensalidade_aluno ma
+           JOIN alunos a ON a.id = ma.aluno_id
+           WHERE a.id_academia=%s AND ma.status <> 'cancelado'
+             AND ma.data_vencimento BETWEEN %s AND %s""",
+        (academia_id, ini, fim),
+    )
+    k["mens_previsto"] = float(cur.fetchone()["v"] or 0)
+    cur.execute(
+        """SELECT COALESCE(SUM(COALESCE(ma.valor_pago, ma.valor)),0) v FROM mensalidade_aluno ma
+           JOIN alunos a ON a.id = ma.aluno_id
+           WHERE a.id_academia=%s AND ma.status = 'pago'
+             AND ma.data_pagamento BETWEEN %s AND %s""",
+        (academia_id, ini, fim),
+    )
+    k["mens_recebido"] = float(cur.fetchone()["v"] or 0)
+    return k
+
+
+def _get_academia_dashboard(academia_id, ano, mes):
+    """Monta todos os KPIs do dashboard do modo academia para o mês/ano informados."""
+    d = {"ano": ano, "mes": mes}
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        # Mês atual e mês anterior (para comparativo)
+        atual = _kpis_mes(cur, academia_id, ano, mes)
+        pmes, pano = (12, ano - 1) if mes == 1 else (mes - 1, ano)
+        anterior = _kpis_mes(cur, academia_id, pano, pmes)
+        d["atual"] = atual
+        d["anterior"] = anterior
+
+        # Snapshot de alunos por status (atual)
+        cur.execute(
+            "SELECT status, COUNT(*) c FROM alunos WHERE id_academia=%s GROUP BY status",
+            (academia_id,),
+        )
+        por_status = {(r["status"] or "ativo"): r["c"] for r in cur.fetchall()}
+        ativos = por_status.get("ativo", 0)
+        d["por_status"] = por_status
+        d["ativos"] = ativos
+        d["inativos"] = por_status.get("inativo", 0)
+        d["suspensos"] = por_status.get("suspenso", 0)
+        d["formados"] = por_status.get("formado", 0)
+        d["total_alunos"] = sum(por_status.values())
+
+        # Inadimplência (snapshot atual): atrasado OU pendente vencido
+        cond_atraso = "(ma.status='atrasado' OR (ma.status='pendente' AND ma.data_vencimento < CURDATE()))"
+        cur.execute(
+            f"""SELECT COALESCE(SUM(ma.valor),0) v, COUNT(DISTINCT ma.aluno_id) a
+                FROM mensalidade_aluno ma JOIN alunos a ON a.id = ma.aluno_id
+                WHERE a.id_academia=%s AND {cond_atraso}""",
+            (academia_id,),
+        )
+        row = cur.fetchone()
+        d["atrasado_valor"] = float(row["v"] or 0)
+        d["inadimplentes_qtd"] = row["a"] or 0
+        d["inadimplencia_pct"] = round((d["inadimplentes_qtd"] / ativos * 100), 1) if ativos else 0.0
+        d["ticket_medio"] = round((atual["mens_recebido"] / ativos), 2) if ativos else 0.0
+        d["saldo_alunos"] = atual["novos"] - atual["baixas"]
+        base_churn = ativos + atual["baixas"]
+        d["churn_pct"] = round((atual["baixas"] / base_churn * 100), 1) if base_churn else 0.0
+
+        # Lista de inadimplentes (top 10 por valor)
+        cur.execute(
+            f"""SELECT a.id, a.nome, COUNT(*) qtd, COALESCE(SUM(ma.valor),0) total,
+                       MIN(ma.data_vencimento) venc
+                FROM mensalidade_aluno ma JOIN alunos a ON a.id = ma.aluno_id
+                WHERE a.id_academia=%s AND {cond_atraso}
+                GROUP BY a.id, a.nome ORDER BY total DESC LIMIT 10""",
+            (academia_id,),
+        )
+        d["inadimplentes"] = cur.fetchall()
+
+        # ---- Financeiro avançado ----
+        import calendar as _cal
+        ini_mes = date(ano, mes, 1)
+        fim_mes = date(ano, mes, _cal.monthrange(ano, mes)[1])
+        ini_ano = date(ano, 1, 1)
+
+        # MRR (receita recorrente): soma da mensalidade mais recente (não cancelada) de cada aluno ativo
+        cur.execute(
+            """SELECT COALESCE(SUM(t.valor),0) v FROM (
+                 SELECT ma.valor
+                 FROM mensalidade_aluno ma JOIN alunos a ON a.id = ma.aluno_id
+                 WHERE a.id_academia=%s AND a.status='ativo' AND ma.status<>'cancelado'
+                   AND ma.id = (SELECT ma2.id FROM mensalidade_aluno ma2
+                                WHERE ma2.aluno_id = ma.aluno_id AND ma2.status<>'cancelado'
+                                ORDER BY ma2.data_vencimento DESC, ma2.id DESC LIMIT 1)
+               ) t""",
+            (academia_id,),
+        )
+        d["mrr"] = float(cur.fetchone()["v"] or 0)
+
+        # Mensalidades vencendo nos próximos 7 dias (ainda pendentes)
+        cur.execute(
+            """SELECT COALESCE(SUM(ma.valor),0) v, COUNT(*) c
+               FROM mensalidade_aluno ma JOIN alunos a ON a.id = ma.aluno_id
+               WHERE a.id_academia=%s AND ma.status='pendente'
+                 AND ma.data_vencimento BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 7 DAY)""",
+            (academia_id,),
+        )
+        row = cur.fetchone()
+        d["venc7_valor"] = float(row["v"] or 0)
+        d["venc7_qtd"] = row["c"] or 0
+
+        # Acumulado do ano (YTD): de 1º de janeiro até o fim do mês selecionado
+        cur.execute(
+            "SELECT COALESCE(SUM(valor),0) v FROM receitas WHERE id_academia=%s AND data BETWEEN %s AND %s",
+            (academia_id, ini_ano, fim_mes),
+        )
+        d["receitas_ano"] = float(cur.fetchone()["v"] or 0)
+        cur.execute(
+            "SELECT COALESCE(SUM(valor),0) v FROM despesas WHERE id_academia=%s AND data BETWEEN %s AND %s",
+            (academia_id, ini_ano, fim_mes),
+        )
+        d["despesas_ano"] = float(cur.fetchone()["v"] or 0)
+        d["saldo_ano"] = d["receitas_ano"] - d["despesas_ano"]
+
+        # Receita por forma de pagamento (mensalidades pagas no mês selecionado)
+        cur.execute(
+            """SELECT COALESCE(fp.nome,'Sem forma') nome,
+                      COALESCE(SUM(COALESCE(ma.valor_pago, ma.valor)),0) total
+               FROM mensalidade_aluno ma JOIN alunos a ON a.id = ma.aluno_id
+               LEFT JOIN formas_pagamento fp ON fp.id = ma.id_forma_pagamento
+               WHERE a.id_academia=%s AND ma.status='pago' AND ma.data_pagamento BETWEEN %s AND %s
+               GROUP BY fp.nome ORDER BY total DESC""",
+            (academia_id, ini_mes, fim_mes),
+        )
+        d["por_forma"] = [{"nome": r["nome"], "total": float(r["total"] or 0)} for r in cur.fetchall()]
+
+        # Série dos últimos 6 meses (para gráfico)
+        meses_pt = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"]
+        serie = []
+        sm, sy = mes, ano
+        for _ in range(6):
+            km = _kpis_mes(cur, academia_id, sy, sm)
+            serie.append({
+                "label": f"{meses_pt[sm-1]}/{str(sy)[2:]}",
+                "receitas": km["receitas"],
+                "despesas": km["despesas"],
+                "novos": km["novos"],
+                "baixas": km["baixas"],
+            })
+            sm, sy = (12, sy - 1) if sm == 1 else (sm - 1, sy)
+        serie.reverse()
+        d["serie"] = serie
+    finally:
+        cur.close()
+        conn.close()
+    return d
+
+
 @academia_bp.route("/dash")
 @login_required
 def dash():
@@ -786,8 +1101,49 @@ def dash():
         return redirect(url_for("painel.home"))
     session["modo_painel"] = "academia"
     session["academia_gerenciamento_id"] = academia_id
+
+    hoje = date.today()
+    mes = request.args.get("mes", type=int) or hoje.month
+    ano = request.args.get("ano", type=int) or hoje.year
+    if not (1 <= mes <= 12):
+        mes = hoje.month
+    if ano < 2000 or ano > 2100:
+        ano = hoje.year
+
     stats = _get_academia_stats(academia_id)
-    return render_template("painel/academia_dash.html", stats=stats, academias=academias, academia_id=academia_id)
+    dash_data = _get_academia_dashboard(academia_id, ano, mes)
+    return render_template(
+        "painel/academia_dash.html",
+        stats=stats,
+        academias=academias,
+        academia_id=academia_id,
+        dash=dash_data,
+        mes=mes,
+        ano=ano,
+    )
+
+
+def _push_aniv_academia_hoje(anivs_hoje: list, hoje) -> None:
+    if not anivs_hoje:
+        return
+    chave = f"push_aniv_{hoje.isoformat()}"
+    if session.get(chave):
+        return
+    session[chave] = True
+    try:
+        from utils.push_notifications import enviar_push_usuario
+        nomes = ", ".join(a["nome"].split()[0] for a in anivs_hoje[:3])
+        sufixo = f" +{len(anivs_hoje)-3}" if len(anivs_hoje) > 3 else ""
+        enviar_push_usuario(
+            current_user.id,
+            title="🎂 Aniversariantes hoje!",
+            body=f"{nomes}{sufixo} fazem aniversário hoje. Envie uma mensagem!",
+            url="/academia/",
+            tag="aniversario",
+            require_interaction=True,
+        )
+    except Exception:
+        pass
 
 
 # =====================================================
@@ -829,12 +1185,25 @@ def painel_academia():
     cur.close()
     conn.close()
 
+    from utils.aniversariantes import aniversariantes_do_mes
+    from datetime import date
+    hoje = date.today()
+    anivs = aniversariantes_do_mes(current_user.id, "academia", mes=hoje.month,
+                                   academia_id=academia_id)
+    anivs_hoje = [a for a in anivs if a["data_nascimento"] and
+                  a["data_nascimento"].day == hoje.day]
+    _push_aniv_academia_hoje(anivs_hoje, hoje)
     return render_template(
         "painel/painel_academia.html",
         usuario=current_user,
         academia=academia,
         academias=academias,
         academia_id=academia_id,
+        aniversariantes=anivs,
+        aniversariantes_hoje=anivs_hoje,
+        hoje_dia=hoje.day,
+        hoje_mes=hoje.month,
+        hoje_ano=hoje.year,
     )
 
 
@@ -863,19 +1232,30 @@ def lista_usuarios():
     )
     
     busca = request.args.get("busca", "").strip()
+    status_filtro = (request.args.get("status") or "ativos").lower()
+    if status_filtro not in ("ativos", "inativos", "todos"):
+        status_filtro = "ativos"
     # Quando há busca na URL mas não há parâmetro 'page', resetar para página 1
     # Isso garante que a busca seja aplicada em toda a base antes da paginação
     tem_busca = bool(busca)
     tem_page_param = "page" in request.args
-    
+
     if tem_busca and not tem_page_param:
         # Nova busca: resetar para página 1
         page = 1
     else:
         page = int(request.args.get("page", 1))
-    
-    por_pagina = 10
+
+    por_pagina = 12
     offset = (page - 1) * por_pagina
+
+    # SQL parcial de status: aplicado em todas as queries
+    if status_filtro == "ativos":
+        sql_status = "AND COALESCE(u.ativo, 1) = 1"
+    elif status_filtro == "inativos":
+        sql_status = "AND COALESCE(u.ativo, 1) = 0"
+    else:
+        sql_status = ""
     
     conn = get_db_connection()
     cur = conn.cursor(dictionary=True, buffered=True)
@@ -925,6 +1305,7 @@ def lista_usuarios():
                     FROM usuarios u
                     INNER JOIN usuarios_academias ua ON ua.usuario_id = u.id
                     WHERE {filtro_academia}
+                    {sql_status}
                     AND (u.nome LIKE %s OR u.email LIKE %s)
                 """, params_count)
             else:
@@ -933,6 +1314,7 @@ def lista_usuarios():
                     FROM usuarios u
                     INNER JOIN usuarios_academias ua ON ua.usuario_id = u.id
                     WHERE {filtro_academia}
+                    {sql_status}
                 """, tuple(params_base))
             
             result_total = cur.fetchone()
@@ -943,33 +1325,35 @@ def lista_usuarios():
             if busca:
                 params_query = tuple(params_base) + (f"%{busca}%", f"%{busca}%", por_pagina, offset)
                 cur.execute(f"""
-                    SELECT DISTINCT u.id, u.nome, u.email, u.criado_em,
+                    SELECT DISTINCT u.id, u.nome, u.email, u.cpf, u.foto, u.criado_em,
                            COALESCE(u.ativo, 1) AS ativo,
                            GROUP_CONCAT(DISTINCT ac.nome ORDER BY ac.nome SEPARATOR ', ') AS academias_vinculadas
                     FROM usuarios u
                     INNER JOIN usuarios_academias ua ON ua.usuario_id = u.id
                     INNER JOIN academias ac ON ac.id = ua.academia_id
                     WHERE {filtro_academia}
+                    {sql_status}
                     AND (u.nome LIKE %s OR u.email LIKE %s)
-                    GROUP BY u.id, u.nome, u.email, u.criado_em, u.ativo
+                    GROUP BY u.id, u.nome, u.email, u.cpf, u.foto, u.criado_em, u.ativo
                     ORDER BY u.nome
                     LIMIT %s OFFSET %s
                 """, params_query)
             else:
                 params_query = tuple(params_base) + (por_pagina, offset)
                 cur.execute(f"""
-                    SELECT DISTINCT u.id, u.nome, u.email, u.criado_em,
+                    SELECT DISTINCT u.id, u.nome, u.email, u.cpf, u.foto, u.criado_em,
                            COALESCE(u.ativo, 1) AS ativo,
                            GROUP_CONCAT(DISTINCT ac.nome ORDER BY ac.nome SEPARATOR ', ') AS academias_vinculadas
                     FROM usuarios u
                     INNER JOIN usuarios_academias ua ON ua.usuario_id = u.id
                     INNER JOIN academias ac ON ac.id = ua.academia_id
                     WHERE {filtro_academia}
-                    GROUP BY u.id, u.nome, u.email, u.criado_em, u.ativo
+                    {sql_status}
+                    GROUP BY u.id, u.nome, u.email, u.cpf, u.foto, u.criado_em, u.ativo
                     ORDER BY u.nome
                     LIMIT %s OFFSET %s
                 """, params_query)
-            
+
             usuarios = cur.fetchall()
             
             # Buscar nome da associação
@@ -997,19 +1381,21 @@ def lista_usuarios():
             
             # Contar total de usuários vinculados à academia
             if busca:
-                cur.execute("""
+                cur.execute(f"""
                     SELECT COUNT(DISTINCT u.id) AS total
                     FROM usuarios u
                     INNER JOIN usuarios_academias ua ON ua.usuario_id = u.id
                     WHERE ua.academia_id = %s
+                    {sql_status}
                     AND (u.nome LIKE %s OR u.email LIKE %s)
                 """, (academia_id, f"%{busca}%", f"%{busca}%"))
             else:
-                cur.execute("""
+                cur.execute(f"""
                     SELECT COUNT(DISTINCT u.id) AS total
                     FROM usuarios u
                     INNER JOIN usuarios_academias ua ON ua.usuario_id = u.id
                     WHERE ua.academia_id = %s
+                    {sql_status}
                 """, (academia_id,))
             
             result_total = cur.fetchone()
@@ -1018,31 +1404,58 @@ def lista_usuarios():
             
             # Buscar usuários vinculados à academia
             if busca:
-                cur.execute("""
-                    SELECT DISTINCT u.id, u.nome, u.email, u.criado_em,
+                cur.execute(f"""
+                    SELECT DISTINCT u.id, u.nome, u.email, u.cpf, u.foto, u.criado_em,
                            COALESCE(u.ativo, 1) AS ativo,
                            NULL AS academias_vinculadas
                     FROM usuarios u
                     INNER JOIN usuarios_academias ua ON ua.usuario_id = u.id
                     WHERE ua.academia_id = %s
+                    {sql_status}
                     AND (u.nome LIKE %s OR u.email LIKE %s)
                     ORDER BY u.nome
                     LIMIT %s OFFSET %s
                 """, (academia_id, f"%{busca}%", f"%{busca}%", por_pagina, offset))
             else:
-                cur.execute("""
-                    SELECT DISTINCT u.id, u.nome, u.email, u.criado_em,
+                cur.execute(f"""
+                    SELECT DISTINCT u.id, u.nome, u.email, u.cpf, u.foto, u.criado_em,
                            COALESCE(u.ativo, 1) AS ativo,
                            NULL AS academias_vinculadas
                     FROM usuarios u
                     INNER JOIN usuarios_academias ua ON ua.usuario_id = u.id
                     WHERE ua.academia_id = %s
+                    {sql_status}
                     ORDER BY u.nome
                     LIMIT %s OFFSET %s
                 """, (academia_id, por_pagina, offset))
-            
+
             usuarios = cur.fetchall()
-        
+
+        # Anexar roles de cada usuário (uma única consulta)
+        if usuarios:
+            ids_usuarios = [u["id"] for u in usuarios]
+            ph = ",".join(["%s"] * len(ids_usuarios))
+            cur.execute(
+                f"""
+                SELECT ru.usuario_id,
+                       r.nome AS role_nome,
+                       COALESCE(r.chave, LOWER(REPLACE(r.nome,' ','_'))) AS role_chave
+                FROM roles_usuario ru
+                JOIN roles r ON r.id = ru.role_id
+                WHERE ru.usuario_id IN ({ph})
+                ORDER BY r.nome
+                """,
+                tuple(ids_usuarios),
+            )
+            roles_por_usuario = {}
+            for row in cur.fetchall():
+                roles_por_usuario.setdefault(row["usuario_id"], []).append({
+                    "nome": row["role_nome"],
+                    "chave": (row["role_chave"] or "").lower(),
+                })
+            for u in usuarios:
+                u["roles"] = roles_por_usuario.get(u["id"], [])
+
     except Exception as e:
         flash(f"Erro ao carregar usuários: {e}", "danger")
         usuarios = []
@@ -1066,6 +1479,7 @@ def lista_usuarios():
         associacao_nome=associacao_nome,
         modo_associacao=modo_associacao,
         busca=busca,
+        status_filtro=status_filtro,
         pagina_atual=page,
         total_paginas=total_paginas,
         total_usuarios=total,
@@ -1101,32 +1515,70 @@ def configuracoes_academia():
     
     try:
         if request.method == "POST":
-            aulas_permitidas = request.form.get("aulas_experimentais_permitidas", "").strip()
-            if aulas_permitidas == "":
-                aulas_permitidas = None
-            elif aulas_permitidas.isdigit():
-                aulas_permitidas = int(aulas_permitidas)
+            secao = request.form.get("secao", "visitantes")
+
+            if secao == "asaas":
+                # Cobrança digital (Asaas) — credenciais próprias de cada academia.
+                asaas_habilitado = 1 if request.form.get("asaas_habilitado") else 0
+
+                ambiente = (request.form.get("asaas_ambiente") or "sandbox").strip().lower()
+                if ambiente not in ("sandbox", "production"):
+                    ambiente = "sandbox"
+
+                webhook_token = (request.form.get("asaas_webhook_token") or "").strip() or None
+
+                # A chave só é sobrescrita quando um novo valor é digitado; em branco
+                # mantém a chave atual (não é reexibida na tela por segurança).
+                nova_chave = (request.form.get("asaas_api_key") or "").strip()
+                if nova_chave:
+                    cur.execute(
+                        """UPDATE academias
+                           SET asaas_habilitado=%s, asaas_ambiente=%s,
+                               asaas_webhook_token=%s, asaas_api_key=%s
+                           WHERE id=%s""",
+                        (asaas_habilitado, ambiente, webhook_token, nova_chave, academia_id),
+                    )
+                else:
+                    cur.execute(
+                        """UPDATE academias
+                           SET asaas_habilitado=%s, asaas_ambiente=%s, asaas_webhook_token=%s
+                           WHERE id=%s""",
+                        (asaas_habilitado, ambiente, webhook_token, academia_id),
+                    )
+                conn.commit()
+                flash("Configuração de cobrança digital salva com sucesso!", "success")
             else:
-                aulas_permitidas = None
-            
-            valor_diaria = request.form.get("valor_diaria_visitante", "").strip()
-            if valor_diaria == "":
-                valor_diaria = None
-            else:
-                try:
-                    valor_diaria = float(valor_diaria)
-                    if valor_diaria < 0:
-                        valor_diaria = None
-                except ValueError:
+                aulas_permitidas = request.form.get("aulas_experimentais_permitidas", "").strip()
+                if aulas_permitidas == "":
+                    aulas_permitidas = None
+                elif aulas_permitidas.isdigit():
+                    aulas_permitidas = int(aulas_permitidas)
+                else:
+                    aulas_permitidas = None
+
+                valor_diaria = request.form.get("valor_diaria_visitante", "").strip()
+                if valor_diaria == "":
                     valor_diaria = None
-            
-            cur.execute("""
-                UPDATE academias 
-                SET aulas_experimentais_permitidas = %s, valor_diaria_visitante = %s
-                WHERE id = %s
-            """, (aulas_permitidas, valor_diaria, academia_id))
-            conn.commit()
-            flash("Configurações salvas com sucesso!", "success")
+                else:
+                    try:
+                        valor_diaria = float(valor_diaria)
+                        if valor_diaria < 0:
+                            valor_diaria = None
+                    except ValueError:
+                        valor_diaria = None
+
+                cur.execute("""
+                    UPDATE academias
+                    SET aulas_experimentais_permitidas = %s, valor_diaria_visitante = %s
+                    WHERE id = %s
+                """, (aulas_permitidas, valor_diaria, academia_id))
+                # Propaga o novo limite para os visitantes da academia (mantém em sincronia)
+                cur.execute(
+                    "UPDATE visitantes SET aulas_experimentais_permitidas = %s WHERE id_academia = %s",
+                    (aulas_permitidas, academia_id),
+                )
+                conn.commit()
+                flash("Configurações salvas com sucesso!", "success")
         
         cur.execute("SELECT * FROM academias WHERE id = %s", (academia_id,))
         academia = cur.fetchone()
@@ -1139,11 +1591,13 @@ def configuracoes_academia():
         cur.close()
         conn.close()
     
+    asaas_chave_definida = bool((academia or {}).get("asaas_api_key"))
     return render_template(
         "painel/configuracoes_academia.html",
         academia=academia,
         academias=academias,
         academia_id=academia_id,
+        asaas_chave_definida=asaas_chave_definida,
     )
 
 
@@ -1207,12 +1661,14 @@ def cadastro_usuario():
     alunos_para_responsavel = todos_alunos
     
     if request.method == "POST":
+        from blueprints.auth.routes import _so_digitos, _valida_cpf
         nome = (request.form.get("nome") or "").strip()
         email = (request.form.get("email") or "").strip()
+        cpf = _so_digitos(request.form.get("cpf") or "")
         senha = (request.form.get("senha") or "").strip()
         roles_escolhidas = request.form.getlist("roles")
         academias_escolhidas = []
-        
+
         # Processar academias selecionadas
         for x in request.form.getlist("academias"):
             try:
@@ -1221,13 +1677,13 @@ def cadastro_usuario():
                     academias_escolhidas.append(aid)
             except (ValueError, TypeError):
                 pass
-        
+
         # Se não selecionou nenhuma, usar a academia atual
         if not academias_escolhidas:
             academias_escolhidas = [academia_id]
-        
-        if not nome or not email or not senha or not roles_escolhidas:
-            flash("Preencha todos os campos e selecione ao menos uma Role.", "danger")
+
+        def _render_form_back(msg, cat="danger"):
+            flash(msg, cat)
             cur.close()
             conn.close()
             return render_template(
@@ -1241,29 +1697,27 @@ def cadastro_usuario():
                 alunos_para_responsavel=alunos_para_responsavel,
                 back_url=back_url,
             )
-        
+
+        if not nome or not email or not cpf or not senha or not roles_escolhidas:
+            return _render_form_back("Preencha todos os campos (incluindo CPF) e selecione ao menos uma Role.")
+
+        if not _valida_cpf(cpf):
+            return _render_form_back("CPF inválido. Verifique e tente novamente.")
+
         # Verificar se email já existe
         cur.execute("SELECT id FROM usuarios WHERE email = %s", (email,))
         if cur.fetchone():
-            flash("Já existe um usuário com este e-mail.", "danger")
-            cur.close()
-            conn.close()
-            return render_template(
-                "academia/cadastro_usuario.html",
-                roles=roles,
-                academias=academias,
-                academia_id=academia_id,
-                academia_fixa=len(academias) == 1,
-                academia_nome_cadastro=academias[0]["nome"] if academias else "",
-                alunos_para_aluno=alunos_para_aluno,
-                alunos_para_responsavel=alunos_para_responsavel,
-                back_url=back_url,
-            )
-        
+            return _render_form_back("Já existe um usuário com este e-mail.")
+
+        # Verificar se CPF já existe
+        cur.execute("SELECT id FROM usuarios WHERE cpf = %s", (cpf,))
+        if cur.fetchone():
+            return _render_form_back("Já existe um usuário com este CPF.")
+
         try:
             senha_hash = generate_password_hash(senha)
             id_academia_principal = academias_escolhidas[0]
-            
+
             # Buscar id_associacao e id_federacao da academia selecionada
             cur.execute("""
                 SELECT ac.id_associacao, ass.id_federacao
@@ -1274,41 +1728,58 @@ def cadastro_usuario():
             acad_info = cur.fetchone()
             id_associacao_usuario = acad_info.get("id_associacao") if acad_info else None
             id_federacao_usuario = acad_info.get("id_federacao") if acad_info else None
-            
-            # Criar usuário com id_federacao e id_associacao
+
+            # Criar usuário com id_federacao, id_associacao e CPF
             cur.execute(
-                """INSERT INTO usuarios (nome, email, senha, id_academia, id_associacao, id_federacao) 
-                   VALUES (%s, %s, %s, %s, %s, %s)""",
-                (nome, email, senha_hash, id_academia_principal, id_associacao_usuario, id_federacao_usuario),
+                """INSERT INTO usuarios (nome, email, cpf, senha, id_academia, id_associacao, id_federacao)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+                (nome, email, cpf, senha_hash, id_academia_principal, id_associacao_usuario, id_federacao_usuario),
             )
             user_id = cur.lastrowid
-            
+
             # Vincular roles
             for role_id in roles_escolhidas:
                 cur.execute(
                     "INSERT INTO roles_usuario (usuario_id, role_id) VALUES (%s, %s)",
                     (user_id, role_id),
                 )
-            
+
             # Vincular academias
             for aid in academias_escolhidas:
                 cur.execute(
                     "INSERT INTO usuarios_academias (usuario_id, academia_id) VALUES (%s, %s)",
                     (user_id, aid),
                 )
-            
+
             # Vincular aluno se role aluno está selecionada
             tem_role_aluno = any(
-                r.get("chave") == "aluno" and str(r.get("id")) in roles_escolhidas 
+                r.get("chave") == "aluno" and str(r.get("id")) in roles_escolhidas
                 for r in roles
             )
+            aluno_vinculado_id = None
             if tem_role_aluno:
                 aluno_id = request.form.get("aluno_id", type=int)
                 if aluno_id:
                     cur.execute(
-                        "UPDATE alunos SET usuario_id = %s WHERE id = %s AND id_academia = %s",
-                        (user_id, aluno_id, academia_id),
+                        "UPDATE alunos SET usuario_id = %s, cpf = COALESCE(NULLIF(cpf,''), %s) WHERE id = %s AND id_academia = %s",
+                        (user_id, cpf, aluno_id, academia_id),
                     )
+                    aluno_vinculado_id = aluno_id
+                else:
+                    # Auto-vincular pelo CPF se houver aluno na academia com mesmo CPF.
+                    cur.execute(
+                        "SELECT id FROM alunos WHERE id_academia = %s "
+                        "AND REGEXP_REPLACE(COALESCE(cpf,''), '[^0-9]', '') = %s "
+                        "AND (usuario_id IS NULL OR usuario_id = 0) LIMIT 1",
+                        (academia_id, cpf),
+                    )
+                    candidato = cur.fetchone()
+                    if candidato:
+                        cur.execute(
+                            "UPDATE alunos SET usuario_id = %s WHERE id = %s",
+                            (user_id, candidato["id"]),
+                        )
+                        aluno_vinculado_id = candidato["id"]
             
             # Vincular responsável aos alunos selecionados
             tem_role_responsavel = any(
