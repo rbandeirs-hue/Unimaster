@@ -75,8 +75,21 @@ def _responsavel_required(f):
             return redirect(url_for("painel.home"))
         alunos = _get_alunos_responsavel()
         if not alunos:
-            flash("Nenhum aluno vinculado a este responsável.", "warning")
-            return redirect(url_for("painel.home"))
+            # Não redirecionar para painel.home (causaria loop quando ele só tem
+            # role responsavel). Renderizar a página informativa diretamente.
+            from flask import session as _session
+            _session.pop("modo_painel", None)
+            try:
+                from blueprints.painel.routes import _modos_disponiveis
+                modos = _modos_disponiveis()
+            except Exception:
+                modos = []
+            return render_template(
+                "painel/sem_aluno_vinculado.html",
+                modos=modos,
+                titulo="Sem alunos sob responsabilidade",
+                mensagem="Nenhum aluno está vinculado a você como responsável. Entre em contato com o administrador ou com a academia para regularizar.",
+            )
         return f(*a, alunos=alunos, **kw)
     return _view
 
@@ -191,11 +204,25 @@ def meu_perfil(alunos):
     _enriquecer_aluno_painel(aluno)
     from blueprints.aluno.alunos import enriquecer_aluno_para_modal
     enriquecer_aluno_para_modal(aluno)
+    from utils.aniversariantes import aniversariantes_do_mes_por_aluno_id
+
+    hoje = date.today()
+    anivs = aniversariantes_do_mes_por_aluno_id(aluno["id"], mes=hoje.month) or []
+    anivs_hoje = [
+        a
+        for a in anivs
+        if a.get("data_nascimento") and getattr(a["data_nascimento"], "day", None) == hoje.day
+    ]
     return render_template(
         "painel_responsavel/meu_perfil.html",
         usuario=current_user,
         aluno=aluno,
         alunos=alunos,
+        aniversariantes=anivs,
+        aniversariantes_hoje=anivs_hoje,
+        hoje_dia=hoje.day,
+        hoje_mes=hoje.month,
+        hoje_ano=hoje.year,
     )
 
 
@@ -250,10 +277,11 @@ def minhas_mensalidades(aluno):
         params = (aluno["id"], ano)
     try:
         cur.execute(f"""
-            SELECT ma.id, ma.data_vencimento, ma.data_pagamento, ma.valor, ma.valor_pago, ma.status,
+            SELECT ma.id, ma.mensalidade_id, ma.data_vencimento, ma.data_pagamento, ma.valor, ma.valor_pago, ma.status,
                    ma.status_pagamento, ma.comprovante_url, ma.observacoes,
                    ma.valor_original, ma.desconto_aplicado, ma.id_desconto,
                    COALESCE(ma.remover_juros, 0) AS remover_juros,
+                   ma.asaas_tipo, ma.asaas_boleto_url, ma.asaas_pix_qrcode, ma.asaas_pix_copia_cola,
                    m.nome as plano_nome, m.id_academia,
                    COALESCE(m.aplicar_juros_multas, 0) AS aplicar_juros_multas,
                    COALESCE(m.percentual_multa_mes, 2) AS percentual_multa_mes,
@@ -300,6 +328,11 @@ def minhas_mensalidades(aluno):
                 r.setdefault("valor_original", None)
                 r.setdefault("desconto_aplicado", 0)
                 r.setdefault("id_desconto", None)
+                r.setdefault("mensalidade_id", None)
+                r.setdefault("asaas_tipo", None)
+                r.setdefault("asaas_boleto_url", None)
+                r.setdefault("asaas_pix_qrcode", None)
+                r.setdefault("asaas_pix_copia_cola", None)
         except Exception:
             rows = []
 
@@ -355,7 +388,8 @@ def minhas_mensalidades(aluno):
     try:
         if mes:
             cur.execute("""
-                SELECT id, descricao, valor, data_vencimento, data_pagamento, status
+                SELECT id, descricao, valor, data_vencimento, data_pagamento, status,
+                       asaas_tipo, asaas_boleto_url, asaas_pix_qrcode, asaas_pix_copia_cola
                 FROM cobranca_avulsa
                 WHERE aluno_id = %s AND status != 'cancelado'
                 AND MONTH(data_vencimento) = %s AND YEAR(data_vencimento) = %s
@@ -363,7 +397,8 @@ def minhas_mensalidades(aluno):
             """, (aluno["id"], mes, ano))
         else:
             cur.execute("""
-                SELECT id, descricao, valor, data_vencimento, data_pagamento, status
+                SELECT id, descricao, valor, data_vencimento, data_pagamento, status,
+                       asaas_tipo, asaas_boleto_url, asaas_pix_qrcode, asaas_pix_copia_cola
                 FROM cobranca_avulsa
                 WHERE aluno_id = %s AND status != 'cancelado'
                 AND YEAR(data_vencimento) = %s
@@ -461,24 +496,74 @@ def minhas_presencas(aluno):
         where_extra = " AND p.turma_id = %s"
         params_extra = [turma_filtro_id]
     try:
+        join_aula = """
+            LEFT JOIN registros_aula_presenca r
+              ON r.turma_id = p.turma_id
+             AND r.data_aula = p.data_presenca
+             AND r.horario_aula = COALESCE(p.horario_aula, '00:00:00')
+        """
+        sel_aula = """
+                , p.horario_aula,
+                 r.observacao AS aula_observacao,
+                 r.plano_aula_texto AS aula_plano_texto,
+                 r.plano_aula_arquivo AS aula_plano_arquivo,
+                 r.plano_aula_arquivo_original AS aula_plano_arquivo_original
+        """
         if meses_sel:
             ph = ",".join(["%s"] * len(meses_sel))
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT p.data_presenca, p.presente
+                """
+                + sel_aula
+                + """
                 FROM presencas p
+                """
+                + join_aula
+                + """
                 WHERE p.aluno_id = %s AND YEAR(p.data_presenca) = %s
-                  AND MONTH(p.data_presenca) IN (""" + ph + ")" + where_extra + """
-                ORDER BY p.data_presenca
-            """, [aluno["id"], ano] + meses_sel + params_extra)
+                  AND MONTH(p.data_presenca) IN ("""
+                + ph
+                + ")"
+                + where_extra
+                + """
+                ORDER BY p.data_presenca, p.horario_aula
+            """,
+                [aluno["id"], ano] + meses_sel + params_extra,
+            )
         else:
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT p.data_presenca, p.presente
+                """
+                + sel_aula
+                + """
                 FROM presencas p
+                """
+                + join_aula
+                + """
                 WHERE p.aluno_id = %s AND YEAR(p.data_presenca) = %s
-                """ + where_extra + """
-                ORDER BY p.data_presenca
-            """, [aluno["id"], ano] + params_extra)
+                """
+                + where_extra
+                + """
+                ORDER BY p.data_presenca, p.horario_aula
+            """,
+                [aluno["id"], ano] + params_extra,
+            )
         presencas = cur.fetchall()
+        for pr in presencas:
+            hv = pr.get("horario_aula")
+            if hv is None:
+                pr["horario_exibir"] = None
+            elif hasattr(hv, "total_seconds"):
+                sec = int(hv.total_seconds()) % 86400
+                hs = f"{sec // 3600:02d}:{(sec % 3600) // 60:02d}"
+                pr["horario_exibir"] = None if hs == "00:00" else hs
+            else:
+                hs = hv.strftime("%H:%M") if hasattr(hv, "strftime") else str(hv)[:8]
+                if len(hs) >= 5:
+                    hs = hs[:5]
+                pr["horario_exibir"] = None if hs in ("00:00", "00:00:00") else hs
     except Exception:
         presencas = []
     cur.close()
@@ -555,30 +640,12 @@ def curriculo(aluno):
         aluno["modalidades"] = cur.fetchall()
     except Exception:
         pass
-    competicoes = []
-    eventos = []
-    try:
-        cur.execute("SELECT id, colocacao, competicao, ambito, local_texto, data_competicao, categoria, ordem FROM aluno_competicoes WHERE aluno_id = %s ORDER BY ordem, id", (aluno["id"],))
-        competicoes = cur.fetchall()
-    except Exception:
-        try:
-            cur.execute("SELECT id, colocacao, competicao, ambito, local_texto, ordem FROM aluno_competicoes WHERE aluno_id = %s ORDER BY ordem, id", (aluno["id"],))
-            competicoes = [{**r, "data_competicao": None, "categoria": None} for r in cur.fetchall()]
-        except Exception:
-            pass
-    try:
-        cur.execute("SELECT id, evento, atividade, ambito, local_texto, data_evento, ordem FROM aluno_eventos WHERE aluno_id = %s ORDER BY ordem, id", (aluno["id"],))
-        eventos = cur.fetchall()
-    except Exception:
-        pass
     cur.close()
     conn.close()
 
     return render_template(
         "painel_aluno/curriculo.html",
         aluno=aluno,
-        competicoes=competicoes,
-        eventos=eventos,
         voltar_url=url_for("painel_responsavel.meu_perfil", aluno_id=aluno["id"]),
         somente_leitura=True,
     )

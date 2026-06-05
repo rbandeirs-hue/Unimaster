@@ -4,6 +4,32 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/financeiro/responsive.css') }}?v=1">
 {% endblock %}
 {% block content %}
+{% macro modal_pix(uid, copia, qrcode, valor) %}
+<div class="modal fade" id="modalPix{{ uid }}" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-qr-code me-2"></i>Pagar com PIX</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body text-center">
+        <p class="mb-2">Valor: <strong>R$ {{ "%.2f"|format(valor or 0) }}</strong></p>
+        {% if qrcode %}
+        <img src="data:image/png;base64,{{ qrcode }}" alt="QR Code PIX" class="img-fluid mb-3" style="max-width: 240px;">
+        {% endif %}
+        {% if copia %}
+        <label class="form-label small text-muted d-block text-start">PIX copia e cola</label>
+        <div class="input-group mb-2">
+          <input type="text" class="form-control" id="pixcopia{{ uid }}" value="{{ copia }}" readonly>
+          <button class="btn btn-outline-primary" type="button" onclick="copiarPix('pixcopia{{ uid }}', this)"><i class="bi bi-clipboard"></i></button>
+        </div>
+        {% endif %}
+        <p class="text-muted small mb-0">Após o pagamento, a confirmação é automática.</p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endmacro %}
 <div class="container mt-4 px-2 px-sm-3">
     {% set back_url = voltar_url|default(url_for('painel_aluno.meu_perfil')) %}
     <div class="mb-3">
@@ -123,6 +149,15 @@
                             </td>
                             <td data-label="Ação">
                                 {% if m.status_efetivo in ['pendente','atrasado'] and m.status != 'aguardando_confirmacao' %}
+                                {% if m.asaas_tipo == 'PIX' and (m.asaas_pix_copia_cola or m.asaas_pix_qrcode) %}
+                                <button type="button" class="btn btn-sm btn-success mb-1" data-bs-toggle="modal" data-bs-target="#modalPix{{ m.id }}">
+                                    <i class="bi bi-qr-code me-1"></i> Pagar PIX
+                                </button>
+                                {% elif m.asaas_tipo == 'BOLETO' and m.asaas_boleto_url %}
+                                <a href="{{ m.asaas_boleto_url }}" target="_blank" rel="noopener" class="btn btn-sm btn-success mb-1">
+                                    <i class="bi bi-upc-scan me-1"></i> Pagar Boleto
+                                </a>
+                                {% endif %}
                                 <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalInformar{{ m.id }}">
                                     <i class="bi bi-upload me-1"></i> Informar
                                 </button>
@@ -162,6 +197,7 @@
                             <th>Vencimento</th>
                             <th>Valor</th>
                             <th>Status</th>
+                            <th>Pagamento</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -174,6 +210,23 @@
                                 <span class="badge {% if a.status == 'pago' %}bg-success{% elif a.status == 'atrasado' %}bg-danger{% else %}bg-warning text-dark{% endif %}">
                                     {{ a.status|capitalize }}
                                 </span>
+                            </td>
+                            <td>
+                                {% if a.status in ['pendente','atrasado'] %}
+                                    {% if a.asaas_tipo == 'PIX' and (a.asaas_pix_copia_cola or a.asaas_pix_qrcode) %}
+                                    <button type="button" class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#modalPixAv{{ a.id }}">
+                                        <i class="bi bi-qr-code me-1"></i> Pagar PIX
+                                    </button>
+                                    {% elif a.asaas_tipo == 'BOLETO' and a.asaas_boleto_url %}
+                                    <a href="{{ a.asaas_boleto_url }}" target="_blank" rel="noopener" class="btn btn-sm btn-success">
+                                        <i class="bi bi-upc-scan me-1"></i> Pagar Boleto
+                                    </a>
+                                    {% else %}
+                                    <span class="text-muted small">—</span>
+                                    {% endif %}
+                                {% else %}
+                                <span class="text-muted small">{{ a.data_pagamento|data_br if a.data_pagamento else '' }}</span>
+                                {% endif %}
                             </td>
                         </tr>
                         {% endfor %}
@@ -200,6 +253,7 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <form method="POST" action="{{ url_for('financeiro.informar_pagamento_mensalidade') }}" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="registro_id" value="{{ m.id }}">
                 <div class="modal-header">
                     <h5 class="modal-title">Informar Pagamento</h5>
@@ -226,6 +280,40 @@
 </div>
 {% endif %}
 {% endfor %}
+
+{# Modais de pagamento PIX (mensalidades) #}
+{% for m in mensalidades %}
+{% if m.status_efetivo in ['pendente','atrasado'] and m.asaas_tipo == 'PIX' and (m.asaas_pix_copia_cola or m.asaas_pix_qrcode) %}
+{{ modal_pix(m.id, m.asaas_pix_copia_cola, m.asaas_pix_qrcode, m.valor_final or m.valor_display or m.valor) }}
+{% endif %}
+{% endfor %}
+
+{# Modais de pagamento PIX (avulsas) #}
+{% for a in avulsas %}
+{% if a.status in ['pendente','atrasado'] and a.asaas_tipo == 'PIX' and (a.asaas_pix_copia_cola or a.asaas_pix_qrcode) %}
+{{ modal_pix('Av' ~ a.id, a.asaas_pix_copia_cola, a.asaas_pix_qrcode, a.valor) }}
+{% endif %}
+{% endfor %}
+
+<script>
+function copiarPix(inputId, btn) {
+    var el = document.getElementById(inputId);
+    if (!el) return;
+    el.select();
+    el.setSelectionRange(0, 99999);
+    var done = function () {
+        var html = btn.innerHTML;
+        btn.innerHTML = '<i class="bi bi-check2"></i>';
+        setTimeout(function () { btn.innerHTML = html; }, 1500);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(el.value).then(done).catch(function () { document.execCommand('copy'); done(); });
+    } else {
+        document.execCommand('copy');
+        done();
+    }
+}
+</script>
 
 <style>
 @media (max-width: 767px) {

@@ -1517,11 +1517,44 @@ def _asaas_habilitado_academia(academia_id):
     return bool(cfg and cfg.get("asaas_habilitado") and (cfg.get("asaas_api_key") or "").strip())
 
 
+def _emitir_cobranca_asaas(row, tipo, descricao):
+    """Cria a cobrança no Asaas a partir de um registro (mensalidade ou avulsa).
+
+    `row` precisa conter: nome, cpf, email, telefone, valor, data_vencimento, id (=external_reference)
+    e as credenciais da academia (asaas_api_key, asaas_ambiente).
+    Retorna dict {payment_id, tipo, boleto_url, pix_qrcode, pix_copia_cola}.
+    """
+    from utils.asaas import AsaasClient
+    cli = AsaasClient(row.get("asaas_api_key"), row.get("asaas_ambiente"))
+    if not cli.configurado:
+        raise RuntimeError("Chave de API do Asaas não configurada para esta academia.")
+    customer_id = cli.criar_ou_obter_cliente(row["nome"], row["cpf"], row.get("email"), row.get("telefone"))
+    pay = cli.criar_cobranca(
+        customer_id, row["valor"], row["data_vencimento"], tipo,
+        descricao=descricao, external_reference=row["id"],
+    )
+    pix_qr = None
+    pix_payload = None
+    if tipo == "PIX":
+        try:
+            qr = cli.obter_pix_qrcode(pay["id"])
+            pix_qr = qr.get("encodedImage")
+            pix_payload = qr.get("payload")
+        except Exception:
+            pass
+    return {
+        "payment_id": pay["id"],
+        "tipo": tipo,
+        "boleto_url": pay.get("bankSlipUrl") or pay.get("invoiceUrl"),
+        "pix_qrcode": pix_qr,
+        "pix_copia_cola": pix_payload,
+    }
+
+
 @bp_financeiro.route("/mensalidades/<int:ma_id>/asaas", methods=["POST"])
 @login_required
 def gerar_cobranca_asaas(ma_id):
     """Gera uma cobrança PIX/Boleto no Asaas para uma mensalidade do aluno."""
-    from utils.asaas import AsaasClient
     academia_id = _get_academia_id()
     destino = request.referrer or url_for("financeiro.mensalidades_alunos", academia_id=academia_id)
     tipo = (request.form.get("tipo") or "PIX").upper()
@@ -1551,39 +1584,74 @@ def gerar_cobranca_asaas(ma_id):
             flash("Cobrança digital (Asaas) não está habilitada para esta academia. "
                   "Ative em Configurações da academia → Financeiro.", "warning")
             return redirect(destino)
-        cli = AsaasClient(ma.get("asaas_api_key"), ma.get("asaas_ambiente"))
-        if not cli.configurado:
-            flash("Chave de API do Asaas não configurada para esta academia. "
-                  "Informe a chave em Configurações da academia → Financeiro.", "warning")
-            return redirect(destino)
 
-        customer_id = cli.criar_ou_obter_cliente(ma["nome"], ma["cpf"], ma.get("email"), ma.get("telefone"))
-        pay = cli.criar_cobranca(
-            customer_id, ma["valor"], ma["data_vencimento"], tipo,
-            descricao=f"Mensalidade - {ma['nome']}", external_reference=ma["id"],
-        )
-        boleto_url = pay.get("bankSlipUrl") or pay.get("invoiceUrl")
-        pix_qr = None
-        pix_payload = None
-        if tipo == "PIX":
-            try:
-                qr = cli.obter_pix_qrcode(pay["id"])
-                pix_qr = qr.get("encodedImage")
-                pix_payload = qr.get("payload")
-            except Exception:
-                pass
+        r = _emitir_cobranca_asaas(ma, tipo, descricao=f"Mensalidade - {ma['nome']}")
         cur.execute(
             """UPDATE mensalidade_aluno
                SET asaas_payment_id=%s, asaas_tipo=%s, asaas_boleto_url=%s,
                    asaas_pix_qrcode=%s, asaas_pix_copia_cola=%s
                WHERE id=%s""",
-            (pay["id"], tipo, boleto_url, pix_qr, pix_payload, ma_id),
+            (r["payment_id"], r["tipo"], r["boleto_url"], r["pix_qrcode"], r["pix_copia_cola"], ma_id),
         )
         conn.commit()
         flash(f"Cobrança {tipo} gerada no Asaas com sucesso.", "success")
     except Exception as e:
         conn.rollback()
         current_app.logger.error(f"Erro ao gerar cobrança Asaas (ma {ma_id}): {e}", exc_info=True)
+        flash(f"Erro ao gerar cobrança no Asaas: {e}", "danger")
+    finally:
+        conn.close()
+    return redirect(destino)
+
+
+@bp_financeiro.route("/avulsas/<int:av_id>/asaas", methods=["POST"])
+@login_required
+def gerar_cobranca_asaas_avulsa(av_id):
+    """Gera uma cobrança PIX/Boleto no Asaas para uma cobrança avulsa."""
+    academia_id = _get_academia_id()
+    destino = request.referrer or url_for("financeiro.mensalidades_alunos", academia_id=academia_id)
+    tipo = (request.form.get("tipo") or "PIX").upper()
+    if tipo not in ("PIX", "BOLETO"):
+        tipo = "PIX"
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute(
+            """SELECT ca.id, ca.valor, ca.data_vencimento, ca.descricao,
+                      a.nome, a.cpf, a.email, a.telefone, ca.id_academia,
+                      ac.asaas_habilitado, ac.asaas_api_key, ac.asaas_ambiente
+               FROM cobranca_avulsa ca
+               JOIN alunos a ON a.id = ca.aluno_id
+               JOIN academias ac ON ac.id = ca.id_academia
+               WHERE ca.id = %s""",
+            (av_id,),
+        )
+        ca = cur.fetchone()
+        if not ca:
+            flash("Cobrança não encontrada.", "danger")
+            return redirect(destino)
+        if academia_id and ca["id_academia"] != academia_id and not current_user.has_role("admin"):
+            flash("Sem permissão para esta cobrança.", "danger")
+            return redirect(destino)
+        if not ca.get("asaas_habilitado"):
+            flash("Cobrança digital (Asaas) não está habilitada para esta academia. "
+                  "Ative em Configurações da academia → Financeiro.", "warning")
+            return redirect(destino)
+
+        descricao = (ca.get("descricao") or "Cobrança avulsa") + f" - {ca['nome']}"
+        r = _emitir_cobranca_asaas(ca, tipo, descricao=descricao)
+        cur.execute(
+            """UPDATE cobranca_avulsa
+               SET asaas_payment_id=%s, asaas_tipo=%s, asaas_boleto_url=%s,
+                   asaas_pix_qrcode=%s, asaas_pix_copia_cola=%s
+               WHERE id=%s""",
+            (r["payment_id"], r["tipo"], r["boleto_url"], r["pix_qrcode"], r["pix_copia_cola"], av_id),
+        )
+        conn.commit()
+        flash(f"Cobrança {tipo} gerada no Asaas com sucesso.", "success")
+    except Exception as e:
+        conn.rollback()
+        current_app.logger.error(f"Erro ao gerar cobrança Asaas (avulsa {av_id}): {e}", exc_info=True)
         flash(f"Erro ao gerar cobrança no Asaas: {e}", "danger")
     finally:
         conn.close()
@@ -1605,35 +1673,69 @@ def webhook_asaas():
         conn = get_db_connection()
         cur = conn.cursor(dictionary=True)
         try:
+            # Localiza a cobrança: primeiro em mensalidades, depois em avulsas.
             cur.execute(
-                """SELECT ma.id, ma.status, ma.valor, a.id_academia, ac.asaas_webhook_token
+                """SELECT 'mensalidade' AS origem, ma.id, ma.status, ma.valor,
+                          a.id_academia, ac.asaas_webhook_token
                    FROM mensalidade_aluno ma
                    JOIN alunos a ON a.id = ma.aluno_id
                    JOIN academias ac ON ac.id = a.id_academia
                    WHERE ma.asaas_payment_id = %s LIMIT 1""",
                 (payment_id,),
             )
-            ma = cur.fetchone()
+            rec = cur.fetchone()
+            if not rec:
+                cur.execute(
+                    """SELECT 'avulsa' AS origem, ca.id, ca.status, ca.valor,
+                              ca.id_academia, ac.asaas_webhook_token
+                       FROM cobranca_avulsa ca
+                       JOIN academias ac ON ac.id = ca.id_academia
+                       WHERE ca.asaas_payment_id = %s LIMIT 1""",
+                    (payment_id,),
+                )
+                rec = cur.fetchone()
             # Validação opcional de segurança por academia: se a academia definiu um
             # token de webhook, o header enviado pelo Asaas precisa coincidir.
-            _wh_token = ((ma or {}).get("asaas_webhook_token") or "").strip()
+            _wh_token = ((rec or {}).get("asaas_webhook_token") or "").strip()
             if _wh_token and request.headers.get("asaas-access-token", "").strip() != _wh_token:
                 conn.close()
                 return jsonify({"ok": False, "msg": "token inválido"}), 403
-            if ma and ma["status"] != "pago":
-                valor_pago = pay.get("value") or ma["valor"]
-                cur.execute(
-                    """UPDATE mensalidade_aluno
-                       SET status='pago', status_pagamento='pago', data_pagamento=CURDATE(), valor_pago=%s
-                       WHERE id=%s""",
-                    (valor_pago, ma["id"]),
-                )
-                cur.execute(
-                    """INSERT INTO receitas (descricao, valor, data, categoria, id_academia, id_mensalidade_aluno)
-                       VALUES (%s, %s, CURDATE(), 'Mensalidades', %s, %s)""",
-                    ("Mensalidade (Asaas)", valor_pago, ma["id_academia"], ma["id"]),
-                )
+            if rec and rec["status"] != "pago":
+                valor_pago = pay.get("value") or rec["valor"]
+                # 1) Baixa do status (parte crítica) — commitada antes da receita.
+                if rec["origem"] == "mensalidade":
+                    cur.execute(
+                        """UPDATE mensalidade_aluno
+                           SET status='pago', status_pagamento='pago', data_pagamento=CURDATE(), valor_pago=%s
+                           WHERE id=%s""",
+                        (valor_pago, rec["id"]),
+                    )
+                else:
+                    cur.execute(
+                        """UPDATE cobranca_avulsa
+                           SET status='pago', data_pagamento=CURDATE(), valor_pago=%s
+                           WHERE id=%s""",
+                        (valor_pago, rec["id"]),
+                    )
                 conn.commit()
+                # 2) Lançamento da receita — falha aqui não desfaz a baixa.
+                try:
+                    if rec["origem"] == "mensalidade":
+                        cur.execute(
+                            """INSERT INTO receitas (descricao, valor, data, categoria, id_academia, id_mensalidade_aluno)
+                               VALUES (%s, %s, CURDATE(), 'Mensalidades', %s, %s)""",
+                            ("Mensalidade (Asaas)", valor_pago, rec["id_academia"], rec["id"]),
+                        )
+                    else:
+                        cur.execute(
+                            """INSERT INTO receitas (descricao, valor, data, categoria, id_academia, id_cobranca_avulsa)
+                               VALUES (%s, %s, CURDATE(), 'Cobrança avulsa', %s, %s)""",
+                            ("Cobrança avulsa (Asaas)", valor_pago, rec["id_academia"], rec["id"]),
+                        )
+                    conn.commit()
+                except Exception as e2:
+                    conn.rollback()
+                    current_app.logger.error(f"Webhook Asaas: baixa OK, receita falhou ({rec['origem']} {rec['id']}): {e2}")
         except Exception as e:
             conn.rollback()
             current_app.logger.error(f"Webhook Asaas erro: {e}", exc_info=True)
@@ -1856,7 +1958,8 @@ def mensalidades_alunos():
             else:
                 where_av.append("1=0")
         cur.execute(f"""
-            SELECT id, descricao, valor, data_vencimento, data_pagamento, valor_pago, status, aluno_id
+            SELECT id, descricao, valor, data_vencimento, data_pagamento, valor_pago, status, aluno_id,
+                   asaas_payment_id, asaas_tipo, asaas_boleto_url, asaas_pix_copia_cola
             FROM cobranca_avulsa WHERE {' AND '.join(where_av)}
             ORDER BY data_vencimento DESC
             LIMIT 200
@@ -2229,6 +2332,87 @@ def alunos_por_academia(acad_id=None):
         return jsonify([])
 
 
+def _auto_gerar_asaas(registros, metodo):
+    """Best-effort: cria cobranças no Asaas para registros recém-gerados.
+
+    registros: lista de dicts com origem ('mensalidade'|'avulsa'), id, aluno_id,
+               id_academia, valor, data_vencimento, descricao e mensalidade_id (opcional).
+    Para mensalidades, usa o valor líquido (com desconto). Ignora valores < R$5.
+    Retorna (geradas, ignoradas, falhas).
+    """
+    metodo = (metodo or "").upper()
+    if metodo not in ("PIX", "BOLETO") or not registros:
+        return (0, 0, 0)
+    geradas = ignoradas = falhas = 0
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    cred_cache = {}
+    aluno_cache = {}
+    try:
+        for reg in registros:
+            acad = reg.get("id_academia")
+            if acad not in cred_cache:
+                cur.execute(
+                    "SELECT asaas_habilitado, asaas_api_key, asaas_ambiente FROM academias WHERE id=%s",
+                    (acad,),
+                )
+                cred_cache[acad] = cur.fetchone() or {}
+            cred = cred_cache[acad]
+            if not (cred.get("asaas_habilitado") and (cred.get("asaas_api_key") or "").strip()):
+                ignoradas += 1
+                continue
+            valor = float(reg.get("valor") or 0)
+            if reg.get("origem") == "mensalidade":
+                ma = {
+                    "valor": valor, "data_vencimento": reg.get("data_vencimento"),
+                    "mensalidade_id": reg.get("mensalidade_id"), "id_academia": acad,
+                }
+                _, _, valor, _ = _valor_com_desconto(ma, reg.get("aluno_id"), acad)
+                valor = float(valor or 0)
+            if valor < 5:
+                ignoradas += 1
+                continue
+            aid = reg.get("aluno_id")
+            if aid not in aluno_cache:
+                cur.execute("SELECT nome, cpf, email, telefone FROM alunos WHERE id=%s", (aid,))
+                aluno_cache[aid] = cur.fetchone() or {}
+            al = aluno_cache[aid]
+            row = {
+                "id": reg["id"], "nome": al.get("nome"), "cpf": al.get("cpf"),
+                "email": al.get("email"), "telefone": al.get("telefone"),
+                "valor": valor, "data_vencimento": reg.get("data_vencimento"),
+                "asaas_api_key": cred.get("asaas_api_key"), "asaas_ambiente": cred.get("asaas_ambiente"),
+            }
+            try:
+                r = _emitir_cobranca_asaas(row, metodo, descricao=reg.get("descricao") or "Cobrança")
+                tabela = "mensalidade_aluno" if reg.get("origem") == "mensalidade" else "cobranca_avulsa"
+                cur.execute(
+                    f"""UPDATE {tabela}
+                        SET asaas_payment_id=%s, asaas_tipo=%s, asaas_boleto_url=%s,
+                            asaas_pix_qrcode=%s, asaas_pix_copia_cola=%s
+                        WHERE id=%s""",
+                    (r["payment_id"], r["tipo"], r["boleto_url"], r["pix_qrcode"], r["pix_copia_cola"], reg["id"]),
+                )
+                conn.commit()
+                geradas += 1
+            except Exception as e:
+                conn.rollback()
+                current_app.logger.error(f"Auto Asaas falhou ({reg.get('origem')} {reg.get('id')}): {e}")
+                falhas += 1
+    finally:
+        conn.close()
+    return (geradas, ignoradas, falhas)
+
+
+def _flash_resumo_asaas(geradas, ignoradas, falhas, metodo):
+    if geradas:
+        flash(f"Cobrança online ({metodo}) gerada para {geradas} cobrança(s). O aluno já pode pagar.", "success")
+    if ignoradas:
+        flash(f"{ignoradas} cobrança(s) sem cobrança online (valor abaixo de R$ 5,00 ou Asaas indisponível).", "warning")
+    if falhas:
+        flash(f"{falhas} cobrança(s) não puderam gerar a cobrança online no Asaas (verifique CPF/dados do aluno).", "warning")
+
+
 @bp_financeiro.route("/mensalidades/gerar-cobranca", methods=["GET", "POST"])
 @login_required
 def gerar_cobranca():
@@ -2294,8 +2478,18 @@ def gerar_cobranca():
                         "INSERT INTO cobranca_avulsa (aluno_id, id_academia, descricao, valor, data_vencimento, status) VALUES (%s, %s, %s, %s, %s, 'pendente')",
                         (aluno_ids[0], id_acad, descricao, valor, data_venc),
                     )
+                av_id = cur.lastrowid
                 conn.commit()
+                conn.close()
                 flash("Cobrança avulsa gerada.", "success")
+                metodo = (request.form.get("asaas_metodo") or "").upper()
+                if metodo in ("PIX", "BOLETO") and av_id:
+                    g, ig, fl = _auto_gerar_asaas([{
+                        "origem": "avulsa", "id": av_id, "aluno_id": aluno_ids[0],
+                        "id_academia": id_acad, "valor": valor, "data_vencimento": data_venc,
+                        "descricao": descricao,
+                    }], metodo)
+                    _flash_resumo_asaas(g, ig, fl, metodo)
                 return _redirect_after_gerar()
             else:
                 plano_id = request.form.get("mensalidade_id", type=int)
@@ -2323,6 +2517,8 @@ def gerar_cobranca():
                 ja_existentes = 0
                 duplicidades_detalhe = []
                 nomes_por_id = {}
+                criadas_mens = []
+                plano_nome = (plano[1] if isinstance(plano, (list, tuple)) else plano.get("nome", "")) or "Mensalidade"
                 # Se não veio turma_id (porque a tela não tem mais seleção de turma),
                 # tenta buscar a TurmaID do aluno para preencher o campo ao registrar.
                 turma_por_aluno = {}
@@ -2374,6 +2570,11 @@ def gerar_cobranca():
                                        VALUES (%s, %s, %s, %s, 'pendente')""",
                                     (plano_id, aid, data_venc, valor_plano),
                                 )
+                            criadas_mens.append({
+                                "origem": "mensalidade", "id": cur.lastrowid, "aluno_id": aid,
+                                "id_academia": id_acad, "valor": valor_plano, "data_vencimento": data_venc,
+                                "mensalidade_id": plano_id, "descricao": f"Mensalidade {plano_nome}",
+                            })
                             geradas += 1
                         except Exception:
                             pass
@@ -2402,6 +2603,11 @@ def gerar_cobranca():
                     flash(f"{geradas} cobrança(s) gerada(s) do mês {mes_inicial} até dezembro.", "success")
                     if ja_existentes > 0:
                         flash(f"{ja_existentes} competência(s) já possuíam cobrança e não foram duplicadas.", "warning")
+                conn.close()
+                metodo = (request.form.get("asaas_metodo") or "").upper()
+                if metodo in ("PIX", "BOLETO") and criadas_mens:
+                    g, ig, fl = _auto_gerar_asaas(criadas_mens, metodo)
+                    _flash_resumo_asaas(g, ig, fl, metodo)
                 return _redirect_after_gerar()
         except Exception as e:
             conn.rollback()

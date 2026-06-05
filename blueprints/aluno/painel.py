@@ -2,11 +2,13 @@
 # 🧩 Blueprint: Painel do Aluno
 # ======================================================
 
-from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify, session, current_app
+from flask import Blueprint, render_template, redirect, url_for, flash, request, session, current_app
 from flask_login import login_required, current_user
 from config import get_db_connection
 from datetime import datetime, date
 from dateutil.relativedelta import relativedelta
+
+from blueprints.presencas.presencas import _garantir_tabela_presencas_observacao_aluno
 
 
 bp_painel_aluno = Blueprint(
@@ -444,17 +446,53 @@ def _calcular_graduacao_prevista(aluno):
         conn.close()
 
 
+def _enviar_push_aniversariantes_hoje(anivs_hoje: list, hoje) -> None:
+    """Envia push ao usuário logado sobre aniversariantes do dia (uma vez por dia)."""
+    if not anivs_hoje:
+        return
+    chave = f"push_aniv_{hoje.isoformat()}"
+    if session.get(chave):
+        return
+    session[chave] = True
+    try:
+        from utils.push_notifications import enviar_push_usuario
+        nomes = ", ".join(a["nome"].split()[0] for a in anivs_hoje[:3])
+        sufixo = f" +{len(anivs_hoje)-3}" if len(anivs_hoje) > 3 else ""
+        enviar_push_usuario(
+            current_user.id,
+            title="🎂 Aniversariantes hoje!",
+            body=f"{nomes}{sufixo} fazem aniversário hoje. Envie uma mensagem!",
+            url="/aluno/",
+            tag="aniversario",
+            require_interaction=True,
+        )
+    except Exception:
+        pass
+
+
 @bp_painel_aluno.route("/")
 @login_required
 @_aluno_required
 def painel(aluno):
     session["modo_painel"] = "aluno"
     stats = _stats_painel_aluno(aluno)
+    from utils.aniversariantes import aniversariantes_do_mes_aluno_associacao
+    from datetime import date
+    hoje = date.today()
+    anivs = aniversariantes_do_mes_aluno_associacao(current_user.id, mes=hoje.month) or []
+    anivs_hoje = [a for a in anivs if a["data_nascimento"] and
+                  a["data_nascimento"].day == hoje.day]
+    _enviar_push_aniversariantes_hoje(anivs_hoje, hoje)
     return render_template(
         "painel/painel_aluno.html",
         usuario=current_user,
         aluno=aluno,
         stats=stats,
+        aniversariantes=anivs,
+        aniversariantes_hoje=anivs_hoje,
+        hoje_dia=hoje.day,
+        hoje_mes=hoje.month,
+        hoje_ano=hoje.year,
     )
 
 
@@ -466,10 +504,22 @@ def meu_perfil(aluno):
     _enriquecer_aluno_painel(aluno)
     from blueprints.aluno.alunos import enriquecer_aluno_para_modal
     enriquecer_aluno_para_modal(aluno)
+    from utils.aniversariantes import aniversariantes_do_mes_aluno_associacao
+    from datetime import date
+    hoje = date.today()
+    anivs = aniversariantes_do_mes_aluno_associacao(current_user.id, mes=hoje.month) or []
+    anivs_hoje = [a for a in anivs if a["data_nascimento"] and
+                  a["data_nascimento"].day == hoje.day]
+    _enviar_push_aniversariantes_hoje(anivs_hoje, hoje)
     return render_template(
         "painel_aluno/meu_perfil.html",
         usuario=current_user,
         aluno=aluno,
+        aniversariantes=anivs,
+        aniversariantes_hoje=anivs_hoje,
+        hoje_dia=hoje.day,
+        hoje_mes=hoje.month,
+        hoje_ano=hoje.year,
     )
 
 
@@ -619,6 +669,38 @@ def simular_categorias(aluno):
         return redirect(url_for("painel_aluno.painel"))
 
 
+def _ranking_frequencia_turmas_do_aluno(aluno):
+    """Turmas do aluno com pódio de frequência (mês/ano)."""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(dictionary=True)
+        ids = set()
+        if aluno.get("TurmaID"):
+            ids.add(aluno["TurmaID"])
+        cur.execute("SELECT TurmaID FROM aluno_turmas WHERE aluno_id = %s", (aluno["id"],))
+        for r in cur.fetchall():
+            if r.get("TurmaID"):
+                ids.add(r["TurmaID"])
+        if not ids:
+            cur.close()
+            conn.close()
+            return []
+        ph = ",".join(["%s"] * len(ids))
+        cur.execute(
+            f"SELECT TurmaID, Nome FROM turmas WHERE TurmaID IN ({ph}) ORDER BY Nome",
+            tuple(ids),
+        )
+        turmas_info = cur.fetchall()
+        from utils.ranking_frequencia import ranking_frequencia_por_turmas
+
+        out = ranking_frequencia_por_turmas(cur, turmas_info)
+        cur.close()
+        conn.close()
+        return out
+    except Exception:
+        return []
+
+
 def _stats_painel_aluno(aluno):
     """Retorna estatísticas básicas para o dashboard do aluno."""
     stats = {"mensalidades_pendentes": 0, "presencas_mes": 0, "turmas_count": 0}
@@ -735,10 +817,11 @@ def minhas_mensalidades(aluno):
         params = (aluno["id"], ano)
     try:
         cur.execute(f"""
-            SELECT ma.id, ma.data_vencimento, ma.data_pagamento, ma.valor, ma.valor_pago, ma.status,
+            SELECT ma.id, ma.mensalidade_id, ma.data_vencimento, ma.data_pagamento, ma.valor, ma.valor_pago, ma.status,
                    ma.status_pagamento, ma.comprovante_url, ma.observacoes,
                    ma.valor_original, ma.desconto_aplicado, ma.id_desconto,
                    COALESCE(ma.remover_juros, 0) AS remover_juros,
+                   ma.asaas_tipo, ma.asaas_boleto_url, ma.asaas_pix_qrcode, ma.asaas_pix_copia_cola,
                    m.nome as plano_nome, m.id_academia,
                    COALESCE(m.aplicar_juros_multas, 0) AS aplicar_juros_multas,
                    COALESCE(m.percentual_multa_mes, 2) AS percentual_multa_mes,
@@ -785,6 +868,11 @@ def minhas_mensalidades(aluno):
                 r.setdefault("valor_original", None)
                 r.setdefault("desconto_aplicado", 0)
                 r.setdefault("id_desconto", None)
+                r.setdefault("mensalidade_id", None)
+                r.setdefault("asaas_tipo", None)
+                r.setdefault("asaas_boleto_url", None)
+                r.setdefault("asaas_pix_qrcode", None)
+                r.setdefault("asaas_pix_copia_cola", None)
         except Exception:
             rows = []
 
@@ -840,7 +928,8 @@ def minhas_mensalidades(aluno):
     try:
         if mes:
             cur.execute("""
-                SELECT id, descricao, valor, data_vencimento, data_pagamento, status
+                SELECT id, descricao, valor, data_vencimento, data_pagamento, status,
+                       asaas_tipo, asaas_boleto_url, asaas_pix_qrcode, asaas_pix_copia_cola
                 FROM cobranca_avulsa
                 WHERE aluno_id = %s AND status != 'cancelado'
                 AND MONTH(data_vencimento) = %s AND YEAR(data_vencimento) = %s
@@ -848,7 +937,8 @@ def minhas_mensalidades(aluno):
             """, (aluno["id"], mes, ano))
         else:
             cur.execute("""
-                SELECT id, descricao, valor, data_vencimento, data_pagamento, status
+                SELECT id, descricao, valor, data_vencimento, data_pagamento, status,
+                       asaas_tipo, asaas_boleto_url, asaas_pix_qrcode, asaas_pix_copia_cola
                 FROM cobranca_avulsa
                 WHERE aluno_id = %s AND status != 'cancelado'
                 AND YEAR(data_vencimento) = %s
@@ -1048,6 +1138,11 @@ def minhas_presencas(aluno):
 
     conn = get_db_connection()
     cur = conn.cursor(dictionary=True)
+    try:
+        _garantir_tabela_presencas_observacao_aluno(cur)
+        conn.commit()
+    except Exception:
+        conn.rollback()
 
     turmas_do_aluno = _turmas_do_aluno(cur, aluno["id"], aluno.get("TurmaID"))
 
@@ -1061,25 +1156,80 @@ def minhas_presencas(aluno):
         params_extra = [turma_filtro_id]
 
     try:
+        join_aula = """
+            LEFT JOIN registros_aula_presenca r
+              ON r.turma_id = p.turma_id
+             AND r.data_aula = p.data_presenca
+             AND r.horario_aula = COALESCE(p.horario_aula, '00:00:00')
+            LEFT JOIN presencas_observacao_aluno po
+              ON po.aluno_id = p.aluno_id
+             AND po.turma_id = p.turma_id
+             AND po.data_aula = p.data_presenca
+             AND po.horario_aula = COALESCE(p.horario_aula, '00:00:00')
+        """
+        sel_aula = """
+                , p.horario_aula,
+                 r.observacao AS aula_observacao,
+                 r.plano_aula_texto AS aula_plano_texto,
+                 r.plano_aula_arquivo AS aula_plano_arquivo,
+                 r.plano_aula_arquivo_original AS aula_plano_arquivo_original,
+                 po.observacao AS mensagem_professor_para_aluno
+        """
         if meses_sel:
             placeholders = ",".join(["%s"] * len(meses_sel))
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT p.data_presenca, p.presente
+                """
+                + sel_aula
+                + """
                 FROM presencas p
+                """
+                + join_aula
+                + """
                 WHERE p.aluno_id = %s AND YEAR(p.data_presenca) = %s
-                  AND MONTH(p.data_presenca) IN (""" + placeholders + ")"
-                + where_extra + """
-                ORDER BY p.data_presenca
-            """, [aluno["id"], ano] + meses_sel + params_extra)
+                  AND MONTH(p.data_presenca) IN ("""
+                + placeholders
+                + ")"
+                + where_extra
+                + """
+                ORDER BY p.data_presenca, p.horario_aula
+            """,
+                [aluno["id"], ano] + meses_sel + params_extra,
+            )
         else:
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT p.data_presenca, p.presente
+                """
+                + sel_aula
+                + """
                 FROM presencas p
+                """
+                + join_aula
+                + """
                 WHERE p.aluno_id = %s AND YEAR(p.data_presenca) = %s
-                """ + where_extra + """
-                ORDER BY p.data_presenca
-            """, [aluno["id"], ano] + params_extra)
+                """
+                + where_extra
+                + """
+                ORDER BY p.data_presenca, p.horario_aula
+            """,
+                [aluno["id"], ano] + params_extra,
+            )
         presencas = cur.fetchall()
+        for pr in presencas:
+            hv = pr.get("horario_aula")
+            if hv is None:
+                pr["horario_exibir"] = None
+            elif hasattr(hv, "total_seconds"):
+                sec = int(hv.total_seconds()) % 86400
+                hs = f"{sec // 3600:02d}:{(sec % 3600) // 60:02d}"
+                pr["horario_exibir"] = None if hs == "00:00" else hs
+            else:
+                hs = hv.strftime("%H:%M") if hasattr(hv, "strftime") else str(hv)[:8]
+                if len(hs) >= 5:
+                    hs = hs[:5]
+                pr["horario_exibir"] = None if hs in ("00:00", "00:00:00") else hs
     except Exception:
         presencas = []
     cur.close()
@@ -1823,13 +1973,13 @@ def solicitar_visita(aluno, academia_destino_id):
 
 
 # ======================================================
-# MEU CURRÍCULO — Currículo do atleta + link Zempo + sync
+# MEU CURRÍCULO — Dados do atleta (layout CV / PDF)
 # ======================================================
 
 @bp_painel_aluno.route("/curriculo", methods=["GET"])
 @login_required
 def curriculo():
-    """Página Meu currículo: dados do cadastro + competições + eventos + link Zempo."""
+    """Página Meu currículo: dados do cadastro do atleta."""
     if not (current_user.has_role("aluno") or current_user.has_role("admin")):
         flash("Acesso restrito aos alunos.", "danger")
         return redirect(url_for("painel.home"))
@@ -1872,23 +2022,6 @@ def curriculo():
         flash("Nenhum aluno vinculado a este usuário.", "warning")
         return redirect(url_for("painel_aluno.painel"))
 
-    competicoes = []
-    eventos = []
-    try:
-        cur.execute("SELECT id, colocacao, competicao, ambito, local_texto, data_competicao, categoria, ordem FROM aluno_competicoes WHERE aluno_id = %s ORDER BY ordem, id", (aluno["id"],))
-        competicoes = cur.fetchall()
-    except Exception:
-        try:
-            cur.execute("SELECT id, colocacao, competicao, ambito, local_texto, ordem FROM aluno_competicoes WHERE aluno_id = %s ORDER BY ordem, id", (aluno["id"],))
-            competicoes = [{**r, "data_competicao": None, "categoria": None} for r in cur.fetchall()]
-        except Exception:
-            pass
-    try:
-        cur.execute("SELECT id, evento, atividade, ambito, local_texto, data_evento, ordem FROM aluno_eventos WHERE aluno_id = %s ORDER BY ordem, id", (aluno["id"],))
-        eventos = cur.fetchall()
-    except Exception:
-        pass
-
     tipo = (aluno.get("tipo_aluno") or "").strip().lower()
     aluno["classe_categoria"] = {"infantil": "Infantil", "juvenil": "Juvenil", "adulto": "Adulto"}.get(tipo, "")
 
@@ -1918,73 +2051,7 @@ def curriculo():
     return render_template(
         "painel_aluno/curriculo.html",
         aluno=aluno,
-        competicoes=competicoes,
-        eventos=eventos,
     )
-
-
-@bp_painel_aluno.route("/curriculo/salvar-link", methods=["POST"])
-@login_required
-def curriculo_salvar_link():
-    """Salva o link Zempo do aluno."""
-    if not (current_user.has_role("aluno") or current_user.has_role("admin")):
-        return jsonify({"ok": False, "msg": "Acesso negado."}), 403
-    link = (request.form.get("link_zempo") or (request.get_json(silent=True) or {}).get("link_zempo") or "").strip()
-    conn = get_db_connection()
-    cur = conn.cursor(dictionary=True)
-    cur.execute("SELECT id FROM alunos WHERE usuario_id = %s", (current_user.id,))
-    row = cur.fetchone()
-    if not row:
-        cur.close()
-        conn.close()
-        return jsonify({"ok": False, "msg": "Aluno não vinculado."}), 404
-    try:
-        cur.execute("UPDATE alunos SET link_zempo = %s WHERE id = %s", (link or None, row["id"]))
-        conn.commit()
-    except Exception as e:
-        return jsonify({"ok": False, "msg": f"Erro ao salvar: {e}"}), 500
-    cur.close()
-    conn.close()
-    return jsonify({"ok": True, "msg": "Link salvo."})
-
-
-@bp_painel_aluno.route("/curriculo/sincronizar", methods=["POST"])
-@login_required
-def curriculo_sincronizar():
-    """Sincroniza currículo a partir do Zempo."""
-    if not (current_user.has_role("aluno") or current_user.has_role("admin")):
-        flash("Acesso negado.", "danger")
-        return redirect(url_for("painel_aluno.curriculo"))
-    conn = get_db_connection()
-    cur = conn.cursor(dictionary=True)
-    cur.execute("SELECT id, link_zempo FROM alunos WHERE usuario_id = %s", (current_user.id,))
-    row = cur.fetchone()
-    cur.close()
-    conn.close()
-    if not row:
-        flash("Aluno não vinculado.", "warning")
-        return redirect(url_for("painel_aluno.curriculo"))
-    link = (request.form.get("link_zempo") or row.get("link_zempo") or "").strip()
-    if not link:
-        flash("Informe o link do seu perfil Zempo.", "warning")
-        return redirect(url_for("painel_aluno.curriculo"))
-
-    conn = get_db_connection()
-    cur = conn.cursor()
-    cur.execute("UPDATE alunos SET link_zempo = %s WHERE id = %s", (link, row["id"]))
-    conn.commit()
-    cur.close()
-    conn.close()
-
-    from blueprints.aluno.zempo_sync import sync_zempo_curriculo
-    zempo_user = request.form.get("zempo_user", "").strip()
-    zempo_pass = request.form.get("zempo_pass", "").strip()
-    ok, msg = sync_zempo_curriculo(row["id"], link, zempo_user=zempo_user or None, zempo_pass=zempo_pass or None)
-    if ok:
-        flash(msg, "success")
-    else:
-        flash(msg, "danger")
-    return redirect(url_for("painel_aluno.curriculo"))
 
 
 @bp_painel_aluno.route("/curriculo/impressao")
@@ -2054,202 +2121,10 @@ def curriculo_impressao():
     except Exception:
         pass
 
-    competicoes = []
-    eventos = []
-    try:
-        cur.execute("SELECT id, colocacao, competicao, ambito, local_texto, data_competicao, categoria FROM aluno_competicoes WHERE aluno_id = %s ORDER BY ordem, id", (aluno["id"],))
-        competicoes = cur.fetchall()
-    except Exception:
-        try:
-            cur.execute("SELECT id, colocacao, competicao, ambito, local_texto FROM aluno_competicoes WHERE aluno_id = %s ORDER BY ordem, id", (aluno["id"],))
-            competicoes = [{**r, "data_competicao": None, "categoria": None} for r in cur.fetchall()]
-        except Exception:
-            pass
-    try:
-        cur.execute("SELECT id, evento, atividade, ambito, local_texto, data_evento FROM aluno_eventos WHERE aluno_id = %s ORDER BY ordem, id", (aluno["id"],))
-        eventos = cur.fetchall()
-    except Exception:
-        pass
-
     cur.close()
     conn.close()
 
     return render_template(
         "painel_aluno/curriculo_impressao.html",
         aluno=aluno,
-        competicoes=competicoes,
-        eventos=eventos,
     )
-
-
-@bp_painel_aluno.route("/curriculo/adicionar-competicao", methods=["POST"])
-@login_required
-def curriculo_adicionar_competicao():
-    """Adiciona competição manualmente."""
-    if not (current_user.has_role("aluno") or current_user.has_role("admin")):
-        flash("Acesso negado.", "danger")
-        return redirect(url_for("painel_aluno.curriculo"))
-
-    conn = get_db_connection()
-    cur = conn.cursor(dictionary=True)
-    cur.execute("SELECT id FROM alunos WHERE usuario_id = %s", (current_user.id,))
-    row = cur.fetchone()
-    if not row:
-        cur.close()
-        conn.close()
-        return redirect(url_for("painel_aluno.curriculo"))
-
-    colocacao = (request.form.get("colocacao") or "").strip() or None
-    competicao = (request.form.get("competicao") or "").strip() or None
-    ambito = (request.form.get("ambito") or "").strip() or None
-    local_texto = (request.form.get("local_texto") or "").strip() or None
-    data_s = (request.form.get("data_competicao") or "").strip()
-    categoria = (request.form.get("categoria") or "").strip() or None
-
-    if not competicao:
-        flash("Informe o nome da competição.", "warning")
-        cur.close()
-        conn.close()
-        return redirect(url_for("painel_aluno.curriculo"))
-
-    data_parsed = None
-    if data_s:
-        try:
-            from datetime import datetime
-            data_parsed = datetime.strptime(data_s, "%Y-%m-%d").date()
-        except Exception:
-            pass
-
-    try:
-        cur.execute("SELECT COALESCE(MAX(ordem), -1) + 1 AS prox FROM aluno_competicoes WHERE aluno_id = %s", (row["id"],))
-        prox = cur.fetchone().get("prox", 0)
-        cur.execute(
-            """INSERT INTO aluno_competicoes (aluno_id, colocacao, competicao, ambito, local_texto, data_competicao, categoria, ordem)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
-            (row["id"], colocacao, competicao, ambito, local_texto, data_parsed, categoria, prox),
-        )
-        conn.commit()
-        flash("Competição adicionada.", "success")
-    except Exception as e:
-        conn.rollback()
-        flash("Erro ao adicionar competição.", "danger")
-    finally:
-        cur.close()
-        conn.close()
-    return redirect(url_for("painel_aluno.curriculo"))
-
-
-@bp_painel_aluno.route("/curriculo/adicionar-evento", methods=["POST"])
-@login_required
-def curriculo_adicionar_evento():
-    """Adiciona evento manualmente."""
-    if not (current_user.has_role("aluno") or current_user.has_role("admin")):
-        flash("Acesso negado.", "danger")
-        return redirect(url_for("painel_aluno.curriculo"))
-
-    conn = get_db_connection()
-    cur = conn.cursor(dictionary=True)
-    cur.execute("SELECT id FROM alunos WHERE usuario_id = %s", (current_user.id,))
-    row = cur.fetchone()
-    if not row:
-        cur.close()
-        conn.close()
-        return redirect(url_for("painel_aluno.curriculo"))
-
-    evento = (request.form.get("evento") or "").strip() or None
-    atividade = (request.form.get("atividade") or "").strip() or None
-    ambito = (request.form.get("ambito") or "").strip() or None
-    local_texto = (request.form.get("local_texto") or "").strip() or None
-    data_s = (request.form.get("data_evento") or "").strip()
-
-    if not evento:
-        flash("Informe o nome do evento.", "warning")
-        cur.close()
-        conn.close()
-        return redirect(url_for("painel_aluno.curriculo"))
-
-    data_parsed = None
-    if data_s:
-        try:
-            from datetime import datetime
-            data_parsed = datetime.strptime(data_s, "%Y-%m-%d").date()
-        except Exception:
-            pass
-
-    try:
-        cur.execute("SELECT COALESCE(MAX(ordem), -1) + 1 AS prox FROM aluno_eventos WHERE aluno_id = %s", (row["id"],))
-        prox = cur.fetchone().get("prox", 0)
-        cur.execute(
-            """INSERT INTO aluno_eventos (aluno_id, evento, atividade, ambito, local_texto, data_evento, ordem)
-               VALUES (%s, %s, %s, %s, %s, %s, %s)""",
-            (row["id"], evento, atividade, ambito, local_texto, data_parsed, prox),
-        )
-        conn.commit()
-        flash("Evento adicionado.", "success")
-    except Exception:
-        conn.rollback()
-        flash("Erro ao adicionar evento.", "danger")
-    finally:
-        cur.close()
-        conn.close()
-    return redirect(url_for("painel_aluno.curriculo"))
-
-
-@bp_painel_aluno.route("/curriculo/excluir-competicoes", methods=["POST"])
-@login_required
-def curriculo_excluir_competicoes():
-    """Exclui competições selecionadas."""
-    if not (current_user.has_role("aluno") or current_user.has_role("admin")):
-        flash("Acesso negado.", "danger")
-        return redirect(url_for("painel_aluno.curriculo"))
-    ids = request.form.getlist("ids")
-    if not ids:
-        flash("Nenhuma competição selecionada.", "warning")
-        return redirect(url_for("painel_aluno.curriculo"))
-
-    conn = get_db_connection()
-    cur = conn.cursor(dictionary=True)
-    cur.execute("SELECT id FROM alunos WHERE usuario_id = %s", (current_user.id,))
-    row = cur.fetchone()
-    if not row:
-        cur.close()
-        conn.close()
-        return redirect(url_for("painel_aluno.curriculo"))
-
-    placeholders = ",".join(["%s"] * len(ids))
-    cur.execute("DELETE FROM aluno_competicoes WHERE aluno_id = %s AND id IN (" + placeholders + ")", (row["id"],) + tuple(int(x) for x in ids if x.isdigit()))
-    conn.commit()
-    cur.close()
-    conn.close()
-    flash("Competição(ões) excluída(s).", "success")
-    return redirect(url_for("painel_aluno.curriculo"))
-
-
-@bp_painel_aluno.route("/curriculo/excluir-eventos", methods=["POST"])
-@login_required
-def curriculo_excluir_eventos():
-    """Exclui eventos selecionados."""
-    if not (current_user.has_role("aluno") or current_user.has_role("admin")):
-        flash("Acesso negado.", "danger")
-        return redirect(url_for("painel_aluno.curriculo"))
-    ids = request.form.getlist("ids")
-    if not ids:
-        flash("Nenhum evento selecionado.", "warning")
-        return redirect(url_for("painel_aluno.curriculo"))
-
-    conn = get_db_connection()
-    cur = conn.cursor(dictionary=True)
-    cur.execute("SELECT id FROM alunos WHERE usuario_id = %s", (current_user.id,))
-    row = cur.fetchone()
-    if not row:
-        cur.close()
-        conn.close()
-        return redirect(url_for("painel_aluno.curriculo"))
-
-    placeholders = ",".join(["%s"] * len(ids))
-    cur.execute("DELETE FROM aluno_eventos WHERE aluno_id = %s AND id IN (" + placeholders + ")", (row["id"],) + tuple(int(x) for x in ids if x.isdigit()))
-    conn.commit()
-    cur.close()
-    conn.close()
-    flash("Evento(s) excluído(s).", "success")
-    return redirect(url_for("painel_aluno.curriculo"))
