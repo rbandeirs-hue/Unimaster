@@ -7,10 +7,11 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
 from utils.upload_seguro import validar_upload, nome_seguro, UploadInvalido
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 import json
 from config import get_db_connection
+from utils.alunos_academias import filtro_alunos_da_academia
 from extensions import csrf
 
 bp_financeiro = Blueprint("financeiro", __name__, url_prefix="/financeiro")
@@ -100,6 +101,10 @@ def _status_efetivo(status, data_venc, status_pagamento=None):
     """Retorna status efetivo: pendente_aprovacao -> aguardando_confirmacao, pendente vencido -> atrasado."""
     if status_pagamento == "pendente_aprovacao":
         return "aguardando_confirmacao"
+    # Pagamento confirmado (inclui isenção por desconto integral) sempre vale como pago,
+    # mesmo que a coluna status tenha ficado defasada (ex.: 'atrasado').
+    if status_pagamento == "pago":
+        return "pago"
     if status and status not in ("pendente",):
         return status
     try:
@@ -203,6 +208,86 @@ def _valor_com_desconto(ma, aluno_id, id_academia, hoje=None):
     else:
         desconto = min(val_desc, valor_base)
     return valor_base, round(desconto, 2), round(valor_base - desconto, 2), desconto_nome
+
+
+def _desconto_id_vigente(cur, aluno_id, id_academia, data_vigencia):
+    """Retorna o id do desconto ativo do aluno vigente na data (ou None)."""
+    try:
+        cur.execute(
+            """SELECT ad.desconto_id
+               FROM aluno_desconto ad
+               JOIN descontos d ON d.id = ad.desconto_id AND d.ativo = 1
+               WHERE ad.aluno_id = %s AND ad.ativo = 1
+                 AND (ad.data_inicio IS NULL OR ad.data_inicio <= %s)
+                 AND (ad.data_fim IS NULL OR ad.data_fim >= %s)
+                 AND d.id_academia = %s
+               LIMIT 1""",
+            (aluno_id, data_vigencia, data_vigencia, id_academia),
+        )
+        r = cur.fetchone()
+        return r.get("desconto_id") if r else None
+    except Exception:
+        return None
+
+
+def _quitar_mensalidades_isentas_por_desconto(conn, cur, aluno_id, academia_id, criado_por=None):
+    """Quita (status pago, valor 0, receita 0) as mensalidades em aberto do aluno cujo
+    desconto vigente cobre 100% do valor. Idempotente. Retorna a quantidade quitada."""
+    hoje = date.today()
+    try:
+        cur.execute(
+            """SELECT ma.id, ma.aluno_id, ma.mensalidade_id, ma.valor, ma.valor_original,
+                      ma.data_vencimento, m.nome AS plano_nome, a.nome AS aluno_nome
+               FROM mensalidade_aluno ma
+               JOIN mensalidades m ON m.id = ma.mensalidade_id
+               JOIN alunos a ON a.id = ma.aluno_id
+               WHERE ma.aluno_id = %s
+                 AND ma.status IN ('pendente', 'atrasado')
+                 AND COALESCE(ma.status_pagamento, '') <> 'pago'""",
+            (aluno_id,),
+        )
+        rows = cur.fetchall()
+    except Exception:
+        return 0
+    n = 0
+    for ma in rows:
+        ma2 = dict(ma)
+        ma2["id_academia"] = academia_id
+        _vi, vd, vf, _nome = _valor_com_desconto(ma2, aluno_id, academia_id, hoje=hoje)
+        if float(vd or 0) <= 0 or float(vf or 0) > 0:
+            continue  # sem desconto aplicável ou não é integral
+        venc = ma.get("data_vencimento")
+        try:
+            data_pg = venc.strftime("%Y-%m-%d") if hasattr(venc, "strftime") else (str(venc)[:10] if venc else hoje.strftime("%Y-%m-%d"))
+        except Exception:
+            data_pg = hoje.strftime("%Y-%m-%d")
+        valor_orig = float(ma.get("valor_original") or 0) or float(ma.get("valor") or 0)
+        desc_id = _desconto_id_vigente(cur, aluno_id, academia_id, data_pg)
+        cur.execute(
+            """UPDATE mensalidade_aluno
+               SET valor_original = %s, desconto_aplicado = %s, valor = 0, id_desconto = %s,
+                   status = 'pago', status_pagamento = 'pago', data_pagamento = %s, valor_pago = 0
+               WHERE id = %s""",
+            (valor_orig, round(float(vd), 2), desc_id, data_pg, ma["id"]),
+        )
+        try:
+            cur.execute("SELECT id FROM receitas WHERE id_mensalidade_aluno = %s LIMIT 1", (ma["id"],))
+            if not cur.fetchone():
+                descricao = f"Mensalidade {ma.get('plano_nome') or 'Plano'} - {ma.get('aluno_nome') or 'Aluno'} (Desconto integral)"
+                try:
+                    cur.execute(
+                        "INSERT INTO receitas (descricao, valor, data, categoria, id_academia, id_mensalidade_aluno, criado_por) VALUES (%s, 0, %s, 'Mensalidades', %s, %s, %s)",
+                        (descricao, data_pg, academia_id, ma["id"], criado_por),
+                    )
+                except Exception:
+                    cur.execute(
+                        "INSERT INTO receitas (descricao, valor, data, categoria, id_academia, id_mensalidade_aluno) VALUES (%s, 0, %s, 'Mensalidades', %s, %s)",
+                        (descricao, data_pg, academia_id, ma["id"]),
+                    )
+        except Exception:
+            pass
+        n += 1
+    return n
 
 
 def _ma_enriquecer_exibicao(ma, aluno_id, id_academia, hoje=None):
@@ -537,6 +622,20 @@ def _before_financeiro():
 @bp_financeiro.route("/dashboard")
 @login_required
 def dashboard():
+    """Entrada do financeiro — hoje leva ao painel novo (layout próprio).
+
+    O endpoint segue chamado `dashboard` de propósito: todos os
+    `url_for('financeiro.dashboard')` espalhados pelos templates passam a cair
+    no painel novo sem precisar de alteração. Para voltar ao antigo, troque
+    este redirect por `return dashboard_classico()`.
+    """
+    return redirect(url_for("financeiro_painel.dashboard",
+                            academia_id=request.args.get("academia_id")))
+
+
+@bp_financeiro.route("/dashboard-classico")
+@login_required
+def dashboard_classico():
     academia_id = _get_academia_id()
     if not academia_id:
         flash("Nenhuma academia disponível.", "warning")
@@ -1265,19 +1364,26 @@ def _gerar_mensalidades_mes(academia_id, ano, mes):
     pulados = 0
     try:
         ultimo_dia = calendar.monthrange(ano, mes)[1]
+        # Escopo por academia = academia do PLANO (mensalidades.id_academia), não a
+        # academia principal do aluno. Assim um aluno vinculado a mais de uma academia
+        # gera cobrança em cada academia onde tem plano, sem misturar. Inclui alunos
+        # vinculados (alunos_academias), não só os que têm esta como principal.
+        _trecho_al, _al_params = filtro_alunos_da_academia(academia_id, alias="a")
         cur.execute(
-            """
+            f"""
             SELECT ma.aluno_id, ma.mensalidade_id, ma.turma_id, ma.valor, DAY(ma.data_vencimento) AS dia
             FROM mensalidade_aluno ma
             JOIN alunos a ON a.id = ma.aluno_id
-            WHERE a.id_academia = %s AND a.status = 'ativo'
-              AND ma.status <> 'cancelado' AND ma.mensalidade_id IS NOT NULL
+            JOIN mensalidades m ON m.id = ma.mensalidade_id
+            WHERE {_trecho_al} AND a.status = 'ativo'
+              AND ma.status <> 'cancelado' AND m.id_academia = %s
               AND ma.id = (SELECT ma2.id FROM mensalidade_aluno ma2
+                           JOIN mensalidades m2 ON m2.id = ma2.mensalidade_id
                            WHERE ma2.aluno_id = ma.aluno_id AND ma2.status <> 'cancelado'
-                                 AND ma2.mensalidade_id IS NOT NULL
+                                 AND m2.id_academia = %s
                            ORDER BY ma2.data_vencimento DESC, ma2.id DESC LIMIT 1)
             """,
-            (academia_id,),
+            (*_al_params, academia_id, academia_id),
         )
         templates = cur.fetchall()
         for t in templates:
@@ -1292,15 +1398,34 @@ def _gerar_mensalidades_mes(academia_id, ano, mes):
             if cur.fetchone():
                 pulados += 1
                 continue
+
+            # Desconto integral (valor final = 0): nada a pagar, já nasce PAGA.
+            ma_calc = {
+                "valor": t["valor"],
+                "mensalidade_id": t["mensalidade_id"],
+                "id_academia": academia_id,
+                "data_vencimento": venc,
+            }
+            _vi, _vd, valor_final, _dn = _valor_com_desconto(
+                ma_calc, t["aluno_id"], academia_id, hoje=venc)
+            isenta = float(valor_final or 0) <= 0
+
+            if isenta:
+                status_ins, stpag, dt_pag, valor_pago = "pago", "pago", venc, 0
+            else:
+                status_ins, stpag, dt_pag, valor_pago = "pendente", "pendente", None, None
+
             if t.get("turma_id"):
                 cur.execute(
-                    "INSERT INTO mensalidade_aluno (mensalidade_id, aluno_id, turma_id, data_vencimento, valor, status) VALUES (%s,%s,%s,%s,%s,'pendente')",
-                    (t["mensalidade_id"], t["aluno_id"], t["turma_id"], venc, t["valor"]),
+                    "INSERT INTO mensalidade_aluno (mensalidade_id, aluno_id, turma_id, data_vencimento, valor, status, status_pagamento, data_pagamento, valor_pago) "
+                    "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                    (t["mensalidade_id"], t["aluno_id"], t["turma_id"], venc, t["valor"], status_ins, stpag, dt_pag, valor_pago),
                 )
             else:
                 cur.execute(
-                    "INSERT INTO mensalidade_aluno (mensalidade_id, aluno_id, data_vencimento, valor, status) VALUES (%s,%s,%s,%s,'pendente')",
-                    (t["mensalidade_id"], t["aluno_id"], venc, t["valor"]),
+                    "INSERT INTO mensalidade_aluno (mensalidade_id, aluno_id, data_vencimento, valor, status, status_pagamento, data_pagamento, valor_pago) "
+                    "VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
+                    (t["mensalidade_id"], t["aluno_id"], venc, t["valor"], status_ins, stpag, dt_pag, valor_pago),
                 )
             geradas += 1
         conn.commit()
@@ -1328,6 +1453,7 @@ def cron_rotina_diaria():
     gerar = request.args.get("gerar") == "1" or hoje.day == 1
     geradas = 0
     academias_processadas = 0
+    sumup_cobradas = 0
     if gerar:
         conn = get_db_connection()
         cur = conn.cursor()
@@ -1341,11 +1467,18 @@ def cron_rotina_diaria():
                 academias_processadas += 1
             except Exception as e:
                 current_app.logger.error(f"Cron gerar mensalidades academia {aid}: {e}")
+            # SumUp: recorrência por cartão salvo exige que NÓS iniciemos a cobrança
+            # (o gateway não faz débito automático). Dispara após gerar as mensalidades.
+            try:
+                sumup_cobradas += _cobrar_sumup_recorrentes(aid)
+            except Exception as e:
+                current_app.logger.error(f"Cron SumUp recorrente academia {aid}: {e}")
     return jsonify({
         "ok": True,
         "atrasadas_marcadas": atrasadas,
         "mensalidades_geradas": geradas,
         "academias_processadas": academias_processadas,
+        "sumup_recorrentes_cobradas": sumup_cobradas,
     })
 
 
@@ -1516,8 +1649,13 @@ def _gateway_config_academia(academia_id):
     cur = conn.cursor(dictionary=True)
     try:
         cur.execute(
-            """SELECT gateway_pagamento, asaas_habilitado, asaas_api_key, asaas_ambiente,
-                      asaas_webhook_token, mercadopago_access_token, infinitepay_handle
+            """SELECT id, gateway_pagamento, asaas_habilitado, asaas_api_key, asaas_ambiente,
+                      asaas_webhook_token, mercadopago_access_token, infinitepay_handle,
+                      cora_client_id, cora_ambiente, cora_certificate, cora_private_key,
+                      cora_client_id_prod, cora_certificate_prod, cora_private_key_prod,
+                      efi_client_id, efi_client_secret, efi_certificate, efi_pix_key, efi_ambiente,
+                      sumup_api_key, sumup_merchant_code, sumup_ambiente, sumup_habilitado,
+                      sumup_conexao, sumup_oauth_access_token, sumup_oauth_refresh_token, sumup_oauth_expira_em
                FROM academias WHERE id = %s""",
             (academia_id,),
         )
@@ -1539,7 +1677,211 @@ def _gateway_ativo(cfg):
         return "mercadopago"
     if g == "infinitepay" and (cfg.get("infinitepay_handle") or "").strip():
         return "infinitepay"
+    if g == "efi" and (cfg.get("efi_client_id") or "").strip() and (cfg.get("efi_certificate") or "").strip() \
+            and (cfg.get("efi_pix_key") or "").strip():
+        return "efi"
+    if g == "cora" and _cora_configurado(cfg):
+        return "cora"
+    if g == "sumup" and _sumup_configurado(cfg):
+        return "sumup"
     return ""
+
+
+def _cora_ambiente(cfg):
+    """'production' ou 'stage' (padrão) da academia."""
+    return "production" if (cfg or {}).get("cora_ambiente") == "production" else "stage"
+
+
+def _cora_credenciais(cfg):
+    """(client_id, certificado, chave) do ambiente ativo da academia.
+
+    O Cora emite credenciais distintas por ambiente — a de stage devolve 401
+    invalid_client em produção —, por isso cada trio é guardado à parte: as
+    colunas sem sufixo são as de stage, as `_prod` as de produção.
+    """
+    cfg = cfg or {}
+    if _cora_ambiente(cfg) == "production":
+        return (cfg.get("cora_client_id_prod"), cfg.get("cora_certificate_prod"),
+                cfg.get("cora_private_key_prod"))
+    return (cfg.get("cora_client_id"), cfg.get("cora_certificate"),
+            cfg.get("cora_private_key"))
+
+
+def _cora_configurado(cfg):
+    """True se a academia tem o trio exigido pelo mTLS do Cora NO AMBIENTE ATIVO."""
+    if not cfg:
+        return False
+    return all((v or "").strip() for v in _cora_credenciais(cfg))
+
+
+def _cora_client(cfg):
+    """Constrói o CoraClient com as credenciais do ambiente ativo da academia."""
+    from utils.cora import CoraClient
+    client_id, certificado, chave = _cora_credenciais(cfg)
+    return CoraClient(client_id, certificado, chave, cfg.get("cora_ambiente"))
+
+
+def _sumup_configurado(cfg):
+    """True se a academia tem SumUp utilizável: chave manual OU conexão OAuth, com merchant."""
+    if not cfg:
+        return False
+    tem_merchant = bool((cfg.get("sumup_merchant_code") or "").strip())
+    conexao = (cfg.get("sumup_conexao") or "key").strip().lower()
+    if conexao == "oauth":
+        return tem_merchant and bool((cfg.get("sumup_oauth_refresh_token") or "").strip())
+    return tem_merchant and bool((cfg.get("sumup_api_key") or "").strip())
+
+
+def _sumup_oauth_app():
+    """Credenciais do app OAuth da plataforma (um app para todas as academias).
+    Definidas por ambiente: SUMUP_OAUTH_CLIENT_ID / SUMUP_OAUTH_CLIENT_SECRET.
+    redirect_uri aponta para o nosso callback."""
+    import os
+    cid = os.environ.get("SUMUP_OAUTH_CLIENT_ID", "").strip()
+    csec = os.environ.get("SUMUP_OAUTH_CLIENT_SECRET", "").strip()
+    try:
+        redirect_uri = url_for("financeiro.sumup_oauth_callback", _external=True)
+    except Exception:
+        redirect_uri = os.environ.get("SUMUP_OAUTH_REDIRECT", "").strip()
+    return cid, csec, redirect_uri
+
+
+def _sumup_client(cfg):
+    """Constrói um SumUpClient para a academia, no modo configurado:
+      - 'oauth': usa o access_token (renovando com refresh_token se expirado, e
+        persistindo o novo token na academia).
+      - 'key' (padrão): usa a chave secreta manual.
+    Retorna None se não estiver configurado."""
+    from utils.sumup import SumUpClient
+    if not _sumup_configurado(cfg):
+        return None
+    merchant = (cfg.get("sumup_merchant_code") or "").strip()
+    ambiente = cfg.get("sumup_ambiente") or "producao"
+    conexao = (cfg.get("sumup_conexao") or "key").strip().lower()
+    if conexao != "oauth":
+        return SumUpClient(cfg.get("sumup_api_key"), merchant, ambiente)
+    # Modo OAuth: garante um access_token válido
+    token = (cfg.get("sumup_oauth_access_token") or "").strip()
+    expira = cfg.get("sumup_oauth_expira_em")
+    precisa_renovar = True
+    if token and expira:
+        try:
+            precisa_renovar = expira <= (datetime.now() + timedelta(seconds=120))
+        except Exception:
+            precisa_renovar = True
+    if precisa_renovar:
+        cid, csec, _ = _sumup_oauth_app()
+        refresh = (cfg.get("sumup_oauth_refresh_token") or "").strip()
+        if cid and csec and refresh:
+            try:
+                from utils.sumup import oauth_refresh
+                j = oauth_refresh(cid, csec, refresh)
+                token = j.get("access_token") or token
+                novo_refresh = j.get("refresh_token") or refresh
+                expira_dt = datetime.now() + timedelta(seconds=int(j.get("expires_in") or 3600))
+                _sumup_salvar_tokens(cfg.get("id"), token, novo_refresh, expira_dt)
+            except Exception as e:
+                current_app.logger.error(f"SumUp OAuth refresh (academia {cfg.get('id')}): {e}")
+    return SumUpClient(token, merchant, ambiente)
+
+
+def _sumup_salvar_tokens(academia_id, access_token, refresh_token, expira_em):
+    """Persiste os tokens OAuth renovados na academia."""
+    if not academia_id:
+        return
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            """UPDATE academias SET sumup_oauth_access_token=%s, sumup_oauth_refresh_token=%s,
+                   sumup_oauth_expira_em=%s WHERE id=%s""",
+            (access_token, refresh_token, expira_em, academia_id),
+        )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+    finally:
+        conn.close()
+
+
+def gerar_cobranca_matricula(academia_id, *, nome, cpf, email, telefone, valor, precad_id,
+                             descricao=None, endereco=None):
+    """Gera uma cobrança de MATRÍCULA pelo gateway ativo da academia (PIX/link + QR).
+    Usado pelo formulário público de matrícula (sem login). `endereco` (cep/street/
+    neighborhood/number/complement) pré-preenche o checkout InfinitePay. Retorna dict
+    normalizado ou None se não houver gateway / valor inválido (→ pagamento avulso)."""
+    if not academia_id or not valor or float(valor) < 5:
+        return None
+    cfg = _gateway_config_academia(academia_id)
+    if not _gateway_ativo(cfg):
+        return None
+    return _emitir_cobranca_online(
+        cfg, "PIX",
+        nome=nome, cpf=cpf, email=email, telefone=telefone,
+        valor=float(valor), vencimento=date.today(),
+        descricao=descricao or f"Matrícula - {nome}",
+        origem="precadastro", registro_id=precad_id, endereco=endereco,
+    )
+
+
+def _gateway_tem_recorrencia(cfg, gw):
+    """True se o gateway informado tem credencial para recorrência."""
+    if not cfg:
+        return False
+    if gw == "asaas":
+        return bool((cfg.get("asaas_api_key") or "").strip())
+    if gw == "mercadopago":
+        return bool((cfg.get("mercadopago_access_token") or "").strip())
+    if gw == "sumup":
+        return _sumup_configurado(cfg)
+    return False
+
+
+def _gateways_recorrencia(cfg):
+    """Lista de gateways de recorrência configurados na academia."""
+    out = []
+    if _gateway_tem_recorrencia(cfg, "asaas"):
+        out.append("asaas")
+    if _gateway_tem_recorrencia(cfg, "mercadopago"):
+        out.append("mercadopago")
+    if _gateway_tem_recorrencia(cfg, "sumup"):
+        out.append("sumup")
+    return out
+
+
+def _gateway_recorrencia(cfg):
+    """Gateway usado para recorrência. RESPEITA o gateway escolhido nas configurações:
+    se o gateway ativo suportar recorrência (Asaas, Mercado Pago ou SumUp) e tiver
+    credencial, usa ele. Só cai para outro configurado quando o ativo não suporta
+    recorrência (ex.: InfinitePay/EFÍ)."""
+    if not cfg:
+        return ""
+    g = (cfg.get("gateway_pagamento") or "").strip().lower()
+    if g in ("asaas", "mercadopago", "sumup") and _gateway_tem_recorrencia(cfg, g):
+        return g
+    if _gateway_tem_recorrencia(cfg, "asaas"):
+        return "asaas"
+    if _gateway_tem_recorrencia(cfg, "mercadopago"):
+        return "mercadopago"
+    if _gateway_tem_recorrencia(cfg, "sumup"):
+        return "sumup"
+    return ""
+
+
+def _opcoes_recorrencia(cfg):
+    """Opções de recorrência (método) do gateway escolhido para a academia.
+    Asaas: cartão + PIX recorrente. Mercado Pago / SumUp: cartão (sem PIX recorrente)."""
+    gw = _gateway_recorrencia(cfg)
+    if gw == "asaas":
+        return [
+            {"val": "asaas:cartao", "label": "Cartão — débito automático", "metodo": "cartao"},
+            {"val": "asaas:pix", "label": "PIX recorrente", "metodo": "pix"},
+        ]
+    if gw == "mercadopago":
+        return [{"val": "mercadopago:cartao", "label": "Cartão — débito automático", "metodo": "cartao"}]
+    if gw == "sumup":
+        return [{"val": "sumup:cartao", "label": "Cartão — débito automático", "metodo": "cartao"}]
+    return []
 
 
 def _online_habilitado_academia(academia_id):
@@ -1547,11 +1889,50 @@ def _online_habilitado_academia(academia_id):
     return bool(_gateway_ativo(_gateway_config_academia(academia_id)))
 
 
+def _dados_pagador(row):
+    """Define o pagador da cobrança online: SEMPRE o responsável financeiro quando
+    informado (nome + CPF). Se o aluno não tiver responsável financeiro cadastrado,
+    usa os dados do próprio aluno.
+
+    O telefone do responsável financeiro (obrigatório no cadastro) é priorizado,
+    com fallback para o telefone do aluno — usado p.ex. no checkout InfinitePay.
+
+    `row` deve conter: nome, cpf, telefone e, quando houver, responsavel_financeiro_nome /
+    responsavel_financeiro_cpf / responsavel_financeiro_telefone.
+    Retorna (nome, cpf, telefone) — CPF apenas com dígitos.
+    """
+    resp_tel = (str(row.get("responsavel_financeiro_telefone") or "").strip()) or row.get("telefone")
+    resp_cpf = "".join(filter(str.isdigit, str(row.get("responsavel_financeiro_cpf") or "")))
+    if resp_cpf:
+        resp_nome = (str(row.get("responsavel_financeiro_nome") or "").strip()) or row.get("nome")
+        return resp_nome, resp_cpf, resp_tel
+    aluno_cpf = "".join(filter(str.isdigit, str(row.get("cpf") or "")))
+    return row.get("nome"), aluno_cpf, resp_tel
+
+
+def _endereco_aluno(row):
+    """Monta o endereço do aluno no formato esperado pela InfinitePay (objeto address).
+
+    `city`/`state` são ignorados pela InfinitePay, mas o boleto registrado do Cora
+    exige o endereço completo — por isso vão sempre no dict.
+    """
+    return {
+        "cep": row.get("cep"),
+        "street": row.get("rua"),
+        "neighborhood": row.get("bairro"),
+        "number": row.get("numero"),
+        "complement": row.get("complemento"),
+        "city": row.get("cidade"),
+        "state": row.get("estado"),
+    }
+
+
 def _emitir_cobranca_online(cfg, tipo, *, nome, cpf, email, telefone, valor, vencimento,
-                            descricao, origem, registro_id):
+                            descricao, origem, registro_id, endereco=None):
     """Cria a cobrança no gateway ATIVO da academia. Retorna dict normalizado:
     {gateway, payment_id, tipo, boleto_url, pix_qrcode, pix_copia_cola}.
-    Para InfinitePay, tipo='LINK' e boleto_url contém o link de checkout."""
+    Para InfinitePay, tipo='LINK' e boleto_url contém o link de checkout.
+    endereco (dict): pré-preenche o endereço no checkout InfinitePay (mesmo do aluno)."""
     gw = _gateway_ativo(cfg)
     ext = f"{origem}-{registro_id}"
     if gw == "asaas":
@@ -1575,7 +1956,69 @@ def _emitir_cobranca_online(cfg, tipo, *, nome, cpf, email, telefone, valor, ven
             webhook_url = None
         r = InfinitePayClient(cfg.get("infinitepay_handle")).criar_link(
             valor, descricao, order_nsu=ext, webhook_url=webhook_url,
+            nome=nome, email=email, telefone=telefone, endereco=endereco,
         )
+        # QR Code do link de checkout (InfinitePay não devolve QR PIX próprio)
+        try:
+            from utils.qrcode_util import gerar_qr_base64
+            r["pix_qrcode"] = gerar_qr_base64(r.get("boleto_url"))
+        except Exception:
+            pass
+    elif gw == "efi":
+        # EFÍ (API Pix): gera sempre cobrança Pix (QR + copia e cola).
+        from utils.efi import EfiClient
+        cli = EfiClient(
+            cfg.get("efi_client_id"), cfg.get("efi_client_secret"),
+            cfg.get("efi_certificate"), cfg.get("efi_pix_key"), cfg.get("efi_ambiente"),
+        )
+        r = cli.criar_cobranca_pix(
+            valor, nome=nome, cpf=cpf, descricao=descricao, external_reference=ext,
+        )
+    elif gw == "cora":
+        # Cora: boleto registrado que já vem com QR Code PIX — o pagador escolhe.
+        r = _cora_client(cfg).criar_cobranca(
+            tipo, valor, vencimento, nome, cpf, email=email, telefone=telefone,
+            descricao=descricao, external_reference=ext, endereco=endereco,
+        )
+    elif gw == "sumup":
+        # SumUp: cria um checkout e hospeda o widget de pagamento numa página nossa.
+        # O "link" enviado ao pagador é a nossa página /pagamento/sumup/<checkout_id>,
+        # onde ele paga com cartão (e PIX/boleto se habilitados na conta SumUp).
+        import uuid as _uuid
+        cli = _sumup_client(cfg)
+        try:
+            return_url = url_for("financeiro.webhook_sumup", _external=True)
+        except Exception:
+            return_url = None
+        try:
+            redirect_url = url_for("financeiro.sumup_retorno", ref=ext, _external=True)
+        except Exception:
+            redirect_url = None
+        # A SumUp exige checkout_reference único; sufixo evita colisão na regeração.
+        # A resolução (status/webhook) é por checkout_id, não pela referência.
+        ref_sumup = f"{ext}-{_uuid.uuid4().hex[:8]}"
+        chk = cli.criar_checkout(
+            valor, descricao, ref_sumup,
+            return_url=return_url, redirect_url=redirect_url, email=email,
+        )
+        checkout_id = chk.get("id")
+        try:
+            pagina = url_for("financeiro.sumup_pagamento", checkout_id=checkout_id, _external=True)
+        except Exception:
+            pagina = None
+        r = {
+            "payment_id": str(checkout_id),
+            "tipo": "LINK",
+            "boleto_url": pagina,
+            "pix_qrcode": None,
+            "pix_copia_cola": None,
+        }
+        # QR Code do link da página de pagamento (a SumUp não devolve QR próprio aqui)
+        try:
+            from utils.qrcode_util import gerar_qr_base64
+            r["pix_qrcode"] = gerar_qr_base64(pagina)
+        except Exception:
+            pass
     else:
         raise RuntimeError("Nenhum gateway de cobrança online configurado para esta academia.")
     r["gateway"] = gw
@@ -1635,7 +2078,10 @@ def gerar_cobranca_asaas(ma_id):
     try:
         cur.execute(
             """SELECT ma.id, ma.valor, ma.data_vencimento,
-                      a.nome, a.cpf, a.email, a.telefone, a.id_academia
+                      a.nome, a.cpf, a.email, a.telefone, a.id_academia,
+                      a.responsavel_financeiro_nome, a.responsavel_financeiro_cpf,
+                      a.responsavel_financeiro_telefone,
+                      a.cep, a.rua, a.numero, a.complemento, a.bairro, a.cidade, a.estado
                FROM mensalidade_aluno ma
                JOIN alunos a ON a.id = ma.aluno_id
                WHERE ma.id = %s""",
@@ -1654,10 +2100,12 @@ def gerar_cobranca_asaas(ma_id):
                   "Ative em Configurações da academia → Financeiro.", "warning")
             return redirect(destino)
 
+        pag_nome, pag_cpf, pag_tel = _dados_pagador(ma)
         r = _emitir_cobranca_online(
-            cfg, tipo, nome=ma["nome"], cpf=ma["cpf"], email=ma.get("email"),
-            telefone=ma.get("telefone"), valor=ma["valor"], vencimento=ma["data_vencimento"],
+            cfg, tipo, nome=pag_nome, cpf=pag_cpf, email=ma.get("email"),
+            telefone=pag_tel, valor=ma["valor"], vencimento=ma["data_vencimento"],
             descricao=f"Mensalidade - {ma['nome']}", origem="mensalidade", registro_id=ma_id,
+            endereco=_endereco_aluno(ma),
         )
         cur.execute(
             """UPDATE mensalidade_aluno
@@ -1691,7 +2139,10 @@ def gerar_cobranca_asaas_avulsa(av_id):
     try:
         cur.execute(
             """SELECT ca.id, ca.valor, ca.data_vencimento, ca.descricao,
-                      a.nome, a.cpf, a.email, a.telefone, ca.id_academia
+                      a.nome, a.cpf, a.email, a.telefone, ca.id_academia,
+                      a.responsavel_financeiro_nome, a.responsavel_financeiro_cpf,
+                      a.responsavel_financeiro_telefone,
+                      a.cep, a.rua, a.numero, a.complemento, a.bairro, a.cidade, a.estado
                FROM cobranca_avulsa ca
                JOIN alunos a ON a.id = ca.aluno_id
                WHERE ca.id = %s""",
@@ -1711,10 +2162,12 @@ def gerar_cobranca_asaas_avulsa(av_id):
             return redirect(destino)
 
         descricao = (ca.get("descricao") or "Cobrança avulsa") + f" - {ca['nome']}"
+        pag_nome, pag_cpf, pag_tel = _dados_pagador(ca)
         r = _emitir_cobranca_online(
-            cfg, tipo, nome=ca["nome"], cpf=ca["cpf"], email=ca.get("email"),
-            telefone=ca.get("telefone"), valor=ca["valor"], vencimento=ca["data_vencimento"],
+            cfg, tipo, nome=pag_nome, cpf=pag_cpf, email=ca.get("email"),
+            telefone=pag_tel, valor=ca["valor"], vencimento=ca["data_vencimento"],
             descricao=descricao, origem="avulsa", registro_id=av_id,
+            endereco=_endereco_aluno(ca),
         )
         cur.execute(
             """UPDATE cobranca_avulsa
@@ -1729,6 +2182,377 @@ def gerar_cobranca_asaas_avulsa(av_id):
         conn.rollback()
         current_app.logger.error(f"Erro ao gerar cobrança online (avulsa {av_id}): {e}", exc_info=True)
         flash(f"Erro ao gerar cobrança online: {e}", "danger")
+    finally:
+        conn.close()
+    return redirect(destino)
+
+
+# =====================================================================
+# 🔁 ASSINATURA RECORRENTE (cobrança automática no cartão)
+# =====================================================================
+def _emitir_assinatura_recorrente(cfg, gw, *, nome, cpf, email, telefone, valor,
+                                  descricao, external_reference, academia_id, metodo="cartao"):
+    """Cria a assinatura recorrente no gateway ativo. Retorna {subscription_id, url}.
+    metodo: 'cartao' (débito automático no cartão) ou 'pix' (PIX recorrente).
+    Suportado por Asaas (link recorrente, cartão ou PIX) e Mercado Pago (cartão)."""
+    metodo = "pix" if str(metodo).lower() == "pix" else "cartao"
+    if gw == "asaas":
+        from utils.asaas import AsaasClient
+        cli = AsaasClient(cfg.get("asaas_api_key"), cfg.get("asaas_ambiente"))
+        return cli.criar_assinatura_recorrente(
+            valor, descricao, external_reference=external_reference, nome=nome, metodo=metodo,
+        )
+    if gw == "mercadopago":
+        if metodo == "pix":
+            raise RuntimeError("O Mercado Pago não oferece PIX recorrente por aqui — use cartão, "
+                               "ou selecione o Asaas para PIX recorrente.")
+        from utils.mercadopago import MercadoPagoClient
+        try:
+            back_url = url_for("financeiro.mensalidades_alunos", academia_id=academia_id, _external=True)
+        except Exception:
+            back_url = url_for("painel.home", _external=True)
+        return MercadoPagoClient(cfg.get("mercadopago_access_token")).criar_assinatura_recorrente(
+            valor, descricao, payer_email=email, back_url=back_url, external_reference=external_reference,
+        )
+    if gw == "sumup":
+        if metodo == "pix":
+            raise RuntimeError("A SumUp não oferece PIX recorrente — use cartão, ou selecione o Asaas para PIX recorrente.")
+        # SumUp: recorrência por CARTÃO SALVO. Criamos um cliente e um checkout de
+        # 'setup' (tokeniza o cartão + cobra a 1ª mensalidade). Nas mensalidades
+        # seguintes cobramos server-side com o token (ver _cobrar_sumup_recorrentes).
+        import uuid as _uuid
+        cli = _sumup_client(cfg)
+        customer_id = str(external_reference)  # ex.: 'assinatura-<aluno_id>' — id estável do pagador
+        cli.criar_ou_obter_cliente(customer_id, nome=nome, email=email, telefone=telefone)
+        try:
+            return_url = url_for("financeiro.webhook_sumup", _external=True)
+        except Exception:
+            return_url = None
+        try:
+            redirect_url = url_for("financeiro.sumup_retorno", _external=True)
+        except Exception:
+            redirect_url = None
+        # checkout_reference único (a SumUp recusa repetido); o customer_id é que fica estável.
+        chk = cli.criar_checkout(
+            valor, descricao, f"{external_reference}-{_uuid.uuid4().hex[:8]}",
+            return_url=return_url, redirect_url=redirect_url, email=email,
+            customer_id=customer_id, purpose="SETUP_RECURRING_PAYMENT",
+        )
+        checkout_id = chk.get("id")
+        try:
+            pagina = url_for("financeiro.sumup_pagamento", checkout_id=checkout_id, _external=True)
+        except Exception:
+            pagina = None
+        return {"subscription_id": customer_id, "url": pagina, "checkout_id": checkout_id}
+    raise RuntimeError("A assinatura recorrente está disponível apenas com Asaas, Mercado Pago ou SumUp.")
+
+
+def _baixar_mensalidade_recorrente(aluno_id, valor_pago, gateway_nome):
+    """Baixa automática de uma cobrança recorrente: marca como paga a mensalidade
+    em aberto mais antiga do aluno (pendente/atrasado) e lança a receita."""
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        # Marca a assinatura do aluno como ATIVA (pagamento recorrente confirmado)
+        cur.execute(
+            "UPDATE assinaturas_recorrentes SET status='ativa' WHERE aluno_id=%s AND status<>'cancelada'",
+            (aluno_id,),
+        )
+        conn.commit()
+        cur.execute(
+            """SELECT ma.id, ma.valor, a.id_academia
+               FROM mensalidade_aluno ma JOIN alunos a ON a.id = ma.aluno_id
+               WHERE ma.aluno_id = %s AND ma.status IN ('pendente','atrasado')
+               ORDER BY ma.data_vencimento ASC, ma.id ASC LIMIT 1""",
+            (aluno_id,),
+        )
+        rec = cur.fetchone()
+        if not rec:
+            current_app.logger.info(f"Recorrência {gateway_nome}: aluno {aluno_id} sem mensalidade em aberto para baixar.")
+            return
+    finally:
+        conn.close()
+    _baixar_cobranca_paga("mensalidade", rec["id"], valor_pago, f"{gateway_nome} recorrente")
+
+
+def _cobrar_sumup_recorrentes(academia_id):
+    """Dispara a cobrança mensal das assinaturas SumUp ATIVAS da academia (cartão salvo).
+    Diferente de Asaas/Mercado Pago (débito automático pelo gateway), a SumUp exige que
+    NÓS iniciemos a cobrança do cartão tokenizado. Para cada assinatura ativa com uma
+    mensalidade em aberto, cobra e, se aprovada, dá baixa. Best-effort (logado)."""
+    cfg = _gateway_config_academia(academia_id) or {}
+    if not (_gateway_tem_recorrencia(cfg, "sumup")):
+        return 0
+    cli = _sumup_client(cfg)
+    if not cli:
+        return 0
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    cobradas = 0
+    try:
+        cur.execute(
+            """SELECT s.aluno_id, s.subscription_id, s.valor
+               FROM assinaturas_recorrentes s
+               WHERE s.gateway='sumup' AND s.status='ativa' AND s.id_academia=%s""",
+            (academia_id,),
+        )
+        assinaturas = cur.fetchall()
+        for s in assinaturas:
+            # Mensalidade em aberto mais antiga do aluno
+            cur.execute(
+                """SELECT ma.id, ma.valor FROM mensalidade_aluno ma
+                   WHERE ma.aluno_id=%s AND ma.status IN ('pendente','atrasado')
+                   ORDER BY ma.data_vencimento ASC, ma.id ASC LIMIT 1""",
+                (s["aluno_id"],),
+            )
+            ma = cur.fetchone()
+            if not ma:
+                continue
+            valor = float(ma.get("valor") or s.get("valor") or 0)
+            if valor <= 0:
+                continue
+            try:
+                res = cli.cobrar_recorrente(
+                    s["subscription_id"], valor, "Mensalidade (recorrente)",
+                    f"assinatura-{s['aluno_id']}",
+                )
+                if str(res.get("status") or "").upper() == "PAID":
+                    _baixar_mensalidade_recorrente(s["aluno_id"], valor, "SumUp")
+                    cobradas += 1
+            except Exception as e:
+                current_app.logger.error(f"SumUp recorrente aluno {s['aluno_id']}: {e}")
+    finally:
+        conn.close()
+    return cobradas
+
+
+@bp_financeiro.route("/aluno/<int:aluno_id>/assinatura-recorrente", methods=["POST"])
+@login_required
+def criar_assinatura_recorrente(aluno_id):
+    """Cria (ou regenera) o link de assinatura recorrente no cartão para um aluno."""
+    academia_id = _get_academia_id()
+    destino = request.referrer or url_for("financeiro.mensalidades_alunos", academia_id=academia_id)
+    _valor_raw = (request.form.get("valor") or "").strip().replace(".", "").replace(",", ".") \
+        if ("," in (request.form.get("valor") or "")) else (request.form.get("valor") or "").strip()
+    try:
+        valor = float(_valor_raw) if _valor_raw else None
+    except (TypeError, ValueError):
+        valor = None
+    metodo = "pix" if (request.form.get("metodo") or "cartao").strip().lower() == "pix" else "cartao"
+    gateway_escolhido = (request.form.get("gateway") or "").strip().lower()
+    # Campo combinado "gateway:metodo" (ex.: "asaas:pix"), se enviado
+    _opcao = (request.form.get("opcao_recorrencia") or "").strip().lower()
+    if ":" in _opcao:
+        _g, _m = _opcao.split(":", 1)
+        gateway_escolhido = _g
+        metodo = "pix" if _m == "pix" else "cartao"
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute(
+            """SELECT a.id, a.nome, a.cpf, a.email, a.telefone, a.id_academia,
+                      a.responsavel_financeiro_nome, a.responsavel_financeiro_cpf,
+                      a.responsavel_financeiro_telefone
+               FROM alunos a WHERE a.id = %s""",
+            (aluno_id,),
+        )
+        al = cur.fetchone()
+        if not al:
+            flash("Aluno não encontrado.", "danger")
+            return redirect(destino)
+        if academia_id and al["id_academia"] != academia_id and not current_user.has_role("admin"):
+            flash("Sem permissão para este aluno.", "danger")
+            return redirect(destino)
+
+        cfg = _gateway_config_academia(al["id_academia"])
+        # Usa o gateway escolhido (se tiver credencial); senão, o padrão de recorrência
+        if gateway_escolhido in ("asaas", "mercadopago", "sumup") and _gateway_tem_recorrencia(cfg, gateway_escolhido):
+            gw = gateway_escolhido
+        else:
+            gw = _gateway_recorrencia(cfg)
+        if gw not in ("asaas", "mercadopago", "sumup"):
+            flash("A mensalidade recorrente exige Asaas, Mercado Pago ou SumUp configurado. "
+                  "Informe as credenciais em Configurações da academia → Financeiro.", "warning")
+            return redirect(destino)
+        if gw == "sumup" and metodo == "pix":
+            flash("A SumUp não oferece PIX recorrente — use cartão, ou selecione o Asaas para PIX recorrente.", "warning")
+            return redirect(destino)
+
+        if not valor or valor < 5:
+            flash("Informe um valor válido para a recorrência (mínimo R$ 5,00).", "warning")
+            return redirect(destino)
+
+        if gw == "mercadopago" and metodo == "pix":
+            flash("PIX recorrente não está disponível no Mercado Pago. Use cartão, ou selecione o Asaas para PIX recorrente.", "warning")
+            return redirect(destino)
+
+        pag_nome, pag_cpf, pag_tel = _dados_pagador(al)
+        if gw == "mercadopago" and not (al.get("email") or "").strip():
+            flash("Para assinatura no Mercado Pago é necessário o e-mail do aluno. Cadastre o e-mail e tente novamente.", "warning")
+            return redirect(destino)
+
+        ext = f"assinatura-{aluno_id}"
+        res = _emitir_assinatura_recorrente(
+            cfg, gw, nome=pag_nome, cpf=pag_cpf, email=al.get("email"), telefone=pag_tel,
+            valor=valor, descricao=f"Mensalidade - {al['nome']}",
+            external_reference=ext, academia_id=al["id_academia"], metodo=metodo,
+        )
+
+        cur.execute(
+            "SELECT id FROM assinaturas_recorrentes WHERE aluno_id=%s AND gateway=%s LIMIT 1",
+            (aluno_id, gw),
+        )
+        ex = cur.fetchone()
+        if ex:
+            cur.execute(
+                """UPDATE assinaturas_recorrentes
+                   SET subscription_id=%s, checkout_url=%s, valor=%s, metodo=%s, status='pendente',
+                       id_academia=%s, sumup_setup_checkout_id=%s
+                   WHERE id=%s""",
+                (res["subscription_id"], res["url"], valor, metodo, al["id_academia"],
+                 res.get("checkout_id"), ex["id"]),
+            )
+            assinatura_id = ex["id"]
+        else:
+            cur.execute(
+                """INSERT INTO assinaturas_recorrentes
+                   (aluno_id, id_academia, gateway, metodo, subscription_id, checkout_url, valor, status, sumup_setup_checkout_id)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s,'pendente',%s)""",
+                (aluno_id, al["id_academia"], gw, metodo, res["subscription_id"], res["url"], valor,
+                 res.get("checkout_id")),
+            )
+            assinatura_id = cur.lastrowid
+        conn.commit()
+        return redirect(url_for("financeiro.assinatura_recorrente_link", assinatura_id=assinatura_id))
+    except Exception as e:
+        conn.rollback()
+        current_app.logger.error(f"Erro ao criar assinatura recorrente (aluno {aluno_id}): {e}", exc_info=True)
+        _msg = str(e)
+        if "invalid_access_token" in _msg or "chave de API" in _msg.lower() or "access_token" in _msg.lower():
+            flash("Credenciais inválidas no gateway de recorrência. Verifique a chave de API do Asaas "
+                  "(ou o Access Token do Mercado Pago) e o ambiente (Sandbox/Produção) em "
+                  "Configurações da academia → Financeiro.", "danger")
+        else:
+            flash(f"Erro ao criar assinatura recorrente: {e}", "danger")
+        return redirect(destino)
+    finally:
+        conn.close()
+
+
+@bp_financeiro.route("/assinatura-recorrente/<int:assinatura_id>")
+@login_required
+def assinatura_recorrente_link(assinatura_id):
+    """Mostra o link (e QR) da assinatura recorrente para enviar ao aluno."""
+    academia_id = _get_academia_id()
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute(
+            """SELECT s.*, a.nome AS aluno_nome, a.id_academia
+               FROM assinaturas_recorrentes s JOIN alunos a ON a.id = s.aluno_id
+               WHERE s.id = %s""",
+            (assinatura_id,),
+        )
+        s = cur.fetchone()
+    finally:
+        conn.close()
+    if not s:
+        flash("Assinatura não encontrada.", "danger")
+        return redirect(url_for("financeiro.mensalidades_alunos", academia_id=academia_id))
+    if academia_id and s["id_academia"] != academia_id and not current_user.has_role("admin"):
+        flash("Sem permissão.", "danger")
+        return redirect(url_for("financeiro.mensalidades_alunos", academia_id=academia_id))
+    from utils.qrcode_util import gerar_qr_base64
+    qr = gerar_qr_base64(s.get("checkout_url"))
+    back_url = request.referrer or url_for("financeiro.mensalidades_alunos", academia_id=academia_id)
+    return render_template("financeiro/assinatura_link.html", s=s, qr=qr, back_url=back_url)
+
+
+@bp_financeiro.route("/assinaturas-recorrentes")
+@login_required
+def assinaturas_recorrentes():
+    """Lista todas as assinaturas recorrentes da academia, classificadas por forma de pagamento."""
+    academia_id = _get_academia_id()
+    filtro = (request.args.get("forma") or "").strip().lower()  # cartao | pix | ''
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        params = []
+        where = "1=1"
+        if academia_id:
+            where += " AND s.id_academia = %s"
+            params.append(academia_id)
+        if filtro in ("cartao", "pix"):
+            where += " AND s.metodo = %s"
+            params.append(filtro)
+        cur.execute(
+            f"""SELECT s.*, a.nome AS aluno_nome, ac.nome AS academia_nome
+                FROM assinaturas_recorrentes s
+                JOIN alunos a ON a.id = s.aluno_id
+                LEFT JOIN academias ac ON ac.id = s.id_academia
+                WHERE {where}
+                ORDER BY (s.status='ativa') DESC, s.criado_em DESC""",
+            tuple(params),
+        )
+        assinaturas = cur.fetchall()
+        # Resumo por forma
+        resumo = {"cartao": 0, "pix": 0, "ativas": 0, "pendentes": 0, "canceladas": 0}
+        for s in assinaturas:
+            if (s.get("metodo") or "cartao") == "pix":
+                resumo["pix"] += 1
+            else:
+                resumo["cartao"] += 1
+            st = s.get("status") or "pendente"
+            resumo["ativas" if st == "ativa" else ("canceladas" if st == "cancelada" else "pendentes")] += 1
+    finally:
+        conn.close()
+    return render_template(
+        "financeiro/assinaturas_recorrentes.html",
+        assinaturas=assinaturas, resumo=resumo, academia_id=academia_id, filtro=filtro,
+    )
+
+
+@bp_financeiro.route("/assinatura-recorrente/<int:assinatura_id>/cancelar", methods=["POST"])
+@login_required
+def cancelar_assinatura_recorrente(assinatura_id):
+    """Cancela uma assinatura recorrente (marca como cancelada e tenta cancelar no gateway)."""
+    academia_id = _get_academia_id()
+    destino = request.referrer or url_for("financeiro.assinaturas_recorrentes", academia_id=academia_id)
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute("SELECT * FROM assinaturas_recorrentes WHERE id = %s", (assinatura_id,))
+        s = cur.fetchone()
+        if not s:
+            flash("Assinatura não encontrada.", "danger")
+            return redirect(destino)
+        if academia_id and s["id_academia"] != academia_id and not current_user.has_role("admin"):
+            flash("Sem permissão.", "danger")
+            return redirect(destino)
+        # Best-effort: cancelar no gateway
+        try:
+            cfg = _gateway_config_academia(s["id_academia"])
+            if s["gateway"] == "asaas" and s.get("subscription_id"):
+                from utils.asaas import AsaasClient
+                _cli = AsaasClient(cfg.get("asaas_api_key"), cfg.get("asaas_ambiente"))
+                import requests as _rq
+                _rq.delete(f"{_cli._base_url()}/paymentLinks/{s['subscription_id']}", headers=_cli._headers(), timeout=20)
+            elif s["gateway"] == "mercadopago" and s.get("subscription_id"):
+                import requests as _rq
+                _rq.put(
+                    f"https://api.mercadopago.com/preapproval/{s['subscription_id']}",
+                    headers={"Authorization": f"Bearer {cfg.get('mercadopago_access_token')}", "Content-Type": "application/json"},
+                    json={"status": "cancelled"}, timeout=20,
+                )
+        except Exception as e:
+            current_app.logger.error(f"Cancelar assinatura {assinatura_id} no gateway falhou: {e}")
+        cur.execute("UPDATE assinaturas_recorrentes SET status='cancelada' WHERE id=%s", (assinatura_id,))
+        conn.commit()
+        flash("Assinatura recorrente cancelada.", "success")
+    except Exception as e:
+        conn.rollback()
+        current_app.logger.error(f"Erro ao cancelar assinatura {assinatura_id}: {e}", exc_info=True)
+        flash("Erro ao cancelar a assinatura.", "danger")
     finally:
         conn.close()
     return redirect(destino)
@@ -1770,6 +2594,19 @@ def webhook_asaas():
                     (payment_id,),
                 )
                 rec = cur.fetchone()
+            # Pagamento de uma ASSINATURA RECORRENTE (não está em mensalidade/avulsa).
+            if not rec:
+                _ext = str(pay.get("externalReference") or "")
+                if _ext.startswith("assinatura-") and _ext.split("-", 1)[1].isdigit():
+                    conn.close()
+                    _baixar_mensalidade_recorrente(int(_ext.split("-", 1)[1]), pay.get("value"), "Asaas")
+                    return jsonify({"ok": True})
+                # Matrícula (pré-cadastro) — localiza pelo payment_id armazenado
+                cur.execute("SELECT id FROM pre_cadastro WHERE matricula_payment_id=%s LIMIT 1", (str(payment_id),))
+                if cur.fetchone():
+                    conn.close()
+                    _baixar_matricula_paga(payment_id=payment_id)
+                    return jsonify({"ok": True})
             # Validação opcional de segurança por academia: se a academia definiu um
             # token de webhook, o header enviado pelo Asaas precisa coincidir.
             _wh_token = ((rec or {}).get("asaas_webhook_token") or "").strip()
@@ -1794,6 +2631,15 @@ def webhook_asaas():
                         (valor_pago, rec["id"]),
                     )
                 conn.commit()
+                # Confirmação de pagamento no WhatsApp (mensalidade ou avulsa, paga online)
+                try:
+                    from utils.whatsapp_lembretes import enviar_confirmacao_pagamento
+                    enviar_confirmacao_pagamento(
+                        rec["id"],
+                        "mensalidade_aluno" if rec["origem"] == "mensalidade" else "cobranca_avulsa",
+                    )
+                except Exception:
+                    pass
                 # 2) Lançamento da receita — falha aqui não desfaz a baixa.
                 try:
                     if rec["origem"] == "mensalidade":
@@ -1858,6 +2704,12 @@ def _baixar_cobranca_paga(origem, registro_id, valor_pago, gateway_nome):
                 (vp, rec["id"]),
             )
         conn.commit()
+        # Confirmação de pagamento no WhatsApp (mensalidade ou avulsa, paga online)
+        try:
+            from utils.whatsapp_lembretes import enviar_confirmacao_pagamento
+            enviar_confirmacao_pagamento(rec["id"], "mensalidade_aluno" if origem == "mensalidade" else "cobranca_avulsa")
+        except Exception:
+            pass
         try:
             if origem == "mensalidade":
                 cur.execute(
@@ -1908,6 +2760,29 @@ def _achar_cobranca_por_payment_id(payment_id, gateway):
         conn.close()
 
 
+def _baixar_matricula_paga(*, precad_id=None, payment_id=None):
+    """Marca a matrícula (pré-cadastro) como paga. Localiza por id direto ou pelo
+    payment_id/txid armazenado em pre_cadastro.matricula_payment_id."""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        if precad_id:
+            cur.execute("UPDATE pre_cadastro SET matricula_status='pago' WHERE id=%s", (precad_id,))
+        elif payment_id:
+            cur.execute(
+                "UPDATE pre_cadastro SET matricula_status='pago' WHERE matricula_payment_id=%s",
+                (str(payment_id),),
+            )
+        conn.commit()
+        return cur.rowcount > 0
+    except Exception as e:
+        conn.rollback()
+        current_app.logger.error(f"Baixa matrícula falhou: {e}")
+        return False
+    finally:
+        conn.close()
+
+
 @bp_financeiro.route("/webhook/mercadopago", methods=["POST", "GET"])
 @csrf.exempt
 def webhook_mercadopago():
@@ -1926,6 +2801,8 @@ def webhook_mercadopago():
     try:
         origem, rid, id_acad = _achar_cobranca_por_payment_id(payment_id, "mercadopago")
         if not origem:
+            # Pode ser um pagamento de ASSINATURA RECORRENTE (não armazenado por nós).
+            _mp_tentar_baixa_recorrente(payment_id)
             return jsonify({"ok": True})
         cfg = _gateway_config_academia(id_acad)
         from utils.mercadopago import MercadoPagoClient
@@ -1937,6 +2814,48 @@ def webhook_mercadopago():
     return jsonify({"ok": True})
 
 
+def _mp_tentar_baixa_recorrente(payment_id):
+    """Tenta baixar um pagamento recorrente do Mercado Pago. Como o webhook não diz
+    a academia, tentamos os tokens das academias que têm assinatura MP até achar o
+    pagamento; ao localizar com external_reference 'assinatura-<aluno_id>' aprovado,
+    dá baixa na mensalidade em aberto do aluno. Best-effort."""
+    import requests as _rq
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute(
+            """SELECT DISTINCT ac.id, ac.mercadopago_access_token AS token
+               FROM assinaturas_recorrentes s JOIN academias ac ON ac.id = s.id_academia
+               WHERE s.gateway='mercadopago'
+                 AND ac.mercadopago_access_token IS NOT NULL AND ac.mercadopago_access_token <> ''"""
+        )
+        contas = cur.fetchall()
+    finally:
+        conn.close()
+    for c in contas:
+        try:
+            r = _rq.get(
+                f"{ 'https://api.mercadopago.com' }/v1/payments/{payment_id}",
+                headers={"Authorization": f"Bearer {c['token']}"}, timeout=20,
+            )
+            if not r.ok:
+                continue
+            j = r.json() or {}
+            ext = str(j.get("external_reference") or "")
+            aprovado = j.get("status") in ("approved", "authorized")
+            if ext.startswith("assinatura-") and ext.split("-", 1)[1].isdigit():
+                if aprovado:
+                    _baixar_mensalidade_recorrente(int(ext.split("-", 1)[1]), j.get("transaction_amount"), "Mercado Pago")
+                return True
+            if ext.startswith("precadastro-") and ext.split("-", 1)[1].isdigit():
+                if aprovado:
+                    _baixar_matricula_paga(precad_id=int(ext.split("-", 1)[1]))
+                return True
+        except Exception:
+            continue
+    return False
+
+
 @bp_financeiro.route("/webhook/infinitepay", methods=["POST"])
 @csrf.exempt
 def webhook_infinitepay():
@@ -1946,7 +2865,7 @@ def webhook_infinitepay():
     if not order_nsu or "-" not in str(order_nsu):
         return jsonify({"ok": True})
     origem, _, rid = str(order_nsu).rpartition("-")
-    if origem not in ("mensalidade", "avulsa") or not rid.isdigit():
+    if origem not in ("mensalidade", "avulsa", "precadastro") or not rid.isdigit():
         return jsonify({"ok": True})
     valor_pago = None
     try:
@@ -1956,10 +2875,636 @@ def webhook_infinitepay():
     except Exception:
         valor_pago = None
     try:
-        _baixar_cobranca_paga(origem, int(rid), valor_pago, "InfinitePay")
+        if origem == "precadastro":
+            _baixar_matricula_paga(precad_id=int(rid))
+        else:
+            _baixar_cobranca_paga(origem, int(rid), valor_pago, "InfinitePay")
     except Exception as e:
         current_app.logger.error(f"Webhook InfinitePay erro: {e}", exc_info=True)
     return jsonify({"ok": True})
+
+
+@bp_financeiro.route("/webhook/cora", methods=["POST"])
+@csrf.exempt
+def webhook_cora():
+    """Recebe a notificação do Cora (boleto/PIX pago) e dá baixa na cobrança.
+
+    O Cora notifica SEM corpo — tudo vem em cabeçalhos (verificado em stage):
+        Webhook-Event-Type : invoice.PAID
+        Webhook-Resource-Id: inv_...
+        Webhook-Event-Id   : evt_...
+    Nem `includeResource` nem `expandable` no cadastro mudam isso. Por isso o
+    pagamento é confirmado consultando a invoice na API com as credenciais da
+    academia dona da cobrança — o que, de quebra, torna inofensivo um POST
+    forjado, já que nada do que chega no request é tomado como verdade.
+
+    A URL precisa estar cadastrada na conta do Cora (POST /endpoints/, resource
+    'invoice', trigger 'paid') pelo botão da tela de configurações, que chama
+    `cora_registrar_webhook` — e o cadastro vale por ambiente.
+
+    Mesmo assim ainda lemos um corpo JSON quando ele vier: se o Cora passar a
+    enviar o recurso, a resolução pelo `code` continua funcionando.
+    """
+    data = request.get_json(silent=True) or request.form.to_dict() or {}
+    if isinstance(data, list):
+        data = next((x for x in data if isinstance(x, dict)), {})
+    entidade = _cora_extrair_invoice(data)
+
+    evento = str(request.headers.get("Webhook-Event-Type")
+                 or data.get("trigger") or data.get("event") or data.get("type") or "").lower()
+    status = str(entidade.get("status") or data.get("status") or "").upper()
+    invoice_id = str(request.headers.get("Webhook-Resource-Id")
+                     or entidade.get("id") or data.get("id") or "").strip()
+
+    # Só interessa o pagamento efetivado.
+    if "paid" not in evento and status not in ("PAID", "IN_PAYMENT", "SETTLED"):
+        # Só cadastramos invoice.paid, então um evento não classificado é anômalo.
+        current_app.logger.warning(
+            "Webhook Cora ignorado (não é pagamento): evento=%r status=%r invoice=%r",
+            evento or None, status or None, invoice_id or None,
+        )
+        return jsonify({"ok": True})
+
+    if not invoice_id:
+        current_app.logger.warning("Webhook Cora sem id da invoice (evento=%r).", evento or None)
+        return jsonify({"ok": True})
+
+    origem, rid, id_academia = _cora_resolver_invoice(invoice_id)
+    inv, id_academia = _cora_confirmar_invoice(invoice_id, id_academia)
+    if inv is None:
+        current_app.logger.warning(
+            "Webhook Cora: invoice %s não confirmada em nenhuma academia com Cora configurado.",
+            invoice_id,
+        )
+        return jsonify({"ok": True})
+
+    status_api = str(inv.get("status") or "").upper()
+    if status_api not in ("PAID", "SETTLED"):
+        current_app.logger.warning(
+            "Webhook Cora: invoice %s notificada como paga, mas a API devolveu status=%r — sem baixa.",
+            invoice_id, status_api or None,
+        )
+        return jsonify({"ok": True})
+
+    valor_pago = None
+    try:
+        cents = inv.get("total_paid") or inv.get("total_amount")
+        if cents:
+            valor_pago = float(cents) / 100.0
+    except (TypeError, ValueError):
+        valor_pago = None
+
+    if origem is None:
+        # A cobrança não foi encontrada pelo id da invoice: usa a nossa
+        # referência ('origem-id'), gravada no `code` na emissão.
+        origem, rid = _cora_referencia_do_code(str(inv.get("code") or ""))
+
+    if origem is None:
+        current_app.logger.warning(
+            "Webhook Cora sem referência resolvível: invoice=%s code=%r academia=%s",
+            invoice_id, inv.get("code"), id_academia,
+        )
+        return jsonify({"ok": True})
+
+    try:
+        if origem == "precadastro":
+            _baixar_matricula_paga(precad_id=rid)
+        else:
+            _baixar_cobranca_paga(origem, rid, valor_pago, "Cora")
+    except Exception as e:
+        current_app.logger.error(f"Webhook Cora erro: {e}", exc_info=True)
+    return jsonify({"ok": True})
+
+
+def _cora_referencia_do_code(code):
+    """Traduz o `code` da invoice ('mensalidade-12') em (origem, id)."""
+    code = str(code or "")
+    if "-" in code:
+        origem, _, rid = code.rpartition("-")
+        if origem in ("mensalidade", "avulsa", "precadastro") and rid.isdigit():
+            return origem, int(rid)
+    return None, None
+
+
+def _cora_resolver_invoice(invoice_id):
+    """(origem, registro_id, id_academia) da cobrança com esse id de invoice."""
+    origem, rid, id_acad = _achar_cobranca_por_payment_id(invoice_id, "cora")
+    if origem:
+        return origem, rid, id_acad
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute(
+            "SELECT id, academia_id FROM pre_cadastro WHERE matricula_payment_id=%s LIMIT 1",
+            (str(invoice_id),),
+        )
+        r = cur.fetchone()
+        if r:
+            return ("precadastro", r["id"], r["academia_id"])
+    except Exception:
+        pass
+    finally:
+        conn.close()
+    return (None, None, None)
+
+
+def _cora_academias_configuradas():
+    """Ids das academias com credenciais do Cora em qualquer ambiente.
+
+    A checagem do trio completo do ambiente ativo fica com `_cora_configurado`,
+    em quem consome esta lista.
+    """
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            """SELECT id FROM academias
+               WHERE COALESCE(cora_client_id,'')<>'' OR COALESCE(cora_client_id_prod,'')<>''"""
+        )
+        return [r[0] for r in cur.fetchall()]
+    except Exception:
+        return []
+    finally:
+        conn.close()
+
+
+def _cora_confirmar_invoice(invoice_id, id_academia=None):
+    """Consulta a invoice na API do Cora — a fonte de verdade do webhook.
+
+    Sabendo a academia, consulta só a dela; senão varre as academias com Cora
+    configurado até uma reconhecer o id (cada conta só enxerga as próprias
+    invoices). Devolve (dados, id_academia) ou (None, None).
+    """
+    ids = [id_academia] if id_academia else _cora_academias_configuradas()
+    for aid in ids:
+        cfg = _gateway_config_academia(aid)
+        if not _cora_configurado(cfg):
+            continue
+        try:
+            return _cora_client(cfg).consultar(invoice_id), aid
+        except Exception as e:
+            current_app.logger.info(
+                "Webhook Cora: invoice %s não é da academia %s (%s)", invoice_id, aid, e
+            )
+    return None, None
+
+
+def _cora_extrair_invoice(data):
+    """Acha o objeto da invoice dentro do payload do webhook do Cora.
+
+    O corpo do evento envelopa o recurso de um jeito que a documentação não
+    fixa (já apareceu solto e sob 'invoice'/'data'/'payload'/'entity'), então
+    procuramos em largura o primeiro dict que pareça uma invoice: id 'inv_…',
+    ou um 'code' junto de 'status'. Cai no próprio payload se não achar.
+    """
+    if not isinstance(data, dict):
+        return {}
+
+    def parece_invoice(d):
+        if not isinstance(d, dict):
+            return False
+        if str(d.get("id") or "").startswith("inv_"):
+            return True
+        return bool(d.get("code")) and bool(d.get("status"))
+
+    fila, visitados = [data], 0
+    while fila and visitados < 50:
+        atual = fila.pop(0)
+        visitados += 1
+        if parece_invoice(atual):
+            return atual
+        for v in atual.values():
+            if isinstance(v, dict):
+                fila.append(v)
+    return data
+
+
+def _base_publica_https():
+    """Base pública do sistema em https, sem barra no fim.
+
+    O Cora só aceita webhook em HTTPS. Como a app roda atrás do nginx sem
+    ProxyFix, `request.url_root` vem como http:// — por isso o esquema sai do
+    X-Forwarded-Proto (ou é forçado a https em qualquer host que não seja local).
+    """
+    from utils.links_curtos import base_url
+    base = (base_url() or "").rstrip("/")
+    if base.startswith("https://"):
+        return base
+    host = (request.host or "").split(":")[0].lower()
+    proto = (request.headers.get("X-Forwarded-Proto") or "").split(",")[0].strip().lower()
+    local = host in ("localhost", "127.0.0.1", "::1") or host.endswith(".local")
+    if base.startswith("http://") and (proto == "https" or not local):
+        return "https://" + base[len("http://"):]
+    return base
+
+
+@bp_financeiro.route("/cora/webhook/registrar", methods=["POST"])
+@login_required
+def cora_registrar_webhook():
+    """Cadastra o nosso endpoint de webhook na conta Cora da academia.
+
+    O Cora não tem tela para isso: o registro é programático (POST /endpoints/)
+    e vale só para o ambiente em que foi feito — stage e produção precisam de
+    cadastros separados. Trocar o ambiente da academia exige clicar de novo.
+    """
+    academia_id = request.form.get("academia_id", type=int) or _get_academia_id()
+    destino = url_for("academia.configuracoes_academia", academia_id=academia_id, _anchor="financeiro")
+    if not academia_id or academia_id not in _get_academias_ids():
+        flash("Selecione uma academia válida.", "warning")
+        return redirect(destino)
+
+    cfg = _gateway_config_academia(academia_id)
+    if not _cora_configurado(cfg):
+        _amb = "Produção" if _cora_ambiente(cfg) == "production" else "Stage"
+        flash(f"Informe o Client ID, o certificado e a chave privada do Cora no ambiente {_amb} "
+              "antes de registrar o webhook.", "warning")
+        return redirect(destino)
+
+    url_webhook = _base_publica_https() + url_for("financeiro.webhook_cora")
+    try:
+        res = _cora_client(cfg).sincronizar_webhooks(url_webhook)
+    except Exception as e:
+        current_app.logger.error(f"Cora registrar webhook (academia {academia_id}): {e}", exc_info=True)
+        flash(f"Não foi possível registrar o webhook no Cora: {e}", "danger")
+        return redirect(destino)
+
+    ambiente = "Stage (testes)" if res["ambiente"] == "stage" else "Produção"
+    partes = []
+    if res["criados"]:
+        partes.append("cadastrado(s): " + ", ".join(res["criados"]))
+    if res["atualizados"]:
+        partes.append("recadastrado(s): " + ", ".join(res["atualizados"]))
+    if res["existentes"]:
+        partes.append("já existia(m): " + ", ".join(res["existentes"]))
+    if res["erros"]:
+        flash(f"Webhook do Cora ({ambiente}) com pendências — " + " | ".join(res["erros"]), "danger")
+    if partes:
+        flash(f"Webhook {res['url']} no Cora ({ambiente}) — " + "; ".join(partes) + ".", "success")
+    elif not res["erros"]:
+        flash("Nenhum evento a registrar no Cora.", "info")
+    return redirect(destino)
+
+
+@bp_financeiro.route("/webhook/efi", methods=["POST"])
+@bp_financeiro.route("/webhook/efi/pix", methods=["POST"])
+@csrf.exempt
+def webhook_efi():
+    """Recebe a notificação Pix da EFÍ e dá baixa pelo txid da cobrança.
+    A EFÍ adiciona '/pix' ao final da URL do webhook — por isso aceitamos ambas as rotas."""
+    data = request.get_json(silent=True) or {}
+    pix_list = data.get("pix") or []
+    if not isinstance(pix_list, list):
+        return jsonify({"ok": True})
+    for p in pix_list:
+        try:
+            txid = p.get("txid")
+            if not txid:
+                continue
+            origem, rid, _ = _achar_cobranca_por_payment_id(txid, "efi")
+            valor_pago = None
+            try:
+                if p.get("valor"):
+                    valor_pago = float(p["valor"])
+            except (TypeError, ValueError):
+                valor_pago = None
+            if origem:
+                _baixar_cobranca_paga(origem, rid, valor_pago, "EFÍ")
+            elif not _baixar_matricula_paga(payment_id=txid):
+                pass  # txid não corresponde a cobrança nem matrícula conhecida
+        except Exception as e:
+            current_app.logger.error(f"Webhook EFÍ erro: {e}", exc_info=True)
+    return jsonify({"ok": True})
+
+
+# ============================================================
+# SumUp — página de pagamento hospedada (widget de cartão + PIX/boleto server-side)
+# ============================================================
+def _sumup_resolver_checkout(checkout_id):
+    """Localiza a cobrança/matrícula pelo checkout_id (armazenado em asaas_payment_id /
+    matricula_payment_id). Retorna (origem, registro_id, id_academia) ou (None, None, None)."""
+    origem, rid, id_acad = _achar_cobranca_por_payment_id(checkout_id, "sumup")
+    if origem:
+        return origem, rid, id_acad
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute(
+            "SELECT id, academia_id FROM pre_cadastro WHERE matricula_payment_id=%s LIMIT 1",
+            (str(checkout_id),),
+        )
+        r = cur.fetchone()
+        if r:
+            return ("precadastro", r["id"], r["academia_id"])
+    finally:
+        conn.close()
+    return (None, None, None)
+
+
+def _sumup_client_por_checkout(checkout_id):
+    """Retorna (SumUpClient, origem, rid, id_academia) para um checkout, ou (None,...)."""
+    origem, rid, id_acad = _sumup_resolver_checkout(checkout_id)
+    if not origem:
+        return (None, None, None, None)
+    cfg = _gateway_config_academia(id_acad) or {}
+    cli = _sumup_client(cfg)
+    return (cli, origem, rid, id_acad)
+
+
+def _sumup_dar_baixa(origem, rid, valor_pago=None):
+    """Dá baixa (pago) na cobrança/matrícula após confirmação de pagamento SumUp."""
+    if origem == "precadastro":
+        _baixar_matricula_paga(precad_id=int(rid))
+    else:
+        _baixar_cobranca_paga(origem, int(rid), valor_pago, "SumUp")
+
+
+@bp_financeiro.route("/pagamento/sumup/<checkout_id>", methods=["GET"])
+def sumup_pagamento(checkout_id):
+    """Página pública de pagamento SumUp: mostra o widget de cartão e as opções de
+    PIX/boleto (se habilitadas na conta). Não exige login (o pagador não é usuário)."""
+    cli, origem, rid, id_acad = _sumup_client_por_checkout(checkout_id)
+    if not cli or not cli.configurado:
+        return render_template("financeiro/sumup_pagamento.html",
+                               erro="Cobrança não encontrada ou gateway indisponível.",
+                               checkout_id=checkout_id), 404
+    dados = cli.obter_checkout(checkout_id)
+    if not dados:
+        return render_template("financeiro/sumup_pagamento.html",
+                               erro="Não foi possível carregar a cobrança.",
+                               checkout_id=checkout_id), 502
+    # Une os métodos do checkout (fonte de verdade) com os da conta — o endpoint por
+    # checkout às vezes restringe (ex.: só 'card'), enquanto a conta oferece PIX/boleto.
+    _m_chk = cli.listar_metodos(checkout_id)
+    _m_mer = cli.listar_metodos_merchant(dados.get("amount"))
+    metodos = list(dict.fromkeys((_m_chk or []) + (_m_mer or [])))
+    pago = str(dados.get("status") or "").upper() == "PAID"
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute("SELECT nome FROM academias WHERE id=%s", (id_acad,))
+        _a = cur.fetchone() or {}
+    finally:
+        conn.close()
+    return render_template(
+        "financeiro/sumup_pagamento.html",
+        checkout_id=checkout_id,
+        valor=dados.get("amount"),
+        moeda=dados.get("currency") or "BRL",
+        descricao=dados.get("description") or "",
+        academia_nome=_a.get("nome") or "",
+        metodos=metodos,
+        tem_cartao=("card" in metodos or not metodos),
+        tem_pix=("pix" in metodos or "qr_code_pix" in metodos),
+        metodo_pix=("pix" if "pix" in metodos else ("qr_code_pix" if "qr_code_pix" in metodos else None)),
+        tem_boleto=("boleto" in metodos),
+        pago=pago,
+        erro=None,
+    )
+
+
+@bp_financeiro.route("/pagamento/sumup/<checkout_id>/processar", methods=["POST"])
+@csrf.exempt
+def sumup_processar_apm(checkout_id):
+    """Processa PIX/boleto server-side e devolve o artifact (código/QR/boleto) em JSON."""
+    metodo = (request.form.get("metodo") or (request.get_json(silent=True) or {}).get("metodo") or "").strip()
+    if metodo not in ("pix", "qr_code_pix", "boleto"):
+        return jsonify({"ok": False, "erro": "método inválido"}), 400
+    cli, origem, rid, id_acad = _sumup_client_por_checkout(checkout_id)
+    if not cli or not cli.configurado:
+        return jsonify({"ok": False, "erro": "cobrança não encontrada"}), 404
+    try:
+        art = cli.processar_apm(checkout_id, metodo)
+    except Exception as e:
+        current_app.logger.error(f"SumUp processar {metodo} ({checkout_id}): {e}")
+        return jsonify({"ok": False, "erro": "falha ao gerar o pagamento"}), 502
+    # A imagem de QR da SumUp vem por URL autenticada; geramos o QR localmente a
+    # partir do código copia-e-cola (funciona no navegador do pagador).
+    art["pix_qrcode_b64"] = None
+    if art.get("pix_copia_cola"):
+        try:
+            from utils.qrcode_util import gerar_qr_base64
+            art["pix_qrcode_b64"] = gerar_qr_base64(art["pix_copia_cola"])
+        except Exception:
+            pass
+    return jsonify({"ok": True, **art})
+
+
+@bp_financeiro.route("/pagamento/sumup/<checkout_id>/status", methods=["GET"])
+def sumup_status(checkout_id):
+    """Consulta o status do checkout (para polling da página). Dá baixa se pago."""
+    cli, origem, rid, id_acad = _sumup_client_por_checkout(checkout_id)
+    if not cli or not cli.configurado:
+        return jsonify({"ok": False, "pago": False}), 404
+    dados = cli.obter_checkout(checkout_id)
+    pago = str(dados.get("status") or "").upper() == "PAID"
+    if pago:
+        try:
+            _sumup_dar_baixa(origem, rid, dados.get("amount"))
+        except Exception as e:
+            current_app.logger.error(f"SumUp baixa status ({checkout_id}): {e}")
+    return jsonify({"ok": True, "pago": pago, "status": dados.get("status")})
+
+
+@bp_financeiro.route("/pagamento/sumup/retorno", methods=["GET"])
+def sumup_retorno(ref=None):
+    """Landing após o redirect do pagamento (SCA/redirect). Mostra a página de status."""
+    checkout_id = request.args.get("checkout_id") or ""
+    return render_template("financeiro/sumup_retorno.html", checkout_id=checkout_id)
+
+
+@bp_financeiro.route("/webhook/sumup", methods=["POST", "GET"])
+@csrf.exempt
+def webhook_sumup():
+    """Webhook da SumUp (return_url do checkout). Confirma o pagamento consultando o
+    checkout e dá baixa quando status == PAID."""
+    data = request.get_json(silent=True) or request.form.to_dict() or {}
+    checkout_id = (
+        data.get("checkout_id") or data.get("id")
+        or (data.get("payload") or {}).get("checkout_id")
+        or (data.get("payload") or {}).get("id")
+        or request.args.get("checkout_id") or request.args.get("id")
+    )
+    if not checkout_id:
+        return jsonify({"ok": True})
+    try:
+        cli, origem, rid, id_acad = _sumup_client_por_checkout(checkout_id)
+        if cli and cli.configurado and origem and cli.checkout_pago(checkout_id):
+            dados = cli.obter_checkout(checkout_id)
+            _sumup_dar_baixa(origem, rid, dados.get("amount"))
+        elif not origem:
+            # Pode ser o pagamento de SETUP de uma assinatura recorrente SumUp:
+            # ativa a assinatura e dá baixa na 1ª mensalidade.
+            _sumup_ativar_assinatura_por_checkout(checkout_id)
+    except Exception as e:
+        current_app.logger.error(f"Webhook SumUp erro: {e}", exc_info=True)
+    return jsonify({"ok": True})
+
+
+def _sumup_ativar_assinatura_por_checkout(checkout_id):
+    """Se o checkout for o SETUP de uma assinatura SumUp e estiver pago, ativa a
+    assinatura (status='ativa') e baixa a mensalidade em aberto do aluno."""
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute(
+            """SELECT aluno_id, id_academia, valor FROM assinaturas_recorrentes
+               WHERE gateway='sumup' AND sumup_setup_checkout_id=%s LIMIT 1""",
+            (str(checkout_id),),
+        )
+        row = cur.fetchone()
+    finally:
+        conn.close()
+    if not row:
+        return
+    cfg = _gateway_config_academia(row["id_academia"])
+    cli = _sumup_client(cfg)
+    if cli and cli.configurado and cli.checkout_pago(checkout_id):
+        # Marca a assinatura como ativa e baixa a 1ª mensalidade em aberto do aluno.
+        _baixar_mensalidade_recorrente(row["aluno_id"], row.get("valor"), "SumUp")
+
+
+# ------------------------------------------------------------------ SumUp OAuth
+def _sumup_state_serializer():
+    from itsdangerous import URLSafeTimedSerializer
+    return URLSafeTimedSerializer(current_app.secret_key or "sumup", salt="sumup-oauth")
+
+
+@bp_financeiro.route("/sumup/oauth/conectar", methods=["GET"])
+@login_required
+def sumup_oauth_conectar():
+    """Inicia o fluxo OAuth: redireciona o gestor para autorizar a conta SumUp."""
+    academia_id = request.args.get("academia_id", type=int) or _get_academia_id()
+    destino = url_for("academia.configuracoes_academia", academia_id=academia_id, _anchor="financeiro")
+    if not academia_id or academia_id not in _get_academias_ids():
+        flash("Selecione uma academia válida.", "warning")
+        return redirect(destino)
+    client_id, client_secret, redirect_uri = _sumup_oauth_app()
+    if not client_id or not client_secret:
+        flash("O app OAuth da SumUp não está configurado no servidor "
+              "(SUMUP_OAUTH_CLIENT_ID / SUMUP_OAUTH_CLIENT_SECRET).", "danger")
+        return redirect(destino)
+    import os
+    from utils.sumup import oauth_authorize_url, OAUTH_SCOPES
+    # Scopes configuráveis: enquanto a SumUp não aprova 'payments' (verificação manual),
+    # use SUMUP_OAUTH_SCOPES sem 'payments' para testar a conexão. Depois de aprovado,
+    # inclua 'payments' na env para o modo OAuth conseguir criar cobrança.
+    scopes = os.environ.get("SUMUP_OAUTH_SCOPES", "").strip() or OAUTH_SCOPES
+    state = _sumup_state_serializer().dumps({"academia_id": academia_id})
+    return redirect(oauth_authorize_url(client_id, redirect_uri, state, scopes=scopes))
+
+
+@bp_financeiro.route("/sumup/oauth/callback", methods=["GET"])
+@login_required
+def sumup_oauth_callback():
+    """Recebe o retorno do OAuth, troca o code por tokens e vincula à academia."""
+    code = request.args.get("code")
+    state = request.args.get("state")
+    erro = request.args.get("error")
+    academia_id = None
+    try:
+        academia_id = (_sumup_state_serializer().loads(state, max_age=1800) or {}).get("academia_id")
+    except Exception:
+        academia_id = None
+    destino = url_for("academia.configuracoes_academia", academia_id=academia_id, _anchor="financeiro") if academia_id \
+        else url_for("academia.configuracoes_academia", _anchor="financeiro")
+    if erro or not code or not academia_id:
+        flash("Conexão com a SumUp cancelada ou inválida.", "warning")
+        return redirect(destino)
+    if academia_id not in _get_academias_ids():
+        flash("Sem permissão para esta academia.", "danger")
+        return redirect(destino)
+    client_id, client_secret, redirect_uri = _sumup_oauth_app()
+    try:
+        from utils.sumup import oauth_exchange_code, obter_merchant_code
+        tok = oauth_exchange_code(client_id, client_secret, code, redirect_uri)
+        access = tok.get("access_token")
+        refresh = tok.get("refresh_token")
+        expira = datetime.now() + timedelta(seconds=int(tok.get("expires_in") or 3600))
+        merchant = obter_merchant_code(access) or ""
+    except Exception as e:
+        current_app.logger.error(f"SumUp OAuth callback (academia {academia_id}): {e}")
+        flash("Falha ao conectar com a SumUp. Tente novamente.", "danger")
+        return redirect(destino)
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        # Conectou → já ativa a SumUp como gateway da academia (o gestor clicou em
+        # "Conectar" justamente para usá-la; assim não precisa marcar/salvar de novo).
+        cur.execute(
+            """UPDATE academias SET sumup_conexao='oauth', sumup_oauth_access_token=%s,
+                   sumup_oauth_refresh_token=%s, sumup_oauth_expira_em=%s,
+                   sumup_merchant_code=COALESCE(NULLIF(%s,''), sumup_merchant_code),
+                   sumup_habilitado=1, gateway_pagamento='sumup'
+               WHERE id=%s""",
+            (access, refresh, expira, merchant, academia_id),
+        )
+        conn.commit()
+        flash("Conta SumUp conectada e ativada como gateway!"
+              + (f" (merchant {merchant})" if merchant else ""), "success")
+    except Exception as e:
+        conn.rollback()
+        current_app.logger.error(f"SumUp OAuth salvar (academia {academia_id}): {e}")
+        flash("Conectou, mas houve erro ao salvar. Tente de novo.", "danger")
+    finally:
+        conn.close()
+    return redirect(destino)
+
+
+@bp_financeiro.route("/sumup/oauth/desconectar", methods=["POST"])
+@login_required
+def sumup_oauth_desconectar():
+    """Remove a conexão OAuth da academia (volta ao modo de chave manual)."""
+    academia_id = request.form.get("academia_id", type=int) or _get_academia_id()
+    destino = url_for("academia.configuracoes_academia", academia_id=academia_id, _anchor="financeiro")
+    if not academia_id or academia_id not in _get_academias_ids():
+        flash("Selecione uma academia válida.", "warning")
+        return redirect(destino)
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            """UPDATE academias SET sumup_conexao='key', sumup_oauth_access_token=NULL,
+                   sumup_oauth_refresh_token=NULL, sumup_oauth_expira_em=NULL
+               WHERE id=%s""",
+            (academia_id,),
+        )
+        conn.commit()
+        flash("Conta SumUp desconectada.", "success")
+    except Exception:
+        conn.rollback()
+        flash("Erro ao desconectar.", "danger")
+    finally:
+        conn.close()
+    return redirect(destino)
+
+
+@bp_financeiro.route("/mensalidades/<int:ma_id>/lembrete-whatsapp", methods=["POST"])
+@login_required
+def lembrete_whatsapp_individual(ma_id):
+    """Envia o lembrete de uma mensalidade pelo WhatsApp da academia."""
+    academia_id = _get_academia_id()
+    if not academia_id:
+        return jsonify({"ok": False, "erro": "academia não definida"}), 400
+    from utils import whatsapp_lembretes as lem
+    ok, msg = lem.enviar_um(academia_id, ma_id)
+    return jsonify({"ok": ok, "msg": msg})
+
+
+@bp_financeiro.route("/mensalidades/lembretes-whatsapp", methods=["POST"])
+@login_required
+def lembretes_whatsapp_lote():
+    """Envia lembretes em lote para mensalidades pendentes/atrasadas da academia."""
+    academia_id = _get_academia_id()
+    if not academia_id:
+        return jsonify({"ok": False, "erro": "academia não definida"}), 400
+    try:
+        dias = int(request.form.get("dias", 3))
+    except (TypeError, ValueError):
+        dias = 3
+    from utils import whatsapp_lembretes as lem
+    # botão manual ignora o toggle (envia mesmo se a automação diária estiver off)
+    resumo = lem.enviar_lote(academia_id, dias_antes=dias, somente_ativadas=False)
+    return jsonify({"ok": True, "resumo": resumo})
 
 
 @bp_financeiro.route("/mensalidades/alunos")
@@ -2210,6 +3755,30 @@ def mensalidades_alunos():
     except Exception:
         pass
 
+    # Forma de recorrência por aluno (cartão/PIX recorrente) — para classificação
+    forma_recorrencia_por_aluno = {}
+    try:
+        _ids = list({m.get("aluno_id") for m in mensalidades if m.get("aluno_id")}
+                    | {a.get("aluno_id") for a in avulsas if a.get("aluno_id")})
+        if _ids:
+            _ph = ",".join(["%s"] * len(_ids))
+            cur.execute(
+                f"""SELECT s.aluno_id, s.gateway, s.metodo, s.status
+                    FROM assinaturas_recorrentes s
+                    INNER JOIN (SELECT aluno_id, MAX(id) AS mid FROM assinaturas_recorrentes
+                                WHERE aluno_id IN ({_ph}) AND status <> 'cancelada'
+                                GROUP BY aluno_id) u ON u.mid = s.id""",
+                tuple(_ids),
+            )
+            for r in cur.fetchall():
+                forma_recorrencia_por_aluno[r["aluno_id"]] = {
+                    "metodo": r.get("metodo") or "cartao",
+                    "status": r.get("status") or "pendente",
+                    "gateway": r.get("gateway"),
+                }
+    except Exception:
+        forma_recorrencia_por_aluno = {}
+
     conn.close()
 
     return render_template(
@@ -2218,6 +3787,7 @@ def mensalidades_alunos():
         academias=academias,
         mensalidades=mensalidades,
         avulsas=avulsas,
+        forma_recorrencia_por_aluno=forma_recorrencia_por_aluno,
         contagens=contagens,
         mes=mes,
         ano=ano,
@@ -2226,6 +3796,9 @@ def mensalidades_alunos():
         ano_atual=date.today().year,
         formas_lista=formas_lista,
         asaas_on=_asaas_habilitado_academia(academia_id),
+        gateway_ativo=_gateway_ativo(_gateway_config_academia(academia_id)),
+        recorrencia_gw=_gateway_recorrencia(_gateway_config_academia(academia_id)),
+        recorrencia_opcoes=_opcoes_recorrencia(_gateway_config_academia(academia_id)),
     )
 
 
@@ -2329,9 +3902,13 @@ def cobrancas_por_aluno_json():
     conn = get_db_connection()
     cur = conn.cursor(dictionary=True)
     try:
+        # Enxerga o aluno pela academia principal OU por vínculo adicional
+        # (alunos_academias): o financeiro por academia já filtra as cobranças
+        # por m.id_academia / cobranca_avulsa.id_academia mais abaixo.
+        _trecho_al, _al_params = filtro_alunos_da_academia(academia_id, alias="alunos")
         cur.execute(
-            "SELECT id, nome FROM alunos WHERE id = %s AND id_academia = %s",
-            (aluno_id, academia_id),
+            f"SELECT id, nome FROM alunos WHERE id = %s AND {_trecho_al}",
+            (aluno_id, *_al_params),
         )
         aluno = cur.fetchone()
         if not aluno:
@@ -2422,15 +3999,17 @@ def buscar_alunos_mensalidades():
     conn = get_db_connection()
     cur = conn.cursor(dictionary=True)
     try:
+        # Inclui alunos com esta academia como principal E os vinculados a ela.
+        _trecho_al, _al_params = filtro_alunos_da_academia(acad_id, alias="a")
         if busca:
             cur.execute(
-                "SELECT id, nome, foto FROM alunos WHERE id_academia = %s AND ativo = 1 AND nome LIKE %s ORDER BY nome LIMIT 50",
-                (acad_id, f"%{busca}%"),
+                f"SELECT a.id, a.nome, a.foto FROM alunos a WHERE {_trecho_al} AND a.ativo = 1 AND a.nome LIKE %s ORDER BY a.nome LIMIT 50",
+                (*_al_params, f"%{busca}%"),
             )
         else:
             cur.execute(
-                "SELECT id, nome, foto FROM alunos WHERE id_academia = %s AND ativo = 1 ORDER BY nome LIMIT 30",
-                (acad_id,),
+                f"SELECT a.id, a.nome, a.foto FROM alunos a WHERE {_trecho_al} AND a.ativo = 1 ORDER BY a.nome LIMIT 30",
+                tuple(_al_params),
             )
         rows = cur.fetchall()
         for r in rows:
@@ -2438,8 +4017,9 @@ def buscar_alunos_mensalidades():
     except Exception:
         try:
             cur.execute(
-                "SELECT a.id, a.nome, a.foto FROM alunos a WHERE a.id_academia = %s AND a.ativo = 1 ORDER BY a.nome LIMIT 30",
-                (acad_id,),
+                f"SELECT a.id, a.nome, a.foto FROM alunos a WHERE {filtro_alunos_da_academia(acad_id)[0]}"
+                " AND a.ativo = 1 ORDER BY a.nome LIMIT 30",
+                tuple(filtro_alunos_da_academia(acad_id)[1]),
             )
             rows = cur.fetchall()
             for r in rows:
@@ -2499,9 +4079,9 @@ def alunos_por_academia(acad_id=None):
                 cur.execute(
                     """SELECT DISTINCT a.id, a.nome FROM alunos a
                        LEFT JOIN aluno_turmas at ON at.aluno_id = a.id AND at.TurmaID = %s
-                       WHERE a.id_academia = %s AND (at.TurmaID IS NOT NULL OR a.TurmaID = %s)
-                       ORDER BY a.nome""",
-                    (turma_id, acad_id, turma_id),
+                       WHERE {_f} AND (at.TurmaID IS NOT NULL OR a.TurmaID = %s)
+                       ORDER BY a.nome""".format(_f=filtro_alunos_da_academia(acad_id)[0]),
+                    (turma_id, *filtro_alunos_da_academia(acad_id)[1], turma_id),
                 )
                 rows = cur.fetchall()
             else:
@@ -2588,15 +4168,24 @@ def _auto_gerar_asaas(registros, metodo):
                 continue
             aid = reg.get("aluno_id")
             if aid not in aluno_cache:
-                cur.execute("SELECT nome, cpf, email, telefone FROM alunos WHERE id=%s", (aid,))
+                cur.execute(
+                    "SELECT nome, cpf, email, telefone, "
+                    "responsavel_financeiro_nome, responsavel_financeiro_cpf, "
+                    "responsavel_financeiro_telefone, "
+                    "cep, rua, numero, complemento, bairro, cidade, estado "
+                    "FROM alunos WHERE id=%s",
+                    (aid,),
+                )
                 aluno_cache[aid] = cur.fetchone() or {}
             al = aluno_cache[aid]
+            pag_nome, pag_cpf, pag_tel = _dados_pagador(al)
             try:
                 r = _emitir_cobranca_online(
-                    cfg, metodo, nome=al.get("nome"), cpf=al.get("cpf"), email=al.get("email"),
-                    telefone=al.get("telefone"), valor=valor, vencimento=reg.get("data_vencimento"),
+                    cfg, metodo, nome=pag_nome, cpf=pag_cpf, email=al.get("email"),
+                    telefone=pag_tel, valor=valor, vencimento=reg.get("data_vencimento"),
                     descricao=reg.get("descricao") or "Cobrança",
                     origem=reg.get("origem"), registro_id=reg["id"],
+                    endereco=_endereco_aluno(al),
                 )
                 tabela = "mensalidade_aluno" if reg.get("origem") == "mensalidade" else "cobranca_avulsa"
                 cur.execute(
@@ -2624,7 +4213,53 @@ def _flash_resumo_asaas(geradas, ignoradas, falhas, metodo):
     if ignoradas:
         flash(f"{ignoradas} cobrança(s) sem cobrança online (valor abaixo de R$ 5,00 ou gateway indisponível).", "warning")
     if falhas:
-        flash(f"{falhas} cobrança(s) não puderam gerar a cobrança online (verifique CPF/dados do aluno).", "warning")
+        flash(
+            f"{falhas} cobrança(s) não puderam gerar a cobrança online. "
+            "Verifique: dados do aluno (CPF/e-mail) e as credenciais do gateway. "
+            "No Mercado Pago, a conta precisa ter uma CHAVE PIX cadastrada para gerar PIX "
+            "(erro 'collector user without key'). Veja o detalhe no log do sistema.",
+            "warning",
+        )
+
+
+def _aplica_desconto_valor(valor_base, tipo, dval):
+    """Aplica um desconto (percentual ou valor_fixo) a um valor. Retorna (desconto, valor_final)."""
+    valor_base = float(valor_base or 0)
+    dval = float(dval or 0)
+    if (tipo or "percentual") == "percentual":
+        desc = valor_base * (dval / 100.0)
+    else:
+        desc = min(dval, valor_base)
+    desc = round(desc, 2)
+    return desc, max(0.0, round(valor_base - desc, 2))
+
+
+def _resolver_desconto_form(cur_dict, form, id_acad):
+    """Resolve o desconto escolhido no modal de cobrança (cadastrado ou avulso/manual).
+    Retorna (tipo, valor, nome, desconto_id) ou None quando não há desconto."""
+    raw = (form.get("desconto_id") or "").strip()
+    if not raw:
+        return None
+    if raw == "avulso":
+        tipo = (form.get("desconto_manual_tipo") or "percentual").strip()
+        if tipo not in ("percentual", "valor_fixo"):
+            tipo = "percentual"
+        val = _parse_valor(form.get("desconto_manual_valor") or "")
+        if val is None or val <= 0:
+            return None
+        return (tipo, float(val), "Desconto avulso", None)
+    if raw.isdigit():
+        try:
+            cur_dict.execute(
+                "SELECT nome, tipo, valor FROM descontos WHERE id = %s AND id_academia = %s",
+                (int(raw), id_acad),
+            )
+            d = cur_dict.fetchone()
+        except Exception:
+            d = None
+        if d:
+            return ((d.get("tipo") or "percentual"), float(d.get("valor") or 0), d.get("nome") or "Desconto", int(raw))
+    return None
 
 
 @bp_financeiro.route("/mensalidades/gerar-cobranca", methods=["GET", "POST"])
@@ -2681,21 +4316,52 @@ def gerar_cobranca():
                     flash("Informe um valor válido.", "danger")
                     conn.close()
                     return _render_gerar_cobranca(academias, academia_id, id_acad, None, None, None, None)
+
+                # Desconto opcional na cobrança avulsa (cadastrado ou avulso/manual)
+                valor_original = valor
+                obs_desconto = None
+                curd = conn.cursor(dictionary=True)
+                desc_sel = _resolver_desconto_form(curd, request.form, id_acad)
+                curd.close()
+                if desc_sel:
+                    d_tipo, d_val, d_nome, _d_id = desc_sel
+                    desc_aplicado, valor = _aplica_desconto_valor(valor_original, d_tipo, d_val)
+                    obs_desconto = (
+                        f"Desconto '{d_nome}' aplicado: "
+                        f"R$ {valor_original:.2f} - R$ {desc_aplicado:.2f} = R$ {valor:.2f}"
+                    )
+
+                isenta = float(valor or 0) <= 0
+                st_ins = "pago" if isenta else "pendente"
+                dt_pag = data_venc if isenta else None
+                vpg = 0 if isenta else None
                 try:
                     cur.execute(
-                        """INSERT INTO cobranca_avulsa (aluno_id, id_academia, descricao, valor, data_vencimento, status, criado_por)
-                           VALUES (%s, %s, %s, %s, %s, 'pendente', %s)""",
-                        (aluno_ids[0], id_acad, descricao, valor, data_venc, current_user.id),
+                        """INSERT INTO cobranca_avulsa (aluno_id, id_academia, descricao, valor, data_vencimento, status, data_pagamento, valor_pago, observacoes, criado_por)
+                           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                        (aluno_ids[0], id_acad, descricao, valor, data_venc, st_ins, dt_pag, vpg, obs_desconto, current_user.id),
                     )
                 except Exception:
                     cur.execute(
-                        "INSERT INTO cobranca_avulsa (aluno_id, id_academia, descricao, valor, data_vencimento, status) VALUES (%s, %s, %s, %s, %s, 'pendente')",
-                        (aluno_ids[0], id_acad, descricao, valor, data_venc),
+                        "INSERT INTO cobranca_avulsa (aluno_id, id_academia, descricao, valor, data_vencimento, status) VALUES (%s, %s, %s, %s, %s, %s)",
+                        (aluno_ids[0], id_acad, descricao, valor, data_venc, st_ins),
                     )
                 av_id = cur.lastrowid
+                # Receita R$ 0 quando isenta por desconto integral
+                if isenta and av_id:
+                    try:
+                        cur.execute("SELECT nome FROM alunos WHERE id = %s", (aluno_ids[0],))
+                        _an = cur.fetchone()
+                        _anome = (_an[0] if isinstance(_an, (list, tuple)) else (_an.get("nome") if _an else "")) or "Aluno"
+                        cur.execute(
+                            "INSERT INTO receitas (descricao, valor, data, categoria, id_academia, criado_por) VALUES (%s, 0, %s, 'Cobranças avulsas', %s, %s)",
+                            (f"{descricao} - {_anome} (Desconto integral)", data_venc, id_acad, current_user.id),
+                        )
+                    except Exception:
+                        pass
                 conn.commit()
                 conn.close()
-                flash("Cobrança avulsa gerada.", "success")
+                flash("Cobrança avulsa gerada." + (" Isenta por desconto integral (registrada como paga)." if isenta else ""), "success")
                 metodo = (request.form.get("asaas_metodo") or "").upper()
                 if metodo in ("PIX", "BOLETO", "LINK") and av_id:
                     g, ig, fl = _auto_gerar_asaas([{
@@ -2733,6 +4399,10 @@ def gerar_cobranca():
                 nomes_por_id = {}
                 criadas_mens = []
                 plano_nome = (plano[1] if isinstance(plano, (list, tuple)) else plano.get("nome", "")) or "Mensalidade"
+                # Desconto escolhido no modal (cadastrado ou avulso) aplicado a TODAS as parcelas do período.
+                curd = conn.cursor(dictionary=True)
+                desc_mod = _resolver_desconto_form(curd, request.form, id_acad)
+                curd.close()
                 # Se não veio turma_id (porque a tela não tem mais seleção de turma),
                 # tenta buscar a TurmaID do aluno para preencher o campo ao registrar.
                 turma_por_aluno = {}
@@ -2772,21 +4442,53 @@ def gerar_cobranca():
                                 duplicidades_detalhe.append(f"{nome_aluno} ({mes:02d}/{ano_ref})")
                                 continue
                             tid = turma_id if turma_id else turma_por_aluno.get(aid)
-                            if tid:
-                                cur.execute(
-                                    """INSERT INTO mensalidade_aluno (mensalidade_id, aluno_id, turma_id, data_vencimento, valor, status)
-                                       VALUES (%s, %s, %s, %s, %s, 'pendente')""",
-                                    (plano_id, aid, tid, data_venc, valor_plano),
-                                )
+                            if desc_mod is not None:
+                                # Desconto escolhido no modal: aplica ao valor do plano e materializa as colunas.
+                                d_tipo, d_val, _d_nome, d_id = desc_mod
+                                desc_aplicado, valor_final = _aplica_desconto_valor(valor_plano, d_tipo, d_val)
+                                if valor_final <= 0:
+                                    st, stp, dtp, vpg = "pago", "pago", data_venc, 0
+                                else:
+                                    st, stp, dtp, vpg = "pendente", "pendente", None, None
+                                if tid:
+                                    cur.execute(
+                                        """INSERT INTO mensalidade_aluno (mensalidade_id, aluno_id, turma_id, data_vencimento, valor, valor_original, desconto_aplicado, id_desconto, status, status_pagamento, data_pagamento, valor_pago)
+                                           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                                        (plano_id, aid, tid, data_venc, valor_final, valor_plano, desc_aplicado, d_id, st, stp, dtp, vpg),
+                                    )
+                                else:
+                                    cur.execute(
+                                        """INSERT INTO mensalidade_aluno (mensalidade_id, aluno_id, data_vencimento, valor, valor_original, desconto_aplicado, id_desconto, status, status_pagamento, data_pagamento, valor_pago)
+                                           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                                        (plano_id, aid, data_venc, valor_final, valor_plano, desc_aplicado, d_id, st, stp, dtp, vpg),
+                                    )
+                                valor_reg = valor_final
                             else:
-                                cur.execute(
-                                    """INSERT INTO mensalidade_aluno (mensalidade_id, aluno_id, data_vencimento, valor, status)
-                                       VALUES (%s, %s, %s, %s, 'pendente')""",
-                                    (plano_id, aid, data_venc, valor_plano),
-                                )
+                                # Desconto integral já atribuído ao aluno (valor final = 0): já nasce PAGA.
+                                _vi, _vd, _vf, _dn = _valor_com_desconto(
+                                    {"valor": valor_plano, "mensalidade_id": plano_id,
+                                     "id_academia": id_acad, "data_vencimento": data_venc},
+                                    aid, id_acad, hoje=date.fromisoformat(data_venc))
+                                if float(_vf or 0) <= 0:
+                                    st, stp, dtp, vpg = "pago", "pago", data_venc, 0
+                                else:
+                                    st, stp, dtp, vpg = "pendente", "pendente", None, None
+                                if tid:
+                                    cur.execute(
+                                        """INSERT INTO mensalidade_aluno (mensalidade_id, aluno_id, turma_id, data_vencimento, valor, status, status_pagamento, data_pagamento, valor_pago)
+                                           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                                        (plano_id, aid, tid, data_venc, valor_plano, st, stp, dtp, vpg),
+                                    )
+                                else:
+                                    cur.execute(
+                                        """INSERT INTO mensalidade_aluno (mensalidade_id, aluno_id, data_vencimento, valor, status, status_pagamento, data_pagamento, valor_pago)
+                                           VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
+                                        (plano_id, aid, data_venc, valor_plano, st, stp, dtp, vpg),
+                                    )
+                                valor_reg = valor_plano
                             criadas_mens.append({
                                 "origem": "mensalidade", "id": cur.lastrowid, "aluno_id": aid,
-                                "id_academia": id_acad, "valor": valor_plano, "data_vencimento": data_venc,
+                                "id_academia": id_acad, "valor": valor_reg, "data_vencimento": data_venc,
                                 "mensalidade_id": plano_id, "descricao": f"Mensalidade {plano_nome}",
                             })
                             geradas += 1
@@ -3180,7 +4882,7 @@ def aplicar_desconto():
             try:
                 if desconto_100:
                     cur.execute(
-                        """UPDATE mensalidade_aluno SET valor_original = %s, desconto_aplicado = %s, valor = 0, id_desconto = %s, status = 'pago', data_pagamento = %s WHERE id = %s""",
+                        """UPDATE mensalidade_aluno SET valor_original = %s, desconto_aplicado = %s, valor = 0, id_desconto = %s, status = 'pago', status_pagamento = 'pago', valor_pago = 0, data_pagamento = %s WHERE id = %s""",
                         (valor_orig, round(desconto_val, 2), desconto_id, hoje_str, ma["id"]),
                     )
                     venc = ma.get("data_vencimento")
@@ -3216,6 +4918,15 @@ def aplicar_desconto():
                 except Exception:
                     pass
             aplicadas += 1
+
+        # Rede de segurança: quita qualquer mensalidade em aberto que fique integral pelo
+        # desconto vigente (cobre casos gerados fora deste laço/pacotes dinâmicos).
+        try:
+            _quitar_mensalidades_isentas_por_desconto(
+                conn, cur, aluno_id, academia_id, criado_por=getattr(current_user, "id", None)
+            )
+        except Exception:
+            pass
 
         conn.commit()
         conn.close()
@@ -3979,6 +5690,11 @@ def confirmar_pagamento_mensalidade(registro_id):
                 conn, cur, "mensalidade_aluno", registro_id, academia_id, id_fp
             )
         conn.commit()
+        try:
+            from utils.whatsapp_lembretes import enviar_confirmacao_pagamento
+            enviar_confirmacao_pagamento(registro_id)
+        except Exception:
+            pass
         flash("Pagamento confirmado e receita gerada.", "success")
         if wants_json:
             conn.close()
@@ -4432,6 +6148,12 @@ def registrar_pagamento():
                 id_fp if tipo == "mensalidade_aluno" else None,
             )
         conn.commit()
+        if tipo in ("mensalidade_aluno", "cobranca_avulsa"):
+            try:
+                from utils.whatsapp_lembretes import enviar_confirmacao_pagamento
+                enviar_confirmacao_pagamento(registro_id, tipo)
+            except Exception:
+                pass
         flash("Pagamento registrado e receita gerada.", "success")
         if wants_json:
             conn.close()

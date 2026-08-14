@@ -1182,6 +1182,27 @@ def painel_academia():
     cur = conn.cursor(dictionary=True)
     cur.execute("SELECT id, nome FROM academias WHERE id = %s", (academia_id,))
     academia = cur.fetchone()
+
+    # Zempo: quantos alunos já têm todos os campos que a CBJ exige e ainda não
+    # foram solicitados — é o número acionável do card.
+    zempo_prontos = 0
+    try:
+        from utils import zempo_mapper
+        cur.execute(
+            """SELECT a.*, g.faixa AS faixa
+               FROM alunos a
+               LEFT JOIN graduacao g ON g.id = a.graduacao_id
+               WHERE a.id_academia = %s AND a.ativo = 1
+                 AND (a.zempo IS NULL OR a.zempo = '')
+                 AND NOT EXISTS (SELECT 1 FROM zempo_solicitacoes s
+                                 WHERE s.aluno_id = a.id
+                                   AND s.status IN ('pendente', 'aprovada'))""",
+            (academia_id,))
+        zempo_prontos = sum(1 for aluno in cur.fetchall()
+                            if not zempo_mapper.validar_aluno(aluno))
+    except Exception:
+        pass
+
     cur.close()
     conn.close()
 
@@ -1199,6 +1220,7 @@ def painel_academia():
         academia=academia,
         academias=academias,
         academia_id=academia_id,
+        zempo_prontos=zempo_prontos,
         aniversariantes=anivs,
         aniversariantes_hoje=anivs_hoje,
         hoje_dia=hoje.day,
@@ -1517,10 +1539,37 @@ def configuracoes_academia():
         if request.method == "POST":
             secao = request.form.get("secao", "visitantes")
 
-            if secao in ("asaas", "online"):
+            if secao in ("asaas", "online") and (request.form.get("limpar_gateway") or "").strip():
+                # Limpar TODAS as credenciais de um gateway (sem deixar resíduo)
+                limpar = (request.form.get("limpar_gateway") or "").strip().lower()
+                _cols = {
+                    "asaas": ["asaas_api_key=NULL", "asaas_webhook_token=NULL", "asaas_habilitado=0", "asaas_ambiente='sandbox'"],
+                    "mercadopago": ["mercadopago_access_token=NULL"],
+                    "infinitepay": ["infinitepay_handle=NULL"],
+                    "cora": ["cora_client_id=NULL", "cora_ambiente=NULL", "cora_certificate=NULL",
+                             "cora_private_key=NULL", "cora_client_id_prod=NULL",
+                             "cora_certificate_prod=NULL", "cora_private_key_prod=NULL"],
+                    "efi": ["efi_client_id=NULL", "efi_client_secret=NULL", "efi_certificate=NULL", "efi_pix_key=NULL", "efi_ambiente=NULL"],
+                    "sumup": ["sumup_api_key=NULL", "sumup_merchant_code=NULL", "sumup_habilitado=0", "sumup_ambiente='producao'"],
+                }
+                _labels = {"asaas": "Asaas", "mercadopago": "Mercado Pago", "infinitepay": "InfinitePay", "cora": "Cora", "efi": "EFÍ", "sumup": "SumUp"}
+                if limpar in _cols:
+                    sets = list(_cols[limpar])
+                    # Se for o gateway ativo, desativa a cobrança online
+                    cur.execute("SELECT gateway_pagamento FROM academias WHERE id=%s", (academia_id,))
+                    _row = cur.fetchone() or {}
+                    if (_row.get("gateway_pagamento") or "").strip().lower() == limpar:
+                        sets.append("gateway_pagamento=''")
+                    cur.execute(f"UPDATE academias SET {', '.join(sets)} WHERE id=%s", (academia_id,))
+                    conn.commit()
+                    flash(f"Dados do {_labels[limpar]} foram limpos.", "success")
+                else:
+                    flash("Gateway inválido para limpeza.", "danger")
+
+            elif secao in ("asaas", "online"):
                 # Cobrança online — a academia escolhe UM gateway e informa as credenciais.
                 gateway = (request.form.get("gateway_pagamento") or "").strip().lower()
-                if gateway not in ("", "asaas", "mercadopago", "infinitepay", "cora"):
+                if gateway not in ("", "asaas", "mercadopago", "infinitepay", "cora", "efi", "sumup"):
                     gateway = ""
 
                 ambiente = (request.form.get("asaas_ambiente") or "sandbox").strip().lower()
@@ -1530,23 +1579,146 @@ def configuracoes_academia():
                 infinitepay_handle = (request.form.get("infinitepay_handle") or "").strip() or None
                 asaas_habilitado = 1 if gateway == "asaas" else 0
 
-                # Campos sensíveis (chave/token) só são sobrescritos se um novo valor for digitado.
+                # Cora — credenciais separadas por ambiente (o Cora emite um trio
+                # para stage e outro para produção; um não vale no outro).
+                cora_client_id = (request.form.get("cora_client_id") or "").strip() or None
+                cora_client_id_prod = (request.form.get("cora_client_id_prod") or "").strip() or None
+                cora_ambiente = (request.form.get("cora_ambiente") or "stage").strip().lower()
+                if cora_ambiente not in ("stage", "production"):
+                    cora_ambiente = "stage"
+
+                # EFÍ (Gerencianet)
+                efi_client_id = (request.form.get("efi_client_id") or "").strip() or None
+                efi_pix_key = (request.form.get("efi_pix_key") or "").strip() or None
+                efi_ambiente = (request.form.get("efi_ambiente") or "homologacao").strip().lower()
+                if efi_ambiente not in ("homologacao", "producao"):
+                    efi_ambiente = "homologacao"
+
+                # SumUp
+                sumup_merchant_code = (request.form.get("sumup_merchant_code") or "").strip() or None
+                sumup_ambiente = (request.form.get("sumup_ambiente") or "producao").strip().lower()
+                if sumup_ambiente not in ("producao", "sandbox"):
+                    sumup_ambiente = "producao"
+                sumup_habilitado = 1 if gateway == "sumup" else 0
+                nova_chave_sumup = (request.form.get("sumup_api_key") or "").strip()
+
+                # Campos sensíveis (chave/token/certificado) só são sobrescritos se um novo valor for digitado.
                 nova_chave_asaas = (request.form.get("asaas_api_key") or "").strip()
                 novo_token_mp = (request.form.get("mercadopago_access_token") or "").strip()
+                # O Cora entrega certificado e chave num arquivo só. Se o conteúdo
+                # colado num dos campos trouxer os dois blocos, usamos as duas metades
+                # dele — assim o par sai sempre da mesma geração, mesmo que o outro
+                # campo tenha ficado com o texto de uma geração antiga.
+                def _cora_par_do_form(campo_cert, campo_key):
+                    from utils.cora import separar_pem
+                    cert_c, key_c = separar_pem(request.form.get(campo_cert))
+                    cert_k, key_k = separar_pem(request.form.get(campo_key))
+                    return (cert_c or cert_k or ""), (key_c or key_k or "")
+
+                novo_cora_cert, nova_cora_key = _cora_par_do_form("cora_certificate", "cora_private_key")
+                novo_cora_cert_prod, nova_cora_key_prod = _cora_par_do_form(
+                    "cora_certificate_prod", "cora_private_key_prod")
+                novo_efi_secret = (request.form.get("efi_client_secret") or "").strip()
+                novo_efi_cert = (request.form.get("efi_certificate") or "").strip()
+
+                # Cora só pode ser ATIVADO com o trio completo DO AMBIENTE escolhido
+                # (Client ID + certificado + chave) — o trio do outro ambiente não serve.
+                cora_incompleto = False
+                if gateway == "cora":
+                    cur.execute(
+                        """SELECT cora_certificate, cora_private_key,
+                                  cora_certificate_prod, cora_private_key_prod
+                           FROM academias WHERE id=%s""",
+                        (academia_id,),
+                    )
+                    _atual = cur.fetchone() or {}
+                    if cora_ambiente == "production":
+                        cert_ok = bool(novo_cora_cert_prod) or bool(_atual.get("cora_certificate_prod"))
+                        key_ok = bool(nova_cora_key_prod) or bool(_atual.get("cora_private_key_prod"))
+                        client_ok = bool(cora_client_id_prod)
+                    else:
+                        cert_ok = bool(novo_cora_cert) or bool(_atual.get("cora_certificate"))
+                        key_ok = bool(nova_cora_key) or bool(_atual.get("cora_private_key"))
+                        client_ok = bool(cora_client_id)
+                    if not (client_ok and cert_ok and key_ok):
+                        faltando = []
+                        if not client_ok:
+                            faltando.append("Client ID")
+                        if not cert_ok:
+                            faltando.append("Certificado")
+                        if not key_ok:
+                            faltando.append("Chave privada")
+                        _amb_label = "Produção" if cora_ambiente == "production" else "Stage"
+                        flash(
+                            f"Cora não foi ativado: preencha, no ambiente {_amb_label}, "
+                            + ", ".join(faltando)
+                            + ". As credenciais informadas foram salvas — complete e salve novamente para ativar.",
+                            "warning",
+                        )
+                        gateway = ""  # não ativa enquanto incompleto
+                        cora_incompleto = True
 
                 cur.execute(
                     """UPDATE academias
                        SET gateway_pagamento=%s, asaas_habilitado=%s, asaas_ambiente=%s,
-                           asaas_webhook_token=%s, infinitepay_handle=%s
+                           asaas_webhook_token=%s, infinitepay_handle=%s,
+                           cora_client_id=%s, cora_client_id_prod=%s, cora_ambiente=%s,
+                           efi_client_id=%s, efi_pix_key=%s, efi_ambiente=%s,
+                           sumup_merchant_code=%s, sumup_ambiente=%s, sumup_habilitado=%s
                        WHERE id=%s""",
-                    (gateway, asaas_habilitado, ambiente, webhook_token, infinitepay_handle, academia_id),
+                    (gateway, asaas_habilitado, ambiente, webhook_token, infinitepay_handle,
+                     cora_client_id, cora_client_id_prod, cora_ambiente,
+                     efi_client_id, efi_pix_key, efi_ambiente,
+                     sumup_merchant_code, sumup_ambiente, sumup_habilitado, academia_id),
                 )
+                if nova_chave_sumup:
+                    # Digitar a chave manual coloca a academia no modo 'key' (sai do OAuth).
+                    cur.execute("UPDATE academias SET sumup_api_key=%s, sumup_conexao='key' WHERE id=%s",
+                                (nova_chave_sumup, academia_id))
                 if nova_chave_asaas:
                     cur.execute("UPDATE academias SET asaas_api_key=%s WHERE id=%s", (nova_chave_asaas, academia_id))
                 if novo_token_mp:
                     cur.execute("UPDATE academias SET mercadopago_access_token=%s WHERE id=%s", (novo_token_mp, academia_id))
+                if novo_cora_cert:
+                    cur.execute("UPDATE academias SET cora_certificate=%s WHERE id=%s", (novo_cora_cert, academia_id))
+                if nova_cora_key:
+                    cur.execute("UPDATE academias SET cora_private_key=%s WHERE id=%s", (nova_cora_key, academia_id))
+                if novo_cora_cert_prod:
+                    cur.execute("UPDATE academias SET cora_certificate_prod=%s WHERE id=%s",
+                                (novo_cora_cert_prod, academia_id))
+                if nova_cora_key_prod:
+                    cur.execute("UPDATE academias SET cora_private_key_prod=%s WHERE id=%s",
+                                (nova_cora_key_prod, academia_id))
+                if novo_efi_secret:
+                    cur.execute("UPDATE academias SET efi_client_secret=%s WHERE id=%s", (novo_efi_secret, academia_id))
+                if novo_efi_cert:
+                    cur.execute("UPDATE academias SET efi_certificate=%s WHERE id=%s", (novo_efi_cert, academia_id))
                 conn.commit()
-                flash("Configuração de cobrança online salva com sucesso!", "success")
+
+                # Certificado e chave precisam ser do MESMO par — como cada um é
+                # colado num campo, é fácil misturar geração (ou ambiente), e aí o
+                # erro só apareceria como SSLError no meio de uma cobrança.
+                if any([cora_client_id, cora_client_id_prod, novo_cora_cert, nova_cora_key,
+                        novo_cora_cert_prod, nova_cora_key_prod]):
+                    cur.execute(
+                        """SELECT cora_certificate, cora_private_key,
+                                  cora_certificate_prod, cora_private_key_prod
+                           FROM academias WHERE id=%s""",
+                        (academia_id,),
+                    )
+                    _cred = cur.fetchone() or {}
+                    if cora_ambiente == "production":
+                        _cert, _key = _cred.get("cora_certificate_prod"), _cred.get("cora_private_key_prod")
+                    else:
+                        _cert, _key = _cred.get("cora_certificate"), _cred.get("cora_private_key")
+                    from utils.cora import validar_par
+                    _problema = validar_par(_cert, _key)
+                    if _problema:
+                        _amb_label = "Produção" if cora_ambiente == "production" else "Stage"
+                        flash(f"Cora ({_amb_label}): {_problema}", "danger")
+
+                if not cora_incompleto:
+                    flash("Configuração de cobrança online salva com sucesso!", "success")
             else:
                 aulas_permitidas = request.form.get("aulas_experimentais_permitidas", "").strip()
                 if aulas_permitidas == "":
@@ -1593,6 +1765,18 @@ def configuracoes_academia():
     
     asaas_chave_definida = bool((academia or {}).get("asaas_api_key"))
     mp_token_definido = bool((academia or {}).get("mercadopago_access_token"))
+    cora_cert_definido = bool((academia or {}).get("cora_certificate"))
+    cora_key_definida = bool((academia or {}).get("cora_private_key"))
+    cora_cert_prod_definido = bool((academia or {}).get("cora_certificate_prod"))
+    cora_key_prod_definida = bool((academia or {}).get("cora_private_key_prod"))
+    efi_secret_definido = bool((academia or {}).get("efi_client_secret"))
+    efi_cert_definido = bool((academia or {}).get("efi_certificate"))
+    sumup_chave_definida = bool((academia or {}).get("sumup_api_key"))
+    sumup_conectado = ((academia or {}).get("sumup_conexao") or "key") == "oauth" \
+        and bool((academia or {}).get("sumup_oauth_refresh_token"))
+    import os as _os
+    sumup_oauth_app_ok = bool(_os.environ.get("SUMUP_OAUTH_CLIENT_ID", "").strip()
+                              and _os.environ.get("SUMUP_OAUTH_CLIENT_SECRET", "").strip())
     return render_template(
         "painel/configuracoes_academia.html",
         academia=academia,
@@ -1600,6 +1784,15 @@ def configuracoes_academia():
         academia_id=academia_id,
         asaas_chave_definida=asaas_chave_definida,
         mp_token_definido=mp_token_definido,
+        cora_cert_definido=cora_cert_definido,
+        cora_key_definida=cora_key_definida,
+        cora_cert_prod_definido=cora_cert_prod_definido,
+        cora_key_prod_definida=cora_key_prod_definida,
+        efi_secret_definido=efi_secret_definido,
+        efi_cert_definido=efi_cert_definido,
+        sumup_chave_definida=sumup_chave_definida,
+        sumup_conectado=sumup_conectado,
+        sumup_oauth_app_ok=sumup_oauth_app_ok,
     )
 
 
@@ -1782,7 +1975,18 @@ def cadastro_usuario():
                             (user_id, candidato["id"]),
                         )
                         aluno_vinculado_id = candidato["id"]
-            
+                # Se não vinculou a nenhum aluno existente, CRIA o registro de aluno
+                # (senão o usuário fica com papel "Aluno" mas não aparece na lista de alunos).
+                if aluno_vinculado_id is None:
+                    cur.execute(
+                        """INSERT INTO alunos (nome, email, telefone, cpf, usuario_id, id_academia,
+                                               id_associacao, id_federacao, status, ativo, data_matricula)
+                           VALUES (%s,%s,%s,%s,%s,%s,%s,%s,'ativo',1,CURDATE())""",
+                        (nome, email, (request.form.get("telefone") or None), cpf, user_id,
+                         id_academia_principal, id_associacao_usuario, id_federacao_usuario),
+                    )
+                    aluno_vinculado_id = cur.lastrowid
+
             # Vincular responsável aos alunos selecionados
             tem_role_responsavel = any(
                 r.get("chave") == "responsavel" and str(r.get("id")) in roles_escolhidas 
@@ -1901,3 +2105,314 @@ def api_alunos_para_vinculo(academia_id):
         cur.close()
         conn.close()
         return jsonify({"ok": False, "msg": str(e)}), 500
+
+
+# =====================================================================
+# 📱 WHATSAPP (Baileys) — conexão por academia + automações
+# =====================================================================
+def _wpp_papel_ok():
+    return (
+        current_user.has_role("gestor_academia")
+        or current_user.has_role("admin")
+        or current_user.has_role("gestor_federacao")
+        or current_user.has_role("gestor_associacao")
+    )
+
+
+@academia_bp.route("/whatsapp")
+@login_required
+def whatsapp_config():
+    if not _wpp_papel_ok():
+        flash("Acesso negado.", "danger")
+        return redirect(url_for("painel.home"))
+    academia_id, academias = _get_academia_gerenciamento()
+    if not academia_id:
+        flash("Nenhuma academia disponível.", "warning")
+        return redirect(url_for("painel.home"))
+    session["modo_painel"] = "academia"
+    session["academia_gerenciamento_id"] = academia_id
+
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    cur.execute(
+        "SELECT nome, whatsapp_numero, whatsapp_lembrete_mensalidade, whatsapp_avisos, "
+        "COALESCE(whatsapp_aniversario, 0) AS whatsapp_aniversario "
+        "FROM academias WHERE id = %s",
+        (academia_id,),
+    )
+    acad = cur.fetchone() or {}
+    cur.close(); conn.close()
+
+    from utils import whatsapp as wpp
+    st = wpp.status(academia_id)
+    return render_template(
+        "academia/whatsapp.html",
+        academia_id=academia_id, academias=academias, acad=acad,
+        wpp_status=st.get("status", "offline"), wpp_numero=st.get("number"),
+        servico_online=wpp.disponivel(),
+    )
+
+
+@academia_bp.route("/whatsapp/conectar", methods=["POST"])
+@login_required
+def whatsapp_conectar():
+    if not _wpp_papel_ok():
+        return jsonify({"erro": "negado"}), 403
+    academia_id, _ = _get_academia_gerenciamento()
+    from utils import whatsapp as wpp
+    return jsonify(wpp.conectar(academia_id))
+
+
+@academia_bp.route("/whatsapp/qr")
+@login_required
+def whatsapp_qr():
+    if not _wpp_papel_ok():
+        return jsonify({"erro": "negado"}), 403
+    academia_id, _ = _get_academia_gerenciamento()
+    from utils import whatsapp as wpp
+    info = wpp.qrcode(academia_id)
+    # ao conectar, guarda o número para exibição
+    if info.get("status") == "open" and info.get("number"):
+        try:
+            conn = get_db_connection(); cur = conn.cursor()
+            cur.execute("UPDATE academias SET whatsapp_numero=%s WHERE id=%s", (info["number"], academia_id))
+            conn.commit(); cur.close(); conn.close()
+        except Exception:
+            pass
+    return jsonify(info)
+
+
+@academia_bp.route("/whatsapp/desconectar", methods=["POST"])
+@login_required
+def whatsapp_desconectar():
+    if not _wpp_papel_ok():
+        return jsonify({"erro": "negado"}), 403
+    academia_id, _ = _get_academia_gerenciamento()
+    from utils import whatsapp as wpp
+    r = wpp.logout(academia_id)
+    try:
+        conn = get_db_connection(); cur = conn.cursor()
+        cur.execute("UPDATE academias SET whatsapp_numero=NULL WHERE id=%s", (academia_id,))
+        conn.commit(); cur.close(); conn.close()
+    except Exception:
+        pass
+    return jsonify(r)
+
+
+@academia_bp.route("/whatsapp/configurar", methods=["POST"])
+@login_required
+def whatsapp_configurar():
+    if not _wpp_papel_ok():
+        flash("Acesso negado.", "danger")
+        return redirect(url_for("painel.home"))
+    academia_id, _ = _get_academia_gerenciamento()
+    lembrete = 1 if request.form.get("whatsapp_lembrete_mensalidade") == "1" else 0
+    avisos = 1 if request.form.get("whatsapp_avisos") == "1" else 0
+    aniversario = 1 if request.form.get("whatsapp_aniversario") == "1" else 0
+    conn = get_db_connection(); cur = conn.cursor()
+    cur.execute(
+        "UPDATE academias SET whatsapp_lembrete_mensalidade=%s, whatsapp_avisos=%s, "
+        "whatsapp_aniversario=%s WHERE id=%s",
+        (lembrete, avisos, aniversario, academia_id),
+    )
+    conn.commit(); cur.close(); conn.close()
+    flash("Preferências de WhatsApp salvas.", "success")
+    return redirect(url_for("academia.whatsapp_config", academia_id=academia_id))
+
+
+@academia_bp.route("/whatsapp/teste", methods=["POST"])
+@login_required
+def whatsapp_teste():
+    if not _wpp_papel_ok():
+        return jsonify({"erro": "negado"}), 403
+    academia_id, _ = _get_academia_gerenciamento()
+    telefone = (request.form.get("telefone") or "").strip()
+    if not telefone:
+        return jsonify({"ok": False, "erro": "informe um telefone"}), 400
+    from utils import whatsapp as wpp
+    ok, info = wpp.enviar(
+        academia_id, telefone,
+        "✅ Teste do Unimaster: seu WhatsApp está conectado e pronto para enviar mensagens automáticas.",
+    )
+    return jsonify({"ok": ok, "info": info})
+
+
+@academia_bp.route("/whatsapp/avisos")
+@login_required
+def whatsapp_avisos():
+    if not _wpp_papel_ok():
+        flash("Acesso negado.", "danger")
+        return redirect(url_for("painel.home"))
+    academia_id, academias = _get_academia_gerenciamento()
+    if not academia_id:
+        flash("Nenhuma academia disponível.", "warning")
+        return redirect(url_for("painel.home"))
+    session["modo_painel"] = "academia"
+    session["academia_gerenciamento_id"] = academia_id
+
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    cur.execute(
+        """SELECT id, nome, tel_celular, telefone, responsavel_financeiro_telefone
+           FROM alunos WHERE id_academia = %s AND ativo = 1 ORDER BY nome""",
+        (academia_id,),
+    )
+    alunos = cur.fetchall()
+    cur.execute("SELECT TurmaID AS id, Nome AS nome FROM turmas WHERE id_academia = %s ORDER BY Nome", (academia_id,))
+    turmas = cur.fetchall()
+    cur.close(); conn.close()
+
+    from utils import whatsapp as wpp
+    st = wpp.status(academia_id)
+    return render_template(
+        "academia/whatsapp_avisos.html",
+        academia_id=academia_id, academias=academias,
+        alunos=alunos, turmas=turmas,
+        conectado=(st.get("status") == "open"),
+    )
+
+
+@academia_bp.route("/whatsapp/avisos/enviar", methods=["POST"])
+@login_required
+def whatsapp_avisos_enviar():
+    if not _wpp_papel_ok():
+        return jsonify({"ok": False, "erro": "negado"}), 403
+    academia_id, _ = _get_academia_gerenciamento()
+    mensagem = (request.form.get("mensagem") or "").strip()
+    destino = (request.form.get("destino") or "todos").strip()
+    if not mensagem:
+        return jsonify({"ok": False, "erro": "Escreva a mensagem."}), 400
+
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    base = ("SELECT a.id, a.nome, a.tel_celular, a.telefone, a.responsavel_financeiro_telefone "
+            "FROM alunos a WHERE a.id_academia = %s AND a.ativo = 1")
+    params = [academia_id]
+    if destino == "turma":
+        turma_id = request.form.get("turma_id", type=int)
+        if not turma_id:
+            cur.close(); conn.close()
+            return jsonify({"ok": False, "erro": "Selecione a turma."}), 400
+        base += " AND a.id IN (SELECT aluno_id FROM aluno_turmas WHERE TurmaID = %s)"
+        params.append(turma_id)
+    elif destino == "selecionados":
+        ids = request.form.getlist("aluno_ids")
+        ids = [int(i) for i in ids if str(i).isdigit()]
+        if not ids:
+            cur.close(); conn.close()
+            return jsonify({"ok": False, "erro": "Selecione ao menos um aluno."}), 400
+        base += " AND a.id IN (%s)" % ",".join(["%s"] * len(ids))
+        params.extend(ids)
+    cur.execute(base + " ORDER BY a.nome", tuple(params))
+    alunos = cur.fetchall()
+    cur.close(); conn.close()
+
+    from utils import whatsapp as wpp
+    enviados = falhas = sem_tel = 0
+    for a in alunos:
+        tel = (a.get("responsavel_financeiro_telefone") or a.get("tel_celular") or a.get("telefone") or "").strip()
+        if not tel:
+            sem_tel += 1
+            continue
+        # personaliza com o primeiro nome
+        primeiro = (a.get("nome") or "").split(" ")[0]
+        texto = mensagem.replace("{nome}", primeiro)
+        ok, _ = wpp.enviar(academia_id, tel, texto)
+        if ok:
+            enviados += 1
+        else:
+            falhas += 1
+    return jsonify({"ok": True, "resumo": {"enviados": enviados, "falhas": falhas, "sem_telefone": sem_tel, "total": len(alunos)}})
+
+
+@academia_bp.route("/whatsapp/mensagens", methods=["GET", "POST"])
+@login_required
+def whatsapp_mensagens():
+    if not _wpp_papel_ok():
+        flash("Acesso negado.", "danger")
+        return redirect(url_for("painel.home"))
+    academia_id, academias = _get_academia_gerenciamento()
+    if not academia_id:
+        flash("Nenhuma academia disponível.", "warning")
+        return redirect(url_for("painel.home"))
+    session["modo_painel"] = "academia"
+    session["academia_gerenciamento_id"] = academia_id
+
+    from utils import whatsapp_templates as tpl
+    if request.method == "POST":
+        for tipo in tpl.TIPOS:
+            texto = (request.form.get("texto_" + tipo) or "").strip()
+            ativo = request.form.get("ativo_" + tipo) == "1"
+            if not texto:
+                texto = tpl.padrao(tipo)
+            tpl.salvar(academia_id, tipo, texto, ativo)
+        flash("Mensagens salvas.", "success")
+        return redirect(url_for("academia.whatsapp_mensagens", academia_id=academia_id))
+
+    dados = tpl.carregar(academia_id)
+    itens = [{"tipo": t, "label": tpl.TIPOS[t]["label"],
+              "texto": dados[t]["texto"], "ativo": dados[t]["ativo"],
+              "padrao": tpl.TIPOS[t]["default"]} for t in tpl.ORDEM]
+    return render_template(
+        "academia/whatsapp_mensagens.html",
+        academia_id=academia_id, academias=academias, itens=itens,
+    )
+
+
+# =====================================================
+# 🔹 Locais de treino (escolas, projetos, CTs) — por academia
+# =====================================================
+# Cada local tem um professor. Usados nas inscrições para registrar de onde
+# o atleta vem (ex.: alunos de uma escola onde o professor dá aula).
+
+@academia_bp.route("/locais-treino", methods=["GET", "POST"])
+@login_required
+def locais_treino():
+    academia_id, academias = _get_academia_gerenciamento()
+    if not academia_id:
+        flash("Nenhuma academia disponível.", "warning")
+        return redirect(url_for("painel.home"))
+
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        if request.method == "POST":
+            acao = request.form.get("acao")
+            if acao == "criar":
+                nome = (request.form.get("nome") or "").strip()
+                professor_id = request.form.get("professor_id", type=int)
+                if not nome:
+                    flash("Informe o nome do local.", "warning")
+                else:
+                    cur.execute(
+                        """INSERT INTO locais_treino (academia_id, nome, professor_id)
+                           VALUES (%s, %s, %s)""",
+                        (academia_id, nome, professor_id or None))
+                    conn.commit()
+                    flash(f"Local '{nome}' cadastrado.", "success")
+            elif acao == "excluir":
+                local_id = request.form.get("local_id", type=int)
+                # Só apaga local da própria academia.
+                cur.execute("DELETE FROM locais_treino WHERE id = %s AND academia_id = %s",
+                            (local_id, academia_id))
+                conn.commit()
+                flash("Local removido.", "info")
+            return redirect(url_for("academia.locais_treino", academia_id=academia_id))
+
+        cur.execute(
+            """SELECT lt.id, lt.nome, lt.ativo, p.nome AS professor_nome
+               FROM locais_treino lt
+               LEFT JOIN professores p ON p.id = lt.professor_id
+               WHERE lt.academia_id = %s ORDER BY lt.nome""", (academia_id,))
+        locais = cur.fetchall()
+        cur.execute(
+            "SELECT id, nome FROM professores WHERE id_academia = %s AND (ativo = 1 OR ativo IS NULL) ORDER BY nome",
+            (academia_id,))
+        professores = cur.fetchall()
+    finally:
+        cur.close()
+        conn.close()
+
+    return render_template("academia/locais_treino.html", locais=locais,
+                           professores=professores, academia_id=academia_id,
+                           academias=academias)

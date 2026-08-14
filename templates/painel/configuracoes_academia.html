@@ -4,191 +4,253 @@
 <style>
   :root {
     --c-surface: #ffffff;
-    --c-border: #e5e9f2;
-    --c-text: #1f2937;
+    --c-bg: #f6f8fc;
+    --c-border: #e8edf5;
+    --c-text: #111827;
     --c-muted: #6b7280;
-    --c-primary: #0d6efd;
-    --c-primary-soft: #e8f1ff;
+    --c-muted-2: #9ca3af;
+    --c-primary: #4f46e5;
+    --c-primary-2: #6366f1;
+    --c-primary-soft: #eef2ff;
+    --shadow-sm: 0 1px 2px rgba(16,24,40,.05);
+    --shadow-md: 0 4px 16px rgba(16,24,40,.08);
+    --shadow-lg: 0 12px 32px rgba(16,24,40,.12);
   }
 
-  .cfg-page { max-width: 880px; margin: 0 auto; padding: 0 0 2.5rem; }
+  .cfg-page { width: 100%; max-width: 1500px; margin: 0 auto; padding: 0 .5rem 3rem; }
 
-  .cfg-header {
-    background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
-    border: 1px solid var(--c-border);
-    border-radius: 16px;
-    padding: 1.4rem 1.6rem;
-    margin-bottom: 1.25rem;
-    box-shadow: 0 1px 3px rgba(15,23,42,.04);
+  /* ── Abas ───────────────────────────────────────────── */
+  .cfg-tabs {
+    display: flex; gap: .4rem; margin-bottom: 1.4rem;
+    background: var(--c-surface); border: 1px solid var(--c-border);
+    border-radius: 14px; padding: .4rem; box-shadow: var(--shadow-sm);
+    overflow-x: auto; scrollbar-width: none;
   }
-  .cfg-header h1 {
-    font-size: 1.45rem; font-weight: 700; margin: 0;
-    color: var(--c-text);
-    display: flex; align-items: center; gap: .55rem;
+  .cfg-tabs::-webkit-scrollbar { display: none; }
+  .cfg-tab {
+    flex: 1 1 auto; min-width: max-content;
+    display: inline-flex; align-items: center; justify-content: center; gap: .5rem;
+    padding: .7rem 1.1rem; border: none; background: transparent; cursor: pointer;
+    font-size: .9rem; font-weight: 700; color: var(--c-muted);
+    border-radius: 10px; white-space: nowrap;
+    transition: background .15s, color .15s, box-shadow .15s;
   }
-  .cfg-header h1 .icon-wrap {
-    width: 40px; height: 40px;
-    background: var(--c-primary-soft); color: var(--c-primary);
-    border-radius: 10px;
-    display: inline-flex; align-items: center; justify-content: center;
-    font-size: 1.15rem;
+  .cfg-tab i { font-size: 1rem; }
+  .cfg-tab:hover { color: var(--c-text); background: #f3f4f6; }
+  .cfg-tab.is-active {
+    color: #fff; background: linear-gradient(135deg,#4f46e5,#6366f1);
+    box-shadow: 0 4px 12px rgba(79,70,229,.30);
   }
-  .cfg-header .subtitle { font-size: .9rem; color: var(--c-muted); margin-top: .25rem; }
+  .cfg-tab .cfg-tab__count {
+    font-size: .68rem; font-weight: 700; background: rgba(0,0,0,.08);
+    color: inherit; padding: .05rem .42rem; border-radius: 999px;
+  }
+  .cfg-tab.is-active .cfg-tab__count { background: rgba(255,255,255,.22); }
 
+  .cfg-pane { display: none; animation: cfgFade .25s ease; }
+  .cfg-pane.is-active { display: block; }
+  @keyframes cfgFade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+  /* ── Cabeçalho ──────────────────────────────────────── */
+  .cfg-head { margin-bottom: 1.4rem; }
+  .cfg-head__top { margin-bottom: .9rem; }
+  .cfg-head__title {
+    font-size: 1.5rem; font-weight: 800; margin: 0; line-height: 1.15;
+    letter-spacing: -.01em; color: var(--c-text);
+    display: flex; align-items: center; gap: .5rem;
+  }
+  .cfg-head__title i { color: var(--c-primary); }
+  .cfg-head__sub { font-size: .88rem; color: var(--c-muted); margin: .25rem 0 0; }
+
+  /* Seletor de academia */
   .cfg-academia-select {
     background: var(--c-surface);
     border: 1px solid var(--c-border);
-    border-radius: 12px;
-    padding: .65rem .85rem;
-    margin-bottom: 1rem;
-    display: flex; align-items: center; gap: .65rem;
-    box-shadow: 0 1px 3px rgba(15,23,42,.03);
+    border-radius: 14px;
+    padding: .7rem .9rem;
+    margin-bottom: 1.5rem;
+    display: flex; align-items: center; gap: .7rem;
+    box-shadow: var(--shadow-sm);
     flex-wrap: wrap;
   }
   .cfg-academia-select label {
-    font-size: .75rem; color: var(--c-muted);
-    font-weight: 600; text-transform: uppercase; letter-spacing: .04em;
-    margin: 0;
+    font-size: .74rem; color: var(--c-muted);
+    font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
+    margin: 0; display: flex; align-items: center; gap: .35rem;
   }
+  .cfg-academia-select label i { color: var(--c-primary); }
   .cfg-academia-select .form-select-sm {
-    border-radius: 10px;
-    border: 1px solid var(--c-border);
-    background: #f9fafb;
-    flex: 1; max-width: 320px; min-width: 200px;
+    border-radius: 10px; border: 1px solid var(--c-border);
+    background: #f9fafb; flex: 1; max-width: 340px; min-width: 200px;
   }
 
-  /* Sections */
-  .cfg-section { margin-bottom: 1.25rem; }
+  /* ── Seções ─────────────────────────────────────────── */
+  .cfg-section { margin-bottom: 1.6rem; }
   .cfg-section__label {
-    font-size: .72rem; font-weight: 700;
-    text-transform: uppercase; letter-spacing: .07em;
-    color: var(--c-muted);
-    margin: 0 0 .55rem .25rem;
-    display: flex; align-items: center; gap: .35rem;
+    font-size: .74rem; font-weight: 800;
+    text-transform: uppercase; letter-spacing: .08em;
+    color: var(--c-muted); margin: 0 0 .65rem .15rem;
+    display: flex; align-items: center; gap: .45rem;
   }
-  .cfg-section__label i { color: var(--c-primary); }
+  .cfg-section__label i { color: var(--c-primary); font-size: .95rem; }
 
   .cfg-group {
     background: var(--c-surface);
     border: 1px solid var(--c-border);
-    border-radius: 14px;
+    border-radius: 16px;
     overflow: hidden;
-    box-shadow: 0 1px 3px rgba(15,23,42,.04);
+    box-shadow: var(--shadow-sm);
   }
+  /* Grid de atalhos (preenche a largura disponível) */
+  .cfg-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: .9rem; }
+  @media (max-width: 640px) { .cfg-grid { grid-template-columns: 1fr; } }
 
-  .cfg-item {
-    display: flex; align-items: center; gap: 1rem;
-    padding: 1.05rem 1.15rem;
+  .cfg-card-link {
+    display: flex; align-items: center; gap: .95rem;
+    padding: 1.05rem 1.1rem;
     text-decoration: none; color: inherit;
-    transition: background .15s;
-    border-bottom: 1px solid #f1f5f9;
+    background: var(--c-surface);
+    border: 1px solid var(--c-border);
+    border-radius: 16px;
+    box-shadow: var(--shadow-sm);
+    transition: transform .16s, box-shadow .16s, border-color .16s;
   }
-  .cfg-item:last-child { border-bottom: none; }
-  .cfg-item:hover { background: #f8fbff; color: inherit; }
+  .cfg-card-link:hover {
+    color: inherit; transform: translateY(-2px);
+    box-shadow: var(--shadow-md); border-color: #d6deec;
+  }
 
   .cfg-item__icon {
-    width: 42px; height: 42px;
-    border-radius: 11px;
+    width: 46px; height: 46px; border-radius: 13px;
     display: flex; align-items: center; justify-content: center;
-    font-size: 1.15rem;
-    flex-shrink: 0;
+    font-size: 1.2rem; flex-shrink: 0;
   }
   .cfg-item__icon--blue   { background: #eff6ff; color: #2563eb; }
-  .cfg-item__icon--green  { background: #f0fdf4; color: #16a34a; }
+  .cfg-item__icon--green  { background: #ecfdf5; color: #059669; }
   .cfg-item__icon--orange { background: #fff7ed; color: #ea580c; }
-  .cfg-item__icon--purple { background: #faf5ff; color: #7c3aed; }
+  .cfg-item__icon--purple { background: #f5f3ff; color: #7c3aed; }
   .cfg-item__icon--teal   { background: #f0fdfa; color: #0d9488; }
   .cfg-item__icon--rose   { background: #fdf2f8; color: #db2777; }
+  .cfg-item__icon--indigo { background: #eef2ff; color: #4f46e5; }
 
   .cfg-item__body { flex: 1; min-width: 0; }
-  .cfg-item__name {
-    font-size: .96rem; font-weight: 600;
-    color: var(--c-text); margin: 0 0 .15rem;
-  }
-  .cfg-item__desc {
-    font-size: .82rem; color: var(--c-muted); margin: 0;
-  }
-  .cfg-item__arrow {
-    color: #cbd5e1; font-size: .9rem; flex-shrink: 0;
-    transition: color .15s, transform .15s;
-  }
-  .cfg-item:hover .cfg-item__arrow { color: var(--c-primary); transform: translateX(3px); }
+  .cfg-item__name { font-size: .98rem; font-weight: 700; color: var(--c-text); margin: 0 0 .12rem; }
+  .cfg-item__desc { font-size: .82rem; color: var(--c-muted); margin: 0; line-height: 1.35; }
+  .cfg-item__arrow { color: #cbd5e1; font-size: .95rem; flex-shrink: 0; transition: color .15s, transform .15s; }
+  .cfg-card-link:hover .cfg-item__arrow { color: var(--c-primary); transform: translateX(3px); }
 
-  .cfg-item-form {
-    padding: 1.05rem 1.15rem;
-    border-bottom: 1px solid #f1f5f9;
+  /* Bloco de formulário (financeiro/visitantes) */
+  .cfg-panel { background: var(--c-surface); border: 1px solid var(--c-border); border-radius: 16px; box-shadow: var(--shadow-sm); overflow: hidden; }
+  .cfg-panel__head {
+    display: flex; align-items: center; gap: .95rem;
+    padding: 1.1rem 1.2rem; border-bottom: 1px solid #f1f5f9;
+    background: linear-gradient(180deg, #fcfdff, #ffffff);
   }
-  .cfg-item-form:last-child { border-bottom: none; }
-  .cfg-item-form__head {
-    display: flex; align-items: center; gap: 1rem;
-    margin-bottom: 1rem;
+  .cfg-panel__head .cfg-item__body { flex: 1; }
+  .cfg-panel__body { padding: 1.2rem; }
+
+  .cfg-badge {
+    font-size: .7rem; font-weight: 700; padding: .26rem .6rem; border-radius: 999px;
+    display: inline-flex; align-items: center; gap: .3rem; white-space: nowrap;
   }
-  .cfg-item-form__label {
-    font-size: .82rem; font-weight: 600;
-    color: #374151; margin-bottom: .35rem;
-    display: block;
+  .cfg-badge--on  { background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; }
+  .cfg-badge--off { background: #f3f4f6; color: #6b7280; border: 1px solid #e5e7eb; }
+  .cfg-badge .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+
+  .cfg-form-label { font-size: .8rem; font-weight: 700; color: #374151; margin-bottom: .4rem; display: block; }
+  .cfg-panel .form-control, .cfg-panel .form-select, .cfg-panel .input-group-text {
+    border-radius: 11px; border: 1px solid var(--c-border); font-size: .92rem; padding: .6rem .85rem;
   }
-  .cfg-item-form .form-control,
-  .cfg-item-form .input-group-text {
-    border-radius: 10px;
-    border: 1px solid var(--c-border);
-    font-size: .92rem;
-    padding: .55rem .8rem;
+  .cfg-panel .form-control, .cfg-panel .form-select { background: #f9fafb; }
+  .cfg-panel .form-control:focus, .cfg-panel .form-select:focus {
+    border-color: var(--c-primary); box-shadow: 0 0 0 3.5px rgba(79,70,229,.14); background: #fff;
   }
-  .cfg-item-form .form-control { background: #f9fafb; }
-  .cfg-item-form .form-control:focus {
-    border-color: var(--c-primary);
-    box-shadow: 0 0 0 3px rgba(13,110,253,.15);
-    background: #fff;
-  }
-  .cfg-item-form .input-group-text {
-    background: #f1f5f9; color: var(--c-muted);
-    border-radius: 10px 0 0 10px;
-  }
-  .cfg-item-form .input-group .form-control { border-radius: 0 10px 10px 0; }
-  .cfg-item-form .form-text {
-    font-size: .75rem; color: #9ca3af; margin-top: .35rem;
-  }
+  .cfg-panel .input-group-text { background: #f1f5f9; color: var(--c-muted); border-radius: 11px 0 0 11px; }
+  .cfg-panel .input-group .form-control { border-radius: 0 11px 11px 0; }
+  .cfg-panel .form-text { font-size: .76rem; color: #9ca3af; margin-top: .4rem; }
+  .cfg-panel code { background: #f1f5f9; color: #4f46e5; padding: .12rem .4rem; border-radius: 6px; font-size: .82em; }
 
   .cfg-btn-save {
-    display: inline-flex; align-items: center; gap: .4rem;
-    padding: .6rem 1.25rem;
-    font-size: .88rem; font-weight: 600;
-    background: var(--c-primary); color: #fff;
-    border: none; border-radius: 10px;
-    cursor: pointer;
-    box-shadow: 0 2px 6px rgba(13,110,253,.25);
-    transition: box-shadow .15s, transform .15s;
+    display: inline-flex; align-items: center; gap: .45rem;
+    padding: .64rem 1.4rem; font-size: .9rem; font-weight: 700;
+    background: linear-gradient(135deg, #4f46e5, #6366f1); color: #fff;
+    border: none; border-radius: 11px; cursor: pointer;
+    box-shadow: 0 4px 14px rgba(79,70,229,.32);
+    transition: box-shadow .16s, transform .16s, filter .16s;
   }
-  .cfg-btn-save:hover { color: #fff; box-shadow: 0 4px 12px rgba(13,110,253,.35); transform: translateY(-1px); }
+  .cfg-btn-save:hover { color: #fff; box-shadow: 0 7px 20px rgba(79,70,229,.42); transform: translateY(-1px); filter: brightness(1.03); }
+
+  /* ── Seletor de gateway em cards ────────────────────── */
+  .gw-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: .7rem; margin-bottom: 1.2rem; }
+  @media (max-width: 480px) { .gw-cards { grid-template-columns: 1fr; } }
+
+  .gw-card {
+    position: relative; display: flex; align-items: center; gap: .8rem;
+    padding: .85rem .95rem; border: 1.5px solid var(--c-border);
+    border-radius: 14px; cursor: pointer; background: #fff;
+    transition: border-color .15s, box-shadow .15s, background .15s;
+  }
+  .gw-card:hover { border-color: #c7d2fe; background: #fcfcff; }
+  .gw-card input { position: absolute; opacity: 0; pointer-events: none; }
+  .gw-card.is-selected { border-color: var(--c-primary); background: #f5f4ff; box-shadow: 0 0 0 3.5px rgba(79,70,229,.12); }
+  .gw-card__logo {
+    width: 40px; height: 40px; border-radius: 11px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; font-size: 1.2rem; color: #fff;
+  }
+  .gw-card__logo--asaas   { background: linear-gradient(135deg,#1e6bff,#0b4ed6); }
+  .gw-card__logo--mp      { background: linear-gradient(135deg,#00b1ea,#0084c7); }
+  .gw-card__logo--infinit { background: linear-gradient(135deg,#111827,#1f2937); color:#00e08a; }
+  .gw-card__logo--cora    { background: linear-gradient(135deg,#ff4d7e,#e21b60); }
+  .gw-card__logo--efi     { background: linear-gradient(135deg,#f97316,#ea580c); }
+  .gw-card__logo--sumup   { background: linear-gradient(135deg,#1d1d1b,#3a3a38); color:#fff; }
+  .gw-card__logo--none    { background: #e5e7eb; color:#6b7280; }
+  .gw-card__body { flex: 1; min-width: 0; }
+  .gw-card__name { font-size: .9rem; font-weight: 700; color: var(--c-text); margin: 0; display:flex; align-items:center; gap:.4rem; }
+  .gw-card__tag { font-size: .73rem; color: var(--c-muted); margin: .05rem 0 0; }
+  .gw-card__check {
+    width: 20px; height: 20px; border-radius: 50%; border: 2px solid #d1d5db; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; color: #fff; font-size: .65rem;
+    transition: all .15s;
+  }
+  .gw-card.is-selected .gw-card__check { background: var(--c-primary); border-color: var(--c-primary); }
+  .gw-card.is-selected .gw-card__check::after { content: '\2713'; }
+  .gw-card--soon { opacity: .65; }
+  .gw-card__pill { font-size: .62rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
+    background: #fef3c7; color: #92400e; padding: .12rem .4rem; border-radius: 5px; }
+
+  .gw-bloco {
+    background: #f8fafc; border: 1px solid var(--c-border);
+    border-radius: 14px; padding: 1.1rem; margin-bottom: 1.2rem;
+  }
+  .gw-bloco__title { font-size: .78rem; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: var(--c-muted); margin-bottom: .85rem; display:flex; align-items:center; gap:.4rem; }
 
   @media (max-width: 575.98px) {
-    .cfg-page { padding-left: .25rem; padding-right: .25rem; }
-    .cfg-header { padding: 1rem; border-radius: 12px; }
-    .cfg-header h1 { font-size: 1.2rem; }
-    .cfg-item { padding: .9rem; gap: .75rem; }
-    .cfg-item__icon { width: 38px; height: 38px; font-size: 1rem; }
-    .cfg-item-form { padding: .9rem; }
+    .cfg-page { padding-left: .15rem; padding-right: .15rem; }
+    .cfg-hero { padding: 1.2rem 1.15rem; border-radius: 16px; }
+    .cfg-hero__title { font-size: 1.25rem; }
+    .cfg-hero__avatar { width: 50px; height: 50px; font-size: 1.3rem; }
+    .cfg-panel__body { padding: 1rem; }
   }
 </style>
 {% endblock %}
 {% block content %}
-<div class="container my-4 cfg-page">
+<div class="container-fluid my-4 cfg-page">
 
-  <div class="cfg-header">
-    {% set back_url = back_url or get_back_url_default() %}
-    {% include 'components/botao_voltar.html' %}
-    <h1>
-      <span class="icon-wrap"><i class="bi bi-sliders"></i></span>
-      Configurações
-      {% if academia %}<span class="text-muted fw-normal" style="font-size:1rem;">— {{ academia.nome }}</span>{% endif %}
-    </h1>
-    <p class="subtitle mb-0">Gerencie os dados e preferências desta academia.</p>
+  <!-- Cabeçalho -->
+  <div class="cfg-head">
+    <div class="cfg-head__top">
+      {% set back_url = back_url or get_back_url_default() %}
+      {% include 'components/botao_voltar.html' %}
+    </div>
+    <div class="cfg-head__info">
+      <h1 class="cfg-head__title"><i class="bi bi-sliders"></i> Configurações</h1>
+      <p class="cfg-head__sub">{{ academia.nome if academia else 'Academia' }} — gerencie os dados, operações e preferências.</p>
+    </div>
   </div>
 
   {% if academias|length > 1 %}
   <form method="GET" class="cfg-academia-select">
-    <label>Academia</label>
+    <label><i class="bi bi-building"></i> Academia</label>
     <select name="academia_id" class="form-select form-select-sm" onchange="this.form.submit()">
       {% for ac in academias %}
       <option value="{{ ac.id }}" {% if ac.id == academia_id %}selected{% endif %}>{{ ac.nome }}</option>
@@ -199,51 +261,59 @@
 
   {% if academia %}
 
-  <!-- Seção: Academia -->
-  <div class="cfg-section">
-    <p class="cfg-section__label"><i class="bi bi-building"></i> Academia</p>
-    <div class="cfg-group">
-      <a href="{{ url_for('associacao.editar_academia', academia_id=academia.id, next=url_for('academia.configuracoes_academia', academia_id=academia.id)) }}" class="cfg-item">
-        <div class="cfg-item__icon cfg-item__icon--blue">
-          <i class="bi bi-pencil-square"></i>
-        </div>
+  {# Aba ativa: padrão "geral"; após salvar, retorna para a aba da seção salva #}
+  {% set ns = namespace(active='geral') %}
+  {% if request.method == 'POST' %}
+    {% set _s = request.form.get('secao') %}
+    {% if _s in ('online','asaas') %}{% set ns.active = 'financeiro' %}
+    {% elif _s == 'visitantes' %}{% set ns.active = 'visitantes' %}{% endif %}
+  {% endif %}
+  {% set pode_financeiro = current_user.has_role('gestor_academia') or current_user.has_role('admin') %}
+
+  <!-- Abas -->
+  <div class="cfg-tabs" role="tablist">
+    <button type="button" class="cfg-tab {% if ns.active == 'geral' %}is-active{% endif %}" data-tab="geral">
+      <i class="bi bi-grid-1x2-fill"></i> Geral &amp; Operações
+    </button>
+    {% if pode_financeiro %}
+    <button type="button" class="cfg-tab {% if ns.active == 'financeiro' %}is-active{% endif %}" data-tab="financeiro">
+      <i class="bi bi-credit-card-2-front-fill"></i> Financeiro
+    </button>
+    {% endif %}
+    <button type="button" class="cfg-tab {% if ns.active == 'visitantes' %}is-active{% endif %}" data-tab="visitantes">
+      <i class="bi bi-person-walking"></i> Visitantes
+    </button>
+  </div>
+
+  <!-- Aba: Geral & Operações -->
+  <div class="cfg-pane {% if ns.active == 'geral' %}is-active{% endif %}" data-pane="geral">
+    <div class="cfg-grid">
+      <a href="{{ url_for('associacao.editar_academia', academia_id=academia.id, next=url_for('academia.configuracoes_academia', academia_id=academia.id)) }}" class="cfg-card-link">
+        <div class="cfg-item__icon cfg-item__icon--blue"><i class="bi bi-pencil-square"></i></div>
         <div class="cfg-item__body">
-          <p class="cfg-item__name">Editar dados da academia</p>
+          <p class="cfg-item__name">Dados da academia</p>
           <p class="cfg-item__desc">Nome, endereço, contato e informações gerais.</p>
         </div>
         <i class="bi bi-chevron-right cfg-item__arrow"></i>
       </a>
-    </div>
-  </div>
-
-  <!-- Seção: Operações da academia -->
-  <div class="cfg-section">
-    <p class="cfg-section__label"><i class="bi bi-gear-fill"></i> Operações</p>
-    <div class="cfg-group">
-      <a href="{{ url_for('configuracoes.modalidades_lista', academia_id=academia.id) }}" class="cfg-item">
-        <div class="cfg-item__icon cfg-item__icon--purple">
-          <i class="bi bi-collection-fill"></i>
-        </div>
+      <a href="{{ url_for('configuracoes.modalidades_lista', academia_id=academia.id) }}" class="cfg-card-link">
+        <div class="cfg-item__icon cfg-item__icon--purple"><i class="bi bi-collection-fill"></i></div>
         <div class="cfg-item__body">
           <p class="cfg-item__name">Modalidades</p>
-          <p class="cfg-item__desc">Cadastrar modalidades, graduações e vínculos.</p>
+          <p class="cfg-item__desc">Modalidades, graduações e vínculos.</p>
         </div>
         <i class="bi bi-chevron-right cfg-item__arrow"></i>
       </a>
-      <a href="{{ url_for('professores.lista', academia_id=academia.id) }}" class="cfg-item">
-        <div class="cfg-item__icon cfg-item__icon--rose">
-          <i class="bi bi-mortarboard-fill"></i>
-        </div>
+      <a href="{{ url_for('professores.lista', academia_id=academia.id) }}" class="cfg-card-link">
+        <div class="cfg-item__icon cfg-item__icon--rose"><i class="bi bi-mortarboard-fill"></i></div>
         <div class="cfg-item__body">
           <p class="cfg-item__name">Professores</p>
-          <p class="cfg-item__desc">Gerenciar professores vinculados à academia.</p>
+          <p class="cfg-item__desc">Professores vinculados à academia.</p>
         </div>
         <i class="bi bi-chevron-right cfg-item__arrow"></i>
       </a>
-      <a href="{{ url_for('turmas.lista_turmas', academia_id=academia.id) }}" class="cfg-item">
-        <div class="cfg-item__icon cfg-item__icon--orange">
-          <i class="bi bi-calendar3"></i>
-        </div>
+      <a href="{{ url_for('turmas.lista_turmas', academia_id=academia.id) }}" class="cfg-card-link">
+        <div class="cfg-item__icon cfg-item__icon--orange"><i class="bi bi-calendar3"></i></div>
         <div class="cfg-item__body">
           <p class="cfg-item__name">Turmas</p>
           <p class="cfg-item__desc">Horários, capacidade e matrículas.</p>
@@ -252,16 +322,17 @@
       </a>
     </div>
   </div>
+  <!-- /Aba Geral -->
 
-  <!-- Seção: Financeiro -->
-  {% if current_user.has_role('gestor_academia') or current_user.has_role('admin') %}
-  <div class="cfg-section">
-    <p class="cfg-section__label"><i class="bi bi-currency-dollar"></i> Financeiro</p>
-    <div class="cfg-group">
-      <a href="{{ url_for('financeiro.formas_pagamento', academia_id=academia.id) }}" class="cfg-item">
-        <div class="cfg-item__icon cfg-item__icon--green">
-          <i class="bi bi-wallet2"></i>
-        </div>
+  <!-- Aba: Financeiro -->
+  {% if pode_financeiro %}
+  {% set gw_atual = academia.gateway_pagamento or '' %}
+  {% set base_url = request.url_root.rstrip('/') %}
+  <div class="cfg-pane {% if ns.active == 'financeiro' %}is-active{% endif %}" data-pane="financeiro">
+    <div class="cfg-group" style="background:transparent;border:none;box-shadow:none;display:flex;flex-direction:column;gap:.9rem;">
+
+      <a href="{{ url_for('financeiro.formas_pagamento', academia_id=academia.id) }}" class="cfg-card-link">
+        <div class="cfg-item__icon cfg-item__icon--green"><i class="bi bi-wallet2"></i></div>
         <div class="cfg-item__body">
           <p class="cfg-item__name">Formas de pagamento</p>
           <p class="cfg-item__desc">Ativar dinheiro, PIX, cartão e outras formas aceitas.</p>
@@ -269,131 +340,362 @@
         <i class="bi bi-chevron-right cfg-item__arrow"></i>
       </a>
 
-      <!-- Cobrança online (gateway de pagamento) -->
-      {% set gw_atual = academia.gateway_pagamento or '' %}
-      {% set base_url = request.url_root.rstrip('/') %}
-      <div class="cfg-item-form">
-        <div class="cfg-item-form__head">
-          <div class="cfg-item__icon cfg-item__icon--green">
-            <i class="bi bi-qr-code"></i>
+      <!-- Cobrança online -->
+      <div class="cfg-panel">
+        <div class="cfg-panel__head">
+          <div class="cfg-item__icon cfg-item__icon--indigo"><i class="bi bi-qr-code"></i></div>
+          <div class="cfg-item__body">
+            <p class="cfg-item__name">Cobrança online</p>
+            <p class="cfg-item__desc">Gere PIX, Boleto ou link de pagamento direto para o aluno.</p>
           </div>
-          <div>
-            <p class="cfg-item__name mb-0">Cobrança online</p>
-            <p class="cfg-item__desc mb-0">Escolha o gateway de pagamento desta academia para gerar PIX, Boleto ou link de pagamento.</p>
-          </div>
+          {% if gw_atual %}
+          <span class="cfg-badge cfg-badge--on"><span class="dot"></span> Ativo</span>
+          {% else %}
+          <span class="cfg-badge cfg-badge--off"><span class="dot"></span> Desativado</span>
+          {% endif %}
         </div>
-        <form method="POST">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <input type="hidden" name="secao" value="online">
+        <div class="cfg-panel__body">
+          <form method="POST" autocomplete="off" id="formCobrancaOnline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="secao" value="online">
+            {# Campos isca para impedir o navegador de autopreencher CPF/usuário/senha #}
+            <input type="text" name="prevent_autofill_user" style="display:none" tabindex="-1" autocomplete="off" aria-hidden="true">
+            <input type="password" name="prevent_autofill_pass" style="display:none" tabindex="-1" autocomplete="new-password" aria-hidden="true">
 
-          <div class="mb-3">
-            <label for="gateway_pagamento" class="cfg-item-form__label">Gateway de pagamento</label>
-            <select class="form-select" id="gateway_pagamento" name="gateway_pagamento" onchange="mostrarBlocoGateway(this.value)">
-              <option value="" {% if not gw_atual %}selected{% endif %}>Nenhum (desativar cobrança online)</option>
-              <option value="asaas" {% if gw_atual == 'asaas' %}selected{% endif %}>Asaas (PIX / Boleto)</option>
-              <option value="mercadopago" {% if gw_atual == 'mercadopago' %}selected{% endif %}>Mercado Pago (PIX / Boleto)</option>
-              <option value="infinitepay" {% if gw_atual == 'infinitepay' %}selected{% endif %}>InfinitePay (link de pagamento)</option>
-              <option value="cora" {% if gw_atual == 'cora' %}selected{% endif %}>Cora (em breve)</option>
-            </select>
-          </div>
+            <label class="cfg-form-label">Provedor de pagamento</label>
+            <div class="gw-cards">
+              <label class="gw-card" data-gw-card="">
+                <input type="radio" name="gateway_pagamento" value="" {% if not gw_atual %}checked{% endif %} onchange="mostrarBlocoGateway('')">
+                <span class="gw-card__logo gw-card__logo--none"><i class="bi bi-slash-circle"></i></span>
+                <span class="gw-card__body">
+                  <span class="gw-card__name">Desativado</span>
+                  <span class="gw-card__tag">Sem cobrança online</span>
+                </span>
+                <span class="gw-card__check"></span>
+              </label>
 
-          <!-- Asaas -->
-          <div class="gw-bloco" data-gw="asaas" style="{% if gw_atual != 'asaas' %}display:none{% endif %}">
-            <div class="row g-3 mb-3">
-              <div class="col-sm-6">
-                <label for="asaas_ambiente" class="cfg-item-form__label">Ambiente</label>
-                <select class="form-select" id="asaas_ambiente" name="asaas_ambiente">
-                  <option value="sandbox" {% if (academia.asaas_ambiente or 'sandbox') != 'production' %}selected{% endif %}>Sandbox (testes)</option>
-                  <option value="production" {% if academia.asaas_ambiente == 'production' %}selected{% endif %}>Produção</option>
-                </select>
-              </div>
-              <div class="col-sm-6">
-                <label for="asaas_api_key" class="cfg-item-form__label">Chave de API (access token)</label>
-                <input type="password" class="form-control" id="asaas_api_key" name="asaas_api_key" autocomplete="off"
-                       placeholder="{% if asaas_chave_definida %}•••••••• (já configurada){% else %}Cole a chave da conta Asaas{% endif %}">
-                <div class="form-text">{% if asaas_chave_definida %}Deixe em branco para manter a atual.{% endif %}</div>
-              </div>
-              <div class="col-12">
-                <label for="asaas_webhook_token" class="cfg-item-form__label">Token do webhook (opcional)</label>
-                <input type="text" class="form-control" id="asaas_webhook_token" name="asaas_webhook_token"
-                       value="{{ academia.asaas_webhook_token or '' }}" placeholder="Token de segurança do webhook">
-                <div class="form-text">Webhook a configurar no Asaas: <code>{{ base_url }}/financeiro/webhook/asaas</code></div>
-              </div>
+              <label class="gw-card" data-gw-card="asaas">
+                <input type="radio" name="gateway_pagamento" value="asaas" {% if gw_atual == 'asaas' %}checked{% endif %} onchange="mostrarBlocoGateway('asaas')">
+                <span class="gw-card__logo gw-card__logo--asaas"><i class="bi bi-bank"></i></span>
+                <span class="gw-card__body">
+                  <span class="gw-card__name">Asaas</span>
+                  <span class="gw-card__tag">PIX nativo · Boleto</span>
+                </span>
+                <span class="gw-card__check"></span>
+              </label>
+
+              <label class="gw-card" data-gw-card="mercadopago">
+                <input type="radio" name="gateway_pagamento" value="mercadopago" {% if gw_atual == 'mercadopago' %}checked{% endif %} onchange="mostrarBlocoGateway('mercadopago')">
+                <span class="gw-card__logo gw-card__logo--mp"><i class="bi bi-cash-stack"></i></span>
+                <span class="gw-card__body">
+                  <span class="gw-card__name">Mercado Pago</span>
+                  <span class="gw-card__tag">PIX nativo · Boleto</span>
+                </span>
+                <span class="gw-card__check"></span>
+              </label>
+
+              <label class="gw-card" data-gw-card="infinitepay">
+                <input type="radio" name="gateway_pagamento" value="infinitepay" {% if gw_atual == 'infinitepay' %}checked{% endif %} onchange="mostrarBlocoGateway('infinitepay')">
+                <span class="gw-card__logo gw-card__logo--infinit"><i class="bi bi-lightning-charge-fill"></i></span>
+                <span class="gw-card__body">
+                  <span class="gw-card__name">InfinitePay</span>
+                  <span class="gw-card__tag">Link de checkout (PIX/cartão)</span>
+                </span>
+                <span class="gw-card__check"></span>
+              </label>
+
+              <label class="gw-card" data-gw-card="efi">
+                <input type="radio" name="gateway_pagamento" value="efi" {% if gw_atual == 'efi' %}checked{% endif %} onchange="mostrarBlocoGateway('efi')">
+                <span class="gw-card__logo gw-card__logo--efi"><i class="bi bi-qr-code-scan"></i></span>
+                <span class="gw-card__body">
+                  <span class="gw-card__name">EFÍ (Gerencianet)</span>
+                  <span class="gw-card__tag">PIX nativo (QR Code)</span>
+                </span>
+                <span class="gw-card__check"></span>
+              </label>
+
+              <label class="gw-card" data-gw-card="cora">
+                <input type="radio" name="gateway_pagamento" value="cora" {% if gw_atual == 'cora' %}checked{% endif %} onchange="mostrarBlocoGateway('cora')">
+                <span class="gw-card__logo gw-card__logo--cora"><i class="bi bi-hexagon-fill"></i></span>
+                <span class="gw-card__body">
+                  <span class="gw-card__name">Cora</span>
+                  <span class="gw-card__tag">PIX · Boleto bancário</span>
+                </span>
+                <span class="gw-card__check"></span>
+              </label>
+
+              <label class="gw-card" data-gw-card="sumup">
+                <input type="radio" name="gateway_pagamento" value="sumup" {% if gw_atual == 'sumup' %}checked{% endif %} onchange="mostrarBlocoGateway('sumup')">
+                <span class="gw-card__logo gw-card__logo--sumup"><i class="bi bi-credit-card-2-front-fill"></i></span>
+                <span class="gw-card__body">
+                  <span class="gw-card__name">SumUp</span>
+                  <span class="gw-card__tag">Cartão · PIX · Boleto</span>
+                </span>
+                <span class="gw-card__check"></span>
+              </label>
             </div>
-          </div>
 
-          <!-- Mercado Pago -->
-          <div class="gw-bloco" data-gw="mercadopago" style="{% if gw_atual != 'mercadopago' %}display:none{% endif %}">
-            <div class="row g-3 mb-3">
-              <div class="col-12">
-                <label for="mercadopago_access_token" class="cfg-item-form__label">Access Token</label>
-                <input type="password" class="form-control" id="mercadopago_access_token" name="mercadopago_access_token" autocomplete="off"
-                       placeholder="{% if mp_token_definido %}•••••••• (já configurado){% else %}Cole o Access Token do Mercado Pago{% endif %}">
-                <div class="form-text">
-                  {% if mp_token_definido %}Deixe em branco para manter o atual. {% endif %}
-                  Obtido em Mercado Pago → Suas integrações → Credenciais. Webhook: <code>{{ base_url }}/financeiro/webhook/mercadopago</code>
+            <!-- Asaas -->
+            <div class="gw-bloco" data-gw="asaas" style="{% if gw_atual != 'asaas' %}display:none{% endif %}">
+              <p class="gw-bloco__title"><i class="bi bi-key-fill"></i> Credenciais Asaas
+                <button type="button" class="btn btn-outline-danger ms-auto" style="font-size:.68rem;padding:.12rem .55rem" onclick="limparGateway('asaas','Asaas')"><i class="bi bi-eraser"></i> Limpar dados</button></p>
+              <div class="row g-3">
+                <div class="col-sm-6">
+                  <label for="asaas_ambiente" class="cfg-form-label">Ambiente</label>
+                  <select class="form-select" id="asaas_ambiente" name="asaas_ambiente">
+                    <option value="sandbox" {% if (academia.asaas_ambiente or 'sandbox') != 'production' %}selected{% endif %}>Sandbox (testes)</option>
+                    <option value="production" {% if academia.asaas_ambiente == 'production' %}selected{% endif %}>Produção</option>
+                  </select>
+                </div>
+                <div class="col-sm-6">
+                  <label for="asaas_api_key" class="cfg-form-label">Chave de API (access token)</label>
+                  <input type="password" class="form-control" id="asaas_api_key" name="asaas_api_key" autocomplete="off"
+                         placeholder="{% if asaas_chave_definida %}•••••••• (já configurada){% else %}Cole a chave da conta Asaas{% endif %}">
+                  <div class="form-text">{% if asaas_chave_definida %}Deixe em branco para manter a atual.{% endif %}</div>
+                </div>
+                <div class="col-12">
+                  <label for="asaas_webhook_token" class="cfg-form-label">Token do webhook (opcional)</label>
+                  <input type="text" class="form-control" id="asaas_webhook_token" name="asaas_webhook_token"
+                         value="{{ academia.asaas_webhook_token or '' }}" placeholder="Token de segurança do webhook">
+                  <div class="form-text">Webhook a configurar no Asaas: <code>{{ base_url }}/financeiro/webhook/asaas</code></div>
                 </div>
               </div>
             </div>
-          </div>
 
-          <!-- InfinitePay -->
-          <div class="gw-bloco" data-gw="infinitepay" style="{% if gw_atual != 'infinitepay' %}display:none{% endif %}">
-            <div class="row g-3 mb-3">
-              <div class="col-12">
-                <label for="infinitepay_handle" class="cfg-item-form__label">Handle (InfiniteTag)</label>
-                <input type="text" class="form-control" id="infinitepay_handle" name="infinitepay_handle"
-                       value="{{ academia.infinitepay_handle or '' }}" placeholder="Ex: $suaempresa">
-                <div class="form-text">Sua tag da InfinitePay (sem espaços). O aluno é direcionado ao checkout da InfinitePay (PIX/cartão). O webhook é configurado automaticamente.</div>
+            <!-- Mercado Pago -->
+            <div class="gw-bloco" data-gw="mercadopago" style="{% if gw_atual != 'mercadopago' %}display:none{% endif %}">
+              <p class="gw-bloco__title"><i class="bi bi-key-fill"></i> Credenciais Mercado Pago
+                <button type="button" class="btn btn-outline-danger ms-auto" style="font-size:.68rem;padding:.12rem .55rem" onclick="limparGateway('mercadopago','Mercado Pago')"><i class="bi bi-eraser"></i> Limpar dados</button></p>
+              <div class="row g-3">
+                <div class="col-12">
+                  <label for="mercadopago_access_token" class="cfg-form-label">Access Token</label>
+                  <input type="password" class="form-control" id="mercadopago_access_token" name="mercadopago_access_token" autocomplete="off"
+                         placeholder="{% if mp_token_definido %}•••••••• (já configurado){% else %}Cole o Access Token do Mercado Pago{% endif %}">
+                  <div class="form-text">
+                    {% if mp_token_definido %}Deixe em branco para manter o atual. {% endif %}
+                    Obtido em Mercado Pago → Suas integrações → Credenciais. Webhook: <code>{{ base_url }}/financeiro/webhook/mercadopago</code>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
 
-          <!-- Cora -->
-          <div class="gw-bloco" data-gw="cora" style="{% if gw_atual != 'cora' %}display:none{% endif %}">
-            <div class="form-text text-warning mb-3">
-              <i class="bi bi-clock-history"></i> Integração Cora em breve (requer certificado digital mTLS). Selecione outro gateway por enquanto.
+            <!-- InfinitePay -->
+            <div class="gw-bloco" data-gw="infinitepay" style="{% if gw_atual != 'infinitepay' %}display:none{% endif %}">
+              <p class="gw-bloco__title"><i class="bi bi-key-fill"></i> Configuração InfinitePay
+                <button type="button" class="btn btn-outline-danger ms-auto" style="font-size:.68rem;padding:.12rem .55rem" onclick="limparGateway('infinitepay','InfinitePay')"><i class="bi bi-eraser"></i> Limpar dados</button></p>
+              <div class="row g-3">
+                <div class="col-12">
+                  <label for="infinitepay_handle" class="cfg-form-label">Handle (InfiniteTag)</label>
+                  <input type="text" class="form-control" id="infinitepay_handle" name="infinitepay_handle"
+                         value="{{ academia.infinitepay_handle or '' }}" placeholder="Ex: $suaempresa">
+                  <div class="form-text">Sua tag da InfinitePay (sem espaços). O aluno é direcionado ao checkout da InfinitePay (PIX/cartão). O webhook é configurado automaticamente.</div>
+                </div>
+              </div>
             </div>
-          </div>
 
-          <button type="submit" class="cfg-btn-save">
-            <i class="bi bi-check-lg"></i> Salvar
-          </button>
-        </form>
+            <!-- EFÍ (Gerencianet) -->
+            <div class="gw-bloco" data-gw="efi" style="{% if gw_atual != 'efi' %}display:none{% endif %}">
+              <p class="gw-bloco__title"><i class="bi bi-key-fill"></i> Credenciais EFÍ (Gerencianet) — API Pix
+                <button type="button" class="btn btn-outline-danger ms-auto" style="font-size:.68rem;padding:.12rem .55rem" onclick="limparGateway('efi','EFÍ')"><i class="bi bi-eraser"></i> Limpar dados</button></p>
+              <div class="row g-3">
+                <div class="col-sm-6">
+                  <label for="efi_client_id" class="cfg-form-label">Client ID</label>
+                  <input type="text" class="form-control" id="efi_client_id" name="efi_client_id"
+                         value="{{ academia.efi_client_id or '' }}" placeholder="Client_Id_xxxxxxxx"
+                         autocomplete="off" data-lpignore="true" data-1p-ignore data-form-type="other" spellcheck="false">
+                </div>
+                <div class="col-sm-6">
+                  <label for="efi_ambiente" class="cfg-form-label">Ambiente</label>
+                  <select class="form-select" id="efi_ambiente" name="efi_ambiente">
+                    <option value="homologacao" {% if (academia.efi_ambiente or 'homologacao') != 'producao' %}selected{% endif %}>Homologação (testes)</option>
+                    <option value="producao" {% if academia.efi_ambiente == 'producao' %}selected{% endif %}>Produção</option>
+                  </select>
+                </div>
+                <div class="col-sm-6">
+                  <label for="efi_client_secret" class="cfg-form-label">Client Secret</label>
+                  <input type="password" class="form-control" id="efi_client_secret" name="efi_client_secret" autocomplete="off"
+                         placeholder="{% if efi_secret_definido %}•••••••• (já configurado){% else %}Client_Secret_xxxxxxxx{% endif %}">
+                  <div class="form-text">{% if efi_secret_definido %}Deixe em branco para manter o atual.{% endif %}</div>
+                </div>
+                <div class="col-sm-6">
+                  <label for="efi_pix_key" class="cfg-form-label">Chave Pix recebedora</label>
+                  <input type="text" class="form-control" id="efi_pix_key" name="efi_pix_key"
+                         value="{{ academia.efi_pix_key or '' }}" placeholder="CPF/CNPJ, e-mail, telefone ou chave aleatória">
+                  <div class="form-text">Chave Pix da conta EFÍ que vai <strong>receber</strong>.</div>
+                </div>
+                <div class="col-12">
+                  <label for="efi_certificate" class="cfg-form-label">Certificado (PEM)</label>
+                  <textarea class="form-control" id="efi_certificate" name="efi_certificate" rows="4" autocomplete="off"
+                            placeholder="{% if efi_cert_definido %}•••••• (já configurado) — cole novamente para substituir{% else %}-----BEGIN CERTIFICATE-----{% endif %}" style="font-family:monospace;font-size:.8rem;"></textarea>
+                  <div class="form-text">
+                    {% if efi_cert_definido %}Deixe em branco para manter o atual. {% endif %}
+                    Converta o <code>.p12</code> da EFÍ para PEM: <code>openssl pkcs12 -in cert.p12 -out cert.pem -nodes</code> e cole o conteúdo (certificado + chave).
+                    Webhook a configurar/registrar: <code>{{ base_url }}/financeiro/webhook/efi</code>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Cora -->
+            <div class="gw-bloco" data-gw="cora" style="{% if gw_atual != 'cora' %}display:none{% endif %}">
+              <p class="gw-bloco__title"><i class="bi bi-key-fill"></i> Credenciais Cora
+                <button type="button" class="btn btn-outline-danger ms-auto" style="font-size:.68rem;padding:.12rem .55rem" onclick="limparGateway('cora','Cora')"><i class="bi bi-eraser"></i> Limpar dados</button></p>
+              <div class="row g-3">
+                <div class="col-sm-6">
+                  <label for="cora_ambiente" class="cfg-form-label">Ambiente</label>
+                  <select class="form-select" id="cora_ambiente" name="cora_ambiente" onchange="mostrarAmbienteCora(this.value)">
+                    <option value="stage" {% if (academia.cora_ambiente or 'stage') != 'production' %}selected{% endif %}>Stage (testes)</option>
+                    <option value="production" {% if academia.cora_ambiente == 'production' %}selected{% endif %}>Produção</option>
+                  </select>
+                  <div class="form-text">Cada ambiente tem as suas próprias credenciais — trocar aqui não apaga as do outro.</div>
+                </div>
+
+                <!-- Credenciais de STAGE -->
+                <div class="col-12 cora-amb" data-cora-amb="stage" style="{% if academia.cora_ambiente == 'production' %}display:none{% endif %}">
+                  <div class="row g-3">
+                    <div class="col-12">
+                      <label for="cora_client_id" class="cfg-form-label">Client ID (Stage)</label>
+                      <input type="text" class="form-control" id="cora_client_id" name="cora_client_id"
+                             value="{{ academia.cora_client_id or '' }}" placeholder="int-xxxxxxxx... (Client ID de stage)"
+                             autocomplete="off" data-lpignore="true" data-1p-ignore data-form-type="other"
+                             inputmode="text" spellcheck="false">
+                    </div>
+                    <div class="col-12">
+                      <label for="cora_certificate" class="cfg-form-label">Certificado (PEM) — Stage</label>
+                      <textarea class="form-control" id="cora_certificate" name="cora_certificate" rows="4" autocomplete="off"
+                                placeholder="{% if cora_cert_definido %}•••••• (já configurado) — cole novamente para substituir{% else %}-----BEGIN CERTIFICATE-----{% endif %}" style="font-family:monospace;font-size:.8rem;"></textarea>
+                      <div class="form-text">{% if cora_cert_definido %}Deixe em branco para manter o atual. {% endif %}Conteúdo do <code>certificate.pem</code> gerado no painel de testes do Cora. Se o arquivo trouxer certificado <em>e</em> chave juntos, cole ele inteiro aqui — o sistema separa os dois.</div>
+                    </div>
+                    <div class="col-12">
+                      <label for="cora_private_key" class="cfg-form-label">Chave privada (PEM) — Stage</label>
+                      <textarea class="form-control" id="cora_private_key" name="cora_private_key" rows="4" autocomplete="off"
+                                placeholder="{% if cora_key_definida %}•••••• (já configurada) — cole novamente para substituir{% else %}-----BEGIN PRIVATE KEY-----{% endif %}" style="font-family:monospace;font-size:.8rem;"></textarea>
+                      <div class="form-text">{% if cora_key_definida %}Deixe em branco para manter a atual. {% endif %}Conteúdo do <code>private-key.key</code>. Guardado de forma sigilosa.</div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Credenciais de PRODUÇÃO -->
+                <div class="col-12 cora-amb" data-cora-amb="production" style="{% if academia.cora_ambiente != 'production' %}display:none{% endif %}">
+                  <div class="row g-3">
+                    <div class="col-12">
+                      <label for="cora_client_id_prod" class="cfg-form-label">Client ID (Produção)</label>
+                      <input type="text" class="form-control" id="cora_client_id_prod" name="cora_client_id_prod"
+                             value="{{ academia.cora_client_id_prod or '' }}" placeholder="int-xxxxxxxx... (Client ID de produção)"
+                             autocomplete="off" data-lpignore="true" data-1p-ignore data-form-type="other"
+                             inputmode="text" spellcheck="false">
+                    </div>
+                    <div class="col-12">
+                      <label for="cora_certificate_prod" class="cfg-form-label">Certificado (PEM) — Produção</label>
+                      <textarea class="form-control" id="cora_certificate_prod" name="cora_certificate_prod" rows="4" autocomplete="off"
+                                placeholder="{% if cora_cert_prod_definido %}•••••• (já configurado) — cole novamente para substituir{% else %}-----BEGIN CERTIFICATE-----{% endif %}" style="font-family:monospace;font-size:.8rem;"></textarea>
+                      <div class="form-text">{% if cora_cert_prod_definido %}Deixe em branco para manter o atual. {% endif %}Gere em <strong>Conta → Integrações via APIs</strong> na conta real do Cora — a credencial de stage não funciona aqui. Se o arquivo trouxer certificado <em>e</em> chave juntos, cole ele inteiro aqui — o sistema separa os dois.</div>
+                    </div>
+                    <div class="col-12">
+                      <label for="cora_private_key_prod" class="cfg-form-label">Chave privada (PEM) — Produção</label>
+                      <textarea class="form-control" id="cora_private_key_prod" name="cora_private_key_prod" rows="4" autocomplete="off"
+                                placeholder="{% if cora_key_prod_definida %}•••••• (já configurada) — cole novamente para substituir{% else %}-----BEGIN PRIVATE KEY-----{% endif %}" style="font-family:monospace;font-size:.8rem;"></textarea>
+                      <div class="form-text">{% if cora_key_prod_definida %}Deixe em branco para manter a atual. {% endif %}Conteúdo do <code>private-key.key</code> de produção. Guardado de forma sigilosa.</div>
+                    </div>
+                  </div>
+                </div>
+                <div class="col-12">
+                  <div class="form-text"><i class="bi bi-info-circle"></i> O Cora emite boleto registrado <strong>já com QR Code PIX</strong> — o aluno escolhe como pagar. Use <strong>Stage</strong> para testar sem cobrança real.</div>
+                </div>
+                <div class="col-12">
+                  <div class="border rounded p-3" style="background:#fafafa">
+                    <p class="mb-2" style="font-size:.82rem"><i class="bi bi-broadcast me-1"></i>
+                      <strong>Baixa automática (webhook)</strong> — o Cora não tem tela para cadastrar a URL: o registro é feito por API, um cadastro por ambiente.</p>
+                    <div class="form-text mb-2">URL registrada: <code>{{ base_url }}/financeiro/webhook/cora</code> · evento <code>invoice.paid</code>.
+                      Salve as credenciais primeiro e repita este passo ao trocar de <strong>Stage</strong> para <strong>Produção</strong>.</div>
+                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="registrarWebhookCora({{ academia.id }})">
+                      <i class="bi bi-cloud-arrow-up"></i> Registrar webhook no Cora</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- SumUp -->
+            <div class="gw-bloco" data-gw="sumup" style="{% if gw_atual != 'sumup' %}display:none{% endif %}">
+
+              <!-- Opção 1: Conectar conta (OAuth) -->
+              <div class="border rounded p-3 mb-3" style="background:#fafafa">
+                <p class="gw-bloco__title mb-2"><i class="bi bi-link-45deg"></i> Opção 1 — Conectar conta SumUp (recomendado)</p>
+                {% if sumup_conectado %}
+                  <p class="mb-2 text-success"><i class="bi bi-check-circle-fill me-1"></i>
+                    Conta conectada{% if academia.sumup_merchant_code %} (merchant <strong>{{ academia.sumup_merchant_code }}</strong>){% endif %}.</p>
+                  <div class="d-flex gap-2 align-items-center" style="flex-wrap:wrap">
+                    <a href="{{ url_for('financeiro.sumup_oauth_conectar', academia_id=academia.id) }}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-repeat"></i> Reconectar</a>
+                    <button type="button" class="btn btn-sm btn-outline-danger" onclick="desconectarSumup({{ academia.id }})"><i class="bi bi-x-circle"></i> Desconectar</button>
+                  </div>
+                {% else %}
+                  <p class="form-text mb-2">A academia autoriza a SumUp uma vez — sem precisar colar a chave secreta.</p>
+                  {% if sumup_oauth_app_ok %}
+                    <a href="{{ url_for('financeiro.sumup_oauth_conectar', academia_id=academia.id) }}" class="btn btn-sm" style="background:#1d1d1b;color:#fff"><i class="bi bi-link-45deg me-1"></i> Conectar conta SumUp</a>
+                  {% else %}
+                    <div class="alert alert-warning py-2 px-3 mb-0" style="font-size:.8rem">
+                      O app OAuth da SumUp ainda não foi configurado no servidor (variáveis <code>SUMUP_OAUTH_CLIENT_ID</code> / <code>SUMUP_OAUTH_CLIENT_SECRET</code>). Use a Opção 2 abaixo, ou configure o app OAuth para habilitar este botão.
+                    </div>
+                  {% endif %}
+                {% endif %}
+              </div>
+
+              <div class="text-center text-muted mb-3" style="font-size:.75rem">— OU —</div>
+
+              <p class="gw-bloco__title"><i class="bi bi-key-fill"></i> Opção 2 — Chave secreta manual
+                <button type="button" class="btn btn-outline-danger ms-auto" style="font-size:.68rem;padding:.12rem .55rem" onclick="limparGateway('sumup','SumUp')"><i class="bi bi-eraser"></i> Limpar dados</button></p>
+              <div class="row g-3">
+                <div class="col-sm-6">
+                  <label for="sumup_merchant_code" class="cfg-form-label">Merchant code</label>
+                  <input type="text" class="form-control" id="sumup_merchant_code" name="sumup_merchant_code"
+                         value="{{ academia.sumup_merchant_code or '' }}" placeholder="Ex: MXXXXXXX"
+                         autocomplete="off" spellcheck="false">
+                  <div class="form-text">Código da sua conta SumUp (perfil / dashboard).</div>
+                </div>
+                <div class="col-sm-6">
+                  <label for="sumup_ambiente" class="cfg-form-label">Ambiente</label>
+                  <select class="form-select" id="sumup_ambiente" name="sumup_ambiente">
+                    <option value="producao" {% if (academia.sumup_ambiente or 'producao') != 'sandbox' %}selected{% endif %}>Produção</option>
+                    <option value="sandbox" {% if academia.sumup_ambiente == 'sandbox' %}selected{% endif %}>Sandbox (testes)</option>
+                  </select>
+                </div>
+                <div class="col-12">
+                  <label for="sumup_api_key" class="cfg-form-label">Chave secreta (API key)</label>
+                  <input type="password" class="form-control" id="sumup_api_key" name="sumup_api_key" autocomplete="off"
+                         placeholder="{% if sumup_chave_definida %}•••••••• (já configurada){% else %}sup_sk_...{% endif %}">
+                  <div class="form-text">
+                    {% if sumup_chave_definida %}Deixe em branco para manter a atual. {% endif %}
+                    Use a chave <strong>secreta</strong> (<code>sup_sk_...</code>) — a pública não cria cobranças. O pagador paga numa página nossa com cartão (e PIX/boleto se habilitados na conta). Webhook: <code>{{ base_url }}/financeiro/webhook/sumup</code>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <button type="submit" class="cfg-btn-save"><i class="bi bi-check-lg"></i> Salvar cobrança online</button>
+          </form>
+        </div>
       </div>
-      <script>
-        function mostrarBlocoGateway(gw) {
-          document.querySelectorAll('.gw-bloco').forEach(function (b) {
-            b.style.display = (b.getAttribute('data-gw') === gw) ? '' : 'none';
-          });
-        }
-      </script>
     </div>
   </div>
   {% endif %}
 
-  <!-- Seção: Visitantes -->
-  <div class="cfg-section">
-    <p class="cfg-section__label"><i class="bi bi-person-walking"></i> Visitantes</p>
-    <div class="cfg-group">
-      <div class="cfg-item-form">
-        <div class="cfg-item-form__head">
-          <div class="cfg-item__icon cfg-item__icon--teal">
-            <i class="bi bi-person-check"></i>
-          </div>
-          <div>
-            <p class="cfg-item__name mb-0">Aulas experimentais</p>
-            <p class="cfg-item__desc mb-0">Limite de aulas gratuitas e cobrança da diária.</p>
-          </div>
+  <!-- Aba: Visitantes -->
+  <div class="cfg-pane {% if ns.active == 'visitantes' %}is-active{% endif %}" data-pane="visitantes">
+    <div class="cfg-panel">
+      <div class="cfg-panel__head">
+        <div class="cfg-item__icon cfg-item__icon--teal"><i class="bi bi-person-check"></i></div>
+        <div class="cfg-item__body">
+          <p class="cfg-item__name">Aulas experimentais</p>
+          <p class="cfg-item__desc">Limite de aulas gratuitas e cobrança da diária.</p>
         </div>
+      </div>
+      <div class="cfg-panel__body">
         <form method="POST">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="hidden" name="secao" value="visitantes">
           <div class="row g-3 mb-3">
             <div class="col-sm-6">
-              <label for="aulas_experimentais_permitidas" class="cfg-item-form__label">
-                Aulas gratuitas permitidas
-              </label>
+              <label for="aulas_experimentais_permitidas" class="cfg-form-label">Aulas gratuitas permitidas</label>
               <input type="number" class="form-control"
                      id="aulas_experimentais_permitidas" name="aulas_experimentais_permitidas"
                      value="{{ academia.aulas_experimentais_permitidas if academia.aulas_experimentais_permitidas is not none else '' }}"
@@ -401,9 +703,7 @@
               <div class="form-text">Em branco = ilimitado · 0 = desabilitado.</div>
             </div>
             <div class="col-sm-6">
-              <label for="valor_diaria_visitante" class="cfg-item-form__label">
-                Valor da diária (após o limite)
-              </label>
+              <label for="valor_diaria_visitante" class="cfg-form-label">Valor da diária (após o limite)</label>
               <div class="input-group">
                 <span class="input-group-text">R$</span>
                 <input type="number" class="form-control"
@@ -414,9 +714,7 @@
               <div class="form-text">Cobrado por aula ao ultrapassar o limite gratuito.</div>
             </div>
           </div>
-          <button type="submit" class="cfg-btn-save">
-            <i class="bi bi-check-lg"></i> Salvar
-          </button>
+          <button type="submit" class="cfg-btn-save"><i class="bi bi-check-lg"></i> Salvar</button>
         </form>
       </div>
     </div>
@@ -424,4 +722,112 @@
 
   {% endif %}
 </div>
+
+<script>
+  function mostrarBlocoGateway(gw) {
+    document.querySelectorAll('.gw-bloco').forEach(function (b) {
+      b.style.display = (b.getAttribute('data-gw') === gw) ? '' : 'none';
+    });
+    document.querySelectorAll('.gw-card').forEach(function (c) {
+      c.classList.toggle('is-selected', c.getAttribute('data-gw-card') === gw);
+    });
+  }
+
+  // ── Limpar dados de um gateway ────────────────────────
+  function limparGateway(gw, label) {
+    if (!confirm('Limpar TODAS as credenciais do ' + label + '? Os dados salvos serão apagados e a cobrança online por esse gateway será desativada.')) return;
+    var csrf = (document.querySelector('input[name=csrf_token]') || {}).value || '';
+    var f = document.createElement('form');
+    f.method = 'POST';
+    f.action = window.location.pathname + window.location.search;
+    f.innerHTML = '<input type="hidden" name="csrf_token" value="' + csrf + '">' +
+                  '<input type="hidden" name="secao" value="online">' +
+                  '<input type="hidden" name="limpar_gateway" value="' + gw + '">';
+    document.body.appendChild(f);
+    f.submit();
+  }
+
+  // ── Cadastra o nosso webhook na conta Cora da academia ─
+  function registrarWebhookCora(academiaId) {
+    if (!confirm('Registrar o webhook de baixa automática na conta Cora desta academia (ambiente selecionado)?\n\nAs credenciais precisam estar salvas.')) return;
+    var csrf = (document.querySelector('input[name=csrf_token]') || {}).value || '';
+    var f = document.createElement('form');
+    f.method = 'POST';
+    f.action = "{{ url_for('financeiro.cora_registrar_webhook') }}";
+    f.innerHTML = '<input type="hidden" name="csrf_token" value="' + csrf + '">' +
+                  '<input type="hidden" name="academia_id" value="' + academiaId + '">';
+    document.body.appendChild(f);
+    f.submit();
+  }
+
+  function desconectarSumup(academiaId) {
+    if (!confirm('Desconectar a conta SumUp desta academia? As cobranças online por SumUp deixarão de funcionar até reconectar ou informar a chave manual.')) return;
+    var csrf = (document.querySelector('input[name=csrf_token]') || {}).value || '';
+    var f = document.createElement('form');
+    f.method = 'POST';
+    f.action = "{{ url_for('financeiro.sumup_oauth_desconectar') }}";
+    f.innerHTML = '<input type="hidden" name="csrf_token" value="' + csrf + '">' +
+                  '<input type="hidden" name="academia_id" value="' + academiaId + '">';
+    document.body.appendChild(f);
+    f.submit();
+  }
+
+  // ── Abas ──────────────────────────────────────────────
+  function ativarAba(key) {
+    var temPane = document.querySelector('.cfg-pane[data-pane="' + key + '"]');
+    if (!temPane) key = 'geral';
+    document.querySelectorAll('.cfg-tab').forEach(function (t) {
+      t.classList.toggle('is-active', t.getAttribute('data-tab') === key);
+    });
+    document.querySelectorAll('.cfg-pane').forEach(function (p) {
+      p.classList.toggle('is-active', p.getAttribute('data-pane') === key);
+    });
+    if (history.replaceState) history.replaceState(null, '', '#' + key);
+    else location.hash = key;
+  }
+  document.querySelectorAll('.cfg-tab').forEach(function (t) {
+    t.addEventListener('click', function () { ativarAba(t.getAttribute('data-tab')); });
+  });
+
+  // ── Cora: mostra as credenciais do ambiente escolhido ─
+  // Os dois trios ficam no formulário e são salvos separadamente — trocar de
+  // ambiente não apaga nem sobrescreve o outro.
+  function mostrarAmbienteCora(amb) {
+    document.querySelectorAll('.cora-amb').forEach(function (b) {
+      b.style.display = (b.getAttribute('data-cora-amb') === amb) ? '' : 'none';
+    });
+  }
+
+  // Bloqueia ativar o Cora sem o Client ID do ambiente escolhido
+  // (certificado/chave são validados no servidor)
+  var formCobranca = document.getElementById('formCobrancaOnline');
+  if (formCobranca) {
+    formCobranca.addEventListener('submit', function (ev) {
+      var sel = document.querySelector('input[name="gateway_pagamento"]:checked');
+      if (sel && sel.value === 'cora') {
+        var amb = (document.getElementById('cora_ambiente') || {}).value || 'stage';
+        var campo = amb === 'production' ? 'cora_client_id_prod' : 'cora_client_id';
+        var cid = (document.getElementById(campo) || {}).value || '';
+        if (!cid.trim()) {
+          ev.preventDefault();
+          alert('Para ativar o Cora em ' + (amb === 'production' ? 'Produção' : 'Stage')
+                + ', preencha o Client ID desse ambiente (e o certificado e a chave, se ainda não estiverem salvos).');
+          var el = document.getElementById(campo);
+          if (el) el.focus();
+        }
+      }
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    // Estado inicial do seletor de gateway
+    var checked = document.querySelector('input[name="gateway_pagamento"]:checked');
+    mostrarBlocoGateway(checked ? checked.value : '');
+    // Se a URL trouxer um #hash de aba, ele tem prioridade sobre o padrão do servidor
+    var h = (location.hash || '').replace('#', '');
+    if (h && document.querySelector('.cfg-tab[data-tab="' + h + '"]')) {
+      ativarAba(h);
+    }
+  });
+</script>
 {% endblock %}
