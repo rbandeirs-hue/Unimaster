@@ -66,12 +66,14 @@ def get_contexto_logo_e_nome(current_user, session):
                     return logo, ac["nome"] or "Minha Turma", "academia"
             return None, "Professor", None
 
-        if modo == "academia" and getattr(current_user, "id_academia", None):
-            cur.execute("SELECT id, nome FROM academias WHERE id = %s", (current_user.id_academia,))
-            row = cur.fetchone()
-            if row:
-                logo = buscar_logo_url("academia", row["id"])
-                return logo, row["nome"] or "Academia", "academia"
+        if modo == "academia":
+            acad_id = _academia_contexto_id(cur, current_user, session)
+            if acad_id:
+                cur.execute("SELECT id, nome FROM academias WHERE id = %s", (acad_id,))
+                row = cur.fetchone()
+                if row:
+                    logo = buscar_logo_url("academia", row["id"])
+                    return logo, row["nome"] or "Academia", "academia"
 
         if modo == "aluno":
             cur.execute(
@@ -127,6 +129,44 @@ def get_contexto_logo_e_nome(current_user, session):
         conn.close()
 
     return None, "Judo Academy", None
+
+
+def _academia_contexto_id(cur, current_user, session):
+    """ID da academia em contexto para logo/nome do cabeçalho.
+
+    Prioriza a academia que o usuário está gerenciando no momento
+    (session['academia_gerenciamento_id']) — assim, ao trocar de academia no
+    seletor, a logo/nome do header acompanham. Cai para a academia do próprio
+    usuário se não houver seleção ou se ele não tiver acesso à selecionada.
+    """
+    sel = session.get("academia_gerenciamento_id") if session else None
+    try:
+        sel = int(sel) if sel is not None and str(sel).strip() else None
+    except (TypeError, ValueError):
+        sel = None
+    if sel:
+        try:
+            if getattr(current_user, "has_role", None) and current_user.has_role("admin"):
+                return sel
+            # Vínculo direto (usuarios_academias)
+            cur.execute(
+                "SELECT 1 FROM usuarios_academias WHERE usuario_id = %s AND academia_id = %s LIMIT 1",
+                (current_user.id, sel),
+            )
+            if cur.fetchone():
+                return sel
+            # Gestor de associação: academia pertence à sua associação
+            id_assoc = getattr(current_user, "id_associacao", None)
+            if id_assoc:
+                cur.execute(
+                    "SELECT 1 FROM academias WHERE id = %s AND id_associacao = %s LIMIT 1",
+                    (sel, id_assoc),
+                )
+                if cur.fetchone():
+                    return sel
+        except Exception:
+            pass
+    return getattr(current_user, "id_academia", None)
 
 
 def _usuario_e_professor_ou_auxiliar(current_user):

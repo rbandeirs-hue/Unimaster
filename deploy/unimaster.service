@@ -1,0 +1,28 @@
+# Unimaster — Gunicorn + Flask (Nginx na frente em 127.0.0.1:8000)
+#
+# Instalação:
+#   sudo cp /var/www/Unimaster/deploy/unimaster.service /etc/systemd/system/unimaster.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now unimaster
+#
+# Não use pasta "venv" nem "python app.py" em produção — apenas .venv + gunicorn wsgi:app
+
+[Unit]
+Description=Unimaster (Gunicorn / Flask)
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/Unimaster
+Environment=PATH=/var/www/Unimaster/.venv/bin:/usr/bin:/bin
+ExecStart=/var/www/Unimaster/.venv/bin/gunicorn -c /var/www/Unimaster/gunicorn.conf.py wsgi:app
+Restart=always
+RestartSec=5
+
+# Permissões para escrever logs/ e static/uploads/ conforme o seu layout
+UMask=002
+
+[Install]
+WantedBy=multi-user.target

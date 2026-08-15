@@ -1,0 +1,89 @@
+{% extends 'base.html' %}
+{% block title %}Inscrições — {{ comp.nome }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <a href="{{ url_for('admin.competicoes') }}" class="back-link">← Competições</a>
+    <h1>{{ comp.nome }}</h1>
+    <p class="sub-info">
+      {{ comp.data.strftime('%d/%m/%Y') if comp.data else '' }}
+      {% if comp.local %} · {{ comp.local }}{% endif %}
+      · <span class="tipo-badge tipo-{{ comp.tipo.lower() if comp.tipo else 'oficial' }}">{{ comp.tipo }}</span>
+    </p>
+  </div>
+  <div style="display:flex;gap:10px">
+    <a href="{{ url_for('home.competicao', comp_id=comp.id) }}" class="btn-action" style="background:var(--surface-2);border:1px solid var(--border);color:var(--text)">Ver Competição</a>
+  </div>
+</div>
+
+{% if comp.festival_aproximacao %}
+<div class="flash flash--info" style="margin-bottom:20px;padding:12px 16px;border-radius:8px;background:var(--surface-2);border:1px solid var(--border);font-size:14px">
+  <strong>Modo aproximação:</strong> inscrições são gerais na competição. Cada atleta confirmado aparece nas categorias em que peso, idade e sexo coincidem com a faixa cadastrada.
+</div>
+{% endif %}
+
+<div class="two-col">
+
+  <!-- Lista de inscrições -->
+  <div class="col-main">
+    <h2 class="section-title">Inscrições ({{ inscricoes|length }})</h2>
+    {% if inscricoes %}
+    <table class="tabela">
+      <thead>
+        <tr><th>Atleta</th><th>Academia</th><th>Faixa</th><th>Peso</th><th>Status</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for i in inscricoes %}
+        <tr>
+          <td class="td-nome">
+            {{ i.atleta.nome }}
+            <a href="{{ url_for('admin.atleta_editar', atleta_id=i.atleta.id, origem='inscricoes', comp_id=comp.id) }}" class="link-action" style="margin-left:8px;font-size:12px">Editar</a>
+          </td>
+          <td>{{ i.atleta.academia.nome if i.atleta.academia else '—' }}</td>
+          <td>{{ i.atleta.faixa or '—' }}</td>
+          <td>{{ ('%.1f kg' % i.atleta.peso) if i.atleta.peso else '—' }}</td>
+          <td>
+            <span class="status-badge status-{{ i.status.lower() }}">{{ i.status }}</span>
+          </td>
+          <td class="td-acoes">
+            {% if i.status == 'PENDENTE' %}
+            <form method="POST" action="{{ url_for('admin.inscricao_confirmar', insc_id=i.id) }}" style="display:inline">
+              <button type="submit" class="btn-sm btn-sm--confirm">Confirmar</button>
+            </form>
+            {% endif %}
+            <form method="POST" action="{{ url_for('admin.inscricao_remover', insc_id=i.id) }}" style="display:inline"
+                  onsubmit="return confirm('Remover inscrição de {{ i.atleta.nome }}?')">
+              <button type="submit" class="btn-danger-sm">✕</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state"><p>Nenhum atleta inscrito ainda.</p></div>
+    {% endif %}
+  </div>
+
+  <!-- Adicionar atleta -->
+  <div class="col-side">
+    <div class="form-card">
+      <h3 class="form-titulo">Inscrever Atleta</h3>
+      <form method="POST" action="{{ url_for('admin.inscricoes_criar', comp_id=comp.id) }}">
+        <div class="field">
+          <label>Atleta *</label>
+          <select name="atleta_id" required>
+            <option value="">Selecione...</option>
+            {% for a in atletas %}
+            <option value="{{ a.id }}">{{ a.nome }} {% if a.academia %}({{ a.academia.nome }}){% endif %}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button type="submit" class="btn-submit">Inscrever</button>
+      </form>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

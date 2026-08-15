@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Importar inscrições — {{ evento.nome }}{% endblock %}
+{% block content %}
+<div class="container {% if layout_embed %}mt-2{% else %}mt-4{% endif %}" style="max-width: 720px;">
+    {% if not layout_embed %}
+    <div class="mb-3">
+        {% set back_url = back_url %}
+        {% include 'components/botao_voltar.html' %}
+    </div>
+    {% endif %}
+    {% set menu_secao_ativa = 'inscricoes' %}
+    {% include 'components/menu_competicao.html' %}
+    <h1 class="h4 fw-bold text-primary mb-2">Importar inscrições (Excel)</h1>
+    <p class="text-muted small mb-3">{{ evento.nome }}</p>
+    <div class="alert alert-info small">
+        <strong>Colunas esperadas na 1ª linha:</strong> nome (ou nome completo), data de nascimento, peso, professor, local de treino. Categoria opcional.
+        Datas aceitas: <code>AAAA-MM-DD</code> ou <code>DD/MM/AAAA</code>.
+    </div>
+    <p><a href="{{ url_modelo }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-download me-1"></i>Baixar modelo .xlsx</a></p>
+    <form method="POST" enctype="multipart/form-data" class="card shadow-sm">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="card-body">
+            <label class="form-label fw-semibold">Arquivo .xlsx</label>
+            <input type="file" name="planilha" class="form-control" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required>
+            <button type="submit" class="btn btn-primary mt-3">Importar</button>
+        </div>
+    </form>
+</div>
+{% endblock %}

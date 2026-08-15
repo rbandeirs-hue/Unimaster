@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}Inscrição — {{ evento.evento_nome if evento else 'Evento' }}{% endblock %}
+{% block content %}
+<div class="container" style="max-width:760px;">
+
+  {% if invalido %}
+    <div class="alert alert-warning mt-4">Este link de inscrição não é válido.</div>
+  {% elif encerrado %}
+    <div class="alert alert-secondary mt-4">
+      As inscrições para <strong>{{ evento.evento_nome }}</strong> estão encerradas.
+    </div>
+  {% elif sucesso %}
+    <div class="card shadow-sm mt-4 border-success">
+      <div class="card-body text-center p-4">
+        <i class="bi bi-check-circle-fill text-success" style="font-size:3rem;"></i>
+        <h1 class="h5 mt-3 mb-2">Inscrição enviada</h1>
+        <p class="text-muted mb-3">
+          Você foi inscrito(a) em <strong>{{ evento.evento_nome }}</strong> pela
+          {{ evento.academia_nome }}. A academia vai revisar e confirmar.
+        </p>
+        <a href="{{ url_for('eventos_competicoes.inscricao_academia', token=token) }}"
+           class="btn btn-outline-secondary btn-sm">Inscrever outro atleta</a>
+      </div>
+    </div>
+  {% else %}
+    <div class="mt-4 mb-3">
+      <h1 class="h5 mb-1">Inscrição — {{ evento.evento_nome }}</h1>
+      <p class="text-muted small mb-0">
+        {{ evento.academia_nome }}
+        {% if evento.data_fim %} · inscrições até {{ evento.data_fim|data_br }}{% endif %}
+      </p>
+    </div>
+
+    <form method="post" action="{{ url_for('eventos_competicoes.inscricao_academia_enviar', token=token) }}"
+          class="card shadow-sm p-4">
+      <div class="row g-3">
+        {% if locais %}
+        <div class="col-md-6">
+          <label class="form-label fw-semibold" for="local_treino_id">Onde você treina</label>
+          <select name="local_treino_id" id="local_treino_id" class="form-select">
+            <option value="">— Selecione o local —</option>
+            {% for l in locais %}
+            <option value="{{ l.id }}"{% if l.professor_nome %} data-prof="{{ l.professor_nome }}"{% endif %}>
+              {{ l.nome }}{% if l.professor_nome %} — Prof. {{ l.professor_nome }}{% endif %}
+            </option>
+            {% endfor %}
+          </select>
+          <div class="form-text">O professor é preenchido pelo local escolhido.</div>
+        </div>
+        {% endif %}
+
+        {% for c in campos %}
+          {% set chave = c.campo_chave %}
+          {% if chave not in ('id_academia', 'categoria', 'local_treino', 'professor') %}
+          <div class="col-md-6">
+            <label class="form-label fw-semibold" for="campo_{{ chave }}">
+              {{ c.label }}{% if c.obrigatorio or chave == 'nome' %} <span class="text-danger">*</span>{% endif %}
+            </label>
+            {% if chave == 'sexo' %}
+              <select class="form-select" id="campo_{{ chave }}" name="campo_{{ chave }}">
+                <option value="">Selecione</option>
+                <option value="M">Masculino</option>
+                <option value="F">Feminino</option>
+              </select>
+            {% elif chave == 'graduacao_id' %}
+              <select class="form-select" id="campo_{{ chave }}" name="campo_{{ chave }}">
+                <option value="">Selecione</option>
+                {% for g in graduacoes %}
+                <option value="{{ g.id }}">{{ g.faixa }} {{ g.graduacao or '' }}</option>
+                {% endfor %}
+              </select>
+            {% elif chave in ('data_nascimento', 'ultimo_exame_faixa', 'rg_data_emissao') %}
+              <input type="date" class="form-control" id="campo_{{ chave }}" name="campo_{{ chave }}">
+            {% elif chave == 'peso' %}
+              <input type="number" step="0.1" min="1" class="form-control" id="campo_{{ chave }}" name="campo_{{ chave }}">
+            {% else %}
+              <input type="text" class="form-control" id="campo_{{ chave }}" name="campo_{{ chave }}"
+                     {% if chave == 'nome' %}required{% endif %}>
+            {% endif %}
+          </div>
+          {% endif %}
+        {% endfor %}
+
+        <div class="col-md-6">
+          <label class="form-label fw-semibold" for="professor_preview">Professor</label>
+          <input type="text" class="form-control" id="professor_preview" readonly
+                 placeholder="Definido pelo local de treino">
+        </div>
+      </div>
+
+      <div class="mt-4">
+        <button type="submit" class="btn btn-primary btn-lg w-100">
+          <i class="bi bi-send me-1"></i>Enviar inscrição
+        </button>
+      </div>
+    </form>
+
+    <script>
+      // Mostra o professor do local escolhido (só visual; o servidor grava o real).
+      const sel = document.getElementById('local_treino_id');
+      if (sel) sel.addEventListener('change', function () {
+        const op = this.options[this.selectedIndex];
+        document.getElementById('professor_preview').value = op ? (op.dataset.prof || '') : '';
+      });
+    </script>
+  {% endif %}
+</div>
+{% endblock %}

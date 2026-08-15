@@ -5,7 +5,9 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from flask_login import login_required, current_user
 from werkzeug.security import generate_password_hash
 from blueprints.auth.user_model import Usuario
+from blueprints.auth.routes import _so_digitos, _valida_cpf
 from config import get_db_connection
+from utils.foto_sync import propagar_foto_usuario_para_aluno
 from math import ceil
 
 bp_usuarios = Blueprint("usuarios", __name__, url_prefix="/usuarios")
@@ -85,8 +87,9 @@ def lista_usuarios():
 
     usuarios = cursor.fetchall()
 
-    # CARREGAR ROLES DE CADA USUÁRIO
+    # CARREGAR ROLES E ALUNO VINCULADO DE CADA USUÁRIO
     for u in usuarios:
+        # Roles / níveis
         cursor.execute("""
             SELECT r.nome 
             FROM roles_usuario ru 
@@ -97,6 +100,24 @@ def lista_usuarios():
         u["roles"] = ", ".join(roles) if roles else "Sem Roles"
         niveis = Usuario.niveis_acesso_por_roles(roles)
         u["niveis_acesso"] = niveis if niveis else ["Sem nível"]
+
+        # Aluno vinculado (para modal com foto)
+        try:
+            cursor.execute(
+                "SELECT id, nome, foto FROM alunos WHERE usuario_id = %s LIMIT 1",
+                (u["id"],),
+            )
+            aluno = cursor.fetchone()
+        except Exception:
+            aluno = None
+        if aluno:
+            u["aluno_id"] = aluno.get("id")
+            u["aluno_nome"] = aluno.get("nome")
+            u["aluno_foto"] = aluno.get("foto")
+        else:
+            u["aluno_id"] = None
+            u["aluno_nome"] = None
+            u["aluno_foto"] = None
 
     cursor.close()
     db.close()
@@ -128,7 +149,7 @@ def cadastro_usuario():
     cursor = db.cursor(dictionary=True)
 
     # Carregar roles disponíveis
-    cursor.execute("SELECT id, nome FROM roles ORDER BY nome")
+    cursor.execute("SELECT id, nome, COALESCE(chave, LOWER(REPLACE(nome,' ','_'))) as chave FROM roles ORDER BY nome")
     roles = cursor.fetchall()
 
     # Academias para vínculo
@@ -161,6 +182,7 @@ def cadastro_usuario():
 
         nome = (request.form.get("nome") or "").strip()
         email = (request.form.get("email") or "").strip()
+        cpf = _so_digitos(request.form.get("cpf") or "")
         senha = (request.form.get("senha") or "").strip()
         roles_escolhidas = request.form.getlist("roles")
         academias_escolhidas = []
@@ -172,8 +194,12 @@ def cadastro_usuario():
             except (ValueError, TypeError):
                 pass
 
-        if not nome or not email or not senha or not roles_escolhidas:
-            flash("Preencha todos os campos e selecione ao menos uma Role.", "danger")
+        if not nome or not email or not cpf or not senha or not roles_escolhidas:
+            flash("Preencha todos os campos (incluindo CPF) e selecione ao menos uma Role.", "danger")
+            return redirect(url_for("usuarios.cadastro_usuario"))
+
+        if not _valida_cpf(cpf):
+            flash("CPF inválido. Verifique e tente novamente.", "danger")
             return redirect(url_for("usuarios.cadastro_usuario"))
 
         # Verifica e-mail duplicado
@@ -182,9 +208,15 @@ def cadastro_usuario():
             flash("Já existe um usuário com este e-mail.", "danger")
             return redirect(url_for("usuarios.cadastro_usuario"))
 
+        # Verifica CPF duplicado (será o login)
+        cursor.execute("SELECT id FROM usuarios WHERE cpf=%s", (cpf,))
+        if cursor.fetchone():
+            flash("Já existe um usuário com este CPF.", "danger")
+            return redirect(url_for("usuarios.cadastro_usuario"))
+
         senha_hash = generate_password_hash(senha)
         id_academia = academias_escolhidas[0] if academias_escolhidas else None
-        
+
         # Buscar id_associacao e id_federacao da academia selecionada (se houver)
         id_associacao_usuario = None
         id_federacao_usuario = None
@@ -200,11 +232,11 @@ def cadastro_usuario():
                 id_associacao_usuario = acad_info.get("id_associacao")
                 id_federacao_usuario = acad_info.get("id_federacao")
 
-        # Inserir usuário com id_federacao e id_associacao
+        # Inserir usuário com id_federacao, id_associacao e CPF
         cursor.execute(
-            """INSERT INTO usuarios (nome, email, senha, id_academia, id_associacao, id_federacao) 
-               VALUES (%s, %s, %s, %s, %s, %s)""",
-            (nome, email, senha_hash, id_academia, id_associacao_usuario, id_federacao_usuario),
+            """INSERT INTO usuarios (nome, email, cpf, senha, id_academia, id_associacao, id_federacao)
+               VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+            (nome, email, cpf, senha_hash, id_academia, id_associacao_usuario, id_federacao_usuario),
         )
         user_id = cursor.lastrowid
 
@@ -222,17 +254,58 @@ def cadastro_usuario():
                 (user_id, aid),
             )
 
+        # Vínculo automático com aluno se a role "Aluno" foi marcada e existe um aluno
+        # com o mesmo CPF nas academias selecionadas (ou em qualquer academia se nenhuma foi).
+        cursor.execute("SELECT id FROM roles WHERE chave = 'aluno' OR LOWER(nome) = 'aluno' LIMIT 1")
+        role_aluno = cursor.fetchone()
+        aluno_vinculado = None
+        if role_aluno and str(role_aluno["id"]) in [str(r) for r in roles_escolhidas]:
+            params = [cpf]
+            sql_busca = (
+                "SELECT id, id_academia, cpf FROM alunos "
+                "WHERE REGEXP_REPLACE(COALESCE(cpf,''), '[^0-9]', '') = %s "
+                "AND (usuario_id IS NULL OR usuario_id = 0)"
+            )
+            if academias_escolhidas:
+                ph = ",".join(["%s"] * len(academias_escolhidas))
+                sql_busca += f" AND id_academia IN ({ph})"
+                params.extend(academias_escolhidas)
+            sql_busca += " LIMIT 1"
+            cursor.execute(sql_busca, tuple(params))
+            aluno_vinculado = cursor.fetchone()
+            if aluno_vinculado:
+                cursor.execute(
+                    "UPDATE alunos SET usuario_id = %s WHERE id = %s",
+                    (user_id, aluno_vinculado["id"]),
+                )
+
         db.commit()
-        flash("Usuário cadastrado com sucesso!", "success")
+        if role_aluno and str(role_aluno["id"]) in [str(r) for r in roles_escolhidas]:
+            if aluno_vinculado:
+                flash(f"Usuário cadastrado e vinculado automaticamente ao aluno (id {aluno_vinculado['id']}) pelo CPF.", "success")
+            else:
+                flash("Usuário cadastrado. Nenhum aluno com este CPF foi encontrado para vínculo automático — use a edição do usuário para vincular ou cadastrar o aluno.", "warning")
+        else:
+            flash("Usuário cadastrado com sucesso!", "success")
         redirect_url = request.form.get("next") or back_url
         return redirect(redirect_url)
 
     cursor.close()
     db.close()
 
+    from flask import session
+    modo_painel = session.get("modo_painel")
+    # No modo academia, esconder roles de acesso global (admin, gestor_associacao, gestor_federacao)
+    roles_filtradas = []
+    for r in roles:
+        chave = (r.get("chave") or r.get("nome") or "").lower()
+        if modo_painel == "academia" and chave in ("admin", "gestor_associacao", "gestor_federacao"):
+            continue
+        roles_filtradas.append(r)
+
     return render_template(
         "usuarios/criar_usuario.html",
-        roles=roles,
+        roles=roles_filtradas,
         back_url=back_url,
         academias_disponiveis=academias_disponiveis,
     )
@@ -255,6 +328,7 @@ def _pode_editar_usuario(usuario):
                     SELECT 1 FROM usuarios_academias ua
                     JOIN academias ac ON ac.id = ua.academia_id
                     WHERE ua.usuario_id = %s AND ac.id_associacao = %s
+                    LIMIT 1
                 """, (usuario["id"], current_user.id_associacao))
                 ok = cur.fetchone() is not None
             except Exception:
@@ -277,7 +351,7 @@ def _pode_editar_usuario(usuario):
             try:
                 ph = ",".join(["%s"] * len(minhas_ids))
                 cur.execute(
-                    f"SELECT 1 FROM usuarios_academias WHERE usuario_id = %s AND academia_id IN ({ph})",
+                    f"SELECT 1 FROM usuarios_academias WHERE usuario_id = %s AND academia_id IN ({ph}) LIMIT 1",
                     (usuario["id"],) + tuple(minhas_ids),
                 )
                 ok = cur.fetchone() is not None
@@ -415,6 +489,28 @@ def editar_usuario(user_id):
         nova_senha = request.form.get("senha")
         roles_novas = request.form.getlist("roles")
 
+        # CPF: validar, garantir unicidade e atualizar (sincronizando com o aluno vinculado se houver)
+        cpf_form = _so_digitos(request.form.get("cpf") or "")
+        if cpf_form:
+            if not _valida_cpf(cpf_form):
+                flash("CPF inválido. Verifique e tente novamente.", "danger")
+                cursor.close()
+                db.close()
+                return redirect(url_for("usuarios.editar_usuario", user_id=user_id))
+            cursor.execute("SELECT id FROM usuarios WHERE cpf = %s AND id <> %s", (cpf_form, user_id))
+            if cursor.fetchone():
+                flash("Este CPF já está em uso por outro usuário.", "danger")
+                cursor.close()
+                db.close()
+                return redirect(url_for("usuarios.editar_usuario", user_id=user_id))
+            cursor.execute("UPDATE usuarios SET cpf = %s WHERE id = %s", (cpf_form, user_id))
+            # Propagar para o cadastro de aluno vinculado, se ainda não tiver CPF
+            cursor.execute(
+                "UPDATE alunos SET cpf = %s WHERE usuario_id = %s "
+                "AND (cpf IS NULL OR cpf = '' OR REGEXP_REPLACE(cpf, '[^0-9]', '') = '')",
+                (cpf_form, user_id),
+            )
+
         # Foto (câmera base64 ou arquivo)
         try:
             from blueprints.aluno.alunos import salvar_imagem_base64, salvar_arquivo_upload
@@ -427,6 +523,7 @@ def editar_usuario(user_id):
                 foto_filename = salvar_arquivo_upload(foto_arquivo, f"usuario_{user_id}")
             if foto_filename:
                 cursor.execute("UPDATE usuarios SET foto = %s WHERE id = %s", (foto_filename, user_id))
+                propagar_foto_usuario_para_aluno(cursor, user_id, foto_filename)
         except Exception:
             pass
 
@@ -449,14 +546,35 @@ def editar_usuario(user_id):
             tinha_role_visitante = cursor.fetchone() is not None
             tem_role_visitante_agora = str(role_visitante_id) in roles_novas
 
-        # Reset das roles
-        cursor.execute("DELETE FROM roles_usuario WHERE usuario_id=%s", (user_id,))
-        
+        # Reset das roles — APENAS as que estavam visíveis no formulário.
+        # Roles fora do escopo (ex.: admin/gestor_associacao/gestor_federacao no modo
+        # academia) ficam ESCONDIDAS no form, mas NÃO devem ser apagadas. Antes era
+        # feito DELETE de todas, o que zerava roles invisíveis e corrompia o cadastro.
+        _modo_painel_atual = session.get("modo_painel")
+        _roles_ocultas = ("admin", "gestor_associacao", "gestor_federacao")
+        roles_visiveis_ids = []
+        for r in roles:
+            chave = (r.get("chave") or r.get("nome") or "").lower()
+            if _modo_painel_atual == "academia" and chave in _roles_ocultas:
+                continue
+            if r.get("id") is not None:
+                roles_visiveis_ids.append(r["id"])
+
+        if roles_visiveis_ids:
+            ph = ",".join(["%s"] * len(roles_visiveis_ids))
+            cursor.execute(
+                f"DELETE FROM roles_usuario WHERE usuario_id=%s AND role_id IN ({ph})",
+                (user_id, *roles_visiveis_ids),
+            )
+
+        # Insere apenas as que foram efetivamente marcadas E estavam no escopo do form
+        ids_visiveis_set = set(str(rid) for rid in roles_visiveis_ids)
         for role_id in roles_novas:
-            cursor.execute("""
-                INSERT INTO roles_usuario (usuario_id, role_id)
-                VALUES (%s, %s)
-            """, (user_id, role_id))
+            if not ids_visiveis_set or str(role_id) in ids_visiveis_set:
+                cursor.execute("""
+                    INSERT IGNORE INTO roles_usuario (usuario_id, role_id)
+                    VALUES (%s, %s)
+                """, (user_id, role_id))
 
         # Academias vinculadas (não atualiza se bloqueado para gestor_academia)
         if mostrar_academias and academias_disponiveis and not academias_bloqueadas:
@@ -581,10 +699,19 @@ def editar_usuario(user_id):
 
     academias_vinculadas_ids = [a.get("academia_id") for a in academias_vinculadas if a.get("academia_id") is not None]
 
+    # Filtrar roles visíveis no modo academia (evitar oferecer admin/gestor_associacao/gestor_federacao)
+    modo_painel = session.get("modo_painel")
+    roles_filtradas = []
+    for r in roles:
+        chave = (r.get("chave") or r.get("nome") or "").lower()
+        if modo_painel == "academia" and chave in ("admin", "gestor_associacao", "gestor_federacao"):
+            continue
+        roles_filtradas.append(r)
+
     return render_template(
         "usuarios/editar_usuario.html",
         usuario=usuario,
-        roles=roles,
+        roles=roles_filtradas,
         roles_do_usuario=roles_do_usuario,
         back_url=back_url,
         mostrar_academias=mostrar_academias,
@@ -628,7 +755,7 @@ def meu_perfil():
         db = get_db_connection()
         cursor = db.cursor(dictionary=True)
 
-        cursor.execute("SELECT id, nome, email, foto FROM usuarios WHERE id=%s", (user_id,))
+        cursor.execute("SELECT id, nome, email, cpf, foto FROM usuarios WHERE id=%s", (user_id,))
         usuario = cursor.fetchone()
 
         if not usuario:
@@ -642,6 +769,7 @@ def meu_perfil():
         if request.method == "POST":
             nome = (request.form.get("nome") or "").strip()
             email = (request.form.get("email") or "").strip()
+            cpf_form = _so_digitos(request.form.get("cpf") or "")
             nova_senha = request.form.get("senha") or None
 
             erros = []
@@ -649,6 +777,11 @@ def meu_perfil():
                 erros.append("Nome é obrigatório.")
             if not email:
                 erros.append("E-mail é obrigatório.")
+            # CPF: se já cadastrado, é exigido (mantém o atual). Se não tem, é obrigatório informar.
+            if not usuario.get("cpf") and not cpf_form:
+                erros.append("CPF é obrigatório.")
+            if cpf_form and not _valida_cpf(cpf_form):
+                erros.append("CPF inválido.")
 
             if erros:
                 for e in erros:
@@ -659,9 +792,28 @@ def meu_perfil():
                         "SELECT id FROM usuarios WHERE email=%s AND id != %s",
                         (email, user_id),
                     )
-                    if cursor.fetchone():
+                    email_em_uso = cursor.fetchone() is not None
+                    cpf_em_uso = False
+                    if cpf_form:
+                        cursor.execute(
+                            "SELECT id FROM usuarios WHERE cpf=%s AND id != %s",
+                            (cpf_form, user_id),
+                        )
+                        cpf_em_uso = cursor.fetchone() is not None
+
+                    if email_em_uso:
                         flash("Este e-mail já está em uso por outro usuário.", "danger")
+                    elif cpf_em_uso:
+                        flash("Este CPF já está em uso por outro usuário.", "danger")
                     else:
+                        # Atualizar CPF (se informado e ainda não cadastrado, ou se mudou)
+                        if cpf_form and cpf_form != (usuario.get("cpf") or ""):
+                            cursor.execute("UPDATE usuarios SET cpf=%s WHERE id=%s", (cpf_form, user_id))
+                            cursor.execute(
+                                "UPDATE alunos SET cpf=%s WHERE usuario_id=%s "
+                                "AND (cpf IS NULL OR cpf = '' OR REGEXP_REPLACE(cpf, '[^0-9]', '') = '')",
+                                (cpf_form, user_id),
+                            )
                         # Foto (câmera base64 ou arquivo)
                         try:
                             from blueprints.aluno.alunos import salvar_imagem_base64, salvar_arquivo_upload
@@ -700,6 +852,8 @@ def meu_perfil():
                                     (nome, email, user_id),
                                 )
                             flash("Cadastro atualizado com sucesso!", "success")
+                        if foto_filename:
+                            propagar_foto_usuario_para_aluno(cursor, user_id, foto_filename)
                         db.commit()
                         # Validar URL de redirecionamento
                         redirect_url = request.form.get("next") or back_url
@@ -805,6 +959,45 @@ def sincronizar_foto_aluno():
 # ======================================================
 # 🔹 EXCLUIR USUÁRIO
 # ======================================================
+@bp_usuarios.route("/<int:user_id>/toggle-ativo", methods=["POST"])
+@login_required
+def toggle_ativo(user_id):
+    """Alterna o status ativo/inativo de um usuário. Retorna JSON.
+    Permissão: admin/gestor_associacao/gestor_academia (com escopo)."""
+    from flask import jsonify
+
+    if user_id == current_user.id:
+        return jsonify({"ok": False, "error": "Você não pode alterar o próprio status."}), 400
+
+    db = get_db_connection()
+    cursor = db.cursor(dictionary=True)
+    try:
+        cursor.execute("SELECT id, nome, COALESCE(ativo, 1) AS ativo FROM usuarios WHERE id = %s", (user_id,))
+        usuario = cursor.fetchone()
+        if not usuario:
+            return jsonify({"ok": False, "error": "Usuário não encontrado."}), 404
+
+        if not _pode_editar_usuario(usuario):
+            return jsonify({"ok": False, "error": "Sem permissão para alterar este usuário."}), 403
+
+        novo = 0 if usuario["ativo"] else 1
+        cursor.execute("UPDATE usuarios SET ativo = %s WHERE id = %s", (novo, user_id))
+        db.commit()
+        return jsonify({
+            "ok": True,
+            "ativo": bool(novo),
+            "nome": usuario["nome"],
+            "mensagem": ("Usuário reativado." if novo else "Usuário inativado."),
+        })
+    except Exception as e:
+        db.rollback()
+        current_app.logger.error(f"Erro ao alterar status: {e}", exc_info=True)
+        return jsonify({"ok": False, "error": "Erro interno."}), 500
+    finally:
+        cursor.close()
+        db.close()
+
+
 @bp_usuarios.route("/excluir/<int:user_id>", methods=["POST"])
 @login_required
 def excluir_usuario(user_id):
@@ -828,3 +1021,138 @@ def excluir_usuario(user_id):
 
     flash("Usuário removido com sucesso!", "success")
     return redirect(url_for("usuarios.lista_usuarios"))
+
+
+# ======================================================
+# 🔹 UNIFICAÇÃO DE CADASTROS DUPLICADOS (admin)
+# ======================================================
+@bp_usuarios.route("/duplicados", methods=["GET"])
+@login_required
+def duplicados():
+    """Lista grupos de usuários potencialmente duplicados (admin)."""
+    if not require_admin():
+        return redirect(url_for("painel.home"))
+    from utils.unificar_usuarios import encontrar_duplicados
+
+    db = get_db_connection()
+    cur = db.cursor(dictionary=True)
+    try:
+        grupos = encontrar_duplicados(cur)
+        # Anexar lista de roles e flags por usuário (para o admin decidir)
+        for g in grupos:
+            for u in g["usuarios"]:
+                cur.execute(
+                    """SELECT r.nome FROM roles_usuario ru
+                       JOIN roles r ON r.id = ru.role_id
+                       WHERE ru.usuario_id = %s ORDER BY r.nome""",
+                    (u["id"],),
+                )
+                u["roles"] = [r["nome"] for r in cur.fetchall()]
+                cur.execute("SELECT id FROM alunos WHERE usuario_id = %s", (u["id"],))
+                u["tem_aluno"] = cur.fetchone() is not None
+                cur.execute("SELECT id FROM professores WHERE usuario_id = %s", (u["id"],))
+                u["tem_professor"] = cur.fetchone() is not None
+                cur.execute("SELECT COUNT(*) AS c FROM usuarios_academias WHERE usuario_id = %s", (u["id"],))
+                u["academias"] = (cur.fetchone() or {}).get("c", 0)
+    finally:
+        cur.close()
+        db.close()
+
+    return render_template("usuarios/duplicados.html", grupos=grupos)
+
+
+@bp_usuarios.route("/duplicados/buscar", methods=["GET"])
+@login_required
+def duplicados_buscar():
+    """Busca usuários por nome/e-mail/CPF para unificação manual (admin)."""
+    from flask import jsonify
+    if not current_user.has_role("admin"):
+        return jsonify({"ok": False, "error": "Acesso negado"}), 403
+    termo = (request.args.get("q") or "").strip()
+    if len(termo) < 2:
+        return jsonify({"itens": []})
+
+    db = get_db_connection()
+    cur = db.cursor(dictionary=True)
+    try:
+        cpf_digits = "".join(filter(str.isdigit, termo))
+        like = f"%{termo}%"
+        params = [like, like]
+        sql = """
+            SELECT u.id, u.nome, u.email, u.cpf, u.foto, COALESCE(u.ativo,1) AS ativo, u.criado_em,
+                   (SELECT COUNT(*) FROM alunos a WHERE a.usuario_id = u.id) AS tem_aluno,
+                   (SELECT COUNT(*) FROM professores p WHERE p.usuario_id = u.id) AS tem_professor,
+                   (SELECT COUNT(*) FROM usuarios_academias ua WHERE ua.usuario_id = u.id) AS academias
+            FROM usuarios u
+            WHERE u.nome LIKE %s OR u.email LIKE %s
+        """
+        if cpf_digits and len(cpf_digits) >= 4:
+            sql += " OR REGEXP_REPLACE(COALESCE(u.cpf,''), '[^0-9]', '') LIKE %s"
+            params.append(f"%{cpf_digits}%")
+        sql += " ORDER BY u.nome LIMIT 30"
+        cur.execute(sql, tuple(params))
+        itens = cur.fetchall()
+        # Anexar roles
+        for u in itens:
+            cur.execute(
+                """SELECT r.nome FROM roles_usuario ru
+                   JOIN roles r ON r.id = ru.role_id
+                   WHERE ru.usuario_id = %s ORDER BY r.nome""",
+                (u["id"],),
+            )
+            u["roles"] = [r["nome"] for r in cur.fetchall()]
+            if u.get("criado_em"):
+                u["criado_em"] = u["criado_em"].strftime("%d/%m/%Y") if hasattr(u["criado_em"], "strftime") else str(u["criado_em"])
+        return jsonify({"itens": itens})
+    finally:
+        cur.close()
+        db.close()
+
+
+@bp_usuarios.route("/duplicados/unificar", methods=["POST"])
+@login_required
+def duplicados_unificar():
+    """Unifica os perdedores no usuário principal escolhido."""
+    if not require_admin():
+        return redirect(url_for("usuarios.duplicados"))
+    from utils.unificar_usuarios import unificar
+
+    try:
+        principal_id = int(request.form.get("principal_id") or 0)
+    except (TypeError, ValueError):
+        principal_id = 0
+    perdedores_ids = []
+    for x in request.form.getlist("perdedor_id"):
+        try:
+            v = int(x)
+            if v != principal_id:
+                perdedores_ids.append(v)
+        except (TypeError, ValueError):
+            pass
+
+    if not principal_id or not perdedores_ids:
+        flash("Selecione o usuário principal e pelo menos um perdedor.", "danger")
+        return redirect(url_for("usuarios.duplicados"))
+
+    if current_user.id in perdedores_ids:
+        flash("Você não pode unificar a si mesmo como perdedor.", "danger")
+        return redirect(url_for("usuarios.duplicados"))
+
+    db = get_db_connection()
+    cur = db.cursor(dictionary=True)
+    try:
+        relatorio = unificar(cur, principal_id, perdedores_ids)
+        db.commit()
+        n = len(relatorio.get("perdedores_apagados", []))
+        flash(f"Unificação concluída: {n} cadastro(s) mesclado(s) ao principal.", "success")
+        for aviso in relatorio.get("avisos", []):
+            flash(aviso, "warning")
+    except Exception as e:
+        db.rollback()
+        current_app.logger.error("Erro ao unificar usuários: %s", e, exc_info=True)
+        flash(f"Erro na unificação: {e}", "danger")
+    finally:
+        cur.close()
+        db.close()
+
+    return redirect(url_for("usuarios.duplicados"))

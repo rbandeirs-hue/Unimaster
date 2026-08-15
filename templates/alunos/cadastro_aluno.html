@@ -192,6 +192,7 @@
 
         <div class="card-body p-4">
             <form method="POST" enctype="multipart/form-data" id="formAluno">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="next" value="{{ back_url }}">
 
                 <!-- ===================================================== -->
@@ -346,17 +347,18 @@
                                value="{{ form_data.get('data_cadastro_zempo', aluno.data_cadastro_zempo if aluno else '') }}" disabled>
                     </div>
 
-                    <div class="col-md-4 mb-3">
-                        <label class="form-label fw-semibold">Faixa / Grau *</label>
-                        <select class="form-control" name="graduacao_id" required>
+                    <div class="col-md-4 mb-3" id="graduacao_container">
+                        <label class="form-label fw-semibold">Faixa / Grau</label>
+                        <select class="form-control" name="graduacao_id" id="graduacao_id">
                             <option value="" disabled {% if not graduacao_sel %}selected{% endif %}>Selecione</option>
                             {% for g in graduacoes %}
-                            <option value="{{ g.id }}"
+                            <option value="{{ g.id }}" data-modalidade-id="{{ g.modalidade_id if g.modalidade_id is defined and g.modalidade_id is not none else '' }}"
                                 {% if graduacao_sel and graduacao_sel|int == g.id %}selected{% elif aluno and aluno.graduacao_id == g.id %}selected{% endif %}>
                                 {{ g.faixa }} - {{ g.graduacao }} - {{ g.categoria }}
                             </option>
                             {% endfor %}
                         </select>
+                        <small class="text-muted d-none" id="graduacao_empty_hint">Nenhuma graduação disponível para a(s) modalidade(s) selecionada(s).</small>
                     </div>
                 </div>
 
@@ -598,7 +600,7 @@
                 </h6>
 
                 <div class="row align-items-end">
-                    <div class="col-md-6 mb-3">
+                    <div class="col-md-4 mb-3">
                         <label class="form-label fw-semibold">Nome do Responsável Financeiro</label>
                         <input type="text" class="form-control" name="responsavel_financeiro_nome"
                                id="responsavel_financeiro_nome"
@@ -606,12 +608,21 @@
                                value="{{ form_data.get('responsavel_financeiro_nome', aluno.responsavel_financeiro_nome if aluno else '') }}">
                     </div>
 
-                    <div class="col-md-4 mb-3">
+                    <div class="col-md-3 mb-3">
                         <label class="form-label fw-semibold">CPF do Responsável Financeiro</label>
                         <input type="text" class="form-control" name="responsavel_financeiro_cpf"
                                id="responsavel_financeiro_cpf" data-mask="cpf"
                                placeholder="CPF do responsável financeiro"
                                value="{{ form_data.get('responsavel_financeiro_cpf', aluno.responsavel_financeiro_cpf if aluno else '') }}">
+                    </div>
+
+                    <div class="col-md-3 mb-3">
+                        <label class="form-label fw-semibold">Telefone do Responsável Financeiro <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" name="responsavel_financeiro_telefone"
+                               id="responsavel_financeiro_telefone" data-mask="phone" required
+                               placeholder="(00) 00000-0000"
+                               value="{{ form_data.get('responsavel_financeiro_telefone', aluno.responsavel_financeiro_telefone if aluno else '') }}">
+                        <small class="text-muted">Usado na cobrança online (InfinitePay).</small>
                     </div>
 
                     <div class="col-md-2 mb-3 d-grid">
@@ -653,7 +664,7 @@
                                 Câmera
                             </button>
 
-                            <input type="file" name="foto_arquivo" id="fotoArquivoAluno" class="form-control" accept="image/*">
+                            <input type="file" name="foto_arquivo" id="fotoArquivoAluno" class="form-control" accept="image/*" capture="environment">
                         </div>
                     </div>
                 </div>
@@ -721,6 +732,24 @@
     let usingFrontCamera = true;
     let frontCameras = [], backCameras = [], currentDeviceId = null;
 
+    // 🟦 Controle de prontidão da câmera (evita capturar foto em branco)
+    const _btnCap = document.getElementById("btnCapturar");
+    const _btnCapHTML = _btnCap ? _btnCap.innerHTML : '';
+    function setCapturaPronta(pronto) {
+        if (!_btnCap) return;
+        _btnCap.disabled = !pronto;
+        _btnCap.innerHTML = pronto
+            ? _btnCapHTML
+            : '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Carregando...';
+    }
+    (function () {
+        const v = document.getElementById("cameraVideo");
+        if (!v) return;
+        const marcarPronta = () => { if (v.videoWidth > 0) setCapturaPronta(true); };
+        v.addEventListener('loadedmetadata', marcarPronta);
+        v.addEventListener('playing', marcarPronta);
+    })();
+
     async function listarCameras() {
         // Solicitar permissão primeiro para obter labels dos dispositivos
         try {
@@ -776,7 +805,8 @@
         
         // Limpar srcObject antes de iniciar novo stream
         video.srcObject = null;
-        
+        setCapturaPronta(false);
+
         // Aguardar um pouco mais para garantir que o stream anterior foi completamente liberado
         await new Promise(resolve => setTimeout(resolve, 300));
 
@@ -955,6 +985,7 @@
 
         const video = document.getElementById("cameraVideo");
         video.srcObject = null;
+        setCapturaPronta(false);
         await new Promise(resolve => setTimeout(resolve, 300));
 
         const constraints = {
@@ -1000,18 +1031,25 @@
 
     $("#btnCapturar").click(function () {
         let video = document.getElementById("cameraVideo");
+        if (!video.videoWidth || video.readyState < 2) {
+            alert("Aguarde a câmera carregar e tente novamente.");
+            return;
+        }
         let canvas = document.getElementById("cameraCanvas");
         let ctx = canvas.getContext("2d");
 
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
+        var MAXDIM = 1080;
+        var vw = video.videoWidth, vh = video.videoHeight;
+        var escala = Math.min(1, MAXDIM / Math.max(vw, vh));
+        canvas.width = Math.round(vw * escala);
+        canvas.height = Math.round(vh * escala);
 
         // Aplicar mesma transformação ao capturar (espelhar se for câmera frontal)
         if (isFrontCamera) {
             ctx.translate(canvas.width, 0);
             ctx.scale(-1, 1);
         }
-        ctx.drawImage(video, 0, 0);
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
         $("#cameraCanvas").show();
         $("#cameraVideo").hide();
@@ -1038,7 +1076,7 @@
     });
 
     $("#btnConfirmarFoto").click(function () {
-        const dataURL = document.getElementById("cameraCanvas").toDataURL("image/png");
+        const dataURL = document.getElementById("cameraCanvas").toDataURL("image/jpeg", 0.82);
         $("#fotoInput").val(dataURL);
         $("#miniatura").attr("src", dataURL).removeClass("d-none");
         $("#cameraModal").fadeOut();
@@ -1162,8 +1200,10 @@
             return;
         }
 
+        const telAluno = $('input[name="telefone_celular"]').val();
         $('#responsavel_financeiro_nome').val(nomeAluno);
         $('#responsavel_financeiro_cpf').val(cpfAluno).trigger('input');
+        $('#responsavel_financeiro_telefone').val(telAluno).trigger('input');
     });
 
     function preencherAssociacao() {
@@ -1231,6 +1271,40 @@
     document.querySelector('input[name="nome_pai"]')?.addEventListener('input', atualizarResponsavel);
     document.querySelector('input[name="nome_mae"]')?.addEventListener('input', atualizarResponsavel);
     atualizarResponsavel();
+
+    // Preservar a graduação já selecionada — nunca limpar automaticamente.
+    const _gradSelectInicial = document.getElementById('graduacao_id');
+    const _graduacaoInicialId = _gradSelectInicial ? _gradSelectInicial.value : '';
+
+    function atualizarGraduacoesPorModalidade() {
+        const gradContainer = document.getElementById('graduacao_container');
+        const gradSelect = document.getElementById('graduacao_id');
+        if (!gradContainer || !gradSelect) return;
+        const hint = document.getElementById('graduacao_empty_hint');
+        const modalidadesMarcadas = Array.from(document.querySelectorAll('input[name="aluno_modalidade_ids"]'))
+            .filter(el => el.type !== 'checkbox' || el.checked)
+            .map(el => String(el.value));
+        let visiveis = 0;
+        Array.from(gradSelect.options).forEach((opt, idx) => {
+            if (!opt.value) return;
+            const modId = opt.dataset.modalidadeId || '';
+            // A graduação atual do aluno fica sempre visível (não perder dado já gravado).
+            const ehAtualDoAluno = _graduacaoInicialId && opt.value === _graduacaoInicialId;
+            const mostrar = ehAtualDoAluno
+                || (modalidadesMarcadas.length > 0 && (!modId || modalidadesMarcadas.includes(modId)));
+            opt.hidden = !mostrar;
+            if (mostrar) visiveis += 1;
+        });
+        const exibir = visiveis > 0;
+        gradContainer.style.display = exibir ? '' : 'none';
+        gradSelect.required = false;
+        if (hint) hint.classList.toggle('d-none', exibir || modalidadesMarcadas.length === 0);
+    }
+
+    document.querySelectorAll('input[name="aluno_modalidade_ids"]').forEach(function(el) {
+        el.addEventListener('change', atualizarGraduacoesPorModalidade);
+    });
+    atualizarGraduacoesPorModalidade();
 
     /* ---------------------------- */
     /* 🟦 Validação menor + CPF     */

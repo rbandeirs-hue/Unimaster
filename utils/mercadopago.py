@@ -92,3 +92,39 @@ class MercadoPagoClient:
         r = requests.get(f"{BASE_URL}/v1/payments/{payment_id}", headers=self._headers(), timeout=TIMEOUT)
         j = r.json() or {}
         return j.get("status")
+
+    def criar_assinatura_recorrente(self, valor, descricao, payer_email, back_url,
+                                    external_reference=None, frequencia_meses=1):
+        """Cria uma assinatura (preapproval) com cobrança recorrente no cartão.
+        Retorna {subscription_id, url} — `url` é o init_point onde o aluno autoriza
+        o cartão uma vez; o Mercado Pago debita automaticamente a cada período."""
+        if not (payer_email or "").strip():
+            raise RuntimeError("E-mail do pagador é obrigatório para assinatura no Mercado Pago.")
+        payload = {
+            "reason": (descricao or "Mensalidade recorrente")[:255],
+            "payer_email": payer_email.strip(),
+            "back_url": back_url,
+            "status": "pending",
+            "auto_recurring": {
+                "frequency": int(frequencia_meses or 1),
+                "frequency_type": "months",
+                "transaction_amount": round(float(valor), 2),
+                "currency_id": "BRL",
+            },
+        }
+        if external_reference is not None:
+            payload["external_reference"] = str(external_reference)
+        idem = f"preapproval-{external_reference or 'mp'}"
+        r = requests.post(f"{BASE_URL}/preapproval", headers=self._headers(idem), json=payload, timeout=TIMEOUT)
+        j = r.json() or {}
+        if not j.get("id"):
+            raise RuntimeError(f"Falha ao criar assinatura no Mercado Pago: {j.get('message') or j}")
+        url = j.get("init_point") or j.get("sandbox_init_point")
+        if not url:
+            raise RuntimeError(f"Mercado Pago não retornou o link de autorização: {j}")
+        return {"subscription_id": str(j["id"]), "url": url}
+
+    def status_preapproval(self, preapproval_id):
+        """Consulta dados de uma assinatura (preapproval)."""
+        r = requests.get(f"{BASE_URL}/preapproval/{preapproval_id}", headers=self._headers(), timeout=TIMEOUT)
+        return r.json() or {}

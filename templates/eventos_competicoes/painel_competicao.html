@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}{{ evento.nome }} — Painel da competição{% endblock %}
+{% block content %}
+{% set cm = evento.categorias_modo|default('padrao') %}
+{% set eid = evento.id %}
+{% if cm == 'aproximacao' %}
+  {% set u_cat = url_for('eventos_competicoes.evento_categorias_aproximacao', evento_id=eid) %}
+{% else %}
+  {% set u_cat = url_for('competicoes.categorias') %}
+{% endif %}
+
+{% set secoes = [
+  ('Dados', 'Configurações da competição: formulário, datas e link público.', 'bi-sliders', 'primary', url_for('eventos_competicoes.editar', evento_id=eid)),
+  ('Inscrições', 'Atletas inscritos por academia. Consolidar, editar e exportar.', 'bi-people-fill', 'success', url_for('eventos_competicoes.consolidar', evento_id=eid)),
+  ('Categorias', 'Categorias de peso e idade da competição.', 'bi-collection', 'info', u_cat),
+  ('Chaves', 'Montagem das chaves e confrontos por categoria.', 'bi-diagram-3', 'warning', url_for('competicoes.chaves_evento', evento_id=eid)),
+  ('Súmulas', 'Súmulas para impressão e registro das lutas.', 'bi-file-earmark-text', 'secondary', url_for('competicoes.sumulas_evento', evento_id=eid)),
+  ('Placar', 'Placar eletrônico das lutas em tempo real.', 'bi-tv', 'danger', url_for('eventos_competicoes.placar_judo_lista', evento_id=eid)),
+  ('Resultados', 'Classificação final e pódios por categoria.', 'bi-trophy', 'dark', url_for('competicoes.resultados_evento', evento_id=eid))
+] %}
+
+<div class="container-fluid px-3 px-md-4 py-3 py-md-4 painel-comp" style="max-width:1100px;">
+
+  <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-4">
+    <div>
+      <a href="{{ back_url or url_for('eventos_competicoes.lista_competicoes') }}"
+         class="btn btn-sm btn-outline-secondary mb-2">
+        <i class="bi bi-arrow-left me-1"></i>Competições
+      </a>
+      <div>
+        <span class="badge bg-danger-subtle text-danger-emphasis border border-danger-subtle mb-1">
+          <i class="bi bi-trophy me-1"></i>Competição
+        </span>
+      </div>
+      <h1 class="h4 fw-bold mb-0">{{ evento.nome }}</h1>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    {% for titulo, descricao, icone, cor, url in secoes %}
+    <div class="col-12 col-sm-6 col-lg-4">
+      <a href="{{ url }}" class="text-decoration-none">
+        <div class="card h-100 secao-card">
+          <div class="secao-faixa bg-{{ cor }}"></div>
+          <div class="card-body d-flex align-items-start gap-3 p-3">
+            <div class="secao-icone bg-{{ cor }}-subtle text-{{ cor }}-emphasis">
+              <i class="bi {{ icone }}"></i>
+            </div>
+            <div class="min-w-0">
+              <h2 class="h6 fw-bold mb-1 text-body">{{ titulo }}</h2>
+              <p class="text-muted small mb-0">{{ descricao }}</p>
+            </div>
+          </div>
+        </div>
+      </a>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<style>
+  .painel-comp .secao-card {
+    border: 1px solid var(--bs-border-color);
+    border-radius: .7rem;
+    overflow: hidden;
+    transition: box-shadow .15s ease, transform .15s ease;
+  }
+  .painel-comp .secao-card:hover {
+    box-shadow: 0 .5rem 1.25rem rgba(0,0,0,.08);
+    transform: translateY(-2px);
+  }
+  .painel-comp .secao-faixa { height: 4px; width: 100%; }
+  .painel-comp .secao-icone {
+    width: 44px; height: 44px; flex: 0 0 44px;
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.3rem;
+  }
+</style>
+{% endblock %}

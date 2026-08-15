@@ -1,0 +1,212 @@
+{% extends "financeiro/painel/_layout.html" %}
+{% block title %}Mensalidades{% endblock %}
+
+{% block conteudo %}
+<div class="fp-page fp-page--narrow">
+
+  <div class="fp-head fp-head--row">
+    <div>
+      <h1 class="fp-h1">Mensalidades</h1>
+      <p class="fp-sub">Gestão de cobranças mensais</p>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <form method="POST" action="{{ url_for('financeiro_painel.mensalidades_atualizar_links') }}"
+          onsubmit="return confirm('Reemitir a cobrança online das mensalidades em aberto de {{ mes_label }}?\n\nUse quando o link estiver com valor ou endereço desatualizado. O link curto continua o mesmo.')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
+      <input type="hidden" name="mes" value="{{ mes_chave }}">
+      <button class="fp-btn-ghost" type="submit" title="Refaz os links de pagamento do mês com o valor e o endereço atuais">
+        Atualizar links
+      </button>
+    </form>
+    <form method="POST" action="{{ url_for('financeiro_painel.mensalidades_notificar_atrasados') }}"
+          onsubmit="return confirm('Enviar lembrete de WhatsApp para os {{ atrasados_geral }} atrasados?\n\nQuem ainda não tem cobrança online vai ter uma gerada agora.')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
+      <input type="hidden" name="mes" value="{{ mes_chave }}">
+      <button class="fp-btn" type="submit" {% if not atrasados_geral %}disabled{% endif %}>
+        {% if atrasados_geral %}Notificar {{ atrasados_geral }} atrasado(s){% else %}Sem atrasados{% endif %}
+      </button>
+    </form>
+    </div>
+  </div>
+
+  <div class="fp-barra-mes">
+    {% for m in meses %}
+    <a class="fp-mes-btn {% if m.chave == mes_chave %}is-active{% endif %}"
+       href="{{ url_for('financeiro_painel.mensalidades', academia_id=academia_id, mes=m.chave) }}">{{ m.label }}</a>
+    {% endfor %}
+    <div class="fp-resumo-dir">
+      <div class="fp-resumo">
+        <div class="fp-resumo__label">Arrecadado</div>
+        <div class="fp-resumo__valor fp-resumo__valor--verde">{{ fmt_moeda(arrecadado) }}</div>
+      </div>
+      <div class="fp-resumo">
+        <div class="fp-resumo__label">Pendente</div>
+        <div class="fp-resumo__valor fp-resumo__valor--amarelo">{{ fmt_moeda(pendente) }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="fp-progress">
+    <div class="fp-progress__top">
+      <span class="fp-progress__label">Taxa de arrecadação</span>
+      <span class="fp-progress__count">{{ pagos }}/{{ total }} alunos</span>
+    </div>
+    <div class="fp-progress__track">
+      <div class="fp-progress__bar" style="width: {{ taxa }}%"></div>
+    </div>
+  </div>
+
+  <div class="fp-card fp-card--table">
+    <div class="fp-table-wrap">
+      <table class="fp-table">
+        <thead>
+          <tr><th>Aluno</th><th>Faixa</th><th>Vencimento</th><th>Valor</th><th>Juros/Multa</th><th>Status</th><th>Pagamento</th><th>Ação</th></tr>
+        </thead>
+        <tbody>
+          {% for r in lista %}
+          <tr>
+            <td class="fp-td-nome">{{ r.aluno_nome }}</td>
+            <td>
+              <span class="fp-faixa">
+                <span class="fp-dot fp-dot--sm" style="background: {{ cor_faixa(r.faixa) }}"></span>
+                {{ r.faixa or 'Sem graduação' }}
+              </span>
+            </td>
+            <td class="fp-td-mono">{{ r.data_vencimento.strftime('%d/%m/%Y') if r.data_vencimento else '—' }}</td>
+            <td class="fp-td-valor">{{ fmt_moeda(r.valor_exibido) }}</td>
+            <td>
+              {% if r.remover_juros %}
+                <span class="fp-badge fp-badge--isento">Isento</span>
+              {% elif r.acrescimo > 0 %}
+                <span style="font-family:var(--fp-mono);font-size:12px;color:var(--fp-accent)">
+                  + {{ fmt_moeda(r.acrescimo) }}
+                </span>
+              {% else %}
+                <span class="fp-td-muted">—</span>
+              {% endif %}
+            </td>
+            <td><span class="fp-badge fp-badge--{{ r.rotulo|lower }}">{{ r.rotulo }}</span></td>
+            <td class="fp-td-muted">
+              {% if r.data_pagamento %}
+                {{ r.data_pagamento.strftime('%d/%m/%Y') }}{% if r.forma_nome %} · {{ r.forma_nome }}{% endif %}
+              {% else %}—{% endif %}
+            </td>
+            <td>
+              {% if r.efetivo != 'pago' %}
+              <div class="fp-acoes">
+                <button type="button" class="fp-btn-registrar"
+                        data-id="{{ r.id }}" data-nome="{{ r.aluno_nome|e }}" data-valor="{{ fmt_moeda(r.valor_exibido) }}">
+                  Registrar
+                </button>
+                {% if r.pode_juros %}
+                <form method="POST" action="{{ url_for('financeiro_painel.mensalidades_juros', registro_id=r.id) }}"
+                      style="display:inline">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
+                  <input type="hidden" name="mes" value="{{ mes_chave }}">
+                  <input type="hidden" name="acao" value="{{ 'reaplicar' if r.remover_juros else 'remover' }}">
+                  <button class="fp-btn-mini {% if not r.remover_juros %}fp-btn-mini--warn{% endif %}" type="submit"
+                          title="{% if r.remover_juros %}Voltar a cobrar juros e multa{% else %}Não cobrar juros e multa desta mensalidade{% endif %}">
+                    {{ 'Cobrar juros' if r.remover_juros else 'Sem juros' }}
+                  </button>
+                </form>
+                {% endif %}
+              </div>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if not lista %}
+    <div class="fp-empty fp-empty--tall">
+      Nenhuma mensalidade em {{ mes_label }}.
+      <br><span style="font-size:12px">Gere as cobranças em <a href="{{ url_for('financeiro_painel.cobrancas', academia_id=academia_id, mes=mes_chave) }}" style="color:var(--fp-accent)">Gerar Cobranças</a>.</span>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="fp-modal" id="fp-modal" hidden>
+  <form class="fp-modal__box" method="POST" id="fp-modal-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
+    <input type="hidden" name="mes" value="{{ mes_chave }}">
+
+    <h2 class="fp-modal__title">Registrar Pagamento</h2>
+    <p class="fp-modal__sub"><span id="fp-modal-nome"></span> · {{ mes_label }}</p>
+
+    <div class="fp-modal__campos">
+      <div>
+        <div class="fp-modal__label">Valor</div>
+        <div class="fp-modal__valor" id="fp-modal-valor"></div>
+      </div>
+      <div>
+        <div class="fp-modal__label">Forma de pagamento</div>
+        {% if formas %}
+        <div class="fp-forma-opcoes" id="fp-formas">
+          {% for f in formas %}
+          <button type="button" class="fp-forma {% if loop.first %}is-active{% endif %}" data-id="{{ f.id }}">{{ f.nome }}</button>
+          {% endfor %}
+        </div>
+        <input type="hidden" name="id_forma_pagamento" id="fp-forma-id" value="{{ formas[0].id }}">
+        {% else %}
+        <div class="fp-sub" style="font-size:12px">
+          Nenhuma forma cadastrada — o pagamento será registrado sem forma.
+          <a href="{{ url_for('financeiro_painel.formas', academia_id=academia_id) }}"
+             style="color:var(--fp-accent)">Cadastrar agora</a>.
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="fp-modal__acoes">
+      <button class="fp-btn" type="submit">Confirmar Pagamento</button>
+      <button class="fp-btn-ghost" type="button" id="fp-modal-cancelar">Cancelar</button>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  (function () {
+    var modal = document.getElementById('fp-modal');
+    var form = document.getElementById('fp-modal-form');
+    var elNome = document.getElementById('fp-modal-nome');
+    var elValor = document.getElementById('fp-modal-valor');
+    var formaId = document.getElementById('fp-forma-id');
+    // A action é montada por id: a rota é /mensalidades/<id>/pagar.
+    var BASE = "{{ url_for('financeiro_painel.mensalidades_pagar', registro_id=0) }}";
+
+    function abrir(btn) {
+      form.action = BASE.replace(/0\/pagar$/, btn.dataset.id + '/pagar');
+      elNome.textContent = btn.dataset.nome;
+      elValor.textContent = btn.dataset.valor;
+      modal.hidden = false;
+    }
+    function fechar() { modal.hidden = true; }
+
+    document.querySelectorAll('.fp-btn-registrar').forEach(function (b) {
+      b.addEventListener('click', function () { abrir(b); });
+    });
+    document.getElementById('fp-modal-cancelar').addEventListener('click', fechar);
+    modal.addEventListener('click', function (e) { if (e.target === modal) fechar(); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') fechar(); });
+
+    var formas = document.getElementById('fp-formas');
+    if (formas) {
+      formas.addEventListener('click', function (e) {
+        var b = e.target.closest('.fp-forma');
+        if (!b) return;
+        formas.querySelectorAll('.fp-forma').forEach(function (x) { x.classList.remove('is-active'); });
+        b.classList.add('is-active');
+        formaId.value = b.dataset.id;
+      });
+    }
+  })();
+</script>
+{% endblock %}

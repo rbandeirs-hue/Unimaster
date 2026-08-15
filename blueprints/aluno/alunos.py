@@ -17,6 +17,11 @@ from flask_login import login_required, current_user
 from config import get_db_connection
 from utils.modalidades import filtro_visibilidade_sql
 from utils.upload_seguro import validar_upload, nome_seguro, UploadInvalido
+from utils.alunos_academias import (
+    filtro_alunos_da_academia,
+    sincronizar_principal,
+    aluno_vinculado_a_academia,
+)
 from datetime import datetime, date
 from dateutil.relativedelta import relativedelta
 import os
@@ -560,6 +565,10 @@ def lista_alunos():
     # ======================================================
     ids_acessiveis = _get_academias_ids()
     modo = session.get("modo_painel") or ""
+    # No modo ASSOCIAÇÃO a lista é global (todos os alunos) — carregamos só os cards.
+    # Frequência e o detalhamento financeiro pesado NÃO são calculados aqui; eles
+    # carregam individualmente ao abrir/editar o aluno. Isso deixa a lista rápida.
+    carregar_detalhes = (modo != "associacao")
     # academia_id na URL: "" ou ausente = Todas; número = filtrar
     raw_academia = request.args.get("academia_id")
     academia_filtro = None
@@ -577,8 +586,10 @@ def lista_alunos():
     if academia_filtro and academia_filtro in ids_acessiveis:
         session["academia_gerenciamento_id"] = academia_filtro
         session["finance_academia_id"] = academia_filtro
-        query += " AND a.id_academia = %s"
-        params.append(academia_filtro)
+        # Inclui quem tem esta academia como principal e quem está vinculado a ela.
+        _trecho, _params = filtro_alunos_da_academia(academia_filtro)
+        query += f" AND {_trecho}"
+        params.extend(_params)
     # SUPERUSER (admin) → vê tudo (só quando não tem filtro de academia)
     elif current_user.has_role("admin"):
         pass
@@ -626,8 +637,9 @@ def lista_alunos():
 
     # ACADEMIA / PROFESSOR → vê alunos da própria academia
     elif current_user.has_role("gestor_academia") or current_user.has_role("professor"):
-        query += " AND a.id_academia = %s"
-        params.append(getattr(current_user, "id_academia", 0))
+        _trecho, _params = filtro_alunos_da_academia(getattr(current_user, "id_academia", 0))
+        query += f" AND {_trecho}"
+        params.extend(_params)
 
     # ALUNO → vê apenas ele mesmo (assumindo que current_user.id == alunos.id ou há um vínculo)
     elif current_user.has_role("aluno"):
@@ -778,6 +790,27 @@ def lista_alunos():
         # Regra:
         # - possui_mensalidade: há ao menos uma cobrança (exceto cancelada)
         # - atrasada: existe cobrança atrasada/pendente vencida
+        #
+        # Escopo por academia: quando a lista está filtrada por UMA academia (seja
+        # pelo filtro na URL, seja porque o gestor/professor é de uma academia só),
+        # o financeiro deve mostrar apenas as cobranças daquela academia. Sem isso,
+        # um aluno vinculado a mais de uma academia teria as mensalidades das duas
+        # somadas na mesma linha. O vínculo da cobrança à academia vem do plano
+        # (mensalidades.id_academia).
+        _fin_acad = None
+        if academia_filtro and academia_filtro in ids_acessiveis:
+            _fin_acad = academia_filtro
+        elif (
+            not current_user.has_role("admin")
+            and modo != "associacao"
+            and not current_user.has_role("gestor_associacao")
+            and not current_user.has_role("gestor_federacao")
+            and (current_user.has_role("gestor_academia") or current_user.has_role("professor"))
+        ):
+            _fin_acad = getattr(current_user, "id_academia", None)
+        _fin_join = " LEFT JOIN mensalidades mfa ON mfa.id = ma.mensalidade_id" if _fin_acad else ""
+        _fin_where = " AND mfa.id_academia = %s" if _fin_acad else ""
+        _fin_params = [_fin_acad] if _fin_acad else []
         try:
             cursor.execute(
                 f"""
@@ -791,12 +824,12 @@ def lista_alunos():
                             THEN 1 ELSE 0
                         END
                     ) AS total_atrasadas
-                FROM mensalidade_aluno ma
+                FROM mensalidade_aluno ma{_fin_join}
                 WHERE ma.aluno_id IN ({placeholders})
-                  AND ma.status <> 'cancelado'
+                  AND ma.status <> 'cancelado'{_fin_where}
                 GROUP BY ma.aluno_id
                 """,
-                tuple(aluno_ids),
+                tuple(aluno_ids) + tuple(_fin_params),
             )
             for row in cursor.fetchall():
                 total_cobrancas = int(row.get("total_cobrancas") or 0)
@@ -806,6 +839,7 @@ def lista_alunos():
                     "atrasada": total_atrasadas > 0,
                 }
 
+            _fin_where_m = " AND m.id_academia = %s" if _fin_acad else ""
             _sql_ma_fin = f"""
                 SELECT
                     ma.aluno_id,
@@ -832,7 +866,7 @@ def lista_alunos():
                 LEFT JOIN mensalidades m ON m.id = ma.mensalidade_id
                 LEFT JOIN formas_pagamento fp ON fp.id = ma.id_forma_pagamento
                 WHERE ma.aluno_id IN ({placeholders})
-                  AND ma.status <> 'cancelado'
+                  AND ma.status <> 'cancelado'{_fin_where_m}
                 ORDER BY ma.aluno_id, ma.data_vencimento
                 """
             _sql_ma_fin_basic = f"""
@@ -856,16 +890,22 @@ def lista_alunos():
                 FROM mensalidade_aluno ma
                 LEFT JOIN mensalidades m ON m.id = ma.mensalidade_id
                 WHERE ma.aluno_id IN ({placeholders})
-                  AND ma.status <> 'cancelado'
+                  AND ma.status <> 'cancelado'{_fin_where_m}
                 ORDER BY ma.aluno_id, ma.data_vencimento
                 """
             try:
-                cursor.execute(_sql_ma_fin, tuple(aluno_ids))
-                ma_rows = cursor.fetchall()
-                _ma_fin_cols = "full"
+                if not carregar_detalhes:
+                    # Modo associação: pula o detalhamento financeiro pesado (e o N+1
+                    # de descontos/receitas). O badge de mensalidade vem do bloco leve acima.
+                    ma_rows = []
+                    _ma_fin_cols = "none"
+                else:
+                    cursor.execute(_sql_ma_fin, tuple(aluno_ids) + tuple(_fin_params))
+                    ma_rows = cursor.fetchall()
+                    _ma_fin_cols = "full"
             except Exception:
                 try:
-                    cursor.execute(_sql_ma_fin_basic, tuple(aluno_ids))
+                    cursor.execute(_sql_ma_fin_basic, tuple(aluno_ids) + tuple(_fin_params))
                     ma_rows = cursor.fetchall()
                     _ma_fin_cols = "basic"
                 except Exception:
@@ -1347,6 +1387,20 @@ def lista_alunos():
     # 🔹 CÁLCULO DE FAIXAS + MODALIDADES
     # ======================================================
 
+    # Frequência de Judô — pré-carrega TODAS as presenças num ÚNICO SELECT
+    # (evita N+1: antes eram 3 queries por aluno → ~750 queries na visão da associação).
+    freq_dados = {}
+    if turmas_judo_ids and aluno_ids and carregar_detalhes:
+        _ph_a = ",".join(["%s"] * len(aluno_ids))
+        _ph_t = ",".join(["%s"] * len(turmas_judo_ids))
+        cursor.execute(
+            f"""SELECT aluno_id, data_presenca, presente FROM presencas
+                WHERE aluno_id IN ({_ph_a}) AND turma_id IN ({_ph_t})""",
+            list(aluno_ids) + list(turmas_judo_ids),
+        )
+        for _r in cursor.fetchall():
+            freq_dados.setdefault(_r["aluno_id"], []).append((_r["data_presenca"], _r["presente"]))
+
     for aluno in alunos:
         n_nn = turmas_nn_por_aluno.get(aluno["id"], 0)
         aluno["tem_matricula_em_turma"] = bool(aluno.get("TurmaID")) or n_nn > 0
@@ -1388,30 +1442,25 @@ def lista_alunos():
         freq_ano, freq_mes, freq_desde_exame = None, None, None
         total_desde, presentes_desde = 0, 0
         data_inicio_freq = exame or parse_date(aluno.get("data_matricula")) or hoje
-        if turmas_judo_ids:
-            ph = ",".join(["%s"] * len(turmas_judo_ids))
-            params_j = [aluno["id"]] + turmas_judo_ids
-            for label, extra_sql, extra_params in [
-                ("ano", "AND YEAR(data_presenca)=%s", [hoje.year]),
-                ("mes", "AND YEAR(data_presenca)=%s AND MONTH(data_presenca)=%s", [hoje.year, hoje.month]),
-                ("desde", "AND data_presenca >= %s AND data_presenca <= %s", [data_inicio_freq, hoje]),
-            ]:
-                cursor.execute(
-                    f"""SELECT COUNT(*) AS tot, SUM(CASE WHEN presente=1 THEN 1 ELSE 0 END) AS pres
-                        FROM presencas WHERE aluno_id=%s AND turma_id IN ({ph}) {extra_sql}""",
-                    params_j + extra_params,
-                )
-                r = cursor.fetchone()
-                if r and r.get("tot", 0) and r["tot"] > 0:
-                    pct = round((r["pres"] or 0) / r["tot"] * 100, 1)
-                    if label == "ano":
-                        freq_ano = pct
-                    elif label == "mes":
-                        freq_mes = pct
-                    else:
-                        freq_desde_exame = pct
-                        total_desde = r["tot"]
-                        presentes_desde = r["pres"] or 0
+        if turmas_judo_ids and carregar_detalhes:
+            _regs = freq_dados.get(aluno["id"], [])
+
+            def _calc_freq(_filtro, _regs=_regs):
+                _tot = _pres = 0
+                for _d, _p in _regs:
+                    if _d and _filtro(_d):
+                        _tot += 1
+                        if _p == 1:
+                            _pres += 1
+                if _tot > 0:
+                    return round(_pres / _tot * 100, 1), _tot, _pres
+                return None, 0, 0
+
+            freq_ano = _calc_freq(lambda d: d.year == hoje.year)[0]
+            freq_mes = _calc_freq(lambda d: d.year == hoje.year and d.month == hoje.month)[0]
+            freq_desde_exame, total_desde, presentes_desde = _calc_freq(
+                lambda d: data_inicio_freq <= d <= hoje
+            )
         aluno["frequencia_ano"] = freq_ano
         aluno["frequencia_mes"] = freq_mes
         aluno["frequencia_desde_exame"] = freq_desde_exame
@@ -1747,10 +1796,14 @@ def lista_alunos():
     mostrar_filtros_avancados = modo in ("associacao", "federacao") or len(ids_acessiveis) > 1
 
     # Enriquecer alunos para o modal (adicionar categorias, frequência, etc.)
-    # IMPORTANTE: fazer antes de fechar a conexão do banco
-    for _, grupo_alunos in alunos_agrupados:
-        for aluno in grupo_alunos:
-            enriquecer_aluno_para_modal(aluno)
+    # IMPORTANTE: fazer antes de fechar a conexão do banco.
+    # No modo ASSOCIAÇÃO o modal não é renderizado (os detalhes carregam na ficha do
+    # aluno sob demanda), então pulamos esse enriquecimento — que era o maior custo
+    # da página (N+1: ~5 queries por aluno).
+    if carregar_detalhes:
+        for _, grupo_alunos in alunos_agrupados:
+            for aluno in grupo_alunos:
+                enriquecer_aluno_para_modal(aluno)
 
     # Planos de mensalidade da academia (para modal financeiro no modo academia)
     planos_mensalidades = []
@@ -1769,10 +1822,34 @@ def lista_alunos():
     except Exception:
         planos_mensalidades = []
 
+    # Descontos da academia (para o campo de desconto na cobrança avulsa do modal financeiro)
+    descontos_academia = []
+    try:
+        academia_desc_id = academia_id_sel or getattr(current_user, "id_academia", None)
+        if academia_desc_id:
+            conn3 = get_db_connection()
+            cur3 = conn3.cursor(dictionary=True)
+            try:
+                cur3.execute(
+                    "SELECT id, nome, tipo, valor FROM descontos WHERE id_academia = %s AND ativo = 1 ORDER BY nome",
+                    (academia_desc_id,),
+                )
+            except Exception:
+                cur3.execute(
+                    "SELECT id, nome, tipo, valor FROM descontos WHERE id_academia = %s ORDER BY nome",
+                    (academia_desc_id,),
+                )
+            descontos_academia = cur3.fetchall()
+            cur3.close()
+            conn3.close()
+    except Exception:
+        descontos_academia = []
+
     # Turmas, planos e formas de pagamento por academia (reativação / modal financeiro)
     turmas_por_academia = {}
     planos_por_academia = {}
     formas_por_academia = {}
+    descontos_por_academia = {}
     try:
         ids_acads_presentes = {a.get("id_academia") for a in alunos if a.get("id_academia")}
         for _info in (mensalidade_detalhes_por_aluno or {}).values():
@@ -1819,10 +1896,20 @@ def lista_alunos():
                 formas_por_academia[acad_id] = _fp_rows
             except Exception:
                 formas_por_academia[acad_id] = []
+            # Descontos da academia (campo de desconto na cobrança avulsa do modal)
+            try:
+                cursor.execute(
+                    "SELECT id, nome, tipo, valor FROM descontos WHERE id_academia = %s AND ativo = 1 ORDER BY nome",
+                    (acad_id,),
+                )
+                descontos_por_academia[acad_id] = cursor.fetchall()
+            except Exception:
+                descontos_por_academia[acad_id] = []
     except Exception:
         turmas_por_academia = {}
         planos_por_academia = {}
         formas_por_academia = {}
+        descontos_por_academia = {}
 
     academias_por_associacao = {}
     if modo == "associacao" and _pode_transferir_aluno_academia_modo_associacao():
@@ -1904,55 +1991,132 @@ def lista_alunos():
     modo_associacao = modo == "associacao"
     # Gateway de cobrança online ativo por academia (para o seletor do modal).
     gateway_por_academia = {}
+    recorrencia_por_academia = {}
+    recorrencia_opcoes_por_academia = {}
     try:
         _c = get_db_connection()
         _cur = _c.cursor(dictionary=True)
         _cur.execute(
-            """SELECT id, gateway_pagamento, asaas_api_key, mercadopago_access_token, infinitepay_handle
-               FROM academias WHERE gateway_pagamento IS NOT NULL AND gateway_pagamento <> ''"""
+            """SELECT id, gateway_pagamento, asaas_api_key, mercadopago_access_token, infinitepay_handle,
+                      efi_client_id, efi_certificate, efi_pix_key,
+                      sumup_api_key, sumup_merchant_code, sumup_conexao, sumup_oauth_refresh_token
+               FROM academias"""
         )
         for r in _cur.fetchall():
             g = (r.get("gateway_pagamento") or "").strip().lower()
+            # SumUp: configurada por chave manual OU por conexão OAuth (ambas com merchant).
+            _sumup_merchant = bool((r.get("sumup_merchant_code") or "").strip())
+            _sumup_oauth = (r.get("sumup_conexao") or "key").strip().lower() == "oauth"
+            _has_sumup = _sumup_merchant and (
+                bool((r.get("sumup_oauth_refresh_token") or "").strip()) if _sumup_oauth
+                else bool((r.get("sumup_api_key") or "").strip())
+            )
             ok = (
                 (g == "asaas" and (r.get("asaas_api_key") or "").strip())
                 or (g == "mercadopago" and (r.get("mercadopago_access_token") or "").strip())
                 or (g == "infinitepay" and (r.get("infinitepay_handle") or "").strip())
+                or (g == "efi" and (r.get("efi_client_id") or "").strip()
+                    and (r.get("efi_certificate") or "").strip() and (r.get("efi_pix_key") or "").strip())
+                or (g == "sumup" and _has_sumup)
             )
             if ok:
                 gateway_por_academia[r["id"]] = g
+            # Recorrência: respeita o gateway ESCOLHIDO (ativo). Só cai p/ outro se o ativo
+            # não suportar recorrência (ex.: InfinitePay).
+            _has_asaas = bool((r.get("asaas_api_key") or "").strip())
+            _has_mp = bool((r.get("mercadopago_access_token") or "").strip())
+            if g in ("asaas", "mercadopago", "sumup") and (
+                (g == "asaas" and _has_asaas) or (g == "mercadopago" and _has_mp) or (g == "sumup" and _has_sumup)
+            ):
+                _gw_rec = g
+            elif _has_asaas:
+                _gw_rec = "asaas"
+            elif _has_mp:
+                _gw_rec = "mercadopago"
+            elif _has_sumup:
+                _gw_rec = "sumup"
+            else:
+                _gw_rec = None
+            _ops = []
+            if _gw_rec == "asaas":
+                _ops = [{"val": "asaas:cartao", "label": "Cartão — débito automático", "metodo": "cartao"},
+                        {"val": "asaas:pix", "label": "PIX recorrente", "metodo": "pix"}]
+            elif _gw_rec == "mercadopago":
+                _ops = [{"val": "mercadopago:cartao", "label": "Cartão — débito automático", "metodo": "cartao"}]
+            elif _gw_rec == "sumup":
+                _ops = [{"val": "sumup:cartao", "label": "Cartão — débito automático", "metodo": "cartao"}]
+            if _ops:
+                recorrencia_opcoes_por_academia[r["id"]] = _ops
+                recorrencia_por_academia[r["id"]] = _gw_rec
         _c.close()
     except Exception:
         gateway_por_academia = {}
+        recorrencia_por_academia = {}
+        recorrencia_opcoes_por_academia = {}
     asaas_academias = set(gateway_por_academia.keys())
+
+    # Forma de recorrência por aluno (cartão recorrente / PIX recorrente) — para classificar
+    try:
+        _ids = [a.get("id") for a in alunos if a.get("id")]
+        if _ids:
+            _c2 = get_db_connection()
+            _cur2 = _c2.cursor(dictionary=True)
+            _ph = ",".join(["%s"] * len(_ids))
+            _cur2.execute(
+                f"""SELECT s.id AS assinatura_id, s.aluno_id, s.gateway, s.metodo, s.status
+                    FROM assinaturas_recorrentes s
+                    INNER JOIN (SELECT aluno_id, MAX(id) AS mid FROM assinaturas_recorrentes
+                                WHERE aluno_id IN ({_ph}) AND status <> 'cancelada'
+                                GROUP BY aluno_id) u ON u.mid = s.id""",
+                tuple(_ids),
+            )
+            _rec_map = {
+                r["aluno_id"]: {"id": r.get("assinatura_id"),
+                                "metodo": r.get("metodo") or "cartao",
+                                "status": r.get("status") or "pendente",
+                                "gateway": r.get("gateway")}
+                for r in _cur2.fetchall()
+            }
+            _c2.close()
+            for _a in alunos:
+                _a["forma_recorrencia"] = _rec_map.get(_a.get("id"))
+    except Exception:
+        for _a in alunos:
+            _a["forma_recorrencia"] = None
+
     # Modo associação: filtros sempre vazios (só placeholders)
     return render_template(
         "alunos/lista_alunos.html",
         alunos=alunos,
         asaas_academias=asaas_academias,
         gateway_por_academia=gateway_por_academia,
+        recorrencia_por_academia=recorrencia_por_academia,
+        recorrencia_opcoes_por_academia=recorrencia_opcoes_por_academia,
         alunos_agrupados=alunos_agrupados,
-        busca="" if modo_associacao else busca,
+        busca=busca,
         back_url=back_url,
         academias=academias,
         academia_id=academia_id_sel,
         faixas=faixas,
-        graduacao_id=None if modo_associacao else graduacao_id,
-        peso_min=None if modo_associacao else peso_min,
-        peso_max=None if modo_associacao else peso_max,
-        ano_nasc_min=None if modo_associacao else ano_nasc_min,
-        ano_nasc_max=None if modo_associacao else ano_nasc_max,
-        turma_id=None if modo_associacao else turma_filtro,
-        sexo=("" if modo_associacao else sexo_filtro),
+        graduacao_id=graduacao_id,
+        peso_min=peso_min,
+        peso_max=peso_max,
+        ano_nasc_min=ano_nasc_min,
+        ano_nasc_max=ano_nasc_max,
+        turma_id=turma_filtro,
+        sexo=sexo_filtro,
         turmas_filtro=turmas_filtro,
         modalidades_filtro=modalidades_filtro,
         modalidade_id=modalidade_filtro,
         tem_sem_modalidade=tem_sem_modalidade,
-        filtro_ativo=("todos" if modo_associacao else filtro_ativo),
+        filtro_ativo=filtro_ativo,
         stats=stats,
         mostrar_filtros_avancados=mostrar_filtros_avancados,
         agrupar_por_academia=agrupar_por_academia if modo_associacao else False,
         modo_associacao=modo_associacao,
         planos_mensalidades=planos_mensalidades,
+        descontos_academia=descontos_academia,
+        descontos_por_academia=descontos_por_academia,
         turmas_por_academia=turmas_por_academia,
         planos_por_academia=planos_por_academia,
         formas_por_academia=formas_por_academia,
@@ -2240,6 +2404,45 @@ def enriquecer_aluno_para_modal(aluno):
 # 🔹 2. CADASTRAR ALUNO
 # ======================================================
 
+
+def _carregar_modalidades_form(cursor, id_acad, id_assoc):
+    """Modalidades disponíveis para o formulário de aluno (cadastro/edição).
+    Preferência: vínculos da academia; se a academia não tiver vínculo, cai para as
+    modalidades da associação; se ainda vazio, todas as ativas visíveis. Evita que o
+    campo 'Modalidades' suma quando a academia não tem vínculos configurados."""
+    if not id_acad:
+        cursor.execute("SELECT id, nome, descricao, ativo FROM modalidade WHERE ativo = 1 ORDER BY nome")
+        return cursor.fetchall()
+    extra, extra_params = filtro_visibilidade_sql(id_academia=id_acad, id_associacao=id_assoc)
+    cursor.execute(
+        "SELECT m.id, m.nome, m.descricao, m.ativo FROM modalidade m "
+        "INNER JOIN academia_modalidades am ON am.modalidade_id = m.id "
+        "WHERE am.academia_id = %s AND m.ativo = 1" + extra + " ORDER BY m.nome",
+        (id_acad,) + extra_params,
+    )
+    mods = cursor.fetchall()
+    if mods:
+        return mods
+    # Fallback 1: modalidades da associação (academia sem vínculos próprios)
+    if id_assoc:
+        cursor.execute(
+            "SELECT m.id, m.nome, m.descricao, m.ativo FROM modalidade m "
+            "INNER JOIN associacao_modalidades asm ON asm.modalidade_id = m.id "
+            "WHERE asm.associacao_id = %s AND m.ativo = 1" + extra + " ORDER BY m.nome",
+            (id_assoc,) + extra_params,
+        )
+        mods = cursor.fetchall()
+        if mods:
+            return mods
+    # Fallback 2: todas as modalidades ativas visíveis neste contexto
+    cursor.execute(
+        "SELECT m.id, m.nome, m.descricao, m.ativo FROM modalidade m "
+        "WHERE m.ativo = 1" + extra + " ORDER BY m.nome",
+        extra_params,
+    )
+    return cursor.fetchall()
+
+
 @bp_alunos.route("/cadastrar_aluno", methods=["GET", "POST"])
 @login_required
 def cadastrar_aluno():
@@ -2308,19 +2511,7 @@ def cadastrar_aluno():
             cursor.execute("SELECT id_associacao FROM academias WHERE id = %s", (id_acad_modalidade,))
             r = cursor.fetchone()
             id_assoc_modalidade = r.get("id_associacao") if r else None
-            extra, extra_params = filtro_visibilidade_sql(id_academia=id_acad_modalidade, id_associacao=id_assoc_modalidade)
-            cursor.execute(
-                """
-                SELECT m.id, m.nome, m.descricao, m.ativo
-                FROM modalidade m
-                INNER JOIN academia_modalidades am ON am.modalidade_id = m.id
-                WHERE am.academia_id = %s AND m.ativo = 1
-                """ + extra + """
-                ORDER BY m.nome
-                """,
-                (id_acad_modalidade,) + extra_params,
-            )
-            modalidades = cursor.fetchall()
+            modalidades = _carregar_modalidades_form(cursor, id_acad_modalidade, id_assoc_modalidade)
         else:
             cursor.execute("SELECT id, nome, descricao, ativo FROM modalidade WHERE ativo = 1 ORDER BY nome")
             modalidades = cursor.fetchall()
@@ -2476,6 +2667,7 @@ def cadastrar_aluno():
 
         responsavel_financeiro_nome = _clean_str(form.get("responsavel_financeiro_nome"))
         responsavel_financeiro_cpf = normalizar_cpf(form.get("responsavel_financeiro_cpf"))
+        responsavel_financeiro_telefone = _clean_str(form.get("responsavel_financeiro_telefone"))
 
         observacoes = _clean_str(form.get("observacoes"))
 
@@ -2537,6 +2729,25 @@ def cadastrar_aluno():
         if not (cpf_aluno_valido or cpf_resp_valido):
             flash(
                 "Informe CPF válido do aluno ou do responsável financeiro.",
+                "danger",
+            )
+            db.close()
+            return render_template(
+                "alunos/cadastro_aluno.html",
+                graduacoes=graduacoes,
+                turmas=turmas,
+                modalidades=modalidades,
+                academias=academias,
+                back_url=back_url,
+                form_data=form,
+                academia_selecionada=form.get("id_academia") or request.args.get("academia_id"),
+                aluno=None,
+            )
+
+        # Telefone do responsável financeiro é obrigatório (usado nas cobranças online)
+        if not responsavel_financeiro_telefone:
+            flash(
+                "Informe o telefone do responsável financeiro (usado nas cobranças online).",
                 "danger",
             )
             db.close()
@@ -2633,7 +2844,8 @@ def cadastrar_aluno():
                     nacionalidade, rg, orgao_emissor, rg_data_emissao,
                     cep, rua, numero, complemento, bairro, cidade, estado,
                     tel_residencial, tel_comercial, tel_celular, tel_outro,
-                    responsavel_financeiro_nome, responsavel_financeiro_cpf
+                    responsavel_financeiro_nome, responsavel_financeiro_cpf,
+                    responsavel_financeiro_telefone
                 )
                 VALUES (
                     %s, %s, %s,
@@ -2645,7 +2857,8 @@ def cadastrar_aluno():
                     %s, %s, %s, %s,
                     %s, %s, %s, %s, %s, %s, %s,
                     %s, %s, %s, %s,
-                    %s, %s
+                    %s, %s,
+                    %s
                 )
                 """,
                 (
@@ -2688,6 +2901,7 @@ def cadastrar_aluno():
                     telefone_outro,
                     responsavel_financeiro_nome,
                     responsavel_financeiro_cpf,
+                    responsavel_financeiro_telefone,
                 ),
             )
             aluno_id = cursor_insert.lastrowid
@@ -2726,7 +2940,18 @@ def cadastrar_aluno():
                 )
 
             db.commit()
-            flash(f'Aluno "{nome}" cadastrado com sucesso!', "success")
+
+            # Boas-vindas no WhatsApp — o pré-cadastro público já fazia isso; quem
+            # cadastra por dentro do sistema também deve avisar o aluno.
+            avisado = False
+            try:
+                from utils.whatsapp_lembretes import enviar_boas_vindas_aluno
+                avisado = enviar_boas_vindas_aluno(aluno_id)
+            except Exception:
+                pass
+
+            flash(f'Aluno "{nome}" cadastrado com sucesso!'
+                  + (" Boas-vindas enviadas no WhatsApp." if avisado else ""), "success")
             redirect_url = request.form.get("next") or back_url
             return redirect(redirect_url)
 
@@ -2784,6 +3009,64 @@ def cadastrar_aluno():
 
 
 # ======================================================
+# 🔹 FICHA DO ALUNO (somente leitura) — usada no modo Associação
+# ======================================================
+@bp_alunos.route("/ficha/<int:aluno_id>", methods=["GET"])
+@login_required
+def ficha_aluno(aluno_id):
+    """Ficha read-only do aluno — carrega ao acessar (modo associação não pré-renderiza
+    os detalhes na lista; abre aqui sob demanda)."""
+    back_url = request.args.get("next") or request.referrer or url_for("alunos.lista_alunos")
+    db = get_db_connection()
+    cur = db.cursor(dictionary=True)
+    cur.execute(
+        """SELECT a.*, ac.nome AS academia_nome, ass.nome AS associacao_nome,
+                  fed.nome AS federacao_nome, g.faixa AS faixa, g.graduacao AS graduacao
+           FROM alunos a
+           LEFT JOIN academias ac ON a.id_academia = ac.id
+           LEFT JOIN associacoes ass ON a.id_associacao = ass.id
+           LEFT JOIN federacoes fed ON a.id_federacao = fed.id
+           LEFT JOIN graduacao g ON a.graduacao_id = g.id
+           WHERE a.id = %s""",
+        (aluno_id,),
+    )
+    aluno = cur.fetchone()
+    if not aluno:
+        cur.close(); db.close()
+        flash("Aluno não encontrado.", "danger")
+        return redirect(back_url)
+
+    # Permissão: precisa ter a academia do aluno entre as acessíveis (gestor academia/
+    # associação/federação/professor) ou ser admin.
+    ids_acessiveis = _get_academias_ids()
+    if not (current_user.has_role("admin") or aluno.get("id_academia") in (ids_acessiveis or [])):
+        cur.close(); db.close()
+        flash("Você não tem permissão para ver este aluno.", "danger")
+        return redirect(back_url)
+
+    # Turmas do aluno
+    cur.execute(
+        """SELECT t.Nome AS nome, t.DiasHorario FROM aluno_turmas at
+           JOIN turmas t ON t.TurmaID = at.TurmaID WHERE at.aluno_id = %s ORDER BY t.Nome""",
+        (aluno_id,),
+    )
+    turmas_aluno = cur.fetchall()
+    # Modalidades do aluno
+    cur.execute(
+        """SELECT m.nome FROM aluno_modalidades am JOIN modalidade m ON m.id = am.modalidade_id
+           WHERE am.aluno_id = %s ORDER BY m.nome""",
+        (aluno_id,),
+    )
+    modalidades_aluno = [r["nome"] for r in cur.fetchall()]
+    cur.close(); db.close()
+    return render_template(
+        "alunos/ficha_aluno.html",
+        aluno=aluno, turmas_aluno=turmas_aluno, modalidades_aluno=modalidades_aluno,
+        back_url=back_url,
+    )
+
+
+# ======================================================
 # 🔹 3. EDITAR ALUNO
 # ======================================================
 
@@ -2828,12 +3111,16 @@ def editar_aluno(aluno_id):
         db.close()
         return redirect(url_for("alunos.lista_alunos"))
 
-    # Permissões para editar
+    # Permissões para editar. O gestor de academia pode editar o aluno quando este
+    # tem a academia dele como principal OU como vínculo adicional (alunos_academias),
+    # para que aluno compartilhado entre academias seja editável por ambas.
     pode_editar = (
         current_user.has_role("admin")
         or (
             current_user.has_role("gestor_academia")
-            and aluno.get("id_academia") == getattr(current_user, "id_academia", None)
+            and aluno_vinculado_a_academia(
+                cursor, aluno_id, getattr(current_user, "id_academia", None)
+            )
         )
         or (
             current_user.has_role("aluno")
@@ -2895,7 +3182,25 @@ def editar_aluno(aluno_id):
         if ids_acad:
             # Se o aluno já tem uma academia, usar ela se estiver acessível
             aluno_academia_id = aluno.get("id_academia")
-            if aluno_academia_id and aluno_academia_id in ids_acad:
+            # Todas as academias do aluno (principal + vinculadas), limitadas ao que
+            # o usuário pode ver — quem treina em duas precisa de turma em cada.
+            cursor.execute(
+                "SELECT academia_id FROM alunos_academias WHERE aluno_id = %s", (aluno_id,))
+            ids_aluno = [r["academia_id"] for r in cursor.fetchall()]
+            if aluno_academia_id and aluno_academia_id not in ids_aluno:
+                ids_aluno.append(aluno_academia_id)
+            ids_turmas = [i for i in ids_aluno if i in ids_acad]
+
+            if ids_turmas:
+                marcadores = ",".join(["%s"] * len(ids_turmas))
+                cursor.execute(
+                    f"""SELECT t.*, ac.nome AS academia_nome
+                        FROM turmas t
+                        LEFT JOIN academias ac ON ac.id = t.id_academia
+                        WHERE t.id_academia IN ({marcadores})
+                        ORDER BY ac.nome, t.Nome""",
+                    tuple(ids_turmas))
+            elif aluno_academia_id and aluno_academia_id in ids_acad:
                 cursor.execute("SELECT * FROM turmas WHERE id_academia = %s ORDER BY Nome", (aluno_academia_id,))
             else:
                 # Filtrar por todas as academias acessíveis
@@ -2914,19 +3219,7 @@ def editar_aluno(aluno_id):
             cursor.execute("SELECT id_associacao FROM academias WHERE id = %s", (id_acad,))
             r = cursor.fetchone()
             id_assoc = r.get("id_associacao") if r else None
-            extra, extra_params = filtro_visibilidade_sql(id_academia=id_acad, id_associacao=id_assoc)
-            cursor.execute(
-                """
-                SELECT m.id, m.nome, m.descricao, m.ativo
-                FROM modalidade m
-                INNER JOIN academia_modalidades am ON am.modalidade_id = m.id
-                WHERE am.academia_id = %s AND m.ativo = 1
-                """ + extra + """
-                ORDER BY m.nome
-                """,
-                (id_acad,) + extra_params,
-            )
-            modalidades = cursor.fetchall()
+            modalidades = _carregar_modalidades_form(cursor, id_acad, id_assoc)
         else:
             cursor.execute("SELECT id, nome, descricao, ativo FROM modalidade WHERE ativo = 1 ORDER BY nome")
             modalidades = cursor.fetchall()
@@ -3020,9 +3313,10 @@ def editar_aluno(aluno_id):
 
         responsavel_financeiro_nome = _clean_str(form.get("responsavel_financeiro_nome"))
         responsavel_financeiro_cpf = normalizar_cpf(form.get("responsavel_financeiro_cpf"))
+        responsavel_financeiro_telefone = _clean_str(form.get("responsavel_financeiro_telefone"))
 
         observacoes = _clean_str(form.get("observacoes"))
-        
+
         # Campo ativo: se não informado, usa 1 (padrão da coluna não permite NULL)
         ativo_val = form.get("ativo")
         if ativo_val == "" or ativo_val is None:
@@ -3073,6 +3367,15 @@ def editar_aluno(aluno_id):
         elif foto_arquivo:
             foto_filename = salvar_arquivo_upload(foto_arquivo, f"aluno_{aluno_id}")
 
+        # Telefone do responsável financeiro é obrigatório (usado nas cobranças online)
+        if not responsavel_financeiro_telefone:
+            flash("Informe o telefone do responsável financeiro (usado nas cobranças online).", "danger")
+            db.close()
+            return redirect(
+                url_for("alunos.editar_aluno", aluno_id=aluno_id,
+                        next=request.args.get("next") or request.form.get("next") or "")
+            )
+
         cursor.execute("SHOW COLUMNS FROM alunos")
         colunas_alunos = {row["Field"] for row in cursor.fetchall()}
 
@@ -3115,6 +3418,7 @@ def editar_aluno(aluno_id):
                     tel_outro=%s,
                     responsavel_financeiro_nome=%s,
                     responsavel_financeiro_cpf=%s,
+                    responsavel_financeiro_telefone=%s,
                     foto=%s,
                     ativo=%s
                 WHERE id=%s
@@ -3153,6 +3457,7 @@ def editar_aluno(aluno_id):
                     telefone_outro,
                     responsavel_financeiro_nome,
                     responsavel_financeiro_cpf,
+                    responsavel_financeiro_telefone,
                     foto_filename,
                     ativo,
                     aluno_id,
@@ -3244,6 +3549,20 @@ def editar_aluno(aluno_id):
         m.get("nome", "") or "" for m in modalidades if m.get("id") in modalidades_ids
     ) if modalidades else "—"
 
+    # Vínculos com outras academias (a principal vem marcada).
+    from utils.alunos_academias import academias_do_aluno, academias_disponiveis_para_vinculo
+    cur_v = db.cursor(dictionary=True, buffered=True)
+    try:
+        academias_vinculadas = academias_do_aluno(cur_v, aluno_id)
+        academias_para_vincular = academias_disponiveis_para_vinculo(cur_v, aluno_id)
+    finally:
+        cur_v.close()
+
+    pode_vincular_academia = (
+        current_user.has_role("admin") or current_user.has_role("gestor_associacao")
+        or current_user.has_role("gestor_academia")
+    )
+
     db.close()
     return render_template(
         "alunos/editar_aluno.html",
@@ -3253,6 +3572,9 @@ def editar_aluno(aluno_id):
         modalidades=modalidades,
         turmas_display=turmas_display,
         modalidades_display=modalidades_display,
+        academias_vinculadas=academias_vinculadas,
+        academias_para_vincular=academias_para_vincular,
+        pode_vincular_academia=pode_vincular_academia,
         back_url=back_url,
     )
 
@@ -3277,13 +3599,39 @@ def excluir_aluno(aluno_id):
         db.close()
         return redirect(url_for("alunos.lista_alunos"))
 
+    _gestor_acad = getattr(current_user, "id_academia", None)
+    _eh_principal = aluno["id_academia"] == _gestor_acad
+    # O gestor pode excluir se o aluno é da sua academia — principal OU vínculo.
     pode_excluir = current_user.has_role("admin") or (
         current_user.has_role("gestor_academia")
-        and aluno["id_academia"] == getattr(current_user, "id_academia", None)
+        and aluno_vinculado_a_academia(cursor, aluno_id, _gestor_acad)
     )
 
     if not pode_excluir:
         flash("Você não tem permissão para excluir este aluno.", "danger")
+        db.close()
+        return redirect(url_for("alunos.lista_alunos"))
+
+    # Aluno compartilhado entre academias: quando quem exclui é o gestor de uma
+    # academia VINCULADA (não a principal), não apagamos o cadastro — apenas
+    # removemos o vínculo, preservando o aluno para a academia principal. A exclusão
+    # total do cadastro fica restrita ao admin ou à academia principal do aluno.
+    if (
+        not current_user.has_role("admin")
+        and current_user.has_role("gestor_academia")
+        and not _eh_principal
+    ):
+        try:
+            from utils.alunos_academias import desvincular
+            ok, msg = desvincular(cursor, aluno_id, _gestor_acad)
+            db.commit()
+            flash(
+                msg if ok else (msg or "Não foi possível remover o vínculo."),
+                "success" if ok else "warning",
+            )
+        except Exception as e:
+            db.rollback()
+            flash(f"Erro ao remover vínculo do aluno: {e}", "danger")
         db.close()
         return redirect(url_for("alunos.lista_alunos"))
 
@@ -3765,6 +4113,10 @@ def transferir_aluno_academia_associacao(aluno_id):
             ),
         )
 
+        # A academia principal mudou: reflete em alunos_academias para os vínculos
+        # não apontarem para a academia antiga como principal.
+        sincronizar_principal(cursor, aluno_id, destino_id)
+
         db.commit()
         flash(
             f'Aluno "{aluno.get("nome")}" transferido. Turmas da academia anterior foram removidas. '
@@ -4244,3 +4596,126 @@ def registrar_desistencia(aluno_id):
     if next_url.startswith("/") and "//" not in next_url:
         return redirect(next_url)
     return redirect(url_for("alunos.lista_alunos"))
+
+
+# =====================================================
+# 🔹 Vínculo do aluno com mais de uma academia
+# =====================================================
+# `alunos.id_academia` segue sendo a principal (e o que conta nos relatórios);
+# estas rotas cuidam apenas dos vínculos adicionais.
+
+@bp_alunos.route("/<int:aluno_id>/academias", methods=["GET"])
+@login_required
+def academias_do_aluno_view(aluno_id):
+    """Academias vinculadas e as que ainda podem ser vinculadas."""
+    from utils.alunos_academias import academias_do_aluno, academias_disponiveis_para_vinculo
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True, buffered=True)
+    try:
+        cur.execute("SELECT id, nome, id_academia FROM alunos WHERE id = %s", (aluno_id,))
+        aluno = cur.fetchone()
+        if not aluno:
+            return jsonify({"erro": "Aluno não encontrado."}), 404
+        return jsonify({
+            "aluno": aluno["nome"],
+            "vinculadas": academias_do_aluno(cur, aluno_id),
+            "disponiveis": academias_disponiveis_para_vinculo(cur, aluno_id),
+        })
+    finally:
+        cur.close()
+        conn.close()
+
+
+@bp_alunos.route("/<int:aluno_id>/academias/vincular", methods=["POST"])
+@login_required
+def vincular_academia(aluno_id):
+    """Vincula o aluno a outra academia da mesma associação."""
+    if not (current_user.has_role("admin") or current_user.has_role("gestor_associacao")
+            or current_user.has_role("gestor_academia")):
+        flash("Você não tem permissão para vincular academias.", "danger")
+        return redirect(url_for("alunos.editar_aluno", aluno_id=aluno_id))
+
+    from utils.alunos_academias import vincular
+    academia_id = request.form.get("academia_id", type=int)
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True, buffered=True)
+    try:
+        ok, mensagem = vincular(cur, aluno_id, academia_id, usuario_id=current_user.id)
+        conn.commit()
+        flash(mensagem, "success" if ok else "warning")
+    finally:
+        cur.close()
+        conn.close()
+    return redirect(url_for("alunos.editar_aluno", aluno_id=aluno_id))
+
+
+@bp_alunos.route("/<int:aluno_id>/academias/desvincular", methods=["POST"])
+@login_required
+def desvincular_academia(aluno_id):
+    """Remove um vínculo adicional (a principal não pode ser removida aqui)."""
+    if not (current_user.has_role("admin") or current_user.has_role("gestor_associacao")
+            or current_user.has_role("gestor_academia")):
+        flash("Você não tem permissão para remover vínculos.", "danger")
+        return redirect(url_for("alunos.editar_aluno", aluno_id=aluno_id))
+
+    from utils.alunos_academias import desvincular
+    academia_id = request.form.get("academia_id", type=int)
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True, buffered=True)
+    try:
+        ok, mensagem = desvincular(cur, aluno_id, academia_id)
+        conn.commit()
+        flash(mensagem, "success" if ok else "warning")
+    finally:
+        cur.close()
+        conn.close()
+    return redirect(url_for("alunos.editar_aluno", aluno_id=aluno_id))
+
+
+@bp_alunos.route("/<int:aluno_id>/academias/tornar-principal", methods=["POST"])
+@login_required
+def tornar_principal_academia(aluno_id):
+    """
+    Troca a academia PRINCIPAL do aluno por uma das vinculadas.
+
+    A academia principal é a que conta nos relatórios e é o `alunos.id_academia`.
+    Só pode virar principal uma academia à qual o aluno já esteja vinculado.
+    """
+    if not (current_user.has_role("admin") or current_user.has_role("gestor_associacao")
+            or current_user.has_role("gestor_academia")):
+        flash("Você não tem permissão para trocar a academia principal.", "danger")
+        return redirect(url_for("alunos.editar_aluno", aluno_id=aluno_id))
+
+    from utils.alunos_academias import sincronizar_principal
+    academia_id = request.form.get("academia_id", type=int)
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True, buffered=True)
+    try:
+        # A academia precisa estar entre os vínculos do aluno (mesma associação).
+        cur.execute(
+            "SELECT 1 FROM alunos_academias WHERE aluno_id = %s AND academia_id = %s",
+            (aluno_id, academia_id))
+        if not cur.fetchone():
+            flash("Vincule o aluno a essa academia antes de torná-la principal.", "warning")
+            return redirect(url_for("alunos.editar_aluno", aluno_id=aluno_id))
+
+        # A associação/federação da nova principal passam a valer para o aluno.
+        cur.execute(
+            """SELECT ac.id_associacao, ass.id_federacao
+               FROM academias ac
+               LEFT JOIN associacoes ass ON ass.id = ac.id_associacao
+               WHERE ac.id = %s""", (academia_id,))
+        dest = cur.fetchone() or {}
+        cur.execute(
+            "UPDATE alunos SET id_academia = %s, id_associacao = %s, id_federacao = %s WHERE id = %s",
+            (academia_id, dest.get("id_associacao"), dest.get("id_federacao"), aluno_id))
+        sincronizar_principal(cur, aluno_id, academia_id)
+        conn.commit()
+
+        cur.execute("SELECT nome FROM academias WHERE id = %s", (academia_id,))
+        nome = (cur.fetchone() or {}).get("nome") or "a academia selecionada"
+        flash(f"{nome} agora é a academia principal do aluno.", "success")
+    finally:
+        cur.close()
+        conn.close()
+    return redirect(url_for("alunos.editar_aluno", aluno_id=aluno_id))

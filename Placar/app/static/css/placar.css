@@ -1,0 +1,414 @@
+/* =============================================================
+   Placar Oficial — Placar Judô
+   Design inspirado nos placar CBJ/IJF para projetor / telão
+   ============================================================= */
+
+:root {
+  /* Azul */
+  --azul-bg:   #011730;
+  --azul-acc:  #1565c0;
+  --azul-txt:  #90caf9;
+  --azul-pts:  #e3f2fd;
+  /* Branco/direita */
+  --bco-bg:    #1a1a1a;
+  --bco-txt:   #f5f5f5;
+  --bco-pts:   #ffffff;
+  /* Centro */
+  --ctr-bg:    #0d0d0d;
+  /* Comuns */
+  --gold:      #ffc107;
+  --gold-lt:   #ffe082;
+  --red:       #ef5350;
+  --orange:    #ffa726;
+  --green:     #66bb6a;
+  --muted:     #546e7a;
+  --gs-color:  #29b6f6;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  width: 100%; height: 100%;
+  overflow: hidden;
+  background: #000;
+  color: #fff;
+  font-family: 'Segoe UI', 'Arial Narrow', Arial, sans-serif;
+}
+
+/* ── Wrap ────────────────────────────────────────────────── */
+.sb-wrap {
+  display: flex;
+  flex-direction: column;
+  width: 100%; height: 100%;
+}
+
+/* ── Header ──────────────────────────────────────────────── */
+.sb-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  height: 44px;
+  background: #060f1e;
+  border-bottom: 2px solid var(--azul-acc);
+  flex-shrink: 0;
+}
+
+.sb-header-cat {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--gold-lt);
+}
+
+.sb-header-fase {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  background: var(--azul-acc);
+  color: #fff;
+  padding: 2px 10px;
+  border-radius: 3px;
+  text-transform: uppercase;
+}
+
+.sb-header-luta {
+  font-size: 12px;
+  color: var(--muted);
+  letter-spacing: 1px;
+}
+
+/* ── Arena ───────────────────────────────────────────────── */
+.sb-arena {
+  display: grid;
+  grid-template-columns: 1fr 180px 1fr;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* ── Lados ───────────────────────────────────────────────── */
+.sb-lado {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: clamp(16px, 3vh, 40px) clamp(20px, 4vw, 60px);
+}
+
+.sb-lado--azul {
+  background: linear-gradient(170deg, var(--azul-bg) 0%, #021d40 100%);
+  border-right: 1px solid #0d2a50;
+}
+
+.sb-lado--branco {
+  background: linear-gradient(190deg, var(--bco-bg) 0%, #111 100%);
+  border-left: 1px solid #2a2a2a;
+}
+
+/* ── Atleta ──────────────────────────────────────────────── */
+.sb-atleta {
+  padding-bottom: clamp(8px, 2vh, 20px);
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+
+.sb-nome {
+  font-size: clamp(1.4rem, 3.2vw, 3rem);
+  font-weight: 900;
+  line-height: 1.1;
+  letter-spacing: -0.5px;
+  text-transform: uppercase;
+}
+
+.sb-lado--azul   .sb-nome { color: var(--azul-pts); }
+.sb-lado--branco .sb-nome { color: var(--bco-pts); }
+
+.sb-clube {
+  font-size: clamp(0.75rem, 1.4vw, 1.1rem);
+  color: var(--muted);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin-top: 4px;
+}
+
+/* ── Score row ───────────────────────────────────────────── */
+.sb-score-row {
+  display: flex;
+  align-items: center;
+  gap: clamp(12px, 2.5vw, 32px);
+  flex: 1;
+  justify-content: center;
+  padding: clamp(8px, 2vh, 24px) 0;
+}
+
+.sb-score-row--rev {
+  flex-direction: row-reverse;
+  justify-content: center;
+}
+
+.sb-contagem-hint {
+  font-size: clamp(0.5rem, 0.85vw, 0.65rem);
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--muted);
+  text-align: center;
+  text-transform: uppercase;
+  margin-top: -4px;
+  margin-bottom: 8px;
+}
+
+.sb-contagem-hint--rev {
+  text-align: center;
+}
+
+/* ── Técnicas (I W Y) ────────────────────────────────────── */
+.sb-tecs {
+  display: flex;
+  gap: clamp(6px, 1vw, 14px);
+}
+
+.sb-tec {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 6px;
+  padding: clamp(6px, 1.2vh, 14px) clamp(10px, 1.5vw, 20px);
+  min-width: clamp(48px, 6vw, 80px);
+}
+
+.sb-lado--azul   .sb-tec { border-color: rgba(144,202,249,0.2); }
+.sb-lado--branco .sb-tec { border-color: rgba(255,255,255,0.15); }
+
+.sb-tec-val {
+  font-size: clamp(1.8rem, 4vw, 4rem);
+  font-weight: 900;
+  line-height: 1;
+  transition: transform 0.12s;
+}
+
+.sb-lado--azul   .sb-tec-val { color: var(--azul-txt); }
+.sb-lado--branco .sb-tec-val { color: var(--bco-txt); }
+
+.sb-tec-val.bump { transform: scale(1.25); }
+
+.sb-tec-lbl {
+  font-size: clamp(0.5rem, 0.9vw, 0.7rem);
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  color: var(--muted);
+  margin-top: 4px;
+  text-transform: uppercase;
+}
+
+/* ── Pontuação total ─────────────────────────────────────── */
+.sb-pts {
+  font-size: clamp(5rem, 14vw, 13rem);
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -4px;
+  transition: transform 0.15s;
+}
+
+.sb-lado--azul   .sb-pts { color: var(--azul-pts); }
+.sb-lado--branco .sb-pts { color: var(--bco-pts); }
+
+.sb-pts.bump { transform: scale(1.06); }
+
+/* ── Shidos ──────────────────────────────────────────────── */
+.sb-shidos {
+  display: flex;
+  align-items: center;
+  gap: clamp(6px, 1vw, 12px);
+  padding-top: clamp(6px, 1.5vh, 16px);
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+
+.sb-shidos--rev { flex-direction: row-reverse; }
+
+.sb-sh-lbl {
+  font-size: clamp(0.6rem, 0.9vw, 0.75rem);
+  font-weight: 800;
+  letter-spacing: 2px;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.sb-sh-dot {
+  font-size: clamp(1.4rem, 3vw, 2.4rem);
+  line-height: 1;
+  color: var(--muted);
+  transition: color 0.2s, transform 0.15s;
+}
+
+.sb-sh-dot.ativo   { color: var(--orange); transform: scale(1.15); }
+.sb-sh-dot.hansoku { color: var(--red); animation: flash 0.4s ease 4; }
+
+@keyframes flash {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.1; }
+}
+
+/* ── Centro ──────────────────────────────────────────────── */
+.sb-centro {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(8px, 1.5vh, 20px);
+  background: var(--ctr-bg);
+  border-left: 1px solid #111;
+  border-right: 1px solid #111;
+  padding: 8px 4px;
+}
+
+.sb-timer-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.sb-osk {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 2px solid var(--gold);
+  background: rgba(255, 193, 7, 0.08);
+}
+
+.sb-osk--azul {
+  border-color: var(--azul-acc);
+  background: rgba(21, 101, 192, 0.2);
+}
+
+.sb-osk--branco {
+  border-color: #78909c;
+  background: rgba(120, 144, 156, 0.15);
+}
+
+.sb-osk-lbl {
+  font-size: clamp(0.45rem, 0.75vw, 0.65rem);
+  font-weight: 800;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--gold-lt);
+}
+
+.sb-osk-seg {
+  font-size: clamp(2rem, 5vw, 3.5rem);
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  color: var(--gold-lt);
+  line-height: 1;
+  transition: color 0.2s;
+}
+
+.sb-osk-seg.sb-osk-urgente {
+  color: var(--red);
+  animation: pisca 0.7s infinite;
+}
+
+.sb-osk-meta {
+  font-size: clamp(0.4rem, 0.7vw, 0.55rem);
+  font-weight: 700;
+  text-align: center;
+  line-height: 1.25;
+  color: var(--gold-lt);
+  opacity: 0.92;
+  max-width: 160px;
+}
+
+.sb-timer {
+  font-size: clamp(2.2rem, 4.5vw, 4.8rem);
+  font-weight: 900;
+  color: var(--gold-lt);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -1px;
+  line-height: 1;
+  transition: color 0.3s;
+}
+
+.sb-timer.urgente {
+  color: var(--red);
+  animation: pisca 0.8s infinite;
+}
+
+.sb-timer.golden { color: var(--gs-color); }
+.sb-timer.idle   { color: var(--muted); }
+
+@keyframes pisca {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}
+
+.sb-status {
+  font-size: clamp(0.55rem, 0.9vw, 0.75rem);
+  font-weight: 800;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  color: var(--muted);
+  text-align: center;
+}
+
+.sb-status.running { color: var(--green); }
+.sb-status.golden  { color: var(--gs-color); }
+.sb-status.done    { color: var(--gold); }
+
+/* ── Overlay vencedor ────────────────────────────────────── */
+.sb-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.92);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  backdrop-filter: blur(12px);
+  animation: fadeIn 0.4s ease;
+}
+
+.sb-overlay[hidden] { display: none; }
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.sb-overlay-box { text-align: center; }
+
+.sbo-trofeu {
+  font-size: clamp(4rem, 10vw, 8rem);
+  animation: bounce 0.5s ease 0.2s both;
+}
+
+@keyframes bounce {
+  from { transform: scale(0.3) rotate(-15deg); opacity: 0; }
+  to   { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+
+.sbo-nome {
+  font-size: clamp(2.5rem, 7vw, 6rem);
+  font-weight: 900;
+  color: var(--gold-lt);
+  text-transform: uppercase;
+  line-height: 1.1;
+  animation: slideUp 0.4s ease 0.4s both;
+}
+
+.sbo-metodo {
+  font-size: clamp(1rem, 2.5vw, 1.8rem);
+  color: #78909c;
+  margin-top: 14px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  animation: slideUp 0.4s ease 0.55s both;
+}
+
+@keyframes slideUp {
+  from { transform: translateY(24px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}

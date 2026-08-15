@@ -1,6 +1,11 @@
 {% extends "base.html" %}
 {% block title %}Promover Pré-cadastro — {{ precadastro.nome }}{% endblock %}
 {% block content %}
+{# Calcula CPF que será usado como login (mesma regra do backend) #}
+{% set _cpf_aluno_raw = precadastro.cpf or '' %}
+{% set _cpf_resp_raw = precadastro.responsavel_financeiro_cpf or '' %}
+{% set _cpf_aluno = _cpf_aluno_raw | replace('.', '') | replace('-', '') | replace(' ', '') %}
+{% set _cpf_resp = _cpf_resp_raw | replace('.', '') | replace('-', '') | replace(' ', '') %}
 <div class="container my-4 my-md-5">
   <div class="card shadow-lg border-0 rounded-3 mx-auto" style="max-width: 800px;">
     <div class="card-header bg-primary text-white text-center py-3 rounded-top-3">
@@ -12,20 +17,30 @@
       <div class="alert alert-info mb-4">
         <strong>{{ precadastro.nome }}</strong><br>
         <small class="text-muted">
-          E-mail: {{ precadastro.email or 'Não informado' }} | 
+          E-mail: {{ precadastro.email or 'Não informado' }} |
           Telefone: {{ precadastro.telefone or 'Não informado' }}
+          {% if precadastro.cpf %} | CPF: {{ precadastro.cpf }}{% endif %}
+          {% if precadastro.responsavel_financeiro_cpf %} | CPF Resp.: {{ precadastro.responsavel_financeiro_cpf }}{% endif %}
         </small>
       </div>
 
       <form method="POST" action="{{ url_for('precadastro.promover', precadastro_id=precadastro.id) }}" class="needs-validation" novalidate>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        {% if precadastro.aula_experimental %}
+        <div class="alert alert-primary d-flex align-items-center mb-3">
+          <i class="bi bi-stars me-2"></i>
+          <div>Esta pessoa marcou <strong>interesse em aula experimental</strong>. Sugerimos promover com o perfil <strong>Visitante</strong> (já pré-selecionado).</div>
+        </div>
+        {% endif %}
         <div class="mb-4">
           <label class="form-label fw-semibold">Selecione os perfis a criar <span class="text-danger">*</span></label>
           <div class="row g-2">
             {% for role in roles_disponiveis %}
             <div class="col-12 col-md-6">
               <div class="form-check">
-                <input class="form-check-input role-cb" type="checkbox" name="roles" id="role_{{ role.id }}" 
-                       value="{{ role.id }}" data-chave="{{ role.chave or role.nome|lower }}">
+                <input class="form-check-input role-cb" type="checkbox" name="roles" id="role_{{ role.id }}"
+                       value="{{ role.id }}" data-chave="{{ role.chave or role.nome|lower }}"
+                       {% if precadastro.aula_experimental and (role.chave or '') == 'visitante' %}checked{% endif %}>
                 <label class="form-check-label" for="role_{{ role.id }}">
                   {{ role.nome }}
                 </label>
@@ -42,18 +57,42 @@
             <i class="bi bi-info-circle me-2"></i>
             <span id="infoUsuarioTexto">Preencha os dados abaixo para criar acesso ao sistema.</span>
           </div>
+
           <div class="mb-3">
-            <label for="email_usuario" class="form-label fw-semibold">E-mail para login <span class="text-danger" id="email_required">*</span></label>
-            <input type="email" class="form-control" id="email_usuario" name="email_usuario" 
-                   value="{{ precadastro.email or precadastro.email_acesso or '' }}" 
+            <label class="form-label fw-semibold">CPF para login <span class="text-danger">*</span></label>
+            <div class="input-group">
+              <span class="input-group-text bg-light"><i class="bi bi-person-vcard"></i></span>
+              <input type="text" class="form-control bg-light" id="cpfLoginPreview" readonly
+                     value="{{ precadastro.cpf or precadastro.responsavel_financeiro_cpf or '— sem CPF cadastrado —' }}">
+            </div>
+            <div class="form-text" id="cpfLoginHelp">
+              {% if _cpf_aluno %}
+              CPF do aluno será usado como login.
+              {% elif _cpf_resp %}
+              CPF do responsável financeiro será usado como login.
+              {% else %}
+              <span class="text-danger">Nenhum CPF cadastrado. Edite o pré-cadastro para informar um CPF antes de promover.</span>
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label for="email_usuario" class="form-label fw-semibold">E-mail <span class="text-muted fw-normal">(recuperação de senha)</span></label>
+            <input type="email" class="form-control" id="email_usuario" name="email_usuario"
+                   value="{{ precadastro.email or precadastro.email_acesso or '' }}"
                    placeholder="exemplo@email.com">
-            <div class="form-text">Será usado para fazer login no sistema.</div>
+            <div class="form-text">Usado apenas para recuperação de senha. O login é por CPF.</div>
           </div>
           <div class="mb-3">
-            <label for="senha_usuario" class="form-label fw-semibold">Senha <span class="text-danger" id="senha_required">*</span></label>
-            <input type="password" class="form-control" id="senha_usuario" name="senha_usuario" 
-                   placeholder="Mínimo 6 caracteres" minlength="6">
-            <div class="form-text">Defina uma senha segura para o usuário.</div>
+            <label for="senha_usuario" class="form-label fw-semibold">
+              Senha <span class="text-muted fw-normal" id="senha_required">(opcional)</span>
+            </label>
+            <input type="password" class="form-control" id="senha_usuario" name="senha_usuario"
+                   placeholder="Deixe em branco para gerar automaticamente" minlength="6">
+            <div class="form-text">
+              <i class="bi bi-magic me-1"></i>Em branco, o sistema cria uma senha aleatória e
+              envia ao responsável por e-mail e WhatsApp.
+            </div>
           </div>
           <div class="form-check mb-3" id="checkCriarUsuario" style="display:none;">
             <input class="form-check-input" type="checkbox" id="criar_usuario_check" name="criar_usuario" value="1" checked>
@@ -73,8 +112,22 @@
           <input type="hidden" name="aluno_id" id="aluno_id" value="">
         </div>
 
+        <div id="blocoResponsavelInfo" class="mb-3" style="display:none;">
+          <div class="alert alert-success mb-0">
+            <i class="bi bi-check-circle-fill me-2"></i>
+            <strong>Aluno será criado automaticamente</strong><br>
+            <small>
+              O cadastro do aluno será gerado a partir do pré-cadastro e <strong>vinculado a você como responsável</strong>.
+              O aluno não terá login próprio — quem acessa o sistema é o responsável (CPF acima).
+            </small>
+          </div>
+        </div>
+
         <div id="blocoResponsavel" class="mb-3" style="display:none;">
-          <h6 class="fw-semibold mb-3">Alunos do Responsável</h6>
+          <h6 class="fw-semibold mb-2">Vincular outros alunos a este responsável <span class="text-muted fw-normal small">(opcional)</span></h6>
+          <p class="small text-muted mb-2">
+            Marque outros alunos da academia que também ficarão sob a responsabilidade deste usuário (além do aluno deste pré-cadastro, que já será vinculado automaticamente).
+          </p>
           <div class="border rounded p-3" style="max-height: 250px; overflow-y: auto; background: #f8fafc;">
             {% for a in alunos_para_responsavel %}
             <div class="form-check mb-2">
@@ -83,10 +136,9 @@
             </div>
             {% endfor %}
             {% if not alunos_para_responsavel %}
-            <p class="text-muted small mb-0">Nenhum aluno cadastrado na academia.</p>
+            <p class="text-muted small mb-0">Nenhum outro aluno cadastrado na academia.</p>
             {% endif %}
           </div>
-          <div class="form-text">Marque os alunos dos quais este responsável terá acesso.</div>
         </div>
 
         <div class="d-flex flex-column flex-md-row justify-content-center gap-3 mt-4">
@@ -109,6 +161,7 @@
     var blocoUsuario = document.getElementById('blocoUsuario');
     var blocoAluno = document.getElementById('blocoAluno');
     var blocoResponsavel = document.getElementById('blocoResponsavel');
+    var blocoResponsavelInfo = document.getElementById('blocoResponsavelInfo');
 
     function temRole(chave) {
         var cbs = document.querySelectorAll('.role-cb:checked');
@@ -119,25 +172,34 @@
     }
 
     function atualizarBlocos() {
-        var precisaUsuario = temRole('professor') || temRole('gestor_academia') || 
-                            temRole('gestor_associacao') || temRole('responsavel') || 
+        var precisaUsuario = temRole('professor') || temRole('gestor_academia') ||
+                            temRole('gestor_associacao') || temRole('responsavel') ||
                             temRole('visitante');
-        
+
         // Se selecionou apenas aluno, também mostrar opção de criar usuário
         var temAluno = temRole('aluno');
+        var temResponsavel = temRole('responsavel');
         var mostrarUsuario = precisaUsuario || temAluno;
-        
+
         blocoUsuario.style.display = mostrarUsuario ? 'block' : 'none';
+        // Aluno será criado automaticamente quando a role aluno for marcada,
+        // ou quando for responsável (precisamos do aluno mesmo sem login do aluno).
         blocoAluno.style.display = temAluno ? 'block' : 'none';
-        
-        blocoResponsavel.style.display = temRole('responsavel') ? 'block' : 'none';
+        if (blocoResponsavelInfo) {
+            // Mostrar aviso de "aluno será criado automaticamente vinculado ao responsável"
+            // somente quando responsável estiver marcado e aluno NÃO estiver
+            // (pra não duplicar o card de aviso).
+            blocoResponsavelInfo.style.display = (temResponsavel && !temAluno) ? 'block' : 'none';
+        }
+
+        blocoResponsavel.style.display = temResponsavel ? 'block' : 'none';
 
         // Validar campos obrigatórios
         var emailUsuario = document.getElementById('email_usuario');
         var senhaUsuario = document.getElementById('senha_usuario');
         // Campos obrigatórios apenas se precisa_usuario (não apenas aluno)
         if (emailUsuario) emailUsuario.required = precisaUsuario;
-        if (senhaUsuario) senhaUsuario.required = precisaUsuario;
+        if (senhaUsuario) senhaUsuario.required = false;  // em branco = gerar automaticamente
         
         // Se apenas aluno, mostrar checkbox para criar usuário
         var checkCriarUsuario = document.getElementById('checkCriarUsuario');
@@ -151,7 +213,7 @@
                 infoUsuarioTexto.textContent = 'Opcional: Preencha os dados abaixo se desejar criar acesso ao sistema para o aluno.';
             }
             if (emailRequired) emailRequired.style.display = 'none';
-            if (senhaRequired) senhaRequired.style.display = 'none';
+            if (senhaRequired) senhaRequired.style.display = '';
             if (emailUsuario) {
                 emailUsuario.required = false;
                 emailUsuario.placeholder = 'Opcional - será usado para login se informado';
@@ -190,7 +252,7 @@
                     if (senhaUsuario) senhaUsuario.required = true;
                 } else if (!this.checked && temAluno && !precisaUsuario) {
                     if (emailRequired) emailRequired.style.display = 'none';
-                    if (senhaRequired) senhaRequired.style.display = 'none';
+                    if (senhaRequired) senhaRequired.style.display = '';
                     if (emailUsuario) emailUsuario.required = false;
                     if (senhaUsuario) senhaUsuario.required = false;
                 }
@@ -206,36 +268,36 @@
 
     // Validação do formulário
     document.querySelector('form').addEventListener('submit', function(e) {
-        var precisaUsuario = temRole('professor') || temRole('gestor_academia') || 
-                            temRole('gestor_associacao') || temRole('responsavel') || 
+        var precisaUsuario = temRole('professor') || temRole('gestor_academia') ||
+                            temRole('gestor_associacao') || temRole('responsavel') ||
                             temRole('visitante');
         var temAluno = temRole('aluno');
         var mostrarUsuario = precisaUsuario || temAluno;
-        
-        if (precisaUsuario) {
-            var email = document.getElementById('email_usuario').value.trim();
-            var senha = document.getElementById('senha_usuario').value.trim();
-            if (!email) {
+        var cpfPreview = (document.getElementById('cpfLoginPreview') || {}).value || '';
+        var temCpfValido = /\d/.test(cpfPreview) && cpfPreview.replace(/\D/g, '').length === 11;
+
+        if (mostrarUsuario && !temCpfValido) {
+            // Vai criar usuário, mas pré-cadastro não tem CPF — backend bloqueia, alertamos antes
+            var criarUsuarioCheck = document.getElementById('criar_usuario_check');
+            var precisaPorCheckbox = !precisaUsuario && criarUsuarioCheck && criarUsuarioCheck.checked;
+            if (precisaUsuario || precisaPorCheckbox) {
                 e.preventDefault();
-                alert('E-mail é obrigatório quando há perfis que requerem acesso ao sistema.');
+                alert('O pré-cadastro não tem CPF cadastrado. Edite o pré-cadastro e informe o CPF do aluno ou do responsável financeiro antes de promover.');
                 return false;
             }
+        }
+
+        if (precisaUsuario) {
+            var senha = document.getElementById('senha_usuario').value.trim();
             if (!senha || senha.length < 6) {
                 e.preventDefault();
                 alert('Senha é obrigatória e deve ter no mínimo 6 caracteres.');
                 return false;
             }
         } else if (temAluno && mostrarUsuario) {
-            // Se apenas aluno, verificar se quer criar usuário
             var criarUsuarioCheck = document.getElementById('criar_usuario_check');
             if (criarUsuarioCheck && criarUsuarioCheck.checked) {
-                var email = document.getElementById('email_usuario').value.trim();
                 var senha = document.getElementById('senha_usuario').value.trim();
-                if (!email) {
-                    e.preventDefault();
-                    alert('Para criar usuário, informe o e-mail.');
-                    return false;
-                }
                 if (!senha || senha.length < 6) {
                     e.preventDefault();
                     alert('Para criar usuário, a senha deve ter no mínimo 6 caracteres.');

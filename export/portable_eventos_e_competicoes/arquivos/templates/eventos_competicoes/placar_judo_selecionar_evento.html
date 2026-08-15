@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Placar de Judô — Selecionar Evento{% endblock %}
+{% block content %}
+<div class="container mt-4">
+    <div class="mb-4">
+        <h2 class="h4 fw-bold text-primary">🥋 Placar de Judô</h2>
+        <p class="text-muted mb-0">Apenas <strong>competições</strong> aparecem aqui. Eventos gerais (cursos, seminários) ficam na lista de eventos, sem placar.</p>
+    </div>
+
+    {% if eventos %}
+    <div class="row g-3">
+        {% for evento in eventos %}
+        <div class="col-md-6 col-lg-4">
+            <div class="card shadow-sm h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <h5 class="card-title mb-0">{{ evento.nome }}</h5>
+                        {% if evento.natureza is defined and evento.natureza == 'festival' %}
+                        <span class="badge bg-warning text-dark">Festival</span>
+                        {% else %}
+                        <span class="badge bg-danger">Oficial</span>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="mb-3">
+                        {% if evento.data_inicio %}
+                        <small class="text-muted d-block">
+                            <i class="bi bi-calendar-event"></i> Início: {{ evento.data_inicio|data_br }}
+                        </small>
+                        {% endif %}
+                        {% if evento.data_fim %}
+                        <small class="text-muted d-block">
+                            <i class="bi bi-calendar-x"></i> Fim: {{ evento.data_fim|data_br }}
+                        </small>
+                        {% endif %}
+                        <small class="text-muted d-block mt-2">
+                            <i class="bi bi-trophy"></i> Lutas cadastradas: <strong>{{ evento.total_lutas or 0 }}</strong>
+                        </small>
+                    </div>
+                    
+                    <a href="{{ url_for('eventos_competicoes.placar_judo_lista', evento_id=evento.id) }}" 
+                       class="btn btn-primary btn-sm w-100">
+                        <i class="bi bi-arrow-right-circle"></i> Acessar Placar
+                    </a>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="alert alert-info">
+        <i class="bi bi-info-circle"></i> Nenhum evento encontrado. 
+        <a href="{{ url_for('eventos_competicoes.lista_competicoes') }}">Cadastre uma competição</a> primeiro.
+    </div>
+    {% endif %}
+
+    <div class="mt-4">
+        <a href="{{ back_url }}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Voltar
+        </a>
+    </div>
+</div>
+{% endblock %}

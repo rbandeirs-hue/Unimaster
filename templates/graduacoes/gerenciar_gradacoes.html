@@ -18,6 +18,7 @@
         </div>
         <div class="card-body">
             <form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="table-responsive">
                     <table class="table align-middle table-hover table-striped tabela-graduacoes">
                         <thead class="table-light">
@@ -26,6 +27,9 @@
                                 <th>Faixa</th>
                                 <th>Graduação</th>
                                 <th>Categoria</th>
+                                {% if col_modalidade_id %}
+                                <th>Modalidade</th>
+                                {% endif %}
                                 {% if col_idade_minima %}
                                 <th>Idade mínima</th>
                                 {% endif %}
@@ -94,6 +98,17 @@
                                     <input type="text" class="form-control form-control-sm campo-graduacao"
                                            name="categoria" value="{{ g.get('categoria') or '' }}" readonly>
                                 </td>
+                                {% if col_modalidade_id %}
+                                <td data-label="Modalidade">
+                                    <select class="form-select form-select-sm campo-graduacao"
+                                            name="modalidade_id" disabled>
+                                        <option value="">Sem modalidade</option>
+                                        {% for m in modalidades %}
+                                        <option value="{{ m.id }}" {% if g.get(col_modalidade_id) == m.id %}selected{% endif %}>{{ m.nome }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </td>
+                                {% endif %}
                                 {% if col_idade_minima %}
                                 <td data-label="Idade mínima">
                                     <input type="text" class="form-control form-control-sm campo-graduacao"
@@ -171,6 +186,9 @@
 
                 <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 mt-3">
                     <small class="text-muted">
+                        {% if col_modalidade_id %}
+                        Graduações atuais foram classificadas como Judô automaticamente. Use "Sem modalidade" para graduações genéricas.
+                        {% endif %}
                         {% if col_carencia_meses or col_carencia_dias %}
                         Preencha carência em meses ou em dias (use um dos dois campos).
                         {% elif col_carencia_minima %}
@@ -382,13 +400,21 @@
 
             inputs.forEach((el) => {
                 if (habilitar) {
-                    el.removeAttribute("readonly");
+                    if (el.tagName === "SELECT") {
+                        el.disabled = false;
+                    } else {
+                        el.removeAttribute("readonly");
+                    }
                     el.classList.add("bg-white");
                     if (el.classList.contains("observacao-textarea")) {
                         autoResize(el);
                     }
                 } else {
-                    el.setAttribute("readonly", "readonly");
+                    if (el.tagName === "SELECT") {
+                        el.disabled = true;
+                    } else {
+                        el.setAttribute("readonly", "readonly");
+                    }
                     el.classList.remove("bg-white");
                 }
             });

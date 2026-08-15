@@ -1,0 +1,58 @@
+{% extends 'base.html' %}
+{% block title %}Admin — Placar Judô{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Painel Administrativo</h1>
+</div>
+
+<div class="stats-row">
+  <div class="stat-card">
+    <div class="stat-num">{{ stats.competicoes }}</div>
+    <div class="stat-label">Competições</div>
+    <a href="{{ url_for('admin.competicoes') }}" class="stat-link">Gerenciar →</a>
+  </div>
+  <div class="stat-card">
+    <div class="stat-num">{{ stats.academias }}</div>
+    <div class="stat-label">Academias</div>
+    <a href="{{ url_for('admin.academias') }}" class="stat-link">Gerenciar →</a>
+  </div>
+  <div class="stat-card">
+    <div class="stat-num">{{ stats.atletas }}</div>
+    <div class="stat-label">Atletas</div>
+    <a href="{{ url_for('admin.atletas') }}" class="stat-link">Gerenciar →</a>
+  </div>
+  <div class="stat-card">
+    <div class="stat-num">{{ stats.inscricoes }}</div>
+    <div class="stat-label">Inscrições</div>
+  </div>
+</div>
+
+<h2 class="section-title">Competições recentes</h2>
+{% if recentes %}
+<table class="tabela">
+  <thead>
+    <tr>
+      <th>Nome</th><th>Data</th><th>Local</th><th>Tipo</th><th>Ações</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for c in recentes %}
+    <tr>
+      <td class="td-nome">{{ c.nome }}</td>
+      <td>{{ c.data.strftime('%d/%m/%Y') if c.data else '—' }}</td>
+      <td>{{ c.local or '—' }}</td>
+      <td><span class="tipo-badge tipo-{{ c.tipo.lower() if c.tipo else 'oficial' }}">{{ c.tipo }}</span></td>
+      <td class="td-acoes">
+        <a href="{{ url_for('admin.competicao_detalhe', comp_id=c.id) }}" class="link-action">Gerenciar</a>
+        <a href="{{ url_for('admin.inscricoes', comp_id=c.id) }}" class="link-action">Inscrições</a>
+        <a href="{{ url_for('home.competicao', comp_id=c.id) }}" class="link-action">Ver</a>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty-state"><p>Nenhuma competição ainda.</p></div>
+{% endif %}
+{% endblock %}

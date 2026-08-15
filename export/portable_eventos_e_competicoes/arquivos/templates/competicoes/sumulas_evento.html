@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Súmulas — {{ evento.nome }}{% endblock %}
+{% block content %}
+<div class="container mt-4">
+    {% set menu_secao_ativa = 'sumulas' %}
+    {% include 'components/menu_competicao.html' %}
+    <div class="mb-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div>
+            <h2 class="h4 fw-bold text-primary">Súmulas de Lutas</h2>
+            <p class="text-muted mb-0">{{ evento.nome }}</p>
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+            {% if lutas %}
+            <a href="{{ url_for('competicoes.sumulas_evento_imprimir_todas', evento_id=evento.id) }}" target="_blank" class="btn btn-outline-dark btn-sm" title="Abre todas as súmulas em A4 para imprimir ou salvar PDF">
+                <i class="bi bi-printer"></i> Imprimir todas (modelo CBJ)
+            </a>
+            {% endif %}
+            <a href="{{ back_url }}" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-arrow-left"></i> Voltar
+            </a>
+        </div>
+    </div>
+
+    {% if categorias %}
+    <div class="mb-3">
+        <h5 class="h6 fw-bold">Por categoria</h5>
+        <div class="row g-2">
+            {% for cat in categorias %}
+            <div class="col-md-6 col-lg-4">
+                <div class="card shadow-sm">
+                    <div class="card-body py-2">
+                        <strong>{{ cat.nome_categoria }}</strong>
+                        <span class="badge bg-secondary ms-2">{{ cat.total_lutas or 0 }} lutas</span>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% if lutas %}
+    <div class="card shadow-sm">
+        <div class="card-header bg-light">
+            <strong>Todas as lutas</strong>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Categoria</th>
+                        <th>Branco</th>
+                        <th>Azul</th>
+                        <th>Status</th>
+                        <th>Vencedor</th>
+                        <th class="text-nowrap">Súmula CBJ</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for luta in lutas %}
+                    <tr>
+                        <td>{{ luta.nome_categoria or '-' }}</td>
+                        <td>{{ luta.atleta_branco_nome }}{% if luta.atleta_branco_academia %} <small class="text-muted">({{ luta.atleta_branco_academia }})</small>{% endif %}</td>
+                        <td>{{ luta.atleta_azul_nome }}{% if luta.atleta_azul_academia %} <small class="text-muted">({{ luta.atleta_azul_academia }})</small>{% endif %}</td>
+                        <td><span class="badge {% if luta.status == 'finalizada' %}bg-success{% elif luta.status == 'em_andamento' %}bg-primary{% elif luta.status == 'pausada' %}bg-warning{% else %}bg-secondary{% endif %}">{{ luta.status|replace('_', ' ')|title }}</span></td>
+                        <td>{% if luta.vencedor %}{{ (luta.atleta_branco_nome if luta.vencedor == 'branco' else luta.atleta_azul_nome) if luta.vencedor != 'empate' else 'Empate' }}{% else %}-{% endif %}</td>
+                        <td>
+                            <a href="{{ url_for('competicoes.sumula_luta_imprimir', evento_id=evento.id, luta_id=luta.id) }}" target="_blank" class="btn btn-sm btn-outline-secondary py-0" title="Modelo tipo oficial — imprimir ou salvar em PDF">
+                                <i class="bi bi-file-earmark-pdf"></i> A4
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% else %}
+    <div class="alert alert-info">
+        <i class="bi bi-info-circle"></i> Nenhuma luta cadastrada nesta competição.
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block title %}Avisos por WhatsApp{% endblock %}
+{% block content %}
+<div class="container my-4" style="max-width: 760px;">
+  <div class="d-flex align-items-center gap-2 mb-1">
+    <i class="bi bi-megaphone-fill text-success fs-3"></i>
+    <h4 class="fw-bold mb-0">Avisos por WhatsApp</h4>
+  </div>
+  <p class="text-muted">Escreva um aviso e envie para os alunos da academia.</p>
+
+  <div class="mb-3"><a href="{{ url_for('academia.whatsapp_config', academia_id=academia_id) }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> WhatsApp da academia</a></div>
+
+  {% if not conectado %}
+  <div class="alert alert-warning"><i class="bi bi-exclamation-triangle me-1"></i> O WhatsApp da academia <strong>não está conectado</strong>. <a href="{{ url_for('academia.whatsapp_config', academia_id=academia_id) }}">Conecte aqui</a> antes de enviar avisos.</div>
+  {% endif %}
+
+  <div class="card border-0 shadow-sm">
+    <div class="card-body">
+      <!-- Mensagem -->
+      <label class="form-label fw-semibold">Mensagem</label>
+      <textarea class="form-control" id="mensagem" rows="4" placeholder="Ex.: Olá {nome}, não haverá treino na sexta-feira (feriado). Bons treinos!"></textarea>
+      <div class="form-text">Dica: use <code>{nome}</code> para inserir o primeiro nome de cada aluno automaticamente.</div>
+
+      <!-- Destinatários -->
+      <label class="form-label fw-semibold mt-3">Para quem enviar</label>
+      <div class="btn-group w-100 mb-2" role="group">
+        <input type="radio" class="btn-check" name="destino" id="d_todos" value="todos" checked>
+        <label class="btn btn-outline-success" for="d_todos">Todos os alunos</label>
+        <input type="radio" class="btn-check" name="destino" id="d_turma" value="turma">
+        <label class="btn btn-outline-success" for="d_turma">Por turma</label>
+        <input type="radio" class="btn-check" name="destino" id="d_sel" value="selecionados">
+        <label class="btn btn-outline-success" for="d_sel">Selecionar alunos</label>
+      </div>
+
+      <!-- Turma -->
+      <div id="boxTurma" class="mb-2 d-none">
+        <select class="form-select" id="turmaSel">
+          <option value="">Selecione a turma…</option>
+          {% for t in turmas %}<option value="{{ t.id }}">{{ t.nome }}</option>{% endfor %}
+        </select>
+      </div>
+
+      <!-- Seleção de alunos -->
+      <div id="boxSelecao" class="mb-2 d-none">
+        <input type="text" class="form-control form-control-sm mb-2" id="buscaAluno" placeholder="Buscar aluno…">
+        <div class="border rounded p-2" style="max-height:240px; overflow:auto;">
+          <div class="form-check"><input class="form-check-input" type="checkbox" id="selTodosAlunos"><label class="form-check-label fw-semibold" for="selTodosAlunos">Marcar todos</label></div>
+          <hr class="my-2">
+          {% for a in alunos %}
+          <div class="form-check aluno-item" data-nome="{{ a.nome|lower }}">
+            <input class="form-check-input cb-aluno" type="checkbox" value="{{ a.id }}" id="al_{{ a.id }}">
+            <label class="form-check-label" for="al_{{ a.id }}">{{ a.nome }}</label>
+          </div>
+          {% endfor %}
+        </div>
+        <div class="form-text"><span id="contSel">0</span> selecionado(s)</div>
+      </div>
+
+      <button type="button" class="btn btn-success mt-2" id="btnEnviarAviso" {{ 'disabled' if not conectado }}>
+        <i class="bi bi-send me-1"></i> Enviar aviso
+      </button>
+      <div class="mt-2" id="avisoMsg"></div>
+      <p class="text-muted small mt-2 mb-0">{{ alunos|length }} aluno(s) ativos na academia. O envio respeita um intervalo entre mensagens para evitar bloqueio.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var CSRF = "{{ csrf_token() }}";
+  var boxTurma = document.getElementById('boxTurma');
+  var boxSel = document.getElementById('boxSelecao');
+
+  document.querySelectorAll('input[name=destino]').forEach(function(r){
+    r.addEventListener('change', function(){
+      boxTurma.classList.toggle('d-none', this.value !== 'turma');
+      boxSel.classList.toggle('d-none', this.value !== 'selecionados');
+    });
+  });
+
+  // busca + marcar todos
+  var busca = document.getElementById('buscaAluno');
+  if(busca) busca.addEventListener('input', function(){
+    var q = this.value.toLowerCase();
+    document.querySelectorAll('.aluno-item').forEach(function(it){
+      it.style.display = it.getAttribute('data-nome').indexOf(q) >= 0 ? '' : 'none';
+    });
+  });
+  function atualizaCont(){ document.getElementById('contSel').textContent = document.querySelectorAll('.cb-aluno:checked').length; }
+  document.querySelectorAll('.cb-aluno').forEach(function(c){ c.addEventListener('change', atualizaCont); });
+  var selTodos = document.getElementById('selTodosAlunos');
+  if(selTodos) selTodos.addEventListener('change', function(){
+    var ck = this.checked;
+    document.querySelectorAll('.aluno-item').forEach(function(it){
+      if(it.style.display !== 'none'){ it.querySelector('.cb-aluno').checked = ck; }
+    });
+    atualizaCont();
+  });
+
+  document.getElementById('btnEnviarAviso').addEventListener('click', function(){
+    var btn = this;
+    var msg = document.getElementById('mensagem').value.trim();
+    var out = document.getElementById('avisoMsg');
+    if(!msg){ out.innerHTML='<span class="text-danger">Escreva a mensagem.</span>'; return; }
+    var destino = document.querySelector('input[name=destino]:checked').value;
+    var fd = new FormData();
+    fd.append('mensagem', msg);
+    fd.append('destino', destino);
+    if(destino === 'turma'){
+      var tid = document.getElementById('turmaSel').value;
+      if(!tid){ out.innerHTML='<span class="text-danger">Selecione a turma.</span>'; return; }
+      fd.append('turma_id', tid);
+    }
+    if(destino === 'selecionados'){
+      var ids = Array.prototype.map.call(document.querySelectorAll('.cb-aluno:checked'), function(c){return c.value;});
+      if(!ids.length){ out.innerHTML='<span class="text-danger">Selecione ao menos um aluno.</span>'; return; }
+      ids.forEach(function(i){ fd.append('aluno_ids', i); });
+    }
+    var qtdTxt = destino === 'todos' ? 'TODOS os alunos ativos' : (destino === 'turma' ? 'a turma selecionada' : 'os alunos selecionados');
+    if(!confirm('Enviar este aviso para ' + qtdTxt + '?')) return;
+    btn.disabled = true; var orig = btn.innerHTML; btn.innerHTML='<span class="spinner-border spinner-border-sm me-1"></span> Enviando…';
+    out.innerHTML='';
+    fetch("{{ url_for('academia.whatsapp_avisos_enviar', academia_id=academia_id) }}", {method:'POST', headers:{'X-CSRFToken':CSRF}, body: fd})
+      .then(function(r){return r.json();})
+      .then(function(d){
+        btn.disabled=false; btn.innerHTML=orig;
+        if(!d.ok){ out.innerHTML='<span class="text-danger">'+(d.erro||'Falha ao enviar.')+'</span>'; return; }
+        var r = d.resumo;
+        out.innerHTML='<div class="alert alert-success py-2 mb-0"><i class="bi bi-check-circle me-1"></i> '+r.enviados+' enviado(s), '+r.falhas+' falha(s), '+r.sem_telefone+' sem telefone (de '+r.total+').</div>';
+      }).catch(function(){ btn.disabled=false; btn.innerHTML=orig; out.innerHTML='<span class="text-danger">Erro de rede.</span>'; });
+  });
+})();
+</script>
+{% endblock %}

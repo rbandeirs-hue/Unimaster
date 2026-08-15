@@ -97,6 +97,23 @@ def _aluno_tem_registro():
         return False
 
 
+def _responsavel_tem_alunos():
+    """Verifica se o usuário tem ao menos um aluno sob sua responsabilidade."""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute(
+            "SELECT 1 FROM responsavel_alunos WHERE usuario_id = %s LIMIT 1",
+            (current_user.id,),
+        )
+        ok = cur.fetchone() is not None
+        cur.close()
+        conn.close()
+        return ok
+    except Exception:
+        return False
+
+
 def _redirecionar_modo(modo):
     """Redireciona para o painel do modo."""
     if modo == "admin":
@@ -122,6 +139,15 @@ def _redirecionar_modo(modo):
         # Redireciona direto para o meu perfil do aluno
         return redirect(url_for("painel_aluno.meu_perfil"))
     if modo == "responsavel":
+        if not _responsavel_tem_alunos():
+            session.pop("modo_painel", None)
+            modos = _modos_disponiveis()
+            return render_template(
+                "painel/sem_aluno_vinculado.html",
+                modos=modos,
+                titulo="Sem alunos sob responsabilidade",
+                mensagem="Nenhum aluno está vinculado a você como responsável. Entre em contato com o administrador ou com a academia para regularizar.",
+            )
         return redirect(url_for("painel_responsavel.painel"))
     if modo == "visitante":
         return redirect(url_for("visitante.painel"))

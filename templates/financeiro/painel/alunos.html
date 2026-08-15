@@ -1,0 +1,103 @@
+{% extends "financeiro/painel/_layout.html" %}
+{% block title %}Alunos{% endblock %}
+
+{% block conteudo %}
+<div class="fp-page fp-page--narrow">
+
+  <div class="fp-head">
+    <h1 class="fp-h1">Alunos</h1>
+    <p class="fp-sub">{{ n_ativos }} ativos · {{ n_inativos }} inativos</p>
+  </div>
+
+  <form class="fp-barra-busca" method="GET">
+    {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
+    <input class="fp-input fp-input--busca" type="search" name="q" value="{{ busca }}"
+           placeholder="Buscar aluno ou faixa..." autocomplete="off">
+    <select class="fp-select-sm" name="ordem" onchange="this.form.submit()">
+      <option value="nome" {% if ordem == 'nome' %}selected{% endif %}>Nome</option>
+      <option value="faixa" {% if ordem == 'faixa' %}selected{% endif %}>Faixa</option>
+      <option value="mensalidade" {% if ordem == 'mensalidade' %}selected{% endif %}>Mensalidade</option>
+      <option value="ingresso" {% if ordem == 'ingresso' %}selected{% endif %}>Ingresso</option>
+    </select>
+    <label class="fp-check">
+      <input type="checkbox" name="inativos" value="1" {% if ver_inativos %}checked{% endif %}
+             onchange="this.form.submit()">
+      Ver inativos
+    </label>
+  </form>
+
+  <div class="fp-card fp-card--table">
+    <div class="fp-table-wrap">
+      <table class="fp-table">
+        <thead>
+          <tr>
+            <th>Aluno</th><th>Faixa</th><th>Telefone</th>
+            <th>Mensalidade</th><th>Ingresso</th><th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for a in lista %}
+          {% set url_sel = url_for('financeiro_painel.alunos', academia_id=academia_id, q=busca,
+                                   ordem=ordem, inativos='1' if ver_inativos else None,
+                                   sel=None if (selecionado and selecionado.id == a.id) else a.id) %}
+          <tr onclick="location.href='{{ url_sel }}'"
+              style="cursor:pointer{% if selecionado and selecionado.id == a.id %};background:var(--fp-nav-active){% endif %}">
+            <td>
+              <div class="fp-td-nome">{{ a.nome }}</div>
+              <div class="fp-td-mini">{{ a.email or '—' }}</div>
+            </td>
+            <td>
+              <span class="fp-faixa">
+                <span class="fp-dot {% if not a.faixa %}fp-dot--claro{% endif %}" style="background: {{ cor_faixa(a.faixa) }}"></span>
+                {{ a.faixa or 'Sem graduação' }}
+              </span>
+            </td>
+            <td class="fp-td-mono">{{ a.tel_celular or a.telefone or '—' }}</td>
+            <td class="fp-td-valor">{{ fmt_moeda(a.mensalidade) if a.mensalidade else '—' }}</td>
+            <td class="fp-td-muted">{{ a.data_matricula.strftime('%d/%m/%Y') if a.data_matricula else '—' }}</td>
+            <td>
+              <span class="fp-badge fp-badge--{{ 'ativo' if a.ativo else 'inativo' }}">
+                {{ 'Ativo' if a.ativo else 'Inativo' }}
+              </span>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if not lista %}
+    <div class="fp-empty">Nenhum aluno encontrado.</div>
+    {% endif %}
+  </div>
+
+  {% if selecionado %}
+  <div class="fp-detalhe">
+    <div>
+      <div class="fp-detalhe__label">Aluno</div>
+      <div class="fp-detalhe__nome">{{ selecionado.nome }}</div>
+      <div class="fp-detalhe__mini">
+        {{ selecionado.email or 'sem e-mail' }} · {{ selecionado.tel_celular or selecionado.telefone or 'sem telefone' }}
+      </div>
+    </div>
+    <div>
+      <div class="fp-detalhe__label">Graduação</div>
+      <span class="fp-faixa" style="font-size:14px;color:var(--fp-text);font-weight:500">
+        <span class="fp-dot" style="width:10px;height:10px;background: {{ cor_faixa(selecionado.faixa) }}"></span>
+        {{ ('Faixa ' ~ selecionado.faixa) if selecionado.faixa else 'Sem graduação' }}
+      </span>
+      <div class="fp-detalhe__mini">
+        {% if selecionado.data_matricula %}Desde {{ selecionado.data_matricula.strftime('%d/%m/%Y') }}{% else %}Matrícula não informada{% endif %}
+      </div>
+    </div>
+    <div>
+      <div class="fp-detalhe__label">Mensalidade</div>
+      <div class="fp-detalhe__valor">{{ fmt_moeda(selecionado.mensalidade) if selecionado.mensalidade else '—' }}</div>
+      <div class="fp-detalhe__mini">Última cobrança lançada</div>
+    </div>
+    <a class="fp-detalhe__fechar"
+       href="{{ url_for('financeiro_painel.alunos', academia_id=academia_id, q=busca, ordem=ordem, inativos='1' if ver_inativos else None) }}">Fechar ×</a>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

@@ -3,6 +3,13 @@
 {% block content %}
 <div class="container mt-4 px-2 px-sm-3">
     {% set back_url = voltar_url|default(url_for('painel_aluno.meu_perfil') if current_user.has_role('aluno') else url_for('painel.home')) %}
+    {% if minha_turma_url is defined %}
+      {% set mt_base = minha_turma_url %}
+    {% elif voltar_url is defined and aluno %}
+      {% set mt_base = url_for('painel_responsavel.minha_turma', aluno_id=aluno.id) %}
+    {% else %}
+      {% set mt_base = url_for('painel_aluno.minha_turma') %}
+    {% endif %}
     <div class="mb-3">
         {% include 'components/botao_voltar.html' %}
     </div>
@@ -12,7 +19,7 @@
     {% if turmas_com_alunos|length > 1 %}
     <div class="mb-4">
         <label class="form-label small fw-semibold">Selecionar turma</label>
-        <select id="seletor-turma" class="form-select form-select-sm" style="max-width: 320px;" data-base-url="{% if voltar_url and aluno %}{{ url_for('painel_responsavel.minha_turma', aluno_id=aluno.id) }}{% else %}{{ url_for('painel_aluno.minha_turma') }}{% endif %}">
+        <select id="seletor-turma" class="form-select form-select-sm" style="max-width: 320px;" data-base-url="{{ mt_base }}">
             <option value="">Todas as turmas</option>
             {% for turma, alunos in turmas_com_alunos %}
             <option value="{{ turma.TurmaID }}" {% if turma_selecionada_id == turma.TurmaID %}selected{% endif %}>
@@ -117,7 +124,7 @@
     var seletor = document.getElementById('seletor-turma');
     var secoes = document.querySelectorAll('.turma-secao');
     if (seletor) {
-        var baseUrl = seletor.getAttribute('data-base-url') || "{{ url_for('painel_aluno.minha_turma') }}";
+        var baseUrl = seletor.getAttribute('data-base-url') || "{{ mt_base }}";
         seletor.addEventListener('change', function() {
             var val = this.value;
             if (val) {

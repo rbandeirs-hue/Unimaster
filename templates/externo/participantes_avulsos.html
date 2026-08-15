@@ -1,0 +1,108 @@
+{% extends "externo/base_externo.html" %}
+{% block title %}Participantes Avulsos — {{ evento.nome }}{% endblock %}
+{% block content %}
+<h5>Participantes Avulsos</h5>
+<p class="text-muted small mb-3">Preencha idade e peso para obter a categoria correta.</p>
+
+<div class="card shadow-sm mb-3">
+  <div class="card-body">
+    <form method="POST" id="form-avulso">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="row g-2 mb-2">
+        <div class="col-12 col-md-3">
+          <label class="form-label">Nome *</label>
+          <input type="text" name="nome" class="form-control" placeholder="Nome completo" required>
+        </div>
+        <div class="col-6 col-md-1">
+          <label class="form-label">Gênero</label>
+          <select name="genero" id="genero" class="form-select">
+            <option value="">—</option>
+            <option value="MASCULINO">M</option>
+            <option value="FEMININO">F</option>
+          </select>
+        </div>
+        <div class="col-6 col-md-1">
+          <label class="form-label">Idade</label>
+          <input type="number" name="idade" id="idade" class="form-control" min="0" max="99" placeholder="anos" step="1">
+        </div>
+        <div class="col-6 col-md-1">
+          <label class="form-label">Peso (kg)</label>
+          <input type="number" name="peso" id="peso" class="form-control" min="0" step="0.01" placeholder="kg">
+        </div>
+        <div class="col-12 col-md-3">
+          <label class="form-label">Categoria</label>
+          <select name="categoria" id="categoria" class="form-select">
+            <option value="">Selecione gênero, idade e peso</option>
+          </select>
+          <input type="text" name="categoria_manual" id="categoria-manual" class="form-control form-control-sm mt-1" placeholder="Ou digite categoria manualmente" style="display:none;">
+          <small class="text-muted d-block" id="categoria-hint"></small>
+        </div>
+        <div class="col-12 col-md-2">
+          <label class="form-label">Academia</label>
+          <input type="text" name="academia" class="form-control" placeholder="Nome da academia">
+        </div>
+        <div class="col-12 col-md-1 d-flex align-items-end">
+          <button type="submit" class="btn btn-primary w-100"><i class="bi bi-plus-lg"></i></button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+(function(){
+  var categorias = {{ categorias_json|safe }};
+  function atualizarCategorias(){
+    var g = document.getElementById('genero').value;
+    var idadeVal = document.getElementById('idade').value;
+    var pesoVal = document.getElementById('peso').value;
+    var idade = idadeVal ? parseInt(idadeVal, 10) : null;
+    var peso = pesoVal ? parseFloat(pesoVal) : null;
+    var sel = document.getElementById('categoria');
+    var hint = document.getElementById('categoria-hint');
+    sel.innerHTML = '<option value="">Selecione gênero, idade e peso</option>';
+    hint.textContent = '';
+    if (!g) return;
+    var ok = categorias.filter(function(c){
+      if (c.genero !== g) return false;
+      if (c.idade_min != null && (idade == null || isNaN(idade) || idade < c.idade_min)) return false;
+      if (c.idade_max != null && (idade == null || isNaN(idade) || idade > c.idade_max)) return false;
+      if (c.peso_min != null && c.peso_max != null){
+        if (peso == null || isNaN(peso)) return false;
+        if (peso < c.peso_min || peso > c.peso_max) return false;
+      } else if (c.peso_min != null && c.peso_max == null){
+        if (peso == null || isNaN(peso)) return false;
+        if (peso <= c.peso_min) return false;
+      }
+      return true;
+    });
+    ok.forEach(function(c){ var o = document.createElement('option'); o.value = c.nome; o.textContent = c.nome; sel.appendChild(o); });
+    var manual = document.getElementById('categoria-manual');
+    if (ok.length > 0) { hint.textContent = ok.length + ' categoria(s) encontrada(s)'; manual.style.display = 'none'; manual.value = ''; }
+    else if (g && (idadeVal || pesoVal)) { hint.textContent = 'Digite a categoria manualmente:'; manual.style.display = 'block'; }
+    else { manual.style.display = 'none'; manual.value = ''; }
+  }
+  document.getElementById('genero').onchange = atualizarCategorias;
+  document.getElementById('idade').oninput = atualizarCategorias;
+  document.getElementById('idade').onchange = atualizarCategorias;
+  document.getElementById('peso').oninput = atualizarCategorias;
+  document.getElementById('peso').onchange = atualizarCategorias;
+})();
+</script>
+
+{% if avulsos %}
+<div class="table-responsive">
+  <table class="table table-sm table-hover bg-white">
+    <thead><tr><th>Nome</th><th>Idade</th><th>Peso</th><th>Categoria</th><th>Academia</th></tr></thead>
+    <tbody>
+      {% for a in avulsos %}
+      <tr><td>{{ a.nome }}</td><td>{{ a.idade if a.idade is not none else '-' }}</td><td>{% if a.peso is not none %}{{ "%.1f"|format(a.peso) }}{% else %}-{% endif %}</td><td>{{ a.categoria }}</td><td>{{ a.academia }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<p class="text-muted small">Total: {{ avulsos|length }} avulsos</p>
+{% else %}
+<p class="text-muted">Nenhum participante avulso adicionado ainda.</p>
+{% endif %}
+{% endblock %}

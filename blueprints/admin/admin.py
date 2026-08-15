@@ -33,10 +33,11 @@ def criar_primeiro_admin():
             db.commit()
 
         # Cria usuário administrador
+        import os
         nome = "Administrador"
-        email = "admin@judo.com"
-        senha = "admin123"
-        hashed = generate_password_hash(senha)  # 🔹 Usa Werkzeug (compatível com check_password_hash)
+        email = os.environ.get("ADMIN_SEED_EMAIL", "admin@judo.com")
+        senha = os.environ.get("ADMIN_SEED_PASSWORD", "admin123")
+        hashed = generate_password_hash(senha)
 
         cursor.execute("""
             INSERT INTO usuarios (nome, email, senha, perfil, tipo_id)
@@ -44,9 +45,9 @@ def criar_primeiro_admin():
         """, (nome, email, hashed))
         db.commit()
 
-        print("✅ Primeiro admin criado com sucesso:")
-        print("   🔹 Email: admin@judo.com")
-        print("   🔹 Senha: admin123")
+        print("Primeiro admin criado com sucesso:")
+        print(f"   Email: {email}")
+        print("   Senha: (definida via ADMIN_SEED_PASSWORD ou padrao)")
 
     db.close()
 

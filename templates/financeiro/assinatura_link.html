@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Assinatura recorrente — {{ s.aluno_nome }}{% endblock %}
+{% block content %}
+<div class="container my-4" style="max-width: 640px;">
+  <div class="mb-3">
+    <a href="{{ back_url }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Voltar</a>
+  </div>
+
+  <div class="card border-0 shadow-sm" style="border-radius:16px;overflow:hidden;">
+    <div class="card-body p-4 text-center">
+      <div style="width:56px;height:56px;border-radius:14px;background:#ecfdf5;color:#059669;display:inline-flex;align-items:center;justify-content:center;font-size:1.6rem;margin-bottom:.6rem;">
+        <i class="bi bi-arrow-repeat"></i>
+      </div>
+      <h4 class="fw-bold mb-1">Mensalidade recorrente</h4>
+      <p class="text-muted mb-3">
+        {{ s.aluno_nome }} ·
+        {% if s.valor %}R$ {{ "%.2f"|format(s.valor|float) }}/mês{% endif %}
+        · {{ 'PIX recorrente' if s.metodo == 'pix' else 'Cartão' }}
+        · via {{ 'Asaas' if s.gateway == 'asaas' else 'Mercado Pago' }}
+      </p>
+
+      {% set _meio = 'o PIX recorrente' if s.metodo == 'pix' else 'o cartão' %}
+      <div class="alert alert-light border small text-start" role="alert">
+        <i class="bi bi-info-circle text-primary"></i>
+        Envie este link ao aluno. Ele cadastra {{ _meio }} <strong>uma única vez</strong> na página segura do
+        {{ 'Asaas' if s.gateway == 'asaas' else 'Mercado Pago' }}
+        {% if s.metodo == 'pix' %}e a cobrança PIX se repete <strong>todo mês</strong>{% else %}e a cobrança passa a ser <strong>descontada automaticamente todo mês</strong>{% endif %}.
+        A baixa no sistema é automática a cada pagamento.
+      </div>
+
+      {% if qr %}
+      <img src="data:image/png;base64,{{ qr }}" alt="QR Code da assinatura" style="width:200px;height:200px;border:1px solid #e9ecef;border-radius:12px;padding:6px;background:#fff;">
+      <p class="text-muted small mt-2 mb-3">Escaneie o QR Code para abrir o cadastro</p>
+      {% endif %}
+
+      <label class="form-label small fw-semibold text-start d-block">Link de cadastro</label>
+      <div class="input-group mb-3">
+        <input type="text" class="form-control" id="assinaturaLink" value="{{ s.checkout_url }}" readonly>
+        <button class="btn btn-outline-primary" type="button" onclick="copiarAssinaturaLink(this)"><i class="bi bi-clipboard"></i></button>
+      </div>
+
+      <div class="d-grid gap-2">
+        <a href="{{ s.checkout_url }}" target="_blank" rel="noopener" class="btn btn-success">
+          <i class="bi bi-box-arrow-up-right me-1"></i> Abrir página de cadastro do cartão
+        </a>
+        <a href="https://wa.me/?text={{ ('Cadastre o cartão para a mensalidade recorrente: ' ~ s.checkout_url) | urlencode }}"
+           target="_blank" rel="noopener" class="btn btn-outline-success">
+          <i class="bi bi-whatsapp me-1"></i> Enviar pelo WhatsApp
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  function copiarAssinaturaLink(btn) {
+    var inp = document.getElementById('assinaturaLink');
+    var ok = function () {
+      var o = btn.innerHTML; btn.innerHTML = '<i class="bi bi-check2"></i>';
+      setTimeout(function () { btn.innerHTML = o; }, 1500);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(inp.value).then(ok).catch(function () { inp.select(); document.execCommand('copy'); ok(); });
+    } else { inp.select(); document.execCommand('copy'); ok(); }
+  }
+</script>
+{% endblock %}

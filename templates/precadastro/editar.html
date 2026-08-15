@@ -30,6 +30,7 @@
       {% endif %}
       {% endwith %}
       <form method="POST" enctype="multipart/form-data" id="formPrecad">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <h6 class="border-bottom pb-2 mb-3 text-secondary fw-bold"><i class="bi bi-person-badge me-1"></i> Dados do aluno</h6>
         <div class="row g-2">
           <div class="col-md-12 mb-3">
@@ -63,7 +64,8 @@
           </div>
         </div>
 
-        <h6 class="border-bottom pb-2 mb-3 mt-4 text-secondary fw-bold"><i class="bi bi-camera-fill me-1"></i> Foto</h6>
+        <h6 class="border-bottom pb-2 mb-3 mt-4 text-secondary fw-bold"><i class="bi bi-camera-fill me-1"></i> Foto do aluno <span class="text-danger">*</span></h6>
+        <p class="small text-muted mb-2">{% if p.foto %}Há foto cadastrada; envie outra apenas se quiser substituir.{% else %}Obrigatória: câmera ou arquivo.{% endif %}</p>
         <div class="d-flex align-items-center gap-3 mb-3">
           <div class="position-relative" style="width:120px;height:120px;flex-shrink:0;">
             <img id="miniatura" src="{% if p.foto %}{{ url_for('static', filename='uploads/precadastro/' ~ p.foto) }}{% endif %}" alt="" class="position-absolute top-0 start-0 rounded-circle {% if not p.foto %}d-none{% endif %}" style="width:120px;height:120px;object-fit:cover;border:3px solid #0d6efd;">
@@ -72,7 +74,7 @@
           <div class="flex-grow-1">
             <input type="hidden" name="foto" id="fotoInput">
             <button type="button" class="btn btn-primary btn-sm mb-2" id="btnCamera"><i class="bi bi-camera-fill me-1"></i> Câmera</button>
-            <input type="file" class="form-control form-control-sm" name="foto_arquivo" id="fotoArquivoPrecadEditar" accept="image/*">
+            <input type="file" class="form-control form-control-sm" name="foto_arquivo" id="fotoArquivoPrecadEditar" accept="image/*" capture="environment">
           </div>
         </div>
 
@@ -153,8 +155,25 @@
   const nomeInput = document.querySelector('input[name="nome"]');
   const cpfAluno = document.getElementById('cpfAluno');
 
+  // 🟦 Controle de prontidão da câmera (evita capturar foto em branco)
+  const _btnCap = document.getElementById('btnCapturar');
+  const _btnCapHTML = _btnCap ? _btnCap.innerHTML : '';
+  function setCapturaPronta(pronto) {
+    if (!_btnCap) return;
+    _btnCap.disabled = !pronto;
+    _btnCap.innerHTML = pronto
+      ? _btnCapHTML
+      : '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Carregando...';
+  }
+  if (video) {
+    const marcarPronta = () => { if (video.videoWidth > 0) setCapturaPronta(true); };
+    video.addEventListener('loadedmetadata', marcarPronta);
+    video.addEventListener('playing', marcarPronta);
+  }
+
   document.getElementById('btnCamera').onclick = async function(){
     try{
+      setCapturaPronta(false);
       stream = await navigator.mediaDevices.getUserMedia({video:true});
       video.srcObject = stream;
       modal.classList.add('show');
@@ -165,9 +184,16 @@
     if(stream) stream.getTracks().forEach(t=>t.stop());
   };
   document.getElementById('btnCapturar').onclick = function(){
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    canvas.getContext('2d').drawImage(video,0,0);
+    if (!video.videoWidth || video.readyState < 2) {
+      alert("Aguarde a câmera carregar e tente novamente.");
+      return;
+    }
+    var MAXDIM = 1080;
+    var vw = video.videoWidth, vh = video.videoHeight;
+    var escala = Math.min(1, MAXDIM / Math.max(vw, vh));
+    canvas.width = Math.round(vw * escala);
+    canvas.height = Math.round(vh * escala);
+    canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
     canvas.style.display = 'block';
     video.style.display = 'none';
     document.getElementById('btnCapturar').classList.add('d-none');
@@ -182,7 +208,7 @@
     document.getElementById('btnRefazer').classList.add('d-none');
   };
   document.getElementById('btnConfirmar').onclick = function(){
-    const dataURL = canvas.toDataURL('image/png');
+    const dataURL = canvas.toDataURL('image/jpeg', 0.82);
     fotoInput.value = dataURL;
     miniatura.src = dataURL;
     miniatura.classList.remove('d-none');
@@ -244,6 +270,24 @@
   }
   document.querySelectorAll('[data-mask="cpf"]').forEach(el=>el.addEventListener('input',function(){mascaraCPF(this);}));
   document.querySelectorAll('[data-mask="phone"]').forEach(el=>el.addEventListener('input',function(){mascaraPhone(this);}));
+
+  var formEd = document.getElementById('formPrecad');
+  var jaTemFoto = {{ 'true' if p.foto else 'false' }};
+  if (formEd) {
+    formEd.addEventListener('submit', function(e) {
+      if (!jaTemFoto) {
+        var fi = document.getElementById('fotoInput');
+        var fa = document.getElementById('fotoArquivoPrecadEditar');
+        var tem = (fi && fi.value && fi.value.trim().startsWith('data:')) ||
+          (fa && fa.files && fa.files.length > 0);
+        if (!tem) {
+          e.preventDefault();
+          alert('A foto do aluno é obrigatória. Use a câmera ou envie uma imagem.');
+          return false;
+        }
+      }
+    });
+  }
 
 })();
 </script>

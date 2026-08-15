@@ -6,6 +6,8 @@ from flask import render_template, request, redirect, url_for, flash, session, j
 from flask_login import login_required, current_user
 from config import get_db_connection
 from werkzeug.security import generate_password_hash
+from werkzeug.utils import secure_filename
+from utils.upload_seguro import validar_upload, nome_seguro, UploadInvalido
 import os
 import uuid
 import base64
@@ -443,7 +445,7 @@ def solicitar_aula():
             return redirect(url_for("visitante.minhas_aulas"))
         
     except Exception as e:
-        flash(f"Erro: {e}", "danger")
+        flash("Ocorreu um erro. Tente novamente mais tarde.", "danger")
         turmas_disponiveis = []
         idade = None
     finally:
@@ -569,10 +571,10 @@ def cancelar_aula(aula_id):
         
         # Atualizar contador de aulas realizadas (se necessário)
         cur.execute("""
-            UPDATE visitantes 
+            UPDATE visitantes
             SET aulas_experimentais_realizadas = (
-                SELECT COUNT(*) FROM aulas_experimentais 
-                WHERE visitante_id = %s AND presente = 1 AND data_aula < CURDATE()
+                SELECT COUNT(*) FROM aulas_experimentais
+                WHERE visitante_id = %s AND presente = 1 AND data_aula <= CURDATE()
             )
             WHERE id = %s
         """, (aula["visitante_id"], aula["visitante_id"]))
@@ -584,7 +586,9 @@ def cancelar_aula(aula_id):
     except Exception as e:
         conn.rollback()
         conn.close()
-        return jsonify({"ok": False, "msg": f"Erro: {e}"}), 500
+        from flask import current_app
+        current_app.logger.error("Erro ao cancelar aula: %s", e, exc_info=True)
+        return jsonify({"ok": False, "msg": "Erro interno no servidor. Tente novamente."}), 500
 
 
 # ======================================================
@@ -629,9 +633,13 @@ def pagar_diaria(pagamento_id):
             if "comprovante" in request.files:
                 file = request.files["comprovante"]
                 if file and file.filename:
+                    try:
+                        ext = validar_upload(file, categorias=["comprovante"])
+                    except UploadInvalido as e:
+                        return jsonify({"ok": False, "msg": str(e)}), 400
                     upload_dir = os.path.join("static", "uploads", "comprovantes")
                     os.makedirs(upload_dir, exist_ok=True)
-                    filename = f"diaria_{pagamento_id}_{uuid.uuid4().hex[:8]}.{file.filename.rsplit('.', 1)[1].lower()}"
+                    filename = nome_seguro(f"diaria_{pagamento_id}", ext)
                     filepath = os.path.join(upload_dir, filename)
                     file.save(filepath)
                     comprovante = f"uploads/comprovantes/{filename}"
@@ -651,7 +659,7 @@ def pagar_diaria(pagamento_id):
             return redirect(url_for("visitante.minhas_aulas"))
         
     except Exception as e:
-        flash(f"Erro: {e}", "danger")
+        flash("Ocorreu um erro. Tente novamente mais tarde.", "danger")
     finally:
         cur.close()
         conn.close()
@@ -730,7 +738,7 @@ def solicitar_mensalidade():
             return redirect(url_for("visitante.painel"))
         
     except Exception as e:
-        flash(f"Erro: {e}", "danger")
+        flash("Ocorreu um erro. Tente novamente mais tarde.", "danger")
         mensalidades = []
     finally:
         cur.close()

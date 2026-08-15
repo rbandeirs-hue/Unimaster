@@ -1,0 +1,236 @@
+{% extends "financeiro/painel/_layout.html" %}
+{% block title %}Gerar Cobranças{% endblock %}
+
+{% block conteudo %}
+<div class="fp-page fp-page--wide">
+
+  <div class="fp-head">
+    <h1 class="fp-h1">Gerar Cobranças</h1>
+    <p class="fp-sub">Gere e gerencie cobranças mensais dos alunos</p>
+  </div>
+
+  <div class="fp-barra-mes">
+    <span style="font-size:12px;color:var(--fp-text-muted);margin-right:4px">Mês:</span>
+    {% for m in meses %}
+    <a class="fp-mes-btn fp-mes-btn--sm {% if m.chave == mes_chave %}is-active{% endif %}"
+       href="{{ url_for('financeiro_painel.cobrancas', academia_id=academia_id, mes=m.chave) }}">{{ m.label }}</a>
+    {% endfor %}
+    <div class="fp-resumo-dir">
+      <div class="fp-resumo">
+        <div class="fp-resumo__label fp-resumo__label--mini">Cobranças</div>
+        <div class="fp-resumo__valor fp-resumo__valor--sm">{{ n_cobrancas }}</div>
+      </div>
+      <div class="fp-resumo">
+        <div class="fp-resumo__label fp-resumo__label--mini">Em aberto</div>
+        <div class="fp-resumo__valor fp-resumo__valor--sm" style="color:var(--fp-yellow-text)">{{ n_geradas }}</div>
+      </div>
+      <div class="fp-resumo">
+        <div class="fp-resumo__label fp-resumo__label--mini">Pagas</div>
+        <div class="fp-resumo__valor fp-resumo__valor--sm fp-resumo__valor--verde">{{ n_pagas }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="fp-grid-gerar">
+
+    <form class="fp-card fp-card--pad" style="align-self:start" method="POST"
+          action="{{ url_for('financeiro_painel.cobrancas_gerar') }}" id="fp-form-gerar">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
+      <input type="hidden" name="mes" value="{{ mes_chave }}">
+
+      <h2 class="fp-h2" style="margin-bottom:16px">Nova Cobrança — {{ mes_label }}</h2>
+
+      {% if not planos %}
+      <div class="fp-gerar__aviso-ok" style="background:rgba(245,197,24,.07);border-color:rgba(245,197,24,.2);color:var(--fp-yellow-text)">
+        Nenhum plano ativo. Cadastre um em <a href="{{ url_for('financeiro_painel.planos', academia_id=academia_id) }}" style="color:inherit;text-decoration:underline">Planos</a>.
+      </div>
+      {% elif not sem_cobranca %}
+      <div class="fp-gerar__aviso-ok">Todos os alunos ativos já têm cobrança em {{ mes_label }}.</div>
+      {% else %}
+
+      <div style="margin-bottom:14px">
+        <div class="fp-sel-topo">
+          <label class="fp-label" style="margin:0">Alunos ({{ sem_cobranca|length }} sem cobrança)</label>
+          <button type="button" class="fp-link-acao" id="fp-sel-todos">Selecionar todos</button>
+        </div>
+        <div class="fp-alunos-lista">
+          {% for a in sem_cobranca %}
+          <label class="fp-aluno-item">
+            <input type="checkbox" name="aluno_id" value="{{ a.id }}">
+            <span class="fp-dot fp-dot--sm" style="background: {{ cor_faixa(a.faixa) }}"></span>
+            <span class="fp-aluno-item__nome">{{ a.nome }}</span>
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div style="margin-bottom:12px">
+        <label class="fp-label" for="gr-plano">Plano *</label>
+        <select class="fp-input" id="gr-plano" name="plano_id" required>
+          {% for p in planos %}
+          <option value="{{ p.id }}" data-valor="{{ '%.2f'|format(p.valor) }}">{{ p.nome }} — {{ fmt_moeda(p.valor) }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div style="margin-bottom:12px">
+        <label class="fp-label" for="gr-desconto">Desconto (opcional)</label>
+        <select class="fp-input" id="gr-desconto" name="desconto_id">
+          <option value="" data-tipo="" data-valor="0">Sem desconto</option>
+          {% for d in descontos_lista %}
+          <option value="{{ d.id }}" data-tipo="{{ d.tipo }}" data-valor="{{ '%.2f'|format(d.valor) }}">
+            {{ d.nome }} ({% if d.tipo == 'percentual' %}{{ '%g'|format(d.valor|float) }}%{% else %}{{ fmt_moeda(d.valor) }}{% endif %})
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div style="margin-bottom:12px">
+        <label class="fp-label" for="gr-dia">Dia do vencimento</label>
+        <input class="fp-input" id="gr-dia" name="dia_vencimento" type="number" min="1" max="28" value="10">
+      </div>
+
+      <div style="margin-bottom:16px">
+        <label class="fp-label" for="gr-obs">Observação</label>
+        <input class="fp-input" id="gr-obs" name="observacao" maxlength="255" placeholder="Opcional...">
+      </div>
+
+      <div class="fp-resumo-sel" id="fp-resumo-sel" hidden>
+        <div class="fp-resumo-sel__n" id="fp-resumo-n">0 aluno(s) selecionado(s)</div>
+        <div class="fp-resumo-sel__valor" id="fp-resumo-total">R$ 0,00</div>
+        <div class="fp-resumo-sel__sub">total a cobrar</div>
+      </div>
+
+      <button class="fp-btn fp-btn--block" type="submit" id="fp-btn-gerar" disabled>Gerar Cobranças</button>
+      {% endif %}
+    </form>
+
+    <div>
+      <div class="fp-filtro-linha">
+        <span style="font-size:11px;color:var(--fp-text-muted)">Filtro:</span>
+        {% for s in ['Todos', 'Gerada', 'Atrasado', 'Paga', 'Cancelada'] %}
+        <a class="fp-pill fp-pill--{{ s|lower }} {% if filtro == s %}is-active{% endif %}"
+           href="{{ url_for('financeiro_painel.cobrancas', academia_id=academia_id, mes=mes_chave, filtro=s) }}">{{ s }}</a>
+        {% endfor %}
+        {% if lista %}<span class="fp-filtro-linha__total">{{ fmt_moeda(total) }}</span>{% endif %}
+      </div>
+
+      <div class="fp-card fp-card--table">
+        <div class="fp-table-wrap">
+          <table class="fp-table">
+            <thead>
+              <tr><th>Aluno</th><th>Original</th><th>Desconto</th><th>Final</th><th>Status</th><th>Vencimento</th><th>Ação</th></tr>
+            </thead>
+            <tbody>
+              {% for c in lista %}
+              <tr>
+                <td>
+                  <div class="fp-td-nome">{{ c.aluno_nome }}
+                    {% if c.tipo == 'avulsa' %}
+                    <span class="fp-badge" style="font-size:9px;vertical-align:middle;margin-left:4px">Avulsa</span>
+                    {% endif %}
+                  </div>
+                  <div class="fp-td-mini" style="display:flex;align-items:center;gap:4px;margin-top:2px">
+                    <span class="fp-dot fp-dot--sm" style="background: {{ cor_faixa(c.faixa) }}"></span>
+                    {% if c.tipo == 'avulsa' %}{{ c.descricao or 'Cobrança avulsa' }}{% else %}{{ c.faixa or 'Sem graduação' }}{% endif %}
+                  </div>
+                </td>
+                <td class="fp-td-mono">{{ fmt_moeda(c.valor_original or c.valor) }}</td>
+                <td style="font-size:11px;color:{% if c.desconto_nome %}var(--fp-accent){% else %}var(--fp-text-faint){% endif %}">
+                  {% if c.desconto_nome %}
+                    {% if c.desconto_tipo == 'percentual' %}−{{ '%g'|format(c.desconto_valor|float) }}%{% else %}−{{ fmt_moeda(c.desconto_valor) }}{% endif %}
+                  {% else %}—{% endif %}
+                </td>
+                <td class="fp-td-valor fp-td-valor--forte">{{ fmt_moeda(c.valor) }}</td>
+                <td><span class="fp-badge fp-badge--{{ c.rotulo|lower }}">{{ c.rotulo }}</span></td>
+                <td class="fp-td-mono">{{ c.data_vencimento.strftime('%d/%m/%Y') if c.data_vencimento else '—' }}</td>
+                <td>
+                  {% if c.rotulo not in ('Paga', 'Cancelada') %}
+                  <div class="fp-acoes">
+                    {% if c.tipo == 'avulsa' %}
+                    {# Avulsa se recebe (e emite cobrança online) na tela de mensalidades dos alunos #}
+                    <a class="fp-btn-mini fp-btn-mini--ok"
+                       href="{{ url_for('financeiro.mensalidades_alunos', academia_id=academia_id, mes=mes, ano=ano) }}">Receber</a>
+                    {% else %}
+                    <a class="fp-btn-mini fp-btn-mini--ok"
+                       href="{{ url_for('financeiro_painel.mensalidades', academia_id=academia_id, mes=mes_chave) }}">Receber</a>
+                    {% endif %}
+                    <form method="POST" action="{{ url_for('financeiro_painel.cobrancas_cancelar', registro_id=c.id) }}"
+                          style="display:inline" onsubmit="return confirm('Cancelar esta cobrança?')">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                      {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
+                      <input type="hidden" name="mes" value="{{ mes_chave }}">
+                      <input type="hidden" name="tipo" value="{{ c.tipo or 'mensalidade' }}">
+                      <button class="fp-btn-mini" type="submit">Cancelar</button>
+                    </form>
+                  </div>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% if not lista %}
+        <div class="fp-empty fp-empty--tall">
+          Nenhuma cobrança em {{ mes_label }}.
+          <br><span style="font-size:12px">Use o painel ao lado para gerar.</span>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Resumo vivo da seleção: conta alunos e soma o valor já com desconto.
+  (function () {
+    var form = document.getElementById('fp-form-gerar');
+    if (!form) return;
+    var plano = document.getElementById('gr-plano');
+    var desconto = document.getElementById('gr-desconto');
+    var btn = document.getElementById('fp-btn-gerar');
+    var box = document.getElementById('fp-resumo-sel');
+    var elN = document.getElementById('fp-resumo-n');
+    var elTotal = document.getElementById('fp-resumo-total');
+    if (!plano) return;
+
+    function moeda(n) {
+      return 'R$ ' + n.toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    }
+    function valorUnitario() {
+      var base = parseFloat(plano.selectedOptions[0].dataset.valor) || 0;
+      var op = desconto.selectedOptions[0];
+      var tipo = op.dataset.tipo, v = parseFloat(op.dataset.valor) || 0;
+      if (!tipo || !v) return base;
+      return Math.max(0, tipo === 'percentual' ? base - (base * v / 100) : base - v);
+    }
+    function marcados() {
+      return form.querySelectorAll('input[name="aluno_id"]:checked');
+    }
+    function atualizar() {
+      var n = marcados().length;
+      btn.disabled = n === 0;
+      btn.textContent = n > 0 ? 'Gerar ' + n + ' Cobrança(s)' : 'Gerar Cobranças';
+      box.hidden = n === 0;
+      elN.textContent = n + ' aluno(s) selecionado(s)';
+      elTotal.textContent = moeda(n * valorUnitario());
+      form.querySelectorAll('.fp-aluno-item').forEach(function (item) {
+        item.classList.toggle('is-sel', item.querySelector('input').checked);
+      });
+    }
+    form.addEventListener('change', atualizar);
+    document.getElementById('fp-sel-todos').addEventListener('click', function () {
+      var todos = form.querySelectorAll('input[name="aluno_id"]');
+      var faltam = marcados().length < todos.length;
+      todos.forEach(function (c) { c.checked = faltam; });
+      atualizar();
+    });
+    atualizar();
+  })();
+</script>
+{% endblock %}

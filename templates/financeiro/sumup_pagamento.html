@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+{% block title %}Pagamento{% if academia_nome %} — {{ academia_nome }}{% endif %}{% endblock %}
+{% block content %}
+<div class="container my-4" style="max-width: 560px;">
+  <div class="card border-0 shadow-sm" style="border-radius:16px;overflow:hidden;">
+    <div class="card-body p-4">
+
+      {% if erro %}
+        <div class="text-center">
+          <div style="width:54px;height:54px;border-radius:14px;background:#fde8e8;color:#dc3545;display:inline-flex;align-items:center;justify-content:center;font-size:1.6rem;margin-bottom:.5rem;"><i class="bi bi-x-octagon-fill"></i></div>
+          <h5 class="fw-bold mb-1">Pagamento indisponível</h5>
+          <p class="text-muted mb-0">{{ erro }}</p>
+        </div>
+      {% else %}
+        <div class="text-center mb-3">
+          <div style="width:54px;height:54px;border-radius:14px;background:#e7f1ff;color:#0d6efd;display:inline-flex;align-items:center;justify-content:center;font-size:1.6rem;margin-bottom:.5rem;"><i class="bi bi-credit-card-2-front"></i></div>
+          <h4 class="fw-bold mb-1">Pagamento</h4>
+          <p class="text-muted mb-1">
+            {% if academia_nome %}{{ academia_nome }} · {% endif %}
+            {% if valor %}R$ {{ "%.2f"|format(valor|float) }}{% endif %} · via SumUp
+          </p>
+          {% if descricao %}<p class="small text-muted mb-0">{{ descricao }}</p>{% endif %}
+        </div>
+
+        <div id="sumup-pago" class="alert alert-success text-center {% if not pago %}d-none{% endif %}" role="alert">
+          <i class="bi bi-check-circle-fill me-1"></i> Pagamento confirmado!
+        </div>
+
+        <div id="sumup-conteudo" class="{% if pago %}d-none{% endif %}">
+          {# ---- Seleção de método ---- #}
+          <div class="btn-group w-100 mb-3" role="group" id="sumup-metodos">
+            {% if tem_cartao %}<button type="button" class="btn btn-outline-primary active" data-metodo="card"><i class="bi bi-credit-card me-1"></i>Cartão</button>{% endif %}
+            {% if tem_pix %}<button type="button" class="btn btn-outline-primary" data-metodo="pix"><i class="bi bi-qr-code me-1"></i>PIX</button>{% endif %}
+            {% if tem_boleto %}<button type="button" class="btn btn-outline-primary" data-metodo="boleto"><i class="bi bi-upc-scan me-1"></i>Boleto</button>{% endif %}
+          </div>
+
+          {# ---- Cartão (widget SumUp) ---- #}
+          {% if tem_cartao %}
+          <div id="pane-card" class="sumup-pane">
+            <div id="sumup-card"></div>
+          </div>
+          {% endif %}
+
+          {# ---- PIX ---- #}
+          {% if tem_pix %}
+          <div id="pane-pix" class="sumup-pane d-none text-center">
+            <button id="btn-gerar-pix" class="btn btn-primary w-100 mb-3"><i class="bi bi-qr-code me-1"></i>Gerar PIX</button>
+            <div id="pix-resultado" class="d-none">
+              <img id="pix-qr" alt="QR PIX" style="width:200px;height:200px;border:1px solid #e9ecef;border-radius:12px;padding:6px;background:#fff;">
+              <p class="text-muted small mt-2 mb-1">Escaneie o QR ou copie o código</p>
+              <div class="input-group mb-2">
+                <input type="text" id="pix-code" class="form-control form-control-sm" readonly>
+                <button class="btn btn-outline-secondary btn-sm" id="pix-copy"><i class="bi bi-clipboard"></i></button>
+              </div>
+            </div>
+          </div>
+          {% endif %}
+
+          {# ---- Boleto ---- #}
+          {% if tem_boleto %}
+          <div id="pane-boleto" class="sumup-pane d-none text-center">
+            <button id="btn-gerar-boleto" class="btn btn-primary w-100 mb-3"><i class="bi bi-upc-scan me-1"></i>Gerar boleto</button>
+            <div id="boleto-resultado" class="d-none">
+              <label class="form-label small fw-semibold d-block text-start">Linha digitável</label>
+              <div class="input-group mb-2">
+                <input type="text" id="boleto-barcode" class="form-control form-control-sm" readonly>
+                <button class="btn btn-outline-secondary btn-sm" id="boleto-copy"><i class="bi bi-clipboard"></i></button>
+              </div>
+              <a id="boleto-link" class="btn btn-outline-primary btn-sm d-none" target="_blank" rel="noopener"><i class="bi bi-download me-1"></i>Baixar boleto</a>
+            </div>
+          </div>
+          {% endif %}
+
+          <div id="sumup-erro" class="alert alert-danger mt-3 d-none"></div>
+          <p class="text-center text-muted small mt-3 mb-0">Aguardando confirmação do pagamento…</p>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{% if not erro %}
+<script src="https://gateway.sumup.com/gateway/ecom/card/v2/sdk.js"></script>
+<script>
+(function () {
+  var CHECKOUT_ID = {{ checkout_id|tojson }};
+  var METODO_PIX = {{ metodo_pix|tojson }};
+  var URL_PROC = {{ url_for('financeiro.sumup_processar_apm', checkout_id=checkout_id)|tojson }};
+  var URL_STATUS = {{ url_for('financeiro.sumup_status', checkout_id=checkout_id)|tojson }};
+  var jaPago = {{ 'true' if pago else 'false' }};
+
+  function mostrarPago() {
+    jaPago = true;
+    var p = document.getElementById('sumup-pago');
+    var c = document.getElementById('sumup-conteudo');
+    if (p) p.classList.remove('d-none');
+    if (c) c.classList.add('d-none');
+  }
+  function erro(msg) {
+    var e = document.getElementById('sumup-erro');
+    if (e) { e.textContent = msg || 'Não foi possível processar o pagamento.'; e.classList.remove('d-none'); }
+  }
+
+  // Alterna painéis de método
+  document.querySelectorAll('#sumup-metodos [data-metodo]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      document.querySelectorAll('#sumup-metodos [data-metodo]').forEach(function (x) { x.classList.remove('active'); });
+      b.classList.add('active');
+      document.querySelectorAll('.sumup-pane').forEach(function (p) { p.classList.add('d-none'); });
+      var pane = document.getElementById('pane-' + b.getAttribute('data-metodo'));
+      if (pane) pane.classList.remove('d-none');
+    });
+  });
+
+  // Widget de cartão SumUp
+  if (window.SumUpCard && document.getElementById('sumup-card')) {
+    try {
+      SumUpCard.mount({
+        id: 'sumup-card',
+        checkoutId: CHECKOUT_ID,
+        showAmount: true,
+        onResponse: function (type, body) {
+          if (type === 'success' || (body && String(body.status).toUpperCase() === 'PAID')) {
+            mostrarPago();
+          } else if (type === 'error') {
+            erro('Pagamento não aprovado. Verifique os dados do cartão.');
+          }
+        }
+      });
+    } catch (e) { /* SDK indisponível */ }
+  }
+
+  function copiar(inputId) {
+    var el = document.getElementById(inputId);
+    if (!el) return;
+    el.select(); el.setSelectionRange(0, 99999);
+    try { document.execCommand('copy'); } catch (e) {}
+    if (navigator.clipboard) { navigator.clipboard.writeText(el.value).catch(function(){}); }
+  }
+
+  // Gerar PIX
+  var btnPix = document.getElementById('btn-gerar-pix');
+  if (btnPix) btnPix.addEventListener('click', function () {
+    btnPix.disabled = true; btnPix.textContent = 'Gerando…';
+    var fd = new FormData(); fd.append('metodo', METODO_PIX || 'pix');
+    fetch(URL_PROC, { method: 'POST', body: fd }).then(function (r) { return r.json(); }).then(function (j) {
+      if (!j.ok) { erro(j.erro); btnPix.disabled = false; btnPix.textContent = 'Gerar PIX'; return; }
+      if (j.pix_qrcode_b64) document.getElementById('pix-qr').src = 'data:image/png;base64,' + j.pix_qrcode_b64;
+      document.getElementById('pix-code').value = j.pix_copia_cola || '';
+      document.getElementById('pix-resultado').classList.remove('d-none');
+      btnPix.classList.add('d-none');
+    }).catch(function () { erro('Falha de conexão.'); btnPix.disabled = false; btnPix.textContent = 'Gerar PIX'; });
+  });
+  var pixCopy = document.getElementById('pix-copy');
+  if (pixCopy) pixCopy.addEventListener('click', function () { copiar('pix-code'); });
+
+  // Gerar boleto
+  var btnBol = document.getElementById('btn-gerar-boleto');
+  if (btnBol) btnBol.addEventListener('click', function () {
+    btnBol.disabled = true; btnBol.textContent = 'Gerando…';
+    var fd = new FormData(); fd.append('metodo', 'boleto');
+    fetch(URL_PROC, { method: 'POST', body: fd }).then(function (r) { return r.json(); }).then(function (j) {
+      if (!j.ok) { erro(j.erro); btnBol.disabled = false; btnBol.textContent = 'Gerar boleto'; return; }
+      document.getElementById('boleto-barcode').value = j.boleto_barcode || '';
+      var lk = document.getElementById('boleto-link');
+      if (j.boleto_url) { lk.href = j.boleto_url; lk.classList.remove('d-none'); }
+      document.getElementById('boleto-resultado').classList.remove('d-none');
+      btnBol.classList.add('d-none');
+    }).catch(function () { erro('Falha de conexão.'); btnBol.disabled = false; btnBol.textContent = 'Gerar boleto'; });
+  });
+  var bolCopy = document.getElementById('boleto-copy');
+  if (bolCopy) bolCopy.addEventListener('click', function () { copiar('boleto-barcode'); });
+
+  // Polling de status
+  function checarStatus() {
+    if (jaPago) return;
+    fetch(URL_STATUS).then(function (r) { return r.json(); }).then(function (j) {
+      if (j && j.pago) mostrarPago();
+    }).catch(function () {});
+  }
+  if (!jaPago) setInterval(checarStatus, 5000);
+})();
+</script>
+{% endif %}
+{% endblock %}

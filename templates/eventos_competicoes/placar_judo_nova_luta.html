@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}Nova Luta — {{ evento.nome }}{% endblock %}
+{% block content %}
+<div class="container mt-4">
+    {% set menu_secao_ativa = 'placar' %}
+    {% include 'components/menu_competicao.html' %}
+    <div class="mb-4">
+        <h2 class="h4 fw-bold text-primary">🥋 Nova Luta</h2>
+        <p class="text-muted mb-0">{{ evento.nome }}</p>
+    </div>
+
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-6">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="mb-3">
+                            <label class="form-label">Categoria (opcional)</label>
+                            <select name="categoria_id" class="form-select">
+                                <option value="">Selecione uma categoria</option>
+                                {% for cat in categorias %}
+                                <option value="{{ cat.valor_option }}">{{ cat.nome_categoria }}</option>
+                                {% endfor %}
+                            </select>
+                            {% if evento.categorias_modo == 'aproximacao' %}
+                            <small class="text-muted">Categorias definidas para esta competição (aproximação). <a href="{{ url_for('eventos_competicoes.evento_categorias_aproximacao', evento_id=evento.id) }}">Editar lista</a></small>
+                            {% else %}
+                            <small class="text-muted">Categorias padrão da federação/associação.</small>
+                            {% endif %}
+                        </div>
+
+                        <hr>
+
+                        <h5 class="mb-3">Atleta Branco</h5>
+                        <div class="mb-3">
+                            <label class="form-label">Nome <span class="text-danger">*</span></label>
+                            <input type="text" name="atleta_branco_nome" class="form-control" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Academia (opcional)</label>
+                            <input type="text" name="atleta_branco_academia" class="form-control">
+                        </div>
+
+                        <hr>
+
+                        <h5 class="mb-3">Atleta Azul</h5>
+                        <div class="mb-3">
+                            <label class="form-label">Nome <span class="text-danger">*</span></label>
+                            <input type="text" name="atleta_azul_nome" class="form-control" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Academia (opcional)</label>
+                            <input type="text" name="atleta_azul_academia" class="form-control">
+                        </div>
+
+                        <hr>
+
+                        <div class="mb-3">
+                            <label class="form-label">Tempo da luta (segundos)</label>
+                            <input type="number" name="tempo_total" class="form-control" value="300" min="60" step="30">
+                            <small class="text-muted">Padrão: 300 segundos (5 minutos)</small>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Área da luta</label>
+                            <select name="area_num" class="form-select">
+                                {% for a in range(1, (evento.placar_num_areas|default(1)|int) + 1) %}
+                                <option value="{{ a }}" {% if a == 1 %}selected{% endif %}>Área {{ a }}</option>
+                                {% endfor %}
+                            </select>
+                            <small class="text-muted">O monitor dessa área mostrará esta luta quando você abrir o controle.</small>
+                        </div>
+
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-check-circle"></i> Criar Luta
+                            </button>
+                            <a href="{{ back_url }}" class="btn btn-outline-secondary">
+                                <i class="bi bi-x-circle"></i> Cancelar
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

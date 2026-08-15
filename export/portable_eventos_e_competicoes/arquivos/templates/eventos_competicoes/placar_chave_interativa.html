@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chave — {{ categoria_nome or 'Categoria' }} — {{ evento.nome }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/bracket.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/bracket_light.css') }}">
+</head>
+<body class="bracket-theme-light">
+  <div id="app">
+
+    <header class="header">
+      <div class="header-info">
+        <span id="comp-nome" class="comp-nome"></span>
+        <h1 id="cat-nome">{{ categoria_nome or 'Categoria' }}</h1>
+      </div>
+      <div class="header-actions">
+        <span id="status-dot" class="dot dot--live" title="Atualizando ao vivo"></span>
+        <button type="button" class="btn-refresh" onclick="carregarBracket()">↻ Atualizar</button>
+        {% if url_placar_evento %}
+        <a href="{{ url_placar_evento }}" class="btn-refresh" title="Lista de lutas do placar">📋 Lutas</a>
+        {% endif %}
+        {% if back_url %}
+        <a href="{{ back_url }}" class="btn-refresh">← Voltar</a>
+        {% endif %}
+      </div>
+    </header>
+
+    <main>
+      <div id="bracket-container">
+        <div id="bracket-scroll">
+          <div id="bracket"></div>
+          <svg id="connectors" aria-hidden="true"></svg>
+        </div>
+      </div>
+
+      <section id="secao-3lugar"></section>
+      <section id="secao-colocacoes"></section>
+    </main>
+
+  </div>
+
+  <script>
+    window.BRACKET_CONFIG = {
+      apiUrl: {{ api_url|tojson }},
+      mesaUrlTpl: {{ controle_url_tpl|tojson }},
+      pollMs: 10000,
+      categoriaNome: {{ (categoria_nome or '')|tojson }},
+      competicaoNome: {{ (evento.nome or '')|tojson }}
+    };
+  </script>
+  <script src="{{ url_for('static', filename='js/bracket_unimaster.js') }}"></script>
+</body>
+</html>

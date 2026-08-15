@@ -144,6 +144,16 @@
     font-size: 0.95rem;
     vertical-align: middle;
   }
+  /* Badge de forma de pagamento (recorrência) */
+  .rec-badge {
+    display: inline-flex; align-items: center; gap: 0.3rem;
+    font-size: 0.7rem; font-weight: 700; padding: 0.18rem 0.5rem; border-radius: 999px;
+    line-height: 1; border: 1px solid transparent;
+  }
+  .rec-badge i { font-size: 0.78rem; }
+  .rec-badge.cartao.ativa { background: #ede9fe; color: #5b21b6; border-color: #ddd6fe; }
+  .rec-badge.pix.ativa    { background: #ccfbf1; color: #0f766e; border-color: #99f6e4; }
+  .rec-badge.pendente     { background: #fef9c3; color: #854d0e; border-color: #fde68a; }
   .aluno-actions {
     display: flex;
     flex-wrap: wrap;
@@ -773,7 +783,7 @@
         {% endif %}
         <div class="col-12 col-lg-auto">
           <button type="submit" class="btn btn-primary btn-sm me-2"><i class="bi bi-funnel me-1"></i> Filtrar</button>
-          <a href="{{ request.path }}" class="btn btn-outline-secondary btn-sm">Limpar</a>
+          <a href="{{ request.path }}?academia_id=" class="btn btn-outline-secondary btn-sm">Limpar</a>
         </div>
       </div>
       {% if academia_id and not academias %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
@@ -863,6 +873,17 @@
               <i class="bi {% if aluno.ativo %}bi-check-circle-fill{% else %}bi-x-circle-fill{% endif %} me-1"></i>
               {% if aluno.ativo %}Ativo{% else %}Inativo{% endif %}
             </p>
+            {% if aluno.forma_recorrencia %}
+            {% set _fr = aluno.forma_recorrencia %}
+            <p class="mb-0 mt-1">
+              <a href="{{ url_for('financeiro.assinatura_recorrente_link', assinatura_id=_fr.id) }}"
+                 class="rec-badge {{ 'pix' if _fr.metodo == 'pix' else 'cartao' }} {{ 'pendente' if _fr.status != 'ativa' else 'ativa' }} text-decoration-none"
+                 title="{{ 'Aguardando o aluno cadastrar — clique para reabrir/reenviar o link' if _fr.status != 'ativa' else 'Recorrência ativa — clique para ver o link' }}">
+                <i class="bi {{ 'bi-qr-code' if _fr.metodo == 'pix' else 'bi-credit-card' }}"></i>
+                {{ 'PIX recorrente' if _fr.metodo == 'pix' else 'Cartão recorrente' }}{% if _fr.status != 'ativa' %} · aguardando{% endif %}
+              </a>
+            </p>
+            {% endif %}
             {% if aluno.academia_nome %}
             <p class="aluno-academia small text-muted mb-0"><i class="bi bi-building me-1"></i>{{ aluno.academia_nome }}</p>
             {% endif %}
@@ -886,10 +907,16 @@
                 {% if _ab_n > 0 %}<span class="ab-badge">{{ _ab_n }}</span>{% endif %}
               </button>
             {% else %}
-              {# modo_associacao ou outro painel: só ver detalhes #}
+              {% if modo_associacao %}
+              {# Associação: abre a ficha (carrega ao acessar — a lista não pré-renderiza os detalhes) #}
+              <a href="{{ url_for('alunos.ficha_aluno', aluno_id=aluno.id, next=request.full_path) }}" class="btn btn-outline-primary" title="Ver ficha do aluno">
+                <i class="bi bi-eye"></i>
+              </a>
+              {% else %}
               <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalAluno{{ aluno.id }}" title="Ver detalhes">
                 <i class="bi bi-eye"></i>
               </button>
+              {% endif %}
             {% endif %}
           </div>
           </div>
@@ -1033,6 +1060,13 @@
                         onclick="uaAbrirSubModal('modalAcoes{{ aluno.id }}','modalFinanceiro{{ aluno.id }}')">
                   <i class="bi bi-plus-circle-fill"></i>Gerar cobrança
                 </button>
+                {% set _rec_gw = (recorrencia_por_academia or {}).get(aluno.id_academia) %}
+                {% if _rec_gw %}
+                <button type="button" class="ua-action-btn status-fin"
+                        onclick="uaAbrirSubModal('modalAcoes{{ aluno.id }}','modalRecorrente{{ aluno.id }}')">
+                  <i class="bi bi-arrow-repeat"></i>Mensalidade recorrente
+                </button>
+                {% endif %}
               </div>
             </div>
 
@@ -1261,6 +1295,7 @@
     {% endif %}
 
     <!-- Modal Detalhes -->
+    {% if not modo_associacao %}
     <div class="modal fade modal-aluno" id="modalAluno{{ aluno.id }}" tabindex="-1"
          data-url-hist="{{ url_for('alunos.historico_aulas', aluno_id=aluno.id) }}"
          data-historico-modal-id="modalHistoricoAulas{{ aluno.id }}">
@@ -1513,6 +1548,7 @@
         </div>
       </div>
     </div>
+    {% endif %}{# fim modais de detalhe (modalAluno + histórico) — ocultos no modo associação #}
 
     {% if session.modo_painel == 'academia' and aluno.mensalidade_tem %}
     <div class="modal fade sm-modal" id="modalStatusMensalidade{{ aluno.id }}" tabindex="-1">
@@ -2066,11 +2102,13 @@
               <!-- Cobrança online -->
               <div class="mf-section mb-3 bloco-asaas">
                 <div class="mf-section-title"><i class="bi bi-qr-code me-1"></i> Cobrança online
-                  <span class="text-muted small">({{ {'asaas':'Asaas','mercadopago':'Mercado Pago','infinitepay':'InfinitePay'}.get(gw_aluno, gw_aluno) }})</span>
+                  <span class="text-muted small">({{ {'asaas':'Asaas','mercadopago':'Mercado Pago','infinitepay':'InfinitePay','efi':'EFÍ','sumup':'SumUp'}.get(gw_aluno, gw_aluno) }})</span>
                 </div>
                 <select name="asaas_metodo_{{ aluno.id }}" class="form-select form-select-sm mf-asaas-metodo">
                   {% if gw_aluno == 'infinitepay' %}
                   <option value="LINK" selected>Gerar link de pagamento (PIX/cartão)</option>
+                  {% elif gw_aluno == 'efi' %}
+                  <option value="PIX" selected>PIX — gera QR Code para o aluno pagar</option>
                   {% else %}
                   <option value="PIX" selected>PIX — gera QR Code para o aluno pagar</option>
                   <option value="BOLETO">Boleto — gera o link do boleto</option>
@@ -2113,7 +2151,7 @@
                     <select name="plano_id" class="form-select form-select-sm">
                       <option value="">Selecione o plano</option>
                       {% for p in planos_mensalidades %}
-                      <option value="{{ p.id }}">{{ p.nome }} — R$ {{ "%.2f"|format(p.valor or 0) }}</option>
+                      <option value="{{ p.id }}" data-valor="{{ "%.2f"|format(p.valor or 0) }}">{{ p.nome }} — R$ {{ "%.2f"|format(p.valor or 0) }}</option>
                       {% endfor %}
                     </select>
                   </div>
@@ -2163,6 +2201,39 @@
                 </div>
               </div>
 
+              <!-- Desconto (aplica-se a avulsa, mensal e anual) -->
+              {% set descontos_aluno = (descontos_por_academia or {}).get(aluno.id_academia) or descontos_academia %}
+              <div class="mf-section mb-1">
+                <div class="mf-section-title"><i class="bi bi-percent me-1"></i> Desconto <span class="fw-normal text-muted">(opcional)</span></div>
+                <div class="row g-2">
+                  <div class="col-12">
+                    <select class="form-select form-select-sm mf-desconto" name="desconto_id">
+                      <option value="">Sem desconto</option>
+                      {% for d in (descontos_aluno or []) %}
+                      <option value="{{ d.id }}"
+                              data-tipo="{{ d.tipo }}"
+                              data-valor="{{ '%.2f'|format(d.valor or 0) }}">
+                        {{ d.nome }} — {% if d.tipo == 'percentual' %}{{ '%g'|format(d.valor or 0) }}%{% else %}R$ {{ '%.2f'|format(d.valor or 0) }}{% endif %}
+                      </option>
+                      {% endfor %}
+                      <option value="avulso">➕ Desconto avulso (informar manualmente)</option>
+                    </select>
+                  </div>
+                  <div class="col-12 mf-desconto-manual d-none">
+                    <div class="input-group input-group-sm">
+                      <select class="form-select mf-desconto-manual-tipo" name="desconto_manual_tipo" style="max-width:130px">
+                        <option value="percentual">%</option>
+                        <option value="valor_fixo">R$</option>
+                      </select>
+                      <input type="text" class="form-control mf-desconto-manual-valor" name="desconto_manual_valor" placeholder="Valor do desconto" inputmode="decimal">
+                    </div>
+                  </div>
+                  <div class="col-12">
+                    <small class="text-muted d-block mf-desconto-preview"></small>
+                  </div>
+                </div>
+              </div>
+
             </form>
           </div>
           <div class="modal-footer border-0 bg-light py-2 d-flex justify-content-between align-items-center">
@@ -2187,6 +2258,53 @@
         </div>
       </div>
     </div>
+
+    {# Sub-modal: Mensalidade recorrente (cartão/PIX automático) #}
+    {% set _rec_gw = (recorrencia_por_academia or {}).get(aluno.id_academia) %}
+    {% if _rec_gw %}
+    <div class="modal fade sm-modal" id="modalRecorrente{{ aluno.id }}" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow-lg">
+          <div class="modal-header p-0">
+            <div class="sm-hero w-100" style="background:linear-gradient(135deg,#3730a3 0%,#6366f1 100%)">
+              <button type="button" class="sm-close" data-bs-dismiss="modal" aria-label="Fechar"><i class="bi bi-x-lg"></i></button>
+              <div class="sm-icon"><i class="bi bi-arrow-repeat"></i></div>
+              <div class="sm-title">Mensalidade recorrente</div>
+              <div class="sm-sub">{{ aluno.nome }}</div>
+            </div>
+          </div>
+          <div class="modal-body px-4 py-3">
+            <form method="POST" action="{{ url_for('financeiro.criar_assinatura_recorrente', aluno_id=aluno.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <div class="mb-3">
+                <label class="form-label small fw-semibold">Valor mensal <span class="text-danger">*</span></label>
+                <div class="mf-input-prefix"><span class="mf-prefix">R$</span>
+                  <input type="text" class="form-control form-control-sm" name="valor" placeholder="0,00" required></div>
+              </div>
+              {% set _rec_ops = (recorrencia_opcoes_por_academia or {}).get(aluno.id_academia) or [] %}
+              <div class="mb-2">
+                <label class="form-label small fw-semibold d-block">Forma de recorrência</label>
+                <div class="d-flex flex-column gap-2">
+                  {% for op in _rec_ops %}
+                  <div class="form-check">
+                    <input class="form-check-input" type="radio" name="opcao_recorrencia" value="{{ op.val }}" id="rec_{{ aluno.id }}_{{ loop.index }}" {% if loop.first %}checked{% endif %}>
+                    <label class="form-check-label small" for="rec_{{ aluno.id }}_{{ loop.index }}">
+                      {% if 'pix' in op.val %}<i class="bi bi-qr-code me-1 text-info"></i>{% else %}<i class="bi bi-credit-card me-1 text-primary"></i>{% endif %}{{ op.label }}
+                    </label>
+                  </div>
+                  {% endfor %}
+                </div>
+              </div>
+              <small class="text-muted d-block mb-3">
+                <i class="bi bi-info-circle"></i> Gera um link; o aluno cadastra cartão/PIX uma vez e passa a ser cobrado automaticamente todo mês. A baixa no sistema é automática.
+              </small>
+              <button type="submit" class="btn btn-primary w-100"><i class="bi bi-arrow-repeat me-1"></i> Gerar link de recorrência</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
     {% endif %}
     {% endfor %}
       </div>
@@ -2243,7 +2361,7 @@
   <div class="empty-state">
     <i class="bi bi-people d-block"></i>
     <h4>Nenhum aluno encontrado</h4>
-    <p>{% if busca or idade_min is not none or idade_max is not none or graduacao_id is not none or peso_min is not none or peso_max is not none %}Ajuste os filtros ou <a href="{{ request.path }}">limpe</a> para ver todos.{% elif modo_associacao %}Nenhum aluno cadastrado no sistema ou nenhum resultado para os filtros atuais.{% else %}Cadastre o primeiro aluno para começar.{% endif %}</p>
+    <p>{% if busca or idade_min is not none or idade_max is not none or graduacao_id is not none or peso_min is not none or peso_max is not none %}Ajuste os filtros ou <a href="{{ request.path }}?academia_id=">limpe</a> para ver todos.{% elif modo_associacao %}Nenhum aluno cadastrado no sistema ou nenhum resultado para os filtros atuais.{% else %}Cadastre o primeiro aluno para começar.{% endif %}</p>
     {% if not modo_associacao %}
     <a href="{{ url_for('alunos.cadastrar_aluno', academia_id=academia_id, next=request.full_path) if academia_id else url_for('alunos.cadastrar_aluno', next=request.full_path) }}" class="btn btn-primary">
       <i class="bi bi-plus-lg me-1"></i> Novo Aluno
@@ -3091,13 +3209,68 @@ document.addEventListener('DOMContentLoaded', function() {
       });
   }
 
+  function parseValorBR(str) {
+    if (!str) return NaN;
+    return parseFloat(String(str).replace(/\./g, '').replace(',', '.'));
+  }
+  function fmtBRLmini(n) {
+    return 'R$ ' + Number(n).toFixed(2).replace('.', ',');
+  }
+  function baseValorForm(form) {
+    const tipo = form.querySelector('input[type="radio"][name^="tipo_"]:checked')?.value || 'avulsa';
+    if (tipo === 'avulsa') {
+      const valorInput = form.querySelector('input[name="valor"]');
+      return parseValorBR(valorInput ? valorInput.value : '');
+    }
+    const planoSel = form.querySelector('select[name="plano_id"]');
+    const opt = planoSel && planoSel.options[planoSel.selectedIndex];
+    return opt ? (parseFloat(opt.getAttribute('data-valor')) || NaN) : NaN;
+  }
+
+  function atualizaPreviewDesconto(form) {
+    const sel = form.querySelector('select[name="desconto_id"]');
+    const prev = form.querySelector('.mf-desconto-preview');
+    const manualBox = form.querySelector('.mf-desconto-manual');
+    if (!sel) return;
+    const isAvulso = sel.value === 'avulso';
+    if (manualBox) manualBox.classList.toggle('d-none', !isAvulso);
+    if (!prev) return;
+    if (!sel.value) { prev.textContent = ''; return; }
+
+    let tipo, dval;
+    if (isAvulso) {
+      tipo = form.querySelector('.mf-desconto-manual-tipo')?.value || 'percentual';
+      dval = parseValorBR(form.querySelector('.mf-desconto-manual-valor')?.value || '');
+    } else {
+      const opt = sel.options[sel.selectedIndex];
+      tipo = opt.getAttribute('data-tipo');
+      dval = parseFloat(opt.getAttribute('data-valor')) || 0;
+    }
+    const base = baseValorForm(form);
+    if (isNaN(base) || isNaN(dval) || dval <= 0) { prev.textContent = ''; return; }
+    let desc = (tipo === 'percentual') ? base * (dval / 100) : Math.min(dval, base);
+    desc = Math.round(desc * 100) / 100;
+    const final = Math.max(0, Math.round((base - desc) * 100) / 100);
+    const tipoCobr = form.querySelector('input[type="radio"][name^="tipo_"]:checked')?.value || 'avulsa';
+    const sufixo = (tipoCobr === 'avulsa') ? '' : ' por parcela';
+    prev.textContent = 'Desconto ' + fmtBRLmini(desc) + ' → valor final ' + fmtBRLmini(final) + sufixo
+                       + (final <= 0 ? ' (registrada como isenta/paga)' : '');
+  }
+
   document.querySelectorAll('.form-financeiro-aluno').forEach(function(form) {
     form.addEventListener('change', function() {
       atualizaBlocosFinanceiro(form);
       checarDisponibilidade(form);
+      atualizaPreviewDesconto(form);
+    });
+    form.addEventListener('input', function(ev) {
+      if (ev.target && (ev.target.name === 'valor' || ev.target.name === 'desconto_manual_valor')) {
+        atualizaPreviewDesconto(form);
+      }
     });
     atualizaBlocosFinanceiro(form);
     checarDisponibilidade(form);
+    atualizaPreviewDesconto(form);
   });
 
   document.querySelectorAll('#listaAlunos .modal').forEach(function(modalEl) {
@@ -3198,6 +3371,24 @@ document.addEventListener('DOMContentLoaded', function() {
           } else {
             add('mes_inicial', '1');
           }
+        }
+      }
+
+      // Desconto (comum a avulsa, mensal e anual)
+      const descontoSel = form.querySelector('select[name="desconto_id"]');
+      if (descontoSel && descontoSel.value) {
+        if (descontoSel.value === 'avulso') {
+          const dtipo = form.querySelector('.mf-desconto-manual-tipo')?.value || 'percentual';
+          const dvalor = form.querySelector('.mf-desconto-manual-valor')?.value || '';
+          if (!dvalor.trim()) {
+            if (msgErro) msgErro.textContent = 'Informe o valor do desconto avulso.';
+            return;
+          }
+          add('desconto_id', 'avulso');
+          add('desconto_manual_tipo', dtipo);
+          add('desconto_manual_valor', dvalor);
+        } else {
+          add('desconto_id', descontoSel.value);
         }
       }
 

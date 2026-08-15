@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="csrf-token" content="{{ csrf_token() }}">
+  <title>Modo aniversariante — Live</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700;0,9..40,800;1,9..40,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='aniversariante_live/styles.css') }}?v=aniv11">
+  <script>
+    /* Base da API (blueprint Flask). Sobrescreva antes de carregar app.js se necessário. */
+    window.__ANIV_API_BASE__ = "{{ url_for('aniversariante_live.pagina')[:-1] }}";
+    window.__ANIV_ALUNO_ESCOPO__ = {{ aniv_aluno_escopo|default(none, true)|tojson }};
+  </script>
+</head>
+<body data-api-base="{{ url_for('aniversariante_live.pagina')[:-1] }}">
+  <canvas id="confetti-canvas" aria-hidden="true"></canvas>
+  <div id="festa-bg" class="festa-bg" aria-hidden="true"></div>
+  <div id="fx-layer" class="fx-layer" aria-hidden="true"></div>
+  <div id="festa-balloons" class="festa-balloons" aria-hidden="true"></div>
+
+  {% set _next = request.args.get('next') %}
+  {% set _voltar = _next or voltar_painel_url|default(url_for('painel.home'), true) %}
+  <div id="app">
+    <header class="app-header">
+      <a href="{{ _voltar }}" class="btn-nav btn-nav--painel" id="btn-voltar-painel" data-default-back="{{ _voltar }}" title="Voltar">
+        <span class="btn-nav-ic" aria-hidden="true">←</span>
+        <span class="btn-nav-txt">Voltar</span>
+      </a>
+      <div class="app-header-main">
+        <h1 class="app-title">Aniversariantes</h1>
+        <p class="app-sub">Mande parabéns no dia do aniversário 🎂</p>
+      </div>
+      <span class="header-spacer" aria-hidden="true"></span>
+    </header>
+
+    <!-- Lista -->
+    <section id="view-list" class="view is-active panel-card" aria-label="Lista de aniversariantes">
+      <div class="mes-bar-wrap">
+        <div class="mes-bar">
+          <label for="mes-select">Mês</label>
+          <select id="mes-select" aria-label="Filtrar por mês">
+            {% for m in range(1,13) %}
+            <option value="{{ m }}">{{ m }} — {% if m == 1 %}Jan{% elif m == 2 %}Fev{% elif m == 3 %}Mar{% elif m == 4 %}Abr{% elif m == 5 %}Mai{% elif m == 6 %}Jun{% elif m == 7 %}Jul{% elif m == 8 %}Ago{% elif m == 9 %}Set{% elif m == 10 %}Out{% elif m == 11 %}Nov{% else %}Dez{% endif %}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      <div id="list-state"></div>
+      <div id="aniv-grid" class="aniv-grid"></div>
+    </section>
+
+    <!-- Live -->
+    <section id="view-live" class="view panel-card" aria-label="Celebração">
+      <div class="live-hero">
+        <div class="live-photo-wrap">
+          <img id="live-photo" class="live-photo is-pulse" src="" alt="">
+        </div>
+        <h2 id="live-name" class="live-name"></h2>
+        <p id="live-aniversario" class="live-aniversario"></p>
+        <p id="live-academia" class="live-academia" hidden></p>
+        <div class="counter-box">
+          <span class="counter-label">Parabéns recebidos</span>
+          <span id="counter-val" class="counter-value">0</span>
+        </div>
+        <p id="live-interacao-aviso" class="live-interacao-aviso" role="status" hidden></p>
+      </div>
+      <div class="actions-row" id="live-actions">
+        <button type="button" class="btn-parabens" id="btn-parabens">Enviar parabéns 🎉</button>
+        <div class="reactions" role="group" aria-label="Reações rápidas">
+          <button type="button" class="reaction-btn" id="reaction-heart" title="Coração">❤️</button>
+          <button type="button" class="reaction-btn" id="reaction-cake" title="Bolo">🎂</button>
+          <button type="button" class="reaction-btn" id="reaction-party" title="Festa">🥳</button>
+          <button type="button" class="reaction-btn" id="reaction-clap" title="Aplausos">👏</button>
+        </div>
+      </div>
+      <div class="feed-wrap">
+        <div id="feed-list" class="feed-list" role="log" aria-live="polite" aria-relevant="additions"></div>
+      </div>
+    </section>
+  </div>
+
+  <script src="{{ url_for('static', filename='aniversariante_live/app.js') }}?v=aniv11" defer></script>
+</body>
+</html>

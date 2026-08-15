@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mesa de Controle</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/mesa.css') }}">
+</head>
+<body>
+
+{# Ícones + / − (SVG inline) #}
+{% macro ico_minus() %}
+<svg class="ico-counter" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19 13H5v-2h14v2z"/></svg>
+{% endmacro %}
+{% macro ico_plus() %}
+<svg class="ico-counter" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+{% endmacro %}
+{% macro ico_clear() %}
+<svg class="ico-zerar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
+{% endmacro %}
+
+{% macro score_card(lado, tipo, label, mirror=false) %}
+<article class="score-card score-card--{{ lado }}">
+  <header class="score-card__head">
+    <span class="score-card__label">{{ label }}</span>
+    <button type="button" class="btn-zerar" title="Zerar {{ label }}" aria-label="Zerar {{ label }}"
+            onclick="zerarScore('{{ lado }}','{{ tipo }}')">{{ ico_clear() }}</button>
+  </header>
+  <div class="score-card__row {% if mirror %}score-card__row--mirror{% endif %}">
+    {% if mirror %}
+    <button type="button" class="btn-counter btn-counter--plus" onclick="ajustarScore('{{ lado }}','{{ tipo }}',1)" aria-label="Mais {{ label }}">{{ ico_plus() }}</button>
+    <span class="counter-val" id="c-{{ tipo }}-{{ lado }}">0</span>
+    <button type="button" class="btn-counter btn-counter--minus" onclick="ajustarScore('{{ lado }}','{{ tipo }}',-1)" aria-label="Menos {{ label }}">{{ ico_minus() }}</button>
+    {% else %}
+    <button type="button" class="btn-counter btn-counter--minus" onclick="ajustarScore('{{ lado }}','{{ tipo }}',-1)" aria-label="Menos {{ label }}">{{ ico_minus() }}</button>
+    <span class="counter-val" id="c-{{ tipo }}-{{ lado }}">0</span>
+    <button type="button" class="btn-counter btn-counter--plus" onclick="ajustarScore('{{ lado }}','{{ tipo }}',1)" aria-label="Mais {{ label }}">{{ ico_plus() }}</button>
+    {% endif %}
+  </div>
+</article>
+{% endmacro %}
+
+{% if mesa_avulsa %}
+  {% set nome_azul = 'Azul' %}
+  {% set nome_branco = 'Branco' %}
+  {% set club_azul = '' %}
+  {% set club_branco = '' %}
+{% else %}
+  {% set nome_azul   = luta.atleta_azul.nome   if luta.atleta_azul   else 'A definir' %}
+  {% set nome_branco = luta.atleta_branco.nome if luta.atleta_branco else 'A definir' %}
+  {% set club_azul   = luta.atleta_azul.academia.nome   if luta.atleta_azul   and luta.atleta_azul.academia   else '' %}
+  {% set club_branco = luta.atleta_branco.academia.nome if luta.atleta_branco and luta.atleta_branco.academia else '' %}
+{% endif %}
+
+<header class="topo">
+  <a href="{{ url_for('home.index') if mesa_avulsa else (url_for('home.competicao', comp_id=categoria.competicao_id) if categoria else url_for('home.index')) }}" class="topo-back">← Voltar</a>
+  {% if mesa_avulsa %}
+  <span class="fase-tag">AVULSO</span>
+  <span class="cat-nome">Sem chave / sem nomes</span>
+  <span class="luta-num">—</span>
+  {% else %}
+  <span class="fase-tag">{{ luta.fase.replace('_',' ').upper() }}</span>
+  <span class="cat-nome">{{ categoria.nome if categoria else '' }}</span>
+  <span class="luta-num">Luta #{{ luta.numero_luta or '—' }}</span>
+  {% if luta_finalizada %}
+  <span class="topo-aviso" title="Altere o placar e use o botão nas ações para gravar de novo">Correção de resultado</span>
+  {% endif %}
+  {% endif %}
+  <a href="{{ url_for('placar.pagina_avulso', token=avulso_token) if mesa_avulsa else (url_for('placar.pagina_categoria', categoria_id=categoria.id) if categoria else url_for('placar.pagina', luta_id=luta.id)) }}"
+     target="_blank" class="topo-placar"
+     title="{{ 'Telão só Azul/Branco — não grava competição' if mesa_avulsa else 'Mesmo link para toda a categoria — ao trocar de luta na mesa, o telão acompanha automaticamente' }}">📺 Abrir Placar</a>
+</header>
+
+<main class="arena">
+
+  <!-- ── AZUL ── -->
+  <section class="lado lado--azul" id="lado-azul">
+    <div class="atleta-card">
+      <div class="avatar avatar--azul">{{ iniciais(nome_azul) }}</div>
+      <div class="atleta-info">
+        <h2 class="atleta-nome">{{ nome_azul }}</h2>
+        <p  class="atleta-club">{{ club_azul }}</p>
+      </div>
+    </div>
+
+    <p class="lado-tag">AZUL</p>
+    <p class="contagem-legenda">Contagem · 2 Wazari = Ippon · Yuko acumula</p>
+
+    <div class="score-cards score-cards--azul" id="contadores-azul">
+      {{ score_card('azul', 'ippon', 'IPPON', false) }}
+      {{ score_card('azul', 'wazari', 'WAZARI', false) }}
+      {{ score_card('azul', 'yuko', 'YUKO', false) }}
+      {{ score_card('azul', 'shido', 'SHIDO', false) }}
+    </div>
+
+    <div class="shidos" id="shidos-azul">
+      <span class="shido-dot" id="sa0">○</span>
+      <span class="shido-dot" id="sa1">○</span>
+      <span class="shido-dot" id="sa2">○</span>
+    </div>
+  </section>
+
+  <!-- ── CENTRO ── -->
+  <section class="centro">
+    <div class="centro-col">
+    <div class="mesa-card mesa-card--timer">
+      <div class="mesa-card__titulo">Tempo</div>
+      <div class="timer-duracao">
+        <label class="timer-duracao-lbl" for="input-minutos">Min</label>
+        <input type="number" class="timer-duracao-input" id="input-minutos" min="1" max="45" value="4" step="1" />
+        <button type="button" class="btn-ctrl btn-ctrl--dur" id="btn-duracao" onclick="aplicarDuracaoMinutos()">OK</button>
+      </div>
+      <div id="timer-display" class="timer">04:00</div>
+      <div id="timer-label"   class="timer-label">Aguardando</div>
+      <button id="btn-timer" class="btn-ctrl btn-ctrl--start" onclick="toggleTimer()">▶ Iniciar</button>
+    </div>
+
+    <div class="mesa-card mesa-card--acoes">
+      <div class="mesa-card__titulo">Ações</div>
+      <div class="mesa-card__grid2 mesa-card__grid2--quad">
+        <button class="btn-ctrl btn-ctrl--undo" onclick="desfazer()">↩ Desfazer</button>
+        <button class="btn-ctrl btn-ctrl--golden" id="btn-golden" onclick="iniciarGolden()" disabled>⚡ GS</button>
+        <button class="btn-ctrl btn-ctrl--wo" onclick="registrarWO()">W.O.</button>
+        <button class="btn-ctrl btn-ctrl--stop" onclick="pedirConfirmacao()">⬛ Encerrar</button>
+        {% if not mesa_avulsa and luta_finalizada %}
+        <button type="button" class="btn-ctrl btn-ctrl--save-correcao" id="btn-salvar-correcao" onclick="abrirModalCorrecao()">💾 Revisar e salvar correção</button>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="mesa-card mesa-card--osk osaekomi-panel">
+      <div class="osaekomi-titulo">Osaekomi</div>
+      <div class="osaekomi-linha">
+        <button type="button" class="btn-osk btn-osk--azul" id="btn-osk-azul" onclick="selecionarLadoOsaekomi('azul')">Azul</button>
+        <div class="osaekomi-tempo" id="osk-display">00:00</div>
+        <button type="button" class="btn-osk btn-osk--branco" id="btn-osk-branco" onclick="selecionarLadoOsaekomi('branco')">Branco</button>
+      </div>
+      <div class="osaekomi-acoes">
+        <button type="button" class="btn-osk-ctrl btn-osk-ctrl--iniciar" id="btn-osk-iniciar" onclick="iniciarContagemOsaekomi()">▶ Iniciar contagem</button>
+        <button type="button" class="btn-osk-ctrl btn-osk-ctrl--parar" id="btn-osk-parar" onclick="pararOsaekomi()" disabled>⏹ Parar</button>
+      </div>
+      <p class="osaekomi-meta" id="osk-meta">1) Escolha Azul ou Branco · 2) Iniciar contagem · 10s = Wazari · 20s = Ippon</p>
+      <p class="osaekomi-legenda">Regra IJF: aos 20s o Wazari dos 10s vira Ippon (não soma os dois).</p>
+    </div>
+    </div>
+  </section>
+
+  <!-- ── BRANCO ── -->
+  <section class="lado lado--branco" id="lado-branco">
+    <div class="atleta-card">
+      <div class="avatar avatar--branco">{{ iniciais(nome_branco) }}</div>
+      <div class="atleta-info">
+        <h2 class="atleta-nome">{{ nome_branco }}</h2>
+        <p  class="atleta-club">{{ club_branco }}</p>
+      </div>
+    </div>
+
+    <p class="lado-tag">BRANCO</p>
+    <p class="contagem-legenda">Contagem · 2 Wazari = Ippon · Yuko acumula</p>
+
+    <div class="score-cards score-cards--branco" id="contadores-branco">
+      {{ score_card('branco', 'ippon', 'IPPON', true) }}
+      {{ score_card('branco', 'wazari', 'WAZARI', true) }}
+      {{ score_card('branco', 'yuko', 'YUKO', true) }}
+      {{ score_card('branco', 'shido', 'SHIDO', true) }}
+    </div>
+
+    <div class="shidos shidos--rev" id="shidos-branco">
+      <span class="shido-dot" id="sb0">○</span>
+      <span class="shido-dot" id="sb1">○</span>
+      <span class="shido-dot" id="sb2">○</span>
+    </div>
+  </section>
+
+</main>
+
+<!-- ── Modal resultado ── -->
+<div class="modal-overlay" id="modal" hidden>
+  <div class="modal-box">
+    <div class="modal-icone" id="modal-icone">🏆</div>
+    <h2  class="modal-titulo" id="modal-titulo">Luta Encerrada</h2>
+    <div class="vencedor-nome" id="modal-vencedor"></div>
+    <p   class="modal-metodo"  id="modal-metodo"></p>
+    <div class="modal-scores"  id="modal-scores"></div>
+    {% if mesa_avulsa %}
+    <p class="modal-correcao-hint">Placar avulso: confirme o vencedor para o telão. Nada é gravado na chave da competição.</p>
+    {% else %}
+    <p class="modal-correcao-hint">Se o vencedor exibido estiver invertido (quem está de quimono azul/branco na mesa), corrija antes de salvar.</p>
+    {% endif %}
+    <button type="button" class="btn-modal btn-modal--swap" id="modal-btn-trocar-vencedor" onclick="trocarVencedorNoModal()">⇄ Trocar vencedor</button>
+    <div class="modal-acoes">
+      <button type="button" class="btn-modal btn-modal--confirm" id="modal-btn-confirmar" onclick="salvarResultado()">✓ Confirmar e Salvar</button>
+      <button class="btn-modal btn-modal--cancel"  onclick="cancelarModal()">↩ Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const LUTA = {% if mesa_avulsa %}{
+    id: 0,
+    categoria_id: null,
+    fase: 'avulso',
+    numero: 0,
+    azul:   { id: null, nome: {{ nome_azul | tojson }} },
+    branco: { id: null, nome: {{ nome_branco | tojson }} },
+  }{% else %}{
+    id: {{ luta.id }},
+    categoria_id: {{ luta.categoria_id }},
+    fase: {{ luta.fase | tojson }},
+    numero: {{ luta.numero_luta or 0 }},
+    azul:   { id: {{ luta.atleta_azul_id   or 'null' }}, nome: {{ nome_azul   | tojson }} },
+    branco: { id: {{ luta.atleta_branco_id or 'null' }}, nome: {{ nome_branco | tojson }} },
+  }{% endif %};
+  const DURACAO = 240;
+  const MESA_AVULSO = {{ (avulso_token if mesa_avulsa else None) | tojson }};
+  const LUTA_FINALIZADA = {{ (false if mesa_avulsa else luta_finalizada) | tojson }};
+  const RESULTADO_MESA = {{ (None if mesa_avulsa else resultado_mesa) | tojson }};
+  const VENCEDOR_LADO_INICIAL = {{ (None if mesa_avulsa else vencedor_lado_inicial) | tojson }};
+</script>
+<script src="{{ url_for('static', filename='js/mesa.js') }}"></script>
+</body>
+</html>

@@ -979,3 +979,63 @@ def remover_aluno_turma(turma_id, aluno_id):
     db.commit()
     db.close()
     return jsonify({"ok": True, "msg": "Aluno removido da turma."})
+
+
+# ======================================================
+# 🔹 Excluir Turma
+# ======================================================
+@bp_turmas.route('/turmas/<int:turma_id>/excluir', methods=['POST'])
+@login_required
+def excluir_turma(turma_id):
+    """Exclui uma turma. Permitido para admin, gestor_associacao, gestor_academia
+    (com escopo na academia da turma). Remove vínculos antes de excluir."""
+    if not (
+        current_user.has_role("admin") or
+        current_user.has_role("gestor_associacao") or
+        current_user.has_role("gestor_academia")
+    ):
+        return jsonify({"ok": False, "msg": "Sem permissão para excluir turmas."}), 403
+
+    db = get_db_connection()
+    cursor = db.cursor(dictionary=True)
+    try:
+        cursor.execute("SELECT TurmaID, Nome, id_academia FROM turmas WHERE TurmaID = %s", (turma_id,))
+        turma = cursor.fetchone()
+        if not turma:
+            return jsonify({"ok": False, "msg": "Turma não encontrada."}), 404
+
+        # Escopo: a academia da turma deve estar entre as acessíveis (admin passa direto)
+        if not current_user.has_role("admin"):
+            ids_acessiveis = _get_academias_ids()
+            if turma.get("id_academia") and turma["id_academia"] not in ids_acessiveis:
+                return jsonify({"ok": False, "msg": "Sem permissão para esta turma."}), 403
+
+        # Quantos alunos estão matriculados? (informativo no log)
+        cursor.execute("SELECT COUNT(*) AS c FROM aluno_turmas WHERE TurmaID = %s", (turma_id,))
+        qtd_matriculados = (cursor.fetchone() or {}).get("c", 0)
+
+        # Limpar vínculos dependentes (best-effort — ignora se a tabela não existir)
+        for sql in (
+            "DELETE FROM aluno_turmas WHERE TurmaID = %s",
+            "UPDATE alunos SET TurmaID = NULL WHERE TurmaID = %s",
+            "DELETE FROM turma_professor WHERE TurmaID = %s",
+            "DELETE FROM turma_modalidades WHERE turma_id = %s",
+        ):
+            try:
+                cursor.execute(sql, (turma_id,))
+            except Exception:
+                pass
+
+        cursor.execute("DELETE FROM turmas WHERE TurmaID = %s", (turma_id,))
+        db.commit()
+        return jsonify({
+            "ok": True,
+            "msg": f"Turma «{turma['Nome']}» excluída com sucesso.",
+            "matriculados_removidos": qtd_matriculados,
+        })
+    except Exception as e:
+        db.rollback()
+        return jsonify({"ok": False, "msg": f"Erro ao excluir turma: {e}"}), 500
+    finally:
+        cursor.close()
+        db.close()

@@ -40,7 +40,7 @@
           fillColor: '#fff'
         });
         if (canvas) {
-          var dataUrl = canvas.toDataURL('image/png');
+          var dataUrl = canvas.toDataURL('image/jpeg', 0.85);
           pendingCallback(dataUrl);
         }
       }
@@ -77,9 +77,16 @@
     var placeholder = options && options.placeholder ? (typeof options.placeholder === 'string' ? document.getElementById(options.placeholder) : options.placeholder) : null;
     var aspectRatio = options && options.aspectRatio !== undefined ? options.aspectRatio : 1;
 
+    function isLikelyImageFile(file) {
+      if (!file) return false;
+      if (file.type && file.type.indexOf('image') === 0) return true;
+      var name = (file.name || '').toLowerCase();
+      return /\.(jpe?g|png|gif|webp|heic|heif|bmp)$/i.test(name);
+    }
+
     fileInput.addEventListener('change', function() {
       var file = this.files[0];
-      if (!file || !file.type || file.type.indexOf('image') !== 0) return;
+      if (!isLikelyImageFile(file)) return;
 
       var reader = new FileReader();
       reader.onload = function(e) {

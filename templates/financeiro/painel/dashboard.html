@@ -1,0 +1,116 @@
+{% extends "financeiro/painel/_layout.html" %}
+{% block title %}Dashboard{% endblock %}
+
+{% block conteudo %}
+<div class="fp-page">
+
+  <div class="fp-head">
+    <div class="fp-head__title-row">
+      <h1 class="fp-h1" style="margin:0">Dashboard</h1>
+      <span class="fp-chip-mes">{{ mes_label }}</span>
+    </div>
+    <p class="fp-sub">Visão geral financeira da academia</p>
+  </div>
+
+  <div class="fp-filtro__opcoes" style="margin-bottom:20px">
+    {% for m in meses %}
+    <a class="fp-pill {% if m.chave == mes_chave %}is-active{% endif %}"
+       href="{{ url_for('financeiro_painel.dashboard', mes=m.chave, academia_id=academia_id) }}">{{ m.label }}</a>
+    {% endfor %}
+  </div>
+
+  <div class="fp-kpis">
+    <div class="fp-kpi">
+      <div class="fp-kpi__label">Receita do Mês</div>
+      <div class="fp-kpi__value">{{ fmt_moeda(receita_mes) }}</div>
+      <div class="fp-kpi__sub">Anterior: {{ fmt_moeda(receita_anterior) }}</div>
+    </div>
+    <div class="fp-kpi">
+      <div class="fp-kpi__label">Receita Potencial</div>
+      <div class="fp-kpi__value">{{ fmt_moeda(receita_potencial) }}</div>
+      <div class="fp-kpi__sub">Se todos pagarem</div>
+    </div>
+    <div class="fp-kpi">
+      <div class="fp-kpi__label">Inadimplentes</div>
+      <div class="fp-kpi__value {% if inadimplentes > 0 %}fp-kpi__value--accent{% endif %}">{{ inadimplentes }}</div>
+      <div class="fp-kpi__sub">Pendentes + Atrasados</div>
+    </div>
+    <div class="fp-kpi">
+      <div class="fp-kpi__label">Adimplência</div>
+      <div class="fp-kpi__value">{{ taxa }}%</div>
+      <div class="fp-kpi__sub">{{ alunos_ativos }} alunos ativos</div>
+    </div>
+  </div>
+
+  <div class="fp-progress">
+    <div class="fp-progress__top">
+      <span class="fp-progress__label">Taxa de arrecadação — {{ mes_label }}</span>
+      <span class="fp-progress__count">{{ pagos }}/{{ total_cobrado }}</span>
+    </div>
+    <div class="fp-progress__track">
+      <div class="fp-progress__bar" style="width: {{ taxa }}%"></div>
+    </div>
+  </div>
+
+  <div class="fp-grid-2">
+
+    <div class="fp-card fp-card--pad">
+      <div class="fp-card__head">
+        <h2 class="fp-h2">Pendências — {{ mes_label }}</h2>
+        <span class="fp-card__count">{{ pendencias|length }} registros</span>
+      </div>
+      {% if not pendencias %}
+      <div class="fp-empty" style="padding:16px 0">Nenhuma pendência.</div>
+      {% endif %}
+      {% for p in pendencias %}
+      <div class="fp-lista-linha">
+        <div class="fp-lista-esq">
+          <span class="fp-dot fp-dot--sm" style="background: {{ cor_faixa(p.faixa) }}"></span>
+          <div>
+            <div class="fp-lista-nome">{{ p.nome }}</div>
+            <div class="fp-lista-sub">{{ p.faixa or 'Sem graduação' }}</div>
+          </div>
+        </div>
+        <div class="fp-lista-dir">
+          <span class="fp-lista-valor">{{ fmt_moeda(p.valor) }}</span>
+          <span class="fp-badge fp-badge--{{ p.status|lower }}">{{ p.status }}</span>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="fp-card fp-card--pad">
+      <h2 class="fp-h2" style="margin-bottom:14px">Alunos por Faixa</h2>
+      <div class="fp-faixas">
+        {% for faixa, qtd in faixas %}
+        {% set pct = ((qtd / total_ativos) * 100)|round|int %}
+        <div>
+          <div class="fp-faixa-linha__top">
+            <span class="fp-faixa-linha__nome" title="{{ faixa }}">{{ faixa }}</span>
+            <span class="fp-faixa-linha__n">{{ qtd }}</span>
+          </div>
+          <div class="fp-faixa-linha__track">
+            <div class="fp-faixa-linha__bar" style="width: {{ pct }}%; background: {{ cor_faixa(faixa) }}"></div>
+          </div>
+        </div>
+        {% else %}
+        <div class="fp-empty" style="padding:8px 0">Sem alunos ativos.</div>
+        {% endfor %}
+      </div>
+
+      <div class="fp-esperada">
+        <div class="fp-esperada__label">Receita esperada</div>
+        {% for e in esperada %}
+        <div class="fp-esperada__linha">
+          <span class="fp-esperada__nome">{{ e.nome }}</span>
+          <span class="fp-esperada__valor">{{ fmt_moeda(e.valor) }}</span>
+        </div>
+        {% else %}
+        <div class="fp-esperada__linha"><span class="fp-esperada__nome">Nada cobrado no mês</span></div>
+        {% endfor %}
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

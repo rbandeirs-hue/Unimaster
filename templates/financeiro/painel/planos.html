@@ -1,0 +1,92 @@
+{% extends "financeiro/painel/_layout.html" %}
+{% block title %}Planos de Mensalidade{% endblock %}
+
+{% block conteudo %}
+<div class="fp-page fp-page--form">
+
+  <div class="fp-head fp-head--row">
+    <div>
+      <h1 class="fp-h1">Planos de Mensalidade</h1>
+      <p class="fp-sub">{{ n_ativos }} planos ativos · {{ n_inativos }} inativos</p>
+    </div>
+    <a class="fp-btn" href="{{ url_for('financeiro_painel.planos', academia_id=academia_id, novo=1) }}">+ Novo Plano</a>
+  </div>
+
+  {% if mostrar_form %}
+  <form class="fp-card fp-card--form" method="POST" action="{{ url_for('financeiro_painel.planos_salvar') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
+    {% if em_edicao %}<input type="hidden" name="id" value="{{ em_edicao.id }}">{% endif %}
+
+    <h2 class="fp-h2 fp-h2--form">{{ 'Editar Plano' if em_edicao else 'Novo Plano de Mensalidade' }}</h2>
+
+    <div class="fp-form-grid">
+      <div>
+        <label class="fp-label" for="pl-nome">Nome do Plano *</label>
+        <input class="fp-input" id="pl-nome" name="nome" required maxlength="120"
+               value="{{ em_edicao.nome if em_edicao else '' }}" placeholder="Ex: Plano Iniciante">
+      </div>
+      <div>
+        <label class="fp-label" for="pl-valor">Valor Mensal (R$) *</label>
+        <input class="fp-input" id="pl-valor" name="valor" type="number" min="0" step="0.01" required
+               value="{{ '%.2f'|format(em_edicao.valor) if em_edicao else '' }}" placeholder="0,00">
+      </div>
+      <div class="fp-span-2">
+        <label class="fp-label" for="pl-desc">Descrição</label>
+        <input class="fp-input" id="pl-desc" name="descricao" maxlength="255"
+               value="{{ em_edicao.descricao or '' if em_edicao else '' }}" placeholder="Descrição do plano">
+      </div>
+      <div>
+        <label class="fp-label" for="pl-ativo">Status</label>
+        <select class="fp-input" id="pl-ativo" name="ativo">
+          <option value="ativo" {% if not em_edicao or em_edicao.ativo %}selected{% endif %}>Ativo</option>
+          <option value="inativo" {% if em_edicao and not em_edicao.ativo %}selected{% endif %}>Inativo</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="fp-form-acoes">
+      <button class="fp-btn" type="submit">{{ 'Salvar Alterações' if em_edicao else 'Cadastrar Plano' }}</button>
+      <a class="fp-btn-ghost" href="{{ url_for('financeiro_painel.planos', academia_id=academia_id) }}">Cancelar</a>
+    </div>
+  </form>
+  {% endif %}
+
+  <div class="fp-planos">
+    {% for p in lista %}
+    <div class="fp-card fp-plano {% if not p.ativo %}is-off{% endif %}">
+      <div class="fp-plano__row">
+        <div style="flex:1;min-width:0">
+          <div class="fp-plano__nome-row">
+            <span class="fp-plano__nome">{{ p.nome }}</span>
+            <span class="fp-badge fp-badge--{{ 'ativo' if p.ativo else 'inativo' }}">{{ 'Ativo' if p.ativo else 'Inativo' }}</span>
+          </div>
+          <p class="fp-plano__desc">{{ p.descricao or 'Sem descrição' }}</p>
+        </div>
+        <div class="fp-plano__dir">
+          <div class="fp-plano__valor">{{ fmt_moeda(p.valor) }}</div>
+          <div class="fp-plano__venc">por mês</div>
+          <div class="fp-plano__acoes">
+            <a class="fp-btn-mini" href="{{ url_for('financeiro_painel.planos', academia_id=academia_id, editar=p.id) }}">Editar</a>
+            <form method="POST" action="{{ url_for('financeiro_painel.planos_alternar', plano_id=p.id) }}" style="display:inline">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
+              <button class="fp-btn-mini" type="submit">{{ 'Desativar' if p.ativo else 'Ativar' }}</button>
+            </form>
+            <form method="POST" action="{{ url_for('financeiro_painel.planos_excluir', plano_id=p.id) }}" style="display:inline"
+                  onsubmit="return confirm('Excluir o plano {{ p.nome|e }}?')">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
+              <button class="fp-btn-mini fp-btn-mini--danger" type="submit">Excluir</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% else %}
+    <div class="fp-card fp-empty fp-empty--tall">Nenhum plano cadastrado ainda.</div>
+    {% endfor %}
+  </div>
+
+</div>
+{% endblock %}

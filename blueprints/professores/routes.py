@@ -71,8 +71,23 @@ def lista(academia_id):
     cur.execute(
         """
         SELECT p.id, p.nome, p.email, p.telefone, p.ativo, p.id_academia, p.usuario_id,
-               (SELECT a.foto FROM alunos a WHERE a.usuario_id = p.usuario_id LIMIT 1) AS foto_aluno
+               COALESCE(
+                   u.foto,
+                   (SELECT a.foto FROM alunos a WHERE a.usuario_id = p.usuario_id AND a.foto IS NOT NULL LIMIT 1),
+                   (SELECT u2.foto FROM usuarios u2
+                      WHERE p.cpf IS NOT NULL AND p.cpf <> ''
+                        AND REGEXP_REPLACE(u2.cpf, '[^0-9]', '') = REGEXP_REPLACE(p.cpf, '[^0-9]', '')
+                        AND u2.foto IS NOT NULL LIMIT 1),
+                   (SELECT a2.foto FROM alunos a2
+                      WHERE p.cpf IS NOT NULL AND p.cpf <> ''
+                        AND REGEXP_REPLACE(a2.cpf, '[^0-9]', '') = REGEXP_REPLACE(p.cpf, '[^0-9]', '')
+                        AND a2.foto IS NOT NULL LIMIT 1),
+                   (SELECT u3.foto FROM usuarios u3
+                      WHERE p.email IS NOT NULL AND p.email <> '' AND u3.email = p.email
+                        AND u3.foto IS NOT NULL LIMIT 1)
+               ) AS foto_aluno
         FROM professores p
+        LEFT JOIN usuarios u ON u.id = p.usuario_id
         WHERE p.id_academia = %s
         ORDER BY p.nome
         """,
@@ -153,25 +168,23 @@ def cadastrar(academia_id):
         INNER JOIN roles r ON r.id = ru.role_id
         INNER JOIN usuarios_academias ua ON ua.usuario_id = u.id AND ua.academia_id = %s
         LEFT JOIN alunos a ON a.usuario_id = u.id AND a.ativo = 1 AND a.id_academia = %s
-        WHERE u.ativo = 1 
+        WHERE u.ativo = 1
           AND (r.chave = 'professor' OR LOWER(r.nome) LIKE '%professor%')
-          AND u.id NOT IN (SELECT usuario_id FROM professores WHERE usuario_id IS NOT NULL)
+          AND u.id NOT IN (SELECT usuario_id FROM professores WHERE usuario_id IS NOT NULL AND id_academia = %s)
         ORDER BY u.nome
         """,
-        (academia_id, academia_id),
+        (academia_id, academia_id, academia_id),
     )
     usuarios = cur.fetchall()
 
     if request.method == "POST":
         usuario_id = request.form.get("usuario_id")
         usuario_id = int(usuario_id) if usuario_id and str(usuario_id).isdigit() else None
-        # Telefone pode vir do formulário ou será buscado do aluno
-        telefone = (request.form.get("telefone") or "").strip() or None
         if not usuario_id:
             flash("Selecione um usuário para vincular como professor.", "danger")
             db.close()
             return redirect(url_for("professores.cadastrar", academia_id=academia_id))
-        # Buscar dados do usuário e do aluno vinculado (se houver)
+        # Dados do professor são SEMPRE puxados do usuário (e telefone do aluno vinculado)
         cur.execute("""
             SELECT u.nome, u.email,
                    COALESCE(a.telefone, a.tel_celular, a.tel_residencial, a.tel_comercial) as telefone_aluno
@@ -180,23 +193,15 @@ def cadastrar(academia_id):
             WHERE u.id = %s
         """, (usuario_id,))
         u = cur.fetchone()
-        
-        # Usar dados do formulário se preenchidos, senão buscar do usuário
-        nome_form = (request.form.get("nome") or "").strip()
-        email_form = (request.form.get("email") or "").strip() or None
-        
-        nome = nome_form if nome_form else ((u.get("nome") or "").strip() if u else "")
-        email = email_form if email_form else ((u.get("email") or "").strip() or None if u else None)
-        telefone_aluno = u.get("telefone_aluno") if u else None
-        
+
+        nome = (u.get("nome") or "").strip() if u else ""
+        email = ((u.get("email") or "").strip() or None) if u else None
+        telefone = (u.get("telefone_aluno") or None) if u else None
+
         if not nome:
             flash("Usuário não encontrado.", "danger")
             db.close()
             return redirect(url_for("professores.cadastrar", academia_id=academia_id))
-        
-        # Usar telefone do formulário, ou do aluno, ou None (prioridade: formulário > aluno)
-        if not telefone and telefone_aluno:
-            telefone = telefone_aluno
         try:
             cur.execute(
                 """
@@ -290,22 +295,41 @@ def editar(professor_id):
         INNER JOIN roles_usuario ru ON ru.usuario_id = u.id
         INNER JOIN roles r ON r.id = ru.role_id
         INNER JOIN usuarios_academias ua ON ua.usuario_id = u.id AND ua.academia_id = %s
-        WHERE u.ativo = 1 
+        WHERE u.ativo = 1
           AND (r.chave = 'professor' OR LOWER(r.nome) LIKE '%professor%' OR u.id = %s)
-          AND (u.id NOT IN (SELECT usuario_id FROM professores WHERE usuario_id IS NOT NULL AND professores.id != %s) OR u.id = %s)
+          AND (u.id NOT IN (SELECT usuario_id FROM professores WHERE usuario_id IS NOT NULL AND id_academia = %s AND professores.id != %s) OR u.id = %s)
         ORDER BY u.nome
         """,
-        (academia_id, professor.get("usuario_id") or 0, professor_id, professor.get("usuario_id") or 0),
+        (academia_id, professor.get("usuario_id") or 0, academia_id, professor_id, professor.get("usuario_id") or 0),
     )
     usuarios = cur.fetchall()
 
     if request.method == "POST":
-        nome = (request.form.get("nome") or "").strip()
-        email = (request.form.get("email") or "").strip() or None
-        telefone = (request.form.get("telefone") or "").strip() or None
         ativo = 1 if request.form.get("ativo") == "1" else 0
         usuario_id = request.form.get("usuario_id")
         usuario_id = int(usuario_id) if usuario_id and str(usuario_id).isdigit() else None
+        # Nome/e-mail/telefone do professor são SEMPRE os do usuário vinculado
+        # (a edição desses dados é feita no cadastro de usuários).
+        # Sem usuário vinculado, mantém os dados atuais do professor.
+        if usuario_id:
+            cur.execute(
+                """
+                SELECT u.nome, u.email,
+                       COALESCE(a.telefone, a.tel_celular, a.tel_residencial, a.tel_comercial) AS tel
+                FROM usuarios u
+                LEFT JOIN alunos a ON a.usuario_id = u.id AND a.ativo = 1
+                WHERE u.id = %s
+                """,
+                (usuario_id,),
+            )
+            uu = cur.fetchone()
+            nome = ((uu.get("nome") or "").strip() if uu else "") or (professor.get("nome") or "")
+            email = ((uu.get("email") or "").strip() or None) if uu else professor.get("email")
+            telefone = (uu.get("tel") or None) if uu else professor.get("telefone")
+        else:
+            nome = professor.get("nome") or ""
+            email = professor.get("email")
+            telefone = professor.get("telefone")
         if not nome:
             flash("Nome do professor é obrigatório.", "danger")
             db.close()
@@ -318,6 +342,18 @@ def editar(professor_id):
                 """,
                 (nome, email, telefone, ativo, usuario_id, professor_id),
             )
+            # Professor inativo: remove responsável/auxiliar em turmas (evita painel/listagens antigas).
+            if ativo == 0:
+                cur.execute(
+                    "DELETE FROM turma_professor WHERE professor_id = %s",
+                    (professor_id,),
+                )
+            # Desvinculou o usuário do sistema: sem login não deve constar como professor da turma.
+            if usuario_id is None and professor.get("usuario_id"):
+                cur.execute(
+                    "DELETE FROM turma_professor WHERE professor_id = %s",
+                    (professor_id,),
+                )
             cur.execute("DELETE FROM professor_modalidade WHERE professor_id = %s", (professor_id,))
             modalidade_ids = [int(x) for x in request.form.getlist("modalidade_ids") if str(x).strip().isdigit()]
             if modalidade_ids:

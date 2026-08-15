@@ -4,6 +4,7 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, session
 from flask_login import login_required, current_user
 from config import get_db_connection
+from utils.upload_seguro import validar_upload, UploadInvalido
 from datetime import datetime, date, timedelta
 import mysql.connector.errors
 import hashlib
@@ -1437,12 +1438,13 @@ def sincronizar_pdf():
         # Ação: processar PDF enviado
         if acao == 'upload' or acao is None:
             arquivo = request.files.get('arquivo_pdf')
-            if not arquivo or arquivo.filename == '':
+            if not arquivo or not arquivo.filename:
                 flash('Selecione um arquivo PDF.', 'warning')
                 return redirect(url_for('calendario.sincronizar_pdf'))
-            
-            if not arquivo.filename.lower().endswith('.pdf'):
-                flash('O arquivo deve ser um PDF (.pdf).', 'warning')
+            try:
+                validar_upload(arquivo, categorias=["pdf"])
+            except UploadInvalido as e:
+                flash(str(e), 'warning')
                 return redirect(url_for('calendario.sincronizar_pdf'))
             
             eventos, erro = _extrair_eventos_do_pdf(arquivo)

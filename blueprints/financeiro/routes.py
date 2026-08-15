@@ -1927,6 +1927,122 @@ def _endereco_aluno(row):
     }
 
 
+@bp_financeiro.route("/cobranca/<origem>/<int:registro_id>/status")
+@login_required
+def status_cobranca(origem, registro_id):
+    """Diz se a cobrança já foi paga — a tela consulta enquanto o QR está aberto.
+
+    Normalmente a baixa vem do webhook do gateway; com `?gw=1` a rota também
+    pergunta ao Cora, o que confirma o pagamento na hora e serve de rede de
+    segurança se o webhook falhar. A tela alterna as duas formas para não
+    martelar a API do banco.
+    """
+    if origem not in ("mensalidade", "avulsa"):
+        return jsonify({"erro": "origem inválida"}), 400
+
+    ids = _get_academias_ids()
+    if not ids:
+        return jsonify({"erro": "sem academia"}), 403
+    ph = ",".join(["%s"] * len(ids))
+
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        if origem == "mensalidade":
+            cur.execute(
+                f"""SELECT ma.id, ma.status, ma.status_pagamento, ma.gateway, ma.asaas_payment_id,
+                           a.id_academia
+                    FROM mensalidade_aluno ma JOIN alunos a ON a.id = ma.aluno_id
+                    WHERE ma.id=%s AND a.id_academia IN ({ph})""",
+                (registro_id,) + tuple(ids),
+            )
+        else:
+            cur.execute(
+                f"""SELECT id, status, NULL AS status_pagamento, gateway, asaas_payment_id, id_academia
+                    FROM cobranca_avulsa WHERE id=%s AND id_academia IN ({ph})""",
+                (registro_id,) + tuple(ids),
+            )
+        rec = cur.fetchone()
+    finally:
+        conn.close()
+
+    if not rec:
+        return jsonify({"erro": "não encontrada"}), 404
+
+    pago = (rec.get("status") or "").lower() == "pago" or rec.get("status_pagamento") == "pago"
+
+    if not pago and request.args.get("gw") == "1" and (rec.get("gateway") or "") == "cora" \
+            and rec.get("asaas_payment_id"):
+        cfg = _gateway_config_academia(rec["id_academia"])
+        if _cora_configurado(cfg):
+            try:
+                inv = _cora_client(cfg).consultar(rec["asaas_payment_id"]) or {}
+                if str(inv.get("status") or "").upper() in ("PAID", "SETTLED"):
+                    valor_pago = None
+                    try:
+                        cents = inv.get("total_paid") or inv.get("total_amount")
+                        valor_pago = float(cents) / 100.0 if cents else None
+                    except (TypeError, ValueError):
+                        valor_pago = None
+                    _baixar_cobranca_paga(origem, registro_id, valor_pago, "Cora")
+                    pago = True
+            except Exception as e:
+                current_app.logger.info(
+                    "Consulta de status no Cora falhou (%s %s): %s", origem, registro_id, e
+                )
+
+    return jsonify({"pago": pago, "status": (rec.get("status") or "").lower()})
+
+
+def _cancelar_no_gateway(cfg, gateway, payment_id):
+    """Cancela a cobrança anterior no gateway, quando ele permite. Best-effort.
+
+    Usado ao trocar o tipo (PIX <-> boleto) de um registro que já tinha cobrança:
+    sem isso ficariam duas cobranças abertas para a mesma dívida, e o pagador
+    poderia pagar as duas.
+    """
+    gateway = (gateway or "").lower()
+    if not payment_id:
+        return
+    if gateway != "cora":
+        # Só o cliente do Cora expõe cancelamento hoje; nos demais a cobrança
+        # antiga fica aberta e precisa ser cancelada no painel do gateway.
+        current_app.logger.info(
+            "Cobrança anterior %s (%s) não foi cancelada: gateway sem cancelamento pela API.",
+            payment_id, gateway or "?",
+        )
+        return
+    try:
+        _cora_client(cfg).cancelar(payment_id)
+    except Exception as e:
+        current_app.logger.warning(
+            "Não deu para cancelar a cobrança anterior no Cora (%s): %s", payment_id, e
+        )
+
+
+def _cobranca_online_em_aberto(rec):
+    """True se o registro já tem cobrança online emitida e ainda não paga."""
+    return bool((rec.get("asaas_payment_id") or "").strip()
+                and (rec.get("status") or "").lower() in ("pendente", "atrasado"))
+
+
+def _cobranca_gateway_ainda_vale(cfg, gateway, payment_id):
+    """A cobrança emitida ainda é pagável no gateway?
+
+    False só quando dá para confirmar que morreu (cancelada no app do banco, por
+    exemplo) — aí faz sentido emitir outra. None quando não há como perguntar, e
+    nesse caso a decisão fica com o estado gravado aqui.
+    """
+    if (gateway or "").lower() != "cora" or not payment_id:
+        return None
+    try:
+        status = str((_cora_client(cfg).consultar(payment_id) or {}).get("status") or "").upper()
+    except Exception as e:
+        current_app.logger.info("Não deu para consultar a invoice %s no Cora: %s", payment_id, e)
+        return None
+    return status in ("DRAFT", "OPEN", "IN_PAYMENT", "LATE")
+
+
 def _emitir_cobranca_online(cfg, tipo, *, nome, cpf, email, telefone, valor, vencimento,
                             descricao, origem, registro_id, endereco=None):
     """Cria a cobrança no gateway ATIVO da academia. Retorna dict normalizado:
@@ -2077,7 +2193,8 @@ def gerar_cobranca_asaas(ma_id):
     cur = conn.cursor(dictionary=True)
     try:
         cur.execute(
-            """SELECT ma.id, ma.valor, ma.data_vencimento,
+            """SELECT ma.id, ma.valor, ma.data_vencimento, ma.status,
+                      ma.asaas_payment_id, ma.asaas_tipo, ma.gateway,
                       a.nome, a.cpf, a.email, a.telefone, a.id_academia,
                       a.responsavel_financeiro_nome, a.responsavel_financeiro_cpf,
                       a.responsavel_financeiro_telefone,
@@ -2099,6 +2216,18 @@ def gerar_cobranca_asaas(ma_id):
             flash("Cobrança online não está habilitada para esta academia. "
                   "Ative em Configurações da academia → Financeiro.", "warning")
             return redirect(destino)
+
+        # Já emitida: não gera outra. Clicar de novo no PIX/boleto criava uma
+        # cobrança nova no gateway a cada clique, deixando várias abertas para a
+        # mesma mensalidade. Mesmo tipo => reaproveita; tipo diferente => cancela
+        # a anterior antes de emitir a nova.
+        if _cobranca_online_em_aberto(ma) and \
+                _cobranca_gateway_ainda_vale(cfg, ma.get("gateway"), ma.get("asaas_payment_id")) is not False:
+            if (ma.get("asaas_tipo") or "").upper() in (tipo, "LINK"):
+                flash("Esta mensalidade já tem cobrança online emitida — use o QR Code e o "
+                      "copia e cola que já estão na tela.", "info")
+                return redirect(destino)
+            _cancelar_no_gateway(cfg, ma.get("gateway"), ma.get("asaas_payment_id"))
 
         pag_nome, pag_cpf, pag_tel = _dados_pagador(ma)
         r = _emitir_cobranca_online(
@@ -2138,7 +2267,8 @@ def gerar_cobranca_asaas_avulsa(av_id):
     cur = conn.cursor(dictionary=True)
     try:
         cur.execute(
-            """SELECT ca.id, ca.valor, ca.data_vencimento, ca.descricao,
+            """SELECT ca.id, ca.valor, ca.data_vencimento, ca.descricao, ca.status,
+                      ca.asaas_payment_id, ca.asaas_tipo, ca.gateway,
                       a.nome, a.cpf, a.email, a.telefone, ca.id_academia,
                       a.responsavel_financeiro_nome, a.responsavel_financeiro_cpf,
                       a.responsavel_financeiro_telefone,
@@ -2160,6 +2290,15 @@ def gerar_cobranca_asaas_avulsa(av_id):
             flash("Cobrança online não está habilitada para esta academia. "
                   "Ative em Configurações da academia → Financeiro.", "warning")
             return redirect(destino)
+
+        # Mesma regra da mensalidade: não emitir duas cobranças para a mesma dívida.
+        if _cobranca_online_em_aberto(ca) and \
+                _cobranca_gateway_ainda_vale(cfg, ca.get("gateway"), ca.get("asaas_payment_id")) is not False:
+            if (ca.get("asaas_tipo") or "").upper() in (tipo, "LINK"):
+                flash("Esta cobrança já tem PIX/boleto emitido — use o QR Code e o "
+                      "copia e cola que já estão na tela.", "info")
+                return redirect(destino)
+            _cancelar_no_gateway(cfg, ca.get("gateway"), ca.get("asaas_payment_id"))
 
         descricao = (ca.get("descricao") or "Cobrança avulsa") + f" - {ca['nome']}"
         pag_nome, pag_cpf, pag_tel = _dados_pagador(ca)
@@ -3572,7 +3711,7 @@ def mensalidades_alunos():
             SELECT ma.id, ma.mensalidade_id, ma.data_vencimento, ma.data_pagamento, ma.valor, ma.valor_pago, ma.status,
                    ma.status_pagamento, ma.comprovante_url, ma.observacoes,
                    ma.valor_original, ma.desconto_aplicado, ma.id_desconto, ma.turma_id,
-                   ma.asaas_boleto_url, ma.asaas_pix_copia_cola, ma.asaas_tipo,
+                   ma.asaas_boleto_url, ma.asaas_pix_copia_cola, ma.asaas_pix_qrcode, ma.asaas_tipo,
                    COALESCE(ma.remover_juros, 0) AS remover_juros,
                    m.nome as plano_nome, m.id_academia, a.id as aluno_id, a.nome as aluno_nome, a.foto as aluno_foto,
                    COALESCE(m.aplicar_juros_multas, 0) AS aplicar_juros_multas,
@@ -3722,7 +3861,7 @@ def mensalidades_alunos():
                 where_av.append("1=0")
         cur.execute(f"""
             SELECT id, descricao, valor, data_vencimento, data_pagamento, valor_pago, status, aluno_id,
-                   asaas_payment_id, asaas_tipo, asaas_boleto_url, asaas_pix_copia_cola
+                   asaas_payment_id, asaas_tipo, asaas_boleto_url, asaas_pix_copia_cola, asaas_pix_qrcode
             FROM cobranca_avulsa WHERE {' AND '.join(where_av)}
             ORDER BY data_vencimento DESC
             LIMIT 200

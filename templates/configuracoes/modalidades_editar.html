@@ -10,6 +10,7 @@
         </div>
         <div class="card-body p-4">
             <form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="mb-3">
                     <label for="nome" class="form-label fw-semibold">Nome <span class="text-danger">*</span></label>
                     <input type="text" class="form-control" id="nome" name="nome" required placeholder="Ex: Judô, Jiu-Jitsu" value="{{ request.form.get('nome', modalidade.nome or '') }}">
@@ -37,6 +38,13 @@
                         </div>
                     </div>
                 </div>
+                {% if not is_admin and academia_contexto %}
+                <div class="alert alert-info py-2 small">
+                    Modalidade no contexto da academia <strong>{{ academia_contexto.nome }}</strong>.
+                    Com <strong>Privada</strong>, só esta academia visualiza.
+                </div>
+                {% endif %}
+                {% if is_admin %}
                 <div class="mb-3" id="bloco_dono" style="display:{% if modalidade.visibilidade == 'privada' %}block{% else %}none{% endif %};">
                     <label class="form-label fw-semibold">Restringir a</label>
                     <div class="row">
@@ -58,6 +66,8 @@
                         </div>
                     </div>
                 </div>
+                {% endif %}
+                {% if is_admin %}
                 <div class="mb-4">
                     <label class="form-label fw-semibold">Vincular às academias</label>
                     <div class="border rounded p-3" style="max-height: 220px; overflow-y: auto;">
@@ -70,9 +80,11 @@
                         {% if not academias %}<p class="text-muted small mb-0">Nenhuma academia cadastrada.</p>{% endif %}
                     </div>
                 </div>
+                {% endif %}
                 <div class="d-flex gap-2">
                     <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i> Salvar</button>
-                    <a href="{{ url_for('configuracoes.modalidades_lista') }}" class="btn btn-outline-secondary">Cancelar</a>
+                    <a href="{{ url_for('configuracoes.modalidades_graduacoes', modalidade_id=modalidade.id, academia_id=academia_contexto_id) }}" class="btn btn-outline-dark">Graduações</a>
+                    <a href="{{ url_for('configuracoes.modalidades_lista', academia_id=academia_contexto_id) }}" class="btn btn-outline-secondary">Cancelar</a>
                 </div>
             </form>
         </div>
@@ -84,11 +96,13 @@ document.querySelectorAll('input[name="visibilidade"]').forEach(function(r) {
         document.getElementById('bloco_dono').style.display = this.value === 'privada' ? 'block' : 'none';
     });
 });
-document.getElementById('id_associacao').addEventListener('change', function() {
-    if (this.value) document.getElementById('id_academia').value = '';
-});
-document.getElementById('id_academia').addEventListener('change', function() {
-    if (this.value) document.getElementById('id_associacao').value = '';
-});
+if (document.getElementById('id_associacao') && document.getElementById('id_academia')) {
+    document.getElementById('id_associacao').addEventListener('change', function() {
+        if (this.value) document.getElementById('id_academia').value = '';
+    });
+    document.getElementById('id_academia').addEventListener('change', function() {
+        if (this.value) document.getElementById('id_associacao').value = '';
+    });
+}
 </script>
 {% endblock %}

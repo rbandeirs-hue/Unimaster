@@ -1,0 +1,258 @@
+{% extends 'base.html' %}
+{% block title %}{{ comp.nome }} — Admin{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <a href="{{ url_for('admin.competicoes') }}" class="back-link">← Competições</a>
+    <h1>{{ comp.nome }}</h1>
+    <p class="sub-info">
+      {{ comp.data.strftime('%d/%m/%Y') if comp.data else 'Sem data' }}
+      {% if comp.local %} · {{ comp.local }}{% endif %}
+      · <span class="tipo-badge tipo-{{ comp.tipo.lower() if comp.tipo else 'oficial' }}">{{ comp.tipo }}</span>
+      {% if comp.festival_aproximacao %}
+      · <span class="tipo-badge tipo-aprox" title="Inscrições sem categoria fixa">Aproximação</span>
+      {% endif %}
+    </p>
+  </div>
+  <div style="display:flex;gap:10px">
+    <a href="{{ url_for('home.competicao', comp_id=comp.id) }}" class="btn-action"
+       style="background:var(--surface-2);border:1px solid var(--border);color:var(--text)">
+      Ver público
+    </a>
+    <a href="{{ url_for('admin.inscricoes', comp_id=comp.id) }}" class="btn-action">
+      Inscrições
+    </a>
+  </div>
+</div>
+
+<!-- Stats -->
+<div class="stats-row" style="margin-bottom:32px">
+  <div class="stat-card">
+    <div class="stat-num">{{ inscritos_total }}</div>
+    <div class="stat-label">Inscritos</div>
+    <a href="{{ url_for('admin.inscricoes', comp_id=comp.id) }}" class="stat-link">Gerenciar →</a>
+  </div>
+  <div class="stat-card">
+    <div class="stat-num">{{ inscritos_confirm }}</div>
+    <div class="stat-label">Confirmados</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-num">{{ categorias|length }}</div>
+    <div class="stat-label">Categorias</div>
+  </div>
+</div>
+
+<div class="two-col">
+
+  <!-- Categorias -->
+  <div class="col-main">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+      <h2 class="section-title" style="margin-bottom:0">Categorias</h2>
+    </div>
+
+    {% if not categorias %}
+    <div class="form-card cat-gerar-opcoes" style="margin-bottom:20px">
+      <h3 class="form-titulo">Como deseja gerar as categorias?</h3>
+      <p class="empty-hint" style="margin-bottom:0">
+        Escolha entre o catálogo oficial (todas de uma vez) ou cadastro <strong>personalizado</strong>, faixa a faixa.
+      </p>
+      <div class="cat-gerar-grid">
+        <div class="cat-gerar-opt">
+          <strong>Catálogo oficial CBJ</strong>
+          <p class="empty-hint" style="margin:0">Cria as 290 categorias do registro CBJ alinhadas ao catálogo oficial.</p>
+          <button type="button" class="btn-action" onclick="gerarCategorias({{ comp.id }})">Gerar catálogo CBJ (290)</button>
+        </div>
+        <div class="cat-gerar-opt">
+          <strong>Categorias personalizadas</strong>
+          <p class="empty-hint" style="margin:0">Nome, sexo, peso e idade por você. Ideal para festivais, internos ou regras que não seguem o catálogo CBJ.</p>
+          <a href="#categorias-personalizadas" class="btn-action"
+             style="display:inline-block;text-align:center;background:var(--surface-2);border:1px solid var(--border);color:var(--text);text-decoration:none;padding:10px 16px;border-radius:8px;font-weight:700;font-size:14px">
+            Ir para formulário personalizado
+          </a>
+        </div>
+      </div>
+    </div>
+    <p class="empty-hint" style="margin-bottom:16px">
+      A lista abaixo está vazia até você usar uma das opções acima ou preencher o formulário personalizado.
+    </p>
+    {% endif %}
+
+    {% if categorias %}
+    <table class="tabela">
+      <thead>
+        <tr><th>Nome</th><th>Sexo</th><th>Peso (kg)</th><th>Idade</th><th>Lutas</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for cat in categorias %}
+        <tr>
+          <td class="td-nome">{{ cat.nome }}</td>
+          <td><span class="sexo-badge sexo-{{ cat.sexo }}">{{ cat.sexo }}</span></td>
+          <td>
+            {% if cat.peso_min is not none %}{{ cat.peso_min | int }}{% else %}—{% endif %}
+            /
+            {% if cat.peso_max is not none %}{{ cat.peso_max | int }}{% else %}open{% endif %}
+          </td>
+          <td>{{ cat.idade_min }}–{% if cat.idade_max is not none %}{{ cat.idade_max }}{% else %}+{% endif %}</td>
+          <td>
+            {% set nl = lutas_por_cat.get(cat.id, 0) %}
+            {% if nl %}
+              <a href="{{ url_for('bracket.pagina', categoria_id=cat.id) }}" class="link-action">
+                {{ nl }} lutas
+              </a>
+            {% else %}
+              <span class="td-muted">—</span>
+            {% endif %}
+          </td>
+          <td class="td-acoes">
+            <a href="{{ url_for('admin.categoria_editar', cat_id=cat.id) }}" class="link-action">Ajustar</a>
+            {% if lutas_por_cat.get(cat.id, 0) == 0 %}
+            <button type="button" class="btn-sm" onclick="gerarChave({{ cat.id }}, this)">Gerar chave</button>
+            <form method="POST" action="{{ url_for('admin.categoria_excluir', cat_id=cat.id) }}"
+                  style="display:inline" onsubmit="return confirm('Excluir esta categoria? Não há como desfazer.')">
+              <button type="submit" class="btn-danger-sm">Excluir</button>
+            </form>
+            {% else %}
+            <a href="{{ url_for('bracket.pagina', categoria_id=cat.id) }}" class="link-action">Ver chave</a>
+            <button type="button" class="btn-danger-sm" onclick="resetarCategoria({{ cat.id }}, this)">Resetar</button>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+
+    <div id="categorias-personalizadas" class="form-card" style="margin-top:{% if categorias %}24px{% else %}0{% endif %}">
+      <h3 class="form-titulo">{% if categorias %}Adicionar categoria personalizada{% else %}Cadastrar categorias personalizadas{% endif %}</h3>
+      {% if comp.festival_aproximacao %}
+      <p class="empty-hint" style="margin-bottom:14px">
+        Modo <strong>aproximação</strong>: atletas <strong>confirmados</strong> entram em toda categoria em que peso, idade e sexo coincidem (data de hoje).
+        Evite faixas sobrepostas no mesmo sexo se não quiser o mesmo atleta em várias chaves.
+      </p>
+      {% else %}
+      <p class="empty-hint" style="margin-bottom:14px">
+        Use quando não for usar só o catálogo CBJ ou para categorias extras. Para restringir um atleta a uma faixa, defina a categoria na inscrição (admin Inscrições).
+        Se a inscrição não tiver categoria, o sistema considera o atleta em todas as faixas em que ele encaixar por peso, idade e sexo.
+      </p>
+      {% endif %}
+      <form method="POST" action="{{ url_for('admin.competicao_categoria_aproximacao', comp_id=comp.id) }}">
+        <div class="field">
+          <label>Nome da categoria *</label>
+          <input type="text" name="nome" required placeholder="Ex: SUB 11 M -28 a -35 kg">
+        </div>
+        <div class="field">
+          <label>Sexo *</label>
+          <select name="sexo" required>
+            <option value="M">Masculino</option>
+            <option value="F">Feminino</option>
+          </select>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label>Idade mínima</label>
+            <input type="number" name="idade_min" min="0" max="99" placeholder="vazio = sem mínimo">
+          </div>
+          <div class="field">
+            <label>Idade máxima</label>
+            <input type="number" name="idade_max" min="0" max="99" placeholder="vazio = sem máximo">
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label>Peso mín. (kg)</label>
+            <input type="text" name="peso_min" inputmode="decimal" placeholder="ex: 28">
+          </div>
+          <div class="field">
+            <label>Peso máx. (kg)</label>
+            <input type="text" name="peso_max" inputmode="decimal" placeholder="ex: 35 (aberto se vazio)">
+          </div>
+        </div>
+        <button type="submit" class="btn-submit">Adicionar categoria</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Editar competição -->
+  <div class="col-side">
+    <div class="form-card">
+      <h3 class="form-titulo">Editar Competição</h3>
+      <form method="POST" action="{{ url_for('admin.competicao_editar', comp_id=comp.id) }}">
+        <div class="field">
+          <label>Nome *</label>
+          <input type="text" name="nome" required value="{{ comp.nome }}">
+        </div>
+        <div class="field">
+          <label>Data</label>
+          <input type="date" name="data"
+                 value="{{ comp.data.isoformat() if comp.data else '' }}">
+        </div>
+        <div class="field">
+          <label>Local</label>
+          <input type="text" name="local" value="{{ comp.local or '' }}" placeholder="Ginásio Municipal">
+        </div>
+        <div class="field">
+          <label>Tipo</label>
+          <select name="tipo">
+            <option value="OFICIAL"  {% if comp.tipo == 'OFICIAL'  %}selected{% endif %}>Oficial</option>
+            <option value="FESTIVAL" {% if comp.tipo == 'FESTIVAL' %}selected{% endif %}>Festival</option>
+          </select>
+        </div>
+        <div class="field field--checkbox">
+          <input type="hidden" name="festival_aproximacao" value="0" />
+          <label class="checkbox-label">
+            <input type="checkbox" name="festival_aproximacao" value="1" {% if comp.festival_aproximacao %}checked{% endif %} />
+            Festival por aproximação — categorias por peso/idade; inscrições sem categoria fixa
+          </label>
+        </div>
+        <button type="submit" class="btn-submit">Salvar alterações</button>
+      </form>
+    </div>
+  </div>
+
+</div>
+
+<div id="toast" class="toast" hidden></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function gerarCategorias(compId) {
+  if (!confirm('Gerar as 290 categorias do catálogo oficial CBJ?\n\nSó é permitido enquanto a competição ainda não tiver categorias cadastradas. Para personalizadas, use o formulário na página.')) return;
+  const r = await fetch(`/api/competicoes/${compId}/gerar-categorias`, { method: 'POST' });
+  const d = await r.json();
+  if (r.ok) { toast(`✓ ${d.data.categorias_criadas} categorias criadas.`, 'ok'); setTimeout(() => location.reload(), 1200); }
+  else       { toast('Erro: ' + d.error, 'erro'); }
+}
+
+async function gerarChave(catId, btn) {
+  if (!confirm('Gerar chave para esta categoria?\nAtletas confirmados serão sorteados automaticamente.')) return;
+  btn.disabled = true;
+  btn.textContent = '…';
+  const r = await fetch(`/api/categorias/${catId}/gerar-chave`, { method: 'POST' });
+  const d = await r.json();
+  if (r.ok) { toast(`✓ ${d.data.lutas_criadas} lutas criadas.`, 'ok'); setTimeout(() => location.reload(), 1200); }
+  else       { toast('Erro: ' + d.error, 'erro'); btn.disabled = false; btn.textContent = 'Gerar chave'; }
+}
+
+async function resetarCategoria(catId, btn) {
+  if (!confirm('Resetar esta categoria?\n\nSerão apagadas todas as lutas e resultados. Os atletas inscritos não são removidos. Esta ação não pode ser desfeita.')) return;
+  if (btn) { btn.disabled = true; btn.textContent = '…'; }
+  const r = await fetch(`/api/categorias/${catId}/resetar-chave`, { method: 'POST' });
+  const d = await r.json();
+  if (r.ok) { toast(`✓ Chave limpa (${d.data.lutas_removidas} lutas).`, 'ok'); setTimeout(() => location.reload(), 1200); }
+  else {
+    toast('Erro: ' + (d.error || r.statusText), 'erro');
+    if (btn) { btn.disabled = false; btn.textContent = 'Resetar'; }
+  }
+}
+
+function toast(msg, tipo) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = `toast toast--${tipo}`;
+  t.hidden = false;
+  setTimeout(() => { t.hidden = true; }, 3500);
+}
+</script>
+{% endblock %}

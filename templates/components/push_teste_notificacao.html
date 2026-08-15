@@ -1,0 +1,110 @@
+{# Bloco: teste de Web Push — grava assinatura deste aparelho no servidor e envia um push. #}
+{% if current_user.is_authenticated %}
+<div class="alert alert-light border mb-3">
+  <h6 class="fw-bold mb-2"><i class="bi bi-bell-fill me-1 text-warning"></i> Teste de notificação push</h6>
+  <p class="small text-muted mb-2 mb-0">
+    O botão abaixo <strong>registra este aparelho no servidor</strong> (se ainda não estiver) e envia uma notificação de teste.
+    Permita notificações quando o navegador pedir. Em outro aparelho, é preciso testar de novo nesse aparelho.
+  </p>
+  <div class="mt-2 d-flex flex-wrap align-items-center gap-2">
+    <button type="button" class="btn btn-outline-primary btn-sm" id="btnPushTesteUnimaster">
+      <i class="bi bi-send-fill me-1"></i> Gravar aparelho e enviar teste
+    </button>
+    <span id="msgPushTesteUnimaster" class="small text-muted"></span>
+  </div>
+</div>
+<script>
+(function () {
+  var b = document.getElementById('btnPushTesteUnimaster');
+  if (!b || b.dataset.pushTesteBound) return;
+  b.dataset.pushTesteBound = '1';
+  var out = document.getElementById('msgPushTesteUnimaster');
+  var url = {{ url_for('notificacoes.push_test')|tojson }};
+  b.addEventListener('click', function () {
+    var m = document.querySelector('meta[name="csrf-token"]');
+    var tok = m ? String(m.getAttribute('content') || '').trim() : '';
+    if (!tok) {
+      if (out) { out.textContent = 'Recarregue a página e tente de novo.'; out.className = 'small text-danger'; }
+      return;
+    }
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+      if (out) { out.textContent = 'Este navegador não suporta Web Push.'; out.className = 'small text-danger'; }
+      return;
+    }
+    if (!window.obterRegistroPush || !window.unimasterUrlBase64ToUint8Array || !window.unimasterVapidPublicKey) {
+      if (out) { out.textContent = 'Carregue a página completa (menu superior) e tente de novo.'; out.className = 'small text-danger'; }
+      return;
+    }
+    b.disabled = true;
+    if (out) { out.textContent = 'Preparando…'; out.className = 'small text-muted'; }
+
+    Promise.resolve()
+      .then(function () { return window.obterRegistroPush(); })
+      .then(function (reg) {
+        return Notification.requestPermission().then(function (perm) {
+          return { reg: reg, perm: perm };
+        });
+      })
+      .then(function (x) {
+        if (x.perm !== 'granted') {
+          throw new Error('Permissão de notificação negada. Ative nas configurações do navegador para este site.');
+        }
+        return x.reg;
+      })
+      .then(function (reg) {
+        return reg.pushManager.getSubscription().then(function (sub) {
+          if (sub) return sub;
+          return reg.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: window.unimasterUrlBase64ToUint8Array(window.unimasterVapidPublicKey)
+          });
+        });
+      })
+      .then(function (sub) {
+        if (out) { out.textContent = 'Salvando e enviando…'; }
+        return fetch(url, {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'X-CSRFToken': tok
+          },
+          body: JSON.stringify({ subscription: sub.toJSON() })
+        });
+      })
+      .then(function (r) { return r.json().catch(function () { return {}; }); })
+      .then(function (j) {
+        b.disabled = false;
+        if (!out) return;
+        var txt = (j && j.msg) ? j.msg : 'Resposta inesperada.';
+        if (j && j.python_executable) {
+          txt += '\n\nPython do servidor (use este para pip install):\n' + j.python_executable;
+        }
+        if (j && j.como_instalar) {
+          txt += '\n\n' + j.como_instalar;
+        }
+        if (j && j.como_instalar_debian_pep668) {
+          txt += '\n' + j.como_instalar_debian_pep668 + '   ← se o pip acima recusar (Debian/Ubuntu PEP 668)';
+        }
+        if (j && j.detalhes && j.detalhes.length) {
+          txt += '\n\n' + j.detalhes.join('\n');
+        }
+        out.textContent = txt;
+        out.style.whiteSpace = (j && j.detalhes && j.detalhes.length) ? 'pre-wrap' : '';
+        out.className = j && j.ok ? 'small text-success' : 'small text-danger';
+        if (j && j.ok && typeof window.unimasterAtualizarSinoPushVisual === 'function') {
+          try { window.unimasterAtualizarSinoPushVisual(true); } catch (e) {}
+        }
+      })
+      .catch(function (e) {
+        b.disabled = false;
+        if (out) {
+          out.textContent = (e && e.message) ? String(e.message) : 'Erro ao preparar push.';
+          out.className = 'small text-danger';
+        }
+      });
+  });
+})();
+</script>
+{% endif %}

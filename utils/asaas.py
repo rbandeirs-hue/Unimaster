@@ -93,3 +93,30 @@ class AsaasClient:
         """Retorna {encodedImage, payload, ...} do QR Code PIX da cobrança."""
         r = requests.get(f"{self._base_url()}/payments/{payment_id}/pixQrCode", headers=self._headers(), timeout=TIMEOUT)
         return r.json() or {}
+
+    def criar_assinatura_recorrente(self, valor, descricao, external_reference=None,
+                                    nome=None, ciclo="MONTHLY", metodo="cartao"):
+        """Cria um LINK de pagamento recorrente — o aluno se cadastra uma vez na página
+        hospedada do Asaas e a cobrança se repete automaticamente a cada ciclo.
+        metodo='cartao' (débito automático no cartão) ou 'pix' (PIX recorrente).
+        Retorna {subscription_id, url}.
+
+        Usa paymentLinks com chargeType=RECURRENT (não trafega dados de cartão pelo
+        nosso servidor → fora do escopo PCI)."""
+        billing = "PIX" if str(metodo).lower() == "pix" else "CREDIT_CARD"
+        payload = {
+            "name": (nome or descricao or "Mensalidade recorrente")[:100],
+            "billingType": billing,
+            "chargeType": "RECURRENT",
+            "subscriptionCycle": (ciclo or "MONTHLY").upper(),
+            "value": round(float(valor), 2),
+            "description": (descricao or "Mensalidade recorrente")[:500],
+            "dueDateLimitDays": 7,
+        }
+        if external_reference is not None:
+            payload["externalReference"] = str(external_reference)
+        r = requests.post(f"{self._base_url()}/paymentLinks", headers=self._headers(), json=payload, timeout=TIMEOUT)
+        j = r.json() or {}
+        if not j.get("id") or not j.get("url"):
+            raise RuntimeError(f"Falha ao criar assinatura recorrente no Asaas: {j}")
+        return {"subscription_id": j["id"], "url": j["url"]}

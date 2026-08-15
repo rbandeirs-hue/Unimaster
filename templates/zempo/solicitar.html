@@ -1,0 +1,665 @@
+{% extends "base.html" %}
+{% block title %}Cadastro no Zempo{% endblock %}
+{% block content %}
+<div class="container-fluid" style="max-width:1280px;">
+
+  {# Cabeçalho: identidade da tela e saída. #}
+  <div class="d-flex flex-wrap align-items-start justify-content-between gap-2 mb-3">
+    <div>
+      <h1 class="h4 mb-1"><i class="bi bi-people-fill text-primary me-2"></i>Cadastro de atletas no Zempo</h1>
+      <p class="text-muted small mb-0">
+        Selecione os alunos e solicite o cadastro. A associação faz a migração.
+      </p>
+    </div>
+    <a href="{{ url_for('painel.home') }}" class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-arrow-left me-1"></i>Voltar
+    </a>
+  </div>
+
+  {# Barra de trabalho: à esquerda o que filtra a lista, à direita o que age sobre ela. #}
+  <div class="card shadow-sm mb-3">
+    <div class="card-body py-2 d-flex flex-wrap align-items-center justify-content-between gap-2">
+      <form method="get" class="d-flex flex-wrap align-items-center gap-2">
+        {% if academias | length > 1 %}
+        <select name="academia_id" class="form-select form-select-sm" style="width:auto;"
+                onchange="this.form.submit()">
+          <option value="">Todas as academias</option>
+          {% for ac in academias %}
+          <option value="{{ ac.id }}" {% if ac.id == academia_id %}selected{% endif %}>{{ ac.nome }}</option>
+          {% endfor %}
+        </select>
+        {% elif academia_id %}
+        <input type="hidden" name="academia_id" value="{{ academia_id }}">
+        {% endif %}
+
+        <div class="input-group input-group-sm" style="width:260px;">
+          <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+          <input type="search" name="busca" class="form-control" value="{{ busca or '' }}"
+                 placeholder="Nome ou CPF" aria-label="Buscar aluno">
+          {% if busca %}
+          <a class="btn btn-outline-secondary"
+             href="{{ url_for('zempo.solicitar', academia_id=academia_id) }}" title="Limpar busca">
+            <i class="bi bi-x-lg"></i>
+          </a>
+          {% endif %}
+        </div>
+
+        {% if busca %}
+          <span class="badge bg-secondary-subtle text-secondary-emphasis">
+            filtrando por "{{ busca }}"
+          </span>
+        {% endif %}
+      </form>
+
+      <div class="d-flex flex-wrap gap-2">
+        <button type="button" class="btn btn-sm btn-outline-dark" onclick="abrirVinculoLote()">
+          <i class="bi bi-search me-1"></i>Buscar números no Zempo
+        </button>
+      </div>
+
+      {% if link_publico %}
+      <div class="d-flex flex-wrap gap-2">
+        <span class="text-muted small align-self-center d-none d-lg-inline">
+          Link para o aluno se cadastrar:
+        </span>
+        <button type="button" class="btn btn-sm btn-outline-primary" onclick="copiarLinkCadastro()">
+          <i class="bi bi-link-45deg me-1"></i>Copiar link
+        </button>
+        <button type="button" class="btn btn-sm btn-success" onclick="abrirEnvioWhatsapp()">
+          <i class="bi bi-whatsapp me-1"></i>Enviar por WhatsApp
+        </button>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if link_publico %}
+  <div class="alert alert-light border py-2 small d-none" id="aviso_link">
+    Link copiado: <code>{{ link_publico }}</code>
+  </div>
+
+  <div class="card border-success shadow-sm mb-3 d-none" id="caixa_whatsapp">
+    <div class="card-body py-3">
+      <div class="d-flex justify-content-between align-items-start">
+        <h2 class="h6 fw-bold mb-2">
+          <i class="bi bi-whatsapp text-success me-1"></i>Enviar o link por WhatsApp
+        </h2>
+        <button type="button" class="btn-close" onclick="abrirEnvioWhatsapp()"></button>
+      </div>
+
+      <div class="row g-3">
+        <div class="col-md-5">
+          <label class="form-label small fw-semibold" for="wa_numero">Digitar um número</label>
+          <div class="input-group input-group-sm">
+            <span class="input-group-text">+55</span>
+            <input type="tel" class="form-control" id="wa_numero" inputmode="numeric"
+                   maxlength="15" placeholder="(81) 99999-9999" autocomplete="off">
+            <button class="btn btn-outline-success" type="button" onclick="adicionarNumero()">
+              Adicionar
+            </button>
+          </div>
+          <div class="form-text" id="wa_aviso">DDD + número. Enter também adiciona.</div>
+        </div>
+
+        <div class="col-md-7">
+          <label class="form-label small fw-semibold">
+            Ou escolher alunos da lista
+            <button type="button" class="btn btn-link btn-sm p-0 ms-1" onclick="marcarPendentes()">
+              marcar os incompletos
+            </button>
+          </label>
+          <div class="border rounded p-2" style="max-height:190px;overflow-y:auto;">
+            {% set com_telefone = linhas | selectattr('telefone') | list %}
+            {% for linha in com_telefone %}
+              <div class="form-check small">
+                <input class="form-check-input aluno-contato" type="checkbox"
+                       id="contato_{{ linha.aluno.id }}" value="{{ linha.telefone }}"
+                       data-incompleto="{{ 1 if linha.faltando else 0 }}">
+                <label class="form-check-label" for="contato_{{ linha.aluno.id }}">
+                  {{ linha.aluno.nome }}
+                  <span class="text-muted">— {{ linha.telefone }}</span>
+                  {% if linha.faltando %}
+                    <span class="badge bg-danger-subtle text-danger">incompleto</span>
+                  {% endif %}
+                </label>
+              </div>
+            {% else %}
+              <div class="text-muted small">Nenhum aluno desta lista tem telefone cadastrado.</div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+
+      <div class="mt-3">
+        <div id="wa_destinos" class="d-flex flex-wrap gap-1 mb-2"></div>
+        <button class="btn btn-success btn-sm" type="button" onclick="dispararEnvio()">
+          <i class="bi bi-send me-1"></i>Enviar para <span id="wa_total">0</span> destinatário(s)
+        </button>
+        <span class="small text-muted ms-2" id="wa_resultado"></span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const LINK_CADASTRO = {{ link_publico | tojson }};
+    const MSG_CADASTRO = 'Olá! Para fazer seu cadastro de atleta no Zempo (CBJ), ' +
+                         'preencha seus dados aqui: ' + LINK_CADASTRO;
+
+    function copiarLinkCadastro() {
+      navigator.clipboard.writeText(LINK_CADASTRO).then(function () {
+        document.getElementById('aviso_link').classList.remove('d-none');
+      });
+    }
+
+    function abrirEnvioWhatsapp() {
+      const caixa = document.getElementById('caixa_whatsapp');
+      caixa.classList.toggle('d-none');
+      if (!caixa.classList.contains('d-none')) document.getElementById('wa_numero').focus();
+    }
+
+    const campoNumero = document.getElementById('wa_numero');
+    const avulsos = new Set();   // números digitados à mão
+
+    // Máscara do telefone, igual à do formulário público.
+    campoNumero.addEventListener('input', function () {
+      let d = this.value.replace(/\D/g, '').slice(0, 11);
+      if (d.length > 10)     this.value = d.replace(/(\d{2})(\d{5})(\d+)/, '($1) $2-$3');
+      else if (d.length > 6) this.value = d.replace(/(\d{2})(\d{4})(\d+)/, '($1) $2-$3');
+      else if (d.length > 2) this.value = d.replace(/(\d{2})(\d+)/, '($1) $2');
+      else                   this.value = d;
+    });
+    campoNumero.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); adicionarNumero(); }
+    });
+
+    function adicionarNumero() {
+      const d = campoNumero.value.replace(/\D/g, '');
+      const aviso = document.getElementById('wa_aviso');
+      if (d.length < 10 || d.length > 11) {
+        aviso.textContent = 'Número incompleto — informe DDD + número.';
+        aviso.style.color = '#dc3545';
+        return;
+      }
+      aviso.textContent = 'DDD + número. Enter também adiciona.';
+      aviso.style.color = '';
+      avulsos.add(d);
+      campoNumero.value = '';
+      atualizarDestinos();
+    }
+
+    function marcarPendentes() {
+      document.querySelectorAll('.aluno-contato').forEach(function (cb) {
+        if (cb.dataset.incompleto === '1') cb.checked = true;
+      });
+      atualizarDestinos();
+    }
+
+    document.querySelectorAll('.aluno-contato').forEach(function (cb) {
+      cb.addEventListener('change', atualizarDestinos);
+    });
+
+    function destinatarios() {
+      const todos = new Set(avulsos);
+      document.querySelectorAll('.aluno-contato:checked').forEach(function (cb) {
+        const d = cb.value.replace(/\D/g, '');
+        if (d.length === 10 || d.length === 11) todos.add(d);
+      });
+      return Array.from(todos);
+    }
+
+    function atualizarDestinos() {
+      const lista = destinatarios();
+      document.getElementById('wa_total').textContent = lista.length;
+      const caixa = document.getElementById('wa_destinos');
+      caixa.innerHTML = '';
+      avulsos.forEach(function (d) {
+        const chip = document.createElement('span');
+        chip.className = 'badge bg-light text-dark border';
+        chip.textContent = d + ' ';
+        const x = document.createElement('a');
+        x.href = '#'; x.className = 'text-danger text-decoration-none'; x.textContent = '×';
+        x.onclick = function (e) { e.preventDefault(); avulsos.delete(d); atualizarDestinos(); };
+        chip.appendChild(x);
+        caixa.appendChild(chip);
+      });
+    }
+
+    function dispararEnvio() {
+      const lista = destinatarios();
+      const saida = document.getElementById('wa_resultado');
+      if (!lista.length) { saida.textContent = 'Escolha ao menos um destinatário.'; return; }
+      saida.textContent = 'Enviando…';
+
+      const dados = new FormData();
+      dados.append('numeros', lista.join(','));
+      dados.append('csrf_token', {{ csrf_token() | tojson }});
+
+      fetch({{ url_for('zempo.enviar_link') | tojson }}, { method: 'POST', body: dados })
+        .then(r => r.json())
+        .then(function (r) {
+          if (r.erro) { saida.textContent = r.erro; return; }
+          if (r.automatico) {
+            const ok = r.resultados.filter(x => x.enviado).length;
+            saida.textContent = ok + ' de ' + r.resultados.length + ' enviado(s) pelo WhatsApp da academia.';
+          } else {
+            // Sem WhatsApp pareado: abre as conversas, uma aba por número.
+            r.resultados.forEach(x => window.open(x.link, '_blank', 'noopener'));
+            saida.textContent = 'WhatsApp da academia não está conectado — abri ' +
+                                r.resultados.length + ' conversa(s) no navegador. ' +
+                                'Se o navegador bloquear, permita pop-ups para este site.';
+          }
+        })
+        .catch(() => { saida.textContent = 'Falha ao enviar. Tente de novo.'; });
+    }
+  </script>
+  {% endif %}
+
+  <div class="alert {{ 'alert-info' if prontos else 'alert-warning' }} py-2">
+    <strong>{{ prontos }}</strong> de {{ linhas | length }} aluno(s) prontos para solicitar.
+    {% if incompletos %}
+      <strong>{{ incompletos }}</strong> com dados faltando — só é possível selecionar
+      quem estiver completo, porque a CBJ exige todos os campos. Use "Completar" para
+      preencher, ou peça ao aluno pelo link do formulário.
+    {% endif %}
+  </div>
+
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <div class="card shadow-sm">
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th style="width:36px;"><input type="checkbox" class="form-check-input" id="marcarTodos"></th>
+              <th>Aluno</th>
+              <th>CPF</th>
+              <th>Situação</th>
+              <th>Pendências para o Zempo</th>
+              <th style="width:120px;"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for linha in linhas %}
+            {% set aluno = linha.aluno %}
+            <tr>
+              {# A caixa aparece sempre; desabilitada explica por que não dá para
+                 selecionar, em vez de deixar a coluna vazia parecendo defeito. #}
+              {% if linha.no_zempo %}
+                {% set impedimento = 'Já está cadastrado no Zempo (' ~ aluno.zempo ~ ').' %}
+              {% elif linha.solicitado %}
+                {% set impedimento = 'Já existe uma solicitação em aberto para este aluno.' %}
+              {% elif linha.faltando %}
+                {% set impedimento = 'Faltam dados exigidos pela CBJ: ' ~ linha.faltando | map(attribute=1) | join(', ') ~ '.' %}
+              {% else %}
+                {% set impedimento = '' %}
+              {% endif %}
+              <td>
+                <input type="checkbox" class="form-check-input {{ 'marcavel' if not impedimento }}"
+                       name="aluno_ids" value="{{ aluno.id }}"
+                       {% if impedimento %}disabled title="{{ impedimento }}"{% endif %}>
+              </td>
+              <td>
+                <div class="fw-semibold">{{ aluno.nome }}</div>
+                {% if aluno.academia_nome %}
+                  <div class="text-muted small">{{ aluno.academia_nome }}</div>
+                {% endif %}
+              </td>
+              <td class="small">{{ aluno.cpf or '—' }}</td>
+              <td>
+                {% if linha.no_zempo %}
+                  <span class="badge bg-success">{{ aluno.zempo }}</span>
+                {% elif linha.solicitado %}
+                  <span class="badge bg-warning text-dark">Solicitado</span>
+                {% elif linha.faltando %}
+                  <span class="badge bg-danger">Incompleto</span>
+                {% else %}
+                  <span class="badge bg-primary">Pronto</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if linha.faltando %}
+                  <div class="d-flex flex-wrap gap-1">
+                    {% for campo, rotulo in linha.faltando %}
+                      <span class="badge bg-light text-danger border border-danger-subtle">{{ rotulo }}</span>
+                    {% endfor %}
+                  </div>
+                {% else %}
+                  <span class="text-success small"><i class="bi bi-check-circle me-1"></i>Completo</span>
+                {% endif %}
+              </td>
+              <td class="text-end text-nowrap">
+                {% if linha.no_zempo %}
+                  {# Já está no Zempo: sincronizar é o caminho mais rápido de preencher o que falta. #}
+                  {# Atributo em aspas simples: tojson escapa ' mas não ", e com
+                     aspas duplas o onclick terminaria no meio do nome do aluno. #}
+                  <button type="button" class="btn btn-sm btn-outline-primary"
+                          onclick='abrirSync({{ aluno.id }}, {{ aluno.nome | tojson }})'>
+                    Sincronizar
+                  </button>
+                {% elif linha.tem_cpf %}
+                  {# Sem número gravado, mas com CPF: procura no Zempo e vincula se achar. #}
+                  <button type="button" class="btn btn-sm btn-outline-secondary"
+                          onclick='abrirSync({{ aluno.id }}, {{ aluno.nome | tojson }})'
+                          title="Procura este CPF no Zempo e traz os dados se já existir cadastro lá">
+                    Buscar no Zempo
+                  </button>
+                {% endif %}
+                {% if linha.faltando %}
+                  <a href="{{ url_for('alunos.editar_aluno', aluno_id=aluno.id) }}"
+                     class="btn btn-sm btn-outline-secondary">Completar</a>
+                {% endif %}
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="6" class="text-center text-muted py-4">Nenhum aluno encontrado.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="mt-3 d-flex flex-wrap gap-2">
+      <button type="submit" class="btn btn-primary">
+        <i class="bi bi-send me-1"></i> Solicitar cadastro dos selecionados
+      </button>
+      {# Migrar é exclusivo da associação; a academia só enxerga a conferência dela. #}
+      {% if pode_migrar %}
+        <a href="{{ url_for('zempo.migracoes') }}" class="btn btn-outline-secondary">
+          Ver solicitações
+        </a>
+      {% else %}
+        <a href="{{ url_for('zempo.conferir') }}" class="btn btn-outline-secondary">
+          Conferir cadastros enviados
+        </a>
+      {% endif %}
+    </div>
+  </form>
+</div>
+
+<!-- Busca em massa dos números do Zempo -->
+<div class="modal fade" id="modalLote" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div>
+          <h5 class="modal-title">Buscar números no Zempo</h5>
+          <div class="text-muted small">Procura pelo CPF quem ainda não tem número gravado.</div>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+      </div>
+      <div class="modal-body" id="lote_corpo">
+        <div class="text-center py-4 text-muted">
+          <div class="spinner-border spinner-border-sm me-2"></div>Levantando candidatos…
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" id="lote_fechar" data-bs-dismiss="modal">
+          Fechar
+        </button>
+        <button type="button" class="btn btn-dark d-none" id="lote_iniciar">
+          <i class="bi bi-play-fill me-1"></i>Iniciar busca
+        </button>
+        <button type="button" class="btn btn-outline-danger d-none" id="lote_parar">Parar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Sincronização com o Zempo, sem sair da lista -->
+<div class="modal fade" id="modalSync" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div>
+          <h5 class="modal-title" id="sync_titulo">Sincronizar com o Zempo</h5>
+          <div class="text-muted small" id="sync_subtitulo"></div>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+      </div>
+      <div class="modal-body" id="sync_corpo">
+        <div class="text-center py-4 text-muted">
+          <div class="spinner-border spinner-border-sm me-2"></div>Consultando o Zempo…
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Fechar</button>
+        <button type="button" class="btn btn-primary d-none" id="sync_aplicar">
+          <i class="bi bi-download me-1"></i>Trazer do Zempo
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.getElementById('marcarTodos')?.addEventListener('change', function () {
+    document.querySelectorAll('.marcavel').forEach(cb => cb.checked = this.checked);
+  });
+
+  // ---- busca em massa dos números do Zempo ----
+  let janelaLote = null, candidatos = [], parar = false;
+  const LOTE = 5;   // por requisição; o Zempo leva ~3 s por aluno
+
+  function abrirVinculoLote() {
+    if (!janelaLote) janelaLote = new bootstrap.Modal(document.getElementById('modalLote'));
+    parar = false;
+    const corpo = document.getElementById('lote_corpo');
+    corpo.innerHTML = '<div class="text-center py-4 text-muted">' +
+      '<div class="spinner-border spinner-border-sm me-2"></div>Levantando candidatos…</div>';
+    document.getElementById('lote_iniciar').classList.add('d-none');
+    document.getElementById('lote_parar').classList.add('d-none');
+    janelaLote.show();
+
+    carregarCandidatos(false);
+  }
+
+  function carregarCandidatos(refazer) {
+    const corpo = document.getElementById('lote_corpo');
+    const acad = new URLSearchParams(location.search).get('academia_id') || '';
+    corpo.innerHTML = '<div class="text-center py-4 text-muted">' +
+      '<div class="spinner-border spinner-border-sm me-2"></div>Levantando candidatos…</div>';
+
+    fetch('/zempo/vincular-lote/candidatos?academia_id=' + acad + (refazer ? '&refazer=1' : ''))
+      .then(r => r.json())
+      .then(function (r) {
+        if (r.erro) { corpo.innerHTML = '<div class="alert alert-warning mb-0">' + r.erro + '</div>'; return; }
+        candidatos = r.candidatos;
+
+        // Quem já foi consultado antes fica de fora por padrão, para não gastar
+        // minutos repetindo CPF que sabidamente não tem cadastro.
+        const jaVistos = r.ja_buscados
+          ? '<p class="small text-muted mb-2">' + r.ja_buscados + ' aluno(s) já foram consultados ' +
+            'antes e não tinham cadastro. Ficaram de fora. ' +
+            '<a href="#" onclick="carregarCandidatos(true);return false;">Consultar esses também</a></p>'
+          : '';
+
+        if (!candidatos.length) {
+          document.getElementById('lote_iniciar').classList.add('d-none');
+          corpo.innerHTML = jaVistos + '<div class="alert alert-info mb-0">' +
+            'Nenhum aluno novo para consultar nesta lista.</div>';
+          return;
+        }
+        // ~6 s por aluno: o Zempo devolve um registro aleatório quando o CPF não
+        // existe, então cada achado precisa ser conferido antes de ser aceito.
+        const minutos = Math.ceil(candidatos.length * 6 / 60);
+        corpo.innerHTML = jaVistos +
+          '<p><strong>' + candidatos.length + '</strong> aluno(s) a consultar' +
+          (refazer ? ' (incluindo os já consultados)' : '') + '.</p>' +
+          '<p class="text-muted small">A consulta é feita um a um no site da CBJ e leva cerca de ' +
+          '<strong>' + minutos + ' minuto(s)</strong>. Pode parar no meio — o que já foi ' +
+          'consultado fica registrado e não se repete.</p>';
+        document.getElementById('lote_iniciar').classList.remove('d-none');
+      })
+      .catch(() => { corpo.innerHTML = '<div class="alert alert-danger mb-0">Falha ao levantar os candidatos.</div>'; });
+  }
+
+  document.getElementById('lote_parar').addEventListener('click', () => { parar = true; });
+
+  document.getElementById('lote_iniciar').addEventListener('click', function () {
+    const corpo = document.getElementById('lote_corpo');
+    document.getElementById('lote_iniciar').classList.add('d-none');
+    document.getElementById('lote_parar').classList.remove('d-none');
+    document.getElementById('lote_fechar').classList.add('d-none');
+
+    corpo.innerHTML =
+      '<div class="progress mb-2" style="height:20px;">' +
+      '<div class="progress-bar progress-bar-striped progress-bar-animated" id="lote_barra" style="width:0%">0%</div></div>' +
+      '<div class="small text-muted mb-2" id="lote_status"></div>' +
+      '<div id="lote_achados" style="max-height:260px;overflow-y:auto;"></div>';
+
+    const barra = document.getElementById('lote_barra');
+    const status = document.getElementById('lote_status');
+    const achados = document.getElementById('lote_achados');
+    let feitos = 0, vinculados = 0, semCadastro = 0;
+
+    function proximoLote(inicio) {
+      if (parar || inicio >= candidatos.length) return finalizar();
+      const bloco = candidatos.slice(inicio, inicio + LOTE);
+      status.textContent = 'Consultando ' + (inicio + 1) + '–' +
+        Math.min(inicio + LOTE, candidatos.length) + ' de ' + candidatos.length + '…';
+
+      const dados = new FormData();
+      bloco.forEach(c => dados.append('aluno_ids', c.id));
+      dados.append('csrf_token', {{ csrf_token() | tojson }});
+
+      fetch('/zempo/vincular-lote', { method: 'POST', body: dados })
+        .then(r => r.json())
+        .then(function (r) {
+          if (r.erro) { status.innerHTML = '<span class="text-danger">' + r.erro + '</span>'; return finalizar(); }
+          (r.resultados || []).forEach(function (x) {
+            if (x.situacao === 'vinculado') {
+              vinculados++;
+              achados.insertAdjacentHTML('beforeend',
+                '<div class="small"><span class="badge bg-success">' + x.numero + '</span> ' + x.nome + '</div>');
+            } else if (x.situacao === 'nao_existe') {
+              semCadastro++;
+            } else if (x.situacao === 'erro') {
+              achados.insertAdjacentHTML('beforeend',
+                '<div class="small text-danger">' + x.nome + ' — ' + (x.detalhe || 'erro') + '</div>');
+            }
+          });
+          feitos = Math.min(inicio + LOTE, candidatos.length);
+          const pct = Math.round(feitos * 100 / candidatos.length);
+          barra.style.width = pct + '%'; barra.textContent = pct + '%';
+          proximoLote(inicio + LOTE);
+        })
+        .catch(function () {
+          status.innerHTML = '<span class="text-danger">Falha na consulta. Interrompido.</span>';
+          finalizar();
+        });
+    }
+
+    function finalizar() {
+      barra.classList.remove('progress-bar-animated', 'progress-bar-striped');
+      document.getElementById('lote_parar').classList.add('d-none');
+      document.getElementById('lote_fechar').classList.remove('d-none');
+      status.innerHTML = '<strong>' + vinculados + '</strong> vinculado(s), <strong>' +
+        semCadastro + '</strong> sem cadastro na CBJ, de ' + feitos + ' consultado(s).' +
+        (vinculados ? ' <a href="#" onclick="location.reload();return false;">Atualizar a lista</a>' : '');
+    }
+
+    proximoLote(0);
+  });
+
+  // ---- modal de sincronização ----
+  let alunoSync = null;
+  let janelaSync = null;
+  const corpoSync = document.getElementById('sync_corpo');
+  const btnAplicar = document.getElementById('sync_aplicar');
+
+  // O bootstrap.bundle.js é carregado no fim do base.html, depois deste bloco.
+  // Instanciar o modal aqui em cima quebraria o script inteiro; por isso só no clique.
+  function obterJanela() {
+    if (!janelaSync) janelaSync = new bootstrap.Modal(document.getElementById('modalSync'));
+    return janelaSync;
+  }
+
+  function abrirSync(alunoId, nome) {
+    alunoSync = alunoId;
+    document.getElementById('sync_titulo').textContent = nome;
+    document.getElementById('sync_subtitulo').textContent = '';
+    btnAplicar.classList.add('d-none');
+    // O site da CBJ é lento; sem este aviso a espera parece travamento.
+    corpoSync.innerHTML =
+      '<div class="text-center py-4 text-muted">' +
+      '<div class="spinner-border text-primary mb-2"></div>' +
+      '<div>Consultando o Zempo…</div>' +
+      '<div class="small">O site da CBJ costuma levar de 5 a 10 segundos.</div></div>';
+    obterJanela().show();
+
+    fetch('/zempo/sincronizar/' + alunoId + '/dados')
+      .then(r => r.json().then(j => ({ ok: r.ok, j })))
+      .then(function (r) {
+        if (!r.ok) {
+          document.getElementById('sync_subtitulo').textContent = '';
+          corpoSync.innerHTML = '<div class="alert alert-warning mb-0">' + r.j.erro + '</div>';
+          return;
+        }
+        montarDiff(r.j);
+      })
+      .catch(function () {
+        corpoSync.innerHTML = '<div class="alert alert-danger mb-0">' +
+          'Falha ao consultar o Zempo. Tente de novo.</div>';
+      });
+  }
+
+  function montarDiff(d) {
+    document.getElementById('sync_subtitulo').innerHTML =
+      'Cadastro <a href="https://zempo.com.br/index.php?secao=pessoas_editar&detalhes=1&id=' +
+      d.zempo_id + '" target="_blank" rel="noopener">' + d.zempo_numero + '</a>';
+
+    if (!d.diferencas.length) {
+      corpoSync.innerHTML = '<div class="alert alert-success mb-0">' +
+        '<i class="bi bi-check-circle me-1"></i>Os dados do sistema já estão iguais aos do Zempo.</div>';
+      btnAplicar.classList.add('d-none');
+      return;
+    }
+
+    let html = '<p class="text-muted small">Marque o que deve ser trazido do Zempo para o sistema.</p>' +
+      '<table class="table table-sm align-middle mb-0"><thead class="table-light"><tr>' +
+      '<th style="width:34px;"><input type="checkbox" class="form-check-input" id="sync_todos" checked></th>' +
+      '<th>Campo</th><th>No Zempo</th><th>No sistema</th></tr></thead><tbody>';
+    d.diferencas.forEach(function (dif) {
+      html += '<tr><td><input type="checkbox" class="form-check-input sync-campo" checked value="' +
+        dif.campo + '"></td><td class="fw-semibold">' + dif.rotulo +
+        '</td><td class="text-success">' + dif.valor_zempo +
+        '</td><td class="text-muted">' + (dif.valor_sistema || '(vazio)') + '</td></tr>';
+    });
+    corpoSync.innerHTML = html + '</tbody></table>';
+
+    document.getElementById('sync_todos').addEventListener('change', function () {
+      document.querySelectorAll('.sync-campo').forEach(cb => cb.checked = this.checked);
+    });
+    btnAplicar.classList.remove('d-none');
+  }
+
+  btnAplicar.addEventListener('click', function () {
+    const escolhidos = Array.from(document.querySelectorAll('.sync-campo:checked')).map(cb => cb.value);
+    btnAplicar.disabled = true;
+    btnAplicar.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Aplicando…';
+
+    const dados = new FormData();
+    escolhidos.forEach(c => dados.append('campos', c));
+    dados.append('csrf_token', {{ csrf_token() | tojson }});
+
+    fetch('/zempo/sincronizar/' + alunoSync + '/aplicar', { method: 'POST', body: dados })
+      .then(r => r.json())
+      .then(function (r) {
+        if (r.erro) {
+          corpoSync.innerHTML = '<div class="alert alert-danger mb-0">' + r.erro + '</div>';
+        } else {
+          corpoSync.innerHTML = '<div class="alert alert-success mb-0">' +
+            r.atualizados + ' campo(s) atualizado(s) a partir do Zempo (' + r.zempo_numero + ').' +
+            '<br><span class="small">A lista será recarregada.</span></div>';
+          setTimeout(() => location.reload(), 1200);
+        }
+        btnAplicar.classList.add('d-none');
+      })
+      .finally(function () {
+        btnAplicar.disabled = false;
+        btnAplicar.innerHTML = '<i class="bi bi-download me-1"></i>Trazer do Zempo';
+      });
+  });
+</script>
+{% endblock %}

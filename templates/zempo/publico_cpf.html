@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Cadastro no Zempo — {{ assoc.nome }}{% endblock %}
+{% block content %}
+<div class="container" style="max-width:520px;">
+  <div class="card shadow-sm mt-4">
+    <div class="card-body p-4">
+      <h1 class="h5 mb-1">Cadastro de atleta no Zempo</h1>
+      <p class="text-muted small mb-4">{{ assoc.nome }}</p>
+
+      <form method="post" action="{{ url_for('zempo_publico.consultar', token=token) }}">
+        <label class="form-label fw-semibold" for="cpf">CPF do aluno</label>
+        <input type="text" name="cpf" id="cpf" class="form-control form-control-lg"
+               inputmode="numeric" maxlength="14" placeholder="000.000.000-00"
+               autocomplete="off" autofocus required>
+        <div class="form-text mb-3">
+          Se você já tem cadastro, vamos preencher o que der e destacar o que falta.
+        </div>
+        <button type="submit" class="btn btn-primary w-100">Continuar</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.getElementById('cpf').addEventListener('input', function () {
+    let v = this.value.replace(/\D/g, '').slice(0, 11);
+    if (v.length > 9)      v = v.replace(/(\d{3})(\d{3})(\d{3})(\d+)/, '$1.$2.$3-$4');
+    else if (v.length > 6) v = v.replace(/(\d{3})(\d{3})(\d+)/, '$1.$2.$3');
+    else if (v.length > 3) v = v.replace(/(\d{3})(\d+)/, '$1.$2');
+    this.value = v;
+  });
+</script>
+{% endblock %}

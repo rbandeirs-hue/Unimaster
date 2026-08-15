@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Incluir participante — {{ evento.nome }}{% endblock %}
+{% block content %}
+<div class="container {% if layout_embed %}mt-2{% else %}mt-4{% endif %}" style="max-width: 720px;">
+    {% if not layout_embed %}
+    <div class="mb-3">
+        {% set back_url = back_url or get_back_url_default() %}
+        {% include 'components/botao_voltar.html' %}
+    </div>
+    {% endif %}
+    {% set menu_secao_ativa = 'inscricoes' %}
+    {% include 'components/menu_competicao.html' %}
+    <h1 class="h4 fw-bold text-primary mb-1">Incluir participante manualmente</h1>
+    <p class="text-muted small mb-4">{{ evento.nome }} — mesmos dados do link público.</p>
+    {% set _gestor_action = url_for('eventos_competicoes.gestor_incluir_participante_avulso', evento_id=evento.id, embed=1) if layout_embed else url_for('eventos_competicoes.gestor_incluir_participante_avulso', evento_id=evento.id) %}
+    <form method="POST" action="{{ _gestor_action }}" class="card shadow-sm">
+        <div class="card-body">
+            {% if layout_embed %}<input type="hidden" name="embed" value="1">{% endif %}
+            <div class="mb-3">
+                <label class="form-label fw-semibold">Nome completo <span class="text-danger">*</span></label>
+                <input type="text" name="nome_completo" class="form-control" required maxlength="200">
+            </div>
+            <div class="mb-3">
+                <label class="form-label fw-semibold">Data de nascimento <span class="text-danger">*</span></label>
+                <input type="date" name="data_nascimento" class="form-control" required>
+            </div>
+            <div class="mb-3">
+                <label class="form-label fw-semibold">Peso (kg) <span class="text-danger">*</span></label>
+                <input type="text" name="peso" class="form-control" required placeholder="Ex: 45,5">
+            </div>
+            <div class="mb-3">
+                <label class="form-label fw-semibold">Sexo <span class="text-danger">*</span></label>
+                <select name="sexo" class="form-select" required>
+                    <option value="">—</option>
+                    <option value="M">Masculino</option>
+                    <option value="F">Feminino</option>
+                    <option value="O">Outro</option>
+                </select>
+                {% if evento.categorias_modo == 'aproximacao' %}
+                <p class="form-text text-muted small mb-0">Se houver faixa compatível, a categoria é atribuída; senão, a inscrição fica sem categoria até cadastrar faixas e recalcular.</p>
+                {% else %}
+                <p class="form-text text-muted small mb-0">Obrigatório para registro completo do participante.</p>
+                {% endif %}
+            </div>
+            <div class="mb-3">
+                <label class="form-label fw-semibold">Professor</label>
+                <input type="text" name="professor" class="form-control" maxlength="200">
+            </div>
+            <div class="mb-3">
+                <label class="form-label fw-semibold">Local de treino</label>
+                <input type="text" name="local_treino" class="form-control" maxlength="200">
+            </div>
+            {% if categorias_opts and categorias_opts|length > 0 %}
+            <div class="mb-3">
+                <label class="form-label fw-semibold">Categoria (opcional)</label>
+                <select name="categoria" class="form-select">
+                    <option value="">—</option>
+                    {% for c in categorias_opts %}
+                    <option value="{{ c.nome_categoria }}">{{ c.nome_categoria }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endif %}
+            <button type="submit" class="btn btn-primary">Salvar</button>
+        </div>
+    </form>
+</div>
+{% endblock %}

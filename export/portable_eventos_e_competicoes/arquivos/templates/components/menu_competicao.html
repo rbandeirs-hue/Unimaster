@@ -1,0 +1,102 @@
+{#
+  Menu em abas — painel interno de cada competição.
+  Seções: dados | inscricoes | categorias | chaves | sumulas | placar | resultados
+
+  Variáveis esperadas:
+    evento              — objeto com id, nome, categorias_modo
+    menu_secao_ativa    — slug da aba ativa
+    competicao_menu_iframe_id (opcional) — id do <iframe> para carregar módulos com embed=1
+
+  Nota: com embed=1 (layout_embed) o menu não é renderizado para evitar duplicação.
+
+  MÓDULO MIGRATÁVEL: Este menu faz a ponte entre eventos_competicoes (inscrições, placar)
+  e competicoes (chaves, súmulas, resultados). Ao migrar, substituir as URLs de competicoes.*
+  pelas rotas do sistema de destino.
+#}
+{% if not layout_embed %}
+{% set cm = evento.categorias_modo|default('padrao') %}
+{% set eid = evento.id %}
+{% set sec = menu_secao_ativa|default('') %}
+{% set u_dados = url_for('eventos_competicoes.editar', evento_id=eid) %}
+{% set u_insc = url_for('eventos_competicoes.consolidar', evento_id=eid) %}
+{% if cm == 'aproximacao' %}
+{% set u_cat = url_for('eventos_competicoes.evento_categorias_aproximacao', evento_id=eid) %}
+{% else %}
+{% set u_cat = url_for('competicoes.categorias') %}
+{% endif %}
+{% set u_chaves = url_for('competicoes.chaves_evento', evento_id=eid) %}
+{% set u_sum = url_for('competicoes.sumulas_evento', evento_id=eid) %}
+{% set u_placar = url_for('eventos_competicoes.placar_judo_lista', evento_id=eid) %}
+{% set u_res = url_for('competicoes.resultados_evento', evento_id=eid) %}
+{% set iframe_id = competicao_menu_iframe_id|default('', true) %}
+<nav class="competicao-tabs-nav competicao-secao-nav"{% if iframe_id %} data-iframe-target="{{ iframe_id }}"{% endif %} aria-label="Módulos da competição">
+    <div class="competicao-tabs-nav__top">
+        <div style="min-width: 0;">
+            <div class="competicao-tabs-nav__label">Competição</div>
+            <div class="competicao-tabs-nav__name" title="{{ evento.nome }}">{{ evento.nome }}</div>
+        </div>
+    </div>
+    <div class="competicao-tabs-scroll">
+        <ul class="competicao-tabs-list" role="tablist">
+            <li>
+                <button type="button" class="competicao-tab competicao-secao-btn {% if sec == 'dados' %}active{% endif %}" data-url="{{ u_dados }}"><i class="bi bi-sliders"></i>Dados</button>
+            </li>
+            <li>
+                <button type="button" class="competicao-tab competicao-secao-btn {% if sec == 'inscricoes' %}active{% endif %}" data-url="{{ u_insc }}"><i class="bi bi-people-fill"></i>Inscrições</button>
+            </li>
+            <li>
+                <button type="button" class="competicao-tab competicao-secao-btn {% if sec == 'categorias' %}active{% endif %}" data-url="{{ u_cat }}"><i class="bi bi-collection"></i>Categorias</button>
+            </li>
+            <li>
+                <button type="button" class="competicao-tab competicao-secao-btn {% if sec == 'chaves' %}active{% endif %}" data-url="{{ u_chaves }}"><i class="bi bi-diagram-3"></i>Chaves</button>
+            </li>
+            <li>
+                <button type="button" class="competicao-tab competicao-secao-btn {% if sec == 'sumulas' %}active{% endif %}" data-url="{{ u_sum }}"><i class="bi bi-file-earmark-text"></i>Súmulas</button>
+            </li>
+            <li>
+                <button type="button" class="competicao-tab competicao-secao-btn {% if sec == 'placar' %}active{% endif %}" data-url="{{ u_placar }}"><i class="bi bi-tv"></i>Placar</button>
+            </li>
+            <li>
+                <button type="button" class="competicao-tab competicao-secao-btn {% if sec == 'resultados' %}active{% endif %}" data-url="{{ u_res }}"><i class="bi bi-trophy"></i>Resultados</button>
+            </li>
+        </ul>
+    </div>
+    {% if iframe_id %}
+    <p class="competicao-tabs-nav__hint">O módulo selecionado abre abaixo, na mesma página.</p>
+    {% endif %}
+</nav>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var root = document.querySelector('.competicao-secao-nav');
+    if (!root) return;
+    var iframeId = root.getAttribute('data-iframe-target');
+    var botoes = root.querySelectorAll('.competicao-secao-btn');
+    if (!botoes.length) return;
+    function withEmbed(url) {
+        if (!iframeId || !url) return url;
+        return url + (url.indexOf('?') >= 0 ? '&' : '?') + 'embed=1';
+    }
+    function go(url) {
+        if (!url) return;
+        if (iframeId) {
+            var f = document.getElementById(iframeId);
+            if (f) f.src = withEmbed(url);
+        } else {
+            window.location.href = url;
+        }
+    }
+    function marcarAtivo(btn) {
+        botoes.forEach(function (b) { b.classList.remove('active'); });
+        if (btn) btn.classList.add('active');
+    }
+    botoes.forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var url = btn.getAttribute('data-url');
+            if (!url) return;
+            marcarAtivo(btn);
+            go(url);
+        });
+    });
+});
+</script>
+{% endif %}

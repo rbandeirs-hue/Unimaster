@@ -30,13 +30,15 @@ class Usuario(UserMixin):
         roles=None,
         permissoes=None,
         menus=None,
-        foto=None
+        foto=None,
+        cpf=None
     ):
         # Dados básicos
         self.id = id
         self.nome = nome
         self.email = email
         self.senha = senha
+        self.cpf = cpf
         self.foto = foto
 
         # Hierarquia (para federacao, associação e academia)

@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<!--
+  Cópia estática para referência / protótipo sem Jinja.
+  Em produção use a rota Flask logada: /aniversariante-live/
+  (templates/aniversariante_live/index.html injeta CSRF e url_for).
+-->
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="csrf-token" content="">
+  <title>Modo aniversariante — Live</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700;0,9..40,800;1,9..40,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css">
+  <script>window.__ANIV_API_BASE__ = "/aniversariante-live";</script>
+</head>
+<body data-api-base="/aniversariante-live">
+  <canvas id="confetti-canvas" aria-hidden="true"></canvas>
+  <div id="festa-bg" class="festa-bg" aria-hidden="true"></div>
+  <div id="fx-layer" class="fx-layer" aria-hidden="true"></div>
+  <div id="festa-balloons" class="festa-balloons" aria-hidden="true"></div>
+
+  <div id="app">
+    <header class="app-header">
+      <a href="/painel/" class="btn-nav btn-nav--painel" id="btn-voltar-painel"><span class="btn-nav-ic">←</span><span class="btn-nav-txt">Voltar</span></a>
+      <div class="app-header-main">
+        <h1 class="app-title">Aniversário Live</h1>
+        <p class="app-sub">Parabéns e reações a partir do dia do aniversário (mês da lista)</p>
+      </div>
+      <button type="button" class="btn-nav btn-nav--lista" id="btn-back" hidden><span class="btn-nav-ic">☰</span><span class="btn-nav-txt">Lista</span></button>
+    </header>
+
+    <section id="view-list" class="view is-active glass-card" aria-label="Lista de aniversariantes">
+      <div style="padding:0.85rem 1rem 0;">
+        <div class="mes-bar">
+          <label for="mes-select">Mês</label>
+          <select id="mes-select" aria-label="Filtrar por mês">
+            <option value="1">1 — Jan</option>
+            <option value="2">2 — Fev</option>
+            <option value="3">3 — Mar</option>
+            <option value="4">4 — Abr</option>
+            <option value="5">5 — Mai</option>
+            <option value="6">6 — Jun</option>
+            <option value="7">7 — Jul</option>
+            <option value="8">8 — Ago</option>
+            <option value="9">9 — Set</option>
+            <option value="10">10 — Out</option>
+            <option value="11">11 — Nov</option>
+            <option value="12">12 — Dez</option>
+          </select>
+        </div>
+      </div>
+      <div id="list-state"></div>
+      <div id="aniv-grid" class="aniv-grid" style="padding:0 1rem 1rem;"></div>
+    </section>
+
+    <section id="view-live" class="view glass-card" aria-label="Celebração">
+      <div class="live-hero">
+        <div class="live-photo-wrap">
+          <img id="live-photo" class="live-photo is-pulse" src="" alt="">
+        </div>
+        <h2 id="live-name" class="live-name"></h2>
+        <p id="live-academia" class="live-academia"></p>
+        <p id="live-aniversario" class="live-aniversario"></p>
+        <div class="counter-box">
+          <span class="counter-label">Parabéns recebidos</span>
+          <span id="counter-val" class="counter-value">0</span>
+        </div>
+        <p id="live-interacao-aviso" class="live-interacao-aviso" role="status" hidden></p>
+      </div>
+      <div class="actions-row" id="live-actions">
+        <button type="button" class="btn-parabens" id="btn-parabens">Enviar parabéns 🎉</button>
+        <div class="reactions" role="group" aria-label="Reações rápidas">
+          <button type="button" class="reaction-btn" id="reaction-heart" title="Coração">❤️</button>
+          <button type="button" class="reaction-btn" id="reaction-cake" title="Bolo">🎂</button>
+          <button type="button" class="reaction-btn" id="reaction-party" title="Festa">🥳</button>
+          <button type="button" class="reaction-btn" id="reaction-clap" title="Aplausos">👏</button>
+        </div>
+      </div>
+      <div class="feed-wrap">
+        <div id="feed-list" class="feed-list" role="log" aria-live="polite" aria-relevant="additions"></div>
+      </div>
+    </section>
+  </div>
+
+  <script src="./app.js" defer></script>
+</body>
+</html>

@@ -1,96 +1,99 @@
 {% extends "base.html" %}
-{% block title %}Editar Evento{% endblock %}
+{% block title %}{% if evento.tipo == 'competicao' %}Editar competição{% else %}Editar evento{% endif %}{% endblock %}
+{% block extra_css %}
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/pages/competicao-dashboard.css') }}">
+{% endblock %}
 {% block content %}
-<div class="container mt-5">
-    <div class="mb-4">
-        {% set back_url = back_url or get_back_url_default() %}
-{% include 'components/botao_voltar.html' %}
-        <h2 class="h4 fw-bold text-primary">Editar Evento / Competição</h2>
-        <p class="text-muted mb-0">Atualize os dados do evento. As alterações serão refletidas no calendário.</p>
-    </div>
+{% set form_action = url_for('eventos_competicoes.editar', evento_id=evento.id, embed=1) if layout_embed else url_for('eventos_competicoes.editar', evento_id=evento.id) %}
+<div class="saas-competicao-page">
+    <div class="saas-competicao-inner">
+        {% if not layout_embed %}
+        <div class="mb-3">
+            {% set back_url = back_url or get_back_url_default() %}
+            {% include 'components/botao_voltar.html' %}
+        </div>
+        {% endif %}
 
-    <div class="card shadow-sm">
-        <div class="card-body p-4">
-            <form method="POST" enctype="multipart/form-data">
-                <div class="mb-3">
-                    <label for="nome" class="form-label fw-semibold">Nome <span class="text-danger">*</span></label>
-                    <input type="text" id="nome" name="nome" class="form-control" required maxlength="200" value="{{ evento.nome or '' }}">
-                </div>
-                <div class="mb-3">
-                    <label for="descricao" class="form-label fw-semibold">Descrição</label>
-                    <textarea id="descricao" name="descricao" class="form-control" rows="2">{{ evento.descricao or '' }}</textarea>
-                </div>
-                <div class="mb-3">
-                    <label for="tipo" class="form-label fw-semibold">Tipo</label>
-                    <select id="tipo" name="tipo" class="form-select">
-                        <option value="evento" {% if evento.tipo == 'evento' %}selected{% endif %}>Evento</option>
-                        <option value="competicao" {% if evento.tipo == 'competicao' %}selected{% endif %}>Competição</option>
-                    </select>
-                </div>
-                <div class="mb-3">
-                    <label for="id_formulario" class="form-label fw-semibold">Formulário de inscrição</label>
-                    <select id="id_formulario" name="id_formulario" class="form-select">
-                        <option value="">— Sem formulário —</option>
-                        {% for f in formularios %}
-                        <option value="{{ f.id }}" {% if evento.id_formulario == f.id %}selected{% endif %}>{{ f.nome }}</option>
-                        {% endfor %}
-                    </select>
-                    <small class="text-muted">O formulário define os campos que o aluno preencherá na inscrição.</small>
-                </div>
-                <div class="row">
-                    <div class="col-md-6 mb-3">
-                        <label for="data_inicio" class="form-label fw-semibold">Data/hora início</label>
-                        <input type="datetime-local" id="data_inicio" name="data_inicio" class="form-control" value="{{ data_inicio_val }}">
+        {% if evento.tipo == 'competicao' %}
+        {% set menu_secao_ativa = 'dados' %}
+        {% if not layout_embed %}
+        {% include 'components/menu_competicao.html' %}
+        {% endif %}
+        {% endif %}
+
+        <header class="saas-page-header">
+            {% if evento.tipo == 'competicao' %}
+            <h1 class="saas-page-title">Editar competição</h1>
+            <p class="saas-page-subtitle">Atualize nome, datas, formulário e academias.{% if not layout_embed %} Use as abas acima para inscrições, categorias, chaves, súmulas, placar e resultados.{% else %} As alterações são salvas nesta página.{% endif %}</p>
+            {% else %}
+            <h1 class="saas-page-title">Editar evento</h1>
+            <p class="saas-page-subtitle">Atualize os dados deste evento geral (inscrições e calendário, sem placar de lutas).</p>
+            {% endif %}
+        </header>
+
+        {# Mensagens inline (ex. sucesso via JS): remova .d-none e injure .saas-alert dentro do container. #}
+        <div id="saas-form-feedback" class="saas-alert-stack d-none" aria-live="polite"></div>
+
+        <form id="editar-evento-form" method="POST" action="{{ form_action }}" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="tipo" value="{{ evento.tipo }}">
+
+            <section class="saas-section" aria-labelledby="heading-info-basica">
+                <h2 id="heading-info-basica" class="saas-section-heading"><i class="bi bi-info-circle" aria-hidden="true"></i>Informações básicas</h2>
+                <div class="saas-card">
+                    <div class="saas-stack">
+                        <label for="nome" class="saas-label">Nome <span class="text-danger">*</span></label>
+                        <input type="text" id="nome" name="nome" class="form-control" required maxlength="200" value="{{ evento.nome or '' }}" autocomplete="off">
                     </div>
-                    <div class="col-md-6 mb-3">
-                        <label for="data_fim" class="form-label fw-semibold">Data/hora fim <span class="text-danger">*</span></label>
-                        <input type="datetime-local" id="data_fim" name="data_fim" class="form-control" required value="{{ data_fim_val }}">
-                        <small class="text-muted">Após esta data não será possível inscrever nem editar a lista.</small>
+                    <div class="saas-stack">
+                        <label for="descricao" class="saas-label">Descrição</label>
+                        <textarea id="descricao" name="descricao" class="form-control" rows="3">{{ evento.descricao or '' }}</textarea>
                     </div>
-                </div>
-                
-                <!-- Seção de Taxa -->
-                <div class="card border-info mb-3">
-                    <div class="card-header bg-info bg-opacity-10">
-                        <h6 class="mb-0 fw-semibold"><i class="bi bi-currency-dollar me-1"></i>Taxa de Inscrição</h6>
-                    </div>
-                    <div class="card-body">
-                        <div class="mb-3">
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" id="tem_taxa" name="tem_taxa" value="1" {% if evento.tem_taxa and (evento.tem_taxa == 1 or evento.tem_taxa == True) %}checked{% endif %} onchange="toggleTaxa()">
-                                <label class="form-check-label" for="tem_taxa">
-                                    Este evento tem taxa de inscrição
-                                </label>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="saas-stack">
+                                <label for="data_inicio" class="saas-label">Data/hora início</label>
+                                <input type="datetime-local" id="data_inicio" name="data_inicio" class="form-control" value="{{ data_inicio_val }}">
                             </div>
                         </div>
-                        <div id="campo_valor_taxa" style="display: {% if evento.tem_taxa %}{% if evento.tem_taxa == 1 or evento.tem_taxa == True or evento.tem_taxa == '1' or evento.tem_taxa|int == 1 %}block{% else %}none{% endif %}{% else %}none{% endif %};">
-                            <label for="valor_taxa_sugerido" class="form-label fw-semibold">Valor sugerido (R$) <span class="text-danger">*</span></label>
-                            <input type="number" id="valor_taxa_sugerido" name="valor_taxa_sugerido" class="form-control" step="0.01" min="0" placeholder="0.00" value="{% if evento.valor_taxa_sugerido %}{{ evento.valor_taxa_sugerido }}{% endif %}">
-                            <small class="text-muted">As academias poderão confirmar este valor ou aumentar ao aderir ao evento.</small>
+                        <div class="col-md-6">
+                            <div class="saas-stack">
+                                <label for="data_fim" class="saas-label">Data/hora fim <span class="text-danger">*</span></label>
+                                <input type="datetime-local" id="data_fim" name="data_fim" class="form-control" required value="{{ data_fim_val }}">
+                                <span class="saas-field-hint">Após esta data não será possível inscrever nem editar a lista.</span>
+                            </div>
                         </div>
                     </div>
+                    <div class="saas-stack">
+                        <label for="id_formulario" class="saas-label">Formulário de inscrição</label>
+                        <select id="id_formulario" name="id_formulario" class="form-select">
+                            <option value="">— Sem formulário —</option>
+                            {% for f in formularios %}
+                            <option value="{{ f.id }}" {% if evento.id_formulario == f.id %}selected{% endif %}>{{ f.nome }}</option>
+                            {% endfor %}
+                        </select>
+                        <span class="saas-field-hint">Define os campos que o aluno preencherá na inscrição.</span>
+                    </div>
                 </div>
-                
-                <!-- Anexos Existentes -->
+
                 {% if anexos_existentes and anexos_existentes|length > 0 %}
-                <div class="mb-3">
-                    <label class="form-label fw-semibold">
-                        <i class="bi bi-paperclip me-1"></i>Anexos Existentes
-                    </label>
+                <div class="saas-card saas-card--muted">
+                    <h3 class="saas-card__title"><i class="bi bi-paperclip me-2 text-primary"></i>Anexos existentes</h3>
                     <div class="list-group">
                         {% for anexo in anexos_existentes %}
                         <div class="list-group-item d-flex justify-content-between align-items-center">
-                            <div class="flex-grow-1">
-                                <i class="bi bi-file-earmark me-2"></i>
+                            <div class="flex-grow-1 min-w-0">
+                                <i class="bi bi-file-earmark me-2 text-muted"></i>
                                 <strong>{{ anexo.nome_arquivo }}</strong>
                                 {% if anexo.descricao %}
                                 <br><small class="text-muted">{{ anexo.descricao }}</small>
                                 {% endif %}
                                 <br><small class="text-muted">{{ anexo.tamanho_formatado }}</small>
                             </div>
-                            <div class="form-check">
+                            <div class="form-check ms-2 flex-shrink-0">
                                 <input class="form-check-input" type="checkbox" name="remover_anexo" value="{{ anexo.id }}" id="remover_{{ anexo.id }}">
-                                <label class="form-check-label text-danger" for="remover_{{ anexo.id }}" title="Marcar para remover">
+                                <label class="form-check-label text-danger small" for="remover_{{ anexo.id }}" title="Marcar para remover">
                                     <i class="bi bi-trash"></i>
                                 </label>
                             </div>
@@ -99,19 +102,16 @@
                     </div>
                 </div>
                 {% endif %}
-                
-                <!-- Seção de Novos Anexos -->
-                <div class="mb-3">
-                    <label class="form-label fw-semibold">
-                        <i class="bi bi-paperclip me-1"></i>Adicionar Novos Anexos
-                    </label>
+
+                <div class="saas-card">
+                    <h3 class="saas-card__title"><i class="bi bi-plus-circle me-2 text-primary"></i>Adicionar novos anexos</h3>
                     <div id="anexosContainer">
                         <div class="anexo-item mb-2">
-                            <div class="input-group">
+                            <div class="input-group flex-column flex-md-row gap-2 gap-md-0">
                                 <input type="file" name="anexos" class="form-control anexo-file" accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.zip,.rar,.txt">
-                                <input type="text" name="descricao_anexo_" class="form-control descricao-anexo" placeholder="Descrição (opcional)" style="max-width: 200px;">
-                                <button type="button" class="btn btn-outline-danger remover-anexo" title="Remover">
-                                    <i class="bi bi-x"></i>
+                                <input type="text" name="descricao_anexo_" class="form-control descricao-anexo saas-desc-anexo" placeholder="Descrição (opcional)">
+                                <button type="button" class="btn btn-outline-danger remover-anexo saas-btn-ghost align-self-stretch" title="Remover">
+                                    <i class="bi bi-x-lg"></i>
                                 </button>
                             </div>
                         </div>
@@ -119,15 +119,173 @@
                     <button type="button" class="btn btn-sm btn-outline-primary mt-2" id="adicionarAnexo">
                         <i class="bi bi-plus-circle me-1"></i>Adicionar mais anexos
                     </button>
-                    <small class="text-muted d-block mt-1">Formatos permitidos: PDF, DOC, DOCX, XLS, XLSX, JPG, PNG, GIF, ZIP, RAR, TXT</small>
+                    <span class="saas-field-hint">Formatos: PDF, DOC, DOCX, XLS, XLSX, JPG, PNG, GIF, ZIP, RAR, TXT</span>
                 </div>
-                
-                <div class="d-flex gap-2">
-                    <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i> Salvar Alterações</button>
-                    <a href="{{ back_url }}" class="btn btn-outline-secondary">Cancelar</a>
+            </section>
+
+            {% if evento.tipo == 'competicao' %}
+            <section class="saas-section" aria-labelledby="heading-config">
+                <h2 id="heading-config" class="saas-section-heading"><i class="bi bi-gear" aria-hidden="true"></i>Configurações da competição</h2>
+                <div class="saas-card">
+                    <div class="saas-stack">
+                        <label class="saas-label" for="natureza_sel">Tipo de competição</label>
+                        <select name="natureza" id="natureza_sel" class="form-select">
+                            <option value="oficial" {% if (evento.natureza or 'oficial') == 'oficial' %}selected{% endif %}>Oficial (calendário: competição)</option>
+                            <option value="festival" {% if evento.natureza == 'festival' %}selected{% endif %}>Festival (calendário: evento)</option>
+                        </select>
+                    </div>
+                    <div class="saas-stack">
+                        <label class="saas-label" for="cat_modo_sel">Categorias no placar</label>
+                        <select name="categorias_modo" id="cat_modo_sel" class="form-select">
+                            <option value="padrao" {% if (evento.categorias_modo or 'padrao') == 'padrao' %}selected{% endif %}>Categorias padrão (tabela da associação)</option>
+                            <option value="aproximacao" {% if evento.categorias_modo == 'aproximacao' %}selected{% endif %}>Categorias por aproximação (lista própria)</option>
+                        </select>
+                    </div>
+                    <div class="saas-stack">
+                        <span class="saas-label">Controle do placar na mesa</span>
+                        {% set pcm = evento.placar_controle_modelo|default('livre') %}
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="placar_controle_modelo" value="livre" id="pcm_livre_e" {% if pcm == 'livre' %}checked{% endif %}>
+                            <label class="form-check-label" for="pcm_livre_e">Livre — a mesa pode alternar entre Controle 1 e Controle 2</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="placar_controle_modelo" value="unimaster" id="pcm_c1_e" {% if pcm == 'unimaster' %}checked{% endif %}>
+                            <label class="form-check-label" for="pcm_c1_e">Somente Controle 1</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="placar_controle_modelo" value="martialmatch" id="pcm_c2_e" {% if pcm == 'martialmatch' %}checked{% endif %}>
+                            <label class="form-check-label" for="pcm_c2_e">Somente Controle 2</label>
+                        </div>
+                        <span class="saas-field-hint">Controle 1 e 2 são os dois layouts da tela de controle do placar (todas as lutas seguem a opção escolhida).</span>
+                    </div>
+                    <hr class="my-4 text-muted opacity-25">
+                    <div class="saas-stack">
+                        <label class="saas-label" for="insc_modo_sel">Inscrições na competição</label>
+                        <select name="inscricao_modo" id="insc_modo_sel" class="form-select">
+                            <option value="academias_formulario" {% if (evento.inscricao_modo|default('academias_formulario')) == 'academias_formulario' %}selected{% endif %}>Apenas pelo sistema: academias aderem e alunos usam o formulário</option>
+                            <option value="publico_avulso" {% if evento.inscricao_modo == 'publico_avulso' %}selected{% endif %}>Apenas avulso: link público, Excel e inclusão manual</option>
+                            <option value="misto" {% if evento.inscricao_modo == 'misto' %}selected{% endif %}>Misto: formulário das academias + avulso (link/planilha/manual)</option>
+                        </select>
+                        <div class="form-check mt-2">
+                            <input class="form-check-input" type="checkbox" name="regenerar_link_publico" value="1" id="regenLinkPub">
+                            <label class="form-check-label text-danger small" for="regenLinkPub">Gerar novo link público (invalida o link anterior)</label>
+                        </div>
+                        <span class="saas-field-hint"><i class="bi bi-info-circle me-1"></i>Depois de <strong>Salvar alterações</strong>, o link aparece no quadro abaixo quando o modo for <em>avulso</em> ou <em>misto</em>.</span>
+                    </div>
                 </div>
-            </form>
-        </div>
+
+                {% if evento.inscricao_modo in ['publico_avulso', 'misto'] %}
+                <div class="saas-card saas-card--muted">
+                    <h3 class="saas-card__title"><i class="bi bi-link-45deg me-2 text-primary"></i>Inscrição avulsa</h3>
+                    {% if evento.public_inscricao_token %}
+                    <p class="small text-muted mb-3">Link geral — qualquer pessoa pode se inscrever. Academias participantes e professores da associação aparecem no formulário.</p>
+                    <div class="input-group mb-3">
+                        <input type="text" class="form-control font-monospace small" readonly id="urlInscPub" value="{{ url_for('eventos_competicoes.inscricao_publica', token=evento.public_inscricao_token, _external=True) }}">
+                        <button type="button" class="btn saas-btn-secondary" onclick="navigator.clipboard.writeText(document.getElementById('urlInscPub').value); this.textContent='Copiado!';">Copiar</button>
+                    </div>
+                    {% if professores_para_links|default([])|length > 0 %}
+                    <p class="small fw-semibold mb-2">Link por academia</p>
+                    <p class="small text-muted mb-2">Um link por academia, com o <strong>responsável (gestor)</strong> da academia como professor. Academias sem responsável definido não aparecem aqui — defina o responsável no cadastro da academia.</p>
+                    <div class="saas-table-wrap">
+                        <table class="table table-sm table-bordered bg-white mb-0">
+                            <thead><tr><th>Professor</th><th>Academia</th><th class="text-end">Ação</th></tr></thead>
+                            <tbody>
+                                {% for p in professores_para_links %}
+                                <tr>
+                                    <td class="align-middle">{{ p.nome }}</td>
+                                    <td class="align-middle text-muted">{{ p.academia_nome or '—' }}</td>
+                                    <td class="text-end align-middle">
+                                        {% set href_prof = url_for('eventos_competicoes.inscricao_publica', token=evento.public_inscricao_token, professor_id=p.id, _external=True) %}
+                                        <button type="button" class="btn btn-sm btn-outline-primary py-1" data-link="{{ href_prof }}" onclick="navigator.clipboard.writeText(this.getAttribute('data-link')); this.textContent='Copiado';">Copiar link</button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% endif %}
+                    {% else %}
+                    <p class="small text-warning mb-0">Link ainda não disponível. Salve após executar a migração <code>add_competicao_inscricao_modo_publica.sql</code> no MySQL.</p>
+                    {% endif %}
+                    <div class="d-flex flex-wrap gap-2 mt-3">
+                        {% if layout_embed %}
+                        <a href="{{ url_for('eventos_competicoes.gestor_incluir_participante_avulso', evento_id=evento.id, embed=1) }}" class="btn btn-sm btn-outline-primary saas-btn-ghost"><i class="bi bi-person-plus me-1"></i>Incluir manualmente</a>
+                        <a href="{{ url_for('eventos_competicoes.importar_inscricoes_excel', evento_id=evento.id, embed=1) }}" class="btn btn-sm btn-outline-primary saas-btn-ghost"><i class="bi bi-file-earmark-spreadsheet me-1"></i>Importar Excel</a>
+                        <a href="{{ url_for('eventos_competicoes.modelo_planilha_inscricoes', evento_id=evento.id, embed=1) }}" class="btn btn-sm btn-outline-secondary saas-btn-ghost"><i class="bi bi-download me-1"></i>Modelo .xlsx</a>
+                        {% else %}
+                        <a href="{{ url_for('eventos_competicoes.gestor_incluir_participante_avulso', evento_id=evento.id) }}" class="btn btn-sm btn-outline-primary saas-btn-ghost"><i class="bi bi-person-plus me-1"></i>Incluir manualmente</a>
+                        <a href="{{ url_for('eventos_competicoes.importar_inscricoes_excel', evento_id=evento.id) }}" class="btn btn-sm btn-outline-primary saas-btn-ghost"><i class="bi bi-file-earmark-spreadsheet me-1"></i>Importar Excel</a>
+                        <a href="{{ url_for('eventos_competicoes.modelo_planilha_inscricoes', evento_id=evento.id) }}" class="btn btn-sm btn-outline-secondary saas-btn-ghost"><i class="bi bi-download me-1"></i>Modelo .xlsx</a>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+            </section>
+            {% endif %}
+
+            <section class="saas-section" aria-labelledby="heading-academias">
+                <h2 id="heading-academias" class="saas-section-heading"><i class="bi bi-building" aria-hidden="true"></i>{% if evento.tipo == 'competicao' %}Academias participantes{% else %}Academias participantes{% endif %}</h2>
+                <div class="saas-card">
+                    {% if evento.tipo == 'competicao' %}
+                    <p class="small text-muted mb-3">Marque as academias que <strong>confirmam participação</strong>. Elas entram nas opções do formulário público (quando houver inscrição avulsa).</p>
+                    {% else %}
+                    <p class="small text-muted mb-3">Marque as academias que <strong>confirmam participação</strong> neste evento.</p>
+                    {% endif %}
+                    {% if academias_adesao|default([]) %}
+                    <div class="d-flex flex-wrap gap-2 mb-3">
+                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="marcarAcademias(true)">
+                            <i class="bi bi-check-all me-1"></i>Marcar todas
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="marcarAcademias(false)">
+                            <i class="bi bi-x-lg me-1"></i>Desmarcar todas
+                        </button>
+                    </div>
+                    {% endif %}
+                    {% for a in academias_adesao|default([]) %}
+                    <div class="form-check">
+                        <input class="form-check-input adesao-cb" type="checkbox" name="adesao_academia" value="{{ a.id }}" id="ad_ac_{{ a.id }}" {% if a.aderiu %}checked{% endif %}>
+                        <label class="form-check-label" for="ad_ac_{{ a.id }}">{{ a.nome }}</label>
+                    </div>
+                    {% else %}
+                    <p class="small text-muted mb-0">Nenhuma academia cadastrada nesta associação.</p>
+                    {% endfor %}
+                    <script>
+                      function marcarAcademias(marcar) {
+                        document.querySelectorAll('.adesao-cb').forEach(function (cb) { cb.checked = marcar; });
+                      }
+                    </script>
+                </div>
+            </section>
+
+            <div class="saas-card">
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+                    <div>
+                        <h3 class="saas-card__title mb-1">Salvar alterações</h3>
+                        <p class="small text-muted mb-0">Os dados são gravados ao confirmar. Você permanece nesta página.</p>
+                    </div>
+                    <div class="saas-actions-row mt-0">
+                        <button type="submit" class="saas-btn-primary"><i class="bi bi-check-lg"></i>Salvar alterações</button>
+                        <a href="{{ back_url }}" class="saas-btn-secondary">Cancelar</a>
+                    </div>
+                </div>
+            </div>
+        </form>
+
+        <button type="submit" form="editar-evento-form" class="saas-fab-save" title="Salvar alterações" aria-label="Salvar alterações">
+            <i class="bi bi-check-lg"></i>
+        </button>
+
+        <section class="saas-section mt-4" aria-labelledby="heading-excluir">
+            <div class="saas-card saas-card--danger">
+                <h3 id="heading-excluir" class="saas-card__title saas-card__title--danger"><i class="bi bi-exclamation-triangle me-2"></i>Excluir definitivamente</h3>
+                <p class="small text-muted mb-3">Remove o cadastro, inscrições, adesões{% if evento.tipo == 'competicao' %}, lutas do placar{% endif %}, anexos e ocorrências no calendário. Não é possível desfazer.</p>
+                <form action="{{ url_for('eventos_competicoes.excluir', evento_id=evento.id) }}" method="POST"
+                      onsubmit="return confirm('Excluir permanentemente este registro? Esta ação não pode ser desfeita.');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-outline-danger rounded-3"><i class="bi bi-trash me-1"></i>{% if evento.tipo == 'competicao' %}Excluir competição{% else %}Excluir evento{% endif %}</button>
+                </form>
+            </div>
+        </section>
     </div>
 </div>
 
@@ -135,21 +293,20 @@
 document.addEventListener('DOMContentLoaded', function() {
     const container = document.getElementById('anexosContainer');
     const btnAdicionar = document.getElementById('adicionarAnexo');
-    
+
     function criarItemAnexo() {
         const div = document.createElement('div');
         div.className = 'anexo-item mb-2';
         div.innerHTML = `
-            <div class="input-group">
+            <div class="input-group flex-column flex-md-row gap-2 gap-md-0">
                 <input type="file" name="anexos" class="form-control anexo-file" accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.zip,.rar,.txt">
-                <input type="text" name="descricao_anexo_" class="form-control descricao-anexo" placeholder="Descrição (opcional)" style="max-width: 200px;">
-                <button type="button" class="btn btn-outline-danger remover-anexo" title="Remover">
-                    <i class="bi bi-x"></i>
+                <input type="text" name="descricao_anexo_" class="form-control descricao-anexo saas-desc-anexo" placeholder="Descrição (opcional)">
+                <button type="button" class="btn btn-outline-danger remover-anexo saas-btn-ghost align-self-stretch" title="Remover">
+                    <i class="bi bi-x-lg"></i>
                 </button>
             </div>
         `;
-        
-        // Atualizar nome do campo descricao quando arquivo for selecionado
+
         const fileInput = div.querySelector('.anexo-file');
         const descInput = div.querySelector('.descricao-anexo');
         fileInput.addEventListener('change', function() {
@@ -157,28 +314,26 @@ document.addEventListener('DOMContentLoaded', function() {
                 descInput.name = 'descricao_anexo_' + this.files[0].name;
             }
         });
-        
-        // Remover item
+
         div.querySelector('.remover-anexo').addEventListener('click', function() {
             div.remove();
         });
-        
+
         return div;
     }
-    
-    if (btnAdicionar) {
+
+    if (btnAdicionar && container) {
         btnAdicionar.addEventListener('click', function() {
             container.appendChild(criarItemAnexo());
         });
-        
-        // Remover item inicial se necessário
+
         document.querySelectorAll('.remover-anexo').forEach(btn => {
             btn.addEventListener('click', function() {
-                this.closest('.anexo-item').remove();
+                const item = this.closest('.anexo-item');
+                if (item) item.remove();
             });
         });
-        
-        // Atualizar nome do campo descricao quando arquivo for selecionado no primeiro item
+
         const primeiroFileInput = document.querySelector('.anexo-file');
         if (primeiroFileInput) {
             primeiroFileInput.addEventListener('change', function() {
@@ -191,43 +346,6 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         }
     }
-    
-    // Inicializar estado do campo de taxa ao carregar
-    const checkboxInicial = document.getElementById('tem_taxa');
-    const campoValorInicial = document.getElementById('campo_valor_taxa');
-    if (checkboxInicial && campoValorInicial) {
-        if (checkboxInicial.checked) {
-            campoValorInicial.style.display = 'block';
-            const valorInput = document.getElementById('valor_taxa_sugerido');
-            if (valorInput) valorInput.required = true;
-        } else {
-            campoValorInicial.style.display = 'none';
-            const valorInput = document.getElementById('valor_taxa_sugerido');
-            if (valorInput) valorInput.required = false;
-        }
-    }
 });
-
-// Função global para mostrar/ocultar campo de valor da taxa
-function toggleTaxa() {
-    const checkbox = document.getElementById('tem_taxa');
-    const campoValor = document.getElementById('campo_valor_taxa');
-    if (checkbox && campoValor) {
-        if (checkbox.checked) {
-            campoValor.style.display = 'block';
-            const valorInput = document.getElementById('valor_taxa_sugerido');
-            if (valorInput) {
-                valorInput.required = true;
-            }
-        } else {
-            campoValor.style.display = 'none';
-            const valorInput = document.getElementById('valor_taxa_sugerido');
-            if (valorInput) {
-                valorInput.required = false;
-                valorInput.value = '';
-            }
-        }
-    }
-}
 </script>
 {% endblock %}

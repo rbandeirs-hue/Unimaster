@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Mensagens do WhatsApp{% endblock %}
+{% block content %}
+<div class="container my-4" style="max-width: 760px;">
+  <div class="d-flex align-items-center gap-2 mb-1">
+    <i class="bi bi-chat-left-text-fill text-success fs-3"></i>
+    <h4 class="fw-bold mb-0">Mensagens do WhatsApp</h4>
+  </div>
+  <p class="text-muted">Personalize o texto de cada mensagem automática. Deixe um modelo <strong>desligado</strong> para não enviá-lo.</p>
+
+  <div class="mb-3"><a href="{{ url_for('academia.whatsapp_config', academia_id=academia_id) }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> WhatsApp da academia</a></div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}<div class="alert alert-{{ cat }} py-2">{{ msg }}</div>{% endfor %}
+  {% endwith %}
+
+  <div class="alert alert-light border small">
+    <strong>Variáveis disponíveis</strong> (são substituídas automaticamente):
+    <code>{nome}</code> primeiro nome,
+    <code>{aluno}</code> nome do aluno,
+    <code>{valor}</code> valor,
+    <code>{vencimento}</code> data,
+    <code>{link}</code> link de pagamento,
+    <code>{academia}</code> nome da academia,
+    <code>{mes}</code> competência.
+  </div>
+
+  <form method="POST" action="{{ url_for('academia.whatsapp_mensagens', academia_id=academia_id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% for it in itens %}
+    <div class="card border-0 shadow-sm mb-3">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <h6 class="fw-bold mb-0">{{ it.label }}</h6>
+          <div class="form-check form-switch mb-0">
+            <input class="form-check-input" type="checkbox" role="switch" id="ativo_{{ it.tipo }}" name="ativo_{{ it.tipo }}" value="1" {{ 'checked' if it.ativo }}>
+            <label class="form-check-label small" for="ativo_{{ it.tipo }}">Ativo</label>
+          </div>
+        </div>
+        <textarea class="form-control" name="texto_{{ it.tipo }}" rows="4">{{ it.texto }}</textarea>
+        <div class="d-flex justify-content-between mt-1">
+          <span class="form-text mb-0" id="prev_{{ it.tipo }}"></span>
+          <button type="button" class="btn btn-link btn-sm p-0 text-muted js-restaurar" data-tipo="{{ it.tipo }}" data-padrao="{{ it.padrao|e }}">Restaurar padrão</button>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+    <div class="d-flex gap-2">
+      <button type="submit" class="btn btn-success"><i class="bi bi-check-lg me-1"></i> Salvar mensagens</button>
+      <a href="{{ url_for('academia.whatsapp_config', academia_id=academia_id) }}" class="btn btn-outline-secondary">Cancelar</a>
+    </div>
+  </form>
+</div>
+
+<script>
+document.querySelectorAll('.js-restaurar').forEach(function(b){
+  b.addEventListener('click', function(){
+    var ta = document.querySelector('textarea[name="texto_'+b.getAttribute('data-tipo')+'"]');
+    if(ta){ ta.value = b.getAttribute('data-padrao'); }
+  });
+});
+</script>
+{% endblock %}

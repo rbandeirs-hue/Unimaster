@@ -1,0 +1,25 @@
+{% extends "externo/base_externo.html" %}
+{% block title %}Categorias — {{ evento.nome }}{% endblock %}
+{% block content %}
+<h5>Categorias</h5>
+{% if categorias %}
+<div class="table-responsive">
+  <table class="table table-sm table-hover bg-white">
+    <thead><tr><th>Gênero</th><th>Classe</th><th>Categoria</th><th>Peso</th><th>Idade</th></tr></thead>
+    <tbody>
+      {% for c in categorias %}
+      <tr>
+        <td>{{ c.genero }}</td>
+        <td>{{ c.id_classe }}</td>
+        <td>{{ c.nome_categoria }}</td>
+        <td>{% if c.peso_min is not none and c.peso_max is not none %}{{ "%.1f"|format(c.peso_min) }}-{{ "%.1f"|format(c.peso_max) }} kg{% else %}-{% endif %}</td>
+        <td>{% if c.idade_min is not none and c.idade_max is not none %}{{ c.idade_min }}-{{ c.idade_max }}{% else %}-{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<p class="text-muted">Nenhuma categoria.</p>
+{% endif %}
+{% endblock %}

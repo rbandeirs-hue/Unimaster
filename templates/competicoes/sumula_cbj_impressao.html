@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Súmula{% if lutas|length == 1 %} #{{ lutas[0].id }}{% else %} — {{ evento.nome }}{% endif %}</title>
+    <style>
+        @page { size: A4 portrait; margin: 10mm; }
+        * { box-sizing: border-box; }
+        body {
+            font-family: "Times New Roman", Times, serif;
+            font-size: 11pt;
+            color: #000;
+            margin: 0;
+            padding: 8px;
+            line-height: 1.25;
+        }
+        .no-print { font-family: system-ui, sans-serif; margin-bottom: 12px; }
+        @media print {
+            .no-print { display: none !important; }
+            body { padding: 0; }
+            .folha-sumula { page-break-after: always; }
+            .folha-sumula:last-child { page-break-after: auto; }
+        }
+        .folha-sumula {
+            border: 2px solid #000;
+            padding: 10px 12px;
+            max-width: 210mm;
+            margin: 0 auto 16px;
+        }
+        .cabecalho-inst {
+            text-align: center;
+            font-weight: bold;
+            font-size: 10pt;
+            letter-spacing: 0.02em;
+            border-bottom: 2px solid #000;
+            padding-bottom: 6px;
+            margin-bottom: 8px;
+        }
+        .cabecalho-inst small {
+            display: block;
+            font-weight: normal;
+            font-size: 9pt;
+            margin-top: 2px;
+        }
+        .titulo-doc {
+            text-align: center;
+            font-size: 13pt;
+            font-weight: bold;
+            margin: 8px 0 10px;
+            text-transform: uppercase;
+        }
+        .grid-info {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 4px 16px;
+            font-size: 10pt;
+            margin-bottom: 10px;
+        }
+        .grid-info div { border-bottom: 1px solid #333; min-height: 1.3em; }
+        .grid-info .lab,
+        .grid-info span.lab { font-weight: bold; border: none; min-height: auto; }
+        .full { grid-column: 1 / -1; }
+        .atletas-dupla {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin: 10px 0;
+        }
+        .painel-atleta {
+            border: 2px solid #000;
+            padding: 8px;
+            min-height: 120px;
+        }
+        .painel-atleta.branco { background: #fafafa; }
+        .painel-atleta.azul { background: #f0f4fa; }
+        .cor-judogi {
+            text-align: center;
+            font-weight: bold;
+            font-size: 10pt;
+            text-transform: uppercase;
+            margin-bottom: 6px;
+            padding: 2px;
+            border-bottom: 1px solid #000;
+        }
+        .painel-atleta.branco .cor-judogi { background: #fff; }
+        .painel-atleta.azul .cor-judogi { background: #e8eef8; }
+        .campo-linha { margin: 4px 0; font-size: 10pt; }
+        .campo-linha .rot { font-weight: bold; display: inline-block; min-width: 4.5em; }
+        .tabela-pontos {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 10px 0;
+            font-size: 10pt;
+        }
+        .tabela-pontos th, .tabela-pontos td {
+            border: 1px solid #000;
+            padding: 4px 6px;
+            text-align: center;
+        }
+        .tabela-pontos th { background: #e8e8e8; font-weight: bold; }
+        .tabela-pontos .lbl { text-align: left; font-weight: bold; background: #f5f5f5; }
+        .marcador {
+            display: inline-block;
+            width: 1.1em;
+            height: 1.1em;
+            border: 1px solid #000;
+            margin: 0 1px;
+            vertical-align: middle;
+            line-height: 1em;
+            font-size: 9pt;
+        }
+        .marcador.preenchido { background: #000; color: #fff; }
+        .resultado-box {
+            border: 2px solid #000;
+            padding: 8px;
+            margin-top: 10px;
+            font-size: 10pt;
+        }
+        .resultado-box .linha { margin: 4px 0; }
+        .assinaturas {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 12px;
+            margin-top: 18px;
+            text-align: center;
+            font-size: 9pt;
+        }
+        .assinaturas .traco {
+            border-top: 1px solid #000;
+            margin-top: 36px;
+            padding-top: 4px;
+        }
+        .rodape-id {
+            text-align: right;
+            font-size: 8pt;
+            color: #444;
+            margin-top: 6px;
+        }
+    </style>
+</head>
+<body>
+    <div class="no-print">
+        <button type="button" onclick="window.print()">Imprimir / Salvar PDF</button>
+        <a href="javascript:history.back()">Voltar</a>
+    </div>
+
+    {% for luta in lutas %}
+    <section class="folha-sumula">
+        <div class="cabecalho-inst">
+            CONFEDERAÇÃO BRASILEIRA DE JUDÔ
+            <small>Modelo de súmula de luta (compatível com preenchimento manual dos campos não registrados no sistema)</small>
+        </div>
+        <div class="titulo-doc">Súmula de luta</div>
+
+        <div class="grid-info">
+            <div class="lab full">Evento</div>
+            <div class="full" style="border-bottom: 1px solid #333;">{{ evento.nome }}</div>
+            <div><span class="lab">Entidade / Realização:</span></div>
+            <div>{{ evento.associacao_nome or '—' }}</div>
+            <div><span class="lab">Data:</span></div>
+            <div>{% if evento.data_inicio %}{{ evento.data_inicio.strftime('%d/%m/%Y') }}{% elif evento.data_fim %}{{ evento.data_fim.strftime('%d/%m/%Y') }}{% else %}—{% endif %}</div>
+            <div><span class="lab">Categoria:</span></div>
+            <div>{{ luta.nome_categoria or luta.categoria_nome or '—' }}</div>
+            <div><span class="lab">Tatame / Área:</span></div>
+            <div>{{ luta.area_num or 1 }}</div>
+            <div><span class="lab">Tempo regulamento:</span></div>
+            <div>{% if luta.tempo_total_segundos %}{{ (luta.tempo_total_segundos // 60) }} min{% else %}5 min{% endif %}</div>
+            {% if luta.chave_fase %}
+            <div><span class="lab">Fase:</span></div>
+            <div>{{ luta.chave_fase|replace('_', ' ') }}</div>
+            {% endif %}
+        </div>
+
+        <div class="atletas-dupla">
+            <div class="painel-atleta branco">
+                <div class="cor-judogi">Judogi branco</div>
+                <div class="campo-linha"><span class="rot">Nome:</span> {{ luta.atleta_branco_nome }}</div>
+                <div class="campo-linha"><span class="rot">Equipe:</span> {{ luta.atleta_branco_academia or '—' }}</div>
+                <div class="campo-linha"><span class="rot">UF:</span> _______</div>
+                <div class="campo-linha"><span class="rot">Faixa:</span> _______</div>
+            </div>
+            <div class="painel-atleta azul">
+                <div class="cor-judogi">Judogi azul</div>
+                <div class="campo-linha"><span class="rot">Nome:</span> {{ luta.atleta_azul_nome }}</div>
+                <div class="campo-linha"><span class="rot">Equipe:</span> {{ luta.atleta_azul_academia or '—' }}</div>
+                <div class="campo-linha"><span class="rot">UF:</span> _______</div>
+                <div class="campo-linha"><span class="rot">Faixa:</span> _______</div>
+            </div>
+        </div>
+
+        <table class="tabela-pontos">
+            <thead>
+                <tr>
+                    <th style="width:28%">Indicador</th>
+                    <th>Branco</th>
+                    <th>Azul</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td class="lbl">Shido (advertências)</td>
+                    <td>
+                        {% set sb = luta.pontos_branco_shido or 0 %}
+                        {% for i in range(3) %}
+                        <span class="marcador{% if i < sb %} preenchido{% endif %}">{% if i < sb %}×{% endif %}</span>
+                        {% endfor %}
+                    </td>
+                    <td>
+                        {% set sa = luta.pontos_azul_shido or 0 %}
+                        {% for i in range(3) %}
+                        <span class="marcador{% if i < sa %} preenchido{% endif %}">{% if i < sa %}×{% endif %}</span>
+                        {% endfor %}
+                    </td>
+                </tr>
+                <tr>
+                    <td class="lbl">Yuko</td>
+                    <td>{{ luta.pontos_branco_yoko|default(0) }}</td>
+                    <td>{{ luta.pontos_azul_yoko|default(0) }}</td>
+                </tr>
+                <tr>
+                    <td class="lbl">Waza-ari</td>
+                    <td>{{ luta.pontos_branco_wazaari or 0 }}</td>
+                    <td>{{ luta.pontos_azul_wazaari or 0 }}</td>
+                </tr>
+                <tr>
+                    <td class="lbl">Ippon</td>
+                    <td>{% if luta.pontos_branco_ippon %}1{% else %}0{% endif %}</td>
+                    <td>{% if luta.pontos_azul_ippon %}1{% else %}0{% endif %}</td>
+                </tr>
+                <tr>
+                    <td class="lbl">Hansoku-make</td>
+                    <td>{% if luta.pontos_branco_hansokumake %}Sim{% else %}Não{% endif %}</td>
+                    <td>{% if luta.pontos_azul_hansokumake %}Sim{% else %}Não{% endif %}</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="grid-info">
+            <div><span class="lab">Golden Score:</span></div>
+            <div>{% if luta.golden_score_ativado %}Sim{% else %}Não{% endif %}</div>
+            <div><span class="lab">Status da luta:</span></div>
+            <div>{{ (luta.status or '—')|replace('_', ' ')|title }}</div>
+        </div>
+
+        <div class="resultado-box">
+            <div class="linha"><strong>Vencedor:</strong>
+                {% if luta.status == 'finalizada' and luta.vencedor == 'branco' %}{{ luta.atleta_branco_nome }}
+                {% elif luta.status == 'finalizada' and luta.vencedor == 'azul' %}{{ luta.atleta_azul_nome }}
+                {% elif luta.status == 'finalizada' and luta.vencedor == 'empate' %}Empate
+                {% else %}_____________________________{% endif %}
+            </div>
+            <div class="linha"><strong>Forma de vitória:</strong>
+                {% if luta.tipo_vitoria == 'ippon' %}Ippon
+                {% elif luta.tipo_vitoria == 'wazaari' %}Waza-ari (ou 2 waza-ari)
+                {% elif luta.tipo_vitoria == 'hansoku_make' %}Vitória por infração (Hansoku-make do oponente)
+                {% elif luta.tipo_vitoria == 'golden_score' %}Golden Score
+                {% elif luta.tipo_vitoria == 'desistencia' %}Desistência
+                {% else %}_____________________________{% endif %}
+            </div>
+            {% if luta.finalizada_em %}
+            <div class="linha"><strong>Encerramento registrado:</strong> {{ luta.finalizada_em.strftime('%d/%m/%Y %H:%M') }}</div>
+            {% endif %}
+        </div>
+
+        <div class="assinaturas">
+            <div>
+                <div class="traco">Árbitro central</div>
+            </div>
+            <div>
+                <div class="traco">Árbitro auxiliar</div>
+            </div>
+            <div>
+                <div class="traco">Mesa / Chefe de tatame</div>
+            </div>
+        </div>
+
+        <div class="rodape-id">Súmula gerada pelo sistema — Luta ID {{ luta.id }}</div>
+    </section>
+    {% endfor %}
+</body>
+</html>

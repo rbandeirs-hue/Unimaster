@@ -4,11 +4,12 @@ import base64
 import re
 import unicodedata
 from datetime import date
-from flask import Blueprint, render_template, redirect, url_for, flash, request, current_app, session
+from flask import Blueprint, render_template, redirect, url_for, flash, request, current_app, session, jsonify
 from flask_login import login_required, current_user
 from werkzeug.security import generate_password_hash
 from config import get_db_connection
 from utils.modalidades import filtro_visibilidade_sql
+from utils.upload_seguro import validar_upload, UploadInvalido
 
 associacao_bp = Blueprint("associacao", __name__, url_prefix="/associacao")
 
@@ -60,10 +61,11 @@ def salvar_logo_base64(data_url, prefixo, entidade_id):
 
 
 def salvar_logo(file_storage, prefixo, entidade_id):
-    if not file_storage or file_storage.filename == "":
+    if not file_storage or not file_storage.filename:
         return None
-    ext = os.path.splitext(file_storage.filename)[1].lower()
-    if ext not in LOGO_EXTENSOES:
+    try:
+        ext = validar_upload(file_storage, categorias=["imagem"])
+    except UploadInvalido:
         return None
     pasta = _pasta_logos()
     os.makedirs(pasta, exist_ok=True)
@@ -74,7 +76,7 @@ def salvar_logo(file_storage, prefixo, entidade_id):
                 os.remove(existente)
             except OSError:
                 pass
-    filename = f"{prefixo}_{entidade_id}{ext}"
+    filename = f"{prefixo}_{entidade_id}.{ext}"
     file_storage.save(os.path.join(pasta, filename))
     return filename
 
@@ -135,14 +137,43 @@ def painel_associacao():
     except Exception:
         pass
 
+    # Fila do Zempo: solicitações de cadastro que aguardam a associação migrar.
+    stats["zempo_pendentes"] = 0
+    try:
+        if current_user.has_role("admin"):
+            cur.execute(
+                "SELECT COUNT(*) AS c FROM zempo_solicitacoes WHERE status = 'pendente'")
+        else:
+            cur.execute(
+                """SELECT COUNT(*) AS c FROM zempo_solicitacoes
+                   WHERE status = 'pendente' AND id_associacao = %s""",
+                (getattr(current_user, "id_associacao", None),))
+        stats["zempo_pendentes"] = cur.fetchone().get("c") or 0
+    except Exception:
+        pass
+
     cur.close()
     conn.close()
+
+    # Aniversariantes do mês — todos os alunos das academias desta associação
+    from utils.aniversariantes import aniversariantes_do_mes_associacao
+    from datetime import date
+    hoje = date.today()
+    ids_acad = [a["id"] for a in academias] if academias else []
+    anivs = aniversariantes_do_mes_associacao(ids_acad, mes=hoje.month)
+    anivs_hoje = [a for a in anivs if a["data_nascimento"] and
+                  a["data_nascimento"].day == hoje.day]
 
     return render_template(
         "painel/painel_associacao.html",
         usuario=current_user,
         academias=academias,
         stats=stats,
+        aniversariantes=anivs,
+        aniversariantes_hoje=anivs_hoje,
+        hoje_dia=hoje.day,
+        hoje_mes=hoje.month,
+        hoje_ano=hoje.year,
     )
 
 
@@ -190,7 +221,13 @@ def lista_professores():
                     p.id_academia,
                     p.usuario_id,
                     ac.nome AS academia_nome,
-                    COALESCE(u.foto, (SELECT a.foto FROM alunos a WHERE a.usuario_id = p.usuario_id AND a.ativo = 1 LIMIT 1)) AS foto
+                    COALESCE(
+                        u.foto,
+                        (SELECT a.foto FROM alunos a WHERE a.usuario_id = p.usuario_id AND a.foto IS NOT NULL LIMIT 1),
+                        (SELECT u2.foto FROM usuarios u2 WHERE p.cpf IS NOT NULL AND p.cpf <> '' AND REGEXP_REPLACE(u2.cpf,'[^0-9]','') = REGEXP_REPLACE(p.cpf,'[^0-9]','') AND u2.foto IS NOT NULL LIMIT 1),
+                        (SELECT a2.foto FROM alunos a2 WHERE p.cpf IS NOT NULL AND p.cpf <> '' AND REGEXP_REPLACE(a2.cpf,'[^0-9]','') = REGEXP_REPLACE(p.cpf,'[^0-9]','') AND a2.foto IS NOT NULL LIMIT 1),
+                        (SELECT u3.foto FROM usuarios u3 WHERE p.email IS NOT NULL AND p.email <> '' AND u3.email = p.email AND u3.foto IS NOT NULL LIMIT 1)
+                    ) AS foto
                 FROM professores p
                 INNER JOIN academias ac ON ac.id = p.id_academia
                 LEFT JOIN usuarios u ON u.id = p.usuario_id
@@ -209,7 +246,13 @@ def lista_professores():
                     p.id_academia,
                     p.usuario_id,
                     ac.nome AS academia_nome,
-                    COALESCE(u.foto, (SELECT a.foto FROM alunos a WHERE a.usuario_id = p.usuario_id AND a.ativo = 1 LIMIT 1)) AS foto
+                    COALESCE(
+                        u.foto,
+                        (SELECT a.foto FROM alunos a WHERE a.usuario_id = p.usuario_id AND a.foto IS NOT NULL LIMIT 1),
+                        (SELECT u2.foto FROM usuarios u2 WHERE p.cpf IS NOT NULL AND p.cpf <> '' AND REGEXP_REPLACE(u2.cpf,'[^0-9]','') = REGEXP_REPLACE(p.cpf,'[^0-9]','') AND u2.foto IS NOT NULL LIMIT 1),
+                        (SELECT a2.foto FROM alunos a2 WHERE p.cpf IS NOT NULL AND p.cpf <> '' AND REGEXP_REPLACE(a2.cpf,'[^0-9]','') = REGEXP_REPLACE(p.cpf,'[^0-9]','') AND a2.foto IS NOT NULL LIMIT 1),
+                        (SELECT u3.foto FROM usuarios u3 WHERE p.email IS NOT NULL AND p.email <> '' AND u3.email = p.email AND u3.foto IS NOT NULL LIMIT 1)
+                    ) AS foto
                 FROM professores p
                 INNER JOIN academias ac ON ac.id = p.id_academia
                 LEFT JOIN usuarios u ON u.id = p.usuario_id
@@ -382,6 +425,18 @@ def cadastro_academia():
         cur.execute("SELECT id, nome FROM modalidade WHERE ativo = 1 ORDER BY nome")
         modalidades = cur.fetchall()
 
+    # Modo associação: não mostrar seletor de associação (usar apenas a do usuário)
+    modo_associacao = (
+        current_user.has_role("gestor_associacao")
+        and not current_user.has_role("admin")
+        and id_associacao_padrao
+    )
+    associacao_nome_cadastro = None
+    if modo_associacao:
+        cur.execute("SELECT nome FROM associacoes WHERE id = %s", (id_associacao_padrao,))
+        row = cur.fetchone()
+        associacao_nome_cadastro = row["nome"] if row else None
+
     if request.method == "POST":
         nome = request.form.get("nome", "").strip()
         responsavel = request.form.get("responsavel", "").strip()
@@ -399,8 +454,14 @@ def cadastro_academia():
         modalidade_ids = [int(x) for x in request.form.getlist("modalidade_ids") if str(x).strip().isdigit()]
         
         # Dados do gestor
+        from blueprints.auth.routes import _so_digitos, _valida_cpf
+        # Vínculo de gestor já existente (selecionado na busca de usuários)
+        gestor_usuario_id = request.form.get("gestor_usuario_id", type=int)
+        usar_gestor_existente = bool(gestor_usuario_id)
         gestor_nome = request.form.get("gestor_nome", "").strip()
         gestor_email = request.form.get("gestor_email", "").strip()
+        gestor_cpf = _so_digitos(request.form.get("gestor_cpf") or "")
+        gestor_telefone = request.form.get("gestor_telefone", "").strip()
         gestor_senha = request.form.get("gestor_senha", "").strip()
 
         if current_user.has_role("admin"):
@@ -408,180 +469,242 @@ def cadastro_academia():
         else:
             id_associacao = id_associacao_padrao
 
+        # ---------- Validação ----------
+        erro = None
+        gestor_user = None  # preenchido quando vincular usuário já existente
         if not nome:
-            flash("Informe o nome da academia.", "danger")
+            erro = "Informe o nome da academia."
         elif not id_associacao:
-            flash("Selecione a associação da academia.", "danger")
-        elif not gestor_nome or not gestor_email or not gestor_senha:
-            flash("Preencha todos os dados do gestor (nome, e-mail e senha).", "danger")
+            erro = "Selecione a associação da academia."
+        elif usar_gestor_existente:
+            cur.execute(
+                """
+                SELECT u.id, u.nome, u.email, u.cpf, u.id_associacao,
+                       COALESCE(
+                           (SELECT a.telefone FROM alunos a
+                             WHERE a.usuario_id = u.id AND a.telefone IS NOT NULL AND a.telefone <> '' LIMIT 1),
+                           (SELECT p.telefone FROM professores p
+                             WHERE p.usuario_id = u.id AND p.telefone IS NOT NULL AND p.telefone <> '' LIMIT 1)
+                       ) AS telefone
+                FROM usuarios u WHERE u.id = %s
+                """,
+                (gestor_usuario_id,),
+            )
+            gestor_user = cur.fetchone()
+            if not gestor_user:
+                erro = "Usuário selecionado para gestor não foi encontrado."
+            elif (not current_user.has_role("admin")
+                  and gestor_user.get("id_associacao") not in (None, id_associacao_padrao)):
+                erro = "Você não tem permissão para vincular este usuário como gestor."
+        elif not gestor_nome or not gestor_email or not gestor_cpf or not gestor_telefone or not gestor_senha:
+            erro = "Preencha todos os dados do gestor (nome, CPF, telefone, e-mail e senha)."
+        elif not _valida_cpf(gestor_cpf):
+            erro = "CPF do gestor inválido. Verifique e tente novamente."
         elif len(gestor_senha) < 6:
-            flash("A senha do gestor deve ter no mínimo 6 caracteres.", "danger")
+            erro = "A senha do gestor deve ter no mínimo 6 caracteres."
         else:
-            # Modo associação: validar modalidades apenas as vinculadas à associação
-            if modo_associacao_modalidades:
-                cur.execute(
-                    "SELECT modalidade_id FROM associacao_modalidades WHERE associacao_id = %s",
-                    (id_associacao,),
-                )
-                ids_validos = {r["modalidade_id"] for r in cur.fetchall()}
-                modalidade_ids = [mid for mid in modalidade_ids if mid in ids_validos]
-
-            # Verificar se email do gestor já existe
             cur.execute("SELECT id FROM usuarios WHERE email = %s", (gestor_email,))
-            if cur.fetchone():
-                flash("Já existe um usuário com este e-mail. Use outro e-mail para o gestor.", "danger")
-                cur.close()
-                conn.close()
-                return render_template(
-                    "academias/cadastro_academia.html",
-                    associacoes=associacoes,
-                    id_associacao_selecionada=id_associacao_padrao,
-                    back_url=back_url,
-                    modo_associacao=modo_associacao,
-                    associacao_nome=associacao_nome_cadastro,
-                    modalidades=modalidades,
-                )
-            
-            # Criar academia
-            cur.execute("""
-                INSERT INTO academias (nome, responsavel, cidade, uf, email, telefone, cep, rua, numero, complemento, bairro, id_associacao)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """, (
-                nome,
-                responsavel or None,
-                cidade or None,
-                uf or None,
-                email or None,
-                telefone or None,
-                cep or None,
-                rua or None,
-                numero or None,
-                complemento or None,
-                bairro or None,
-                id_associacao
-            ))
-            academia_id = cur.lastrowid
-            
-            # Salvar logo
-            if logo_base64 and logo_base64.startswith("data:"):
-                salvar_logo_base64(logo_base64, "academia", academia_id)
+            if cur.fetchone() is not None:
+                erro = ('Já existe um usuário com este e-mail. Use a opção '
+                        '"Selecionar usuário existente" para vinculá-lo como gestor, '
+                        'ou informe outro e-mail.')
             else:
-                salvar_logo(logo_file, "academia", academia_id)
-            
-            # Vincular modalidades
-            for mid in modalidade_ids:
-                cur.execute(
-                    "INSERT IGNORE INTO academia_modalidades (academia_id, modalidade_id) VALUES (%s, %s)",
-                    (academia_id, mid),
-                )
-            
-            # Buscar id_associacao e id_federacao da academia criada
-            cur.execute("""
-                SELECT a.id_associacao, 
-                       ass.id_federacao
-                FROM academias a
-                LEFT JOIN associacoes ass ON ass.id = a.id_associacao
-                WHERE a.id = %s
-            """, (academia_id,))
-            acad_info = cur.fetchone()
-            id_associacao_usuario = acad_info["id_associacao"] if acad_info else None
-            id_federacao_usuario = acad_info["id_federacao"] if acad_info else None
-            
-            # Criar usuário gestor
-            senha_hash = generate_password_hash(gestor_senha)
-            cur.execute("""
-                INSERT INTO usuarios (nome, email, senha, id_academia, id_associacao, id_federacao)
-                VALUES (%s, %s, %s, %s, %s, %s)
-            """, (gestor_nome, gestor_email, senha_hash, academia_id, id_associacao_usuario, id_federacao_usuario))
-            gestor_user_id = cur.lastrowid
-            
-            # Buscar IDs das roles gestor_academia e aluno
-            cur.execute("""
-                SELECT id, nome, COALESCE(chave, LOWER(REPLACE(nome,' ','_'))) as chave 
-                FROM roles 
-                WHERE chave IN ('gestor_academia', 'aluno')
-                   OR nome IN ('Gestor Academia', 'Aluno')
-                ORDER BY 
-                    CASE chave
-                        WHEN 'gestor_academia' THEN 1
-                        WHEN 'aluno' THEN 2
-                        ELSE 3
-                    END
-            """)
-            roles_encontradas = cur.fetchall()
-            role_gestor = None
-            role_aluno = None
-            for r in roles_encontradas:
-                if r.get("chave") == "gestor_academia" or "gestor" in r.get("nome", "").lower() and "academia" in r.get("nome", "").lower():
-                    role_gestor = r
-                elif r.get("chave") == "aluno" or r.get("nome", "").lower() == "aluno":
-                    role_aluno = r
-            
-            # Vincular role gestor_academia
+                cur.execute("SELECT id FROM usuarios WHERE cpf = %s", (gestor_cpf,))
+                if cur.fetchone() is not None:
+                    erro = ('Já existe um usuário com este CPF. Use a opção '
+                            '"Selecionar usuário existente" para vinculá-lo como gestor.')
+
+        if erro:
+            flash(erro, "danger")
+            cur.close()
+            conn.close()
+            return render_template(
+                "academias/cadastro_academia.html",
+                associacoes=associacoes,
+                id_associacao_selecionada=id_associacao_padrao,
+                back_url=back_url,
+                modo_associacao=modo_associacao,
+                associacao_nome=associacao_nome_cadastro,
+                modalidades=modalidades,
+            )
+
+        # ---------- Criação ----------
+        # Modo associação: validar modalidades apenas as vinculadas à associação
+        if modo_associacao_modalidades:
+            cur.execute(
+                "SELECT modalidade_id FROM associacao_modalidades WHERE associacao_id = %s",
+                (id_associacao,),
+            )
+            ids_validos = {r["modalidade_id"] for r in cur.fetchall()}
+            modalidade_ids = [mid for mid in modalidade_ids if mid in ids_validos]
+
+        # O contato da academia (responsável/telefone/e-mail) é SEMPRE o do gestor
+        if usar_gestor_existente and gestor_user:
+            responsavel = gestor_user.get("nome") or ""
+            email = gestor_user.get("email") or ""
+            telefone = gestor_user.get("telefone") or ""
+        else:
+            responsavel = gestor_nome
+            email = gestor_email
+            telefone = gestor_telefone
+
+        # Criar academia
+        cur.execute("""
+            INSERT INTO academias (nome, responsavel, cidade, uf, email, telefone, cep, rua, numero, complemento, bairro, id_associacao)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """, (
+            nome,
+            responsavel or None,
+            cidade or None,
+            uf or None,
+            email or None,
+            telefone or None,
+            cep or None,
+            rua or None,
+            numero or None,
+            complemento or None,
+            bairro or None,
+            id_associacao
+        ))
+        academia_id = cur.lastrowid
+
+        # Salvar logo
+        if logo_base64 and logo_base64.startswith("data:"):
+            salvar_logo_base64(logo_base64, "academia", academia_id)
+        else:
+            salvar_logo(logo_file, "academia", academia_id)
+
+        # Vincular modalidades
+        for mid in modalidade_ids:
+            cur.execute(
+                "INSERT IGNORE INTO academia_modalidades (academia_id, modalidade_id) VALUES (%s, %s)",
+                (academia_id, mid),
+            )
+
+        # Buscar id_associacao e id_federacao da academia criada
+        cur.execute("""
+            SELECT a.id_associacao,
+                   ass.id_federacao
+            FROM academias a
+            LEFT JOIN associacoes ass ON ass.id = a.id_associacao
+            WHERE a.id = %s
+        """, (academia_id,))
+        acad_info = cur.fetchone()
+        id_associacao_usuario = acad_info["id_associacao"] if acad_info else None
+        id_federacao_usuario = acad_info["id_federacao"] if acad_info else None
+
+        # Buscar IDs das roles gestor_academia e aluno
+        cur.execute("""
+            SELECT id, nome, COALESCE(chave, LOWER(REPLACE(nome,' ','_'))) as chave
+            FROM roles
+            WHERE chave IN ('gestor_academia', 'aluno')
+               OR nome IN ('Gestor Academia', 'Aluno')
+            ORDER BY
+                CASE chave
+                    WHEN 'gestor_academia' THEN 1
+                    WHEN 'aluno' THEN 2
+                    ELSE 3
+                END
+        """)
+        roles_encontradas = cur.fetchall()
+        role_gestor = None
+        role_aluno = None
+        for r in roles_encontradas:
+            if r.get("chave") == "gestor_academia" or ("gestor" in r.get("nome", "").lower() and "academia" in r.get("nome", "").lower()):
+                role_gestor = r
+            elif r.get("chave") == "aluno" or r.get("nome", "").lower() == "aluno":
+                role_aluno = r
+
+        if usar_gestor_existente:
+            # Vincular usuário JÁ EXISTENTE como gestor desta academia
+            gestor_user_id = gestor_user["id"]
+            gestor_nome = gestor_user["nome"]
+
+            # Preenche o escopo apenas se ainda não estiver definido
+            # (não sobrescreve a academia/associação atual do usuário)
+            cur.execute(
+                """
+                UPDATE usuarios
+                SET id_academia = COALESCE(id_academia, %s),
+                    id_associacao = COALESCE(id_associacao, %s),
+                    id_federacao = COALESCE(id_federacao, %s)
+                WHERE id = %s
+                """,
+                (academia_id, id_associacao_usuario, id_federacao_usuario, gestor_user_id),
+            )
+
+            # Garantir a role gestor_academia (sem duplicar)
             if role_gestor:
-                cur.execute("""
-                    INSERT INTO roles_usuario (usuario_id, role_id)
-                    VALUES (%s, %s)
-                """, (gestor_user_id, role_gestor["id"]))
-            
-            # Vincular role aluno
-            if role_aluno:
-                cur.execute("""
-                    INSERT INTO roles_usuario (usuario_id, role_id)
-                    VALUES (%s, %s)
-                """, (gestor_user_id, role_aluno["id"]))
-            
+                cur.execute(
+                    "SELECT 1 FROM roles_usuario WHERE usuario_id = %s AND role_id = %s",
+                    (gestor_user_id, role_gestor["id"]),
+                )
+                if not cur.fetchone():
+                    cur.execute(
+                        "INSERT INTO roles_usuario (usuario_id, role_id) VALUES (%s, %s)",
+                        (gestor_user_id, role_gestor["id"]),
+                    )
+
             # Vincular usuário à academia
-            cur.execute("""
-                INSERT INTO usuarios_academias (usuario_id, academia_id)
-                VALUES (%s, %s)
-            """, (gestor_user_id, academia_id))
-            
-            # Criar perfil de aluno automaticamente
-            if role_aluno:
-                try:
-                    # Buscar id_associacao e id_federacao da academia
-                    cur.execute("""
-                        SELECT a.id_associacao, 
-                               ass.id_federacao
-                        FROM academias a
-                        LEFT JOIN associacoes ass ON ass.id = a.id_associacao
-                        WHERE a.id = %s
-                    """, (academia_id,))
-                    acad_info = cur.fetchone()
-                    id_associacao_aluno = acad_info["id_associacao"] if acad_info else None
-                    id_federacao_aluno = acad_info["id_federacao"] if acad_info else None
-                    
-                    cur.execute("""
-                        INSERT INTO alunos (
-                            nome, usuario_id, id_academia, id_associacao, id_federacao,
-                            status, ativo, data_matricula
-                        )
-                        VALUES (%s, %s, %s, %s, %s, 'ativo', 1, %s)
-                    """, (gestor_nome, gestor_user_id, academia_id, id_associacao_aluno, id_federacao_aluno, date.today()))
-                    current_app.logger.info(f"Perfil de aluno criado automaticamente para gestor {gestor_nome} (ID: {gestor_user_id})")
-                except Exception as e:
-                    # Se falhar, não impede a criação da academia, mas registra o erro
-                    current_app.logger.error(f"Erro ao criar perfil de aluno para gestor {gestor_nome} (ID: {gestor_user_id}): {e}", exc_info=True)
-            
+            cur.execute(
+                "INSERT INTO usuarios_academias (usuario_id, academia_id) VALUES (%s, %s)",
+                (gestor_user_id, academia_id),
+            )
+
             conn.commit()
             cur.close()
             conn.close()
-            flash(f"Academia cadastrada com sucesso! Usuário gestor '{gestor_nome}' criado e vinculado.", "success")
-            redirect_url = request.form.get("next") or back_url
-            return redirect(redirect_url)
+            flash(f"Academia cadastrada com sucesso! Usuário '{gestor_nome}' vinculado como gestor.", "success")
+            return redirect(request.form.get("next") or back_url)
 
-    # Modo associação: não mostrar seletor de associação (usar apenas a do usuário)
-    modo_associacao = (
-        current_user.has_role("gestor_associacao")
-        and not current_user.has_role("admin")
-        and id_associacao_padrao
-    )
-    associacao_nome_cadastro = None
-    if modo_associacao:
-        cur.execute("SELECT nome FROM associacoes WHERE id = %s", (id_associacao_padrao,))
-        row = cur.fetchone()
-        associacao_nome_cadastro = row["nome"] if row else None
+        # Criar NOVO usuário gestor (login por CPF)
+        senha_hash = generate_password_hash(gestor_senha)
+        cur.execute("""
+            INSERT INTO usuarios (nome, email, cpf, senha, id_academia, id_associacao, id_federacao)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+        """, (gestor_nome, gestor_email, gestor_cpf, senha_hash, academia_id, id_associacao_usuario, id_federacao_usuario))
+        gestor_user_id = cur.lastrowid
+
+        # Vincular role gestor_academia
+        if role_gestor:
+            cur.execute("""
+                INSERT INTO roles_usuario (usuario_id, role_id)
+                VALUES (%s, %s)
+            """, (gestor_user_id, role_gestor["id"]))
+
+        # Vincular role aluno
+        if role_aluno:
+            cur.execute("""
+                INSERT INTO roles_usuario (usuario_id, role_id)
+                VALUES (%s, %s)
+            """, (gestor_user_id, role_aluno["id"]))
+
+        # Vincular usuário à academia
+        cur.execute("""
+            INSERT INTO usuarios_academias (usuario_id, academia_id)
+            VALUES (%s, %s)
+        """, (gestor_user_id, academia_id))
+
+        # Criar perfil de aluno automaticamente
+        if role_aluno:
+            try:
+                cur.execute("""
+                    INSERT INTO alunos (
+                        nome, email, telefone, usuario_id, cpf, id_academia, id_associacao, id_federacao,
+                        status, ativo, data_matricula
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'ativo', 1, %s)
+                """, (gestor_nome, gestor_email or None, gestor_telefone or None, gestor_user_id, gestor_cpf, academia_id, id_associacao_usuario, id_federacao_usuario, date.today()))
+                current_app.logger.info(f"Perfil de aluno criado automaticamente para gestor {gestor_nome} (ID: {gestor_user_id})")
+            except Exception as e:
+                # Se falhar, não impede a criação da academia, mas registra o erro
+                current_app.logger.error(f"Erro ao criar perfil de aluno para gestor {gestor_nome} (ID: {gestor_user_id}): {e}", exc_info=True)
+
+        conn.commit()
+        cur.close()
+        conn.close()
+        flash(f"Academia cadastrada com sucesso! Usuário gestor '{gestor_nome}' criado e vinculado.", "success")
+        return redirect(request.form.get("next") or back_url)
 
     cur.close()
     conn.close()
@@ -595,6 +718,63 @@ def cadastro_academia():
         associacao_nome=associacao_nome_cadastro,
         modalidades=modalidades,
     )
+
+
+@associacao_bp.route("/academias/buscar-usuarios")
+@login_required
+def buscar_usuarios_gestor():
+    """Autocomplete: busca usuários já cadastrados para vincular como gestor de academia."""
+    if not (current_user.has_role("gestor_associacao") or current_user.has_role("admin")):
+        return jsonify({"ok": False, "msg": "Sem permissão"}), 403
+
+    termo = (request.args.get("q") or "").strip()
+    if len(termo) < 2:
+        return jsonify({"ok": True, "usuarios": []})
+
+    like = f"%{termo}%"
+    digitos = re.sub(r"\D", "", termo)
+    like_cpf = f"%{digitos}%" if digitos else None
+
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        params = [like, like]
+        cpf_cond = ""
+        if like_cpf:
+            cpf_cond = " OR REGEXP_REPLACE(COALESCE(u.cpf, ''), '[^0-9]', '') LIKE %s"
+            params.append(like_cpf)
+
+        escopo_cond = ""
+        if not current_user.has_role("admin"):
+            # gestor_associacao: só usuários da própria associação ou ainda sem associação
+            escopo_cond = " AND (u.id_associacao = %s OR u.id_associacao IS NULL)"
+            params.append(getattr(current_user, "id_associacao", None))
+
+        cur.execute(
+            f"""
+            SELECT u.id, u.nome, u.email, u.cpf,
+                   COALESCE(
+                       (SELECT a.telefone FROM alunos a
+                         WHERE a.usuario_id = u.id AND a.telefone IS NOT NULL AND a.telefone <> '' LIMIT 1),
+                       (SELECT p.telefone FROM professores p
+                         WHERE p.usuario_id = u.id AND p.telefone IS NOT NULL AND p.telefone <> '' LIMIT 1)
+                   ) AS telefone
+            FROM usuarios u
+            WHERE (u.nome LIKE %s OR u.email LIKE %s{cpf_cond})
+            {escopo_cond}
+            ORDER BY u.nome
+            LIMIT 20
+            """,
+            tuple(params),
+        )
+        usuarios = cur.fetchall()
+        return jsonify({"ok": True, "usuarios": usuarios})
+    except Exception as e:
+        current_app.logger.error(f"Erro ao buscar usuários para gestor: {e}", exc_info=True)
+        return jsonify({"ok": False, "msg": "Erro ao buscar usuários."}), 500
+    finally:
+        cur.close()
+        conn.close()
 
 
 # =====================================================
@@ -1018,6 +1198,22 @@ def editar_academia(academia_id):
     cur.execute("SELECT modalidade_id FROM academia_modalidades WHERE academia_id = %s", (academia_id,))
     academia_modalidades_ids = {r["modalidade_id"] for r in cur.fetchall()}
 
+    # Gestores vinculados à academia (somente exibição; edição é no cadastro de usuários)
+    cur.execute(
+        """
+        SELECT DISTINCT u.id, u.nome, u.email, u.cpf
+        FROM usuarios u
+        INNER JOIN usuarios_academias ua ON ua.usuario_id = u.id
+        INNER JOIN roles_usuario ru ON ru.usuario_id = u.id
+        INNER JOIN roles r ON r.id = ru.role_id
+        WHERE ua.academia_id = %s
+          AND COALESCE(r.chave, LOWER(REPLACE(r.nome,' ','_'))) = 'gestor_academia'
+        ORDER BY u.nome
+        """,
+        (academia_id,),
+    )
+    gestores = cur.fetchall()
+
     if request.method == "POST":
         nome = request.form.get("nome", "").strip()
         responsavel = request.form.get("responsavel", "").strip()
@@ -1045,6 +1241,7 @@ def editar_academia(academia_id):
             flash("Selecione a associação da academia.", "danger")
         else:
             # Modo associação: validar modalidades apenas as vinculadas à associação
+            # (Os dados/credenciais do gestor agora são editados no cadastro de usuários.)
             if modo_associacao_edit:
                 cur.execute(
                     "SELECT modalidade_id FROM associacao_modalidades WHERE associacao_id = %s",
@@ -1056,7 +1253,7 @@ def editar_academia(academia_id):
             cur.execute(
                 """
                 UPDATE academias
-                SET nome=%s, responsavel=%s, cidade=%s, uf=%s, email=%s, telefone=%s, 
+                SET nome=%s, responsavel=%s, cidade=%s, uf=%s, email=%s, telefone=%s,
                     cep=%s, rua=%s, numero=%s, complemento=%s, bairro=%s, id_associacao=%s
                 WHERE id=%s
                 """,
@@ -1076,6 +1273,33 @@ def editar_academia(academia_id):
                     academia_id,
                 ),
             )
+            # Troca do gestor responsável (substitui o atual pelo selecionado).
+            novo_gestor_id = request.form.get("gestor_usuario_id", type=int)
+            if novo_gestor_id:
+                cur.execute(
+                    "SELECT id, nome, id_associacao FROM usuarios WHERE id = %s", (novo_gestor_id,))
+                novo = cur.fetchone()
+                if not novo:
+                    flash("Usuário selecionado para gestor não foi encontrado.", "warning")
+                elif (not current_user.has_role("admin")
+                      and novo.get("id_associacao") not in (None, id_associacao)):
+                    flash("Você não tem permissão para vincular este usuário como gestor.", "warning")
+                else:
+                    cur.execute(
+                        "SELECT id FROM roles WHERE COALESCE(chave, LOWER(REPLACE(nome,' ','_'))) = 'gestor_academia' LIMIT 1")
+                    role = cur.fetchone()
+                    if role:
+                        # Adiciona o novo gestor e o define como responsável. A
+                        # remoção de outros gestores é feita individualmente na tela.
+                        cur.execute(
+                            "INSERT IGNORE INTO roles_usuario (usuario_id, role_id) VALUES (%s, %s)",
+                            (novo_gestor_id, role["id"]))
+                        cur.execute(
+                            "INSERT IGNORE INTO usuarios_academias (usuario_id, academia_id) VALUES (%s, %s)",
+                            (novo_gestor_id, academia_id))
+                        cur.execute("UPDATE academias SET responsavel = %s WHERE id = %s",
+                                    (novo["nome"], academia_id))
+
             if logo_base64 and logo_base64.startswith("data:"):
                 salvar_logo_base64(logo_base64, "academia", academia_id)
             else:
@@ -1086,6 +1310,7 @@ def editar_academia(academia_id):
                     "INSERT INTO academia_modalidades (academia_id, modalidade_id) VALUES (%s, %s)",
                     (academia_id, mid),
                 )
+
             conn.commit()
             cur.close()
             conn.close()
@@ -1107,7 +1332,68 @@ def editar_academia(academia_id):
         academia_modalidades_ids=academia_modalidades_ids,
         modo_associacao=modo_associacao_edit,
         modo_academia=current_user.has_role("gestor_academia") or current_user.has_role("professor"),
+        gestores=gestores,
     )
+
+
+def _pode_gerir_gestores(cur, academia_id):
+    """True se o usuário pode gerir gestores desta academia."""
+    if current_user.has_role("admin"):
+        return True
+    if current_user.has_role("gestor_associacao"):
+        cur.execute("SELECT id_associacao FROM academias WHERE id = %s", (academia_id,))
+        linha = cur.fetchone()
+        return bool(linha) and linha.get("id_associacao") == getattr(current_user, "id_associacao", None)
+    return False
+
+
+@associacao_bp.route("/academias/<int:academia_id>/gestor/definir-responsavel", methods=["POST"])
+@login_required
+def definir_gestor_responsavel(academia_id):
+    """Define qual gestor (usuário) é o responsável da academia."""
+    usuario_id = request.form.get("usuario_id", type=int)
+    volta = request.form.get("next") or url_for("associacao.editar_academia", academia_id=academia_id)
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        if not _pode_gerir_gestores(cur, academia_id):
+            flash("Sem permissão.", "danger")
+            return redirect(volta)
+        cur.execute("SELECT nome FROM usuarios WHERE id = %s", (usuario_id,))
+        u = cur.fetchone()
+        if not u:
+            flash("Usuário não encontrado.", "warning")
+            return redirect(volta)
+        cur.execute("UPDATE academias SET responsavel = %s WHERE id = %s", (u["nome"], academia_id))
+        conn.commit()
+        flash(f"{u['nome']} definido como responsável da academia.", "success")
+    finally:
+        cur.close()
+        conn.close()
+    return redirect(volta)
+
+
+@associacao_bp.route("/academias/<int:academia_id>/gestor/remover", methods=["POST"])
+@login_required
+def remover_gestor(academia_id):
+    """Remove o vínculo de gestão de um usuário com a academia."""
+    usuario_id = request.form.get("usuario_id", type=int)
+    volta = request.form.get("next") or url_for("associacao.editar_academia", academia_id=academia_id)
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        if not _pode_gerir_gestores(cur, academia_id):
+            flash("Sem permissão.", "danger")
+            return redirect(volta)
+        cur.execute(
+            "DELETE FROM usuarios_academias WHERE usuario_id = %s AND academia_id = %s",
+            (usuario_id, academia_id))
+        conn.commit()
+        flash("Gestor removido desta academia.", "info")
+    finally:
+        cur.close()
+        conn.close()
+    return redirect(volta)
 
 
 # =====================================================
@@ -1146,9 +1432,13 @@ def gerenciar_categorias():
         except ValueError:
             return None
 
+    _TABELAS_PERMITIDAS = {"categorias", "alunos", "graduacoes", "turmas"}
+
     def carregar_colunas(cursor, tabela):
+        if tabela not in _TABELAS_PERMITIDAS:
+            raise ValueError(f"Tabela não permitida: {tabela!r}")
         try:
-            cursor.execute(f"SHOW COLUMNS FROM {tabela}")
+            cursor.execute(f"SHOW COLUMNS FROM `{tabela}`")
             cols = cursor.fetchall()
             col_map = {}
             for c in cols:

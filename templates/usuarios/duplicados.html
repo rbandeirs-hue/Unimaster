@@ -1,0 +1,621 @@
+{% extends "base.html" %}
+{% block title %}Cadastros duplicados{% endblock %}
+{% block content %}
+<style>
+  :root {
+    --c-surface: #ffffff;
+    --c-border: #e5e9f2;
+    --c-text: #1f2937;
+    --c-muted: #6b7280;
+    --c-primary: #0d6efd;
+    --c-primary-soft: #e8f1ff;
+  }
+  .dup-page { max-width: 1080px; margin: 0 auto; }
+  .dup-header {
+    background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+    border: 1px solid var(--c-border);
+    border-radius: 16px;
+    padding: 1.4rem 1.6rem;
+    margin-bottom: 1.1rem;
+    box-shadow: 0 1px 3px rgba(15,23,42,.04);
+  }
+  .dup-header h1 {
+    font-size: 1.45rem; font-weight: 700; margin: 0;
+    color: var(--c-text);
+    display: flex; align-items: center; gap: .55rem;
+  }
+  .dup-header h1 .icon-wrap {
+    width: 40px; height: 40px;
+    background: #fef3c7; color: #b45309;
+    border-radius: 10px;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 1.15rem;
+  }
+  .dup-header .subtitle { font-size: .9rem; color: var(--c-muted); margin-top: .25rem; }
+
+  .dup-warn {
+    background: #fffbeb; border: 1px solid #fde68a; color: #92400e;
+    border-radius: 12px; padding: .85rem 1.05rem;
+    font-size: .87rem; margin-bottom: 1.25rem;
+    display: flex; align-items: flex-start; gap: .65rem;
+  }
+  .dup-warn i { font-size: 1.05rem; margin-top: 1px; }
+
+  .dup-group {
+    background: var(--c-surface);
+    border: 1px solid var(--c-border);
+    border-radius: 14px;
+    margin-bottom: 1.1rem;
+    box-shadow: 0 1px 3px rgba(15,23,42,.04);
+    overflow: hidden;
+  }
+  .dup-group-head {
+    padding: .85rem 1.15rem;
+    background: linear-gradient(90deg, #fef9c3, #fff);
+    border-bottom: 1px solid #fde68a;
+    display: flex; align-items: center; gap: .55rem;
+    flex-wrap: wrap;
+  }
+  .dup-group-head .ic { color: #b45309; font-size: 1.1rem; }
+  .dup-group-head .title { font-weight: 700; color: var(--c-text); font-size: .95rem; }
+  .dup-group-head .crit-tag {
+    font-size: .7rem; font-weight: 700;
+    background: #fef3c7; color: #92400e;
+    padding: .2rem .6rem; border-radius: 999px;
+    text-transform: uppercase; letter-spacing: .05em;
+  }
+  .dup-group-head .key {
+    font-size: .82rem; color: var(--c-muted);
+    font-family: ui-monospace, "Menlo", monospace;
+  }
+
+  .dup-cards { display: flex; flex-wrap: wrap; gap: .75rem; padding: 1rem 1.15rem; }
+  .dup-card {
+    flex: 1 1 240px;
+    border: 1.5px solid var(--c-border);
+    border-radius: 12px;
+    padding: .85rem 1rem;
+    cursor: pointer;
+    transition: all .15s;
+    background: #fafbff;
+    position: relative;
+  }
+  .dup-card:hover { border-color: #cfd6e2; background: #fff; }
+  .dup-card .head { display: flex; align-items: center; gap: .55rem; margin-bottom: .45rem; }
+  .dup-card .av {
+    width: 38px; height: 38px; border-radius: 50%;
+    background: var(--c-primary); color: #fff;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: .9rem; flex-shrink: 0;
+  }
+  .dup-card .nome { font-weight: 700; font-size: .92rem; color: var(--c-text); margin: 0; }
+  .dup-card .id { font-size: .7rem; color: var(--c-muted); }
+  .dup-card .info-line {
+    font-size: .78rem; color: var(--c-muted);
+    margin: .15rem 0; word-break: break-word;
+  }
+  .dup-card .info-line i { color: #94a3b8; margin-right: .25rem; }
+  .dup-card .badges {
+    display: flex; flex-wrap: wrap; gap: .25rem; margin-top: .5rem;
+  }
+  .dup-card .chip {
+    font-size: .65rem; font-weight: 600;
+    padding: .15rem .5rem; border-radius: 999px;
+    background: #f3f4f6; color: #4b5563;
+  }
+  .dup-card .chip.role { background: #eef2ff; color: #4338ca; }
+  .dup-card .chip.aluno { background: #ecfdf5; color: #047857; }
+  .dup-card .chip.professor { background: #fef3c7; color: #92400e; }
+  .dup-card .chip.acad { background: #eff6ff; color: #1d4ed8; }
+
+  /* Selected states */
+  .dup-card.is-principal {
+    border-color: #10b981; background: #ecfdf5;
+    box-shadow: 0 0 0 3px rgba(16,185,129,.15);
+  }
+  .dup-card.is-perdedor {
+    border-color: #dc2626; background: #fef2f2;
+    box-shadow: 0 0 0 3px rgba(220,38,38,.12);
+  }
+  .dup-card .role-tag {
+    position: absolute; top: 8px; right: 8px;
+    font-size: .65rem; font-weight: 700;
+    padding: .15rem .5rem; border-radius: 999px;
+    text-transform: uppercase; letter-spacing: .04em;
+    display: none;
+  }
+  .dup-card.is-principal .role-tag.principal { display: inline-block; background: #10b981; color: #fff; }
+  .dup-card.is-perdedor .role-tag.perdedor { display: inline-block; background: #dc2626; color: #fff; }
+
+  .dup-actions {
+    display: flex; gap: .55rem; flex-wrap: wrap; justify-content: flex-end;
+    padding: .85rem 1.15rem;
+    background: #fafbff; border-top: 1px solid var(--c-border);
+  }
+  .btn-unificar {
+    background: var(--c-primary); color: #fff; border: none;
+    padding: .55rem 1.1rem; border-radius: 10px;
+    font-weight: 600; font-size: .85rem; cursor: pointer;
+    box-shadow: 0 2px 6px rgba(13,110,253,.25);
+    display: inline-flex; align-items: center; gap: .35rem;
+  }
+  .btn-unificar:hover { box-shadow: 0 4px 12px rgba(13,110,253,.35); }
+  .btn-unificar:disabled { background: #cbd5e1; box-shadow: none; cursor: not-allowed; }
+  .legenda { font-size: .78rem; color: var(--c-muted); margin-right: auto; align-self: center; }
+
+  .empty-state {
+    background: var(--c-surface);
+    border: 1px dashed var(--c-border);
+    border-radius: 16px;
+    padding: 3rem 1rem;
+    text-align: center;
+    color: var(--c-muted);
+  }
+  .empty-state i.bi-people-fill { font-size: 3rem; color: #d1d5db; display: block; margin-bottom: .75rem; }
+
+  /* Seleção manual */
+  .manual-section {
+    background: var(--c-surface);
+    border: 1px solid var(--c-border);
+    border-radius: 14px;
+    padding: 1.15rem 1.25rem;
+    margin-bottom: 1.25rem;
+    box-shadow: 0 1px 3px rgba(15,23,42,.04);
+  }
+  .manual-section h3 {
+    font-size: 1rem; font-weight: 700; color: var(--c-text);
+    margin: 0 0 .35rem; display: flex; align-items: center; gap: .4rem;
+  }
+  .manual-section h3 i { color: var(--c-primary); }
+  .manual-section .help { font-size: .82rem; color: var(--c-muted); margin: 0 0 .8rem; }
+  .manual-search-wrap { position: relative; }
+  .manual-search-wrap > i.bi-search {
+    position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+    color: var(--c-muted); pointer-events: none; font-size: 1rem;
+  }
+  .manual-search {
+    width: 100%;
+    padding: .65rem .85rem .65rem 2.4rem;
+    border: 1px solid var(--c-border);
+    border-radius: 10px;
+    background: #f9fafb;
+    font-size: .92rem;
+  }
+  .manual-search:focus {
+    outline: none; border-color: var(--c-primary);
+    box-shadow: 0 0 0 3px rgba(13,110,253,.15); background: #fff;
+  }
+  .manual-results {
+    margin-top: .65rem;
+    max-height: 320px;
+    overflow-y: auto;
+    border: 1px solid var(--c-border);
+    border-radius: 10px;
+    background: #fafbff;
+    padding: .35rem;
+    display: none;
+  }
+  .manual-results.open { display: block; }
+  .manual-row {
+    display: flex; align-items: center; gap: .65rem;
+    padding: .55rem .65rem;
+    border-radius: 8px;
+    cursor: pointer;
+    border-bottom: 1px solid #f1f5f9;
+  }
+  .manual-row:last-child { border-bottom: 0; }
+  .manual-row:hover { background: #fff; }
+  .manual-row .av {
+    width: 32px; height: 32px; border-radius: 50%;
+    background: var(--c-primary); color: #fff;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: .8rem; flex-shrink: 0;
+  }
+  .manual-row .info { flex: 1; min-width: 0; }
+  .manual-row .nome { font-weight: 600; font-size: .88rem; color: var(--c-text); margin: 0; }
+  .manual-row .meta { font-size: .76rem; color: var(--c-muted); }
+  .manual-row .meta i { margin-right: .2rem; }
+  .manual-row.added { background: #eff6ff; cursor: default; }
+  .manual-row.added::after {
+    content: "Adicionado"; font-size: .7rem; font-weight: 600;
+    color: var(--c-primary); padding: .2rem .55rem;
+    background: #fff; border: 1px solid #cfe0ff;
+    border-radius: 999px;
+  }
+  .manual-empty { padding: 1rem; text-align: center; color: var(--c-muted); font-size: .85rem; }
+
+  .manual-selecao { margin-top: 1rem; }
+  .manual-selecao-empty {
+    padding: 1.25rem; text-align: center; color: var(--c-muted);
+    background: #fafbff; border: 1px dashed var(--c-border); border-radius: 10px;
+    font-size: .85rem;
+  }
+
+  @media (max-width: 575.98px) {
+    .dup-header { padding: 1rem; border-radius: 12px; }
+    .dup-cards { padding: .85rem; }
+    .dup-card { flex: 1 1 100%; }
+  }
+</style>
+
+<div class="container my-4 dup-page">
+  <div class="dup-header">
+    {% set back_url = back_url or get_back_url_default() %}
+    {% include 'components/botao_voltar.html' %}
+    <h1>
+      <span class="icon-wrap"><i class="bi bi-people-fill"></i></span>
+      Cadastros duplicados
+    </h1>
+    <p class="subtitle mb-0">
+      Identifica e unifica usuários potencialmente duplicados (mesmo e-mail ou mesmo CPF de aluno).
+    </p>
+  </div>
+
+  <div class="dup-warn">
+    <i class="bi bi-exclamation-triangle-fill"></i>
+    <div>
+      <strong>Operação irreversível.</strong> Em cada grupo, escolha o usuário <strong>Principal</strong>
+      (quem ficará) e marque os <strong>Perdedores</strong> (que serão fundidos no principal).
+      Todos os vínculos (alunos, professores, academias, roles, mensagens etc.) são migrados para o principal,
+      e os perdedores são apagados.
+      Caso o principal e algum perdedor tenham cadastros conflitantes na mesma tabela com restrição de unicidade
+      (ex.: dois cadastros de aluno), o registro do perdedor é desvinculado para preservar o histórico.
+    </div>
+  </div>
+
+  <!-- ===== Seleção manual ===== -->
+  <div class="manual-section">
+    <h3><i class="bi bi-search"></i> Unificação manual</h3>
+    <p class="help">
+      Busque qualquer usuário (nome, e-mail ou CPF) e selecione 2 ou mais para unificar — útil quando os duplicados não foram detectados automaticamente.
+    </p>
+    <div class="manual-search-wrap">
+      <i class="bi bi-search"></i>
+      <input type="text" class="manual-search" id="manualSearch"
+             placeholder="Digite nome, e-mail ou CPF (mín. 2 caracteres)…" autocomplete="off">
+    </div>
+    <div class="manual-results" id="manualResults"></div>
+
+    <form method="POST" action="{{ url_for('usuarios.duplicados_unificar') }}" id="formManual" data-group class="manual-selecao">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="dup-cards" id="manualCards" style="padding: 0;"></div>
+      <div class="manual-selecao-empty" id="manualEmpty">
+        Nenhum usuário selecionado ainda. Use a busca acima para adicionar.
+      </div>
+      <div class="dup-actions" style="background: transparent; border: 0; padding: .85rem 0 0;">
+        <span class="legenda">
+          <i class="bi bi-info-circle"></i>
+          1 clique = <strong style="color:#10b981">Principal</strong> · 2 cliques = <strong style="color:#dc2626">Perdedor</strong> · 3 cliques = limpar
+        </span>
+        <button type="submit" class="btn-unificar"
+                onclick="return confirm('Tem certeza que deseja unificar os usuários selecionados? A ação é IRREVERSÍVEL.');"
+                disabled>
+          <i class="bi bi-arrows-collapse"></i> Unificar selecionados
+        </button>
+      </div>
+    </form>
+  </div>
+
+  {% if grupos %}
+    <h2 class="h6 fw-bold text-muted text-uppercase mt-4 mb-2" style="letter-spacing:.06em;">
+      <i class="bi bi-shield-exclamation me-1"></i> Grupos detectados automaticamente
+    </h2>
+    {% for g in grupos %}
+    <form method="POST" action="{{ url_for('usuarios.duplicados_unificar') }}" class="dup-group" data-group>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="dup-group-head">
+        <i class="bi bi-shield-exclamation ic"></i>
+        <span class="title">
+          {% if g.criterio == 'email' %}E-mail duplicado{% else %}CPF de aluno duplicado{% endif %}
+        </span>
+        <span class="crit-tag">{{ g.criterio.replace('_', ' ') }}</span>
+        <span class="key">{{ g.chave }}</span>
+        <span class="ms-auto small text-muted">{{ g.usuarios|length }} cadastros</span>
+      </div>
+
+      <div class="dup-cards">
+        {% for u in g.usuarios %}
+        {% set inicial = (u.nome or '?')[:1] | upper %}
+        <label class="dup-card" data-user-id="{{ u.id }}">
+          <span class="role-tag principal">Principal</span>
+          <span class="role-tag perdedor">Perdedor</span>
+          <div class="head">
+            <span class="av">{{ inicial }}</span>
+            <div>
+              <p class="nome">{{ u.nome }}</p>
+              <span class="id">id #{{ u.id }} · criado {{ u.criado_em.strftime('%d/%m/%Y') if u.criado_em.strftime is defined else u.criado_em }}</span>
+            </div>
+          </div>
+          {% if u.email %}<div class="info-line"><i class="bi bi-envelope"></i>{{ u.email }}</div>{% endif %}
+          {% if u.cpf %}<div class="info-line"><i class="bi bi-person-vcard"></i>{{ u.cpf[:3] }}.{{ u.cpf[3:6] }}.{{ u.cpf[6:9] }}-{{ u.cpf[9:11] }}</div>{% endif %}
+          <div class="badges">
+            {% if u.ativo %}<span class="chip">Ativo</span>{% else %}<span class="chip">Inativo</span>{% endif %}
+            {% if u.tem_aluno %}<span class="chip aluno"><i class="bi bi-mortarboard-fill"></i> Aluno</span>{% endif %}
+            {% if u.tem_professor %}<span class="chip professor"><i class="bi bi-person-workspace"></i> Professor</span>{% endif %}
+            {% if u.academias %}<span class="chip acad"><i class="bi bi-building"></i> {{ u.academias }} academia{% if u.academias != 1 %}s{% endif %}</span>{% endif %}
+            {% for r in (u.roles or []) %}<span class="chip role">{{ r }}</span>{% endfor %}
+          </div>
+        </label>
+        {% endfor %}
+      </div>
+
+      <div class="dup-actions">
+        <span class="legenda">
+          <i class="bi bi-info-circle"></i>
+          1 clique = <strong style="color:#10b981">Principal</strong> · 2 cliques = <strong style="color:#dc2626">Perdedor</strong> · 3 cliques = limpar
+        </span>
+        <button type="submit" class="btn-unificar"
+                onclick="return confirm('Tem certeza que deseja unificar esses cadastros? A ação é IRREVERSÍVEL.');">
+          <i class="bi bi-arrows-collapse"></i> Unificar grupo
+        </button>
+      </div>
+    </form>
+    {% endfor %}
+  {% else %}
+  <div class="empty-state">
+    <i class="bi bi-people-fill"></i>
+    <p class="fw-semibold mb-1" style="color: var(--c-text);">Nenhum cadastro duplicado encontrado</p>
+    <p class="small mb-0">Os critérios verificados foram: e-mail repetido entre usuários e CPF de aluno apontando para usuários diferentes.</p>
+  </div>
+  {% endif %}
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  document.querySelectorAll('[data-group]').forEach(function (group) {
+    const cards = group.querySelectorAll('[data-user-id]');
+    cards.forEach(function (card) {
+      // Clique cicla: limpo → principal → perdedor → limpo
+      card.addEventListener('click', function (e) {
+        e.preventDefault();
+        const isPrincipal = card.classList.contains('is-principal');
+        const isPerdedor = card.classList.contains('is-perdedor');
+        if (!isPrincipal && !isPerdedor) {
+          // Garantir que só haja UM principal por grupo
+          group.querySelectorAll('.is-principal').forEach(c => c.classList.remove('is-principal'));
+          card.classList.add('is-principal');
+        } else if (isPrincipal) {
+          card.classList.remove('is-principal');
+          card.classList.add('is-perdedor');
+        } else {
+          card.classList.remove('is-perdedor');
+        }
+        sincronizarHidden(group);
+      });
+    });
+  });
+
+  function sincronizarHidden(group) {
+    // Remove hidden inputs antigos
+    group.querySelectorAll('input[name="principal_id"], input[name="perdedor_id"]').forEach(i => {
+      if (i.type === 'hidden') i.remove();
+    });
+    const principal = group.querySelector('.is-principal');
+    if (principal) {
+      const ip = document.createElement('input');
+      ip.type = 'hidden'; ip.name = 'principal_id'; ip.value = principal.dataset.userId;
+      group.appendChild(ip);
+    }
+    group.querySelectorAll('.is-perdedor').forEach(c => {
+      const ip = document.createElement('input');
+      ip.type = 'hidden'; ip.name = 'perdedor_id'; ip.value = c.dataset.userId;
+      group.appendChild(ip);
+    });
+    const btn = group.querySelector('.btn-unificar');
+    if (btn) {
+      btn.disabled = !principal || group.querySelectorAll('.is-perdedor').length === 0;
+    }
+  }
+
+  // Validação no submit
+  document.querySelectorAll('[data-group]').forEach(function (group) {
+    const btn = group.querySelector('.btn-unificar');
+    if (btn) btn.disabled = true; // começa desabilitado
+    group.addEventListener('submit', function (e) {
+      const principal = group.querySelector('.is-principal');
+      const perdedores = group.querySelectorAll('.is-perdedor');
+      if (!principal || perdedores.length === 0) {
+        e.preventDefault();
+        alert('Selecione um Principal (1 clique) e ao menos um Perdedor (2 cliques) antes de unificar.');
+      }
+    });
+  });
+
+  /* ============================================================
+   * Seleção manual (busca + adicionar usuários ao grupo)
+   * ============================================================ */
+  (function () {
+    const input = document.getElementById('manualSearch');
+    const results = document.getElementById('manualResults');
+    const formManual = document.getElementById('formManual');
+    const cards = document.getElementById('manualCards');
+    const empty = document.getElementById('manualEmpty');
+    if (!input || !results || !formManual || !cards) return;
+
+    let timer = null;
+    let abortCtrl = null;
+
+    function fmtCpf(d) {
+      if (!d || d.length !== 11) return d || '';
+      return `${d.slice(0,3)}.${d.slice(3,6)}.${d.slice(6,9)}-${d.slice(9,11)}`;
+    }
+
+    async function buscar(q) {
+      if (abortCtrl) abortCtrl.abort();
+      abortCtrl = new AbortController();
+      try {
+        const url = `{{ url_for('usuarios.duplicados_buscar') }}?q=${encodeURIComponent(q)}`;
+        const r = await fetch(url, { signal: abortCtrl.signal, credentials: 'same-origin' });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const data = await r.json();
+        renderResultados(data.itens || []);
+      } catch (e) {
+        if (e.name === 'AbortError') return;
+        console.error(e);
+        results.innerHTML = '<div class="manual-empty text-danger">Erro ao buscar.</div>';
+        results.classList.add('open');
+      }
+    }
+
+    function jaSelecionado(id) {
+      return !!cards.querySelector(`[data-user-id="${id}"]`);
+    }
+
+    function renderResultados(itens) {
+      results.innerHTML = '';
+      if (!itens.length) {
+        results.innerHTML = '<div class="manual-empty">Nenhum usuário encontrado.</div>';
+        results.classList.add('open');
+        return;
+      }
+      itens.forEach(function (u) {
+        const row = document.createElement('div');
+        row.className = 'manual-row' + (jaSelecionado(u.id) ? ' added' : '');
+        row.dataset.userId = u.id;
+        const nome = u.nome || '?';
+        const inicial = nome.slice(0, 1).toUpperCase();
+        const partsMeta = [];
+        if (u.email) partsMeta.push(`<i class="bi bi-envelope"></i>${escHtml(u.email)}`);
+        if (u.cpf) partsMeta.push(`<i class="bi bi-person-vcard"></i>${escHtml(fmtCpf(String(u.cpf).replace(/\D/g,'')))}`);
+        partsMeta.push(`<i class="bi bi-hash"></i>id ${u.id}`);
+        row.innerHTML = `
+          <span class="av">${escHtml(inicial)}</span>
+          <div class="info">
+            <p class="nome">${escHtml(nome)}</p>
+            <span class="meta">${partsMeta.join(' · ')}</span>
+          </div>
+        `;
+        row.addEventListener('click', function () {
+          if (row.classList.contains('added')) return;
+          adicionarCard(u);
+          row.classList.add('added');
+        });
+        results.appendChild(row);
+      });
+      results.classList.add('open');
+    }
+
+    function escHtml(s) {
+      return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+
+    function adicionarCard(u) {
+      const inicial = (u.nome || '?').slice(0,1).toUpperCase();
+      const cpfFmt = u.cpf ? fmtCpf(String(u.cpf).replace(/\D/g,'')) : '';
+      const card = document.createElement('label');
+      card.className = 'dup-card';
+      card.dataset.userId = u.id;
+      const flags = [];
+      if (u.tem_aluno) flags.push('<span class="chip aluno"><i class="bi bi-mortarboard-fill"></i> Aluno</span>');
+      if (u.tem_professor) flags.push('<span class="chip professor"><i class="bi bi-person-workspace"></i> Professor</span>');
+      if (u.academias) flags.push(`<span class="chip acad"><i class="bi bi-building"></i> ${u.academias} academia${u.academias != 1 ? 's' : ''}</span>`);
+      (u.roles || []).forEach(r => flags.push(`<span class="chip role">${escHtml(r)}</span>`));
+      card.innerHTML = `
+        <span class="role-tag principal">Principal</span>
+        <span class="role-tag perdedor">Perdedor</span>
+        <button type="button" class="btn-close-card" title="Remover" style="position:absolute;top:8px;left:8px;background:transparent;border:0;color:#9ca3af;font-size:1rem;cursor:pointer;">&times;</button>
+        <div class="head">
+          <span class="av">${escHtml(inicial)}</span>
+          <div>
+            <p class="nome">${escHtml(u.nome || '')}</p>
+            <span class="id">id #${u.id} · criado ${escHtml(u.criado_em || '')}</span>
+          </div>
+        </div>
+        ${u.email ? `<div class="info-line"><i class="bi bi-envelope"></i>${escHtml(u.email)}</div>` : ''}
+        ${cpfFmt ? `<div class="info-line"><i class="bi bi-person-vcard"></i>${escHtml(cpfFmt)}</div>` : ''}
+        <div class="badges">${flags.join('')}</div>
+      `;
+      // Remover ao clicar no X (sem disparar o ciclo de seleção)
+      card.querySelector('.btn-close-card').addEventListener('click', function (e) {
+        e.stopPropagation();
+        card.remove();
+        const r = results.querySelector(`[data-user-id="${u.id}"]`);
+        if (r) r.classList.remove('added');
+        atualizar();
+      });
+      // Ciclo de seleção: principal/perdedor/limpa
+      card.addEventListener('click', function (e) {
+        if (e.target && e.target.classList && e.target.classList.contains('btn-close-card')) return;
+        e.preventDefault();
+        const isPrincipal = card.classList.contains('is-principal');
+        const isPerdedor = card.classList.contains('is-perdedor');
+        if (!isPrincipal && !isPerdedor) {
+          cards.querySelectorAll('.is-principal').forEach(c => c.classList.remove('is-principal'));
+          card.classList.add('is-principal');
+        } else if (isPrincipal) {
+          card.classList.remove('is-principal');
+          card.classList.add('is-perdedor');
+        } else {
+          card.classList.remove('is-perdedor');
+        }
+        atualizar();
+      });
+      cards.appendChild(card);
+      atualizar();
+    }
+
+    function atualizar() {
+      // Atualiza hidden inputs no form manual
+      formManual.querySelectorAll('input[name="principal_id"], input[name="perdedor_id"]').forEach(i => {
+        if (i.type === 'hidden') i.remove();
+      });
+      const principal = cards.querySelector('.is-principal');
+      if (principal) {
+        const ip = document.createElement('input');
+        ip.type = 'hidden'; ip.name = 'principal_id'; ip.value = principal.dataset.userId;
+        formManual.appendChild(ip);
+      }
+      cards.querySelectorAll('.is-perdedor').forEach(c => {
+        const ip = document.createElement('input');
+        ip.type = 'hidden'; ip.name = 'perdedor_id'; ip.value = c.dataset.userId;
+        formManual.appendChild(ip);
+      });
+      // Empty state
+      if (cards.children.length === 0) {
+        empty.style.display = '';
+      } else {
+        empty.style.display = 'none';
+      }
+      // Botão habilitado quando há principal + ≥1 perdedor
+      const btn = formManual.querySelector('.btn-unificar');
+      if (btn) {
+        btn.disabled = !principal || cards.querySelectorAll('.is-perdedor').length === 0;
+      }
+    }
+
+    input.addEventListener('input', function () {
+      const q = input.value.trim();
+      if (timer) clearTimeout(timer);
+      if (q.length < 2) {
+        results.classList.remove('open');
+        results.innerHTML = '';
+        return;
+      }
+      timer = setTimeout(() => buscar(q), 300);
+    });
+
+    document.addEventListener('click', function (e) {
+      if (!results.contains(e.target) && e.target !== input) {
+        results.classList.remove('open');
+      }
+    });
+    input.addEventListener('focus', function () {
+      if (input.value.trim().length >= 2 && results.children.length) {
+        results.classList.add('open');
+      }
+    });
+
+    formManual.addEventListener('submit', function (e) {
+      const principal = cards.querySelector('.is-principal');
+      const perdedores = cards.querySelectorAll('.is-perdedor');
+      if (!principal || perdedores.length === 0) {
+        e.preventDefault();
+        alert('Selecione um Principal (1 clique) e ao menos um Perdedor (2 cliques) antes de unificar.');
+      }
+    });
+
+    atualizar();
+  })();
+});
+</script>
+{% endblock %}

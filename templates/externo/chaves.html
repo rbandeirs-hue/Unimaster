@@ -1,0 +1,113 @@
+{% extends "externo/base_externo.html" %}
+{% block title %}Chaves — {{ evento.nome }}{% endblock %}
+{% block content %}
+<h5>Chaves</h5>
+<p class="text-muted small mb-3">Organize as lutas por categoria no formato eliminatório. Clique no botão de peso para abrir a chave com os atletas. Só aparecem categorias com inscritos.</p>
+
+{% if agrupado and (agrupado.MASCULINO or agrupado.FEMININO) %}
+<div class="row g-3 mb-4">
+  <div class="col-md-6">
+    <div class="card border-primary">
+      <div class="card-header bg-primary text-white py-2">
+        <strong>MASCULINO</strong>
+      </div>
+      <div class="card-body py-2">
+        {% for id_classe, itens in agrupado.MASCULINO.items() %}
+        <div class="mb-3">
+          <div class="small fw-bold text-secondary text-uppercase mb-2">{{ id_classe }}</div>
+          <div class="d-flex flex-wrap gap-2">
+            {% for item in itens %}
+            <button type="button" class="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-1 categoria-tile" data-bs-toggle="collapse" data-bs-target="#chave-{{ item.slug }}" aria-expanded="false">
+              <span class="fw-bold">{{ item.peso_label }}</span>
+              <span class="text-muted">({{ item.count }})</span>
+              {% if item.count > 0 %}<i class="bi bi-check-circle-fill text-success small"></i>{% endif %}
+              {% if item.tem_chave %}<i class="bi bi-trophy-fill text-warning small"></i>{% endif %}
+            </button>
+            {% endfor %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card border-dark">
+      <div class="card-header text-white py-2" style="background-color: #4a148c;">
+        <strong>FEMININO</strong>
+      </div>
+      <div class="card-body py-2">
+        {% for id_classe, itens in agrupado.FEMININO.items() %}
+        <div class="mb-3">
+          <div class="small fw-bold text-secondary text-uppercase mb-2">{{ id_classe }}</div>
+          <div class="d-flex flex-wrap gap-2">
+            {% for item in itens %}
+            <button type="button" class="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-1 categoria-tile" data-bs-toggle="collapse" data-bs-target="#chave-{{ item.slug }}" aria-expanded="false">
+              <span class="fw-bold">{{ item.peso_label }}</span>
+              <span class="text-muted">({{ item.count }})</span>
+              {% if item.count > 0 %}<i class="bi bi-check-circle-fill text-success small"></i>{% endif %}
+              {% if item.tem_chave %}<i class="bi bi-trophy-fill text-warning small"></i>{% endif %}
+            </button>
+            {% endfor %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="accordion accordion-flush mb-3" id="accordionChaves">
+  {% for cat_nome, inscritos in por_categoria.items() %}
+  {% set slug = slug_por_categoria.get(cat_nome, 'cat') %}
+  <div class="collapse border rounded mb-2" id="chave-{{ slug }}" data-bs-parent="#accordionChaves">
+    <div class="p-3 bg-light">
+      <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+        <strong>{{ cat_nome }}</strong>
+        <span class="badge bg-secondary">{{ inscritos|length }} inscrito(s)</span>
+        {% if inscritos|length >= 2 %}
+        <form method="POST" class="d-inline" onsubmit="return confirm('Gerar chave para {{ cat_nome }}? As lutas existentes desta categoria serão substituídas.');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="categoria_nome" value="{{ cat_nome }}">
+          <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-shuffle me-1"></i>Gerar chave</button>
+        </form>
+        {% else %}
+        <small class="text-muted">Mínimo 2 inscritos</small>
+        {% endif %}
+      </div>
+      <div class="row g-2 mb-2">
+        {% for i in inscritos %}
+        <div class="col-12 col-md-6"><small><i class="bi bi-person me-1"></i>{{ i.nome }} <span class="text-muted">({{ i.academia }})</span></small></div>
+        {% endfor %}
+      </div>
+      {% if lutas_por_cat.get(cat_nome) %}
+      <hr class="my-2">
+      <strong class="small">Chave eliminatória:</strong>
+      {% set lutas_cat = lutas_por_cat[cat_nome] %}
+      {% set round_names = {1: '1ª rodada', 2: 'Semifinal', 3: 'Final', 4: 'Disputa 3º'} %}
+      {% for l in lutas_cat %}
+        {% if l.round and (loop.first or lutas_cat[loop.index0 - 1].round != l.round) %}
+      <div class="mt-2 mb-1 small fw-bold text-secondary">{{ round_names.get(l.round, 'Rodada ' ~ l.round) }}</div>
+        {% endif %}
+      <div class="small py-1 d-flex align-items-center flex-wrap gap-1">
+        <span class="text-muted me-1">#{{ l.id }}</span>
+        <span>{{ l.atleta_branco_nome }}</span>
+        <span class="text-muted">vs</span>
+        <span>{{ l.atleta_azul_nome }}</span>
+        <span class="badge {% if l.status == 'finalizada' %}bg-success{% elif l.status == 'em_andamento' %}bg-primary{% else %}bg-secondary{% endif %} ms-1">{{ l.status|replace('_', ' ')|title }}</span>
+        <a href="{{ url_for('externo.placar_controle', evento_id=evento.id, luta_id=l.id) }}" class="btn btn-outline-secondary btn-sm py-0 ms-auto" target="_blank">Placar</a>
+      </div>
+      {% endfor %}
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="alert alert-info"><i class="bi bi-info-circle me-1"></i>Nenhuma categoria com inscritos. Adicione inscrições ou participantes avulsos primeiro.</div>
+{% endif %}
+
+<div class="mt-3 d-flex gap-2 flex-wrap">
+  <a href="{{ url_for('externo.placar_chaves_monitor', evento_id=evento.id) }}" class="btn btn-outline-success btn-sm" target="_blank"><i class="bi bi-tv me-1"></i>Monitor de chaves (TV)</a>
+  <a href="{{ url_for('externo.placar_lista', evento_id=evento.id) }}" class="btn btn-outline-primary btn-sm"><i class="bi bi-gear me-1"></i>Ir para Placar</a>
+</div>
+{% endblock %}

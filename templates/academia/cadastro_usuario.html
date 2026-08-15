@@ -14,6 +14,7 @@
             </p>
 
             <form method="POST" action="{{ url_for('academia.cadastro_usuario') }}" class="needs-validation" novalidate>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="next" value="{{ back_url }}">
 
                 {% if academia_fixa %}
@@ -48,9 +49,15 @@
                 </div>
 
                 <div class="mb-3">
+                    <label for="cpf" class="form-label fw-semibold">CPF <span class="text-danger">*</span></label>
+                    <input type="text" inputmode="numeric" class="form-control" id="cpf" name="cpf" placeholder="000.000.000-00" maxlength="14" required autocomplete="off">
+                    <div class="form-text">Login do sistema. Se a role <strong>Aluno</strong> for marcada e existir um aluno desta academia com o mesmo CPF, o vínculo é feito automaticamente.</div>
+                </div>
+
+                <div class="mb-3">
                     <label for="email" class="form-label fw-semibold">E-mail</label>
                     <input type="email" class="form-control" id="email" name="email" placeholder="exemplo@academia.com" value="" required autocomplete="off">
-                    <div class="form-text">Será o login do usuário.</div>
+                    <div class="form-text">Usado para recuperação de senha e comunicação.</div>
                 </div>
 
                 <div class="mb-3">
@@ -112,6 +119,19 @@
     </div>
 </div>
 <script>
+(function () {
+    var cpf = document.getElementById('cpf');
+    if (cpf) {
+        cpf.addEventListener('input', function (e) {
+            var d = e.target.value.replace(/\D/g, '').slice(0, 11);
+            var out = d;
+            if (d.length > 9) out = d.replace(/(\d{3})(\d{3})(\d{3})(\d{1,2})/, '$1.$2.$3-$4');
+            else if (d.length > 6) out = d.replace(/(\d{3})(\d{3})(\d{1,3})/, '$1.$2.$3');
+            else if (d.length > 3) out = d.replace(/(\d{3})(\d{1,3})/, '$1.$2');
+            e.target.value = out;
+        });
+    }
+})();
 (function() {
     var blocoAluno = document.getElementById('blocoAluno');
     var blocoResponsavel = document.getElementById('blocoResponsavel');

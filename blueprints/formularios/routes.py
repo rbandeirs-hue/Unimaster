@@ -118,12 +118,13 @@ def cadastro():
                     (nome, id_ent),
                 )
             formulario_id = cur.lastrowid
+            obrigatorios = set(request.form.getlist("obrigatorio"))
             for ordem, chave in enumerate(campo_chaves):
                 if chave and chave in CAMPOS_ALUNO_PADRAO:
                     label = get_label(chave)
                     cur.execute(
-                        "INSERT INTO formularios_campos (formulario_id, campo_chave, label, ordem) VALUES (%s, %s, %s, %s)",
-                        (formulario_id, chave, label, ordem),
+                        "INSERT INTO formularios_campos (formulario_id, campo_chave, label, obrigatorio, ordem) VALUES (%s, %s, %s, %s, %s)",
+                        (formulario_id, chave, label, 1 if chave in obrigatorios else 0, ordem),
                     )
             conn.commit()
             flash("Formulário cadastrado com sucesso!", "success")
@@ -173,7 +174,7 @@ def editar(formulario_id):
             return redirect(url_for("formularios.lista"))
 
         cur.execute(
-            "SELECT campo_chave, label, ordem FROM formularios_campos WHERE formulario_id = %s ORDER BY ordem",
+            "SELECT campo_chave, label, obrigatorio, ordem FROM formularios_campos WHERE formulario_id = %s ORDER BY ordem",
             (formulario_id,),
         )
         campos_atuais = {r["campo_chave"]: r for r in cur.fetchall()}
@@ -208,12 +209,13 @@ def editar(formulario_id):
                 (nome, ativo, formulario_id),
             )
             cur.execute("DELETE FROM formularios_campos WHERE formulario_id = %s", (formulario_id,))
+            obrigatorios = set(request.form.getlist("obrigatorio"))
             for ordem, chave in enumerate(campo_chaves):
                 if chave and chave in CAMPOS_ALUNO_PADRAO:
                     label = get_label(chave)
                     cur.execute(
-                        "INSERT INTO formularios_campos (formulario_id, campo_chave, label, ordem) VALUES (%s, %s, %s, %s)",
-                        (formulario_id, chave, label, ordem),
+                        "INSERT INTO formularios_campos (formulario_id, campo_chave, label, obrigatorio, ordem) VALUES (%s, %s, %s, %s, %s)",
+                        (formulario_id, chave, label, 1 if chave in obrigatorios else 0, ordem),
                     )
             conn.commit()
             flash("Formulário atualizado!", "success")

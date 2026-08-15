@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}Cupons de matrícula{% endblock %}
+{% block content %}
+<div class="container my-4" style="max-width: 900px;">
+  <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+    <div>
+      <a href="{{ url_for('precadastro.lista', academia_id=academia_id) }}" class="btn btn-outline-secondary btn-sm mb-2"><i class="bi bi-arrow-left"></i> Voltar</a>
+      <h4 class="fw-bold mb-0"><i class="bi bi-ticket-perforated-fill text-primary me-1"></i> Cupons de matrícula</h4>
+      <div class="text-muted small">Descontos aplicáveis no link de matrícula.</div>
+    </div>
+  </div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}<div class="alert alert-{{ cat }} py-2">{{ msg }}</div>{% endfor %}
+  {% endwith %}
+
+  <!-- Criar cupom -->
+  <div class="card border-0 shadow-sm mb-4">
+    <div class="card-body">
+      <h6 class="fw-bold mb-3"><i class="bi bi-plus-circle me-1"></i> Novo cupom</h6>
+      <form method="POST" class="row g-2 align-items-end">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="col-6 col-md-3">
+          <label class="form-label small fw-semibold">Código</label>
+          <input type="text" name="codigo" class="form-control text-uppercase" placeholder="EX: BEMVINDO" required>
+        </div>
+        <div class="col-6 col-md-2">
+          <label class="form-label small fw-semibold">Tipo</label>
+          <select name="tipo" class="form-select" id="tipoSel">
+            <option value="percentual">Percentual (%)</option>
+            <option value="valor">Valor (R$)</option>
+          </select>
+        </div>
+        <div class="col-6 col-md-2">
+          <label class="form-label small fw-semibold">Desconto</label>
+          <input type="text" name="valor" class="form-control" placeholder="10" required>
+        </div>
+        <div class="col-6 col-md-2">
+          <label class="form-label small fw-semibold">Uso</label>
+          <select name="uso" class="form-select">
+            <option value="todos">Vários (todos)</option>
+            <option value="unico">Único</option>
+          </select>
+        </div>
+        <div class="col-6 col-md-3">
+          <label class="form-label small fw-semibold">Vigência (início → fim)</label>
+          <div class="d-flex gap-1">
+            <input type="date" name="validade_inicio" class="form-control form-control-sm">
+            <input type="date" name="validade_fim" class="form-control form-control-sm">
+          </div>
+        </div>
+        <div class="col-12 col-md-6">
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" name="mostrar_form" value="1" id="mostrarForm">
+            <label class="form-check-label small" for="mostrarForm">Mostrar este cupom para o aluno no formulário de matrícula</label>
+          </div>
+        </div>
+        <div class="col-12 col-md-6 text-md-end">
+          <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i> Criar cupom</button>
+        </div>
+      </form>
+      <p class="text-muted small mt-2 mb-0">Percentual = % sobre o valor da matrícula. Valor = desconto fixo em R$. "Único" só pode ser usado uma vez.</p>
+    </div>
+  </div>
+
+  <!-- Lista -->
+  <div class="card border-0 shadow-sm">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead class="table-light">
+          <tr><th>Código</th><th>Desconto</th><th>Uso</th><th>Vigência</th><th>Mostrar</th><th>Status</th><th class="text-end">Ações</th></tr>
+        </thead>
+        <tbody>
+          {% for c in cupons %}
+          <tr>
+            <td><strong>{{ c.codigo }}</strong></td>
+            <td>{% if c.tipo == 'percentual' %}{{ "%.0f"|format(c.valor|float) }}%{% else %}R$ {{ "%.2f"|format(c.valor|float) }}{% endif %}</td>
+            <td>{% if c.uso == 'unico' %}<span class="badge bg-warning text-dark">Único{% if c.usos %} (usado){% endif %}</span>{% else %}<span class="badge bg-info text-dark">Vários</span>{% if c.usos %} <span class="text-muted small">{{ c.usos }} uso(s)</span>{% endif %}{% endif %}</td>
+            <td class="small">
+              {% if c.validade_inicio or c.validade_fim %}
+                {{ c.validade_inicio.strftime('%d/%m/%y') if c.validade_inicio else '—' }} → {{ c.validade_fim.strftime('%d/%m/%y') if c.validade_fim else '—' }}
+              {% else %}<span class="text-muted">sem prazo</span>{% endif %}
+            </td>
+            <td>{% if c.mostrar_form %}<i class="bi bi-eye text-success" title="Visível no formulário"></i>{% else %}<i class="bi bi-eye-slash text-muted"></i>{% endif %}</td>
+            <td>{% if c.ativo %}<span class="badge bg-success">Ativo</span>{% else %}<span class="badge bg-secondary">Inativo</span>{% endif %}</td>
+            <td class="text-end">
+              <form method="POST" action="{{ url_for('precadastro.cupom_toggle', cupom_id=c.id) }}" class="d-inline">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-sm btn-outline-secondary" title="{{ 'Desativar' if c.ativo else 'Ativar' }}"><i class="bi {{ 'bi-pause' if c.ativo else 'bi-play' }}"></i></button>
+              </form>
+              <form method="POST" action="{{ url_for('precadastro.cupom_excluir', cupom_id=c.id) }}" class="d-inline" onsubmit="return confirm('Excluir o cupom {{ c.codigo }}?');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-sm btn-outline-danger" title="Excluir"><i class="bi bi-trash"></i></button>
+              </form>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="7" class="text-center text-muted py-4">Nenhum cupom criado ainda.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

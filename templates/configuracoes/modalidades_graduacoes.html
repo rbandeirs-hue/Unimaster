@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+{% block title %}Graduações — {{ modalidade.nome }}{% endblock %}
+{% block content %}
+<div class="container my-4">
+    {% set back_url = back_url or get_back_url_default() %}
+{% include 'components/botao_voltar.html' %}
+
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-3">
+        <div>
+            <h2 class="h4 fw-bold text-dark mb-1">Graduações da modalidade: {{ modalidade.nome }}</h2>
+            <p class="text-muted small mb-0">Cadastre e edite as graduações específicas desta modalidade.</p>
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+            <a href="{{ url_for('configuracoes.modalidades_editar', modalidade_id=modalidade.id, academia_id=academia_contexto_id) }}" class="btn btn-outline-secondary">
+                <i class="bi bi-pencil-square me-1"></i> Editar modalidade
+            </a>
+        </div>
+    </div>
+
+    <div class="card shadow-sm border-0">
+        <div class="card-header bg-light d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <span class="small text-muted">Edite as existentes e adicione novas linhas abaixo.</span>
+            <button type="button" class="btn btn-outline-primary btn-sm" id="btn_add_nova_graduacao">
+                <i class="bi bi-plus-circle me-1"></i> Adicionar outra graduação
+            </button>
+        </div>
+        <div class="card-body">
+            <form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-2" id="tblGraduacoes">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width:64px;">Ordem</th>
+                                <th style="width:60px;">ID</th>
+                                <th>Faixa</th>
+                                <th>Graduação</th>
+                                <th>Categoria</th>
+                                <th class="text-center" style="width: 130px;">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for g in graduacoes %}
+                            <tr data-grad-id="{{ g.id }}" class="{% if not g.ativo %}grad-inativa{% endif %}">
+                                <td>
+                                  <input type="number" class="form-control form-control-sm text-center"
+                                         name="ordem" min="0" step="1"
+                                         value="{{ g.ordem or g.id }}"
+                                         title="Posição na lista (menor = primeiro)">
+                                </td>
+                                <td class="text-muted small">
+                                    #{{ g.id }}
+                                    <input type="hidden" name="id" value="{{ g.id }}">
+                                </td>
+                                <td><input class="form-control form-control-sm" name="faixa" value="{{ g.faixa or '' }}"></td>
+                                <td><input class="form-control form-control-sm" name="graduacao" value="{{ g.graduacao or '' }}"></td>
+                                <td><input class="form-control form-control-sm" name="categoria" value="{{ g.categoria or '' }}"></td>
+                                <td class="text-center">
+                                  <button type="button" class="btn btn-sm btn-toggle-grad
+                                          {{ 'btn-success' if g.ativo else 'btn-outline-secondary' }}"
+                                          data-grad-id="{{ g.id }}"
+                                          data-ativo="{{ '1' if g.ativo else '0' }}"
+                                          title="Clique para ativar/inativar">
+                                    {% if g.ativo %}
+                                      <i class="bi bi-check-circle-fill"></i> Ativa
+                                    {% else %}
+                                      <i class="bi bi-pause-circle"></i> Inativa
+                                    {% endif %}
+                                  </button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                            <tr class="table-success-subtle nova-graduacao-row">
+                                <td>
+                                  <input type="number" class="form-control form-control-sm text-center"
+                                         name="nova_ordem" min="0" step="1" placeholder="auto">
+                                </td>
+                                <td><strong>Novo</strong></td>
+                                <td><input class="form-control form-control-sm" name="nova_faixa" placeholder="Ex: Faixa Azul"></td>
+                                <td><input class="form-control form-control-sm" name="nova_graduacao" placeholder="Ex: 1º Kyu"></td>
+                                <td><input class="form-control form-control-sm" name="nova_categoria" placeholder="Opcional"></td>
+                                <td class="text-center text-muted small">criado ativo</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <p class="text-muted small mb-0" style="font-size: .82rem;">
+                      <i class="bi bi-info-circle"></i>
+                      <strong>Ordem</strong> define a sequência das faixas nos formulários de cadastro (menor número aparece primeiro).
+                      Gradações <strong>inativas</strong> não aparecem nos cadastros de alunos — use para esconder graduações que não usa mais sem perder histórico.
+                    </p>
+                </div>
+
+                <style>
+                  #tblGraduacoes tr.grad-inativa { background: #f9fafb; opacity: .7; }
+                  #tblGraduacoes tr.grad-inativa input { background: #f3f4f6; color: #6b7280; }
+                  .btn-toggle-grad { white-space: nowrap; }
+                </style>
+                {% if not graduacoes %}
+                <p class="text-muted small mb-3">Ainda não há graduações para esta modalidade. Use a linha "Novo" para cadastrar.</p>
+                {% endif %}
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mt-3">
+                    <span class="small text-muted">Dica: você pode adicionar várias linhas e salvar tudo de uma vez.</span>
+                    <div class="d-flex gap-2 flex-wrap">
+                    <button type="submit" class="btn btn-primary">Salvar graduações</button>
+                    <a href="{{ url_for('configuracoes.modalidades_lista', academia_id=academia_contexto_id) }}" class="btn btn-outline-secondary">Voltar para modalidades</a>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<script>
+document.getElementById('btn_add_nova_graduacao')?.addEventListener('click', function () {
+    const tbody = document.querySelector('table tbody');
+    const baseRow = document.querySelector('.nova-graduacao-row');
+    if (!tbody || !baseRow) return;
+    const clone = baseRow.cloneNode(true);
+    clone.querySelectorAll('input').forEach(function (inp) { inp.value = ''; });
+    tbody.appendChild(clone);
+});
+
+// Toggle ativo/inativo da graduação (AJAX, sem reload)
+(function () {
+  const csrfMeta = document.querySelector('meta[name="csrf-token"]');
+  const csrfToken = csrfMeta ? csrfMeta.getAttribute('content') : '';
+  const urlBase = "{{ url_for('configuracoes.modalidades_graduacao_toggle', modalidade_id=modalidade.id, graduacao_id=999) }}";
+
+  document.querySelectorAll('.btn-toggle-grad').forEach(function (btn) {
+    btn.addEventListener('click', async function () {
+      const id = btn.dataset.gradId;
+      btn.disabled = true;
+      try {
+        const fd = new FormData();
+        if (csrfToken) fd.append('csrf_token', csrfToken);
+        const r = await fetch(urlBase.replace('999', id), {
+          method: 'POST',
+          body: fd,
+          credentials: 'same-origin',
+          headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        });
+        const data = await r.json();
+        if (!r.ok || !data.ok) {
+          alert(data.error || 'Erro ao alternar status.');
+          return;
+        }
+        // Como o backend renumera as ordens das graduações, recarregamos
+        // a página para refletir os novos valores nos inputs.
+        // Antes do reload, atualizamos visualmente o botão para feedback imediato.
+        const ativo = data.ativo === true;
+        btn.classList.toggle('btn-success', ativo);
+        btn.classList.toggle('btn-outline-secondary', !ativo);
+        btn.innerHTML = ativo
+          ? '<i class="bi bi-check-circle-fill"></i> Ativa'
+          : '<i class="bi bi-pause-circle"></i> Inativa';
+        const tr = btn.closest('tr');
+        if (tr) tr.classList.toggle('grad-inativa', !ativo);
+        // Reload depois de pequeno delay para o usuário ver a mudança
+        setTimeout(function () { window.location.reload(); }, 250);
+      } catch (e) {
+        alert('Erro de rede ao alternar status.');
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  });
+})();
+</script>
+{% endblock %}

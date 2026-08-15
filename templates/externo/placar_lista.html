@@ -1,0 +1,41 @@
+{% extends "externo/base_externo.html" %}
+{% block title %}Placar — {{ evento.nome }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <h5 class="mb-0">Controle de Lutas</h5>
+  <div class="d-flex gap-1 flex-wrap">
+    {% for a in range(1, (evento.placar_num_areas|default(1)|int) + 1) %}
+    <a href="{{ url_for('eventos_competicoes.placar_judo_monitor_area', evento_id=evento.id, area_num=a) }}" class="btn btn-outline-primary btn-sm" target="_blank" title="TV da área {{ a }}"><i class="bi bi-tv"></i> Área {{ a }}</a>
+    {% endfor %}
+    <a href="{{ url_for('externo.placar_chave_visual', evento_id=evento.id) }}" class="btn btn-warning btn-sm" target="_blank" title="Chave com placar por luta"><i class="bi bi-diagram-3-fill"></i> Chave interativa</a>
+    <a href="{{ url_for('externo.placar_chaves_monitor', evento_id=evento.id) }}" class="btn btn-outline-success btn-sm" target="_blank" title="Exibir chaves no monitor/TV"><i class="bi bi-diagram-3"></i> Chaves (TV)</a>
+    <a href="{{ url_for('externo.placar_nova_luta', evento_id=evento.id) }}" class="btn btn-primary btn-sm"><i class="bi bi-plus"></i> Nova Luta</a>
+  </div>
+</div>
+{% if lutas %}
+<div class="row g-2">
+  {% for l in lutas %}
+  <div class="col-12 col-md-6 col-lg-4">
+    <div class="card shadow-sm">
+      <div class="card-body py-2">
+        <div class="d-flex justify-content-between align-items-start">
+          <strong>{{ l.nome_categoria or ('Luta #' ~ l.id) }}</strong>
+          <span class="badge {% if l.status == 'finalizada' %}bg-success{% elif l.status == 'em_andamento' %}bg-primary{% else %}bg-secondary{% endif %}">{{ l.status|replace('_', ' ')|title }}</span>
+        </div>
+        <small class="d-block text-muted">Área {{ l.area_num|default(1) }} — {{ l.atleta_branco_nome }} vs {{ l.atleta_azul_nome }}</small>
+        {% if l.status == 'finalizada' and l.vencedor %}
+        <small class="text-success">Vencedor: {{ l.atleta_branco_nome if l.vencedor == 'branco' else l.atleta_azul_nome }}</small>
+        {% endif %}
+        <div class="mt-2 d-flex gap-1">
+          <a href="{{ url_for('externo.placar_controle', evento_id=evento.id, luta_id=l.id) }}" class="btn btn-sm btn-primary flex-fill"><i class="bi bi-gear"></i> Controle</a>
+          <a href="{{ url_for('externo.placar_monitor', evento_id=evento.id, luta_id=l.id) }}" target="_blank" class="btn btn-sm btn-outline-secondary"><i class="bi bi-tv"></i> Monitor</a>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<p class="text-muted">Nenhuma luta. <a href="{{ url_for('externo.placar_nova_luta', evento_id=evento.id) }}">Criar primeira luta</a></p>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,123 @@
+{#
+  Modal filho: detalhamento de chamadas (Judô), empilhado sobre o modal de perfil.
+  Variáveis:
+    - aluno (com id, nome)
+    - parent_modal_id: seletor CSS do modal pai, ex: '#modalAluno' ~ aluno.id
+  Dados: aluno.presencas_judo_historico — lista de dicts:
+    data_fmt (dd/mm/yyyy), data_iso (opcional), horario, turma_nome, presente (bool),
+    status_chamada (opcional: justificada, atestado, ...)
+  Na página (ex.: lista de alunos), antes do include:
+    {% set parent_modal_id = '#modalAluno' ~ aluno.id %}
+  Inclua uma vez por página:
+    extra_css: static/css/components/modal_freq_judo_detalhe.css
+    extra_js: static/js/components/attendance_detail_modal.js (defer)
+#}
+{% set aid = aluno.id %}
+<script type="application/json" id="attendance-data-{{ aid }}">{{ (aluno.presencas_judo_historico if aluno.presencas_judo_historico is defined else []) | tojson }}</script>
+
+<div class="modal fade modal-attendance-detail modal-freq-judo-detalhe"
+     id="modalFreqJudoDetalhe{{ aid }}"
+     tabindex="-1"
+     aria-labelledby="tituloFreqJudoDetalhe{{ aid }}"
+     aria-modal="true"
+     data-bs-backdrop="true"
+     data-bs-keyboard="true"
+     data-attendance-detail-modal="1"
+     data-parent-modal="{{ parent_modal_id | default('', true) }}">
+  <div class="modal-dialog modal-dialog-scrollable modal-fullscreen-sm-down">
+    <div class="modal-content">
+      <div class="modal-header border-bottom align-items-start flex-wrap gap-2">
+        <div class="flex-grow-1 min-w-0">
+          <h5 class="modal-title fw-bold mb-1" id="tituloFreqJudoDetalhe{{ aid }}">
+            Chamadas — {{ aluno.nome }}
+          </h5>
+          <div class="d-flex flex-wrap align-items-center gap-2">
+            <span class="afd-chip-muted">Últimos 3 anos · até 400 registros</span>
+          </div>
+        </div>
+        <div class="afd-header-stats d-flex flex-wrap gap-3 align-items-center small ms-auto">
+          <span>Aulas: <strong class="afd-stat-aulas">0</strong></span>
+          <span class="text-muted d-none d-sm-inline">|</span>
+          <span>Presenças: <strong class="afd-stat-presencas">0</strong></span>
+          <span class="text-muted d-none d-sm-inline">|</span>
+          <span>Frequência: <strong class="afd-stat-pct afd-stat-pct--mid">—</strong></span>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+      </div>
+
+      <button type="button"
+              class="btn btn-outline-secondary btn-sm w-100 rounded-0 afd-filters-mobile-toggle border-start-0 border-end-0"
+              aria-expanded="false"
+              aria-controls="afdFiltersWrap{{ aid }}"
+              id="afdFiltersMobBtn{{ aid }}">
+        <i class="bi bi-sliders me-1" aria-hidden="true"></i>Filtros
+      </button>
+
+      <div class="modal-body pt-0 pb-2 px-0">
+        <div class="afd-filters-collapsible px-3 border-bottom" id="afdFiltersWrap{{ aid }}">
+          <div class="afd-filters-bar">
+            <div class="row g-2 align-items-end afd-filters-inner">
+              <div class="col-6 col-md-3">
+                <label class="form-label small mb-0 text-muted" for="afdYear{{ aid }}">Ano</label>
+                <select id="afdYear{{ aid }}" class="form-select form-select-sm afd-filter-year" autocomplete="off"></select>
+              </div>
+              <div class="col-6 col-md-3">
+                <label class="form-label small mb-0 text-muted" for="afdStatus{{ aid }}">Status</label>
+                <select id="afdStatus{{ aid }}" class="form-select form-select-sm afd-filter-status" autocomplete="off">
+                  <option value="all">Todos</option>
+                  <option value="presentes">Apenas presenças</option>
+                  <option value="faltas">Apenas faltas</option>
+                </select>
+              </div>
+              <div class="col-12 col-md-4">
+                <label class="form-label small mb-0 text-muted" for="afdTurma{{ aid }}">Turma</label>
+                <select id="afdTurma{{ aid }}" class="form-select form-select-sm afd-filter-turma" autocomplete="off">
+                  <option value="">Todas</option>
+                </select>
+              </div>
+              <div class="col-6 col-md-2">
+                <label class="form-label small mb-0 text-muted" for="afdFrom{{ aid }}">De</label>
+                <input type="date" id="afdFrom{{ aid }}" class="form-control form-control-sm afd-filter-date-from" autocomplete="off">
+              </div>
+              <div class="col-6 col-md-2">
+                <label class="form-label small mb-0 text-muted" for="afdTo{{ aid }}">Até</label>
+                <input type="date" id="afdTo{{ aid }}" class="form-control form-control-sm afd-filter-date-to" autocomplete="off">
+              </div>
+              <div class="col-12 text-md-end">
+                <button type="button" class="btn btn-link btn-sm text-secondary text-decoration-none px-0 afd-filter-clear d-none">
+                  Limpar filtros
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="afd-scroll-host px-2 px-md-3 mt-2">
+          <div class="afd-empty-state d-none py-5 px-3">
+            <div class="text-center text-muted mb-3" aria-hidden="true">
+              <i class="bi bi-inbox fs-1 d-block mb-2 opacity-50"></i>
+            </div>
+            <p class="text-center mb-3 afd-empty-title small">Nenhuma chamada encontrada.</p>
+            <div class="text-center">
+              <button type="button" class="btn btn-outline-secondary btn-sm afd-empty-clear d-none">Limpar filtros</button>
+            </div>
+          </div>
+          <div class="afd-virtual-inner"></div>
+        </div>
+      </div>
+
+      <div class="modal-footer flex-wrap gap-2 align-items-center">
+        <div class="me-auto d-flex flex-column flex-sm-row flex-wrap gap-2 small text-muted align-items-start align-items-sm-center">
+          <span class="afd-footer-count">Mostrando 0 de 0 registros</span>
+          <span class="d-none d-sm-inline text-muted">·</span>
+          <div class="d-flex gap-2">
+            <button type="button" class="btn btn-link btn-sm text-secondary text-decoration-none px-1 py-0 afd-export-csv">Exportar CSV</button>
+            {# TODO: Exportar PDF quando houver endpoint/rota no backend #}
+            <button type="button" class="btn btn-link btn-sm text-secondary text-decoration-none px-1 py-0 disabled" disabled title="Em breve">Exportar PDF</button>
+          </div>
+        </div>
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+      </div>
+    </div>
+  </div>
+</div>

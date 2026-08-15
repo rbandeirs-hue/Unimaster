@@ -2,7 +2,11 @@
 {% block title %}Painel — Associação{% endblock %}
 {% block content %}
 <div class="container mt-4 painel-academia-dash">
+
     <div class="row g-4">
+        <div class="col-12 col-sm-6 col-lg-4 col-xl-3">
+            {% include 'components/aniversariantes_menu_card.html' %}
+        </div>
         <div class="col-12 col-sm-6 col-lg-4 col-xl-3">
             <div class="card shadow-sm border-success card-hover painel-atalho-card h-100">
                 <div class="card-body text-center py-4 px-4 d-flex flex-column align-items-center justify-content-center">
@@ -20,6 +24,23 @@
                     <span class="display-4 fw-bold text-info">{{ stats.get('alunos', 0) if stats else 0 }}</span>
                 </div>
             </div>
+        </div>
+        <div class="col-12 col-sm-6 col-lg-4 col-xl-3">
+            {% set zempo_pendentes = stats.get('zempo_pendentes', 0) if stats else 0 %}
+            <a href="{{ url_for('zempo.migracoes') }}" class="text-decoration-none">
+                <div class="card shadow-sm border-primary card-hover painel-atalho-card h-100">
+                    <div class="card-body text-center py-4 px-4 d-flex flex-column align-items-center justify-content-center">
+                        <i class="bi bi-cloud-upload-fill fs-1 mb-2 text-primary"></i>
+                        <h6 class="fw-bold mb-2 text-body">Cadastro no Zempo</h6>
+                        {% if zempo_pendentes %}
+                            <span class="display-4 fw-bold text-primary">{{ zempo_pendentes }}</span>
+                            <small class="text-muted">aguardando migração</small>
+                        {% else %}
+                            <small class="text-muted">Nenhuma solicitação pendente</small>
+                        {% endif %}
+                    </div>
+                </div>
+            </a>
         </div>
     </div>
 </div>

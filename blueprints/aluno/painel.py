@@ -772,6 +772,8 @@ def _status_efetivo_painel(status, data_venc, status_pagamento=None):
     """Pendente_aprovacao -> aguardando_confirmacao. Pendente vencido -> atrasado."""
     if status_pagamento == "pendente_aprovacao":
         return "aguardando_confirmacao"
+    if status_pagamento == "pago":
+        return "pago"
     if status and status not in ("pendente",):
         return status
     try:

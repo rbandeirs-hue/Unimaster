@@ -10,6 +10,55 @@ from config import MAIL_SERVER, MAIL_PORT, MAIL_USE_TLS, MAIL_USERNAME, MAIL_PAS
 from flask import current_app, url_for
 
 
+def enviar_email_link_pagamento(email_destino, nome, academia_nome, link, valor=None, copia_cola=None):
+    """Envia por e-mail o link de pagamento (matrícula/cobrança) ao responsável.
+    Retorna True se enviado, False caso contrário (best-effort)."""
+    if not email_destino or "@" not in str(email_destino):
+        return False
+    if not MAIL_USERNAME or not MAIL_PASSWORD:
+        current_app.logger.warning("Email não configurado — link de pagamento não enviado.")
+        return False
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = f"Pagamento da matrícula — {academia_nome}"
+        msg["From"] = MAIL_DEFAULT_SENDER or MAIL_USERNAME
+        msg["To"] = email_destino
+        valor_txt = (f"R$ {float(valor):.2f}" if valor else "")
+        text = (
+            f"Olá, {nome or ''}!\n\n"
+            f"Segue o link para pagamento da matrícula na {academia_nome}"
+            + (f" no valor de {valor_txt}" if valor_txt else "") + ":\n"
+            f"{link}\n\n"
+            + (f"PIX copia e cola:\n{copia_cola}\n\n" if copia_cola else "")
+            + "Após o pagamento, sua matrícula será confirmada.\n\nEquipe Unimaster"
+        )
+        html = f"""
+        <div style="font-family:Arial,sans-serif;max-width:520px;margin:auto;color:#1f2937">
+          <h2 style="color:#0d6efd">Pagamento da matrícula</h2>
+          <p>Olá, <strong>{nome or ''}</strong>!</p>
+          <p>Segue o link para pagamento da matrícula na <strong>{academia_nome}</strong>{(' no valor de <strong>'+valor_txt+'</strong>') if valor_txt else ''}:</p>
+          <p style="text-align:center;margin:24px 0">
+            <a href="{link}" style="background:#0d6efd;color:#fff;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:bold">Pagar matrícula</a>
+          </p>
+          {('<p style="font-size:13px;color:#555"><strong>PIX copia e cola:</strong><br><span style="word-break:break-all">'+copia_cola+'</span></p>') if copia_cola else ''}
+          <p style="font-size:13px;color:#555">Ou copie e cole no navegador:<br><span style="word-break:break-all">{link}</span></p>
+          <p style="font-size:12px;color:#888;margin-top:20px">Após o pagamento, sua matrícula será confirmada.<br>Equipe Unimaster</p>
+        </div>"""
+        msg.attach(MIMEText(text, "plain", "utf-8"))
+        msg.attach(MIMEText(html, "html", "utf-8"))
+        context = ssl.create_default_context()
+        with smtplib.SMTP(MAIL_SERVER, MAIL_PORT) as server:
+            if MAIL_USE_TLS:
+                server.starttls(context=context)
+            server.login(MAIL_USERNAME, MAIL_PASSWORD)
+            server.send_message(msg)
+        current_app.logger.info(f"Link de pagamento enviado para {email_destino}")
+        return True
+    except Exception as e:
+        current_app.logger.error(f"Erro ao enviar link de pagamento: {e}", exc_info=True)
+        return False
+
+
 def enviar_email_redefinicao_senha(email_destino, nome_usuario, token, base_url):
     """
     Envia email com link de redefinição de senha.
@@ -132,4 +181,68 @@ Equipe Unimaster Judô
         
     except Exception as e:
         current_app.logger.error(f"Erro ao enviar email de redefinição de senha: {e}", exc_info=True)
+        return False
+
+
+def enviar_email_credenciais_acesso(email_destino, nome_destinatario, nome_aluno,
+                                    academia_nome, login, senha, link_login):
+    """
+    Envia as credenciais de acesso ao responsável, após a promoção do pré-cadastro.
+
+    A senha vai em texto porque é gerada na hora e só existe aqui — o sistema
+    guarda apenas o hash. Retorna True se enviado (best-effort, não levanta).
+    """
+    if not email_destino or "@" not in str(email_destino):
+        return False
+    if not MAIL_USERNAME or not MAIL_PASSWORD:
+        current_app.logger.warning("Email não configurado — credenciais não enviadas.")
+        return False
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = f"Seu acesso ao sistema — {academia_nome}"
+        msg["From"] = MAIL_DEFAULT_SENDER or MAIL_USERNAME
+        msg["To"] = email_destino
+
+        sobre_aluno = f" do aluno {nome_aluno}" if nome_aluno else ""
+        text = (
+            f"Olá, {nome_destinatario or ''}!\n\n"
+            f"O cadastro{sobre_aluno} foi concluído na {academia_nome} e seu acesso "
+            f"ao sistema já está liberado.\n\n"
+            f"Endereço: {link_login}\n"
+            f"Usuário: {login}\n"
+            f"Senha: {senha}\n\n"
+            f"Por segurança, troque a senha no primeiro acesso.\n\nEquipe Unimaster"
+        )
+        html = f"""
+        <div style="font-family:Arial,sans-serif;max-width:520px;margin:auto;color:#1f2937">
+          <h2 style="color:#0d6efd">Seu acesso ao sistema</h2>
+          <p>Olá, <strong>{nome_destinatario or ''}</strong>!</p>
+          <p>O cadastro{sobre_aluno} foi concluído na <strong>{academia_nome}</strong>
+             e seu acesso ao sistema já está liberado.</p>
+          <table style="border-collapse:collapse;margin:18px 0;font-size:15px">
+            <tr><td style="padding:6px 12px 6px 0;color:#555">Usuário</td>
+                <td style="padding:6px 0"><strong>{login}</strong></td></tr>
+            <tr><td style="padding:6px 12px 6px 0;color:#555">Senha</td>
+                <td style="padding:6px 0"><strong>{senha}</strong></td></tr>
+          </table>
+          <p style="text-align:center;margin:24px 0">
+            <a href="{link_login}" style="background:#0d6efd;color:#fff;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:bold">Entrar no sistema</a>
+          </p>
+          <p style="font-size:13px;color:#555">Ou copie e cole no navegador:<br>
+             <span style="word-break:break-all">{link_login}</span></p>
+          <p style="font-size:12px;color:#888;margin-top:20px">
+             Por segurança, troque a senha no primeiro acesso.<br>Equipe Unimaster</p>
+        </div>"""
+        msg.attach(MIMEText(text, "plain", "utf-8"))
+        msg.attach(MIMEText(html, "html", "utf-8"))
+        context = ssl.create_default_context()
+        with smtplib.SMTP(MAIL_SERVER, MAIL_PORT) as server:
+            if MAIL_USE_TLS:
+                server.starttls(context=context)
+            server.login(MAIL_USERNAME, MAIL_PASSWORD)
+            server.send_message(msg)
+        current_app.logger.info(f"Credenciais enviadas para {email_destino}")
+        return True
+    except Exception as e:
+        current_app.logger.error(f"Erro ao enviar credenciais: {e}", exc_info=True)
         return False

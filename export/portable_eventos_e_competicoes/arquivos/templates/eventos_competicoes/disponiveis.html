@@ -1,0 +1,255 @@
+{% extends "base.html" %}
+{% block title %}Eventos para Inscrição{% endblock %}
+{% block content %}
+<div class="container mt-5">
+    <div class="mb-4">
+        {% set back_url = back_url or get_back_url_default() %}
+{% include 'components/botao_voltar.html' %}
+        <h2 class="h4 fw-bold text-primary">Eventos e Competições — Inscrições</h2>
+        <p class="text-muted mb-0">Eventos ativos e finalizados. Eventos ativos permitem inscrição.</p>
+    </div>
+
+    <!-- Filtros -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-body py-3">
+            <form method="GET" class="row g-2 align-items-end">
+                {% if alunos|length > 1 %}
+                <div class="col-auto">
+                    <label class="form-label small mb-1">Aluno</label>
+                    <select name="aluno_id" class="form-select form-select-sm">
+                        {% for a in alunos %}
+                        <option value="{{ a.id }}" {% if (request.args.get('aluno_id')|default('')|string == a.id|string) or (not request.args.get('aluno_id') and loop.first) %}selected{% endif %}>{{ a.nome }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {% endif %}
+                <div class="col-auto">
+                    <label class="form-label small mb-1">Status</label>
+                    <select name="status" class="form-select form-select-sm">
+                        <option value="" {% if not filtro_status %}selected{% endif %}>Todos</option>
+                        <option value="ativo" {% if filtro_status == 'ativo' %}selected{% endif %}>Ativos</option>
+                        <option value="finalizado" {% if filtro_status == 'finalizado' %}selected{% endif %}>Finalizados</option>
+                    </select>
+                </div>
+                <div class="col-auto">
+                    <label class="form-label small mb-1">Mês</label>
+                    <select name="mes" class="form-select form-select-sm">
+                        <option value="" {% if not filtro_mes %}selected{% endif %}>Todos</option>
+                        <option value="1" {% if filtro_mes == '1' %}selected{% endif %}>Janeiro</option>
+                        <option value="2" {% if filtro_mes == '2' %}selected{% endif %}>Fevereiro</option>
+                        <option value="3" {% if filtro_mes == '3' %}selected{% endif %}>Março</option>
+                        <option value="4" {% if filtro_mes == '4' %}selected{% endif %}>Abril</option>
+                        <option value="5" {% if filtro_mes == '5' %}selected{% endif %}>Maio</option>
+                        <option value="6" {% if filtro_mes == '6' %}selected{% endif %}>Junho</option>
+                        <option value="7" {% if filtro_mes == '7' %}selected{% endif %}>Julho</option>
+                        <option value="8" {% if filtro_mes == '8' %}selected{% endif %}>Agosto</option>
+                        <option value="9" {% if filtro_mes == '9' %}selected{% endif %}>Setembro</option>
+                        <option value="10" {% if filtro_mes == '10' %}selected{% endif %}>Outubro</option>
+                        <option value="11" {% if filtro_mes == '11' %}selected{% endif %}>Novembro</option>
+                        <option value="12" {% if filtro_mes == '12' %}selected{% endif %}>Dezembro</option>
+                    </select>
+                </div>
+                <div class="col-auto">
+                    <label class="form-label small mb-1">Ano</label>
+                    <select name="ano" class="form-select form-select-sm">
+                        <option value="" {% if not filtro_ano %}selected{% endif %}>Todos</option>
+                        {% for a in anos_disponiveis %}
+                        <option value="{{ a }}" {% if filtro_ano == a|string %}selected{% endif %}>{{ a }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-auto">
+                    <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-funnel me-1"></i> Filtrar</button>
+                    <a href="{{ request.path }}" class="btn btn-outline-secondary btn-sm">Limpar</a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    {% if eventos %}
+    <div class="row g-3">
+        {% for ev in eventos %}
+        <div class="col-12 col-md-6 col-lg-4">
+            <div class="card h-100 shadow-sm {% if ev.encerrado %}border-secondary{% else %}border-primary{% endif %}">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <h5 class="card-title mb-0 flex-grow-1 pr-2">{{ ev.nome }}</h5>
+                        <div class="d-flex flex-column align-items-end gap-1">
+                            <button type="button" class="btn btn-sm btn-outline-info p-1" 
+                                    data-bs-toggle="modal" 
+                                    data-bs-target="#modalEvento{{ ev.id }}" 
+                                    title="Ver informações completas"
+                                    style="line-height: 1; min-width: 28px; height: 28px; flex-shrink: 0;">
+                                <i class="bi bi-eye"></i>
+                            </button>
+                            {% if ev.encerrado %}
+                            <span class="badge bg-secondary">Finalizado</span>
+                            {% else %}
+                            <span class="badge bg-success">Ativo</span>
+                            {% endif %}
+                            {% if ev.ja_inscrito %}
+                            <span class="badge bg-info"><i class="bi bi-check-circle-fill"></i> Inscrito</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <p class="small text-muted mb-2">{{ ev.tipo }} • Data fim: {% if ev.data_fim %}{{ ev.data_fim|data_br }}{% set _s = ev.data_fim|string %}{% if _s|length > 10 %} {{ _s[11:16] }}{% endif %}{% else %}-{% endif %}</p>
+                    {% if ev.descricao %}
+                    <p class="small mb-2">{{ ev.descricao[:100] }}{% if ev.descricao|length > 100 %}...{% endif %}</p>
+                    {% endif %}
+                    {% if ev.anexos and ev.anexos|length > 0 %}
+                    <div class="mb-2">
+                        <strong class="small"><i class="bi bi-paperclip me-1"></i>Anexos disponíveis:</strong>
+                        <div class="mt-1">
+                            {% for anexo in ev.anexos %}
+                            <div class="mb-1">
+                                <a href="{{ url_for('eventos_competicoes.download_anexo', anexo_id=anexo.id) }}{% if request.args.get('aluno_id') %}?aluno_id={{ request.args.get('aluno_id') }}{% endif %}" 
+                                   class="btn btn-sm btn-outline-primary text-decoration-none" 
+                                   title="{{ anexo.nome_arquivo }}">
+                                    <i class="bi bi-download me-1"></i>{{ anexo.nome_arquivo[:25] }}{% if anexo.nome_arquivo|length > 25 %}...{% endif %}
+                                    {% if anexo.tamanho_formatado %}
+                                    <small class="text-muted">({{ anexo.tamanho_formatado }})</small>
+                                    {% endif %}
+                                </a>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+                    {% set aid = (request.args.get('aluno_id') or (alunos[0].id if alunos else '')) %}
+                    {% if not ev.encerrado %}
+                        {% if ev.ja_inscrito %}
+                        <span class="text-success small"><i class="bi bi-check-circle-fill"></i> Você já está inscrito neste evento</span>
+                        {% else %}
+                        <a href="{{ url_for('eventos_competicoes.inscrever', evento_id=ev.id, academia_id=academia_id, aluno_id=aid) if aid else '#' }}" class="btn btn-primary btn-sm">
+                            <i class="bi bi-pencil-square"></i> Realizar inscrição
+                        </a>
+                        {% endif %}
+                    {% else %}
+                    <span class="text-muted small"><i class="bi bi-lock"></i> Inscrições encerradas</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    
+    <!-- Modais de Informações Completas -->
+    {% for ev in eventos %}
+    <div class="modal fade" id="modalEvento{{ ev.id }}" tabindex="-1" aria-labelledby="modalEventoLabel{{ ev.id }}" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-scrollable modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title" id="modalEventoLabel{{ ev.id }}">
+                        <i class="bi bi-calendar-event me-2"></i>{{ ev.nome }}
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <div class="d-flex flex-wrap gap-2 mb-3">
+                            {% if ev.encerrado %}
+                            <span class="badge bg-secondary">Finalizado</span>
+                            {% else %}
+                            <span class="badge bg-success">Ativo</span>
+                            {% endif %}
+                            <span class="badge bg-info">{{ ev.tipo }}</span>
+                            {% if ev.ja_inscrito %}
+                            <span class="badge bg-info"><i class="bi bi-check-circle-fill"></i> Inscrito</span>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="row g-3">
+                            {% if ev.descricao %}
+                            <div class="col-12">
+                                <h6 class="fw-semibold mb-2"><i class="bi bi-info-circle me-2"></i>Descrição</h6>
+                                <div class="text-muted">{{ ev.descricao|nl2br|safe }}</div>
+                            </div>
+                            {% endif %}
+                            
+                            <div class="col-12 col-md-6">
+                                <h6 class="fw-semibold mb-2"><i class="bi bi-calendar-check me-2"></i>Data de Início</h6>
+                                <p class="text-muted mb-0">
+                                    {% if ev.data_inicio %}
+                                        {{ ev.data_inicio|data_br }}
+                                        {% set _s_ini = ev.data_inicio|string %}
+                                        {% if _s_ini|length > 10 %} {{ _s_ini[11:16] }}{% endif %}
+                                    {% else %}
+                                        <span class="text-muted">Não informado</span>
+                                    {% endif %}
+                                </p>
+                            </div>
+                            
+                            <div class="col-12 col-md-6">
+                                <h6 class="fw-semibold mb-2"><i class="bi bi-calendar-x me-2"></i>Data de Fim</h6>
+                                <p class="text-muted mb-0">
+                                    {% if ev.data_fim %}
+                                        {{ ev.data_fim|data_br }}
+                                        {% set _s_fim = ev.data_fim|string %}
+                                        {% if _s_fim|length > 10 %} {{ _s_fim[11:16] }}{% endif %}
+                                    {% else %}
+                                        <span class="text-muted">Não informado</span>
+                                    {% endif %}
+                                </p>
+                            </div>
+                            
+                            {% if ev.anexos and ev.anexos|length > 0 %}
+                            <div class="col-12">
+                                <h6 class="fw-semibold mb-2"><i class="bi bi-paperclip me-2"></i>Anexos Disponíveis</h6>
+                                <div class="list-group">
+                                    {% for anexo in ev.anexos %}
+                                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                                        <div class="flex-grow-1">
+                                            <i class="bi bi-file-earmark me-2"></i>
+                                            <strong>{{ anexo.nome_arquivo }}</strong>
+                                            {% if anexo.tamanho_formatado %}
+                                            <small class="text-muted ms-2">({{ anexo.tamanho_formatado }})</small>
+                                            {% endif %}
+                                            {% if anexo.descricao %}
+                                            <br><small class="text-muted ms-4">{{ anexo.descricao }}</small>
+                                            {% endif %}
+                                        </div>
+                                        <a href="{{ url_for('eventos_competicoes.download_anexo', anexo_id=anexo.id) }}{% if request.args.get('aluno_id') %}?aluno_id={{ request.args.get('aluno_id') }}{% endif %}" 
+                                           class="btn btn-sm btn-outline-primary" 
+                                           title="Baixar {{ anexo.nome_arquivo }}">
+                                            <i class="bi bi-download"></i> Baixar
+                                        </a>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    {% set aid = (request.args.get('aluno_id') or (alunos[0].id if alunos else '')) %}
+                    {% if not ev.encerrado %}
+                        {% if ev.ja_inscrito %}
+                        <span class="text-success me-auto"><i class="bi bi-check-circle-fill"></i> Você já está inscrito neste evento</span>
+                        {% else %}
+                        <a href="{{ url_for('eventos_competicoes.inscrever', evento_id=ev.id, academia_id=academia_id, aluno_id=aid) if aid else '#' }}" 
+                           class="btn btn-primary">
+                            <i class="bi bi-pencil-square me-1"></i> Realizar inscrição
+                        </a>
+                        {% endif %}
+                    {% else %}
+                    <span class="text-muted me-auto"><i class="bi bi-lock"></i> Inscrições encerradas</span>
+                    {% endif %}
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+    
+    {% else %}
+    <div class="card shadow-sm">
+        <div class="card-body text-center py-5">
+            <i class="bi bi-calendar-event display-4 text-muted mb-3"></i>
+            <h5 class="text-muted">Nenhum evento encontrado</h5>
+            <p class="text-muted mb-0">Ajuste os filtros ou aguarde novos eventos.</p>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

@@ -36,9 +36,43 @@
         vertical-align: middle;
     }
 
+    .ata-indicadores {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 0.6rem;
+    }
+    .ata-ind-card {
+        border: 1px solid #e9ecef;
+        border-radius: 10px;
+        padding: 0.65rem 0.75rem;
+        background: #fff;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+    }
+    .ata-ind-card .lbl {
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+        font-weight: 700;
+        color: #6c757d;
+    }
+    .ata-ind-card .val {
+        font-size: 1.15rem;
+        font-weight: 800;
+        line-height: 1;
+    }
+    .ata-ind-card.total .val { color: #0d6efd; }
+    .ata-ind-card.pres .val { color: #198754; }
+    .ata-ind-card.falt .val { color: #dc3545; }
+
     @media (max-width: 768px) {
         .accordion-button {
             font-size: 0.9rem;
+        }
+        .ata-indicadores {
+            grid-template-columns: 1fr;
         }
     }
 </style>
@@ -91,11 +125,13 @@
             <h4 class="mt-4 mb-2 text-secondary border-bottom pb-1">{{ mes_ano }}</h4>
             
             {% for data, turmas_dict in aulas.items() %}
-                {% for turma_id_item, registro in turmas_dict.items() %}
+                {% for registro_key, registro in turmas_dict.items() %}
                     {% set idx = idx + 1 %}
-                    {% set unique_key = mes_ano|replace('/','_') ~ "_" ~ data|replace('/','_') ~ "_" ~ turma_id_item %}
+                    {% set unique_key = mes_ano|replace('/','_') ~ "_" ~ data|replace('/','_') ~ "_" ~ registro_key %}
                     {% set collapse_id = "collapse_" ~ unique_key %}
                     {% set heading_id = "heading_" ~ unique_key %}
+                    {% set modal_obs_id = "modal_obs_" ~ unique_key %}
+                    {% set modal_plano_id = "modal_plano_" ~ unique_key %}
                     
                     <div class="accordion-item mb-3 shadow-sm">
                         <h2 class="accordion-header" id="{{ heading_id }}">
@@ -103,7 +139,7 @@
                                     data-bs-toggle="collapse" data-bs-target="#{{ collapse_id }}"
                                     aria-expanded="false" aria-controls="{{ collapse_id }}">
                                 <span class="d-flex flex-column flex-md-row flex-wrap gap-1 gap-md-2 align-items-start">
-                                    <span><i class="bi bi-calendar-check-fill me-2"></i> Aula em {{ data }} — Turma: {{ turmas[turma_id_item] }}</span>
+                                    <span><i class="bi bi-calendar-check-fill me-2"></i> Aula em {{ data }} — Turma: {{ turmas.get(registro.turma_id, 'Turma ' ~ registro.turma_id) }} — Horário: {{ registro.horario_aula or '00:00' }}</span>
                                     <span class="small">Registrado por: {{ registro.responsavel }}{% if registro.abertura_registro %} <span class="text-white-50">•</span> aberto em {{ registro.abertura_registro.strftime('%d/%m/%Y %H:%M') }}{% endif %}</span>
                                 </span>
                             </button>
@@ -111,6 +147,42 @@
                         <div id="{{ collapse_id }}" class="accordion-collapse collapse"
                             aria-labelledby="{{ heading_id }}" data-bs-parent="#accordionAta">
                             <div class="accordion-body p-0">
+                                {% set ns = namespace(total=0, presentes=0) %}
+                                {% for aluno in registro.alunos %}
+                                    {% set ns.total = ns.total + 1 %}
+                                    {% if aluno.id in registro.presentes %}
+                                        {% set ns.presentes = ns.presentes + 1 %}
+                                    {% endif %}
+                                {% endfor %}
+                                {% set faltantes = ns.total - ns.presentes %}
+                                <div class="p-3 border-bottom d-flex flex-wrap gap-2">
+                                    <button type="button" class="btn btn-sm btn-outline-secondary"
+                                            data-bs-toggle="modal" data-bs-target="#{{ modal_obs_id }}"
+                                            {% if not registro.observacao %}disabled{% endif %}>
+                                        <i class="bi bi-journal-text me-1"></i> Ver Observação
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-primary"
+                                            data-bs-toggle="modal" data-bs-target="#{{ modal_plano_id }}"
+                                            {% if not registro.plano_aula_texto and not registro.plano_aula_arquivo %}disabled{% endif %}>
+                                        <i class="bi bi-book me-1"></i> Ver Plano de Aula
+                                    </button>
+                                </div>
+                                <div class="p-3 border-bottom">
+                                    <div class="ata-indicadores">
+                                        <div class="ata-ind-card total">
+                                            <span class="lbl"><i class="bi bi-people-fill me-1"></i>Na aula</span>
+                                            <span class="val">{{ ns.total }}</span>
+                                        </div>
+                                        <div class="ata-ind-card pres">
+                                            <span class="lbl"><i class="bi bi-check-circle-fill me-1"></i>Presentes</span>
+                                            <span class="val">{{ ns.presentes }}</span>
+                                        </div>
+                                        <div class="ata-ind-card falt">
+                                            <span class="lbl"><i class="bi bi-x-circle-fill me-1"></i>Faltantes</span>
+                                            <span class="val">{{ faltantes if faltantes > 0 else 0 }}</span>
+                                        </div>
+                                    </div>
+                                </div>
                                 <table class="table table-hover table-striped mb-0">
                                     <thead class="table-light">
                                         <tr>
@@ -121,7 +193,24 @@
                                     <tbody>
                                         {% for aluno in registro.alunos %}
                                         <tr>
-                                            <td>{{ aluno.nome }}</td>
+                                            <td>
+                                                <div class="d-flex align-items-center gap-2 flex-wrap">
+                                                    {% if aluno.foto %}
+                                                    <img src="{{ url_for('static', filename='uploads/' + aluno.foto) }}" alt="" class="rounded-circle border" style="width:40px;height:40px;object-fit:cover;">
+                                                    {% endif %}
+                                                    <span>{{ aluno.nome }}</span>
+                                                </div>
+                                                {% if aluno.presenca_avulsa %}
+                                                    <span class="badge bg-secondary ms-1">Avulso</span>
+                                                {% elif aluno.aluno_outra_turma %}
+                                                    <span class="badge bg-primary ms-1">Outra turma</span>
+                                                    {% if aluno.turma_origem_nome %}
+                                                        <div class="small text-muted mt-1">
+                                                            <i class="bi bi-people me-1"></i>{{ aluno.turma_origem_nome }}
+                                                        </div>
+                                                    {% endif %}
+                                                {% endif %}
+                                            </td>
                                             <td class="text-center">
                                                 {% if aluno.id in registro.presentes %}
                                                     <span class="badge bg-success py-2 px-3"><i class="bi bi-check-circle-fill me-1"></i> Presente</span>
@@ -131,8 +220,59 @@
                                             </td>
                                         </tr>
                                         {% endfor %}
+                                        {% if not registro.alunos %}
+                                        <tr>
+                                            <td colspan="2" class="text-center text-muted py-3">Sem alunos listados para este registro.</td>
+                                        </tr>
+                                        {% endif %}
                                     </tbody>
                                 </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="modal fade" id="{{ modal_obs_id }}" tabindex="-1" aria-hidden="true">
+                        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title">Observação da Aula</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                                </div>
+                                <div class="modal-body">
+                                    {% if registro.observacao %}
+                                        <p class="mb-0" style="white-space: pre-line;">{{ registro.observacao }}</p>
+                                    {% else %}
+                                        <p class="text-muted mb-0">Sem observação registrada.</p>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="modal fade" id="{{ modal_plano_id }}" tabindex="-1" aria-hidden="true">
+                        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title">Plano de Aula</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                                </div>
+                                <div class="modal-body">
+                                    {% if registro.plano_aula_texto %}
+                                        <h6 class="fw-bold">Texto</h6>
+                                        <p class="mb-3" style="white-space: pre-line;">{{ registro.plano_aula_texto }}</p>
+                                    {% endif %}
+                                    {% if registro.plano_aula_arquivo %}
+                                        <h6 class="fw-bold">Arquivo</h6>
+                                        <a class="btn btn-sm btn-outline-primary"
+                                           href="{{ url_for('static', filename='uploads/planos_aula/' + registro.plano_aula_arquivo) }}"
+                                           target="_blank" rel="noopener">
+                                            <i class="bi bi-paperclip me-1"></i>{{ registro.plano_aula_arquivo_original or registro.plano_aula_arquivo }}
+                                        </a>
+                                    {% endif %}
+                                    {% if not registro.plano_aula_texto and not registro.plano_aula_arquivo %}
+                                        <p class="text-muted mb-0">Sem plano de aula registrado.</p>
+                                    {% endif %}
+                                </div>
                             </div>
                         </div>
                     </div>

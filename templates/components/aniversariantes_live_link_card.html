@@ -1,0 +1,89 @@
+{#
+  Card do menu: abre o modo aniversariante live (parabéns e reações).
+  Contexto: aniversariantes, aniversariantes_hoje, hoje_dia, hoje_mes, hoje_ano (opcional)
+  Opcional: aniv_live_compact — true no painel do aluno (título menor, card-hover)
+#}
+{% set total_mes = aniversariantes|length if aniversariantes else 0 %}
+{% set total_hoje = aniversariantes_hoje|length if aniversariantes_hoje else 0 %}
+{% set compact = aniv_live_compact|default(false) %}
+{# Volta ao menu/painel de onde o usuário abriu (evita cair sempre no hub genérico) #}
+{% set _p = request.path or '' %}
+{# Modo responsável: escopo da lista live = aluno selecionado (query aluno_id na SPA) #}
+{% if aniv_aluno_escopo is defined and aniv_aluno_escopo is not none %}
+  {% if _p and not _p.startswith('/aniversariante-live') %}
+    {% set live_url = url_for('aniversariante_live.pagina', next=_p, aluno_id=aniv_aluno_escopo) %}
+  {% else %}
+    {% set live_url = url_for('aniversariante_live.pagina', aluno_id=aniv_aluno_escopo) %}
+  {% endif %}
+{% elif _p and not _p.startswith('/aniversariante-live') %}
+  {% set live_url = url_for('aniversariante_live.pagina', next=_p) %}
+{% else %}
+  {% set live_url = url_for('aniversariante_live.pagina') %}
+{% endif %}
+
+<a href="{{ live_url }}"
+   class="text-decoration-none text-reset h-100 d-block w-100"
+   aria-label="Acessar aniversariantes">
+  <div class="card shadow-sm h-100 position-relative aniv-menu-card card-hover"
+       style="border-radius:{% if compact %}0.85rem{% else %}1rem{% endif %};border:2px solid {% if total_hoje > 0 %}#f97316{% elif total_mes > 0 %}#fdba74{% else %}#e2e8f0{% endif %} !important;">
+    {% if total_mes > 0 or total_hoje > 0 %}
+    <span class="position-absolute top-0 end-0 translate-middle badge rounded-pill bg-danger border border-white shadow-sm"
+          style="font-size:.72rem;min-width:1.35rem;z-index:2;">
+      {{ total_mes if total_mes > 0 else total_hoje }}
+      <span class="visually-hidden">aniversariantes no mês</span>
+    </span>
+    {% endif %}
+    <div class="card-body text-center py-{% if compact %}3{% else %}4{% endif %} px-3 d-flex flex-column align-items-center justify-content-center">
+      <div class="position-relative mb-2">
+        <i class="bi bi-broadcast" style="font-size:{% if compact %}1.85rem{% else %}2.25rem{% endif %};color:#7c3aed;"></i>
+        {% if total_hoje > 0 %}
+        <span class="position-absolute top-0 start-100 translate-middle" style="font-size:1rem;">🎂</span>
+        {% endif %}
+      </div>
+      {% if compact %}
+      <h6 class="fw-bold mb-1" style="color:#1e1b4b;">Aniversariantes</h6>
+      {% else %}
+      <h5 class="fw-bold mb-1" style="color:#1e1b4b;">Aniversariantes</h5>
+      {% endif %}
+      <p class="text-muted small mb-2" style="line-height:1.35;">
+        {% if total_hoje > 0 %}
+        <span class="text-danger fw-semibold">{{ total_hoje }} hoje</span><br>
+        {% endif %}
+        {% if total_mes > 0 %}
+        <span>{{ total_mes }} no mês</span>
+        {% else %}
+        Nenhum este mês
+        {% endif %}
+      </p>
+      <span class="aniv-live-cta"
+            style="--cta1:{% if total_hoje > 0 %}#ea580c{% elif total_mes > 0 %}#7c3aed{% else %}#64748b{% endif %};--cta2:{% if total_hoje > 0 %}#fb923c{% elif total_mes > 0 %}#c084fc{% else %}#94a3b8{% endif %};">
+        Acessar
+      </span>
+    </div>
+  </div>
+</a>
+
+<style>
+.aniv-menu-card .aniv-live-cta {
+  display: inline-block;
+  margin-top: 0.15rem;
+  padding: 0.45rem 1.1rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #fff !important;
+  border: none;
+  background: linear-gradient(135deg, var(--cta1), var(--cta2));
+  box-shadow: 0 6px 18px rgba(124, 92, 255, 0.25);
+  transition: transform 0.15s ease, box-shadow 0.2s ease, filter 0.2s ease;
+}
+.aniv-menu-card:hover .aniv-live-cta {
+  filter: brightness(1.06);
+  box-shadow: 0 8px 22px rgba(124, 92, 255, 0.35);
+}
+.aniv-menu-card:active .aniv-live-cta {
+  transform: scale(0.97);
+}
+</style>

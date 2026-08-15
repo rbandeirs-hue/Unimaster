@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+{% block title %}WhatsApp da Academia{% endblock %}
+{% block content %}
+<div class="container my-4" style="max-width: 720px;">
+  <div class="d-flex align-items-center gap-2 mb-1">
+    <i class="bi bi-whatsapp text-success fs-3"></i>
+    <h4 class="fw-bold mb-0">WhatsApp da Academia</h4>
+  </div>
+  <p class="text-muted">Conecte o WhatsApp da academia para enviar lembretes e avisos automáticos aos alunos.</p>
+
+  <div class="mb-3 d-flex flex-wrap gap-2">
+    <a href="{{ url_for('academia.whatsapp_avisos', academia_id=academia_id) }}" class="btn btn-success"><i class="bi bi-megaphone me-1"></i> Enviar avisos aos alunos</a>
+    <a href="{{ url_for('academia.whatsapp_mensagens', academia_id=academia_id) }}" class="btn btn-outline-success"><i class="bi bi-chat-left-text me-1"></i> Personalizar mensagens</a>
+  </div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}<div class="alert alert-{{ cat }} py-2">{{ msg }}</div>{% endfor %}
+  {% endwith %}
+
+  {% if not servico_online %}
+  <div class="alert alert-danger"><i class="bi bi-exclamation-triangle me-1"></i> O serviço de WhatsApp está fora do ar. Tente novamente em instantes ou contate o suporte.</div>
+  {% endif %}
+
+  <!-- Conexão -->
+  <div class="card border-0 shadow-sm mb-3">
+    <div class="card-body">
+      <h6 class="fw-bold mb-3"><i class="bi bi-link-45deg me-1"></i> Conexão</h6>
+
+      <div id="estadoConectado" class="{{ '' if wpp_status == 'open' else 'd-none' }}">
+        <div class="d-flex align-items-center gap-2 mb-2">
+          <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i> Conectado</span>
+          <span class="text-muted">Número: <strong id="numConectado">{{ wpp_numero or acad.whatsapp_numero or '—' }}</strong></span>
+        </div>
+        <button class="btn btn-outline-danger btn-sm" id="btnDesconectar"><i class="bi bi-box-arrow-right me-1"></i> Desconectar</button>
+      </div>
+
+      <div id="estadoDesconectado" class="{{ 'd-none' if wpp_status == 'open' else '' }}">
+        <p class="text-muted small mb-2">A academia ainda não tem um número conectado. Clique em conectar e escaneie o QR Code com o WhatsApp do número da academia (<em>Aparelhos conectados → Conectar um aparelho</em>).</p>
+        <button class="btn btn-success" id="btnConectar"><i class="bi bi-qr-code me-1"></i> Conectar WhatsApp</button>
+
+        <div id="boxQr" class="text-center mt-3 d-none">
+          <div class="mb-2"><img id="imgQr" src="" alt="QR Code" style="width:280px;height:280px;border:1px solid #e9ecef;border-radius:12px;padding:8px;background:#fff;"></div>
+          <p class="text-muted small mb-0" id="qrMsg">Aguardando leitura do QR Code…</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Preferências -->
+  <div class="card border-0 shadow-sm mb-3">
+    <div class="card-body">
+      <h6 class="fw-bold mb-3"><i class="bi bi-sliders me-1"></i> Automações</h6>
+      <form method="POST" action="{{ url_for('academia.whatsapp_configurar', academia_id=academia_id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="form-check form-switch mb-2">
+          <input class="form-check-input" type="checkbox" role="switch" id="sw1" name="whatsapp_lembrete_mensalidade" value="1" {{ 'checked' if acad.whatsapp_lembrete_mensalidade }}>
+          <label class="form-check-label" for="sw1">Lembrete de mensalidade (vencimento + link de pagamento)</label>
+        </div>
+        <div class="form-check form-switch mb-2">
+          <input class="form-check-input" type="checkbox" role="switch" id="sw2" name="whatsapp_avisos" value="1" {{ 'checked' if acad.whatsapp_avisos }}>
+          <label class="form-check-label" for="sw2">Avisos gerais aos alunos</label>
+        </div>
+        <div class="form-check form-switch mb-3">
+          <input class="form-check-input" type="checkbox" role="switch" id="sw3" name="whatsapp_aniversario" value="1" {{ 'checked' if acad.whatsapp_aniversario }}>
+          <label class="form-check-label" for="sw3">Parabéns de aniversário (envio diário automático)</label>
+        </div>
+        <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-check-lg me-1"></i> Salvar preferências</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Teste -->
+  <div class="card border-0 shadow-sm">
+    <div class="card-body">
+      <h6 class="fw-bold mb-3"><i class="bi bi-send me-1"></i> Enviar mensagem de teste</h6>
+      <div class="input-group" style="max-width:420px;">
+        <input type="text" class="form-control" id="telTeste" placeholder="(81) 99999-9999">
+        <button class="btn btn-outline-success" id="btnTeste" type="button"><i class="bi bi-send me-1"></i> Enviar teste</button>
+      </div>
+      <div class="small mt-2" id="testeMsg"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var CSRF = "{{ csrf_token() }}";
+  function post(url, body){ return fetch(url, {method:'POST', headers:{'X-CSRFToken':CSRF}, body: body}); }
+
+  var btnConectar = document.getElementById('btnConectar');
+  var boxQr = document.getElementById('boxQr');
+  var imgQr = document.getElementById('imgQr');
+  var qrMsg = document.getElementById('qrMsg');
+  var pollTimer = null;
+
+  function mostrarConectado(num){
+    document.getElementById('estadoConectado').classList.remove('d-none');
+    document.getElementById('estadoDesconectado').classList.add('d-none');
+    if(num) document.getElementById('numConectado').textContent = num;
+  }
+
+  function pollQr(){
+    fetch("{{ url_for('academia.whatsapp_qr', academia_id=academia_id) }}")
+      .then(function(r){return r.json();})
+      .then(function(d){
+        if(d.status === 'open'){ if(pollTimer) clearInterval(pollTimer); mostrarConectado(d.number); qrMsg.textContent='Conectado!'; setTimeout(function(){location.reload();}, 800); return; }
+        if(d.qr){ imgQr.src = d.qr; qrMsg.textContent = 'Escaneie o QR Code com o WhatsApp da academia.'; }
+        else if(d.status==='offline'){ qrMsg.textContent='Serviço indisponível.'; }
+        else { qrMsg.textContent = 'Gerando QR Code…'; }
+      }).catch(function(){});
+  }
+
+  if(btnConectar) btnConectar.addEventListener('click', function(){
+    btnConectar.disabled = true; btnConectar.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Conectando…';
+    boxQr.classList.remove('d-none');
+    post("{{ url_for('academia.whatsapp_conectar', academia_id=academia_id) }}")
+      .then(function(r){return r.json();})
+      .then(function(d){
+        if(d.status==='open'){ mostrarConectado(d.number); return; }
+        if(d.qr){ imgQr.src=d.qr; qrMsg.textContent='Escaneie o QR Code com o WhatsApp da academia.'; }
+        if(pollTimer) clearInterval(pollTimer);
+        pollTimer = setInterval(pollQr, 2500);
+        setTimeout(pollQr, 1200);
+      })
+      .catch(function(){ qrMsg.textContent='Erro ao conectar.'; })
+      .finally(function(){ btnConectar.disabled=false; btnConectar.innerHTML='<i class="bi bi-qr-code me-1"></i> Conectar WhatsApp'; });
+  });
+
+  var btnDesc = document.getElementById('btnDesconectar');
+  if(btnDesc) btnDesc.addEventListener('click', function(){
+    if(!confirm('Desconectar o WhatsApp desta academia?')) return;
+    post("{{ url_for('academia.whatsapp_desconectar', academia_id=academia_id) }}")
+      .then(function(){ location.reload(); });
+  });
+
+  var btnTeste = document.getElementById('btnTeste');
+  if(btnTeste) btnTeste.addEventListener('click', function(){
+    var tel = document.getElementById('telTeste').value.trim();
+    var msg = document.getElementById('testeMsg');
+    if(!tel){ msg.innerHTML='<span class="text-danger">Informe um telefone.</span>'; return; }
+    msg.innerHTML='<span class="text-muted">Enviando…</span>';
+    var fd = new FormData(); fd.append('telefone', tel);
+    post("{{ url_for('academia.whatsapp_teste', academia_id=academia_id) }}", fd)
+      .then(function(r){return r.json();})
+      .then(function(d){
+        if(d.ok) msg.innerHTML='<span class="text-success"><i class="bi bi-check-circle"></i> Mensagem enfileirada! Confira o WhatsApp de destino.</span>';
+        else msg.innerHTML='<span class="text-danger"><i class="bi bi-x-circle"></i> '+((d.info&&d.info.erro)||d.erro||'Falha. A academia está conectada?')+'</span>';
+      }).catch(function(){ msg.innerHTML='<span class="text-danger">Erro de rede.</span>'; });
+  });
+})();
+</script>
+{% endblock %}

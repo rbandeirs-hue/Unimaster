@@ -54,7 +54,23 @@
                 <tr class="user-row">
                     <td class="text-center user-data-cell" data-label="ID">{{ usuario.id }}</td>
                     
-                    <td class="user-data-cell" data-label="Nome">{{ usuario.nome }}</td>
+                    <td class="user-data-cell" data-label="Nome">
+                        <div class="d-flex align-items-center gap-2">
+                            {% if usuario.aluno_foto %}
+                            <img src="{{ url_for('static', filename='uploads/' + usuario.aluno_foto) }}"
+                                 alt="Foto aluno"
+                                 class="rounded-circle border"
+                                 style="width: 32px; height: 32px; object-fit: cover;"
+                                 onerror="this.style.display='none'">
+                            {% endif %}
+                            <div class="d-flex flex-column">
+                                <span>{{ usuario.nome }}</span>
+                                {% if usuario.aluno_nome %}
+                                <small class="text-muted">Aluno: {{ usuario.aluno_nome }}</small>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </td>
                     
                     <td class="user-data-cell text-truncate" data-label="Email">{{ usuario.email }}</td>
                     
@@ -74,6 +90,15 @@
                     
                     <td class="text-center user-actions-cell" data-label="Ações">
                         <div class="d-flex justify-content-center gap-2 flex-wrap">
+                            {% if usuario.aluno_id %}
+                            <button type="button"
+                                    class="btn btn-sm btn-outline-secondary"
+                                    title="Ver aluno vinculado"
+                                    data-bs-toggle="modal"
+                                    data-bs-target="#modalAlunoUsuario{{ usuario.id }}">
+                                <i class="bi bi-person-badge"></i>
+                            </button>
+                            {% endif %}
                             <a href="{{ url_for('usuarios.editar_usuario', user_id=usuario.id, next=request.full_path) }}"
                                 class="btn btn-sm btn-outline-primary" title="Editar Usuário">
                                 <i class="bi bi-pencil-square"></i>
@@ -120,6 +145,47 @@
     {% endif %}
 </div>
 
+{# Modais de aluno vinculado (foto/dados básicos) #}
+{% if usuarios %}
+  {% for usuario in usuarios %}
+    {% if usuario.aluno_id %}
+    <div class="modal fade" id="modalAlunoUsuario{{ usuario.id }}" tabindex="-1" aria-labelledby="modalAlunoUsuarioLabel{{ usuario.id }}" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="modalAlunoUsuarioLabel{{ usuario.id }}">
+              <i class="bi bi-person-badge me-2"></i> Aluno vinculado a {{ usuario.nome }}
+            </h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body text-center">
+            {% if usuario.aluno_foto %}
+            <img src="{{ url_for('static', filename='uploads/' + usuario.aluno_foto) }}"
+                 alt="Foto do aluno"
+                 class="rounded-circle border mb-3"
+                 style="width: 120px; height: 120px; object-fit: cover;"
+                 onerror="this.style.display='none'">
+            {% else %}
+            <div class="rounded-circle bg-light d-flex align-items-center justify-content-center mb-3"
+                 style="width: 120px; height: 120px;">
+              <i class="bi bi-person-fill text-muted" style="font-size: 3rem;"></i>
+            </div>
+            {% endif %}
+            <h5 class="fw-bold mb-1">{{ usuario.aluno_nome }}</h5>
+            <p class="text-muted small mb-0">
+              Este é o aluno vinculado ao usuário <strong>{{ usuario.nome }}</strong>.
+            </p>
+          </div>
+          <div class="modal-footer d-flex justify-content-end">
+            <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Fechar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+  {% endfor %}
+{% endif %}
+
 <div class="modal fade" id="deleteModal" tabindex="-1" aria-labelledby="deleteModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
@@ -134,6 +200,7 @@
             <div class="modal-footer d-flex justify-content-center">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
                 <form id="deleteUserForm" method="POST" style="display:inline;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <button type="submit" class="btn btn-danger px-4">Excluir</button>
                 </form>
             </div>

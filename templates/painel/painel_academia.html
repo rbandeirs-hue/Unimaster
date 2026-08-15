@@ -18,14 +18,55 @@
     </div>
 
     <div class="row g-4">
-        <!-- Eventos e Competições -->
+        <!-- Painel / Indicadores -->
         <div class="col-xl-3 col-lg-4 col-md-6">
-            <a href="{{ url_for('eventos_competicoes.lista', academia_id=academia_id) }}" class="card-action-link text-decoration-none">
+            <a href="{{ url_for('academia.dash', academia_id=academia_id) }}" class="card-action-link text-decoration-none">
+                <div class="card h-100 shadow-sm border-primary">
+                    <div class="card-body text-center p-4">
+                        <i class="bi bi-speedometer2 display-5 mb-3 text-primary"></i>
+                        <h5 class="card-title fw-bold">Painel / Indicadores</h5>
+                        <p class="card-text small text-muted mb-0">KPIs de alunos e financeiro: novos, baixas, mensalidades e inadimplência.</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col-xl-3 col-lg-4 col-md-6">
+            {% include 'components/aniversariantes_menu_card.html' %}
+        </div>
+        <!-- Eventos -->
+        <div class="col-xl-3 col-lg-4 col-md-6">
+            <a href="{{ url_for('eventos_competicoes.lista_eventos', academia_id=academia_id) }}" class="card-action-link text-decoration-none">
+                <div class="card h-100 shadow-sm border-info">
+                    <div class="card-body text-center p-4">
+                        <i class="bi bi-calendar-event display-5 mb-3 text-info"></i>
+                        <h5 class="card-title fw-bold">Eventos</h5>
+                        <p class="card-text small text-muted mb-0">Aderir a eventos e inscrever alunos.</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <!-- Competições -->
+        <div class="col-xl-3 col-lg-4 col-md-6">
+            <a href="{{ url_for('eventos_competicoes.lista_competicoes', academia_id=academia_id) }}" class="card-action-link text-decoration-none">
                 <div class="card h-100 shadow-sm border-danger">
                     <div class="card-body text-center p-4">
                         <i class="bi bi-trophy display-5 mb-3 text-danger"></i>
-                        <h5 class="card-title fw-bold">Eventos e Competições</h5>
-                        <p class="card-text small text-muted mb-0">Eventos para aderir e gerenciar inscrições de alunos.</p>
+                        <h5 class="card-title fw-bold">Competições</h5>
+                        <p class="card-text small text-muted mb-0">Aderir a competições e inscrever atletas.</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <!-- Locais de treino -->
+        <div class="col-xl-3 col-lg-4 col-md-6">
+            <a href="{{ url_for('academia.locais_treino', academia_id=academia_id) }}" class="card-action-link text-decoration-none">
+                <div class="card h-100 shadow-sm border-primary">
+                    <div class="card-body text-center p-4">
+                        <i class="bi bi-geo-alt-fill display-5 mb-3 text-primary"></i>
+                        <h5 class="card-title fw-bold">Locais de treino</h5>
+                        <p class="card-text small text-muted mb-0">Escolas e núcleos onde seus alunos treinam.</p>
                     </div>
                 </div>
             </a>
@@ -65,6 +106,19 @@
                         <i class="bi bi-person-plus display-5 mb-3 text-warning"></i>
                         <h5 class="card-title fw-bold">Pré-cadastro</h5>
                         <p class="card-text small text-muted mb-0">Pré-cadastros para converter em alunos.</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <!-- WhatsApp -->
+        <div class="col-xl-3 col-lg-4 col-md-6">
+            <a href="{{ url_for('academia.whatsapp_config', academia_id=academia_id) }}" class="card-action-link text-decoration-none">
+                <div class="card h-100 shadow-sm border-success">
+                    <div class="card-body text-center p-4">
+                        <i class="bi bi-whatsapp display-5 mb-3 text-success"></i>
+                        <h5 class="card-title fw-bold">WhatsApp</h5>
+                        <p class="card-text small text-muted mb-0">Conectar o número e enviar lembretes e avisos automáticos.</p>
                     </div>
                 </div>
             </a>
@@ -124,6 +178,30 @@
             </a>
         </div>
 
+        <!-- Cadastro no Zempo -->
+        <div class="col-xl-3 col-lg-4 col-md-6">
+            <a href="{{ url_for('zempo.solicitar', academia_id=academia_id) }}" class="card-action-link text-decoration-none">
+                <div class="card h-100 shadow-sm border-primary">
+                    <div class="card-body text-center p-4">
+                        <i class="bi bi-person-vcard display-5 mb-3 text-primary"></i>
+                        <h5 class="card-title fw-bold">
+                            Cadastro no Zempo
+                            {% if zempo_prontos %}
+                                <span class="badge bg-primary ms-1">{{ zempo_prontos }}</span>
+                            {% endif %}
+                        </h5>
+                        <p class="card-text small text-muted mb-0">
+                            {% if zempo_prontos %}
+                                {{ zempo_prontos }} aluno(s) prontos para solicitar o cadastro no Zempo.
+                            {% else %}
+                                Veja o que falta em cada aluno e solicite o cadastro no Zempo.
+                            {% endif %}
+                        </p>
+                    </div>
+                </div>
+            </a>
+        </div>
+
         <!-- Presença -->
         <div class="col-xl-3 col-lg-4 col-md-6">
             <a href="{{ url_for('presencas.painel_presenca', academia_id=academia_id) }}" class="card-action-link text-decoration-none">
@@ -132,6 +210,19 @@
                         <i class="bi bi-clipboard-check-fill display-5 mb-3 text-secondary"></i>
                         <h5 class="card-title fw-bold">Presença</h5>
                         <p class="card-text small text-muted mb-0">Registro, relatório e histórico de frequência.</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <!-- Ranking de frequência -->
+        <div class="col-xl-3 col-lg-4 col-md-6">
+            <a href="{{ url_for('presencas.ranking_frequencia_pagina') }}" class="card-action-link text-decoration-none">
+                <div class="card h-100 shadow-sm border-warning">
+                    <div class="card-body text-center p-4">
+                        <i class="bi bi-trophy-fill display-5 mb-3 text-warning"></i>
+                        <h5 class="card-title fw-bold">Ranking de frequência</h5>
+                        <p class="card-text small text-muted mb-0">Pódio por turma — mês e ano.</p>
                     </div>
                 </div>
             </a>
@@ -173,6 +264,19 @@
                         <i class="bi bi-sliders display-5 mb-3 text-secondary"></i>
                         <h5 class="card-title fw-bold">Configurações</h5>
                         <p class="card-text small text-muted mb-0">Editar dados da academia.</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <!-- Modalidades -->
+        <div class="col-xl-3 col-lg-4 col-md-6">
+            <a href="{{ url_for('configuracoes.modalidades_lista', academia_id=academia_id) }}" class="card-action-link text-decoration-none">
+                <div class="card h-100 shadow-sm border-warning">
+                    <div class="card-body text-center p-4">
+                        <i class="bi bi-collection-fill display-5 mb-3 text-warning"></i>
+                        <h5 class="card-title fw-bold">Modalidades</h5>
+                        <p class="card-text small text-muted mb-0">Cadastro de modalidades públicas e privadas da academia.</p>
                     </div>
                 </div>
             </a>

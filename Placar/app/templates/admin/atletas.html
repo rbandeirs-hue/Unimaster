@@ -1,0 +1,131 @@
+{% extends 'base.html' %}
+{% block title %}Atletas — Admin{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <a href="{{ url_for('admin.dashboard') }}" class="back-link">← Admin</a>
+    <h1>Atletas</h1>
+  </div>
+  <a href="{{ url_for('admin.academias') }}" class="btn-action">Ver Academias</a>
+</div>
+
+<!-- Filtro por nome e academia -->
+<div class="filtro-bar">
+  <form method="GET" action="{{ url_for('admin.atletas') }}" class="filtro-form" style="flex-wrap:wrap;align-items:flex-end;gap:12px">
+    <div class="field" style="margin:0;min-width:200px;flex:1;max-width:320px">
+      <label for="atleta-busca-q" style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px">Buscar por nome</label>
+      <input type="search" id="atleta-busca-q" name="q" value="{{ busca_q }}"
+             placeholder="Digite parte do nome…" autocomplete="off"
+             style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px">
+    </div>
+    <div class="field" style="margin:0;min-width:180px">
+      <label for="atleta-filtro-ac" style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px">Academia</label>
+      <select name="academia_id" id="atleta-filtro-ac" class="filtro-select" style="width:100%">
+        <option value="">Todas</option>
+        {% for ac in academias %}
+        <option value="{{ ac.id }}" {% if filtro == ac.id %}selected{% endif %}>{{ ac.nome }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button type="submit" class="btn-action" style="padding:10px 18px;margin-top:18px">Buscar</button>
+    {% if filtro or busca_q %}
+    <a href="{{ url_for('admin.atletas') }}" class="link-action" style="align-self:center;margin-top:18px">Limpar filtros</a>
+    {% endif %}
+  </form>
+</div>
+
+<div class="two-col">
+
+  <div class="col-main">
+    {% if atletas %}
+    <table class="tabela">
+      <thead>
+        <tr><th>Nome</th><th>Faixa</th><th>Sexo</th><th>Peso</th><th>Academia</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for a in atletas %}
+        <tr>
+          <td class="td-nome">{{ a.nome }}</td>
+          <td>
+            <span class="faixa-badge faixa-{{ a.faixa or 'branca' }}">{{ a.faixa or 'branca' }}</span>
+          </td>
+          <td>
+            {% if a.sexo %}
+            <span class="sexo-badge sexo-{{ a.sexo }}">{{ a.sexo }}</span>
+            {% else %}—{% endif %}
+          </td>
+          <td>{{ ('%.1f kg' % a.peso) if a.peso else '—' }}</td>
+          <td>{{ a.academia.nome if a.academia else '—' }}</td>
+          <td class="td-acoes">
+            <a href="{{ url_for('admin.atleta_editar', atleta_id=a.id) }}{% if atletas_query_string %}?{{ atletas_query_string }}{% endif %}" class="link-action">Editar</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state">
+      {% if busca_q %}
+      <p>Nenhum atleta encontrado para «{{ busca_q }}»{% if filtro %} nesta academia{% endif %}.</p>
+      <p class="empty-hint"><a href="{{ url_for('admin.atletas', academia_id=filtro) if filtro else url_for('admin.atletas') }}" class="link-action">Limpar busca</a></p>
+      {% else %}
+      <p>Nenhum atleta cadastrado.</p>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="col-side">
+    <div class="form-card">
+      <h3 class="form-titulo">Novo Atleta</h3>
+      <form method="POST" action="{{ url_for('admin.atletas_criar') }}">
+        <div class="field">
+          <label>Nome *</label>
+          <input type="text" name="nome" required placeholder="Nome completo">
+        </div>
+        <div class="field">
+          <label>Data de Nascimento</label>
+          <input type="date" name="data_nascimento">
+        </div>
+        <div class="field">
+          <label>Sexo</label>
+          <select name="sexo">
+            <option value="">—</option>
+            <option value="M">Masculino</option>
+            <option value="F">Feminino</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Peso (kg)</label>
+          <input type="number" name="peso" step="0.1" min="0" placeholder="65.0">
+        </div>
+        <div class="field">
+          <label>Faixa</label>
+          <select name="faixa">
+            <option value="">—</option>
+            {% for f in faixas %}
+            <option value="{{ f }}">{{ f|capitalize }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label>Academia</label>
+          <select name="academia_id">
+            <option value="">—</option>
+            {% for ac in academias %}
+            <option value="{{ ac.id }}">{{ ac.nome }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label>Foto (URL)</label>
+          <input type="url" name="foto_url" placeholder="https://...">
+        </div>
+        <button type="submit" class="btn-submit">Cadastrar Atleta</button>
+      </form>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

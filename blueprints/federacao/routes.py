@@ -3,6 +3,7 @@ import os
 from flask import Blueprint, render_template, redirect, url_for, flash, request, current_app
 from flask_login import login_required, current_user
 from config import get_db_connection
+from utils.upload_seguro import validar_upload, UploadInvalido
 
 federacao_bp = Blueprint("federacao", __name__, url_prefix="/federacao")
 
@@ -14,10 +15,11 @@ def _pasta_logos():
 
 
 def salvar_logo(file_storage, prefixo, entidade_id):
-    if not file_storage or file_storage.filename == "":
+    if not file_storage or not file_storage.filename:
         return None
-    ext = os.path.splitext(file_storage.filename)[1].lower()
-    if ext not in LOGO_EXTENSOES:
+    try:
+        ext = validar_upload(file_storage, categorias=["imagem"])
+    except UploadInvalido:
         return None
     pasta = _pasta_logos()
     os.makedirs(pasta, exist_ok=True)
@@ -28,7 +30,7 @@ def salvar_logo(file_storage, prefixo, entidade_id):
                 os.remove(existente)
             except OSError:
                 pass
-    filename = f"{prefixo}_{entidade_id}{ext}"
+    filename = f"{prefixo}_{entidade_id}.{ext}"
     file_storage.save(os.path.join(pasta, filename))
     return filename
 

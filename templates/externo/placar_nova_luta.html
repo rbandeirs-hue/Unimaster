@@ -1,0 +1,23 @@
+{% extends "externo/base_externo.html" %}
+{% block title %}Nova Luta — {{ evento.nome }}{% endblock %}
+{% block content %}
+<h5>Nova Luta</h5>
+<div class="card shadow-sm"><div class="card-body">
+<form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<div class="mb-2"><label class="form-label">Categoria (opcional)</label><select name="categoria_id" class="form-select"><option value="">Selecione</option>{% for cat in categorias %}<option value="{{ cat.id }}">{{ cat.nome_categoria }}</option>{% endfor %}</select></div>
+<hr>
+<h6>Atleta Branco</h6>
+<div class="mb-2"><label class="form-label">Nome *</label><input type="text" name="atleta_branco_nome" class="form-control" required></div>
+<div class="mb-2"><label class="form-label">Academia</label><input type="text" name="atleta_branco_academia" class="form-control"></div>
+<hr>
+<h6>Atleta Azul</h6>
+<div class="mb-2"><label class="form-label">Nome *</label><input type="text" name="atleta_azul_nome" class="form-control" required></div>
+<div class="mb-2"><label class="form-label">Academia</label><input type="text" name="atleta_azul_academia" class="form-control"></div>
+<hr>
+<div class="mb-2"><label class="form-label">Tempo (seg)</label><input type="number" name="tempo_total" class="form-control" value="300" min="60" step="30"></div>
+<div class="mb-2"><label class="form-label">Área da luta</label><select name="area_num" class="form-select">{% for a in range(1, (evento.placar_num_areas|default(1)|int) + 1) %}<option value="{{ a }}">Área {{ a }}</option>{% endfor %}</select></div>
+<div class="d-flex gap-2"><button type="submit" class="btn btn-primary">Criar Luta</button><a href="{{ url_for('externo.placar_lista', evento_id=evento.id) }}" class="btn btn-outline-secondary">Voltar</a></div>
+</form>
+</div></div>
+{% endblock %}

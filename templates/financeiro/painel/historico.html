@@ -1,0 +1,90 @@
+{% extends "financeiro/painel/_layout.html" %}
+{% block title %}Histórico de Pagamentos{% endblock %}
+
+{% block conteudo %}
+<div class="fp-page fp-page--narrow">
+
+  <div class="fp-head">
+    <h1 class="fp-h1">Histórico de Pagamentos</h1>
+    <p class="fp-sub">
+      {{ lista|length }} registros encontrados · Total pago:
+      <span style="font-family:var(--fp-mono);color:var(--fp-green)">{{ fmt_moeda(total_pago) }}</span>
+    </p>
+  </div>
+
+  <div class="fp-filtros">
+    <div>
+      <div class="fp-filtro__label">Status</div>
+      <div class="fp-filtro__opcoes">
+        {% for s in ['Todos', 'Pago', 'Pendente', 'Atrasado'] %}
+        <a class="fp-pill fp-pill--{{ s|lower }} {% if f_status == s %}is-active{% endif %}"
+           href="{{ url_for('financeiro_painel.historico', academia_id=academia_id, status=s, forma=f_forma, mes=f_mes) }}">{{ s }}</a>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div>
+      <div class="fp-filtro__label">Forma</div>
+      <div class="fp-filtro__opcoes">
+        <a class="fp-pill {% if f_forma == 'Todos' %}is-active{% endif %}"
+           href="{{ url_for('financeiro_painel.historico', academia_id=academia_id, status=f_status, forma='Todos', mes=f_mes) }}">Todos</a>
+        {% for f in formas_usadas %}
+        <a class="fp-pill {% if f_forma == f %}is-active{% endif %}"
+           href="{{ url_for('financeiro_painel.historico', academia_id=academia_id, status=f_status, forma=f, mes=f_mes) }}">{{ f }}</a>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div>
+      <div class="fp-filtro__label">Mês</div>
+      <div class="fp-filtro__opcoes">
+        <a class="fp-pill {% if f_mes == 'Todos' %}is-active{% endif %}"
+           href="{{ url_for('financeiro_painel.historico', academia_id=academia_id, status=f_status, forma=f_forma, mes='Todos') }}">Todos</a>
+        {% for m in meses %}
+        <a class="fp-pill {% if f_mes == m.chave %}is-active{% endif %}"
+           href="{{ url_for('financeiro_painel.historico', academia_id=academia_id, status=f_status, forma=f_forma, mes=m.chave) }}">{{ m.label }}</a>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div class="fp-card fp-card--table">
+    <div class="fp-table-wrap">
+      <table class="fp-table">
+        <thead>
+          <tr><th>#</th><th>Aluno</th><th>Mês</th><th>Vencimento</th><th>Pagamento</th><th>Forma</th><th>Valor</th><th>Status</th></tr>
+        </thead>
+        <tbody>
+          {% for r in lista %}
+          <tr>
+            <td class="fp-td-id">{{ '%03d'|format(r.id) }}</td>
+            <td class="fp-td-nome">{{ r.aluno_nome }}</td>
+            <td class="fp-td-sub">{{ r.mes_label }}</td>
+            <td class="fp-td-mono">{{ r.data_vencimento.strftime('%d/%m/%Y') if r.data_vencimento else '—' }}</td>
+            <td class="fp-td-mono">{{ r.data_pagamento.strftime('%d/%m/%Y') if r.data_pagamento else '—' }}</td>
+            <td class="fp-td-muted">{{ r.forma_nome or '—' }}</td>
+            <td class="fp-td-valor" style="font-weight:500">{{ fmt_moeda(r.valor) }}</td>
+            <td><span class="fp-badge fp-badge--{{ r.rotulo|lower }}">{{ r.rotulo }}</span></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if not lista %}
+    <div class="fp-empty">Nenhum registro encontrado para os filtros selecionados.</div>
+    {% endif %}
+  </div>
+
+  {% if por_forma %}
+  <div style="margin-top:20px;display:flex;gap:12px;flex-wrap:wrap">
+    {% for pf in por_forma %}
+    <div class="fp-card" style="padding:14px 18px;flex:1;min-width:150px">
+      <div class="fp-filtro__label" style="margin-bottom:4px">{{ pf.nome }}</div>
+      <div style="font-family:var(--fp-mono);font-size:16px;font-weight:600;color:var(--fp-green)">{{ fmt_moeda(pf.total) }}</div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

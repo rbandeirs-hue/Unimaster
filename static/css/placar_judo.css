@@ -1,0 +1,859 @@
+/* ============================================================
+   🥋 PLACAR DE JUDÔ - Estilos Responsivos Mobile-First
+   ============================================================ */
+
+/* Layout do placar - largura total da página */
+.placar-controle {
+    width: 100%;
+    max-width: 100%;
+    padding: 12px 16px;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow-x: hidden;
+}
+
+/* Controle 2 (martialmatch): altura vem do conteúdo — evita faixas esticadas e scroll “falso” */
+.placar-controle[data-modelo="martialmatch"] {
+    min-height: 0;
+    height: auto;
+}
+.placar-controle[data-modelo="martialmatch"] .controle-martialmatch {
+    flex: 0 0 auto;
+    min-height: 0;
+}
+.placar-controle[data-modelo="martialmatch"] .mm-strip {
+    flex: 0 0 auto;
+    min-height: auto;
+    align-items: center;
+}
+.placar-controle > .row {
+    margin-bottom: 0.5rem !important;
+    flex-shrink: 0;
+}
+.placar-controle .controle-unimaster {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+.placar-controle .controle-unimaster .row {
+    margin-bottom: 0.5rem !important;
+    flex-shrink: 0;
+}
+.placar-controle .controle-unimaster .row:last-of-type {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+.placar-controle .controle-unimaster .row:last-of-type .col-md-6 {
+    overflow-y: auto;
+}
+
+/* Garantir que não haja scroll horizontal */
+.placar-controle * {
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+/* Tela cheia do placar: esconder header/footer globais e aproveitar toda a tela */
+body.placar-fullscreen {
+    background: #000;
+}
+
+body.placar-fullscreen header,
+body.placar-fullscreen .navbar,
+body.placar-fullscreen footer,
+body.placar-fullscreen .footer,
+body.placar-fullscreen .app-header,
+body.placar-fullscreen .app-footer {
+    display: none !important;
+}
+
+body.placar-fullscreen .placar-controle {
+    padding: 8px 16px 12px;
+    min-height: 100vh;
+}
+
+/* Tela cheia: borda inferior limitada ao conteúdo (sem espaço vazio em baixo) */
+body.placar-fullscreen .placar-controle .controle-unimaster .row:last-of-type {
+    padding-bottom: 0;
+    margin-bottom: 0;
+}
+
+body.placar-fullscreen .placar-controle .controle-unimaster .row:last-of-type .mb-2 {
+    margin-bottom: 0 !important;
+}
+
+body.placar-fullscreen .placar-controle .controle-unimaster .row:last-of-type .card-body {
+    padding-bottom: 0.5rem;
+}
+
+/* Prevenir scroll vertical em mobile quando possível */
+@media (max-width: 768px) {
+    html, body {
+        height: 100%;
+        overflow-y: auto;
+        overflow-x: hidden;
+    }
+    
+    .placar-controle {
+        min-height: calc(100vh - 20px);
+    }
+    
+    /* Reduzir ainda mais espaçamentos */
+    .card {
+        margin-bottom: 0.5rem;
+    }
+    
+    /* Botões de tempo em grid 2x3 em mobile */
+    .placar-controle .btn-group-tempo {
+        display: grid !important;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 4px !important;
+        width: 100% !important;
+        flex-direction: unset !important;
+    }
+    
+    .placar-controle .btn-group-tempo .btn {
+        width: 100% !important;
+        margin: 0 !important;
+        flex: unset !important;
+        min-width: unset !important;
+    }
+}
+
+/* Botões compactos e touch-friendly */
+.btn-ponto, .btn-remover {
+    min-height: 34px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    border-radius: 8px;
+    transition: all 0.2s;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    width: 100%;
+}
+
+.btn-ponto:active, .btn-remover:active {
+    transform: scale(0.95);
+    opacity: 0.8;
+}
+
+.btn-ponto:disabled, .btn-remover:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.btn-ponto .btn-text, .btn-remover .btn-text {
+    font-weight: 700;
+}
+
+.btn-ponto i, .btn-remover i {
+    font-size: 1rem;
+}
+
+.placar-controle .btn-lg {
+    min-height: 38px;
+    font-size: 0.85rem;
+    padding: 6px 10px;
+}
+
+/* Botão de resetar (modo teste) */
+#btn-resetar {
+    border: 2px dashed #6c757d;
+    font-weight: 600;
+}
+
+#btn-resetar:hover {
+    background-color: #5a6268;
+    border-color: #545b62;
+    color: white;
+}
+
+/* Display de tempo */
+.placar-controle #tempo-display {
+    font-family: 'Courier New', monospace;
+    font-weight: 700;
+    color: #0066cc;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.placar-controle .display-4,
+.placar-controle #tempo-display {
+    font-size: 3rem !important;
+    letter-spacing: 0.05em;
+    line-height: 1.2;
+}
+
+.placar-controle .btn-group-tempo {
+    gap: 6px;
+    display: grid !important;
+    grid-template-columns: repeat(3, 1fr);
+}
+
+.placar-controle .btn-group-tempo .btn {
+    min-height: 38px !important;
+    font-size: 0.8rem !important;
+    padding: 6px 8px !important;
+}
+
+.placar-controle .card-body.text-center {
+    padding: 0.75rem !important;
+}
+
+/* ========== LAYOUT PC (Desktop) - Largura total ========== */
+@media (min-width: 992px) {
+    .placar-controle {
+        width: 100%;
+        max-width: 100%;
+    }
+    
+    /* Todos os cards na mesma largura (atletas, tempo, pontuação) */
+    .placar-controle .controle-unimaster .row:nth-child(1),
+    .placar-controle .controle-unimaster .row:nth-child(2),
+    .placar-controle .controle-unimaster .row:nth-child(3) {
+        max-width: 100%;
+        width: 100%;
+    }
+    
+    /* Botões de tempo: todos em uma única linha */
+    .placar-controle .btn-group-tempo {
+        display: flex !important;
+        flex-direction: row;
+        flex-wrap: nowrap;
+        justify-content: center;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+    }
+    
+    .placar-controle .btn-group-tempo .btn {
+        flex: 1 1 auto;
+        min-width: 0;
+        max-width: 140px;
+        min-height: 40px !important;
+        font-size: 0.85rem !important;
+        padding: 6px 10px !important;
+    }
+    
+    /* Contador maior e mais legível no PC */
+    .placar-controle #tempo-display,
+    .placar-controle .display-4 {
+        font-size: 3.25rem !important;
+    }
+    
+    
+    .placar-controle .ponto-controle-item .ponto-botoes {
+        max-width: 160px;
+    }
+    
+    .placar-controle .ponto-controle-item .ponto-nome {
+        flex: 0 0 95px;
+    }
+    
+}
+
+/* Pontos display */
+.pontos-display {
+    margin-bottom: 8px;
+}
+
+.ponto-box {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 6px 8px;
+    text-align: center;
+}
+
+.ponto-label {
+    font-size: 0.7rem;
+    color: #6c757d;
+    font-weight: 600;
+    margin-bottom: 2px;
+    text-transform: uppercase;
+}
+
+.ponto-valor {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #212529;
+    line-height: 1;
+    transition: all 0.3s ease;
+}
+
+.ponto-valor.ponto-animado {
+    animation: bounce 0.5s ease;
+    color: #28a745;
+    transform: scale(1.2);
+}
+
+/* Alert Hansoku-make */
+.placar-controle .alert-danger {
+    padding: 0.4rem 0.75rem;
+    font-size: 0.85rem;
+    margin-top: 0.5rem !important;
+}
+
+/* Cards de atletas - compactos */
+.card {
+    border-radius: 10px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+    transition: transform 0.2s;
+}
+
+.placar-controle .card .card-body {
+    padding: 0.6rem 0.75rem;
+}
+
+.placar-controle .card-header {
+    padding: 0.5rem 0.75rem;
+}
+
+.placar-controle .card-header h5 {
+    font-size: 1rem;
+    margin: 0;
+}
+
+.card:hover {
+    transform: translateY(-1px);
+}
+
+/* Botão Desfazer compacto em mobile */
+@media (max-width: 768px) {
+    .btn-desfazer {
+        padding: 4px 8px !important;
+        font-size: 0.7rem !important;
+        min-height: 28px !important;
+    }
+    .btn-desfazer i { font-size: 0.85rem !important; }
+}
+@media (max-width: 576px) {
+    .btn-desfazer {
+        padding: 3px 6px !important;
+        font-size: 0.65rem !important;
+        min-height: 26px !important;
+    }
+    .btn-desfazer .btn-desfazer-texto { display: none; }
+    .btn-desfazer i { font-size: 0.9rem !important; margin: 0 !important; }
+}
+
+/* Responsividade Mobile */
+@media (max-width: 768px) {
+    .placar-controle {
+        padding: 8px;
+    }
+    
+    /* Reduzir espaçamento entre seções */
+    .placar-controle .row {
+        margin-bottom: 0.5rem !important;
+    }
+    
+    .placar-controle .mb-3 {
+        margin-bottom: 0.75rem !important;
+    }
+    
+    .placar-controle .mb-4 {
+        margin-bottom: 1rem !important;
+    }
+    
+    /* Header mais compacto */
+    .placar-controle h2 {
+        font-size: 1.1rem !important;
+        margin-bottom: 0.25rem !important;
+    }
+    
+    .placar-controle small {
+        font-size: 0.75rem !important;
+    }
+    
+    /* Cards de atletas mais compactos */
+    .placar-controle .card-body {
+        padding: 0.5rem 0.6rem !important;
+    }
+    
+    .card-header {
+        padding: 0.5rem !important;
+    }
+    
+    .card-header h5 {
+        font-size: 0.9rem !important;
+        margin: 0 !important;
+    }
+    
+    /* Tempo display em mobile */
+    #tempo-display {
+        font-size: 2.25rem !important;
+        margin-bottom: 0.5rem !important;
+    }
+    
+    .display-4 {
+        font-size: 2.25rem !important;
+    }
+    
+    /* Botões de tempo em grid 2x3 */
+    .btn-group-tempo {
+        display: grid !important;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 3px !important;
+        width: 100% !important;
+        flex-direction: unset !important;
+    }
+    
+    .btn-group-tempo .btn {
+        width: 100% !important;
+        margin: 0 !important;
+        flex: unset !important;
+        min-width: unset !important;
+        min-height: 38px !important;
+        font-size: 0.8rem !important;
+        padding: 6px 8px !important;
+    }
+    
+    .btn-group-tempo .btn i {
+        font-size: 1rem;
+    }
+    
+    .btn-group-tempo .btn span {
+        font-size: 0.7rem;
+    }
+    
+    /* Pontos display em mobile */
+    .pontos-display {
+        margin-bottom: 6px !important;
+    }
+    
+    .ponto-box {
+        padding: 5px 6px !important;
+    }
+    
+    .ponto-label {
+        font-size: 0.65rem !important;
+        margin-bottom: 2px !important;
+    }
+    
+    .ponto-valor {
+        font-size: 1.1rem !important;
+    }
+    
+    /* Botões em tablet/mobile */
+    .btn-ponto, .btn-remover {
+        min-height: 34px !important;
+        font-size: 0.85rem !important;
+        padding: 6px 8px !important;
+        width: 100%;
+    }
+    
+    .btn-ponto i, .btn-remover i {
+        font-size: 1rem;
+    }
+    
+    .btn-ponto .btn-text, .btn-remover .btn-text {
+        font-size: 0.85rem;
+        font-weight: 700;
+    }
+    
+    .btn-group-vertical {
+        gap: 6px !important;
+    }
+    
+    .btn-remover {
+        min-height: 34px !important;
+        font-size: 0.85rem !important;
+        padding: 6px 8px !important;
+    }
+    
+    .btn-remover i {
+        font-size: 1rem !important;
+    }
+    
+    .btn-remover .btn-text {
+        font-size: 0.85rem !important;
+        font-weight: 700;
+    }
+    
+    .btn-group-vertical small {
+        margin-bottom: 0.35rem !important;
+        font-size: 0.75rem !important;
+    }
+    
+    .pontuacao-container {
+        gap: 6px !important;
+    }
+    
+    .ponto-controle-item {
+        gap: 3px;
+    }
+    
+    .ponto-nome {
+        font-size: 0.8rem !important;
+    }
+    
+    .ponto-botoes .btn {
+        min-height: 32px !important;
+    }
+    
+    .ponto-botoes .btn i {
+        font-size: 1.15rem !important;
+    }
+    
+    .ponto-botoes {
+        gap: 5px !important;
+    }
+    
+    .placar-controle .btn-group-tempo .btn {
+        min-height: 30px !important;
+        font-size: 0.7rem !important;
+    }
+    
+    #tempo-display, .display-4 {
+        font-size: 2rem !important;
+    }
+    
+    /* Cards de pontuação (Unimaster) mais compactos em mobile */
+    .placar-controle .card-body { padding: 0.5rem 0.6rem !important; }
+    .placar-controle .card-header { padding: 0.4rem 0.6rem !important; }
+    .placar-controle .card-header h5 { font-size: 0.85rem !important; }
+    .placar-controle .ponto-controle-item { gap: 2px; margin-bottom: 4px; }
+    .placar-controle .ponto-nome { font-size: 0.7rem !important; flex: 0 0 65px; }
+    .placar-controle .ponto-botoes .btn { min-height: 28px !important; padding: 4px 6px !important; }
+    .placar-controle .ponto-botoes .btn i { font-size: 1rem !important; }
+    .placar-controle .ponto-valor { font-size: 1rem !important; }
+    .placar-controle .ponto-box { padding: 4px 6px !important; }
+    .placar-controle .pontuacao-container { gap: 4px !important; }
+}
+
+@media (max-width: 576px) {
+    /* Ainda mais compacto para telas muito pequenas */
+    .placar-controle {
+        padding: 4px;
+    }
+    
+    .placar-controle .row {
+        margin-bottom: 0.5rem !important;
+    }
+    
+    .placar-controle .mb-3 {
+        margin-bottom: 0.5rem !important;
+    }
+    
+    .placar-controle .mb-4 {
+        margin-bottom: 0.75rem !important;
+    }
+    
+    /* Header ultra compacto */
+    .placar-controle h2 {
+        font-size: 1rem !important;
+    }
+    
+    .placar-controle small {
+        font-size: 0.7rem !important;
+    }
+    
+    /* Cards ainda mais compactos */
+    .card-body {
+        padding: 0.5rem !important;
+    }
+    
+    .card-header {
+        padding: 0.4rem !important;
+    }
+    
+    .card-header h5 {
+        font-size: 0.85rem !important;
+    }
+    
+    /* Tempo em telas pequenas */
+    #tempo-display {
+        font-size: 2rem !important;
+        margin-bottom: 0.25rem !important;
+    }
+    
+    .display-4 {
+        font-size: 2rem !important;
+    }
+    
+    /* Botões de tempo em grid 2x3 */
+    .btn-group-tempo {
+        display: grid !important;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 2px !important;
+        width: 100% !important;
+        flex-direction: unset !important;
+    }
+    
+    .btn-group-tempo .btn {
+        width: 100% !important;
+        margin: 0 !important;
+        flex: unset !important;
+        min-width: unset !important;
+        min-height: 36px !important;
+        font-size: 0.75rem !important;
+        padding: 5px 6px !important;
+    }
+    
+    .btn-group-tempo .btn i {
+        font-size: 0.9rem;
+    }
+    
+    .btn-group-tempo .btn span {
+        font-size: 0.65rem;
+    }
+    
+    /* Pontos ainda mais compactos */
+    .pontos-display {
+        margin-bottom: 0.5rem !important;
+    }
+    
+    .ponto-box {
+        padding: 6px 2px !important;
+    }
+    
+    .ponto-label {
+        font-size: 0.6rem !important;
+        margin-bottom: 2px !important;
+    }
+    
+    .ponto-valor {
+        font-size: 1.3rem !important;
+    }
+    
+    /* Botões em telas pequenas */
+    .btn-ponto, .btn-remover {
+        min-height: 32px !important;
+        font-size: 0.8rem !important;
+        padding: 5px 6px !important;
+        width: 100%;
+    }
+    
+    .btn-ponto i, .btn-remover i {
+        font-size: 1rem;
+    }
+    
+    .btn-ponto .btn-text, .btn-remover .btn-text {
+        font-size: 0.8rem;
+        font-weight: 700;
+    }
+    
+    .ponto-botoes .btn {
+        min-height: 30px !important;
+    }
+    
+    .ponto-botoes .btn i {
+        font-size: 1.1rem !important;
+    }
+    
+    .placar-controle .btn-group-tempo .btn {
+        min-height: 32px !important;
+        font-size: 0.75rem !important;
+    }
+    
+    /* Cards de pontuação ainda mais compactos em telas pequenas */
+    .placar-controle .card-body { padding: 0.4rem 0.5rem !important; }
+    .placar-controle .card-header { padding: 0.35rem 0.5rem !important; }
+    .placar-controle .card-header h5 { font-size: 0.8rem !important; }
+    .placar-controle .ponto-controle-item { gap: 1px; margin-bottom: 2px; }
+    .placar-controle .ponto-nome { font-size: 0.65rem !important; flex: 0 0 60px; }
+    .placar-controle .ponto-botoes .btn { min-height: 26px !important; padding: 3px 5px !important; }
+    .placar-controle .ponto-botoes .btn i { font-size: 0.95rem !important; }
+    .placar-controle .ponto-valor { font-size: 0.95rem !important; }
+    .placar-controle .ponto-box { padding: 3px 5px !important; }
+    .placar-controle .pontuacao-container { gap: 2px !important; }
+    
+    .btn-group-vertical {
+        gap: 6px !important;
+    }
+    
+    /* Botões de ponto em telas pequenas */
+    .ponto-controle-item {
+        gap: 5px;
+    }
+    
+    .ponto-nome {
+        font-size: 0.85rem !important;
+        padding: 3px 0;
+    }
+    
+    .ponto-botoes .btn {
+        min-height: 30px !important;
+    }
+    
+    .ponto-botoes .btn i {
+        font-size: 1.1rem !important;
+    }
+    
+    .ponto-botoes {
+        gap: 6px !important;
+    }
+    
+    .btn-remover i {
+        font-size: 1rem !important;
+    }
+    
+    .btn-remover .btn-text {
+        font-size: 0.8rem !important;
+    }
+    
+    .btn-group-vertical small {
+        margin-bottom: 0.3rem !important;
+        font-size: 0.7rem !important;
+    }
+    
+    /* Espaçamento entre cards reduzido */
+    .row > .col-md-6 {
+        margin-bottom: 0.5rem !important;
+    }
+    
+    /* Garantir que os botões ocupem toda largura */
+    .btn-group-vertical .btn {
+        width: 100% !important;
+    }
+}
+
+/* Animações */
+@keyframes pulse {
+    0%, 100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.05);
+    }
+}
+
+@keyframes bounce {
+    0%, 100% {
+        transform: translateY(0);
+    }
+    50% {
+        transform: translateY(-5px);
+    }
+}
+
+.ponto-animado {
+    animation: pulse 0.3s ease-in-out;
+}
+
+/* Melhorias para touch devices */
+@media (hover: none) and (pointer: coarse) {
+    .btn-ponto, .btn-remover {
+        min-height: 40px !important;
+        font-size: 0.9rem !important;
+    }
+    
+    .btn-ponto:active, .btn-remover:active {
+        transform: scale(0.92);
+        background-color: rgba(0,0,0,0.1);
+    }
+}
+
+/* Prevenir zoom no double-tap em mobile */
+.btn-ponto, .btn-lg, .btn-remover {
+    touch-action: manipulation;
+}
+
+/* Golden Score badge */
+.badge.bg-warning {
+    font-size: 1rem;
+    padding: 8px 16px;
+}
+
+/* Status badges */
+.badge {
+    font-size: 0.9rem;
+    padding: 6px 12px;
+}
+
+/* Container para botões de pontuação - layout em linha */
+.pontuacao-container {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 100%;
+}
+
+/* Item de controle de ponto - nome à esquerda, botões à direita */
+.ponto-controle-item {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    width: 100%;
+}
+
+.ponto-controle-item .ponto-nome {
+    flex: 0 0 80px;
+}
+
+.ponto-controle-item .ponto-botoes {
+    flex: 1;
+    max-width: 130px;
+}
+
+.ponto-controle-item .ponto-botoes .btn {
+    min-height: 34px !important;
+    padding: 4px 8px !important;
+}
+
+.ponto-nome {
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-align: left;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #495057;
+    padding: 2px 0;
+}
+
+.ponto-botoes {
+    display: flex;
+    gap: 6px;
+}
+
+.ponto-botoes .btn {
+    flex: 1;
+    min-height: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    padding: 4px;
+}
+
+.ponto-botoes .btn i {
+    font-size: 1.2rem;
+}
+
+@media (min-width: 768px) {
+    .ponto-nome {
+        font-size: 0.85rem;
+        padding: 4px 0;
+    }
+    
+    .ponto-controle-item .ponto-nome {
+        flex: 0 0 90px;
+    }
+    
+    .ponto-botoes .btn {
+        min-height: 38px;
+    }
+    
+    .ponto-botoes .btn i {
+        font-size: 1.25rem;
+    }
+    
+    .ponto-botoes {
+        gap: 8px;
+    }
+}
+
+/* Botões de remover - EXATAMENTE o mesmo estilo dos botões de pontuação */
+/* Compartilham todos os estilos de .btn-ponto */

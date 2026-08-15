@@ -1,0 +1,33 @@
+{#
+  Cabeçalho das telas internas de uma competição.
+
+  Antes era uma barra de abas; agora a navegação entre seções é feita pelo
+  HUB DE CARDS (painel_competicao). Aqui fica só um cabeçalho de contexto:
+  voltar ao painel + selo + nome da competição + seção atual.
+
+  Variáveis esperadas:
+    evento            — objeto com id, nome
+    menu_secao_ativa  — slug da seção atual (dados|inscricoes|categorias|chaves|sumulas|placar|resultados)
+    layout_embed      — quando 1, não renderiza (usado em iframes/impressão)
+#}
+{% if not layout_embed %}
+{% set _rotulos = {
+  'dados': 'Dados', 'inscricoes': 'Inscrições', 'categorias': 'Categorias',
+  'chaves': 'Chaves', 'sumulas': 'Súmulas', 'placar': 'Placar', 'resultados': 'Resultados'
+} %}
+{% set _secao = _rotulos.get(menu_secao_ativa|default(''), '') %}
+<div class="d-flex flex-wrap align-items-center gap-2 mb-3 pb-2 border-bottom">
+  <a href="{{ url_for('eventos_competicoes.painel_competicao', evento_id=evento.id) }}"
+     class="btn btn-sm btn-outline-secondary" title="Voltar ao painel da competição">
+    <i class="bi bi-grid-3x3-gap me-1"></i>Painel
+  </a>
+  <span class="badge bg-danger-subtle text-danger-emphasis border border-danger-subtle">
+    <i class="bi bi-trophy me-1"></i>Competição
+  </span>
+  <span class="fw-semibold text-truncate" style="max-width:340px;">{{ evento.nome }}</span>
+  {% if _secao %}
+  <span class="text-body-tertiary">/</span>
+  <span class="text-muted">{{ _secao }}</span>
+  {% endif %}
+</div>
+{% endif %}

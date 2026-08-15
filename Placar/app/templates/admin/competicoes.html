@@ -1,0 +1,86 @@
+{% extends 'base.html' %}
+{% block title %}Competições — Admin{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <a href="{{ url_for('admin.dashboard') }}" class="back-link">← Admin</a>
+    <h1>Competições</h1>
+  </div>
+</div>
+
+<div class="two-col">
+
+  <!-- Lista -->
+  <div class="col-main">
+    {% if competicoes %}
+    <table class="tabela">
+      <thead>
+        <tr><th>Nome</th><th>Data</th><th>Local</th><th>Tipo</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for c in competicoes %}
+        <tr>
+          <td class="td-nome">{{ c.nome }}</td>
+          <td>{{ c.data.strftime('%d/%m/%Y') if c.data else '—' }}</td>
+          <td>{{ c.local or '—' }}</td>
+          <td><span class="tipo-badge tipo-{{ c.tipo.lower() if c.tipo else 'oficial' }}">{{ c.tipo }}</span></td>
+          <td class="td-acoes">
+            <a href="{{ url_for('admin.competicao_detalhe', comp_id=c.id) }}" class="link-action">Gerenciar</a>
+            <a href="{{ url_for('admin.inscricoes', comp_id=c.id) }}" class="link-action">Inscrições</a>
+            <a href="{{ url_for('home.competicao', comp_id=c.id) }}" class="link-action">Ver</a>
+            <form method="POST" action="{{ url_for('admin.competicoes_deletar', id=c.id) }}" style="display:inline"
+                  onsubmit="return confirm('Remover competição?')">
+              <button type="submit" class="btn-danger-sm">✕</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state"><p>Nenhuma competição cadastrada.</p></div>
+    {% endif %}
+  </div>
+
+  <!-- Formulário -->
+  <div class="col-side">
+    <div class="form-card">
+      <h3 class="form-titulo">Nova Competição</h3>
+      <form method="POST" action="{{ url_for('admin.competicoes_criar') }}">
+        <div class="field">
+          <label>Nome *</label>
+          <input type="text" name="nome" required placeholder="Ex: Campeonato Estadual 2025">
+        </div>
+        <div class="field">
+          <label>Data</label>
+          <input type="date" name="data">
+        </div>
+        <div class="field">
+          <label>Local</label>
+          <input type="text" name="local" placeholder="Ginásio Municipal">
+        </div>
+        <div class="field">
+          <label>Tipo</label>
+          <select name="tipo">
+            <option value="OFICIAL">Oficial</option>
+            <option value="FESTIVAL">Festival</option>
+          </select>
+        </div>
+        <div class="field field--checkbox">
+          <input type="hidden" name="festival_aproximacao" value="0" />
+          <label class="checkbox-label">
+            <input type="checkbox" name="festival_aproximacao" value="1" />
+            Festival por aproximação (faixas peso/idade; atletas caem nas categorias em que encaixam)
+          </label>
+          <p class="empty-hint" style="margin-top:8px;margin-bottom:0">
+            Na página da competição você escolhe <strong>catálogo CBJ (290)</strong> ou <strong>categorias personalizadas</strong> (formulário próprio). Com a lista já cheia do CBJ, ainda dá para incluir categorias extras pelo mesmo formulário.
+          </p>
+        </div>
+        <button type="submit" class="btn-submit">Criar Competição</button>
+      </form>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

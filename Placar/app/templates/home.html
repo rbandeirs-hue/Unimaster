@@ -1,0 +1,44 @@
+{% extends 'base.html' %}
+{% block title %}Competições — Placar Judô{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Competições</h1>
+  {% if current_user.is_authenticated and current_user.papel in ('admin', 'arbitro') %}
+    <a href="{{ url_for('admin.competicoes') }}" class="btn-action">+ Nova Competição</a>
+  {% endif %}
+</div>
+
+{% if competicoes %}
+  <div class="cards-grid">
+    {% for comp in competicoes %}
+    <a href="{{ url_for('home.competicao', comp_id=comp.id) }}" class="comp-card">
+      <div class="comp-card-top">
+        <span class="tipo-badge tipo-{{ comp.tipo.lower() if comp.tipo else 'oficial' }}">
+          {{ comp.tipo or 'OFICIAL' }}
+        </span>
+        <h2 class="comp-nome">{{ comp.nome }}</h2>
+      </div>
+      <div class="comp-card-body">
+        {% if comp.data %}
+          <span class="comp-info">📅 {{ comp.data.strftime('%d/%m/%Y') }}</span>
+        {% endif %}
+        {% if comp.local %}
+          <span class="comp-info">📍 {{ comp.local }}</span>
+        {% endif %}
+      </div>
+      <div class="comp-card-footer">
+        Ver categorias e chaves →
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="empty-state">
+    <p>Nenhuma competição cadastrada ainda.</p>
+    {% if current_user.is_authenticated and current_user.papel in ('admin', 'arbitro') %}
+      <p class="empty-hint"><a href="{{ url_for('admin.competicoes') }}" class="link-action">Criar competição no painel admin →</a></p>
+    {% endif %}
+  </div>
+{% endif %}
+{% endblock %}

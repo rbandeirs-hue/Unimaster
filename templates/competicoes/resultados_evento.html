@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Resultados — {{ evento.nome }}{% endblock %}
+{% block content %}
+<div class="container mt-4">
+    {% set menu_secao_ativa = 'resultados' %}
+    {% include 'components/menu_competicao.html' %}
+    <div class="mb-4 d-flex justify-content-between align-items-center">
+        <div>
+            <h2 class="h4 fw-bold text-primary">Resultados por Categoria</h2>
+            <p class="text-muted mb-0">{{ evento.nome }}</p>
+        </div>
+        <a href="{{ back_url }}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrow-left"></i> Voltar
+        </a>
+    </div>
+
+    {% if resultados %}
+    <div class="card shadow-sm">
+        <div class="card-header bg-light">
+            <strong>Lutas finalizadas — resultados salvos do placar</strong>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Categoria</th>
+                        <th>Branco</th>
+                        <th>Azul</th>
+                        <th>Vencedor</th>
+                        <th>Tipo</th>
+                        <th>Finalizada em</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in resultados %}
+                    <tr>
+                        <td>{{ r.nome_categoria or '-' }}</td>
+                        <td>{{ r.atleta_branco_nome }} {% if r.atleta_branco_academia %}<small class="text-muted">({{ r.atleta_branco_academia }})</small>{% endif %}</td>
+                        <td>{{ r.atleta_azul_nome }} {% if r.atleta_azul_academia %}<small class="text-muted">({{ r.atleta_azul_academia }})</small>{% endif %}</td>
+                        <td>
+                            {% if r.vencedor == 'branco' %}
+                                <strong class="text-primary">{{ r.atleta_branco_nome }}</strong>
+                            {% elif r.vencedor == 'azul' %}
+                                <strong class="text-info">{{ r.atleta_azul_nome }}</strong>
+                            {% else %}
+                                <span class="text-muted">Empate</span>
+                            {% endif %}
+                        </td>
+                        <td><span class="badge bg-secondary">{{ r.tipo_vitoria|replace('_', ' ')|title if r.tipo_vitoria else '-' }}</span></td>
+                        <td>{{ r.finalizada_em|data_br if r.finalizada_em else '-' }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <p class="text-muted small mt-2">Total: {{ resultados|length }} lutas finalizadas.</p>
+    {% else %}
+    <div class="alert alert-info">
+        <i class="bi bi-info-circle"></i> Nenhum resultado ainda. As lutas finalizadas pelo placar aparecerão aqui.
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

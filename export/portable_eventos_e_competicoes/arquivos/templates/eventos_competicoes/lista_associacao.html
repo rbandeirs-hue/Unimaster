@@ -1,0 +1,410 @@
+{% extends "base.html" %}
+{% block title %}
+{% if tipo_filtro == 'evento' %}Eventos gerais{% elif tipo_filtro == 'competicao' %}Competições{% else %}Eventos e competições{% endif %}
+{% endblock %}
+{% block content %}
+<div class="container mt-3 mt-md-5 px-2 px-md-3">
+    {% if tipo_filtro != 'competicao' %}
+    <ul class="nav nav-pills flex-wrap gap-1 mb-3 small">
+        <li class="nav-item">
+            <a class="nav-link py-1 px-2 {% if tipo_filtro == 'evento' %}active{% endif %}" href="{{ url_lista_eventos }}"><i class="bi bi-calendar-event me-1"></i>Eventos</a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link py-1 px-2 {% if tipo_filtro == 'competicao' %}active{% endif %}" href="{{ url_lista_competicoes }}"><i class="bi bi-trophy me-1"></i>Competições</a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link py-1 px-2 {% if tipo_filtro is none %}active{% endif %}" href="{{ url_lista_todos }}"><i class="bi bi-list-ul me-1"></i>Todos</a>
+        </li>
+    </ul>
+    {% endif %}
+    <div class="mb-3 mb-md-4 d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2">
+        <div>
+            {% if tipo_filtro == 'evento' %}
+            <h2 class="h5 h4-md fw-bold text-primary">Eventos gerais</h2>
+            <p class="text-muted mb-0 small small-md">Cursos, seminários e demais eventos <strong>sem placar de lutas</strong>. Inscrições e anexos por item.</p>
+            {% elif tipo_filtro == 'competicao' %}
+            <h2 class="h5 h4-md fw-bold text-primary">Competições de judô</h2>
+            <p class="text-muted mb-0 small small-md">Toque no card da competição (ou em <strong>Abrir painel</strong>) para ver a tela com <strong>todas as opções</strong>.</p>
+            {% else %}
+            <h2 class="h5 h4-md fw-bold text-primary">Eventos e competições</h2>
+            <p class="text-muted mb-0 small small-md">Visão completa. Use as abas acima para filtrar só <strong>eventos</strong> ou só <strong>competições</strong>.</p>
+            {% endif %}
+        </div>
+        <div class="d-flex flex-column flex-sm-row gap-2 w-100 w-md-auto">
+            {% set back_url = back_url or get_back_url_default() %}
+{% include 'components/botao_voltar.html' %}
+            {% if tipo_filtro == 'competicao' %}
+            <a href="{{ url_for('eventos_competicoes.cadastro', tipo='competicao', next=request.full_path) }}" class="btn btn-primary btn-sm">
+                <i class="bi bi-plus-lg me-1"></i> Nova competição
+            </a>
+            {% elif tipo_filtro == 'evento' %}
+            <a href="{{ url_for('eventos_competicoes.cadastro', tipo='evento', next=request.full_path) }}" class="btn btn-primary btn-sm">
+                <i class="bi bi-plus-lg me-1"></i> Novo evento
+            </a>
+            {% else %}
+            <a href="{{ url_for('eventos_competicoes.cadastro', tipo='evento', next=request.full_path) }}" class="btn btn-outline-primary btn-sm">
+                <i class="bi bi-calendar-event me-1"></i> Novo evento
+            </a>
+            <a href="{{ url_for('eventos_competicoes.cadastro', tipo='competicao', next=request.full_path) }}" class="btn btn-primary btn-sm">
+                <i class="bi bi-trophy me-1"></i> Nova competição
+            </a>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if eventos and tipo_filtro == 'competicao' %}
+    <div class="row g-3 g-md-4 justify-content-start">
+        {% for ev in eventos %}
+        <div class="col-12 col-sm-11 col-md-9 col-lg-5 col-xl-4">
+            <div class="card shadow-sm border-0 border-start border-danger border-4 h-100 comp-lista-card">
+                <div class="card-body p-3">
+                    <div class="d-flex flex-wrap align-items-start justify-content-between gap-2 mb-2">
+                        <h3 class="h6 fw-bold text-primary mb-0 text-break flex-grow-1">{{ ev.nome }}</h3>
+                        <div class="d-flex flex-wrap gap-1 justify-content-end">
+                            {% if ev.natureza == 'festival' %}
+                            <span class="badge bg-warning text-dark">Festival</span>
+                            {% else %}
+                            <span class="badge bg-danger">Oficial</span>
+                            {% endif %}
+                            {% if ev.status == 'finalizado' %}
+                            <span class="badge bg-dark">Finalizado</span>
+                            {% else %}
+                            <span class="badge bg-success">Ativo</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <ul class="list-unstyled small text-muted mb-0 comp-lista-meta">
+                        <li class="d-flex align-items-baseline gap-2 py-1 border-bottom border-light">
+                            <i class="bi bi-calendar-event comp-lista-meta-ico flex-shrink-0"></i>
+                            <div class="min-w-0"><span class="text-secondary fw-semibold">Fim</span> {% if ev.data_fim %}<span class="text-body">{{ ev.data_fim|data_br }}{% set _s = ev.data_fim|string %}{% if _s|length > 10 %} {{ _s[11:16] }}{% endif %}</span>{% else %}<span class="text-body">—</span>{% endif %}</div>
+                        </li>
+                        <li class="d-flex align-items-baseline gap-2 py-1 border-bottom border-light">
+                            <i class="bi bi-ui-checks comp-lista-meta-ico flex-shrink-0"></i>
+                            <div class="min-w-0"><span class="text-secondary fw-semibold">Formulário</span> <span class="text-body text-break">{{ ev.formulario_nome or '—' }}</span></div>
+                        </li>
+                        <li class="d-flex align-items-baseline gap-2 py-1 border-bottom border-light">
+                            <i class="bi bi-building comp-lista-meta-ico flex-shrink-0"></i>
+                            <div class="min-w-0"><span class="text-secondary fw-semibold">Academias</span> <span class="text-body">{{ ev.academias_aderidas or 0 }}</span></div>
+                        </li>
+                        <li class="d-flex align-items-baseline gap-2 py-1">
+                            <i class="bi bi-send-check comp-lista-meta-ico flex-shrink-0"></i>
+                            <div class="min-w-0"><span class="text-secondary fw-semibold">Inscrições</span> <span class="text-body">{{ ev.inscricoes_enviadas or 0 }}</span></div>
+                        </li>
+                    </ul>
+                    {% if ev.anexos and ev.anexos|length > 0 %}
+                    <div class="small mt-2 pt-2 border-top border-light">
+                        <span class="text-secondary fw-semibold"><i class="bi bi-paperclip me-1"></i>Anexos</span>
+                        <div class="mt-1">
+                            {% for anexo in ev.anexos[:3] %}
+                            <a href="{{ url_for('eventos_competicoes.download_anexo', anexo_id=anexo.id) }}" class="text-decoration-none d-block text-truncate" title="{{ anexo.nome_arquivo }}">{{ anexo.nome_arquivo[:36] }}{% if anexo.nome_arquivo|length > 36 %}…{% endif %}</a>
+                            {% endfor %}
+                            {% if ev.anexos|length > 3 %}<span class="text-muted">+{{ ev.anexos|length - 3 }}</span>{% endif %}
+                        </div>
+                    </div>
+                    {% endif %}
+                    <div class="d-flex flex-wrap align-items-center gap-2 pt-3 mt-2 border-top border-light">
+                        <a href="{{ url_for('eventos_competicoes.painel_competicao', evento_id=ev.id) }}" class="btn btn-danger comp-lista-btn-ico" title="Abrir painel da competição"><i class="bi bi-grid-3x3-gap"></i></a>
+                        <form action="{{ url_for('eventos_competicoes.finalizar', evento_id=ev.id) }}" method="POST" class="d-inline">
+                            {% if ev.status == 'finalizado' %}
+                            <button type="submit" class="btn btn-outline-success comp-lista-btn-ico" title="Reativar competição"><i class="bi bi-play-circle"></i></button>
+                            {% else %}
+                            <button type="submit" class="btn btn-outline-dark comp-lista-btn-ico" title="Finalizar competição"><i class="bi bi-check-circle"></i></button>
+                            {% endif %}
+                        </form>
+                        <form action="{{ url_for('eventos_competicoes.excluir', evento_id=ev.id) }}" method="POST" class="d-inline"
+                              onsubmit="return confirm('Excluir permanentemente esta competição? Inscrições, lutas e anexos serão removidos.');">
+                            <button type="submit" class="btn btn-outline-danger comp-lista-btn-ico" title="Excluir competição"><i class="bi bi-trash"></i></button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% elif eventos %}
+    <!-- Tabela para desktop (eventos / visão todos) -->
+    <div class="card shadow-sm d-none d-md-block">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Nome</th>
+                        <th>Tipo</th>
+                        <th>Status</th>
+                        <th>Data fim</th>
+                        <th>Formulário</th>
+                        <th>Academias aderidas</th>
+                        <th>Inscrições enviadas</th>
+                        <th class="text-end">Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for ev in eventos %}
+                    <tr>
+                        <td><strong>{{ ev.nome }}</strong></td>
+                        <td>
+                            {% if ev.tipo == 'competicao' %}
+                                {% if ev.natureza == 'festival' %}
+                                <span class="badge bg-warning text-dark">Competição — Festival</span>
+                                {% else %}
+                                <span class="badge bg-danger">Competição — Oficial</span>
+                                {% endif %}
+                            {% else %}
+                                <span class="badge bg-info text-dark">Evento geral</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if ev.status == 'finalizado' %}
+                            <span class="badge bg-dark">Finalizado</span>
+                            {% else %}
+                            <span class="badge bg-success">Ativo</span>
+                            {% endif %}
+                        </td>
+                        <td>{% if ev.data_fim %}{{ ev.data_fim|data_br }}{% set _s = ev.data_fim|string %}{% if _s|length > 10 %} {{ _s[11:16] }}{% endif %}{% else %}-{% endif %}</td>
+                        <td>{{ ev.formulario_nome or '-' }}</td>
+                        <td>{{ ev.academias_aderidas or 0 }}</td>
+                        <td>{{ ev.inscricoes_enviadas or 0 }}</td>
+                        <td>
+                            {% if ev.anexos and ev.anexos|length > 0 %}
+                            <div class="small">
+                                <i class="bi bi-paperclip me-1"></i>{{ ev.anexos|length }} anexo(s)
+                                {% for anexo in ev.anexos[:2] %}
+                                <br><a href="{{ url_for('eventos_competicoes.download_anexo', anexo_id=anexo.id) }}" 
+                                       class="text-decoration-none" title="{{ anexo.nome_arquivo }}">
+                                    <i class="bi bi-download"></i> {{ anexo.nome_arquivo[:20] }}{% if anexo.nome_arquivo|length > 20 %}...{% endif %}
+                                </a>
+                                {% endfor %}
+                                {% if ev.anexos|length > 2 %}
+                                <br><small class="text-muted">+{{ ev.anexos|length - 2 }} mais</small>
+                                {% endif %}
+                            </div>
+                            {% else %}
+                            <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-end">
+                            <a href="{{ url_for('eventos_competicoes.editar', evento_id=ev.id) }}" class="btn btn-outline-secondary btn-sm me-1" title="Editar evento">
+                                <i class="bi bi-pencil"></i>
+                            </a>
+                            <form action="{{ url_for('eventos_competicoes.finalizar', evento_id=ev.id) }}" method="POST" class="d-inline">
+                                {% if ev.status == 'finalizado' %}
+                                <button type="submit" class="btn btn-outline-success btn-sm me-1" title="Reativar evento">
+                                    <i class="bi bi-play-circle"></i>
+                                </button>
+                                {% else %}
+                                <button type="submit" class="btn btn-outline-dark btn-sm me-1" title="Finalizar evento">
+                                    <i class="bi bi-check-circle"></i>
+                                </button>
+                                {% endif %}
+                            </form>
+                            <a href="{{ url_for('eventos_competicoes.consolidar', evento_id=ev.id) }}" class="btn btn-outline-primary btn-sm me-1" title="Consolidar inscrições">
+                                <i class="bi bi-collection"></i> Consolidar
+                            </a>
+                            <form action="{{ url_for('eventos_competicoes.excluir', evento_id=ev.id) }}" method="POST" class="d-inline"
+                                  onsubmit="return confirm('Excluir permanentemente este registro? Inscrições, adesões, lutas do placar e anexos serão removidos. Esta ação não pode ser desfeita.');">
+                                <button type="submit" class="btn btn-outline-danger btn-sm" title="Excluir">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <!-- Cards para mobile -->
+    <div class="d-md-none">
+        {% for ev in eventos %}
+        <div class="card shadow-sm mb-3">
+            <div class="card-body p-3">
+                <div class="d-flex justify-content-between align-items-start mb-3">
+                    <h5 class="card-title mb-0 fw-bold" style="font-size: 0.95rem; line-height: 1.3;">{{ ev.nome }}</h5>
+                    {% if ev.status == 'finalizado' %}
+                    <span class="badge bg-dark" style="font-size: 0.7rem;">Finalizado</span>
+                    {% else %}
+                    <span class="badge bg-success" style="font-size: 0.7rem;">Ativo</span>
+                    {% endif %}
+                </div>
+                <div class="small text-muted mb-3" style="font-size: 0.8rem;">
+                    <div class="mb-2"><strong>Tipo:</strong>
+                                {% if ev.tipo == 'competicao' %}
+                                    {% if ev.natureza == 'festival' %}
+                                    <span class="badge bg-warning text-dark" style="font-size: 0.7rem;">Festival</span>
+                                    {% else %}
+                                    <span class="badge bg-danger" style="font-size: 0.7rem;">Oficial</span>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="badge bg-info text-dark" style="font-size: 0.7rem;">Evento</span>
+                                {% endif %}
+                    </div>
+                    <div class="mb-2"><strong>Data fim:</strong> {% if ev.data_fim %}{{ ev.data_fim|data_br }}{% set _s = ev.data_fim|string %}{% if _s|length > 10 %} {{ _s[11:16] }}{% endif %}{% else %}-{% endif %}</div>
+                    <div class="mb-2"><strong>Formulário:</strong> {{ ev.formulario_nome or '-' }}</div>
+                    <div class="mb-2"><strong>Academias:</strong> {{ ev.academias_aderidas or 0 }}</div>
+                    <div class="mb-2"><strong>Inscrições:</strong> {{ ev.inscricoes_enviadas or 0 }}</div>
+                    {% if ev.anexos and ev.anexos|length > 0 %}
+                    <div class="mb-2">
+                        <strong><i class="bi bi-paperclip me-1"></i>Anexos:</strong>
+                        <div class="mt-1">
+                            {% for anexo in ev.anexos %}
+                            <div class="mb-1">
+                                <a href="{{ url_for('eventos_competicoes.download_anexo', anexo_id=anexo.id) }}" 
+                                   class="text-decoration-none small" 
+                                   title="{{ anexo.nome_arquivo }}">
+                                    <i class="bi bi-download me-1"></i>{{ anexo.nome_arquivo[:25] }}{% if anexo.nome_arquivo|length > 25 %}...{% endif %}
+                                    {% if anexo.tamanho_formatado %}
+                                    <small class="text-muted">({{ anexo.tamanho_formatado }})</small>
+                                    {% endif %}
+                                </a>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="d-flex flex-column gap-2 mt-3">
+                    <a href="{{ url_for('eventos_competicoes.consolidar', evento_id=ev.id) }}" class="btn btn-outline-primary btn-sm w-100" style="min-height: 44px;">
+                        <i class="bi bi-collection"></i> Consolidar
+                    </a>
+                    <div class="d-flex gap-2">
+                        <a href="{{ url_for('eventos_competicoes.editar', evento_id=ev.id) }}" class="btn btn-outline-secondary btn-sm flex-fill" style="min-height: 44px;">
+                            <i class="bi bi-pencil"></i> Editar
+                        </a>
+                        <form action="{{ url_for('eventos_competicoes.finalizar', evento_id=ev.id) }}" method="POST" class="d-inline flex-fill">
+                            {% if ev.status == 'finalizado' %}
+                            <button type="submit" class="btn btn-outline-success btn-sm w-100" style="min-height: 44px;">
+                                <i class="bi bi-play-circle"></i> Reativar
+                            </button>
+                            {% else %}
+                            <button type="submit" class="btn btn-outline-dark btn-sm w-100" style="min-height: 44px;">
+                                <i class="bi bi-check-circle"></i> Finalizar
+                            </button>
+                            {% endif %}
+                        </form>
+                    </div>
+                    <form action="{{ url_for('eventos_competicoes.excluir', evento_id=ev.id) }}" method="POST"
+                          onsubmit="return confirm('Excluir permanentemente? Inscrições, lutas e anexos serão removidos.');">
+                        <button type="submit" class="btn btn-outline-danger btn-sm w-100" style="min-height: 44px;">
+                            <i class="bi bi-trash"></i> Excluir
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="card shadow-sm">
+        <div class="card-body text-center py-4 py-md-5">
+            {% if tipo_filtro == 'competicao' %}
+            <i class="bi bi-trophy display-4 display-6-md text-danger mb-3"></i>
+            <h5 class="text-muted h6 h5-md">Nenhuma competição cadastrada</h5>
+            <p class="text-muted mb-4 small small-md">Crie uma competição para gerir inscrições, chaves, placar e resultados.</p>
+            {% else %}
+            <i class="bi bi-calendar-event display-4 display-6-md text-muted mb-3"></i>
+            <h5 class="text-muted h6 h5-md">Nenhum evento cadastrado</h5>
+            <p class="text-muted mb-4 small small-md">Crie um evento vinculando um formulário. As academias poderão aderir e receber inscrições.</p>
+            {% endif %}
+            {% if tipo_filtro == 'competicao' %}
+            <a href="{{ url_for('eventos_competicoes.cadastro', tipo='competicao') }}" class="btn btn-primary btn-sm btn-md-normal"><i class="bi bi-plus-lg me-1"></i> Nova competição</a>
+            {% elif tipo_filtro == 'evento' %}
+            <a href="{{ url_for('eventos_competicoes.cadastro', tipo='evento') }}" class="btn btn-primary btn-sm btn-md-normal"><i class="bi bi-plus-lg me-1"></i> Novo evento</a>
+            {% else %}
+            <a href="{{ url_for('eventos_competicoes.cadastro', tipo='evento') }}" class="btn btn-outline-primary btn-sm btn-md-normal"><i class="bi bi-calendar-event me-1"></i> Novo evento</a>
+            <a href="{{ url_for('eventos_competicoes.cadastro', tipo='competicao') }}" class="btn btn-primary btn-sm btn-md-normal"><i class="bi bi-trophy me-1"></i> Nova competição</a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<style>
+/* Cards da lista de competições (associação) */
+.comp-lista-meta-ico {
+    width: 1.35rem;
+    flex-shrink: 0;
+    text-align: center;
+    color: var(--bs-secondary-color);
+    line-height: 1.25;
+}
+.comp-lista-meta li:last-child { border-bottom: 0 !important; }
+.comp-lista-btn-ico {
+    width: 2.5rem;
+    height: 2.5rem;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.375rem;
+}
+.comp-lista-card { max-width: 100%; }
+
+@media (max-width: 767.98px) {
+    .container {
+        padding-left: 8px;
+        padding-right: 8px;
+    }
+    
+    .card {
+        margin-bottom: 0.75rem;
+        border-radius: 0.5rem;
+    }
+    
+    .card-body {
+        padding: 0.75rem !important;
+    }
+    
+    .btn-sm {
+        font-size: 0.85rem;
+        padding: 0.5rem 0.75rem;
+        min-height: 44px;
+    }
+    
+    .card-title {
+        font-size: 0.9rem;
+        line-height: 1.3;
+    }
+    
+    .small {
+        font-size: 0.75rem;
+    }
+    
+    .badge {
+        font-size: 0.65rem;
+        padding: 0.25em 0.5em;
+    }
+    
+    .d-flex.gap-2 {
+        gap: 0.5rem !important;
+    }
+    
+    .d-flex.flex-column.gap-2 {
+        gap: 0.75rem !important;
+    }
+}
+
+@media (min-width: 768px) {
+    .h4-md {
+        font-size: 1.5rem;
+    }
+    
+    .small-md {
+        font-size: 1rem;
+    }
+    
+    .display-6-md {
+        font-size: 4rem;
+    }
+    
+    .h5-md {
+        font-size: 1.25rem;
+    }
+    
+    .btn-md-normal {
+        font-size: 1rem;
+        padding: 0.5rem 1rem;
+    }
+}
+</style>
+{% endblock %}

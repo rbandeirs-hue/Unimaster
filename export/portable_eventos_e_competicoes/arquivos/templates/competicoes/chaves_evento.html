@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% block title %}Chaves — {{ evento.nome }}{% endblock %}
+{% block content %}
+<div class="container mt-4">
+    {% set menu_secao_ativa = 'chaves' %}
+    {% include 'components/menu_competicao.html' %}
+    <div class="d-flex flex-wrap align-items-start justify-content-between gap-2 mb-2">
+        <h5 class="mb-0">Chaves — {{ evento.nome }}</h5>
+        {% if evento.categorias_modo == 'aproximacao' and session.get('modo_painel') == 'associacao' and (current_user.has_role('gestor_associacao') or current_user.has_role('admin')) %}
+        {% if layout_embed %}
+        <form method="POST" action="{{ url_for('eventos_competicoes.recalcular_categorias_aproximacao', evento_id=evento.id, embed=1) }}" class="d-inline"
+              onsubmit="return confirm('Atualizar categorias por aproximação em todas as inscrições desta competição? Quem estiver sem data, sexo ou peso válidos pode continuar sem categoria.');">
+            <input type="hidden" name="retorno" value="chaves">
+            <input type="hidden" name="embed" value="1">
+            <button type="submit" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-arrow-repeat me-1"></i>Atualizar categorias nas inscrições
+            </button>
+        </form>
+        {% else %}
+        <form method="POST" action="{{ url_for('eventos_competicoes.recalcular_categorias_aproximacao', evento_id=evento.id) }}" class="d-inline"
+              onsubmit="return confirm('Atualizar categorias por aproximação em todas as inscrições desta competição? Quem estiver sem data, sexo ou peso válidos pode continuar sem categoria.');">
+            <input type="hidden" name="retorno" value="chaves">
+            <button type="submit" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-arrow-repeat me-1"></i>Atualizar categorias nas inscrições
+            </button>
+        </form>
+        {% endif %}
+        {% endif %}
+    </div>
+    <p class="text-muted small mb-3">Clique no botão de peso para abrir a chave com os atletas. Só aparecem categorias com inscritos.</p>
+
+    {% if agrupado and (agrupado.MASCULINO or agrupado.FEMININO) %}
+    <div class="row g-3 mb-4">
+        <div class="col-md-6">
+            <div class="card border-primary">
+                <div class="card-header bg-primary text-white py-2"><strong>MASCULINO</strong></div>
+                <div class="card-body py-2">
+                    {% for id_classe, itens in agrupado.MASCULINO.items() %}
+                    <div class="mb-3">
+                        <div class="small fw-bold text-secondary text-uppercase mb-2">{{ id_classe }}</div>
+                        <div class="d-flex flex-wrap gap-2">
+                            {% for item in itens %}
+                            <button type="button" class="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-1" data-bs-toggle="collapse" data-bs-target="#chave-{{ item.slug }}" aria-expanded="false">
+                                <span class="fw-bold">{{ item.peso_label }}</span>
+                                <span class="text-muted">({{ item.count }})</span>
+                                {% if item.count > 0 %}<i class="bi bi-check-circle-fill text-success small"></i>{% endif %}
+                                {% if item.tem_chave %}<i class="bi bi-trophy-fill text-warning small"></i>{% endif %}
+                            </button>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card border-dark">
+                <div class="card-header text-white py-2" style="background-color: #4a148c;"><strong>FEMININO</strong></div>
+                <div class="card-body py-2">
+                    {% for id_classe, itens in agrupado.FEMININO.items() %}
+                    <div class="mb-3">
+                        <div class="small fw-bold text-secondary text-uppercase mb-2">{{ id_classe }}</div>
+                        <div class="d-flex flex-wrap gap-2">
+                            {% for item in itens %}
+                            <button type="button" class="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-1" data-bs-toggle="collapse" data-bs-target="#chave-{{ item.slug }}" aria-expanded="false">
+                                <span class="fw-bold">{{ item.peso_label }}</span>
+                                <span class="text-muted">({{ item.count }})</span>
+                                {% if item.count > 0 %}<i class="bi bi-check-circle-fill text-success small"></i>{% endif %}
+                                {% if item.tem_chave %}<i class="bi bi-trophy-fill text-warning small"></i>{% endif %}
+                            </button>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="accordion accordion-flush mb-3" id="accordionChaves">
+        {% for cat_nome, inscritos in por_categoria.items() %}
+        {% set slug = slug_por_categoria.get(cat_nome, 'cat') %}
+        <div class="collapse border rounded mb-2" id="chave-{{ slug }}" data-bs-parent="#accordionChaves">
+            <div class="p-3 bg-light">
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                    <strong>{{ cat_nome }}</strong>
+                    <span class="badge bg-secondary">{{ inscritos|length }} inscrito(s)</span>
+                    {% if inscritos|length >= 2 %}
+                    <form method="POST" class="d-inline" onsubmit="return confirm('Gerar chave para {{ cat_nome }}? As lutas existentes desta categoria serão substituídas.');">
+                        <input type="hidden" name="categoria_nome" value="{{ cat_nome }}">
+                        <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-shuffle me-1"></i>Gerar chave</button>
+                    </form>
+                    {% else %}
+                    <small class="text-muted">Mínimo 2 inscritos</small>
+                    {% endif %}
+                </div>
+                <div class="row g-2 mb-2">
+                    {% for i in inscritos %}
+                    <div class="col-12 col-md-6"><small><i class="bi bi-person me-1"></i>{{ i.nome }} <span class="text-muted">({{ i.academia }})</span></small></div>
+                    {% endfor %}
+                </div>
+                {% if lutas_por_cat.get(cat_nome) %}
+                <hr class="my-2">
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+                    <strong class="small mb-0">Chave eliminatória</strong>
+                    <a href="{{ url_for('competicoes.chave_visual_evento', evento_id=evento.id, categoria=cat_nome) }}" class="btn btn-outline-secondary btn-sm py-0" target="_blank" rel="noopener"><i class="bi bi-box-arrow-up-right me-1"></i>Nova aba</a>
+                </div>
+                <p class="text-muted small mb-2">Visual no estilo placar (cartões, conexões e atualização automática). A pré-visualização carrega ao expandir a categoria.</p>
+                <iframe class="w-100 border-0 rounded shadow-sm chave-bracket-frame" style="min-height:500px;background:#f1f5f9;" title="Chave {{ cat_nome }}" src="about:blank" data-bracket-src="{{ url_for('competicoes.chave_visual_evento', evento_id=evento.id, categoria=cat_nome) }}"></iframe>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="alert alert-info"><i class="bi bi-info-circle me-1"></i>Nenhuma categoria com inscritos. Adicione inscrições ou participantes avulsos primeiro.</div>
+    {% endif %}
+
+    <div class="mt-3">
+        <a href="{{ url_for('competicoes.placar_lista', evento_id=evento.id) }}" class="btn btn-outline-primary btn-sm"><i class="bi bi-tv me-1"></i>Ir para Placar</a>
+        <a href="{{ back_url }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left me-1"></i>Voltar</a>
+    </div>
+</div>
+<script>
+/* O Bootstrap é carregado no final do base.html; este bloco roda antes dele.
+   Só anexamos o listener após DOMContentLoaded, quando bootstrap já existe. */
+document.addEventListener("DOMContentLoaded", function () {
+  var acc = document.getElementById("accordionChaves");
+  if (!acc) return;
+  acc.addEventListener("shown.bs.collapse", function (ev) {
+    var panel = ev.target;
+    if (!panel || !panel.classList || !panel.classList.contains("collapse")) return;
+    var ifr = panel.querySelector("iframe.chave-bracket-frame[data-bracket-src]");
+    if (!ifr) return;
+    var u = ifr.getAttribute("data-bracket-src");
+    if (!u) return;
+    try {
+      var cur = ifr.getAttribute("src") || "";
+      if (cur === "about:blank" || !cur) ifr.setAttribute("src", u);
+    } catch (e) {}
+  });
+});
+</script>
+{% endblock %}

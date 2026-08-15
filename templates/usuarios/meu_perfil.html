@@ -38,7 +38,9 @@
     </div>
 
     <div class="card-body p-4">
+      {% include 'components/push_teste_notificacao.html' %}
       <form method="POST" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <input type="hidden" name="next" value="{{ back_url }}">
 
         <!-- Foto -->
@@ -86,6 +88,22 @@
           <input type="email" name="email" class="form-control" value="{{ usuario.email or '' }}" required placeholder="seu@email.com">
         </div>
 
+        <div class="mb-3">
+          <label for="cpf" class="form-label fw-semibold">CPF (login)
+            {% if not usuario.cpf %}<span class="badge bg-warning text-dark ms-2">Pendente</span>{% endif %}
+          </label>
+          <input type="text" inputmode="numeric" name="cpf" id="cpf" class="form-control"
+                 value="{{ usuario.cpf or '' }}" placeholder="000.000.000-00" maxlength="14"
+                 {% if usuario.cpf %}readonly{% else %}required{% endif %} autocomplete="off">
+          <div class="form-text">
+            {% if usuario.cpf %}
+            CPF cadastrado — usado como login do sistema. Para corrigi-lo, contate o administrador.
+            {% else %}
+            Informe seu CPF. Ele passará a ser o seu login do sistema.
+            {% endif %}
+          </div>
+        </div>
+
         <div class="mb-4" id="campo-senha">
           <label class="form-label fw-semibold">Nova senha <span class="text-muted fw-normal">(opcional)</span></label>
           <input type="password" name="senha" id="senha" class="form-control" placeholder="Deixe em branco para manter a atual">
@@ -103,6 +121,7 @@
       <!-- Formulário separado para sincronizar foto do aluno -->
       {% if aluno_vinculado and aluno_vinculado.foto %}
       <form method="POST" action="{{ url_for('usuarios.sincronizar_foto_aluno') }}" id="formSincronizarFoto" style="display:none;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <input type="hidden" name="next" value="{{ back_url }}">
       </form>
       {% endif %}
@@ -129,6 +148,19 @@
 </div>
 
 <script>
+(function () {
+  var cpf = document.getElementById('cpf');
+  if (cpf && !cpf.readOnly) {
+    cpf.addEventListener('input', function (e) {
+      var d = e.target.value.replace(/\D/g, '').slice(0, 11);
+      var out = d;
+      if (d.length > 9) out = d.replace(/(\d{3})(\d{3})(\d{3})(\d{1,2})/, '$1.$2.$3-$4');
+      else if (d.length > 6) out = d.replace(/(\d{3})(\d{3})(\d{1,3})/, '$1.$2.$3');
+      else if (d.length > 3) out = d.replace(/(\d{3})(\d{1,3})/, '$1.$2');
+      e.target.value = out;
+    });
+  }
+})();
 (function() {
   var miniatura = document.getElementById('miniaturaMeuPerfil');
   var placeholder = document.getElementById('placeholderFotoMeuPerfil');
@@ -158,6 +190,24 @@
   var streamMeuPerfil, devicesMeuPerfil = [], currentIndexMeuPerfil = 0, isFrontCameraMeuPerfil = false;
   var usingFrontCameraMeuPerfil = true;
   var frontCamerasMeuPerfil = [], backCamerasMeuPerfil = [], currentDeviceIdMeuPerfil = null;
+
+  // 🟦 Controle de prontidão da câmera (evita capturar foto em branco)
+  var _btnCapMeuPerfil = document.getElementById('btnCapturarMeuPerfil');
+  var _btnCapMeuPerfilHTML = _btnCapMeuPerfil ? _btnCapMeuPerfil.innerHTML : '';
+  function setCapturaProntaMeuPerfil(pronto) {
+    if (!_btnCapMeuPerfil) return;
+    _btnCapMeuPerfil.disabled = !pronto;
+    _btnCapMeuPerfil.innerHTML = pronto
+      ? _btnCapMeuPerfilHTML
+      : '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Carregando...';
+  }
+  (function () {
+    var v = document.getElementById('cameraVideoMeuPerfil');
+    if (!v) return;
+    var marcarPronta = function () { if (v.videoWidth > 0) setCapturaProntaMeuPerfil(true); };
+    v.addEventListener('loadedmetadata', marcarPronta);
+    v.addEventListener('playing', marcarPronta);
+  })();
 
   async function listarCamerasMeuPerfil() {
     try {
@@ -237,7 +287,8 @@
     
     // Limpar srcObject antes de iniciar novo stream
     videoCam.srcObject = null;
-    
+    setCapturaProntaMeuPerfil(false);
+
     // Aguardar um pouco mais para garantir que o stream anterior foi completamente liberado
     await new Promise(function(resolve) { setTimeout(resolve, 300); });
 
@@ -408,6 +459,7 @@
 
     var videoCam = document.getElementById('cameraVideoMeuPerfil');
     videoCam.srcObject = null;
+    setCapturaProntaMeuPerfil(false);
     await new Promise(function(resolve) { setTimeout(resolve, 300); });
 
     var constraints = {
@@ -458,6 +510,10 @@
 
   document.getElementById('btnCapturarMeuPerfil').addEventListener('click', function() {
     var videoCam = document.getElementById('cameraVideoMeuPerfil');
+    if (!videoCam.videoWidth || videoCam.readyState < 2) {
+      alert("Aguarde a câmera carregar e tente novamente.");
+      return;
+    }
     var canvasCam = document.getElementById('cameraCanvasMeuPerfil');
     var ctx = canvasCam.getContext('2d');
 

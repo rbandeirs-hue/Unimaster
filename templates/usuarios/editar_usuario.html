@@ -1,224 +1,540 @@
 {% extends "base.html" %}
-{% block title %}Editar Usuário{% endblock %}
+{% block title %}Editar Usuário — {{ usuario.nome }}{% endblock %}
 {% block extra_css %}
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/photo-cropper.css') }}">
 {% endblock %}
 {% block content %}
-
 <style>
-  #miniaturaUsuario { width: 120px; height: 120px; object-fit: cover; border-radius: 50%; border: 3px solid #ffc107; }
+  :root {
+    --c-bg: #f5f7fb;
+    --c-surface: #ffffff;
+    --c-border: #e5e9f2;
+    --c-text: #1f2937;
+    --c-muted: #6b7280;
+    --c-primary: #0d6efd;
+    --c-primary-soft: #e8f1ff;
+    --c-warn: #f59e0b;
+    --c-warn-soft: #fef3c7;
+  }
+  .form-page { max-width: 1080px; margin: 0 auto; }
+
+  /* Header com avatar */
+  .user-header {
+    background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+    border: 1px solid var(--c-border);
+    border-radius: 16px;
+    padding: 1.4rem 1.6rem;
+    margin-bottom: 1.25rem;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1rem;
+    box-shadow: 0 1px 3px rgba(15,23,42,.04);
+  }
+  .uh-avatar {
+    width: 64px; height: 64px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 3px solid #fff;
+    box-shadow: 0 0 0 1px var(--c-border);
+    flex-shrink: 0;
+  }
+  .uh-avatar-initials {
+    width: 64px; height: 64px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    color: #fff; font-weight: 700; font-size: 1.4rem;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: var(--c-primary);
+    border: 3px solid #fff;
+    box-shadow: 0 0 0 1px var(--c-border);
+  }
+  .uh-info { flex: 1 1 240px; min-width: 0; }
+  .uh-info h1 {
+    font-size: 1.4rem; font-weight: 700; margin: 0 0 .25rem 0;
+    color: var(--c-text);
+    word-break: break-word;
+  }
+  .uh-info .uh-email { font-size: .88rem; color: var(--c-muted); margin: 0; word-break: break-word; }
+  .uh-badges { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .5rem; }
+  .uh-status {
+    font-size: .72rem; font-weight: 600;
+    padding: .25rem .65rem; border-radius: 999px;
+  }
+  .uh-status.ok { background: #ecfdf5; color: #047857; }
+  .uh-status.off { background: #f3f4f6; color: #6b7280; }
+  .uh-status.warn { background: var(--c-warn-soft); color: #92400e; }
+
+  /* Sections */
+  .section-card {
+    background: var(--c-surface);
+    border: 1px solid var(--c-border);
+    border-radius: 16px;
+    padding: 1.35rem 1.5rem;
+    margin-bottom: 1.1rem;
+    box-shadow: 0 1px 3px rgba(15,23,42,.04);
+  }
+  .section-title {
+    display: flex; align-items: center; gap: .55rem;
+    font-size: .9rem; font-weight: 700; color: var(--c-text);
+    text-transform: uppercase; letter-spacing: .04em;
+    margin-bottom: 1rem;
+    padding-bottom: .65rem;
+    border-bottom: 1px solid var(--c-border);
+  }
+  .section-title i { color: var(--c-primary); font-size: 1rem; }
+  .section-help { font-size: .82rem; color: var(--c-muted); margin: -.4rem 0 .8rem 0; }
+
+  /* Foto card */
+  .photo-card { text-align: center; }
+  .photo-frame {
+    position: relative;
+    width: 150px; height: 150px;
+    border-radius: 50%;
+    margin: 0 auto;
+    border: 4px solid #fff;
+    box-shadow: 0 0 0 1px var(--c-border), 0 4px 12px rgba(15,23,42,.06);
+    overflow: hidden;
+    background: #f3f4f6;
+  }
+  .photo-frame img { width: 100%; height: 100%; object-fit: cover; }
+  .photo-frame .placeholder {
+    width: 100%; height: 100%;
+    display: flex; align-items: center; justify-content: center;
+    color: #9ca3af; font-size: 3rem;
+  }
+  .photo-actions { display: flex; flex-direction: column; gap: .5rem; margin-top: 1rem; }
+  .photo-actions .btn { border-radius: 10px; }
+
+  .form-label { color: #374151; font-weight: 600; font-size: .88rem; }
+  .form-control, .form-select {
+    border-radius: 10px;
+    border: 1px solid var(--c-border);
+    padding: .6rem .85rem;
+    background: #f9fafb;
+    transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
+  }
+  .form-control:focus, .form-select:focus {
+    border-color: var(--c-primary);
+    box-shadow: 0 0 0 3px rgba(13,110,253,.15);
+    background: #fff;
+  }
+  .form-control:disabled, .form-control[readonly] { background: #f3f4f6; color: #6b7280; }
+  .input-icon-wrap { position: relative; }
+  .input-icon-wrap > i {
+    position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+    color: var(--c-muted); pointer-events: none; font-size: 1rem;
+  }
+  .input-icon-wrap > .form-control { padding-left: 2.4rem; }
+
+  /* Pills */
+  .role-grid, .acad-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    gap: .55rem;
+  }
+  .role-pill, .acad-pill {
+    position: relative;
+    display: flex; align-items: center; gap: .55rem;
+    padding: .65rem .85rem;
+    background: #f9fafb;
+    border: 1.5px solid var(--c-border);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all .15s ease;
+    user-select: none;
+  }
+  .role-pill input, .acad-pill input { position: absolute; opacity: 0; pointer-events: none; }
+  .role-pill .check-ic, .acad-pill .check-ic {
+    width: 20px; height: 20px; border-radius: 50%;
+    border: 1.5px solid #cbd5e1;
+    display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+    font-size: .75rem; color: transparent;
+  }
+  .role-pill:hover { border-color: #cfe0ff; background: #f3f8ff; }
+  .role-pill.checked { border-color: var(--c-primary); background: var(--c-primary-soft); color: #0a4cab; }
+  .role-pill.checked .check-ic { background: var(--c-primary); border-color: var(--c-primary); color: #fff; }
+  .role-pill .role-name { font-size: .88rem; font-weight: 600; }
+
+  .acad-pill:hover { border-color: #a7f3d0; background: #f0fdf4; }
+  .acad-pill.checked { border-color: #10b981; background: #ecfdf5; color: #065f46; }
+  .acad-pill.checked .check-ic { background: #10b981; border-color: #10b981; color: #fff; }
+  .acad-pill input:disabled ~ * { opacity: .55; }
+  .acad-pill.disabled { cursor: not-allowed; opacity: .7; }
+
+  /* Sub-blocks por role */
+  .conditional-block {
+    background: #fafbff;
+    border: 1px dashed #c7d2fe;
+    border-radius: 12px;
+    padding: 1rem 1.1rem;
+    margin-top: 1rem;
+  }
+  .conditional-block .block-title {
+    font-size: .85rem; font-weight: 700; color: #4338ca;
+    display: flex; align-items: center; gap: .4rem; margin-bottom: .65rem;
+  }
+  .alunos-checkbox-list {
+    max-height: 220px; overflow-y: auto;
+    background: #fff; border: 1px solid var(--c-border);
+    border-radius: 10px; padding: .65rem;
+  }
+  .alunos-checkbox-list .form-check { margin-bottom: .35rem; }
+  .alunos-checkbox-list .form-check:last-child { margin-bottom: 0; }
+
+  /* Picker de alunos com busca */
+  .aluno-picker { position: relative; }
+  .aluno-picker .picker-input-wrap { position: relative; }
+  .aluno-picker .picker-input-wrap > i.bi-search {
+    position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+    color: var(--c-muted); pointer-events: none;
+  }
+  .aluno-picker .picker-input {
+    width: 100%;
+    padding: .55rem .85rem .55rem 2.4rem;
+    border: 1px solid var(--c-border);
+    border-radius: 10px;
+    background: #fff;
+    transition: border-color .15s ease, box-shadow .15s ease;
+  }
+  .aluno-picker .picker-input:focus {
+    outline: none;
+    border-color: var(--c-primary);
+    box-shadow: 0 0 0 3px rgba(13,110,253,.15);
+  }
+  .aluno-picker .picker-suggestions {
+    position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+    background: #fff;
+    border: 1px solid var(--c-border);
+    border-radius: 10px;
+    max-height: 240px; overflow-y: auto;
+    box-shadow: 0 6px 18px rgba(15,23,42,.10);
+    z-index: 20;
+    display: none;
+  }
+  .aluno-picker .picker-suggestions.open { display: block; }
+  .aluno-picker .picker-suggestion {
+    padding: .55rem .85rem;
+    cursor: pointer;
+    display: flex; align-items: center; gap: .5rem;
+    font-size: .9rem;
+    color: var(--c-text);
+    border-bottom: 1px solid #f1f5f9;
+  }
+  .aluno-picker .picker-suggestion:last-child { border-bottom: 0; }
+  .aluno-picker .picker-suggestion:hover,
+  .aluno-picker .picker-suggestion.active {
+    background: var(--c-primary-soft);
+    color: #0a4cab;
+  }
+  .aluno-picker .picker-suggestion i.bi-mortarboard { color: #6b7280; }
+  .aluno-picker .picker-suggestion .empty,
+  .aluno-picker .picker-suggestion-empty {
+    color: var(--c-muted);
+    font-style: italic;
+    cursor: default;
+  }
+  .aluno-picker .picker-suggestion-empty:hover { background: transparent; color: var(--c-muted); }
+
+  .aluno-picker .picker-selected {
+    display: flex; flex-wrap: wrap; gap: .35rem;
+    margin-top: .65rem;
+    min-height: 0;
+  }
+  .aluno-picker .picker-selected:empty { margin-top: 0; }
+  .aluno-picker .chip {
+    display: inline-flex; align-items: center; gap: .35rem;
+    padding: .3rem .55rem .3rem .65rem;
+    background: var(--c-primary-soft);
+    color: #0a4cab;
+    border: 1px solid #c7d8ff;
+    border-radius: 999px;
+    font-size: .82rem;
+    font-weight: 600;
+  }
+  .aluno-picker .chip button {
+    background: transparent;
+    border: 0;
+    color: #0a4cab;
+    line-height: 1;
+    padding: 0 .15rem;
+    cursor: pointer;
+    border-radius: 50%;
+    width: 20px; height: 20px;
+    display: inline-flex; align-items: center; justify-content: center;
+    transition: background .15s ease;
+  }
+  .aluno-picker .chip button:hover { background: rgba(13,110,253,.18); }
+  .aluno-picker .picker-empty-state {
+    font-size: .82rem; color: var(--c-muted);
+    margin-top: .5rem;
+  }
+
+  .form-actions {
+    display: flex; flex-wrap: wrap; gap: .6rem; justify-content: space-between;
+    padding: .25rem 0 0 0;
+  }
+  .form-actions .btn-primary {
+    background: var(--c-primary); border: none; padding: .7rem 1.5rem;
+    font-weight: 600; border-radius: 10px;
+    box-shadow: 0 2px 6px rgba(13,110,253,.25);
+  }
+  .form-actions .btn-primary:hover { box-shadow: 0 4px 12px rgba(13,110,253,.35); transform: translateY(-1px); }
+
+  /* Câmera modal */
   .camera-modal-usuario { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; justify-content: center; align-items: center; background: rgba(0,0,0,.9); z-index: 9999; padding: 10px; }
   .camera-content-usuario { width: 90%; max-width: 480px; text-align: center; }
-  .camera-content-usuario video, .camera-content-usuario canvas { 
-    width: 100%; 
-    max-width: 100%;
-    height: auto;
-    max-height: 70vh;
-    border-radius: 10px; 
-    border: 2px solid #ddd; 
-    margin-bottom: 10px;
-    object-fit: contain;
-    background: #000;
+  .camera-content-usuario video, .camera-content-usuario canvas {
+    width: 100%; max-width: 100%; height: auto; max-height: 70vh;
+    border-radius: 10px; border: 2px solid #ddd; margin-bottom: 10px;
+    object-fit: contain; background: #000;
   }
   .camera-content-usuario .btn { margin: 5px; }
+
   @media (max-width: 768px) {
     .camera-modal-usuario { padding: 10px; }
     .camera-content-usuario { width: 100%; max-width: 100%; }
     .camera-content-usuario video, .camera-content-usuario canvas { max-height: 60vh; }
-    .camera-content-usuario .btn { flex: 1 1 auto; min-width: 80px; font-size: 0.85rem; padding: 0.4rem; margin: 3px; }
+    .camera-content-usuario .btn { flex: 1 1 auto; min-width: 80px; font-size: .85rem; padding: .4rem; margin: 3px; }
     .camera-content-usuario > div { display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; }
+  }
+  @media (max-width: 575.98px) {
+    .user-header { padding: 1rem; border-radius: 12px; }
+    .section-card { padding: 1rem; border-radius: 12px; }
+    .role-grid, .acad-grid { grid-template-columns: 1fr; }
+    .form-actions .btn { flex: 1 1 auto; }
+    .photo-frame { width: 120px; height: 120px; }
   }
 </style>
 
-<div class="container mt-4">
-  <div class="card shadow-lg border-0 mx-auto" style="max-width: 650px;">
+<div class="container my-4 my-md-5 form-page">
 
-    <div class="card-header bg-warning text-dark text-center py-3">
-      <h5 class="mb-0 fw-bold">
-        <i class="bi bi-pencil-square me-2"></i> Editar Usuário
-      </h5>
+  {% set palette = ['#6366f1','#0ea5e9','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#14b8a6','#f97316'] %}
+  {% set cor = palette[(usuario.id or 0) % palette|length] %}
+
+  <!-- HEADER do usuário -->
+  <div class="user-header">
+    {% if usuario.foto %}
+      <img src="{{ url_for('static', filename='uploads/' ~ usuario.foto) }}" alt="{{ usuario.nome }}" class="uh-avatar"
+           onerror="this.outerHTML='<span class=&quot;uh-avatar-initials&quot; style=&quot;background:{{ cor }}&quot;>{{ (usuario.nome or '?')[:1] }}</span>'">
+    {% else %}
+      <span class="uh-avatar-initials" style="background: {{ cor }}">{{ (usuario.nome or '?')[:1] }}</span>
+    {% endif %}
+    <div class="uh-info">
+      <h1>{{ usuario.nome }}</h1>
+      {% if usuario.email %}<p class="uh-email"><i class="bi bi-envelope me-1"></i>{{ usuario.email }}</p>{% endif %}
+      <div class="uh-badges">
+        <span class="uh-status {{ 'ok' if usuario.get('ativo', 1) else 'off' }}">
+          <i class="bi bi-{{ 'check-circle-fill' if usuario.get('ativo',1) else 'pause-circle-fill' }} me-1"></i>
+          {{ 'Ativo' if usuario.get('ativo', 1) else 'Inativo' }}
+        </span>
+        {% if not usuario.cpf %}
+        <span class="uh-status warn"><i class="bi bi-exclamation-triangle-fill me-1"></i> CPF pendente</span>
+        {% endif %}
+      </div>
     </div>
+    {% set back_url = back_url or get_back_url_default() %}
+    {% include 'components/botao_voltar.html' %}
+  </div>
 
-    <div class="card-body p-4">
+  <form method="POST" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="next" value="{{ back_url }}">
 
-      <form method="POST" enctype="multipart/form-data">
-        <input type="hidden" name="next" value="{{ back_url }}">
-
-        <!-- Foto -->
-        <div class="mb-4">
-          <label class="form-label fw-semibold"><i class="bi bi-camera-fill me-1"></i> Foto</label>
-          <div class="d-flex flex-wrap align-items-start gap-4">
-            <div class="text-center">
-              <img id="miniaturaUsuario" src="{{ url_for('static', filename='uploads/' + usuario.foto) if usuario.get('foto') else '' }}"
-                   class="{{ 'd-block' if usuario.foto else 'd-none' }} mx-auto"
-                   alt="Foto" onerror="this.style.display='none'">
-              <div id="placeholderFoto" class="{{ 'd-none' if usuario.get('foto') else 'd-flex' }} align-items-center justify-content-center bg-light rounded-circle mx-auto" style="width:120px;height:120px;">
-                <i class="bi bi-person-fill text-muted" style="font-size:3rem;"></i>
-              </div>
-              <input type="hidden" name="foto" id="fotoInputUsuario">
-            </div>
-            <div class="flex-grow-1">
-              <button type="button" class="btn btn-primary btn-sm mb-2" id="btnAbrirCameraUsuario">
-                <i class="bi bi-camera-fill me-1"></i> Tirar da câmera
-              </button>
-              <div class="mb-2">
-                <label class="form-label small mb-0">ou escolher arquivo</label>
-                <input type="file" name="foto_arquivo" class="form-control form-control-sm" accept="image/*" id="fotoArquivoUsuario">
-              </div>
+    <div class="row g-3">
+      <!-- COLUNA ESQUERDA: foto -->
+      <div class="col-12 col-lg-4">
+        <div class="section-card photo-card">
+          <div class="section-title"><i class="bi bi-camera"></i> Foto</div>
+          <div class="photo-frame">
+            <img id="miniaturaUsuario"
+                 src="{{ url_for('static', filename='uploads/' + usuario.foto) if usuario.get('foto') else '' }}"
+                 class="{{ 'd-block' if usuario.foto else 'd-none' }}"
+                 alt="Foto" onerror="this.style.display='none'">
+            <div id="placeholderFoto" class="{{ 'd-none' if usuario.get('foto') else 'd-flex' }} placeholder">
+              <i class="bi bi-person-fill"></i>
             </div>
           </div>
-        </div>
-
-        <!-- Nome (somente leitura) -->
-        <div class="mb-3">
-          <label class="form-label fw-semibold">Nome</label>
-          <input type="text" class="form-control" value="{{ usuario.nome }}" disabled>
-        </div>
-
-        <!-- Email (somente leitura) -->
-        <div class="mb-3">
-          <label class="form-label fw-semibold">Email</label>
-          <input type="email" class="form-control" value="{{ usuario.email }}" disabled>
-        </div>
-
-        <div class="row g-3 mb-3">
-          <div class="col-md-6">
-            <label class="form-label fw-semibold">Nova Senha (opcional)</label>
-            <input type="password" name="senha" class="form-control" placeholder="••••••">
+          <input type="hidden" name="foto" id="fotoInputUsuario">
+          <div class="photo-actions">
+            <button type="button" class="btn btn-primary btn-sm" id="btnAbrirCameraUsuario">
+              <i class="bi bi-camera-fill me-1"></i> Tirar da câmera
+            </button>
+            <label class="form-label small mb-0 mt-2 text-muted">ou escolher arquivo</label>
+            <input type="file" name="foto_arquivo" class="form-control form-control-sm" accept="image/*" id="fotoArquivoUsuario">
           </div>
         </div>
+      </div>
 
-        <div class="mb-3">
-          <label class="form-label fw-semibold">Níveis de Acesso (Roles)</label>
-          <div class="row g-2">
-            {% for role in roles %}
+      <!-- COLUNA DIREITA: dados -->
+      <div class="col-12 col-lg-8">
+        <!-- IDENTIFICAÇÃO -->
+        <div class="section-card">
+          <div class="section-title"><i class="bi bi-person-vcard"></i> Identificação</div>
+          <div class="row g-3">
+            <div class="col-12">
+              <label class="form-label">Nome</label>
+              <div class="input-icon-wrap"><i class="bi bi-person"></i>
+                <input type="text" class="form-control" value="{{ usuario.nome }}" disabled>
+              </div>
+            </div>
             <div class="col-12 col-md-6">
-              <div class="form-check">
-                <input class="form-check-input role-cb" type="checkbox" name="roles" id="role_{{ role.id }}"
-                       value="{{ role.id }}" data-chave="{{ role.chave or role.nome|lower }}"
-                       {% if role.id in roles_do_usuario %}checked{% endif %}>
-                <label class="form-check-label" for="role_{{ role.id }}">
-                  {{ role.nome }}
-                </label>
+              <label class="form-label">E-mail</label>
+              <div class="input-icon-wrap"><i class="bi bi-envelope"></i>
+                <input type="email" class="form-control" value="{{ usuario.email }}" disabled>
               </div>
             </div>
-            {% endfor %}
+            <div class="col-12 col-md-6">
+              <label for="cpf" class="form-label">
+                CPF (login)
+                {% if not usuario.cpf %}<span class="badge bg-warning text-dark ms-1" style="font-size:.65rem;">Pendente</span>{% endif %}
+              </label>
+              <div class="input-icon-wrap"><i class="bi bi-person-badge"></i>
+                <input type="text" inputmode="numeric" class="form-control" id="cpf" name="cpf"
+                       value="{{ usuario.cpf or '' }}" placeholder="000.000.000-00" maxlength="14" autocomplete="off">
+              </div>
+              <small class="text-muted">
+                {% if usuario.cpf %}
+                  CPF cadastrado. Editar somente em caso de correção.
+                {% else %}
+                  Informe o CPF — passa a ser o login do sistema. Se houver aluno vinculado, sincroniza automaticamente.
+                {% endif %}
+              </small>
+            </div>
           </div>
-          <div class="form-text">Marque as roles que o usuário deve ter.</div>
         </div>
 
-        {% if contexto_academia %}
-        <div id="blocoAluno" class="mb-3" style="display:none;">
-          <label for="aluno_id" class="form-label fw-semibold">Qual aluno é este usuário?</label>
-          <select class="form-select" id="aluno_id" name="aluno_id">
-            <option value="">— Selecione o aluno —</option>
-            {% for a in alunos_para_aluno %}
-            <option value="{{ a.id }}" {% if a.id == aluno_vinculado_id %}selected{% endif %}>{{ a.nome }}</option>
-            {% endfor %}
-          </select>
-        </div>
-        <div id="blocoResponsavel" class="mb-3" style="display:none;">
-          <label class="form-label fw-semibold">Alunos vinculados ao responsável</label>
-          <div class="border rounded p-3" style="max-height: 200px; overflow-y: auto; background: #f8fafc;">
-            {% for a in alunos_para_responsavel %}
-            <div class="form-check mb-2">
-              <input class="form-check-input" type="checkbox" name="aluno_ids" value="{{ a.id }}" id="aluno_resp_{{ a.id }}"
-                     {% if a.id in responsavel_aluno_ids %}checked{% endif %}>
-              <label class="form-check-label" for="aluno_resp_{{ a.id }}">{{ a.nome }}</label>
+        <!-- ACESSO -->
+        <div class="section-card">
+          <div class="section-title"><i class="bi bi-shield-lock"></i> Acesso</div>
+          <div class="row g-3">
+            <div class="col-12 col-md-6">
+              <label class="form-label">Nova senha <span class="text-muted fw-normal">(opcional)</span></label>
+              <div class="input-icon-wrap"><i class="bi bi-lock"></i>
+                <input type="password" name="senha" class="form-control" placeholder="••••••" autocomplete="new-password">
+              </div>
+              <small class="text-muted">Deixe em branco para manter a senha atual.</small>
             </div>
-            {% endfor %}
           </div>
         </div>
-        <div id="blocoVisitante" class="mb-3" style="display:none;">
-          <div class="alert alert-info mb-0">
-            <i class="bi bi-info-circle me-2"></i>
-            <strong>Visitante:</strong> 
-            {% if visitante_dados %}
-            Este usuário já possui registro de visitante na academia.
-            <br><small class="text-muted">
-              Aulas realizadas: {{ visitante_dados.aulas_experimentais_realizadas or 0 }}
-              {% if visitante_dados.aulas_experimentais_permitidas %}
-              / {{ visitante_dados.aulas_experimentais_permitidas }}
-              {% else %}
-              (sem limite)
-              {% endif %}
+
+        <!-- ROLES -->
+        <div class="section-card">
+          <div class="section-title"><i class="bi bi-people"></i> Níveis de acesso (Roles)</div>
+          <div class="section-help">Selecione os papéis que o usuário deve ter.</div>
+          <div class="role-grid">
+            {% for role in roles %}
+            <label class="role-pill" data-role-pill>
+              <input type="checkbox" class="role-cb" name="roles" id="role_{{ role.id }}"
+                     value="{{ role.id }}" data-chave="{{ role.chave or role.nome|lower }}"
+                     {% if role.id in roles_do_usuario %}checked{% endif %}>
+              <span class="check-ic"><i class="bi bi-check-lg"></i></span>
+              <span class="role-name">{{ role.nome }}</span>
+            </label>
+            {% endfor %}
+          </div>
+
+          {% if contexto_academia %}
+          <div id="blocoAluno" class="conditional-block" style="display:none;">
+            <div class="block-title"><i class="bi bi-mortarboard-fill"></i> Vínculo com aluno</div>
+            <label for="aluno_id" class="form-label">Qual aluno é este usuário?</label>
+            <select class="form-select" id="aluno_id" name="aluno_id">
+              <option value="">— Selecione o aluno —</option>
+              {% for a in alunos_para_aluno %}
+              <option value="{{ a.id }}" {% if a.id == aluno_vinculado_id %}selected{% endif %}>{{ a.nome }}</option>
+              {% endfor %}
+            </select>
+            <small class="text-muted">Apenas alunos sem vínculo de acesso ao sistema.</small>
+          </div>
+
+          <div id="blocoResponsavel" class="conditional-block" style="display:none;">
+            <div class="block-title"><i class="bi bi-people-fill"></i> Alunos sob responsabilidade</div>
+
+            {% if alunos_para_responsavel %}
+            <div class="aluno-picker" id="alunoRespPicker">
+              <div class="picker-input-wrap">
+                <i class="bi bi-search"></i>
+                <input type="text" class="picker-input" id="alunoRespBusca"
+                       placeholder="Digite para buscar alunos…" autocomplete="off">
+              </div>
+              <div class="picker-suggestions" id="alunoRespSuggestions" role="listbox"></div>
+
+              <!-- Checkboxes ocultos: o backend continua recebendo aluno_ids[] -->
+              <div class="d-none">
+                {% for a in alunos_para_responsavel %}
+                <input type="checkbox" name="aluno_ids" value="{{ a.id }}" id="aluno_resp_{{ a.id }}"
+                       data-aluno-resp data-nome="{{ a.nome }}"
+                       {% if a.id in responsavel_aluno_ids %}checked{% endif %}>
+                {% endfor %}
+              </div>
+
+              <div class="picker-selected" id="alunoRespSelecionados"></div>
+              <div class="picker-empty-state" id="alunoRespEmpty">Nenhum aluno selecionado ainda.</div>
+            </div>
+            <small class="text-muted d-block mt-2">
+              Você pode selecionar vários alunos. Um mesmo aluno pode ter mais de um responsável vinculado em cadastros diferentes.
             </small>
             {% else %}
-            Ao salvar, será criado um registro de visitante vinculado à primeira academia do usuário.
+            <p class="text-muted small mb-0">Nenhum aluno disponível.</p>
             {% endif %}
           </div>
-        </div>
-        {% endif %}
 
+          <div id="blocoVisitante" class="conditional-block" style="display:none;">
+            <div class="block-title"><i class="bi bi-info-circle-fill"></i> Visitante</div>
+            {% if visitante_dados %}
+              <p class="mb-1 small">Este usuário já possui registro de visitante na academia.</p>
+              <p class="mb-0 text-muted small">
+                Aulas realizadas: {{ visitante_dados.aulas_experimentais_realizadas or 0 }}
+                {% if visitante_dados.aulas_experimentais_permitidas %}/ {{ visitante_dados.aulas_experimentais_permitidas }}{% else %} (sem limite){% endif %}
+              </p>
+            {% else %}
+              <p class="mb-0 small">Ao salvar, será criado um registro de visitante na primeira academia do usuário.</p>
+            {% endif %}
+          </div>
+          {% endif %}
+        </div>
+
+        <!-- ACADEMIAS -->
         {% if mostrar_academias and academias_disponiveis %}
-        <div class="mb-3">
-          <label class="form-label fw-semibold">Academias vinculadas</label>
+        <div class="section-card">
+          <div class="section-title"><i class="bi bi-building"></i> Academias vinculadas</div>
           {% if academias_bloqueadas %}
-          <div class="alert alert-secondary small py-2 mb-0">
+          <div class="alert alert-secondary small py-2 mb-3">
             <i class="bi bi-lock-fill me-1"></i> No modo academia não é possível alterar academias vinculadas.
           </div>
+          {% else %}
+          <div class="section-help">Marque as academias às quais o usuário tem acesso.</div>
           {% endif %}
-          <div class="row g-2">
+          <div class="acad-grid">
             {% for ac in academias_disponiveis %}
-            <div class="col-12 col-md-6">
-              <div class="form-check">
-                <input class="form-check-input" type="checkbox" name="academias" id="academia_{{ ac.id }}" value="{{ ac.id }}"
-                       {% if ac.id in (academias_vinculadas_ids or []) %}checked{% endif %}
-                       {% if academias_bloqueadas %}disabled{% endif %}>
-                <label class="form-check-label {% if academias_bloqueadas %}text-muted{% endif %}" for="academia_{{ ac.id }}">{{ ac.nome }}</label>
-              </div>
-            </div>
+            <label class="acad-pill {% if academias_bloqueadas %}disabled{% endif %}" data-acad-pill>
+              <input type="checkbox" name="academias" id="academia_{{ ac.id }}" value="{{ ac.id }}"
+                     {% if ac.id in (academias_vinculadas_ids or []) %}checked{% endif %}
+                     {% if academias_bloqueadas %}disabled{% endif %}>
+              <span class="check-ic"><i class="bi bi-check-lg"></i></span>
+              <i class="bi bi-building"></i>
+              <span>{{ ac.nome }}</span>
+            </label>
             {% endfor %}
           </div>
-          {% if not academias_bloqueadas %}
-          <div class="form-text">Marque as academias às quais o usuário terá acesso.</div>
-          {% endif %}
         </div>
         {% endif %}
 
-        <div class="d-flex justify-content-between mt-4">
-          <button type="submit" class="btn btn-warning">
-            <i class="bi bi-save me-2"></i> Salvar
-          </button>
-
+        <div class="form-actions">
           {% set back_url = back_url or get_back_url_default() %}
           {% include 'components/botao_voltar.html' %}
+          <button type="submit" class="btn btn-primary">
+            <i class="bi bi-save me-1"></i> Salvar alterações
+          </button>
         </div>
-
-      </form>
-
+      </div>
     </div>
 
-  </div>
+  </form>
 </div>
-{% if contexto_academia %}
-<script>
-(function() {
-    var blocoAluno = document.getElementById('blocoAluno');
-    var blocoResponsavel = document.getElementById('blocoResponsavel');
-    function temRole(chave) {
-        var cbs = document.querySelectorAll('.role-cb:checked');
-        for (var i = 0; i < cbs.length; i++) {
-            if ((cbs[i].dataset.chave || '').toLowerCase() === chave) return true;
-        }
-        return false;
-    }
-    var blocoVisitante = document.getElementById('blocoVisitante');
-    function atualizarBlocos() {
-        if (blocoAluno) blocoAluno.style.display = temRole('aluno') ? 'block' : 'none';
-        if (blocoResponsavel) blocoResponsavel.style.display = temRole('responsavel') ? 'block' : 'none';
-        if (blocoVisitante) blocoVisitante.style.display = temRole('visitante') ? 'block' : 'none';
-    }
-    document.querySelectorAll('.role-cb').forEach(function(cb) {
-        cb.addEventListener('change', atualizarBlocos);
-    });
-    atualizarBlocos();
-})();
-</script>
-{% endif %}
 
-<!-- Modal Câmera (d-flex só via JS ao abrir — senão d-flex sobrescreve display:none e modal aparece ao carregar) -->
+<!-- Modal Câmera -->
 <div class="camera-modal-usuario" id="cameraModalUsuario">
   <div class="camera-content-usuario bg-dark p-3 rounded">
     <video id="cameraVideoUsuario" autoplay playsinline></video>
@@ -236,6 +552,190 @@
 </div>
 
 <script>
+// Máscara CPF
+(function () {
+  var cpf = document.getElementById('cpf');
+  if (!cpf) return;
+  cpf.addEventListener('input', function (e) {
+    var d = e.target.value.replace(/\D/g, '').slice(0, 11);
+    var out = d;
+    if (d.length > 9) out = d.replace(/(\d{3})(\d{3})(\d{3})(\d{1,2})/, '$1.$2.$3-$4');
+    else if (d.length > 6) out = d.replace(/(\d{3})(\d{3})(\d{1,3})/, '$1.$2.$3');
+    else if (d.length > 3) out = d.replace(/(\d{3})(\d{1,3})/, '$1.$2');
+    e.target.value = out;
+  });
+})();
+
+// Pills clicáveis (roles + academias)
+(function () {
+  function bind(selector) {
+    document.querySelectorAll(selector).forEach(function (pill) {
+      var cb = pill.querySelector('input[type="checkbox"]');
+      if (!cb) return;
+      var sync = function () { pill.classList.toggle('checked', cb.checked); };
+      cb.addEventListener('change', sync);
+      pill.addEventListener('click', function (e) {
+        if (cb.disabled) return;
+        if (e.target.tagName === 'INPUT') return;
+        e.preventDefault();
+        cb.checked = !cb.checked;
+        cb.dispatchEvent(new Event('change'));
+      });
+      sync();
+    });
+  }
+  bind('[data-role-pill]');
+  bind('[data-acad-pill]');
+})();
+
+{% if contexto_academia %}
+// Picker de alunos (responsáveis) com busca dinâmica + chips
+(function () {
+  var picker = document.getElementById('alunoRespPicker');
+  if (!picker) return;
+  var input = document.getElementById('alunoRespBusca');
+  var suggestions = document.getElementById('alunoRespSuggestions');
+  var selectedWrap = document.getElementById('alunoRespSelecionados');
+  var emptyState = document.getElementById('alunoRespEmpty');
+  var checkboxes = Array.prototype.slice.call(document.querySelectorAll('[data-aluno-resp]'));
+
+  function normaliza(s) {
+    return (s || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+  }
+
+  function renderSelecionados() {
+    selectedWrap.innerHTML = '';
+    var selecionadas = checkboxes.filter(function (cb) { return cb.checked; });
+    selecionadas.forEach(function (cb) {
+      var chip = document.createElement('span');
+      chip.className = 'chip';
+      chip.innerHTML =
+        '<i class="bi bi-mortarboard-fill"></i>' +
+        '<span></span>' +
+        '<button type="button" title="Remover">&times;</button>';
+      chip.querySelector('span').textContent = cb.dataset.nome;
+      chip.querySelector('button').addEventListener('click', function () {
+        cb.checked = false;
+        renderSelecionados();
+      });
+      selectedWrap.appendChild(chip);
+    });
+    if (emptyState) emptyState.style.display = selecionadas.length ? 'none' : '';
+  }
+
+  function renderSuggestions(termo) {
+    var t = normaliza(termo);
+    suggestions.innerHTML = '';
+
+    if (!t) {
+      suggestions.classList.remove('open');
+      return;
+    }
+
+    var disponiveis = checkboxes.filter(function (cb) {
+      if (cb.checked) return false;
+      return normaliza(cb.dataset.nome).indexOf(t) !== -1;
+    }).slice(0, 30);
+
+    if (disponiveis.length === 0) {
+      var empty = document.createElement('div');
+      empty.className = 'picker-suggestion picker-suggestion-empty';
+      empty.textContent = 'Nenhum aluno encontrado.';
+      suggestions.appendChild(empty);
+      suggestions.classList.add('open');
+      return;
+    }
+
+    disponiveis.forEach(function (cb, idx) {
+      var item = document.createElement('div');
+      item.className = 'picker-suggestion' + (idx === 0 ? ' active' : '');
+      item.innerHTML = '<i class="bi bi-mortarboard"></i><span></span>';
+      item.querySelector('span').textContent = cb.dataset.nome;
+      item.dataset.checkboxId = cb.id;
+      item.addEventListener('mousedown', function (e) {
+        e.preventDefault();
+        cb.checked = true;
+        input.value = '';
+        renderSelecionados();
+        suggestions.classList.remove('open');
+        input.focus();
+      });
+      suggestions.appendChild(item);
+    });
+    suggestions.classList.add('open');
+  }
+
+  input.addEventListener('input', function () { renderSuggestions(input.value); });
+  input.addEventListener('focus', function () {
+    if (input.value) renderSuggestions(input.value);
+  });
+  input.addEventListener('blur', function () {
+    setTimeout(function () { suggestions.classList.remove('open'); }, 150);
+  });
+
+  // Navegação com setas + Enter
+  input.addEventListener('keydown', function (e) {
+    var items = Array.prototype.slice.call(suggestions.querySelectorAll('.picker-suggestion:not(.picker-suggestion-empty)'));
+    if (!items.length) return;
+    var ativo = suggestions.querySelector('.picker-suggestion.active');
+    var idx = items.indexOf(ativo);
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      idx = (idx + 1) % items.length;
+      if (ativo) ativo.classList.remove('active');
+      items[idx].classList.add('active');
+      items[idx].scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      idx = idx <= 0 ? items.length - 1 : idx - 1;
+      if (ativo) ativo.classList.remove('active');
+      items[idx].classList.add('active');
+      items[idx].scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'Enter') {
+      if (suggestions.classList.contains('open') && items[Math.max(0, idx)]) {
+        e.preventDefault();
+        items[Math.max(0, idx)].dispatchEvent(new MouseEvent('mousedown'));
+      }
+    } else if (e.key === 'Escape') {
+      suggestions.classList.remove('open');
+    }
+  });
+
+  // Render inicial das chips (alunos já vinculados)
+  renderSelecionados();
+})();
+
+// Mostrar/ocultar blocos condicionais por role
+(function () {
+  var blocoAluno = document.getElementById('blocoAluno');
+  var blocoResponsavel = document.getElementById('blocoResponsavel');
+  var blocoVisitante = document.getElementById('blocoVisitante');
+  function temRole(chave) {
+    var cbs = document.querySelectorAll('.role-cb:checked');
+    for (var i = 0; i < cbs.length; i++) {
+      if ((cbs[i].dataset.chave || '').toLowerCase() === chave) return true;
+    }
+    return false;
+  }
+  function atualizar() {
+    if (blocoAluno) blocoAluno.style.display = temRole('aluno') ? 'block' : 'none';
+    if (blocoResponsavel) blocoResponsavel.style.display = temRole('responsavel') ? 'block' : 'none';
+    if (blocoVisitante) blocoVisitante.style.display = temRole('visitante') ? 'block' : 'none';
+  }
+  document.querySelectorAll('.role-cb').forEach(function (cb) {
+    cb.addEventListener('change', atualizar);
+  });
+  atualizar();
+})();
+{% endif %}
+</script>
+
+<script>
+// CÂMERA — preserva IDs/comportamento original
 (function() {
   var miniatura = document.getElementById('miniaturaUsuario');
   var placeholder = document.getElementById('placeholderFoto');
@@ -246,269 +746,70 @@
     if (miniatura) {
       miniatura.src = src;
       miniatura.classList.remove('d-none');
+      miniatura.style.display = 'block';
     }
     if (placeholder) placeholder.classList.add('d-none');
   }
 
-
-  var streamUsuario, devicesUsuario = [], currentIndexUsuario = 0, isFrontCameraUsuario = false;
+  var streamUsuario, devicesUsuario = [], isFrontCameraUsuario = false;
   var usingFrontCameraUsuario = true;
   var frontCamerasUsuario = [], backCamerasUsuario = [], currentDeviceIdUsuario = null;
 
+  // 🟦 Controle de prontidão da câmera (evita capturar foto em branco)
+  var _btnCapUsuario = document.getElementById('btnCapturarUsuario');
+  var _btnCapUsuarioHTML = _btnCapUsuario ? _btnCapUsuario.innerHTML : '';
+  function setCapturaProntaUsuario(pronto) {
+    if (!_btnCapUsuario) return;
+    _btnCapUsuario.disabled = !pronto;
+    _btnCapUsuario.innerHTML = pronto
+      ? _btnCapUsuarioHTML
+      : '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Carregando...';
+  }
+  (function () {
+    var v = document.getElementById('cameraVideoUsuario');
+    if (!v) return;
+    var marcarPronta = function () { if (v.videoWidth > 0) setCapturaProntaUsuario(true); };
+    v.addEventListener('loadedmetadata', marcarPronta);
+    v.addEventListener('playing', marcarPronta);
+  })();
+
   async function listarCamerasUsuario() {
     try {
-      // Solicitar permissão primeiro para obter labels dos dispositivos
-      try {
-        await navigator.mediaDevices.getUserMedia({ video: true });
-      } catch (e) {
-        console.error('Erro ao solicitar permissão:', e);
-      }
+      try { await navigator.mediaDevices.getUserMedia({ video: true }); } catch (e) {}
       const medias = await navigator.mediaDevices.enumerateDevices();
       devicesUsuario = medias.filter(d => d.kind === "videoinput");
-      
-      // Classificar câmeras em frontais e traseiras
-      frontCamerasUsuario = [];
-      backCamerasUsuario = [];
+      frontCamerasUsuario = []; backCamerasUsuario = [];
       for (var i = 0; i < devicesUsuario.length; i++) {
         var device = devicesUsuario[i];
         var label = device.label.toLowerCase();
-        if (label.includes('front') || label.includes('facing') || label.includes('user')) {
-          frontCamerasUsuario.push(device);
-        } else {
-          backCamerasUsuario.push(device);
-        }
+        if (label.includes('front') || label.includes('facing') || label.includes('user')) frontCamerasUsuario.push(device);
+        else backCamerasUsuario.push(device);
       }
-      
-      // Mostrar botão se houver múltiplas câmeras (mesmo que não identifiquemos claramente quais são frontais/traseiras)
-      var temAmbas = frontCamerasUsuario.length > 0 && backCamerasUsuario.length > 0;
       var temMultiplas = devicesUsuario.length > 1;
       var btnTrocar = document.getElementById('btnTrocarCameraUsuario');
       if (btnTrocar) btnTrocar.style.display = temMultiplas ? 'inline-block' : 'none';
-      
-      // Se não identificamos ambas, definir texto padrão
-      if (!temAmbas && temMultiplas) {
-        var btnText = document.getElementById('btnTrocarCameraTextUsuario');
-        if (btnText) {
-          btnText.textContent = 'Trocar Câmera';
-        }
-      }
-    } catch (e) {
-      console.error('Erro ao listar câmeras:', e);
-    }
+    } catch (e) {}
   }
 
   function atualizarTextoBotaoTrocarCameraUsuario() {
     var btnText = document.getElementById('btnTrocarCameraTextUsuario');
-    if (btnText) {
-      var temAmbas = frontCamerasUsuario.length > 0 && backCamerasUsuario.length > 0;
-      if (temAmbas) {
-        // Se identificamos ambas, usar texto dinâmico
-        if (isFrontCameraUsuario) {
-          btnText.textContent = 'Câmera Traseira';
-        } else {
-          btnText.textContent = 'Câmera Dianteira';
-        }
-      } else {
-        // Caso contrário, usar texto genérico
-        btnText.textContent = 'Trocar Câmera';
-      }
-    }
-  }
-
-  async function abrirCameraUsuario(deviceId = null) {
-    var modalCam = document.getElementById('cameraModalUsuario');
-    var videoCam = document.getElementById('cameraVideoUsuario');
-    
-    // Parar stream anterior completamente
-    if (streamUsuario) {
-      try {
-        streamUsuario.getTracks().forEach(function(t) {
-          t.stop();
-        });
-      } catch (e) {
-        console.warn('Erro ao parar tracks:', e);
-      }
-      streamUsuario = null;
-    }
-    
-    // Limpar srcObject antes de iniciar novo stream
-    videoCam.srcObject = null;
-    
-    // Aguardar um pouco mais para garantir que o stream anterior foi completamente liberado
-    await new Promise(function(resolve) { setTimeout(resolve, 300); });
-
-    var constraints = { video: true };
-    var triedExact = false;
-    if (deviceId) {
-      // Verificar se o deviceId ainda existe na lista
-      var deviceExists = devicesUsuario.some(function(d) { return d.deviceId === deviceId; });
-      if (deviceExists) {
-        // Tentar primeiro com exact, se falhar tentar com ideal
-        constraints.video = { deviceId: { exact: deviceId } };
-        triedExact = true;
-      } else {
-        console.warn('DeviceId não encontrado, usando câmera padrão');
-      }
-    }
-
-    try {
-      streamUsuario = await navigator.mediaDevices.getUserMedia(constraints);
-      videoCam.srcObject = streamUsuario;
-
-      // Detectar tipo de câmera após stream estar ativo
-      var track = streamUsuario.getVideoTracks()[0];
-      if (track) {
-        var settings = track.getSettings();
-        currentDeviceIdUsuario = settings.deviceId;
-        
-        if (settings.facingMode === 'user') {
-          isFrontCameraUsuario = true;
-        } else if (settings.facingMode === 'environment') {
-          isFrontCameraUsuario = false;
-        } else {
-          // Fallback: verificar se está na lista de frontais ou traseiras
-          var device = devicesUsuario.find(function(d) { return d.deviceId === currentDeviceIdUsuario; });
-          if (device) {
-            var isInFront = frontCamerasUsuario.some(function(d) { return d.deviceId === currentDeviceIdUsuario; });
-            var isInBack = backCamerasUsuario.some(function(d) { return d.deviceId === currentDeviceIdUsuario; });
-            if (isInFront) {
-              isFrontCameraUsuario = true;
-            } else if (isInBack) {
-              isFrontCameraUsuario = false;
-            } else {
-              // Tentar detectar pelo label
-              var label = device.label.toLowerCase();
-              isFrontCameraUsuario = label.includes('front') || label.includes('facing') || label.includes('user');
-            }
-          } else {
-            isFrontCameraUsuario = false;
-          }
-        }
-        
-        // Aplicar transformação apenas para câmera frontal
-        if (isFrontCameraUsuario) {
-          videoCam.style.transform = 'scaleX(-1)';
-        } else {
-          videoCam.style.transform = 'scaleX(1)';
-        }
-      }
-
-      modalCam.style.display = 'flex';
-      document.getElementById('cameraCanvasUsuario').style.display = 'none';
-      videoCam.style.display = 'block';
-      document.getElementById('btnCapturarUsuario').style.display = 'inline-block';
-      document.getElementById('btnConfirmarFotoUsuario').style.display = 'none';
-      document.getElementById('btnTirarNovamenteUsuario').style.display = 'none';
-    } catch (e) {
-      console.error('Erro ao acessar câmera com constraints:', e);
-      
-      // Se tentou com exact e falhou, tentar com ideal
-      if (triedExact && deviceId) {
-        try {
-          constraints.video = { deviceId: { ideal: deviceId } };
-          streamUsuario = await navigator.mediaDevices.getUserMedia(constraints);
-          videoCam.srcObject = streamUsuario;
-          
-          var track = streamUsuario.getVideoTracks()[0];
-          if (track) {
-            var settings = track.getSettings();
-            currentDeviceIdUsuario = settings.deviceId;
-            
-            if (settings.facingMode === 'user') {
-              isFrontCameraUsuario = true;
-            } else if (settings.facingMode === 'environment') {
-              isFrontCameraUsuario = false;
-            } else {
-              var device = devicesUsuario.find(function(d) { return d.deviceId === currentDeviceIdUsuario; });
-              if (device) {
-                var isInFront = frontCamerasUsuario.some(function(d) { return d.deviceId === currentDeviceIdUsuario; });
-                var isInBack = backCamerasUsuario.some(function(d) { return d.deviceId === currentDeviceIdUsuario; });
-                if (isInFront) {
-                  isFrontCameraUsuario = true;
-                } else if (isInBack) {
-                  isFrontCameraUsuario = false;
-                } else {
-                  var label = device.label.toLowerCase();
-                  isFrontCameraUsuario = label.includes('front') || label.includes('facing') || label.includes('user');
-                }
-              } else {
-                isFrontCameraUsuario = false;
-              }
-            }
-          }
-          
-          if (isFrontCameraUsuario) {
-            videoCam.style.transform = 'scaleX(-1)';
-          } else {
-            videoCam.style.transform = 'scaleX(1)';
-          }
-
-          atualizarTextoBotaoTrocarCameraUsuario();
-          modalCam.style.display = 'flex';
-          document.getElementById('cameraCanvasUsuario').style.display = 'none';
-          videoCam.style.display = 'block';
-          document.getElementById('btnCapturarUsuario').style.display = 'inline-block';
-          document.getElementById('btnConfirmarFotoUsuario').style.display = 'none';
-          document.getElementById('btnTirarNovamenteUsuario').style.display = 'none';
-          return;
-        } catch (e2) {
-          console.error('Erro ao acessar câmera com ideal:', e2);
-          // Se ainda falhar, tentar sem especificar deviceId
-          try {
-            constraints.video = true;
-            streamUsuario = await navigator.mediaDevices.getUserMedia(constraints);
-            videoCam.srcObject = streamUsuario;
-            
-            var track = streamUsuario.getVideoTracks()[0];
-            if (track) {
-              var settings = track.getSettings();
-              currentDeviceIdUsuario = settings.deviceId;
-              isFrontCameraUsuario = settings.facingMode === 'user';
-            }
-            
-            if (isFrontCameraUsuario) {
-              videoCam.style.transform = 'scaleX(-1)';
-            } else {
-              videoCam.style.transform = 'scaleX(1)';
-            }
-            
-            atualizarTextoBotaoTrocarCameraUsuario();
-            modalCam.style.display = 'flex';
-            document.getElementById('cameraCanvasUsuario').style.display = 'none';
-            videoCam.style.display = 'block';
-            document.getElementById('btnCapturarUsuario').style.display = 'inline-block';
-            document.getElementById('btnConfirmarFotoUsuario').style.display = 'none';
-            document.getElementById('btnTirarNovamenteUsuario').style.display = 'none';
-            return;
-          } catch (e3) {
-            console.error('Erro ao acessar câmera padrão:', e3);
-          }
-        }
-      }
-      
-      alert('Não foi possível acessar a câmera: ' + e.message);
-    }
+    if (!btnText) return;
+    var temAmbas = frontCamerasUsuario.length > 0 && backCamerasUsuario.length > 0;
+    if (temAmbas) btnText.textContent = isFrontCameraUsuario ? 'Câmera Traseira' : 'Câmera Dianteira';
+    else btnText.textContent = 'Trocar Câmera';
   }
 
   async function startCameraUsuario() {
     if (streamUsuario) {
-      try {
-        streamUsuario.getTracks().forEach(function(t) { t.stop(); });
-      } catch (e) {
-        console.warn('Erro ao parar tracks:', e);
-      }
+      try { streamUsuario.getTracks().forEach(function(t) { t.stop(); }); } catch (e) {}
       streamUsuario = null;
     }
-
     var videoCam = document.getElementById('cameraVideoUsuario');
     videoCam.srcObject = null;
-    await new Promise(function(resolve) { setTimeout(resolve, 300); });
+    setCapturaProntaUsuario(false);
+    await new Promise(function(resolve) { setTimeout(resolve, 250); });
 
-    var constraints = {
-      video: { facingMode: usingFrontCameraUsuario ? 'user' : 'environment' },
-      audio: false
-    };
-
+    var constraints = { video: { facingMode: usingFrontCameraUsuario ? 'user' : 'environment' }, audio: false };
     try {
       streamUsuario = await navigator.mediaDevices.getUserMedia(constraints);
       videoCam.srcObject = streamUsuario;
@@ -525,7 +826,15 @@
       document.getElementById('btnTirarNovamenteUsuario').style.display = 'none';
     } catch (e) {
       await listarCamerasUsuario();
-      await abrirCameraUsuario(devicesUsuario[0]?.deviceId);
+      try {
+        constraints = { video: true };
+        streamUsuario = await navigator.mediaDevices.getUserMedia(constraints);
+        videoCam.srcObject = streamUsuario;
+        document.getElementById('cameraModalUsuario').style.display = 'flex';
+        videoCam.style.display = 'block';
+      } catch (e2) {
+        alert('Não foi possível acessar a câmera: ' + (e2.message || e.message));
+      }
     }
   }
 
@@ -552,19 +861,16 @@
 
   document.getElementById('btnCapturarUsuario').addEventListener('click', function() {
     var videoCam = document.getElementById('cameraVideoUsuario');
+    if (!videoCam.videoWidth || videoCam.readyState < 2) {
+      alert("Aguarde a câmera carregar e tente novamente.");
+      return;
+    }
     var canvasCam = document.getElementById('cameraCanvasUsuario');
     var ctx = canvasCam.getContext('2d');
-
     canvasCam.width = videoCam.videoWidth;
     canvasCam.height = videoCam.videoHeight;
-
-    // Aplicar mesma transformação ao capturar (espelhar se for câmera frontal)
-    if (isFrontCameraUsuario) {
-      ctx.translate(canvasCam.width, 0);
-      ctx.scale(-1, 1);
-    }
+    if (isFrontCameraUsuario) { ctx.translate(canvasCam.width, 0); ctx.scale(-1, 1); }
     ctx.drawImage(videoCam, 0, 0);
-
     canvasCam.style.display = 'block';
     videoCam.style.display = 'none';
     document.getElementById('btnCapturarUsuario').style.display = 'none';
@@ -582,12 +888,7 @@
     document.getElementById('btnCapturarUsuario').style.display = 'inline-block';
     document.getElementById('btnConfirmarFotoUsuario').style.display = 'none';
     document.getElementById('btnTirarNovamenteUsuario').style.display = 'none';
-    // Restaurar transformação do video
-    if (isFrontCameraUsuario) {
-      videoCam.style.transform = 'scaleX(-1)';
-    } else {
-      videoCam.style.transform = 'scaleX(1)';
-    }
+    videoCam.style.transform = isFrontCameraUsuario ? 'scaleX(-1)' : 'scaleX(1)';
     var temMultiplas = devicesUsuario.length > 1;
     var btnTrocar = document.getElementById('btnTrocarCameraUsuario');
     if (btnTrocar) btnTrocar.style.display = temMultiplas ? 'inline-block' : 'none';
@@ -595,6 +896,8 @@
   });
 
   document.getElementById('btnConfirmarFotoUsuario').addEventListener('click', function() {
+    var canvasCam = document.getElementById('cameraCanvasUsuario');
+    var modalCam = document.getElementById('cameraModalUsuario');
     var dataURL = canvasCam.toDataURL('image/png');
     if (fotoInput) fotoInput.value = dataURL;
     mostrarPreview(dataURL);

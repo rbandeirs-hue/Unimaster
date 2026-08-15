@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+{% block title %}Ranking de frequência — completo{% endblock %}
+
+{% block extra_css %}
+<style>
+.ranking-filtros-card {
+    border-radius: 12px;
+    border: 1px solid var(--bs-border-color-translucent);
+}
+.ranking-filtros-card .form-label { font-size: 0.75rem; margin-bottom: 0.2rem; }
+.ranking-resumo-bar { font-size: 0.875rem; }
+.ranking-detalhe-table { font-size: 0.8125rem; }
+.ranking-detalhe-table .foto-xs {
+    width: 32px; height: 32px; object-fit: cover;
+}
+.ranking-detalhe-table tr.destaque-aluno td {
+    box-shadow: inset 3px 0 0 0 #0d6efd;
+    background-color: rgba(13, 110, 253, 0.06);
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4 mb-5">
+    {% set back_url = back_url or get_back_url_default() %}
+    {% include 'components/botao_voltar.html' %}
+
+    <div class="mb-3 d-flex flex-wrap align-items-start justify-content-between gap-2">
+        <div>
+            <h1 class="h4 fw-bold text-primary mb-1"><i class="bi bi-list-ol me-2"></i>Ranking completo</h1>
+            <p class="text-muted mb-0 small">Todos os alunos por turma, ordenados por presenças (mesmo critério do pódio).</p>
+        </div>
+        <a href="{{ url_voltar_podium }}" class="btn btn-sm btn-outline-primary flex-shrink-0">
+            <i class="bi bi-trophy-fill me-1"></i> Voltar ao pódio
+        </a>
+    </div>
+
+    <div class="card shadow-sm ranking-filtros-card mb-4">
+        <div class="card-body p-3 p-md-4">
+            <form method="GET" action="{{ url_for('presencas.ranking_frequencia_detalhe') }}" class="row g-3 align-items-end" id="formFiltrosRankingDetalhe">
+                {% if academias and academias|length > 1 %}
+                <div class="col-12">
+                    <label class="form-label fw-semibold text-muted">Academia</label>
+                    <select name="academia_id" class="form-select form-select-sm" style="max-width: 420px;">
+                        {% for ac in academias %}
+                        <option value="{{ ac.id }}" {% if ac.id == academia_id %}selected{% endif %}>{{ ac.nome }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {% endif %}
+
+                <input type="hidden" name="page" value="1">
+
+                <div class="col-6 col-md-4 col-lg-2">
+                    <label class="form-label fw-semibold text-muted">Mês (sem intervalo)</label>
+                    <select name="mes" class="form-select form-select-sm">
+                        {% for mid, mnome in meses_opts %}
+                        <option value="{{ mid }}" {% if mid == mes_sel %}selected{% endif %}>{{ mnome }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-6 col-md-4 col-lg-2">
+                    <label class="form-label fw-semibold text-muted">Ano</label>
+                    <select name="ano" class="form-select form-select-sm">
+                        {% for y in anos_opts %}
+                        <option value="{{ y }}" {% if y == ano_sel %}selected{% endif %}>{{ y }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-6 col-md-4 col-lg-2">
+                    <label class="form-label fw-semibold text-muted">Data início <span class="fw-normal opacity-75">(opcional)</span></label>
+                    <input type="date" name="data_inicio" class="form-control form-control-sm" value="{{ data_inicio_val or '' }}" autocomplete="off">
+                </div>
+                <div class="col-6 col-md-4 col-lg-2">
+                    <label class="form-label fw-semibold text-muted">Data fim <span class="fw-normal opacity-75">(opcional)</span></label>
+                    <input type="date" name="data_fim" class="form-control form-control-sm" value="{{ data_fim_val or '' }}" autocomplete="off">
+                </div>
+                {% if turmas_opciones and turmas_opciones|length > 0 %}
+                <div class="col-12 col-md-8 col-lg-4">
+                    <label class="form-label fw-semibold text-muted">Turma</label>
+                    <select name="turma_id" class="form-select form-select-sm">
+                        <option value="">Todas as turmas</option>
+                        {% for tt in turmas_opciones %}
+                        <option value="{{ tt.TurmaID }}" {% if turma_sel == tt.TurmaID %}selected{% endif %}>{{ tt.Nome }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {% endif %}
+                <div class="col-12 col-md-4 col-lg-3">
+                    <label class="form-label fw-semibold text-muted">Turmas por página</label>
+                    <select name="per_page" class="form-select form-select-sm">
+                        <option value="1" {% if per_page_sel == 1 %}selected{% endif %}>1 turma</option>
+                        <option value="3" {% if per_page_sel == 3 %}selected{% endif %}>3 turmas</option>
+                        <option value="6" {% if per_page_sel == 6 %}selected{% endif %}>6 turmas</option>
+                        <option value="12" {% if per_page_sel == 12 %}selected{% endif %}>12 turmas</option>
+                    </select>
+                </div>
+                <div class="col-12 col-lg-auto mt-2 mt-lg-0 d-flex flex-wrap gap-2">
+                    <button type="submit" class="btn btn-primary btn-sm px-4">
+                        <i class="bi bi-funnel-fill me-1"></i> Aplicar filtros
+                    </button>
+                    <a href="{{ url_for('presencas.ranking_frequencia_detalhe') }}" class="btn btn-outline-secondary btn-sm">Limpar</a>
+                </div>
+                <div class="col-12">
+                    <p class="text-muted small mb-0">
+                        Com início e fim preenchidos, a primeira tabela de cada turma usa o intervalo; senão, o mês civil. A segunda tabela é sempre o total no ano selecionado.
+                    </p>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    {% if pagination %}
+    <div class="ranking-resumo-bar d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3 px-1">
+        <span class="text-muted">
+            {% if pagination.total_turmas > 0 %}
+            <strong class="text-body">{{ pagination.total_turmas }}</strong> turma{% if pagination.total_turmas != 1 %}s{% endif %}
+            {% else %}
+            Nenhuma turma neste escopo
+            {% endif %}
+            {% if not turma_sel and pagination.total_pages > 1 %}
+            · página <strong class="text-body">{{ pagination.page }}</strong> de {{ pagination.total_pages }}
+            {% endif %}
+        </span>
+        {% if pagination.total_pages > 1 and not turma_sel %}
+        <div class="btn-group btn-group-sm" role="group" aria-label="Paginação">
+            {% if pagination.url_prev %}
+            <a class="btn btn-outline-primary" href="{{ pagination.url_prev }}">« Anterior</a>
+            {% else %}
+            <span class="btn btn-outline-secondary disabled">« Anterior</span>
+            {% endif %}
+            {% if pagination.url_next %}
+            <a class="btn btn-outline-primary" href="{{ pagination.url_next }}">Próxima »</a>
+            {% else %}
+            <span class="btn btn-outline-secondary disabled">Próxima »</span>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {% if ranking_completo_turmas and ranking_completo_turmas|length > 0 %}
+        {% for bl in ranking_completo_turmas %}
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-white border-bottom py-2">
+                <span class="fw-semibold"><i class="bi bi-collection me-1 text-primary"></i>{{ bl.turma_nome }}</span>
+            </div>
+            <div class="card-body">
+                <div class="row g-4">
+                    <div class="col-lg-6">
+                        <h3 class="h6 text-muted fw-semibold mb-2"><i class="bi bi-calendar3 me-1"></i>{{ bl.periodo_rotulo }}</h3>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-striped ranking-detalhe-table mb-0">
+                                <thead><tr><th>#</th><th></th><th>Aluno</th><th class="text-end">Presenças</th></tr></thead>
+                                <tbody>
+                                    {% for row in bl.alunos_periodo %}
+                                    <tr class="{% if destaque_aluno_id is not none and row.aluno_id == destaque_aluno_id %}destaque-aluno{% endif %}">
+                                        <td class="text-muted">{{ row.lugar }}</td>
+                                        <td class="py-1">
+                                            {% if row.foto %}
+                                            <img src="{{ url_for('static', filename='uploads/' + row.foto) }}" alt="" class="foto-xs rounded-circle" loading="lazy" onerror="this.style.visibility='hidden'">
+                                            {% else %}
+                                            <span class="d-inline-flex align-items-center justify-content-center rounded-circle bg-light text-secondary" style="width:32px;height:32px;font-size:0.9rem;"><i class="bi bi-person-fill"></i></span>
+                                            {% endif %}
+                                        </td>
+                                        <td>{{ row.nome }}</td>
+                                        <td class="text-end fw-semibold">{{ row.total }}</td>
+                                    </tr>
+                                    {% else %}
+                                    <tr><td colspan="4" class="text-muted">Nenhuma presença neste período.</td></tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="col-lg-6">
+                        <h3 class="h6 text-muted fw-semibold mb-2"><i class="bi bi-calendar-range me-1"></i>Total no ano {{ bl.ano_rotulo }}</h3>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-striped ranking-detalhe-table mb-0">
+                                <thead><tr><th>#</th><th></th><th>Aluno</th><th class="text-end">Presenças</th></tr></thead>
+                                <tbody>
+                                    {% for row in bl.alunos_ano %}
+                                    <tr class="{% if destaque_aluno_id is not none and row.aluno_id == destaque_aluno_id %}destaque-aluno{% endif %}">
+                                        <td class="text-muted">{{ row.lugar }}</td>
+                                        <td class="py-1">
+                                            {% if row.foto %}
+                                            <img src="{{ url_for('static', filename='uploads/' + row.foto) }}" alt="" class="foto-xs rounded-circle" loading="lazy" onerror="this.style.visibility='hidden'">
+                                            {% else %}
+                                            <span class="d-inline-flex align-items-center justify-content-center rounded-circle bg-light text-secondary" style="width:32px;height:32px;font-size:0.9rem;"><i class="bi bi-person-fill"></i></span>
+                                            {% endif %}
+                                        </td>
+                                        <td>{{ row.nome }}</td>
+                                        <td class="text-end fw-semibold">{{ row.total }}</td>
+                                    </tr>
+                                    {% else %}
+                                    <tr><td colspan="4" class="text-muted">Nenhuma presença neste ano.</td></tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+        <div class="alert alert-light border text-muted">
+            <i class="bi bi-info-circle me-2"></i>Nenhuma turma no escopo ou sem presenças nos filtros selecionados.
+        </div>
+    {% endif %}
+
+    {% if pagination and pagination.total_pages > 1 and not turma_sel and (pagination.url_prev or pagination.url_next) %}
+    <div class="d-flex justify-content-center gap-2 mt-4">
+        {% if pagination.url_prev %}
+        <a class="btn btn-outline-primary btn-sm" href="{{ pagination.url_prev }}">« Página anterior</a>
+        {% endif %}
+        {% if pagination.url_next %}
+        <a class="btn btn-outline-primary btn-sm" href="{{ pagination.url_next }}">Próxima página »</a>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

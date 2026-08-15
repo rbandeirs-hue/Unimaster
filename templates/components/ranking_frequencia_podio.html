@@ -1,0 +1,177 @@
+{# ranking_frequencia_turmas, destaque_aluno_id (opcional)
+   ocultar_titulo_ranking (opcional): se true, não repete o bloco de título (página dedicada) #}
+
+{% macro podio_rosto(px) %}
+{% if px %}
+<div class="podio-rosto mb-1">
+  {% if px.foto %}
+  <img src="{{ url_for('static', filename='uploads/' + px.foto) }}" alt="" class="podio-foto rounded-circle" width="52" height="52" style="object-fit:cover;" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.classList.remove('d-none');">
+  <div class="podio-foto-placeholder rounded-circle d-none"><i class="bi bi-person-fill"></i></div>
+  {% else %}
+  <div class="podio-foto-placeholder rounded-circle"><i class="bi bi-person-fill"></i></div>
+  {% endif %}
+</div>
+{% endif %}
+{% endmacro %}
+
+{% macro podio_visual(top3, destaque_id=none) %}
+{% set p2 = top3[1] if top3 and top3|length > 1 else none %}
+{% set p1 = top3[0] if top3 and top3|length > 0 else none %}
+{% set p3 = top3[2] if top3 and top3|length > 2 else none %}
+<div class="podio-row">
+    <div class="podio-slot podio-2nd {% if not p2 %}vazio{% endif %} {% if destaque_id is not none and p2 and p2.aluno_id == destaque_id %}destaque-aluno{% endif %}">
+        {% if p2 %}<div class="medal">🥈</div>{% endif %}
+        <div class="pedestal">
+            {% if p2 %}
+            {{ podio_rosto(p2) }}
+            <div class="nome-podio">{{ p2.nome }}</div>
+            <div class="pts-podio">{{ p2.total }} presença{% if p2.total != 1 %}s{% endif %}</div>
+            {% else %}<span class="small text-muted">—</span>{% endif %}
+        </div>
+    </div>
+    <div class="podio-slot podio-1st {% if not p1 %}vazio{% endif %} {% if destaque_id is not none and p1 and p1.aluno_id == destaque_id %}destaque-aluno{% endif %}">
+        {% if p1 %}<div class="medal">🥇</div>{% endif %}
+        <div class="pedestal">
+            {% if p1 %}
+            {{ podio_rosto(p1) }}
+            <div class="nome-podio">{{ p1.nome }}</div>
+            <div class="pts-podio">{{ p1.total }} presença{% if p1.total != 1 %}s{% endif %}</div>
+            {% else %}<span class="small text-muted">Sem dados</span>{% endif %}
+        </div>
+    </div>
+    <div class="podio-slot podio-3rd {% if not p3 %}vazio{% endif %} {% if destaque_id is not none and p3 and p3.aluno_id == destaque_id %}destaque-aluno{% endif %}">
+        {% if p3 %}<div class="medal">🥉</div>{% endif %}
+        <div class="pedestal">
+            {% if p3 %}
+            {{ podio_rosto(p3) }}
+            <div class="nome-podio">{{ p3.nome }}</div>
+            <div class="pts-podio">{{ p3.total }} presença{% if p3.total != 1 %}s{% endif %}</div>
+            {% else %}<span class="small text-muted">—</span>{% endif %}
+        </div>
+    </div>
+</div>
+{% endmacro %}
+
+{% if ranking_frequencia_turmas and ranking_frequencia_turmas|length > 0 %}
+<div class="ranking-frequencia-wrap mb-4">
+    {% if not (ocultar_titulo_ranking | default(false)) %}
+    <div class="d-flex align-items-center gap-2 mb-3">
+        <i class="bi bi-trophy-fill text-warning fs-4"></i>
+        <div>
+            <h3 class="h5 fw-bold mb-0">Ranking de frequência</h3>
+            <p class="text-muted small mb-0">Pódio por turma — mais presenças no mês e no ano correntes.</p>
+        </div>
+    </div>
+    {% endif %}
+
+    {% for bl in ranking_frequencia_turmas %}
+    <div class="card border-0 shadow-sm mb-3 ranking-freq-card">
+        <div class="card-header bg-white border-bottom py-2">
+            <span class="fw-semibold"><i class="bi bi-collection me-1 text-primary"></i>{{ bl.turma_nome }}</span>
+        </div>
+        <div class="card-body pt-3">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <p class="small text-muted fw-semibold mb-2">
+                        <i class="bi bi-calendar-month me-1"></i>{{ bl.mes_rotulo }}
+                    </p>
+                    {{ podio_visual(bl.top3_mes, destaque_aluno_id|default(none)) }}
+                </div>
+                <div class="col-md-6">
+                    <p class="small text-muted fw-semibold mb-2">
+                        <i class="bi bi-calendar-range me-1"></i>Total no ano {{ bl.ano_rotulo }}
+                    </p>
+                    {{ podio_visual(bl.top3_ano, destaque_aluno_id|default(none)) }}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<style>
+.ranking-freq-card .podio-foto-placeholder {
+    width: 52px;
+    height: 52px;
+    background: #e9ecef;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #6c757d;
+    font-size: 1.35rem;
+    margin-left: auto;
+    margin-right: auto;
+}
+.ranking-freq-card .podio-rosto {
+    display: flex;
+    justify-content: center;
+}
+.ranking-freq-card .podio-row {
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 0.35rem;
+    min-height: 168px;
+    padding-top: 0.5rem;
+}
+@media (min-width: 768px) {
+    .ranking-freq-card .podio-row { gap: 0.75rem; }
+}
+.ranking-freq-card .podio-slot {
+    flex: 1;
+    max-width: 132px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+}
+.ranking-freq-card .podio-slot .pedestal {
+    width: 100%;
+    border-radius: 8px 8px 0 0;
+    padding: 0.5rem 0.35rem 0.65rem;
+    text-align: center;
+    font-size: 0.75rem;
+    line-height: 1.25;
+}
+.ranking-freq-card .podio-slot .medal {
+    font-size: 1.15rem;
+    margin-bottom: 0.15rem;
+}
+.ranking-freq-card .podio-1st .pedestal {
+    min-height: 118px;
+    background: linear-gradient(180deg, #fff8e6 0%, #ffd54f 100%);
+    border: 2px solid #e6b800;
+}
+.ranking-freq-card .podio-2nd .pedestal {
+    min-height: 98px;
+    background: linear-gradient(180deg, #f8f9fa 0%, #cfd8dc 100%);
+    border: 2px solid #90a4ae;
+}
+.ranking-freq-card .podio-3rd .pedestal {
+    min-height: 88px;
+    background: linear-gradient(180deg, #fff5f0 0%, #d7a78c 100%);
+    border: 2px solid #a67c52;
+}
+.ranking-freq-card .podio-slot.vazio .pedestal {
+    min-height: 52px;
+    background: #f8f9fa;
+    border: 1px dashed #dee2e6;
+    color: #adb5bd;
+}
+.ranking-freq-card .nome-podio {
+    font-weight: 600;
+    font-size: 0.72rem;
+    word-break: break-word;
+}
+.ranking-freq-card .pts-podio {
+    font-size: 0.68rem;
+    color: #495057;
+}
+.ranking-freq-card .podio-slot.destaque-aluno .pedestal {
+    box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.35);
+}
+.ranking-freq-card .podio-1st { order: 2; }
+.ranking-freq-card .podio-2nd { order: 1; }
+.ranking-freq-card .podio-3rd { order: 3; }
+</style>
+{% endif %}

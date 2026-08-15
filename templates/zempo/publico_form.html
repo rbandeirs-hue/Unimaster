@@ -1,0 +1,361 @@
+{% extends "base.html" %}
+{% block title %}Complete seu cadastro — {{ assoc.nome }}{% endblock %}
+{% block content %}
+<div class="container" style="max-width:860px;">
+
+  <div class="mt-4 mb-3">
+    <h1 class="h5 mb-1">Cadastro de atleta no Zempo</h1>
+    <p class="text-muted small mb-2">{{ assoc.nome }} — CPF {{ cpf }}</p>
+
+    {% if faltando %}
+      <div class="alert alert-warning py-2 mb-0">
+        <i class="bi bi-exclamation-triangle-fill me-1"></i>
+        Faltam <strong>{{ faltando | length }}</strong> informação(ões), destacadas em amarelo.
+        A CBJ exige todas elas.
+      </div>
+    {% else %}
+      <div class="alert alert-success py-2 mb-0">
+        <i class="bi bi-check-circle-fill me-1"></i>
+        Está tudo preenchido. Confira os dados e confirme.
+      </div>
+    {% endif %}
+  </div>
+
+  <form method="post" action="{{ url_for('zempo_publico.enviar', token=token) }}"
+        enctype="multipart/form-data" class="card shadow-sm p-4">
+    <input type="hidden" name="cpf" value="{{ cpf }}">
+    {% if aluno_id %}<input type="hidden" name="aluno_id" value="{{ aluno_id }}">{% endif %}
+    {% if valores.get('foto') %}<input type="hidden" name="foto_atual" value="{{ valores.foto }}">{% endif %}
+
+    <div class="row g-3">
+      {% if not aluno_id %}
+      <div class="col-md-6">
+        <label class="form-label fw-semibold" for="academia_id">
+          Academia onde treina <span class="text-danger">*</span>
+        </label>
+        <select name="academia_id" id="academia_id" class="form-select" required>
+          <option value="">Selecione…</option>
+          {% for ac in academias %}
+            <option value="{{ ac.id }}" {% if valores.get('academia_id')|string == ac.id|string %}selected{% endif %}>{{ ac.nome }}</option>
+          {% endfor %}
+          <option value="0" {% if valores.get('academia_id')|string == '0' %}selected{% endif %}>
+            Minha academia não está cadastrada
+          </option>
+        </select>
+        <div class="form-text">
+          Se escolher a última opção, seu cadastro fica guardado e é vinculado à sua
+          academia assim que ela entrar no sistema.
+        </div>
+      </div>
+      {% endif %}
+
+      {% for nome, rotulo, tipo in campos %}
+      {% set falta = nome in faltando %}
+      <div class="col-md-6">
+        <label class="form-label fw-semibold" for="{{ nome }}">
+          {{ rotulo }}
+          {% if falta %}<span class="badge bg-warning text-dark ms-1">falta</span>{% endif %}
+        </label>
+
+        {% if tipo == 'sexo' %}
+          <select name="{{ nome }}" id="{{ nome }}" class="form-select {{ 'is-warning' if falta }}">
+            <option value="">Selecione…</option>
+            <option value="M" {% if valores.get(nome) == 'M' %}selected{% endif %}>Masculino</option>
+            <option value="F" {% if valores.get(nome) == 'F' %}selected{% endif %}>Feminino</option>
+          </select>
+        {% elif tipo == 'uf' %}
+          <select name="{{ nome }}" id="{{ nome }}" class="form-select {{ 'is-warning' if falta }}">
+            <option value="">Selecione…</option>
+            {% for uf in ufs %}
+              <option value="{{ uf }}" {% if (valores.get(nome) or '')|upper == uf %}selected{% endif %}>{{ uf }}</option>
+            {% endfor %}
+          </select>
+        {% elif tipo == 'faixa' %}
+          <select name="{{ nome }}" id="{{ nome }}" class="form-select {{ 'is-warning' if falta }}">
+            <option value="">Selecione…</option>
+            {% for valor, rotulo in faixas %}
+              <option value="{{ valor }}" {% if (valores.get(nome) or '')|upper == valor %}selected{% endif %}>{{ rotulo }}</option>
+            {% endfor %}
+          </select>
+        {% else %}
+          <input type="{{ tipo }}" name="{{ nome }}" id="{{ nome }}"
+                 class="form-control {{ 'is-warning' if falta }}"
+                 value="{{ valores.get(nome, '') }}"
+                 {% if nome == 'cep' %}inputmode="numeric" maxlength="9" placeholder="00000-000"{% endif %}
+                 {% if tipo == 'tel' %}inputmode="numeric" maxlength="15" placeholder="(81) 99999-9999"{% endif %}
+                 {% if tipo == 'number' %}step="0.1" min="1"{% endif %}>
+          {% if nome == 'cep' %}
+            <div class="form-text" id="cep_aviso"></div>
+          {% endif %}
+          {% if nome == 'rg' %}
+            {# Prática aceita pela CBJ: sem RG, repete-se o CPF neste campo. #}
+            <div class="form-check mt-1">
+              <input class="form-check-input" type="checkbox" name="sem_rg" value="1" id="sem_rg">
+              <label class="form-check-label small" for="sem_rg">
+                Não possuo RG — usar o CPF
+              </label>
+            </div>
+          {% endif %}
+        {% endif %}
+      </div>
+      {% endfor %}
+
+      <div class="col-md-6">
+        <label class="form-label fw-semibold" for="foto">
+          Foto do aluno
+          {% if not valores.get('foto') %}<span class="badge bg-warning text-dark ms-1">falta</span>{% endif %}
+        </label>
+        <input type="file" name="foto" id="foto" accept="image/*"
+               class="form-control {{ '' if valores.get('foto') else 'is-warning' }}">
+
+        <div class="d-flex flex-wrap gap-2 mt-2">
+          <button type="button" class="btn btn-outline-primary btn-sm" id="btn_camera">
+            <i class="bi bi-camera me-1"></i>Tirar foto agora
+          </button>
+          <button type="button" class="btn btn-outline-secondary btn-sm d-none" id="btn_capturar">
+            <i class="bi bi-record-circle me-1"></i>Capturar
+          </button>
+          <button type="button" class="btn btn-outline-secondary btn-sm d-none" id="btn_refazer">
+            Refazer
+          </button>
+        </div>
+
+        <div id="area_camera" class="mt-2 d-none">
+          <video id="camera" autoplay playsinline muted
+                 style="width:100%;max-width:320px;border-radius:8px;background:#000;"></video>
+        </div>
+        <div id="area_previa" class="mt-2 d-none">
+          <img id="previa" alt="Foto capturada"
+               style="width:100%;max-width:220px;border-radius:8px;border:2px solid #198754;">
+        </div>
+        <input type="hidden" name="foto_camera" id="foto_camera">
+
+        {% if valores.get('foto') %}
+          <div class="form-text text-success">
+            <i class="bi bi-check-circle me-1"></i>Já existe uma foto. Envie outra só se quiser trocar.
+          </div>
+        {% else %}
+          <div class="form-text">Obrigatória pela CBJ. Rosto visível, fundo claro.</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="mt-4">
+      <button type="submit" class="btn btn-primary btn-lg w-100">
+        {% if faltando %}Enviar cadastro{% else %}Confirmar dados{% endif %}
+      </button>
+      <p class="text-muted small text-center mt-2 mb-0">
+        Depois de enviar, sua academia confere os dados e a associação faz o cadastro no Zempo.
+      </p>
+    </div>
+  </form>
+</div>
+
+<style>
+  .is-warning { background-color: #fff8e1; border-color: #ffc107; }
+  .is-warning:focus { border-color: #ffc107; box-shadow: 0 0 0 .2rem rgba(255,193,7,.25); }
+</style>
+
+<script>
+(function () {
+  const soDigitos = v => (v || '').replace(/\D/g, '');
+
+  // Tira o destaque amarelo assim que o campo é preenchido.
+  function revisarDestaque(el) {
+    if (!el) return;
+    if ((el.value || '').trim()) {
+      el.classList.remove('is-warning');
+      const etiqueta = document.querySelector('label[for="' + el.id + '"] .badge');
+      if (etiqueta) etiqueta.remove();
+    }
+  }
+
+  // ---- máscaras ----
+  function mascaraTelefone(el) {
+    let d = soDigitos(el.value).slice(0, 11);
+    if (d.length > 10)      el.value = d.replace(/(\d{2})(\d{5})(\d+)/, '($1) $2-$3');
+    else if (d.length > 6)  el.value = d.replace(/(\d{2})(\d{4})(\d+)/, '($1) $2-$3');
+    else if (d.length > 2)  el.value = d.replace(/(\d{2})(\d+)/, '($1) $2');
+    else if (d.length > 0)  el.value = '(' + d;
+    else                    el.value = '';
+  }
+
+  function mascaraCep(el) {
+    const d = soDigitos(el.value).slice(0, 8);
+    el.value = d.length > 5 ? d.replace(/(\d{5})(\d+)/, '$1-$2') : d;
+  }
+
+  document.querySelectorAll('input[type="tel"]').forEach(function (el) {
+    el.addEventListener('input', () => { mascaraTelefone(el); revisarDestaque(el); });
+    mascaraTelefone(el);
+  });
+
+  // Peso: aceita vírgula, grava com ponto.
+  const peso = document.getElementById('peso');
+  if (peso) {
+    peso.addEventListener('blur', function () {
+      const n = parseFloat((peso.value || '').replace(',', '.'));
+      peso.value = isNaN(n) ? '' : n.toFixed(2);
+      revisarDestaque(peso);
+    });
+  }
+
+  // Nomes em caixa normal, sem gritar.
+  ['nome', 'nome_pai', 'nome_mae', 'responsavel_nome', 'rua', 'bairro', 'cidade']
+    .forEach(function (id) {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('input', () => revisarDestaque(el));
+    });
+
+  // ---- CEP preenche o endereço ----
+  const cep = document.getElementById('cep');
+  const aviso = document.getElementById('cep_aviso');
+  let ultimoCep = '';
+
+  function buscarCep() {
+    const d = soDigitos(cep.value);
+    if (d.length !== 8 || d === ultimoCep) return;
+    ultimoCep = d;
+    aviso.textContent = 'Buscando endereço…';
+    aviso.style.color = '';
+
+    fetch('https://viacep.com.br/ws/' + d + '/json/')
+      .then(r => r.json())
+      .then(function (dados) {
+        if (dados.erro) {
+          aviso.textContent = 'CEP não encontrado. Preencha o endereço à mão.';
+          aviso.style.color = '#dc3545';
+          return;
+        }
+        const mapa = {
+          rua: dados.logradouro, bairro: dados.bairro,
+          cidade: dados.localidade, estado: dados.uf
+        };
+        let preenchidos = 0;
+        Object.keys(mapa).forEach(function (id) {
+          const el = document.getElementById(id);
+          if (!el || !mapa[id]) return;
+          el.value = mapa[id];
+          revisarDestaque(el);
+          preenchidos++;
+        });
+        aviso.textContent = preenchidos
+          ? 'Endereço preenchido. Confira e informe o número.'
+          : 'CEP válido, mas sem endereço detalhado. Preencha à mão.';
+        aviso.style.color = '#198754';
+        revisarDestaque(cep);
+        const numero = document.getElementById('numero');
+        if (numero && !numero.value) numero.focus();
+      })
+      .catch(function () {
+        aviso.textContent = 'Não foi possível consultar o CEP. Preencha o endereço à mão.';
+        aviso.style.color = '#dc3545';
+      });
+  }
+
+  if (cep) {
+    cep.addEventListener('input', function () { mascaraCep(cep); buscarCep(); });
+    cep.addEventListener('blur', buscarCep);
+    mascaraCep(cep);
+  }
+
+  // ---- "não possuo RG": repete o CPF no campo ----
+  const semRg = document.getElementById('sem_rg');
+  const rg = document.getElementById('rg');
+  const cpfPagina = '{{ cpf }}';
+
+  if (semRg && rg) {
+    // Se o RG já veio igual ao CPF, a caixa nasce marcada.
+    if (rg.value && soDigitos(rg.value) === soDigitos(cpfPagina)) semRg.checked = true;
+
+    let rgAnterior = rg.value;
+    const aplicar = function () {
+      if (semRg.checked) {
+        rgAnterior = rg.value;
+        rg.value = cpfPagina;
+        rg.readOnly = true;
+      } else {
+        rg.readOnly = false;
+        // Não devolve o CPF ao campo ao desmarcar.
+        rg.value = (soDigitos(rgAnterior) === soDigitos(cpfPagina)) ? '' : rgAnterior;
+      }
+      revisarDestaque(rg);
+    };
+    semRg.addEventListener('change', aplicar);
+    if (semRg.checked) aplicar();
+  }
+
+  // ---- tirar foto pela câmera ----
+  const btnCamera   = document.getElementById('btn_camera');
+  const btnCapturar = document.getElementById('btn_capturar');
+  const btnRefazer  = document.getElementById('btn_refazer');
+  const areaCamera  = document.getElementById('area_camera');
+  const areaPrevia  = document.getElementById('area_previa');
+  const video       = document.getElementById('camera');
+  const previa      = document.getElementById('previa');
+  const campoFoto   = document.getElementById('foto');
+  const campoBase64 = document.getElementById('foto_camera');
+  let fluxo = null;
+
+  function pararCamera() {
+    if (fluxo) { fluxo.getTracks().forEach(t => t.stop()); fluxo = null; }
+    areaCamera.classList.add('d-none');
+    btnCapturar.classList.add('d-none');
+  }
+
+  if (btnCamera && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+    btnCamera.addEventListener('click', function () {
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false })
+        .then(function (s) {
+          fluxo = s; video.srcObject = s;
+          areaCamera.classList.remove('d-none');
+          btnCapturar.classList.remove('d-none');
+          btnCamera.classList.add('d-none');
+          areaPrevia.classList.add('d-none');
+        })
+        .catch(function () {
+          alert('Não foi possível abrir a câmera. Verifique a permissão do navegador ' +
+                'ou envie a foto pelo botão de arquivo.');
+        });
+    });
+
+    btnCapturar.addEventListener('click', function () {
+      const tela = document.createElement('canvas');
+      tela.width = video.videoWidth || 480;
+      tela.height = video.videoHeight || 640;
+      tela.getContext('2d').drawImage(video, 0, 0, tela.width, tela.height);
+      const dados = tela.toDataURL('image/jpeg', 0.85);
+      campoBase64.value = dados;
+      previa.src = dados;
+      areaPrevia.classList.remove('d-none');
+      btnRefazer.classList.remove('d-none');
+      // A foto da câmera substitui o arquivo, para não enviar duas.
+      if (campoFoto) { campoFoto.value = ''; campoFoto.classList.remove('is-warning'); }
+      pararCamera();
+    });
+
+    btnRefazer.addEventListener('click', function () {
+      campoBase64.value = '';
+      areaPrevia.classList.add('d-none');
+      btnRefazer.classList.add('d-none');
+      btnCamera.classList.remove('d-none');
+    });
+  } else if (btnCamera) {
+    btnCamera.classList.add('d-none');   // navegador sem suporte: só upload
+  }
+
+  // Escolher arquivo descarta a foto da câmera.
+  if (campoFoto) {
+    campoFoto.addEventListener('change', function () {
+      if (campoFoto.files.length) {
+        campoBase64.value = '';
+        areaPrevia.classList.add('d-none');
+        btnRefazer.classList.add('d-none');
+        if (btnCamera) btnCamera.classList.remove('d-none');
+        pararCamera();
+      }
+    });
+  }
+})();
+</script>
+{% endblock %}

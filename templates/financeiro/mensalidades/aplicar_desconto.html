@@ -18,7 +18,7 @@
     {% set back_url = url_for('financeiro.mensalidades_alunos', academia_id=academia_id) if academia_id else url_for('financeiro.mensalidades_alunos') %}
     {% include 'components/botao_voltar.html' %}
     <h2 class="h4 fw-bold mb-3">Aplicar Desconto</h2>
-    <p class="text-muted mb-4">Busque o aluno, selecione o desconto e o período de vigência. As mensalidades existentes no período serão atualizadas. Desconto 100% marca como pago. Você pode cancelar o desconto depois.</p>
+    <p class="text-muted mb-4">Busque o aluno, selecione o desconto, os pacotes (planos de mensalidade) nos quais o desconto vale e o período de vigência. As mensalidades existentes no período serão atualizadas só nos pacotes escolhidos (ou em todos). Desconto 100% marca como pago. Você pode cancelar o desconto depois.</p>
 
     <div class="card border-0 shadow-sm mb-4">
         <div class="card-header bg-light">
@@ -26,6 +26,7 @@
         </div>
         <div class="card-body">
             <form method="POST" id="form-aplicar">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="acao" value="aplicar">
                 <input type="hidden" name="aluno_id" id="aluno_id" value="">
                 <div class="row g-3">
@@ -48,6 +49,30 @@
                             {% endfor %}
                         </select>
                     </div>
+                    {% if pacotes_mensalidades and pacotes_mensalidades|length > 0 %}
+                    <div class="col-12">
+                        <input type="hidden" name="aplica_todos_pacotes" id="fldAplicaTodos" value="1">
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="checkbox" id="chkTodosPacotes" checked>
+                            <label class="form-check-label fw-semibold" for="chkTodosPacotes">Aplicar a todos os pacotes (planos de mensalidade)</label>
+                        </div>
+                        <div id="blocoEscolherPacotes" class="d-none border rounded p-3 bg-body-secondary">
+                            <div class="small text-muted mb-2">Selecione um ou mais pacotes:</div>
+                            <div class="row row-cols-1 row-cols-sm-2 g-2">
+                                {% for p in pacotes_mensalidades %}
+                                <div class="col">
+                                    <div class="form-check">
+                                        <input class="form-check-input js-cb-pacote" type="checkbox" name="pacotes_mensalidade_id" value="{{ p.id }}" id="pac_{{ p.id }}">
+                                        <label class="form-check-label" for="pac_{{ p.id }}">{{ p.nome }}</label>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                    {% else %}
+                    <input type="hidden" name="aplica_todos_pacotes" value="1">
+                    {% endif %}
                     <div class="col-6 col-md-2">
                         <label class="form-label fw-semibold">Início vigência</label>
                         <input type="date" name="data_inicio" class="form-control" id="data_inicio">
@@ -76,6 +101,7 @@
                         <tr>
                             <th>Aluno</th>
                             <th>Desconto</th>
+                            <th>Pacotes</th>
                             <th>Vigência</th>
                             <th class="text-end">Ação</th>
                         </tr>
@@ -92,12 +118,14 @@
                                 <span class="badge bg-secondary">R$ {{ "%.2f"|format(v.desconto_valor|float) }}</span>
                                 {% endif %}
                             </td>
+                            <td class="small">{{ v.pacotes_resumo or '—' }}</td>
                             <td>{{ v.data_inicio|data_br or '-' }} até {{ v.data_fim|data_br or '-' }}</td>
                             <td class="text-end">
                                 <button type="button" class="btn btn-sm btn-outline-primary me-1" data-bs-toggle="modal" data-bs-target="#modalEditar{{ v.id }}">
                                     <i class="bi bi-pencil"></i> Editar
                                 </button>
                                 <form method="POST" class="d-inline" onsubmit="return confirm('Cancelar este desconto? As mensalidades não pagas voltarão ao valor normal; as marcadas como paga por desconto 100% voltarão para pendente.');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                     <input type="hidden" name="acao" value="cancelar">
                                     <input type="hidden" name="aluno_id" value="{{ v.aluno_id }}">
                                     <input type="hidden" name="desconto_id" value="{{ v.desconto_id }}">
@@ -122,12 +150,14 @@
                             <span class="badge bg-secondary">R$ {{ "%.2f"|format(v.desconto_valor|float) }}</span>
                             {% endif %}
                         </p>
+                        <p class="mb-1 small text-muted">Pacotes: {{ v.pacotes_resumo or '—' }}</p>
                         <p class="mb-2 small">{{ v.data_inicio|data_br or '-' }} até {{ v.data_fim|data_br or '-' }}</p>
                         <div class="d-flex flex-column gap-1">
                             <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalEditar{{ v.id }}">
                                 <i class="bi bi-pencil"></i> Editar
                             </button>
                             <form method="POST" onsubmit="return confirm('Cancelar este desconto?');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <input type="hidden" name="acao" value="cancelar">
                                 <input type="hidden" name="aluno_id" value="{{ v.aluno_id }}">
                                 <input type="hidden" name="desconto_id" value="{{ v.desconto_id }}">
@@ -154,6 +184,7 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="acao" value="editar">
                 <input type="hidden" name="aluno_desconto_id" value="{{ v.id }}">
                 <input type="hidden" name="aluno_id" value="{{ v.aluno_id }}">
@@ -179,6 +210,32 @@
                         <label class="form-label fw-semibold">Fim vigência</label>
                         <input type="date" name="data_fim" class="form-control" value="{{ (v.data_fim|string)[:10] if v.data_fim else '' }}">
                     </div>
+                    {% if pacotes_mensalidades and pacotes_mensalidades|length > 0 %}
+                    <div class="mb-3 js-edit-pacotes-modal">
+                        <input type="hidden" name="aplica_todos_pacotes" class="js-edit-fld-todos" value="{% if v.aplica_todos_pacotes %}1{% else %}0{% endif %}">
+                        <div class="form-check mb-2">
+                            <input class="form-check-input js-edit-chk-todos" type="checkbox" id="editChkTodos{{ v.id }}" {% if v.aplica_todos_pacotes %}checked{% endif %}>
+                            <label class="form-check-label fw-semibold" for="editChkTodos{{ v.id }}">Aplicar a todos os pacotes</label>
+                        </div>
+                        <div class="js-edit-bloco-pacotes border rounded p-2 bg-body-secondary {% if v.aplica_todos_pacotes %}d-none{% endif %}">
+                            <div class="small text-muted mb-2">Pacotes do desconto:</div>
+                            <div class="row row-cols-1 g-1">
+                                {% for p in pacotes_mensalidades %}
+                                <div class="col">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="pacotes_mensalidade_id" value="{{ p.id }}"
+                                               id="edit_pac_{{ v.id }}_{{ p.id }}"
+                                               {% if p.id in (v.pacotes_ids_list or []) %}checked{% endif %}>
+                                        <label class="form-check-label" for="edit_pac_{{ v.id }}_{{ p.id }}">{{ p.nome }}</label>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                    {% else %}
+                    <input type="hidden" name="aplica_todos_pacotes" value="1">
+                    {% endif %}
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
@@ -261,6 +318,49 @@
             alert('Selecione um aluno.');
             return false;
         }
+        var fldTodos = document.getElementById('fldAplicaTodos');
+        var chkTodos = document.getElementById('chkTodosPacotes');
+        if (fldTodos && chkTodos && !chkTodos.checked) {
+            var marcados = document.querySelectorAll('.js-cb-pacote:checked');
+            if (!marcados.length) {
+                e.preventDefault();
+                alert('Selecione ao menos um pacote ou marque \"Aplicar a todos os pacotes\".');
+                return false;
+            }
+        }
+    });
+
+    (function pacotesUi() {
+        var fldTodos = document.getElementById('fldAplicaTodos');
+        var chkTodos = document.getElementById('chkTodosPacotes');
+        var bloco = document.getElementById('blocoEscolherPacotes');
+        if (!fldTodos || !chkTodos || !bloco) return;
+        function sync() {
+            var todos = chkTodos.checked;
+            fldTodos.value = todos ? '1' : '0';
+            bloco.classList.toggle('d-none', todos);
+            if (todos) {
+                bloco.querySelectorAll('.js-cb-pacote').forEach(function (c) { c.checked = false; });
+            }
+        }
+        chkTodos.addEventListener('change', sync);
+        sync();
+    })();
+
+    document.querySelectorAll('.js-edit-pacotes-modal').forEach(function (wrap) {
+        var fld = wrap.querySelector('.js-edit-fld-todos');
+        var chk = wrap.querySelector('.js-edit-chk-todos');
+        var bloco = wrap.querySelector('.js-edit-bloco-pacotes');
+        if (!fld || !chk || !bloco) return;
+        function syncEdit() {
+            var todos = chk.checked;
+            fld.value = todos ? '1' : '0';
+            bloco.classList.toggle('d-none', todos);
+            if (todos) {
+                bloco.querySelectorAll('input[type=\"checkbox\"][name=\"pacotes_mensalidade_id\"]').forEach(function (c) { c.checked = false; });
+            }
+        }
+        chk.addEventListener('change', syncEdit);
     });
 
     var hoje = new Date();

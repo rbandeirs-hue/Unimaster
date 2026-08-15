@@ -2,184 +2,261 @@
 {% block title %}Professores — {{ academia.nome }}{% endblock %}
 {% block content %}
 <style>
-.professor-card {
-  border-radius: 12px;
-  border: 1px solid #e9ecef;
-  transition: all 0.2s;
-  position: relative;
-}
-.professor-card:hover { border-color: #0d6efd; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
-.professor-card .status-badge {
-  position: absolute;
-  top: 0.75rem;
-  right: 0.75rem;
-  font-size: 0.7rem;
-  padding: 0.25rem 0.5rem;
-}
-.professor-foto {
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  object-fit: cover;
-  background: linear-gradient(135deg, #e9ecef 0%, #dee2e6 100%);
-  flex-shrink: 0;
-}
-.professor-foto-placeholder {
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #198754 0%, #20c997 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  font-weight: 700;
-  font-size: 1.1rem;
-  flex-shrink: 0;
-}
-.professor-card .card-body { padding-top: 2.25rem; }
-.professor-card .professor-main { display: flex; align-items: center; gap: 1rem; min-width: 0; }
-.professor-card .professor-info { flex: 1; min-width: 0; }
-.professor-card .professor-info .nome { font-weight: 600; font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 0.25rem; }
-.professor-card .professor-info .dado { font-size: 0.8rem; color: #6c757d; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.professor-card .professor-info .dado i { width: 16px; margin-right: 0.25rem; opacity: 0.8; }
-.professor-card .professor-actions { display: flex; gap: 0.35rem; flex-shrink: 0; align-items: center; }
-.professor-card .professor-actions .btn,
-.professor-card .professor-actions form .btn { width: 36px; height: 36px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; }
-@media (max-width: 575.98px) {
-  .professor-card .card-body { padding: 1rem !important; padding-top: 2.25rem !important; }
-  .professor-foto, .professor-foto-placeholder { width: 48px; height: 48px; font-size: 0.95rem; }
-  .professor-card .professor-main { flex-wrap: wrap; }
-  .professor-card .professor-actions { margin-left: auto; }
-  .professor-card .professor-actions .btn,
-  .professor-card .professor-actions form .btn { width: 40px; height: 40px; min-height: 40px; }
-}
-@media (min-width: 992px) {
-  .professores-cards { display: none; }
-  .professores-table-wrap { display: block; }
-}
-@media (max-width: 991.98px) {
-  .professores-table-wrap { display: none; }
-  .professores-cards { display: flex; }
-  .container.my-4 { padding-left: 0.75rem; padding-right: 0.75rem; }
-  .professores-cards .col-12 { padding-left: 0.5rem; padding-right: 0.5rem; }
-}
+  :root {
+    --c-surface: #fff;
+    --c-border: #e5e9f2;
+    --c-text: #1f2937;
+    --c-muted: #6b7280;
+    --c-primary: #0d6efd;
+    --c-primary-soft: #e8f1ff;
+  }
+
+  .prof-page { max-width: 1240px; margin: 0 auto; }
+
+  .prof-header {
+    background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+    border: 1px solid var(--c-border);
+    border-radius: 16px;
+    padding: 1.4rem 1.6rem;
+    margin-bottom: 1.1rem;
+    box-shadow: 0 1px 3px rgba(15,23,42,.04);
+  }
+  .prof-header h1 {
+    font-size: 1.45rem; font-weight: 700; margin: 0;
+    color: var(--c-text);
+    display: flex; align-items: center; gap: .55rem;
+  }
+  .prof-header h1 .icon-wrap {
+    width: 40px; height: 40px;
+    background: var(--c-primary-soft); color: var(--c-primary);
+    border-radius: 10px;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 1.1rem;
+  }
+  .prof-header .subtitle { font-size: .9rem; color: var(--c-muted); margin-top: .25rem; }
+  .prof-header .stats { display: flex; flex-wrap: wrap; gap: .45rem; margin-top: .65rem; }
+  .prof-chip {
+    background: var(--c-primary-soft); color: var(--c-primary);
+    padding: .35rem .8rem; border-radius: 999px;
+    font-size: .8rem; font-weight: 600;
+    display: inline-flex; align-items: center; gap: .35rem;
+  }
+  .prof-chip.alt-success { background: #ecfdf5; color: #047857; }
+  .prof-chip.alt-muted { background: #f3f4f6; color: #4b5563; }
+
+  .prof-header .btn-novo {
+    background: var(--c-primary); border: none; color: #fff;
+    padding: .65rem 1.1rem; border-radius: 10px; font-weight: 600;
+    box-shadow: 0 2px 6px rgba(13,110,253,.25);
+    text-decoration: none; display: inline-flex; align-items: center; gap: .35rem;
+    transition: transform .15s, box-shadow .15s;
+  }
+  .prof-header .btn-novo:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(13,110,253,.35); color: #fff; }
+
+  .prof-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
+    gap: .9rem;
+  }
+  .prof-card {
+    background: var(--c-surface);
+    border: 1px solid var(--c-border);
+    border-radius: 14px;
+    padding: 1.1rem 1.15rem;
+    display: flex; flex-direction: column;
+    transition: transform .15s, box-shadow .15s, border-color .15s;
+  }
+  .prof-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 18px rgba(15,23,42,.07);
+    border-color: #cfd6e2;
+  }
+  .prof-card.is-inativo { opacity: .68; }
+
+  .prof-top { display: flex; align-items: center; gap: .85rem; margin-bottom: .8rem; }
+  .prof-avatar, .prof-avatar-init {
+    width: 56px; height: 56px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    border: 2px solid #fff;
+    box-shadow: 0 0 0 1px var(--c-border);
+  }
+  .prof-avatar { object-fit: cover; }
+  .prof-avatar-init {
+    color: #fff;
+    font-weight: 700; font-size: 1.05rem;
+    display: inline-flex; align-items: center; justify-content: center;
+    text-transform: uppercase;
+  }
+  .prof-name {
+    margin: 0 0 .15rem 0; font-size: 1rem; font-weight: 700; color: var(--c-text);
+    line-height: 1.3;
+    word-break: break-word;
+  }
+  .prof-status-chip {
+    font-size: .7rem; font-weight: 600;
+    padding: .2rem .55rem; border-radius: 999px;
+    display: inline-flex; align-items: center; gap: .25rem;
+  }
+  .prof-status-chip.ativo { background: #ecfdf5; color: #047857; }
+  .prof-status-chip.inativo { background: #f3f4f6; color: #6b7280; }
+
+  .prof-info-line {
+    display: flex; align-items: center; gap: .45rem;
+    font-size: .82rem; color: var(--c-muted);
+    padding: .15rem 0;
+    word-break: break-word;
+  }
+  .prof-info-line i { color: #94a3b8; flex-shrink: 0; }
+  .prof-modalidades {
+    display: flex; flex-wrap: wrap; gap: .3rem;
+    margin-top: .55rem;
+  }
+  .prof-mod-pill {
+    font-size: .7rem; font-weight: 600;
+    background: #eef2ff; color: #4338ca;
+    border: 1px solid #c7d2fe;
+    padding: .15rem .55rem; border-radius: 999px;
+  }
+
+  .prof-actions {
+    display: flex; gap: .35rem; margin-top: auto;
+    padding-top: .85rem; border-top: 1px solid #f1f3f5;
+  }
+  .prof-actions .btn-act {
+    flex: 1;
+    border-radius: 10px;
+    padding: .5rem .65rem;
+    font-size: .82rem; font-weight: 600;
+    border: 1px solid var(--c-border); background: #fff; color: var(--c-text);
+    text-decoration: none;
+    display: inline-flex; align-items: center; justify-content: center; gap: .35rem;
+    cursor: pointer; transition: all .15s ease;
+  }
+  .prof-actions .btn-act:hover { border-color: var(--c-primary); color: var(--c-primary); background: #f8fbff; }
+  .prof-actions .btn-act.danger:hover { border-color: #dc2626; color: #b91c1c; background: #fef2f2; }
+  .prof-actions form { margin: 0; flex: 0 0 auto; }
+  .prof-actions form .btn-act { width: 42px; padding: .5rem; }
+
+  .empty-state {
+    background: var(--c-surface);
+    border: 1px dashed var(--c-border);
+    border-radius: 16px;
+    padding: 3rem 1rem;
+    text-align: center;
+    color: var(--c-muted);
+  }
+  .empty-state i.bi-people-fill { font-size: 3rem; color: #d1d5db; display: block; margin-bottom: .75rem; }
+
+  @media (max-width: 575.98px) {
+    .prof-header { padding: 1rem; border-radius: 12px; }
+    .prof-header h1 { font-size: 1.2rem; }
+    .prof-grid { grid-template-columns: 1fr; gap: .75rem; }
+  }
 </style>
 
-<div class="container my-4">
-    <div class="mb-3">
+{% set palette = ['#0d6efd','#10b981','#f59e0b','#8b5cf6','#ec4899','#06b6d4','#ef4444','#14b8a6'] %}
+
+<div class="container my-4 prof-page">
+  <div class="prof-header">
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3">
+      <div class="flex-grow-1">
         {% set back_url = url_for('academia.painel_academia', academia_id=academia_id) if academia_id else url_for('academia.painel_academia') %}
         {% include 'components/botao_voltar.html' %}
-    </div>
-
-    <div class="d-flex justify-content-between align-items-start align-items-md-center flex-wrap gap-2 mb-4">
-        <div class="min-w-0">
-            <h2 class="h4 fw-bold text-dark mb-1">Professores</h2>
-            <p class="text-muted small mb-0 text-truncate">{{ academia.nome }}</p>
+        <h1>
+          <span class="icon-wrap"><i class="bi bi-mortarboard-fill"></i></span>
+          Professores
+          {% if academia and academia.nome %}<span class="text-muted fw-normal" style="font-size:1rem;">— {{ academia.nome }}</span>{% endif %}
+        </h1>
+        <p class="subtitle mb-0">Vincule usuários como professores e gerencie suas modalidades.</p>
+        {% if professores %}
+        {% set _ativos = professores | selectattr('ativo') | list | length %}
+        {% set _inativos = professores|length - _ativos %}
+        <div class="stats">
+          <span class="prof-chip">
+            <i class="bi bi-people-fill"></i>
+            {{ professores|length }} professor{% if professores|length != 1 %}es{% endif %}
+          </span>
+          {% if _ativos %}<span class="prof-chip alt-success"><i class="bi bi-check-circle-fill"></i>{{ _ativos }} ativo{% if _ativos != 1 %}s{% endif %}</span>{% endif %}
+          {% if _inativos %}<span class="prof-chip alt-muted"><i class="bi bi-pause-circle-fill"></i>{{ _inativos }} inativo{% if _inativos != 1 %}s{% endif %}</span>{% endif %}
         </div>
-        <a href="{{ url_for('professores.cadastrar', academia_id=academia_id) }}{% if origin %}?origin={{ origin }}{% endif %}" class="btn btn-success flex-shrink-0">
-            <i class="bi bi-person-plus-fill me-1"></i><span class="d-none d-sm-inline">Vincular usuário como professor</span><span class="d-inline d-sm-none">Novo professor</span>
-        </a>
+        {% endif %}
+      </div>
+      <a href="{{ url_for('professores.cadastrar', academia_id=academia_id) }}{% if origin %}?origin={{ origin }}{% endif %}" class="btn-novo">
+        <i class="bi bi-person-plus-fill"></i>
+        <span class="d-none d-sm-inline">Vincular como professor</span>
+        <span class="d-inline d-sm-none">Novo</span>
+      </a>
     </div>
+  </div>
 
-    {% if professores %}
-    <!-- Cards (mobile/tablet) -->
-    <div class="professores-cards row g-3 mb-4">
-        {% for p in professores %}
-        <div class="col-12 col-sm-6">
-            <div class="card professor-card h-100">
-                <span class="badge status-badge {{ 'bg-success' if p.ativo else 'bg-secondary' }}">{{ 'Ativo' if p.ativo else 'Inativo' }}</span>
-                <div class="card-body d-flex flex-column p-4">
-                    <div class="professor-main">
-                        {% if p.foto_url %}
-                        <img src="{{ p.foto_url }}" class="professor-foto" alt="">
-                        {% else %}
-                        <div class="professor-foto-placeholder">{% set parts = (p.nome or 'P').split() %}{{ (parts[0][0] ~ (parts[-1][0] if parts|length > 1 else ''))|upper }}</div>
-                        {% endif %}
-                        <div class="professor-info">
-                            <h6 class="nome text-dark">{{ p.nome }}</h6>
-                            <div class="dado"><i class="bi bi-envelope"></i>{{ p.email or '—' }}</div>
-                            <div class="dado"><i class="bi bi-telephone"></i>{{ p.telefone|telefone_br or '—' }}</div>
-                            {% if p.modalidades_nomes and p.modalidades_nomes != '—' %}
-                            <div class="dado"><i class="bi bi-collection"></i>{{ p.modalidades_nomes }}</div>
-                            {% endif %}
-                        </div>
-                        <div class="professor-actions">
-                            <a href="{{ url_for('professores.editar', professor_id=p.id) }}{% if origin %}?origin={{ origin }}{% endif %}" class="btn btn-sm btn-outline-primary" title="Editar">
-                                <i class="bi bi-pencil-fill"></i>
-                            </a>
-                            <form method="post" action="{{ url_for('professores.excluir', professor_id=p.id) }}" class="d-inline m-0" onsubmit="return confirm('Excluir este professor?');">
-                                <input type="hidden" name="origin" value="{{ origin or '' }}">
-                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Excluir"><i class="bi bi-trash-fill"></i></button>
-                            </form>
-                        </div>
-                    </div>
-                </div>
-            </div>
+  {% if professores %}
+  <div class="prof-grid">
+    {% for p in professores %}
+    {% set cor = palette[(p.id or 0) % palette|length] %}
+    {% set parts = (p.nome or 'P').split() %}
+    {% set iniciais = (parts[0][0] ~ (parts[-1][0] if parts|length > 1 else ''))|upper %}
+    <article class="prof-card {% if not p.ativo %}is-inativo{% endif %}">
+      <div class="prof-top">
+        {% if p.foto_url %}
+          <img src="{{ p.foto_url }}" alt="" class="prof-avatar"
+               onerror="this.outerHTML='<span class=&quot;prof-avatar-init&quot; style=&quot;background:{{ cor }}&quot;>{{ iniciais }}</span>'">
+        {% else %}
+          <span class="prof-avatar-init" style="background: {{ cor }}">{{ iniciais }}</span>
+        {% endif %}
+        <div class="flex-grow-1 min-w-0">
+          <p class="prof-name">{{ p.nome }}</p>
+          <span class="prof-status-chip {{ 'ativo' if p.ativo else 'inativo' }}">
+            <i class="bi bi-{{ 'check-circle-fill' if p.ativo else 'pause-circle-fill' }}"></i>
+            {{ 'Ativo' if p.ativo else 'Inativo' }}
+          </span>
         </div>
+      </div>
+
+      {% if p.email %}
+      <div class="prof-info-line">
+        <i class="bi bi-envelope"></i>
+        <span>{{ p.email }}</span>
+      </div>
+      {% endif %}
+      {% if p.telefone %}
+      <div class="prof-info-line">
+        <i class="bi bi-telephone"></i>
+        <span>{{ p.telefone|telefone_br }}</span>
+      </div>
+      {% endif %}
+
+      {% if p.modalidades_nomes and p.modalidades_nomes != '—' %}
+      <div class="prof-modalidades">
+        {% for nome_mod in p.modalidades_nomes.split(', ') %}
+        <span class="prof-mod-pill">{{ nome_mod }}</span>
         {% endfor %}
-    </div>
+      </div>
+      {% endif %}
 
-    <!-- Tabela (desktop) -->
-    <div class="professores-table-wrap card shadow-sm border-0">
-        <div class="card-body p-0">
-            <div class="table-responsive">
-                <table class="table table-hover mb-0">
-                    <thead class="table-light">
-                        <tr>
-                            <th></th>
-                            <th>Nome</th>
-                            <th>Email</th>
-                            <th>Telefone</th>
-                            <th>Modalidades</th>
-                            <th class="text-center">Status</th>
-                            <th class="text-center">Ações</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for p in professores %}
-                        <tr>
-                            <td>
-                                {% if p.foto_url %}
-                                <img src="{{ p.foto_url }}" class="professor-foto" alt="" style="width:40px;height:40px;">
-                                {% else %}
-                                <div class="professor-foto-placeholder" style="width:40px;height:40px;font-size:0.9rem;">{% set parts = (p.nome or 'P').split() %}{{ (parts[0][0] ~ (parts[-1][0] if parts|length > 1 else ''))|upper }}</div>
-                                {% endif %}
-                            </td>
-                            <td>{{ p.nome }}</td>
-                            <td>{{ p.email or '-' }}</td>
-                            <td>{{ p.telefone|telefone_br }}</td>
-                            <td>{{ p.modalidades_nomes or '—' }}</td>
-                            <td class="text-center">
-                                <span class="badge {{ 'bg-success' if p.ativo else 'bg-secondary' }}">{{ 'Ativo' if p.ativo else 'Inativo' }}</span>
-                            </td>
-                            <td class="text-center">
-                                <a href="{{ url_for('professores.editar', professor_id=p.id) }}{% if origin %}?origin={{ origin }}{% endif %}" class="btn btn-sm btn-outline-primary">
-                                    <i class="bi bi-pencil-fill"></i> Editar
-                                </a>
-                                <form method="post" action="{{ url_for('professores.excluir', professor_id=p.id) }}" class="d-inline" onsubmit="return confirm('Excluir este professor?');">
-                                    <input type="hidden" name="origin" value="{{ origin or '' }}">
-                                    <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash-fill"></i> Excluir</button>
-                                </form>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-    {% else %}
-    <div class="card shadow-sm border-0">
-        <div class="card-body p-4 p-md-5 text-center text-muted">
-            <i class="bi bi-people display-4 mb-3"></i>
-            <p class="mb-2">Nenhum professor vinculado nesta academia.</p>
-            <p class="small mb-3">Vincule um usuário do sistema como professor para começar.</p>
-            <a href="{{ url_for('professores.cadastrar', academia_id=academia_id) }}{% if origin %}?origin={{ origin }}{% endif %}" class="btn btn-success">
-                <i class="bi bi-person-plus me-1"></i> Vincular usuário como professor
-            </a>
-        </div>
-    </div>
-    {% endif %}
+      <div class="prof-actions">
+        <a href="{{ url_for('professores.editar', professor_id=p.id) }}{% if origin %}?origin={{ origin }}{% endif %}" class="btn-act">
+          <i class="bi bi-pencil-fill"></i> Editar
+        </a>
+        <form method="post" action="{{ url_for('professores.excluir', professor_id=p.id) }}"
+              onsubmit="return confirm('Excluir o professor {{ p.nome }}?');">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="origin" value="{{ origin or '' }}">
+          <button type="submit" class="btn-act danger" title="Excluir"><i class="bi bi-trash-fill"></i></button>
+        </form>
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <i class="bi bi-people-fill"></i>
+    <p class="fw-semibold mb-1" style="color: var(--c-text);">Nenhum professor vinculado</p>
+    <p class="small mb-3">Vincule um usuário do sistema como professor para começar a montar turmas.</p>
+    <a href="{{ url_for('professores.cadastrar', academia_id=academia_id) }}{% if origin %}?origin={{ origin }}{% endif %}" class="btn btn-primary">
+      <i class="bi bi-person-plus-fill me-1"></i> Vincular usuário
+    </a>
+  </div>
+  {% endif %}
 </div>
 {% endblock %}

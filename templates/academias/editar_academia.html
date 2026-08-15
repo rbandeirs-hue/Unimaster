@@ -17,6 +17,7 @@
         </div>
         <div class="card-body p-4">
             <form method="POST" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="next" value="{{ back_url }}">
                 <div class="mb-4">
                     <label for="logo" class="form-label fw-semibold">Logo da Academia</label>
@@ -150,6 +151,119 @@
                 {% endfor %}
                 {% endif %}
 
+                <hr class="my-4">
+                <div class="mb-3">
+                    <h6 class="fw-semibold mb-0"><i class="bi bi-person-badge me-2"></i>Gestor responsável da Academia</h6>
+                    <p class="small text-muted mb-0">O responsável da academia é este usuário. Trocá-lo substitui o gestor atual.</p>
+                </div>
+
+                {% for g in gestores %}
+                {% set eh_responsavel = academia.responsavel and academia.responsavel|trim == g.nome|trim %}
+                <div class="border rounded p-3 mb-2 {{ 'bg-primary-subtle border-primary' if eh_responsavel else 'bg-light' }} d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <div>
+                        <div class="fw-semibold">
+                            <i class="bi {{ 'bi-person-check-fill text-primary' if eh_responsavel else 'bi-person' }} me-1"></i>{{ g.nome }}
+                            {% if eh_responsavel %}<span class="badge bg-primary ms-1">responsável</span>{% endif %}
+                        </div>
+                        {% if g.email %}<div class="small text-muted">{{ g.email }}</div>{% endif %}
+                    </div>
+                    <div class="d-flex flex-wrap gap-1">
+                        {% if not eh_responsavel %}
+                        <button type="submit" class="btn btn-outline-primary btn-sm" form="resp_{{ g.id }}"
+                                title="Tornar responsável">
+                            <i class="bi bi-star me-1"></i>Responsável
+                        </button>
+                        {% endif %}
+                        <a href="{{ url_for('usuarios.editar_usuario', user_id=g.id, next=request.full_path) }}" class="btn btn-outline-secondary btn-sm">
+                            <i class="bi bi-pencil-square"></i>
+                        </a>
+                        <button type="submit" class="btn btn-outline-danger btn-sm" form="rem_{{ g.id }}"
+                                title="Remover gestor" onclick="return confirm('Remover {{ g.nome }} da gestão desta academia?');">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
+                </div>
+                {% else %}
+                <p class="small text-warning"><i class="bi bi-exclamation-triangle me-1"></i>Esta academia ainda não tem um gestor responsável.</p>
+                {% endfor %}
+
+                {# Trocar/definir o gestor: busca um usuário existente e o vincula. #}
+                <input type="hidden" name="gestor_usuario_id" id="gestor_usuario_id" value="">
+                <div class="mt-2 mb-3">
+                    <label for="gestorBuscaInput" class="form-label fw-semibold">
+                        {% if gestores %}Trocar por outro usuário{% else %}Definir gestor responsável{% endif %}
+                    </label>
+                    <div class="position-relative" style="max-width:520px;">
+                        <input type="text" id="gestorBuscaInput" class="form-control"
+                               placeholder="Digite nome, e-mail ou CPF do usuário…" autocomplete="off">
+                        <div id="gestorBuscaResultados" class="list-group position-absolute w-100 shadow-sm"
+                             style="z-index:1050; max-height:260px; overflow-y:auto; display:none;"></div>
+                    </div>
+                    <div id="gestorSelecionado" class="alert alert-success d-flex justify-content-between align-items-center mt-2 mb-0 py-2 px-3" style="display:none; max-width:520px;">
+                        <span><i class="bi bi-person-check me-1"></i><span id="gestorSelecionadoTexto"></span></span>
+                        <button type="button" class="btn-close" id="gestorLimparSelecao" aria-label="Remover"></button>
+                    </div>
+                    <small class="text-muted d-block mt-1">Ao salvar, este usuário passa a ser o responsável e o anterior deixa de gerenciar a academia.</small>
+                </div>
+
+                <script>
+                (function () {
+                    var URL_BUSCA = "{{ url_for('associacao.buscar_usuarios_gestor') }}";
+                    var input = document.getElementById('gestorBuscaInput');
+                    var box = document.getElementById('gestorBuscaResultados');
+                    var hidden = document.getElementById('gestor_usuario_id');
+                    var sel = document.getElementById('gestorSelecionado');
+                    var selTxt = document.getElementById('gestorSelecionadoTexto');
+                    var limpar = document.getElementById('gestorLimparSelecao');
+                    var t = null;
+
+                    function esconder() { box.style.display = 'none'; box.innerHTML = ''; }
+
+                    input.addEventListener('input', function () {
+                        var q = input.value.trim();
+                        clearTimeout(t);
+                        hidden.value = '';
+                        if (q.length < 2) { esconder(); return; }
+                        t = setTimeout(function () {
+                            fetch(URL_BUSCA + '?q=' + encodeURIComponent(q))
+                                .then(function (r) { return r.json(); })
+                                .then(function (d) {
+                                    if (!d.ok || !d.usuarios || !d.usuarios.length) {
+                                        box.innerHTML = '<div class="list-group-item text-muted small">Nenhum usuário encontrado.</div>';
+                                        box.style.display = 'block'; return;
+                                    }
+                                    box.innerHTML = '';
+                                    d.usuarios.forEach(function (u) {
+                                        var a = document.createElement('button');
+                                        a.type = 'button';
+                                        a.className = 'list-group-item list-group-item-action';
+                                        a.innerHTML = '<strong>' + u.nome + '</strong>' +
+                                            (u.email ? '<br><span class="small text-muted">' + u.email + '</span>' : '') +
+                                            (u.cpf ? '<span class="small text-muted"> · ' + u.cpf + '</span>' : '');
+                                        a.onclick = function () {
+                                            hidden.value = u.id;
+                                            selTxt.textContent = u.nome + (u.email ? ' (' + u.email + ')' : '');
+                                            sel.style.display = 'flex';
+                                            input.value = '';
+                                            esconder();
+                                        };
+                                        box.appendChild(a);
+                                    });
+                                    box.style.display = 'block';
+                                })
+                                .catch(esconder);
+                        }, 300);
+                    });
+
+                    limpar.addEventListener('click', function () {
+                        hidden.value = ''; sel.style.display = 'none';
+                    });
+                    document.addEventListener('click', function (e) {
+                        if (!box.contains(e.target) && e.target !== input) esconder();
+                    });
+                })();
+                </script>
+
                 <div class="d-flex justify-content-between pt-2">
                     {% set back_url = back_url or get_back_url_default() %}
 {% include 'components/botao_voltar.html' %}
@@ -161,6 +275,23 @@
         </div>
     </div>
 </div>
+
+{# Ações por gestor (definir responsável / remover): fora do <form> principal
+   para não salvar o cadastro junto nem aninhar formulários. #}
+{% for g in gestores %}
+  <form id="resp_{{ g.id }}" method="POST" class="d-none"
+        action="{{ url_for('associacao.definir_gestor_responsavel', academia_id=academia.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="usuario_id" value="{{ g.id }}">
+    <input type="hidden" name="next" value="{{ request.full_path }}">
+  </form>
+  <form id="rem_{{ g.id }}" method="POST" class="d-none"
+        action="{{ url_for('associacao.remover_gestor', academia_id=academia.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="usuario_id" value="{{ g.id }}">
+    <input type="hidden" name="next" value="{{ request.full_path }}">
+  </form>
+{% endfor %}
 {% endblock %}
 {% block extra_js %}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
@@ -199,6 +330,20 @@ function aplicarMascaraTelefone(input) {
 document.querySelectorAll('input[data-mask="phone"]').forEach(function (el) {
     el.addEventListener('input', function () {
         aplicarMascaraTelefone(this);
+    });
+});
+
+// Máscara de CPF
+function aplicarMascaraCPF(input) {
+    let v = input.value.replace(/\D/g, '').slice(0, 11);
+    if (v.length > 9)      v = `${v.slice(0,3)}.${v.slice(3,6)}.${v.slice(6,9)}-${v.slice(9)}`;
+    else if (v.length > 6) v = `${v.slice(0,3)}.${v.slice(3,6)}.${v.slice(6)}`;
+    else if (v.length > 3) v = `${v.slice(0,3)}.${v.slice(3)}`;
+    input.value = v;
+}
+document.querySelectorAll('input[data-mask="cpf"]').forEach(function (el) {
+    el.addEventListener('input', function () {
+        aplicarMascaraCPF(this);
     });
 });
 

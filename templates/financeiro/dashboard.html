@@ -60,12 +60,12 @@
             </div>
         </div>
         <div class="col-12 col-sm-6 col-lg-4 col-xl-3">
-            <div class="card shadow-sm border-info card-hover financeiro-dash-card h-100">
+            <div class="card shadow-sm card-hover financeiro-dash-card h-100 {{ 'border-danger' if mes_eh_passado else 'border-info' }}">
                 <div class="card-body text-center py-4 px-4 d-flex flex-column align-items-center justify-content-center">
-                    <i class="bi bi-calendar-check fs-1 mb-2 text-info"></i>
-                    <h6 class="fw-bold mb-2">Projeção</h6>
-                    <span class="h4 fw-bold text-info">R$ {{ "%.2f" % (projecao or 0) }}</span>
-                    <small class="text-muted mt-1">Mensalidades não pagas</small>
+                    <i class="bi fs-1 mb-2 {{ 'bi-exclamation-triangle text-danger' if mes_eh_passado else 'bi-calendar-check text-info' }}"></i>
+                    <h6 class="fw-bold mb-2">{{ 'Em Atraso' if mes_eh_passado else 'Projeção' }}</h6>
+                    <span class="h4 fw-bold {{ 'text-danger' if mes_eh_passado else 'text-info' }}">R$ {{ "%.2f" % (projecao or 0) }}</span>
+                    <small class="mt-1 {{ 'text-danger' if mes_eh_passado else 'text-muted' }}">{{ 'Mensalidades não pagas' if mes_eh_passado else 'Mensalidades a receber' }}</small>
                 </div>
             </div>
         </div>
@@ -132,6 +132,11 @@
                 <div class="col-12 col-sm-6 col-md-4">
                     <a href="{{ url_for('financeiro.lista_despesas', academia_id=academia_id) }}" class="btn btn-outline-danger w-100">
                         <i class="bi bi-cash-stack me-2"></i> Despesas
+                    </a>
+                </div>
+                <div class="col-12 col-sm-6 col-md-4">
+                    <a href="{{ url_for('financeiro.relatorios', academia_id=academia_id) }}" class="btn btn-outline-primary w-100">
+                        <i class="bi bi-file-earmark-bar-graph me-2"></i> Relatórios
                     </a>
                 </div>
             </div>

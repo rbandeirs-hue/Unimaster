@@ -4,150 +4,408 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Pré-cadastro — {{ academia_nome }}</title>
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/photo-cropper.css') }}">
     <style>
-        .camera-modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.9);z-index:9999;justify-content:center;align-items:center;}
-        .camera-modal.show{display:flex;}
-        .camera-content{width:90%;max-width:480px;text-align:center;}
-        .camera-content video,.camera-content canvas{width:100%;border-radius:10px;border:2px solid #ddd;margin-bottom:10px;}
-        #miniatura{width:120px;height:120px;object-fit:cover;border-radius:50%;border:3px solid #0d6efd;}
-        .cam-btns button{margin:4px;}
+      :root {
+        --c-bg: #f5f7fb;
+        --c-surface: #ffffff;
+        --c-border: #e5e9f2;
+        --c-text: #1f2937;
+        --c-muted: #6b7280;
+        --c-primary: #0d6efd;
+        --c-primary-soft: #e8f1ff;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "Inter", system-ui, -apple-system, sans-serif;
+        color: var(--c-text);
+        background:
+          radial-gradient(900px 400px at 100% -10%, rgba(13,110,253,.07), transparent 60%),
+          radial-gradient(700px 360px at -10% 30%, rgba(139,92,246,.06), transparent 60%),
+          var(--c-bg);
+        -webkit-font-smoothing: antialiased;
+      }
+
+      .form-page { max-width: 880px; margin: 0 auto; padding: 1.25rem 1rem 3rem; }
+
+      .form-page-header {
+        background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+        border: 1px solid var(--c-border);
+        border-radius: 16px;
+        padding: 1.4rem 1.6rem;
+        margin-bottom: 1.1rem;
+        display: flex; align-items: center; gap: 1rem;
+        box-shadow: 0 1px 3px rgba(15,23,42,.04);
+      }
+      .form-page-header .ic {
+        width: 52px; height: 52px;
+        background: var(--c-primary-soft); color: var(--c-primary);
+        border-radius: 12px;
+        display: inline-flex; align-items: center; justify-content: center;
+        font-size: 1.4rem; flex-shrink: 0;
+      }
+      .form-page-header h1 {
+        font-size: 1.4rem; font-weight: 700; margin: 0; color: var(--c-text);
+      }
+      .form-page-header .subtitle {
+        font-size: .9rem; color: var(--c-muted); margin: .15rem 0 0;
+      }
+
+      .section-card {
+        background: var(--c-surface);
+        border: 1px solid var(--c-border);
+        border-radius: 16px;
+        padding: 1.35rem 1.5rem;
+        margin-bottom: 1.1rem;
+        box-shadow: 0 1px 3px rgba(15,23,42,.04);
+      }
+      .section-title {
+        display: flex; align-items: center; gap: .55rem;
+        font-size: .9rem; font-weight: 700;
+        color: var(--c-text);
+        text-transform: uppercase; letter-spacing: .04em;
+        margin-bottom: 1rem; padding-bottom: .65rem;
+        border-bottom: 1px solid var(--c-border);
+      }
+      .section-title i { color: var(--c-primary); font-size: 1rem; }
+      .section-help {
+        font-size: .82rem; color: var(--c-muted);
+        margin: -.4rem 0 .8rem 0;
+      }
+
+      .form-label { color: #374151; font-weight: 600; font-size: .88rem; margin-bottom: .35rem; }
+      .form-label .req { color: #dc2626; margin-left: 2px; }
+      .form-control, .form-select {
+        border-radius: 10px;
+        border: 1px solid var(--c-border);
+        padding: .6rem .85rem;
+        background: #f9fafb;
+        font-size: .95rem;
+        transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
+      }
+      .form-control:focus, .form-select:focus {
+        border-color: var(--c-primary);
+        box-shadow: 0 0 0 3px rgba(13,110,253,.15);
+        background: #fff;
+        outline: none;
+      }
+      .input-icon-wrap { position: relative; }
+      .input-icon-wrap > i {
+        position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+        color: var(--c-muted); pointer-events: none; font-size: 1rem; z-index: 2;
+      }
+      .input-icon-wrap > .form-control { padding-left: 2.4rem; }
+      .form-text-help {
+        font-size: .78rem; color: var(--c-muted); margin-top: .3rem;
+      }
+
+      /* Foto */
+      .photo-row {
+        display: flex; align-items: center; gap: 1.25rem; flex-wrap: wrap;
+      }
+      .photo-frame {
+        position: relative;
+        width: 130px; height: 130px;
+        border-radius: 50%;
+        flex-shrink: 0;
+        background: linear-gradient(135deg, var(--c-primary-soft), #fdf2f8);
+        padding: 4px;
+        box-shadow: 0 0 0 1px var(--c-border);
+      }
+      .photo-frame > img,
+      .photo-frame > .placeholder {
+        width: 100%; height: 100%;
+        border-radius: 50%;
+        object-fit: cover;
+        background: #f3f4f6;
+        border: 3px solid #fff;
+        display: block;
+      }
+      .photo-frame > .placeholder {
+        display: flex; align-items: center; justify-content: center;
+        color: #9ca3af; font-size: 2.5rem;
+      }
+      .photo-actions { display: flex; flex-direction: column; gap: .5rem; flex: 1 1 200px; }
+      .photo-actions .photo-btn {
+        display: inline-flex; align-items: center; gap: .4rem; justify-content: center;
+        padding: .55rem .9rem; border-radius: 10px;
+        font-weight: 600; font-size: .88rem; cursor: pointer;
+        border: 1px solid var(--c-border); background: #fff; color: var(--c-text);
+        text-decoration: none;
+        transition: all .15s ease;
+      }
+      .photo-actions .photo-btn:hover { border-color: var(--c-primary); color: var(--c-primary); background: #f8fbff; }
+      .photo-actions .photo-btn.primary { background: var(--c-primary); color: #fff; border-color: var(--c-primary); }
+      .photo-actions .photo-btn.primary:hover { background: #0856c5; border-color: #0856c5; }
+
+      /* Toggle "responsável é o próprio" */
+      .toggle-card {
+        display: flex; align-items: center; gap: .75rem;
+        padding: .75rem .9rem;
+        background: #f9fafb;
+        border: 1px solid var(--c-border);
+        border-radius: 12px;
+        cursor: pointer;
+        margin-bottom: 1rem;
+        transition: all .15s ease;
+      }
+      .toggle-card:hover { background: #f3f4f6; }
+      .toggle-card.checked { background: #ecfdf5; border-color: #10b981; }
+      .toggle-card input { position: absolute; opacity: 0; pointer-events: none; }
+      .toggle-card .toggle-switch {
+        width: 36px; height: 20px; border-radius: 999px;
+        background: #cbd5e1;
+        position: relative; flex-shrink: 0;
+        transition: background .15s ease;
+      }
+      .toggle-card .toggle-switch::after {
+        content: ""; position: absolute;
+        top: 2px; left: 2px;
+        width: 16px; height: 16px;
+        border-radius: 50%;
+        background: #fff;
+        box-shadow: 0 1px 2px rgba(15,23,42,.2);
+        transition: left .18s ease;
+      }
+      .toggle-card.checked .toggle-switch { background: #10b981; }
+      .toggle-card.checked .toggle-switch::after { left: 18px; }
+      .toggle-card .toggle-label { font-weight: 600; font-size: .9rem; color: var(--c-text); }
+      .toggle-card .toggle-desc { font-size: .78rem; color: var(--c-muted); margin-top: .1rem; }
+
+      /* Submit */
+      .submit-card { display: flex; flex-wrap: wrap; gap: .6rem; justify-content: flex-end; }
+      .btn-submit {
+        background: var(--c-primary); color: #fff; border: none;
+        padding: .8rem 1.6rem;
+        border-radius: 12px;
+        font-weight: 700; font-size: 1rem;
+        cursor: pointer;
+        box-shadow: 0 4px 12px rgba(13,110,253,.28);
+        transition: all .15s ease;
+        display: inline-flex; align-items: center; gap: .5rem;
+      }
+      .btn-submit:hover { box-shadow: 0 6px 18px rgba(13,110,253,.4); transform: translateY(-1px); }
+      .btn-submit:active { transform: translateY(0); }
+
+      .alert {
+        border-radius: 12px;
+        font-size: .9rem;
+      }
+
+      /* Camera modal */
+      .camera-modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.92);z-index:9999;justify-content:center;align-items:center;padding: 1rem;}
+      .camera-modal.show{display:flex;}
+      .camera-content{width:100%;max-width:480px;text-align:center;}
+      .camera-content video,.camera-content canvas{width:100%;border-radius:14px;border:2px solid #2d3748;margin-bottom:.75rem;background:#000;}
+      .cam-btns { display: flex; flex-wrap: wrap; gap: .35rem; justify-content: center; }
+      .cam-btns button{margin: 0;}
+
+      @media (max-width: 575.98px) {
+        .form-page-header { padding: 1rem 1.1rem; flex-direction: column; align-items: flex-start; border-radius: 12px; }
+        .section-card { padding: 1rem; border-radius: 12px; }
+        .form-page-header h1 { font-size: 1.2rem; }
+        .submit-card { justify-content: stretch; }
+        .submit-card .btn-submit { flex: 1 1 100%; justify-content: center; }
+      }
     </style>
 </head>
-<body class="bg-light">
-<div class="container py-5">
-    <div class="row justify-content-center">
-        <div class="col-lg-8">
-            <div class="card shadow">
-                <div class="card-header bg-primary text-white text-center py-3">
-                    <h5 class="mb-0"><i class="bi bi-person-plus-fill me-2"></i> Pré-cadastro — {{ academia_nome }}</h5>
-                    <p class="mb-0 small opacity-90">Preencha os dados para iniciar o cadastro</p>
-                </div>
-                <div class="card-body p-4">
-                    {% with messages = get_flashed_messages(with_categories=true) %}
-                    {% if messages %}
-                        {% for cat, msg in messages %}
-                        <div class="alert alert-{{ cat }} alert-dismissible fade show">{{ msg }}
-                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>
-                        {% endfor %}
-                    {% endif %}
-                    {% endwith %}
-                    {% if sucesso %}
-                    <div class="alert alert-success">
-                        <i class="bi bi-check-circle-fill me-2"></i>Pré-cadastro realizado com sucesso! Em breve a academia entrará em contato.
-                    </div>
-                    <a href="{{ url_for('precadastro.form_publico', academia_slug=academia_slug) }}" class="btn btn-outline-primary">Fazer outro pré-cadastro</a>
-                    {% else %}
-                    <form method="POST" enctype="multipart/form-data" id="formPrecad">
-                        <h6 class="border-bottom pb-2 mb-3 text-secondary fw-bold"><i class="bi bi-person-badge me-1"></i> Dados do aluno</h6>
-                        <div class="row g-2">
-                            <div class="col-md-12 mb-3">
-                                <label class="form-label fw-semibold">Nome completo *</label>
-                                <input type="text" class="form-control" name="nome" required value="{{ form.get('nome','') }}">
-                            </div>
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label fw-semibold">Data de nascimento</label>
-                                <input type="date" class="form-control" name="data_nascimento" id="dataNasc" value="{{ form.get('data_nascimento','') }}">
-                            </div>
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label fw-semibold">Sexo</label>
-                                <select class="form-select" name="sexo">
-                                    <option value="">Selecione</option>
-                                    <option value="M" {% if form.get('sexo')=='M' %}selected{% endif %}>Masculino</option>
-                                    <option value="F" {% if form.get('sexo')=='F' %}selected{% endif %}>Feminino</option>
-                                    <option value="O" {% if form.get('sexo')=='O' %}selected{% endif %}>Outro</option>
-                                </select>
-                            </div>
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label fw-semibold">CPF do aluno</label>
-                                <input type="text" class="form-control" name="cpf" id="cpfAluno" data-mask="cpf" placeholder="000.000.000-00" value="{{ form.get('cpf','') }}">
-                            </div>
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label fw-semibold">Telefone</label>
-                                <input type="text" class="form-control" name="telefone" id="telAluno" data-mask="phone" placeholder="(11) 99999-9999" value="{{ form.get('telefone','') }}">
-                            </div>
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label fw-semibold">E-mail</label>
-                                <input type="email" class="form-control" name="email" id="emailInput" placeholder="email@exemplo.com" value="{{ form.get('email','') }}">
-                                <div class="invalid-feedback" id="emailFeedback" style="display:none;">
-                                    Este e-mail já está cadastrado. Por favor, utilize outro e-mail.
-                                </div>
-                            </div>
-                        </div>
+<body>
+<div class="form-page">
 
-                        <h6 class="border-bottom pb-2 mb-3 mt-4 text-secondary fw-bold"><i class="bi bi-camera-fill me-1"></i> Foto</h6>
-                        <div class="d-flex align-items-center gap-3 mb-3">
-                            <div class="position-relative" style="width:120px;height:120px;flex-shrink:0;">
-                                <img id="miniatura" src="" alt="" class="d-none position-absolute top-0 start-0 rounded-circle" style="width:120px;height:120px;object-fit:cover;border:3px solid #0d6efd;">
-                                <div id="miniaturaPlaceholder" class="position-absolute top-0 start-0 rounded-circle bg-secondary d-flex align-items-center justify-content-center text-white" style="width:120px;height:120px;"><i class="bi bi-person-fill fs-1"></i></div>
-                            </div>
-                            <div class="flex-grow-1">
-                                <input type="hidden" name="foto" id="fotoInput">
-                                <button type="button" class="btn btn-primary btn-sm mb-2" id="btnCamera"><i class="bi bi-camera-fill me-1"></i> Câmera</button>
-                                <input type="file" class="form-control form-control-sm" name="foto_arquivo" id="fotoArquivoPrecad" accept="image/*">
-                            </div>
-                        </div>
-
-                        <h6 class="border-bottom pb-2 mb-3 mt-4 text-secondary fw-bold"><i class="bi bi-shield-lock me-1"></i> Acesso ao sistema</h6>
-                        <p class="small text-muted">Quem terá acesso à área do aluno no sistema?</p>
-                        <div class="mb-3">
-                            <div class="form-check">
-                                <input class="form-check-input" type="radio" name="acesso_sistema" id="acessoAluno" value="aluno" {% if form.get('acesso_sistema','aluno')=='aluno' %}checked{% endif %}>
-                                <label class="form-check-label" for="acessoAluno">O próprio aluno (maior de idade ou responsável fará o cadastro)</label>
-                            </div>
-                            <div class="form-check">
-                                <input class="form-check-input" type="radio" name="acesso_sistema" id="acessoResp" value="responsavel" {% if form.get('acesso_sistema')=='responsavel' %}checked{% endif %}>
-                                <label class="form-check-label" for="acessoResp">O responsável (menor de idade — responsável terá o acesso)</label>
-                            </div>
-                        </div>
-                        <div id="blocoEmailAcesso" class="mb-3" style="display:{% if form.get('acesso_sistema')=='responsavel' %}block{% else %}none{% endif %};">
-                            <label class="form-label fw-semibold">E-mail para criar acesso *</label>
-                            <input type="email" class="form-control" name="email_acesso" id="emailAcesso" placeholder="email@exemplo.com" value="{{ form.get('email_acesso', form.get('email','')) }}">
-                            <div class="invalid-feedback" id="emailAcessoFeedback" style="display:none;">
-                                Este e-mail já está cadastrado. Por favor, utilize outro e-mail.
-                            </div>
-                            <small class="text-muted">Será usado para login no sistema (quem terá o acesso).</small>
-                        </div>
-
-                        <h6 class="border-bottom pb-2 mb-3 mt-4 text-secondary fw-bold"><i class="bi bi-cash-coin me-1"></i> Responsável financeiro</h6>
-                        <p class="small text-muted">Para alunos menores ou quando outra pessoa é responsável pelas mensalidades.</p>
-                        <div class="form-check mb-2">
-                            <input class="form-check-input" type="checkbox" name="responsavel_eh_proprio" id="respProprio" value="1" {% if form.get('responsavel_eh_proprio')=='1' %}checked{% endif %}>
-                            <label class="form-check-label" for="respProprio"><strong>O responsável financeiro sou eu (o próprio aluno)</strong></label>
-                        </div>
-                        <div id="blocoRespFinanceiro">
-                            <div class="row g-2">
-                                <div class="col-md-6 mb-3">
-                                    <label class="form-label fw-semibold">Nome do responsável financeiro</label>
-                                    <input type="text" class="form-control" name="responsavel_financeiro_nome" id="respNome" value="{{ form.get('responsavel_financeiro_nome','') }}">
-                                </div>
-                                <div class="col-md-6 mb-3">
-                                    <label class="form-label fw-semibold">CPF do responsável financeiro</label>
-                                    <input type="text" class="form-control" name="responsavel_financeiro_cpf" id="respCpf" data-mask="cpf" placeholder="000.000.000-00" value="{{ form.get('responsavel_financeiro_cpf','') }}">
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold">Observações</label>
-                            <textarea class="form-control" name="observacoes" rows="2">{{ form.get('observacoes','') }}</textarea>
-                        </div>
-
-                        <button type="submit" class="btn btn-primary w-100">
-                            <i class="bi bi-send me-2"></i> Enviar pré-cadastro
-                        </button>
-                            {% set back_url = back_url or get_back_url_default() %}
-{% include 'components/botao_voltar.html' %}
-    </form>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
+  <div class="form-page-header">
+    <div class="ic"><i class="bi bi-person-plus-fill"></i></div>
+    <div class="flex-grow-1">
+      <h1>Pré-cadastro</h1>
+      <p class="subtitle">Preencha seus dados — em seguida a {{ academia_nome }} entrará em contato.</p>
     </div>
+  </div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    {% for cat, msg in messages %}
+    <div class="alert alert-{{ cat }} alert-dismissible fade show">{{ msg }}
+      <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endfor %}
+  {% endif %}
+  {% endwith %}
+
+  {% if sucesso %}
+  <div class="section-card text-center">
+    <div style="width:72px;height:72px;background:#ecfdf5;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;margin-bottom:1rem;">
+      <i class="bi bi-check-circle-fill" style="font-size:2rem;color:#10b981;"></i>
+    </div>
+    <h2 style="font-size:1.25rem;font-weight:700;margin-bottom:.5rem;">Pré-cadastro enviado!</h2>
+    <p style="color:var(--c-muted);margin-bottom:1.25rem;">Em breve a {{ academia_nome }} entrará em contato com você.</p>
+    <a href="{{ url_for('precadastro.form_publico', academia_slug=academia_slug) }}" class="photo-btn" style="display:inline-flex;">
+      <i class="bi bi-arrow-clockwise"></i> Fazer outro pré-cadastro
+    </a>
+  </div>
+  {% else %}
+
+  <form method="POST" enctype="multipart/form-data" id="formPrecad">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <!-- IDENTIFICAÇÃO -->
+    <div class="section-card">
+      <div class="section-title"><i class="bi bi-person-vcard"></i> Dados do aluno</div>
+      <div class="row g-3">
+        <div class="col-12">
+          <label class="form-label" for="nomeInput">Nome completo <span class="req">*</span></label>
+          <div class="input-icon-wrap">
+            <i class="bi bi-person"></i>
+            <input id="nomeInput" type="text" class="form-control" name="nome" required value="{{ form.get('nome','') }}" placeholder="Seu nome completo">
+          </div>
+        </div>
+        <div class="col-12 col-md-6">
+          <label class="form-label" for="dataNasc">Data de nascimento</label>
+          <div class="input-icon-wrap">
+            <i class="bi bi-calendar2-event"></i>
+            <input type="date" class="form-control" name="data_nascimento" id="dataNasc" value="{{ form.get('data_nascimento','') }}">
+          </div>
+        </div>
+        <div class="col-12 col-md-6">
+          <label class="form-label">Sexo</label>
+          <div class="input-icon-wrap">
+            <i class="bi bi-gender-ambiguous"></i>
+            <select class="form-control" name="sexo">
+              <option value="">Selecione…</option>
+              <option value="M" {% if form.get('sexo')=='M' %}selected{% endif %}>Masculino</option>
+              <option value="F" {% if form.get('sexo')=='F' %}selected{% endif %}>Feminino</option>
+              <option value="O" {% if form.get('sexo')=='O' %}selected{% endif %}>Outro</option>
+            </select>
+          </div>
+        </div>
+        <div class="col-12 col-md-6">
+          <label class="form-label">Graduação</label>
+          <div class="input-icon-wrap">
+            <i class="bi bi-award"></i>
+            <select class="form-control" name="graduacao_id">
+              <option value="">Selecione…</option>
+              {% for g in graduacoes or [] %}
+              <option value="{{ g.id }}" {% if form.get('graduacao_id') == (g.id|string) %}selected{% endif %}>
+                {{ g.faixa }}{% if g.graduacao %} {{ g.graduacao }}{% endif %}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+        <div class="col-12 col-md-6">
+          <label class="form-label" for="cpfAluno">CPF do aluno</label>
+          <div class="input-icon-wrap">
+            <i class="bi bi-person-badge"></i>
+            <input type="text" class="form-control" name="cpf" id="cpfAluno" data-mask="cpf" placeholder="000.000.000-00" value="{{ form.get('cpf','') }}">
+          </div>
+          <div class="form-text-help">
+            Obrigatório informar o CPF do aluno <strong>ou</strong> do responsável financeiro — será o login do sistema.
+          </div>
+        </div>
+        <div class="col-12 col-md-6">
+          <label class="form-label" for="telAluno">Telefone <span class="text-danger">*</span></label>
+          <div class="input-icon-wrap">
+            <i class="bi bi-telephone"></i>
+            <input type="text" class="form-control" name="telefone" id="telAluno" data-mask="phone" placeholder="(11) 99999-9999" value="{{ form.get('telefone','') }}" required>
+          </div>
+          <div class="form-text">Usado para enviar os dados de acesso ao responsável.</div>
+        </div>
+        <div class="col-12 col-md-6">
+          <label class="form-label" for="emailInput">E-mail <span class="req">*</span></label>
+          <div class="input-icon-wrap">
+            <i class="bi bi-envelope"></i>
+            <input type="email" class="form-control" name="email" id="emailInput" placeholder="email@exemplo.com" required value="{{ form.get('email','') }}">
+          </div>
+          <div class="form-text-help">Será usado para recuperação de senha.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- FOTO -->
+    <div class="section-card">
+      <div class="section-title"><i class="bi bi-camera"></i> Foto do aluno <span class="req" style="margin-left:.4rem;">*</span></div>
+      <div class="section-help">Use a câmera ou envie uma imagem da galeria. A foto é obrigatória.</div>
+      <div class="photo-row">
+        <div class="photo-frame">
+          <img id="miniatura" src="" alt="" class="d-none">
+          <div id="miniaturaPlaceholder" class="placeholder"><i class="bi bi-person-fill"></i></div>
+        </div>
+        <div class="photo-actions">
+          <input type="hidden" name="foto" id="fotoInput">
+          <button type="button" class="photo-btn primary" id="btnCamera">
+            <i class="bi bi-camera-fill"></i> Tirar foto pela câmera
+          </button>
+          <label for="fotoArquivoPrecad" class="photo-btn">
+            <i class="bi bi-images"></i> Escolher da galeria
+          </label>
+          <input type="file" class="visually-hidden" name="foto_arquivo" id="fotoArquivoPrecad" accept="image/*,.heic,.heif">
+        </div>
+      </div>
+    </div>
+
+
+    <!-- RESPONSÁVEL FINANCEIRO -->
+    <div class="section-card">
+      <div class="section-title"><i class="bi bi-cash-coin"></i> Responsável financeiro</div>
+      <div class="section-help">Para alunos menores ou quando outra pessoa é responsável pelas mensalidades.</div>
+
+      <label class="toggle-card" data-toggle-card id="toggleRespProprio">
+        <input type="checkbox" name="responsavel_eh_proprio" id="respProprio" value="1" {% if form.get('responsavel_eh_proprio')=='1' %}checked{% endif %}>
+        <span class="toggle-switch"></span>
+        <span class="flex-grow-1">
+          <div class="toggle-label">O responsável financeiro sou eu (o próprio aluno)</div>
+          <div class="toggle-desc">Marque se você mesmo paga as mensalidades.</div>
+        </span>
+      </label>
+
+      <div id="blocoRespFinanceiro">
+        <div class="row g-3">
+          <div class="col-12 col-md-6">
+            <label class="form-label" for="respNome">Nome do responsável financeiro</label>
+            <div class="input-icon-wrap">
+              <i class="bi bi-person"></i>
+              <input type="text" class="form-control" name="responsavel_financeiro_nome" id="respNome" value="{{ form.get('responsavel_financeiro_nome','') }}" placeholder="Nome completo">
+            </div>
+          </div>
+          <div class="col-12 col-md-6">
+            <label class="form-label" for="respCpf">CPF do responsável financeiro</label>
+            <div class="input-icon-wrap">
+              <i class="bi bi-person-badge"></i>
+              <input type="text" class="form-control" name="responsavel_financeiro_cpf" id="respCpf" data-mask="cpf" placeholder="000.000.000-00" value="{{ form.get('responsavel_financeiro_cpf','') }}">
+            </div>
+            <div class="form-text-help">Usado como login se o aluno não tiver CPF próprio.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- OBSERVAÇÕES -->
+    <div class="section-card">
+      <div class="section-title"><i class="bi bi-chat-left-text"></i> Observações</div>
+      <textarea class="form-control" name="observacoes" rows="3" placeholder="Algo que a academia precise saber? (opcional)">{{ form.get('observacoes','') }}</textarea>
+    </div>
+
+    <!-- AULA EXPERIMENTAL -->
+    <div class="section-card">
+      <div class="form-check">
+        <input class="form-check-input" type="checkbox" name="aula_experimental" id="aulaExperimental" value="1"
+               {% if form.get('aula_experimental') in ('1','on','true','True') %}checked{% endif %}>
+        <label class="form-check-label" for="aulaExperimental">
+          <i class="bi bi-stars text-primary me-1"></i> Tenho interesse em fazer uma <strong>aula experimental</strong>
+        </label>
+      </div>
+    </div>
+
+    <div class="submit-card">
+      <button type="submit" class="btn-submit">
+        <i class="bi bi-send-fill"></i> Enviar pré-cadastro
+      </button>
+    </div>
+  </form>
+  {% endif %}
 </div>
 
 <div class="camera-modal" id="cameraModal">
@@ -179,14 +437,28 @@
     const modal = document.getElementById('cameraModal');
     const video = document.getElementById('cameraVideo');
     const canvas = document.getElementById('cameraCanvas');
+
+    // 🟦 Controle de prontidão da câmera (evita capturar foto em branco)
+    const _btnCap = document.getElementById('btnCapturar');
+    const _btnCapHTML = _btnCap ? _btnCap.innerHTML : '';
+    function setCapturaPronta(pronto) {
+        if (!_btnCap) return;
+        _btnCap.disabled = !pronto;
+        _btnCap.innerHTML = pronto
+            ? _btnCapHTML
+            : '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Carregando...';
+    }
+    if (video) {
+        const marcarPronta = () => { if (video.videoWidth > 0) setCapturaPronta(true); };
+        video.addEventListener('loadedmetadata', marcarPronta);
+        video.addEventListener('playing', marcarPronta);
+    }
+
     const miniatura = document.getElementById('miniatura');
     const placeholder = document.getElementById('miniaturaPlaceholder');
     const fotoInput = document.getElementById('fotoInput');
     const respProprio = document.getElementById('respProprio');
     const blocoResp = document.getElementById('blocoRespFinanceiro');
-    const acessoAluno = document.getElementById('acessoAluno');
-    const acessoResp = document.getElementById('acessoResp');
-    const emailAcesso = document.getElementById('emailAcesso');
     const nomeInput = document.querySelector('input[name="nome"]');
     const cpfAluno = document.getElementById('cpfAluno');
     const emailGeral = document.querySelector('input[name="email"]');
@@ -244,6 +516,7 @@
         }
         
         video.srcObject = null;
+        setCapturaPronta(false);
         await new Promise(resolve => setTimeout(resolve, 300));
 
         let constraints = { video: true };
@@ -382,6 +655,8 @@
             stream = null;
         }
 
+        setCapturaPronta(false);
+
         const constraints = {
             video: { facingMode: usingFrontCamera ? 'user' : 'environment' },
             audio: false
@@ -419,6 +694,7 @@
             stream = null;
         }
         video.srcObject = null;
+        setCapturaPronta(false);
         await new Promise(resolve => setTimeout(resolve, 300));
 
         const attempts = [
@@ -455,16 +731,24 @@
         if(stream) stream.getTracks().forEach(t=>t.stop());
     };
     document.getElementById('btnCapturar').onclick = function(){
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
+        if (!video.videoWidth || video.readyState < 2) {
+            alert("Aguarde a câmera carregar e tente novamente.");
+            return;
+        }
+        // Limita a resolução para a foto não ficar gigante (evita erro de envio)
+        var MAXDIM = 1080;
+        var vw = video.videoWidth, vh = video.videoHeight;
+        var escala = Math.min(1, MAXDIM / Math.max(vw, vh));
+        canvas.width = Math.round(vw * escala);
+        canvas.height = Math.round(vh * escala);
         const ctx = canvas.getContext('2d');
-        
+
         // Aplicar mesma transformação ao capturar (espelhar se for câmera frontal)
         if (isFrontCamera) {
             ctx.translate(canvas.width, 0);
             ctx.scale(-1, 1);
         }
-        ctx.drawImage(video, 0, 0);
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         
         canvas.style.display = 'block';
         video.style.display = 'none';
@@ -492,7 +776,7 @@
         }
     };
     document.getElementById('btnConfirmar').onclick = function(){
-        const dataURL = canvas.toDataURL('image/png');
+        const dataURL = canvas.toDataURL('image/jpeg', 0.82);
         fotoInput.value = dataURL;
         miniatura.src = dataURL;
         miniatura.classList.remove('d-none');
@@ -520,22 +804,6 @@
     nomeInput && nomeInput.addEventListener('blur', sincronizarRespProprio);
     cpfAluno && cpfAluno.addEventListener('blur', sincronizarRespProprio);
 
-    function toggleEmailAcesso(){
-        const resp = document.getElementById('acessoResp');
-        const bloco = document.getElementById('blocoEmailAcesso');
-        const inp = document.getElementById('emailAcesso');
-        if(resp && resp.checked){
-            bloco.style.display = 'block';
-            if(inp) inp.required = true;
-        } else {
-            bloco.style.display = 'none';
-            if(inp) inp.required = false;
-        }
-    }
-    acessoAluno && acessoAluno.addEventListener('change', toggleEmailAcesso);
-    acessoResp && acessoResp.addEventListener('change', toggleEmailAcesso);
-    toggleEmailAcesso();
-
     function mascaraCPF(el){
         let v = el.value.replace(/\D/g,'');
         if(v.length>11) v = v.slice(0,11);
@@ -555,113 +823,56 @@
     document.querySelectorAll('[data-mask="cpf"]').forEach(el=>el.addEventListener('input',function(){mascaraCPF(this);}));
     document.querySelectorAll('[data-mask="phone"]').forEach(el=>el.addEventListener('input',function(){mascaraPhone(this);}));
 
-    // Validação de email duplicado
-    let emailCheckTimeout;
-    const emailInput = document.getElementById('emailInput');
-    const emailFeedback = document.getElementById('emailFeedback');
-    const emailAcessoInput = document.getElementById('emailAcesso');
-    const emailAcessoFeedback = document.getElementById('emailAcessoFeedback');
+    // Sincroniza estado visual do toggle "responsável é o próprio aluno"
+    (function () {
+      const card = document.getElementById('toggleRespProprio');
+      const inp = document.getElementById('respProprio');
+      if (!card || !inp) return;
+      function sync() { card.classList.toggle('checked', inp.checked); }
+      inp.addEventListener('change', sync);
+      sync();
+    })();
 
-    function verificarEmail(email, callback) {
-        if (!email || email.length < 5 || !email.includes('@')) {
-            callback(false);
-            return;
-        }
-        const url = '/precadastro/verificar-email';
-        fetch(url, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ email: email })
-        })
-        .then(response => response.json())
-        .then(data => {
-            callback(data.existe);
-        })
-        .catch(error => {
-            console.error('Erro ao verificar email:', error);
-            callback(false);
-        });
-    }
-
-    function mostrarErroEmail(input, feedback) {
-        input.classList.add('is-invalid');
-        feedback.style.display = 'block';
-    }
-
-    function removerErroEmail(input, feedback) {
-        input.classList.remove('is-invalid');
-        feedback.style.display = 'none';
-    }
-
-    if (emailInput) {
-        emailInput.addEventListener('blur', function() {
-            const email = this.value.trim();
-            if (email) {
-                clearTimeout(emailCheckTimeout);
-                emailCheckTimeout = setTimeout(() => {
-                    verificarEmail(email, function(existe) {
-                        if (existe) {
-                            mostrarErroEmail(emailInput, emailFeedback);
-                        } else {
-                            removerErroEmail(emailInput, emailFeedback);
-                        }
-                    });
-                }, 500);
-            } else {
-                removerErroEmail(emailInput, emailFeedback);
+    // Validação: pelo menos um CPF (do aluno OU do responsável financeiro) é obrigatório
+    (function(){
+        const formEl = document.getElementById('formPrecad');
+        if (!formEl) return;
+        formEl.addEventListener('submit', function(e){
+            const cpfA = (document.getElementById('cpfAluno')?.value || '').replace(/\D/g, '');
+            const cpfR = (document.getElementById('respCpf')?.value || '').replace(/\D/g, '');
+            const respProprio = document.querySelector('input[name="responsavel_eh_proprio"]:checked');
+            // Se "responsável é o próprio aluno", o CPF do aluno conta para ambos.
+            if (respProprio && respProprio.value === '1' && cpfA.length === 11) return;
+            if (cpfA.length === 11 || cpfR.length === 11) return;
+            e.preventDefault();
+            alert('Informe o CPF do aluno OU o CPF do responsável financeiro. É necessário ao menos um deles para gerar o login do sistema.');
+            const focusEl = cpfA.length ? document.getElementById('respCpf') : document.getElementById('cpfAluno');
+            if (focusEl) {
+                focusEl.focus();
+                focusEl.scrollIntoView({behavior: 'smooth', block: 'center'});
             }
         });
+    })();
 
-        emailInput.addEventListener('input', function() {
-            removerErroEmail(emailInput, emailFeedback);
-        });
-    }
-
-    if (emailAcessoInput) {
-        emailAcessoInput.addEventListener('blur', function() {
-            const email = this.value.trim();
-            if (email) {
-                clearTimeout(emailCheckTimeout);
-                emailCheckTimeout = setTimeout(() => {
-                    verificarEmail(email, function(existe) {
-                        if (existe) {
-                            mostrarErroEmail(emailAcessoInput, emailAcessoFeedback);
-                        } else {
-                            removerErroEmail(emailAcessoInput, emailAcessoFeedback);
-                        }
-                    });
-                }, 500);
-            } else {
-                removerErroEmail(emailAcessoInput, emailAcessoFeedback);
-            }
-        });
-
-        emailAcessoInput.addEventListener('input', function() {
-            removerErroEmail(emailAcessoInput, emailAcessoFeedback);
-        });
-    }
-
-    // Validar antes de enviar o formulário
+    // Validar antes de enviar o formulário (foto obrigatória)
     const formPrecad = document.getElementById('formPrecad');
     if (formPrecad) {
         formPrecad.addEventListener('submit', function(e) {
-            const emailValue = emailInput ? emailInput.value.trim() : '';
-            const emailAcessoValue = emailAcessoInput ? emailAcessoInput.value.trim() : '';
-            let temErro = false;
-
-            if (emailValue && emailInput.classList.contains('is-invalid')) {
-                temErro = true;
-            }
-
-            if (emailAcessoValue && emailAcessoInput.classList.contains('is-invalid')) {
-                temErro = true;
-            }
-
-            if (temErro) {
+            const fi = document.getElementById('fotoInput');
+            const fa = document.getElementById('fotoArquivoPrecad');
+            const temFoto = (fi && fi.value && fi.value.trim().startsWith('data:')) ||
+                (fa && fa.files && fa.files.length > 0);
+            if (!temFoto) {
                 e.preventDefault();
-                alert('Por favor, corrija os erros antes de enviar o formulário.');
+                alert('A foto do aluno é obrigatória. Use a câmera ou envie uma imagem.');
+                return false;
+            }
+            // Aviso amigável se a foto ficou grande demais (evita erro de envio)
+            var fotoGrande = (fi && fi.value && fi.value.length > 7000000) ||
+                (fa && fa.files && fa.files[0] && fa.files[0].size > 8 * 1024 * 1024);
+            if (fotoGrande) {
+                e.preventDefault();
+                alert('A foto ficou muito grande. Tire a foto novamente pela câmera (recomendado) ou escolha uma imagem menor.');
                 return false;
             }
         });

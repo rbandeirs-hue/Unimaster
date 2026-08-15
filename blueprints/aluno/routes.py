@@ -62,8 +62,12 @@ def painel():
     # ======================================================
     # 🔥 4. Exibir painel do aluno
     # ======================================================
+    from blueprints.aluno.painel import _stats_painel_aluno
+
+    stats = _stats_painel_aluno(aluno)
     return render_template(
         "painel/painel_aluno.html",
         usuario=current_user,
-        aluno=aluno
+        aluno=aluno,
+        stats=stats,
     )

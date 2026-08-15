@@ -30,6 +30,30 @@
   </div>
 </div>
 {% endmacro %}
+
+{% macro modal_link(uid, link, qrcode, valor) %}
+<div class="modal fade" id="modalLink{{ uid }}" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-credit-card me-2"></i>Pagar online</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body text-center">
+        <p class="mb-2">Valor: <strong>R$ {{ "%.2f"|format(valor or 0) }}</strong></p>
+        {% if qrcode %}
+        <img src="data:image/png;base64,{{ qrcode }}" alt="QR Code do pagamento" class="img-fluid mb-2" style="max-width: 240px;">
+        <p class="text-muted small mb-3">Escaneie o QR Code ou use o botão abaixo.</p>
+        {% endif %}
+        {% if link %}
+        <a href="{{ link }}" target="_blank" rel="noopener" class="btn btn-success w-100 mb-1"><i class="bi bi-box-arrow-up-right me-1"></i> Abrir página de pagamento</a>
+        {% endif %}
+        <p class="text-muted small mb-0">Após o pagamento, a confirmação é automática.</p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endmacro %}
 <div class="container mt-4 px-2 px-sm-3">
     {% set back_url = voltar_url|default(url_for('painel_aluno.meu_perfil')) %}
     <div class="mb-3">
@@ -158,9 +182,15 @@
                                     <i class="bi bi-upc-scan me-1"></i> Pagar Boleto
                                 </a>
                                 {% elif m.asaas_tipo == 'LINK' and m.asaas_boleto_url %}
+                                {% if m.asaas_pix_qrcode %}
+                                <button type="button" class="btn btn-sm btn-success mb-1" data-bs-toggle="modal" data-bs-target="#modalLink{{ m.id }}">
+                                    <i class="bi bi-credit-card me-1"></i> Pagar online
+                                </button>
+                                {% else %}
                                 <a href="{{ m.asaas_boleto_url }}" target="_blank" rel="noopener" class="btn btn-sm btn-success mb-1">
                                     <i class="bi bi-credit-card me-1"></i> Pagar online
                                 </a>
+                                {% endif %}
                                 {% endif %}
                                 <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalInformar{{ m.id }}">
                                     <i class="bi bi-upload me-1"></i> Informar
@@ -226,9 +256,15 @@
                                         <i class="bi bi-upc-scan me-1"></i> Pagar Boleto
                                     </a>
                                     {% elif a.asaas_tipo == 'LINK' and a.asaas_boleto_url %}
+                                    {% if a.asaas_pix_qrcode %}
+                                    <button type="button" class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#modalLinkAv{{ a.id }}">
+                                        <i class="bi bi-credit-card me-1"></i> Pagar online
+                                    </button>
+                                    {% else %}
                                     <a href="{{ a.asaas_boleto_url }}" target="_blank" rel="noopener" class="btn btn-sm btn-success">
                                         <i class="bi bi-credit-card me-1"></i> Pagar online
                                     </a>
+                                    {% endif %}
                                     {% else %}
                                     <span class="text-muted small">—</span>
                                     {% endif %}
@@ -300,6 +336,18 @@
 {% for a in avulsas %}
 {% if a.status in ['pendente','atrasado'] and a.asaas_tipo == 'PIX' and (a.asaas_pix_copia_cola or a.asaas_pix_qrcode) %}
 {{ modal_pix('Av' ~ a.id, a.asaas_pix_copia_cola, a.asaas_pix_qrcode, a.valor) }}
+{% endif %}
+{% endfor %}
+
+{# Modais de pagamento online com QR (LINK - InfinitePay) #}
+{% for m in mensalidades %}
+{% if m.status_efetivo in ['pendente','atrasado'] and m.asaas_tipo == 'LINK' and m.asaas_pix_qrcode %}
+{{ modal_link(m.id, m.asaas_boleto_url, m.asaas_pix_qrcode, m.valor_final or m.valor_display or m.valor) }}
+{% endif %}
+{% endfor %}
+{% for a in avulsas %}
+{% if a.status in ['pendente','atrasado'] and a.asaas_tipo == 'LINK' and a.asaas_pix_qrcode %}
+{{ modal_link('Av' ~ a.id, a.asaas_boleto_url, a.asaas_pix_qrcode, a.valor) }}
 {% endif %}
 {% endfor %}
 

@@ -1,16 +1,29 @@
 {% extends "base.html" %}
-{% block title %}Eventos e Competições{% endblock %}
+{% block title %}
+{% if tipo_filtro == 'evento' %}Eventos{% elif tipo_filtro == 'competicao' %}Competições{% else %}Eventos e competições{% endif %}
+{% endblock %}
 {% block content %}
-<div class="container mt-3 mt-md-5 px-2 px-md-3">
-    <div class="mb-3 mb-md-4">
-        {% set back_url = back_url or get_back_url_default() %}
-{% include 'components/botao_voltar.html' %}
-        <h2 class="h5 h4-md fw-bold text-primary">Eventos e Competições</h2>
-        <p class="text-muted mb-0 small small-md">Eventos disponíveis para aderir e gerenciar inscrições.</p>
+{% set eh_competicao = tipo_filtro == 'competicao' %}
+<div class="container-fluid px-3 px-md-4 py-3 py-md-4 eventos-lista" style="max-width:1180px;">
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+        <div>
+            {% set back_url = back_url or get_back_url_default() %}
+            {% include 'components/botao_voltar.html' %}
+            <h1 class="h4 fw-bold mb-1 mt-2">
+                {% if eh_competicao %}
+                    <i class="bi bi-trophy-fill text-danger me-2"></i>Competições
+                {% else %}
+                    <i class="bi bi-calendar-event text-primary me-2"></i>Eventos
+                {% endif %}
+            </h1>
+            <p class="text-muted small mb-0">
+                {% if eh_competicao %}Aderir e inscrever atletas em competições de judô.
+                {% else %}Aderir e gerenciar inscrições em eventos.{% endif %}
+            </p>
+        </div>
         {% if academias|length > 1 %}
-        <form method="GET" class="mt-2">
-            <label class="form-label small">Academia:</label>
-            <select name="academia_id" class="form-select form-select-sm w-100 w-md-auto d-inline-block" onchange="this.form.submit()">
+        <form method="GET">
+            <select name="academia_id" class="form-select form-select-sm" style="min-width:200px;" onchange="this.form.submit()">
                 {% for ac in academias %}
                 <option value="{{ ac.id }}" {% if ac.id == academia_id %}selected{% endif %}>{{ ac.nome }}</option>
                 {% endfor %}
@@ -20,73 +33,64 @@
     </div>
 
     {% if eventos %}
-    <div class="row g-2 g-md-3">
+    <div class="row g-3">
         {% for ev in eventos %}
-        <div class="col-12 col-md-6 col-lg-4">
-            <div class="card h-100 shadow-sm {% if ev.encerrado %}border-secondary{% else %}border-primary{% endif %}">
-                <div class="card-body p-3 p-md-4">
-                    <div class="d-flex justify-content-between align-items-start mb-2">
-                        <h5 class="card-title mb-0 fw-bold h6 h5-md" style="line-height: 1.3;">{{ ev.nome }}</h5>
+        {% set cor = 'danger' if eh_competicao else 'primary' %}
+        <div class="col-12 col-sm-6 col-lg-4">
+            <div class="card h-100 evento-card {% if ev.encerrado %}is-encerrado{% endif %}">
+                <div class="evento-faixa bg-{{ 'secondary' if ev.encerrado else cor }}"></div>
+                <div class="card-body d-flex flex-column p-3">
+                    <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+                        <h2 class="h6 fw-bold mb-0" style="line-height:1.3;">{{ ev.nome }}</h2>
                         {% if ev.encerrado %}
-                        <span class="badge bg-secondary" style="font-size: 0.7rem;">Encerrado</span>
+                        <span class="badge bg-secondary flex-shrink-0">Encerrado</span>
+                        {% elif ev.aderiu %}
+                        <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle flex-shrink-0">
+                            <i class="bi bi-check-lg"></i> Aderido
+                        </span>
                         {% endif %}
                     </div>
-                    <div class="small text-muted mb-3" style="font-size: 0.8rem;">
-                        <div class="mb-2"><strong>Tipo:</strong> <span class="badge bg-secondary" style="font-size: 0.7rem;">{{ ev.tipo }}</span></div>
-                        <div class="mb-2"><strong>Data fim:</strong> {% if ev.data_fim %}{{ ev.data_fim|data_br }}{% set _s = ev.data_fim|string %}{% if _s|length > 10 %} {{ _s[11:16] }}{% endif %}{% else %}-{% endif %}</div>
-                        {% if ev.tem_taxa and (ev.tem_taxa == 1 or ev.tem_taxa == True or ev.tem_taxa == '1') %}
-                        <div class="mb-2">
-                            <strong><i class="bi bi-currency-dollar me-1"></i>Taxa:</strong> 
-                            {% if ev.valor_taxa and ev.valor_taxa != None %}
-                                <span class="badge bg-success" style="font-size: 0.7rem;">R$ {{ "%.2f"|format(ev.valor_taxa) }}</span>
-                            {% elif ev.valor_taxa_sugerido %}
-                                <span class="badge bg-info" style="font-size: 0.7rem;">Sugerido: R$ {{ "%.2f"|format(ev.valor_taxa_sugerido) }}</span>
-                            {% else %}
-                                <span class="badge bg-warning" style="font-size: 0.7rem;">Definir valor</span>
-                            {% endif %}
-                        </div>
+
+                    <ul class="list-unstyled small text-muted mb-3 mt-1 evento-meta">
+                        {% if ev.data_fim %}
+                        <li><i class="bi bi-calendar-check me-2"></i>Encerra {{ ev.data_fim|data_br }}</li>
                         {% endif %}
-                        {% if ev.anexos and ev.anexos|length > 0 %}
-                        <div class="mb-2">
-                            <strong><i class="bi bi-paperclip me-1"></i>Anexos:</strong>
-                            <div class="mt-1">
-                                {% for anexo in ev.anexos %}
-                                <div class="mb-1">
-                                    <a href="{{ url_for('eventos_competicoes.download_anexo', anexo_id=anexo.id) }}" 
-                                       class="text-decoration-none small" 
-                                       title="{{ anexo.nome_arquivo }}">
-                                        <i class="bi bi-download me-1"></i>{{ anexo.nome_arquivo[:30] }}{% if anexo.nome_arquivo|length > 30 %}...{% endif %}
-                                    </a>
-                                </div>
-                                {% endfor %}
-                            </div>
-                        </div>
+                        <li><i class="bi bi-ui-checks-grid me-2"></i>{{ ev.formulario_nome or 'Sem formulário' }}</li>
+                        {% if ev.anexos and ev.anexos|length %}
+                        <li>
+                            <i class="bi bi-paperclip me-2"></i>
+                            {% for anexo in ev.anexos %}
+                            <a href="{{ url_for('eventos_competicoes.download_anexo', anexo_id=anexo.id) }}"
+                               class="text-decoration-none" title="{{ anexo.nome_arquivo }}">
+                                {{ anexo.nome_arquivo[:24] }}{% if anexo.nome_arquivo|length > 24 %}…{% endif %}</a>{% if not loop.last %}, {% endif %}
+                            {% endfor %}
+                        </li>
                         {% endif %}
-                    </div>
+                    </ul>
+
                     {% if not ev.encerrado %}
-                    <div class="d-flex flex-column gap-2">
+                    <div class="mt-auto d-flex gap-2">
                         {% if ev.aderiu %}
-                        <a href="{{ url_for('eventos_competicoes.inscritos', evento_id=ev.id, academia_id=academia_id) }}" class="btn btn-primary btn-sm w-100" style="min-height: 44px;">
-                            <i class="bi bi-people"></i> Inscritos
+                        <a href="{{ url_for('eventos_competicoes.inscritos', evento_id=ev.id, academia_id=academia_id) }}"
+                           class="btn btn-{{ cor }} btn-sm flex-grow-1">
+                            <i class="bi bi-people me-1"></i>Inscritos
                         </a>
-                        {% if ev.tem_taxa and (ev.tem_taxa == 1 or ev.tem_taxa == True or ev.tem_taxa == '1') %}
-                        <a href="{{ url_for('eventos_competicoes.aderir', evento_id=ev.id, academia_id=academia_id) }}" class="btn btn-outline-info btn-sm w-100" style="min-height: 44px;">
-                            <i class="bi bi-currency-dollar"></i> {% if ev.valor_taxa and ev.valor_taxa != None %}Alterar Valor (R$ {{ "%.2f"|format(ev.valor_taxa) }}){% else %}Definir Valor{% endif %}
-                        </a>
-                        {% endif %}
-                        <form method="POST" action="{{ url_for('eventos_competicoes.desaderir', evento_id=ev.id) }}" class="d-inline w-100">
+                        <form method="POST" action="{{ url_for('eventos_competicoes.desaderir', evento_id=ev.id) }}"
+                              onsubmit="return confirm('Remover a adesão a este {{ 'evento' if not eh_competicao else 'evento' }}?');">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <input type="hidden" name="academia_id" value="{{ academia_id }}">
-                            <button type="submit" class="btn btn-outline-secondary btn-sm w-100" style="min-height: 44px;">Desaderir</button>
+                            <button type="submit" class="btn btn-outline-secondary btn-sm" title="Desaderir">
+                                <i class="bi bi-x-lg"></i>
+                            </button>
                         </form>
                         {% else %}
-                        {% if ev.tem_taxa and (ev.tem_taxa == 1 or ev.tem_taxa == True or ev.tem_taxa == '1') %}
-                        <a href="{{ url_for('eventos_competicoes.aderir', evento_id=ev.id, academia_id=academia_id) }}" class="btn btn-success btn-sm w-100" style="min-height: 44px;">Aderir</a>
-                        {% else %}
-                        <form method="POST" action="{{ url_for('eventos_competicoes.aderir', evento_id=ev.id) }}" class="d-inline w-100">
+                        <form method="POST" action="{{ url_for('eventos_competicoes.aderir', evento_id=ev.id) }}" class="w-100">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <input type="hidden" name="academia_id" value="{{ academia_id }}">
-                            <button type="submit" class="btn btn-success btn-sm w-100" style="min-height: 44px;">Aderir</button>
+                            <button type="submit" class="btn btn-success btn-sm w-100">
+                                <i class="bi bi-plus-circle me-1"></i>Aderir
+                            </button>
                         </form>
-                        {% endif %}
                         {% endif %}
                     </div>
                     {% endif %}
@@ -96,79 +100,32 @@
         {% endfor %}
     </div>
     {% else %}
-    <div class="card shadow-sm">
-        <div class="card-body text-center py-4 py-md-5">
-            <i class="bi bi-calendar-event display-4 display-6-md text-muted mb-3"></i>
-            <h5 class="text-muted h6 h5-md">Nenhum evento disponível</h5>
-            <p class="text-muted mb-0 small small-md">A associação ainda não criou eventos ou sua academia não pertence à associação.</p>
+    <div class="card shadow-sm border-0">
+        <div class="card-body text-center py-5">
+            <i class="bi bi-calendar-x text-body-tertiary" style="font-size:2.5rem;"></i>
+            <h2 class="h6 text-muted mt-3 mb-1">
+                Nenhum{{ 'a competição' if eh_competicao else ' evento' }} disponível
+            </h2>
+            <p class="text-muted small mb-0">A associação ainda não abriu {{ 'competições' if eh_competicao else 'eventos' }} para sua academia.</p>
         </div>
     </div>
     {% endif %}
 </div>
 
 <style>
-@media (max-width: 767.98px) {
-    .container {
-        padding-left: 8px;
-        padding-right: 8px;
-    }
-    
-    .card {
-        margin-bottom: 0.75rem;
-        border-radius: 0.5rem;
-    }
-    
-    .card-body {
-        padding: 0.75rem !important;
-    }
-    
-    .card-title {
-        font-size: 0.9rem;
-        line-height: 1.3;
-    }
-    
-    .small {
-        font-size: 0.75rem;
-    }
-    
-    .btn-sm {
-        font-size: 0.85rem;
-        padding: 0.5rem 0.75rem;
-        min-height: 44px;
-    }
-    
-    .badge {
-        font-size: 0.65rem;
-        padding: 0.25em 0.5em;
-    }
-    
-    .d-flex.flex-column.gap-2 {
-        gap: 0.75rem !important;
-    }
-    
-    .form-select {
-        font-size: 0.875rem;
-        padding: 0.5rem 0.75rem;
-        min-height: 44px;
-    }
-}
-
-@media (min-width: 768px) {
-    .h4-md {
-        font-size: 1.5rem;
-    }
-    
-    .h5-md {
-        font-size: 1.25rem;
-    }
-    
-    .small-md {
-        font-size: 1rem;
-    }
-    
-    .display-6-md {
-        font-size: 4rem;
-    }
-}
+  .eventos-lista .evento-card {
+    border: 1px solid var(--bs-border-color);
+    border-radius: .7rem;
+    overflow: hidden;
+    transition: box-shadow .15s ease, transform .15s ease;
+  }
+  .eventos-lista .evento-card:hover {
+    box-shadow: 0 .5rem 1.25rem rgba(0,0,0,.08);
+    transform: translateY(-2px);
+  }
+  .eventos-lista .evento-card.is-encerrado { opacity: .72; }
+  .eventos-lista .evento-faixa { height: 4px; width: 100%; }
+  .eventos-lista .evento-meta li { margin-bottom: .3rem; display: flex; align-items: flex-start; }
+  .eventos-lista .evento-meta li i { color: var(--bs-secondary-color); }
 </style>
 {% endblock %}

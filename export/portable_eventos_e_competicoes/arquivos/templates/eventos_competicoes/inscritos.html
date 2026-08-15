@@ -1,0 +1,253 @@
+{% extends "base.html" %}
+{% block title %}Inscritos — {{ evento.nome }}{% endblock %}
+{% block content %}
+<div class="container mt-3 mt-md-5 px-2 px-md-3">
+    <div class="mb-3 mb-md-4">
+        {% set back_url = back_url or get_back_url_default() %}
+{% include 'components/botao_voltar.html' %}
+        <h2 class="h5 h4-md fw-bold text-primary">Inscritos — {{ evento.nome }}</h2>
+        <p class="text-muted mb-0 small small-md">Alunos inscritos neste evento. {% if encerrado %}Evento encerrado.{% else %}Você pode incluir alunos avulsos, editar ou cancelar inscrições antes de enviar.{% endif %}</p>
+    </div>
+
+    {% if not encerrado %}
+    <div class="mb-3 d-flex flex-column flex-sm-row gap-2">
+        <a href="{{ url_for('eventos_competicoes.incluir_avulso', evento_id=evento.id, academia_id=academia_id) }}" class="btn btn-success btn-sm w-100 w-sm-auto" style="min-height: 44px;">
+            <i class="bi bi-person-plus me-1"></i> Incluir aluno avulso
+        </a>
+        <form method="POST" action="{{ url_for('eventos_competicoes.enviar_inscricoes', evento_id=evento.id) }}" class="d-inline w-100 w-sm-auto">
+            <input type="hidden" name="academia_id" value="{{ academia_id }}">
+            <button type="submit" class="btn btn-primary btn-sm w-100" {% if not inscricoes %}disabled{% endif %} style="min-height: 44px;">
+                <i class="bi bi-send me-1"></i> Enviar inscrições
+            </button>
+        </form>
+    </div>
+    {% endif %}
+
+    {% if inscricoes %}
+    <!-- Tabela para desktop -->
+    <div class="card shadow-sm d-none d-md-block">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Aluno</th>
+                        <th>Status</th>
+                        <th>Dt. Inscrição</th>
+                        <th>Dt. Envio</th>
+                        {% for c in campos_form %}<th>{{ c.label }}</th>{% endfor %}
+                        {% if not campos_form %}<th>Dados</th>{% endif %}
+                        <th class="text-end">Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for i in inscricoes %}
+                    <tr>
+                        <td>
+                            {% if i.aluno_nome %}
+                            {{ i.aluno_nome }}{% if i.inclusao_avulsa %} <span class="badge bg-warning">Avulso</span>{% endif %}
+                            {% else %}
+                            <span class="text-muted">—</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if i.status == 'enviada' %}
+                            <span class="badge bg-success">Enviada</span>
+                            {% else %}
+                            <span class="badge bg-info">Confirmada</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if i.created_at %}
+                            {{ i.created_at|data_br }}
+                            {% set _dt = i.created_at|string %}
+                            {% if _dt|length > 10 %}<br><small class="text-muted">{{ _dt[11:16] }}</small>{% endif %}
+                            {% else %}-{% endif %}
+                        </td>
+                        <td>
+                            {% if i.data_envio %}
+                            {{ i.data_envio|data_br }}
+                            {% set _de = i.data_envio|string %}
+                            {% if _de|length > 10 %}<br><small class="text-muted">{{ _de[11:16] }}</small>{% endif %}
+                            {% else %}-{% endif %}
+                        </td>
+                        {% for c in campos_form %}
+                        <td>
+                            {% set v = (i.dados_form or {}).get(c.campo_chave, '-') if i.dados_form else '-' %}
+                            {% if c.campo_chave == 'data_nascimento' and v and v != '-' %}
+                                {{ v|data_br }}
+                            {% elif c.campo_chave == 'sexo' %}
+                                {% if v == 'M' %}Masculino{% elif v == 'F' %}Feminino{% else %}{{ v }}{% endif %}
+                            {% else %}
+                                {{ v }}
+                            {% endif %}
+                        </td>
+                        {% endfor %}
+                        {% if not campos_form %}<td>—</td>{% endif %}
+                        <td class="text-end text-nowrap">
+                            {% if i.status != 'enviada' and not encerrado %}
+                            <a href="{{ url_for('eventos_competicoes.editar_inscricao', evento_id=evento.id, inscricao_id=i.id, academia_id=academia_id) }}" class="btn btn-outline-secondary btn-sm" title="Editar">
+                                <i class="bi bi-pencil"></i>
+                            </a>
+                            <form method="POST" action="{{ url_for('eventos_competicoes.cancelar_inscricao', evento_id=evento.id, inscricao_id=i.id) }}" class="d-inline" onsubmit="return confirm('Cancelar inscrição deste aluno?')">
+                                <input type="hidden" name="academia_id" value="{{ academia_id }}">
+                                <button type="submit" class="btn btn-outline-danger btn-sm" title="Cancelar inscrição">
+                                    <i class="bi bi-x-lg"></i>
+                                </button>
+                            </form>
+                            {% else %}
+                            <span class="text-muted small">—</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <!-- Cards para mobile -->
+    <div class="d-md-none">
+        {% for i in inscricoes %}
+        <div class="card shadow-sm mb-3">
+            <div class="card-body p-3">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                    <div class="flex-grow-1">
+                        <h6 class="mb-1 fw-bold" style="font-size: 0.95rem;">
+                            {% if i.aluno_nome %}
+                            {{ i.aluno_nome }}{% if i.inclusao_avulsa %} <span class="badge bg-warning" style="font-size: 0.65rem;">Avulso</span>{% endif %}
+                            {% else %}
+                            <span class="text-muted">—</span>
+                            {% endif %}
+                        </h6>
+                        <div class="small text-muted mb-2">
+                            {% if i.status == 'enviada' %}
+                            <span class="badge bg-success" style="font-size: 0.7rem;">Enviada</span>
+                            {% else %}
+                            <span class="badge bg-info" style="font-size: 0.7rem;">Confirmada</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% if i.status != 'enviada' and not encerrado %}
+                    <div class="d-flex gap-1">
+                        <a href="{{ url_for('eventos_competicoes.editar_inscricao', evento_id=evento.id, inscricao_id=i.id, academia_id=academia_id) }}" class="btn btn-outline-secondary btn-sm" style="min-width: 44px; min-height: 44px; padding: 0.5rem;" title="Editar">
+                            <i class="bi bi-pencil"></i>
+                        </a>
+                        <form method="POST" action="{{ url_for('eventos_competicoes.cancelar_inscricao', evento_id=evento.id, inscricao_id=i.id) }}" class="d-inline" onsubmit="return confirm('Cancelar inscrição deste aluno?')">
+                            <input type="hidden" name="academia_id" value="{{ academia_id }}">
+                            <button type="submit" class="btn btn-outline-danger btn-sm" style="min-width: 44px; min-height: 44px; padding: 0.5rem;" title="Cancelar">
+                                <i class="bi bi-x-lg"></i>
+                            </button>
+                        </form>
+                    </div>
+                    {% endif %}
+                </div>
+                
+                <div class="small text-muted mb-2" style="font-size: 0.75rem;">
+                    <div class="mb-1"><strong>Dt. Inscrição:</strong> {% if i.created_at %}{{ i.created_at|data_br }}{% set _dt = i.created_at|string %}{% if _dt|length > 10 %} {{ _dt[11:16] }}{% endif %}{% else %}-{% endif %}</div>
+                    <div><strong>Dt. Envio:</strong> {% if i.data_envio %}{{ i.data_envio|data_br }}{% set _de = i.data_envio|string %}{% if _de|length > 10 %} {{ _de[11:16] }}{% endif %}{% else %}-{% endif %}</div>
+                </div>
+                
+                {% if campos_form %}
+                <div class="border-top pt-2 mt-2">
+                    {% for c in campos_form %}
+                    <div class="row g-1 mb-1" style="font-size: 0.75rem;">
+                        <div class="col-5 fw-bold text-muted">{{ c.label }}:</div>
+                        <div class="col-7">
+                            {% set v = (i.dados_form or {}).get(c.campo_chave, '-') if i.dados_form else '-' %}
+                            {% if c.campo_chave == 'data_nascimento' and v and v != '-' %}
+                                {{ v|data_br }}
+                            {% elif c.campo_chave == 'sexo' %}
+                                {% if v == 'M' %}Masculino{% elif v == 'F' %}Feminino{% else %}{{ v }}{% endif %}
+                            {% else %}
+                                {{ v }}
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="card shadow-sm">
+        <div class="card-body text-center py-4 py-md-5">
+            <i class="bi bi-people display-4 display-6-md text-muted mb-3"></i>
+            <h5 class="text-muted h6 h5-md">Nenhum inscrito</h5>
+            <p class="text-muted mb-0 small small-md">Os alunos podem se inscrever pelo painel. Você também pode incluir alunos avulsos.</p>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<style>
+@media (max-width: 767.98px) {
+    .container {
+        padding-left: 8px;
+        padding-right: 8px;
+    }
+    
+    .card {
+        margin-bottom: 0.75rem;
+        border-radius: 0.5rem;
+    }
+    
+    .card-body {
+        padding: 0.75rem !important;
+    }
+    
+    .btn-sm {
+        font-size: 0.85rem;
+        padding: 0.5rem 0.75rem;
+        min-height: 44px;
+    }
+    
+    .badge {
+        font-size: 0.65rem;
+        padding: 0.25em 0.5em;
+    }
+    
+    .small {
+        font-size: 0.75rem;
+    }
+    
+    .d-flex.gap-1 {
+        gap: 0.25rem !important;
+    }
+    
+    .d-flex.gap-2 {
+        gap: 0.5rem !important;
+    }
+    
+    .row.g-1 {
+        margin-left: 0;
+        margin-right: 0;
+    }
+    
+    .row.g-1 .col-5,
+    .row.g-1 .col-7 {
+        padding-left: 0.25rem;
+        padding-right: 0.25rem;
+    }
+}
+
+@media (min-width: 768px) {
+    .h4-md {
+        font-size: 1.5rem;
+    }
+    
+    .h5-md {
+        font-size: 1.25rem;
+    }
+    
+    .small-md {
+        font-size: 1rem;
+    }
+    
+    .display-6-md {
+        font-size: 4rem;
+    }
+}
+</style>
+{% endblock %}

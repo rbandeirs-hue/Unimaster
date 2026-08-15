@@ -87,18 +87,62 @@
                         <tr>
                             <th>Data</th>
                             <th>Status</th>
+                            <th class="text-end" style="min-width:7rem">Aula</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for p in presencas %}
+                        {% set tem_msg_prof = p.mensagem_professor_para_aluno and p.mensagem_professor_para_aluno.strip() %}
+                        {% set tem_aula_info = p.presente and (p.aula_observacao or p.aula_plano_texto or p.aula_plano_arquivo) %}
+                        {% set tem_detalhe = tem_aula_info or tem_msg_prof %}
                         <tr>
-                            <td>{{ p.data_presenca|data_br }}</td>
+                            <td>
+                                <span class="fw-medium">{{ p.data_presenca|data_br }}</span>
+                                {% if p.horario_exibir %}
+                                <div class="small text-muted">{{ p.horario_exibir }}</div>
+                                {% endif %}
+                            </td>
                             <td>
                                 <span class="badge {{ 'bg-success' if p.presente else 'bg-secondary' }}">
                                     {{ 'Presente' if p.presente else 'Falta' }}
                                 </span>
                             </td>
+                            <td class="text-end">
+                                {% if tem_detalhe %}
+                                <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="collapse" data-bs-target="#aula-detalhe-{{ loop.index }}" aria-expanded="false" aria-controls="aula-detalhe-{{ loop.index }}">
+                                    <i class="bi bi-journal-richtext"></i> Ver
+                                </button>
+                                {% else %}
+                                <span class="text-muted small">—</span>
+                                {% endif %}
+                            </td>
                         </tr>
+                        {% if tem_detalhe %}
+                        <tr class="collapse table-light" id="aula-detalhe-{{ loop.index }}">
+                            <td colspan="3" class="small border-top-0 pt-0 pb-3">
+                                {% if tem_msg_prof %}
+                                <div class="alert alert-light border-primary border-opacity-25 py-2 mb-3">
+                                    <h6 class="fw-semibold text-primary mb-1"><i class="bi bi-person-lock me-1"></i>Mensagem do professor (só você vê)</h6>
+                                    <p class="mb-0" style="white-space: pre-line;">{{ p.mensagem_professor_para_aluno }}</p>
+                                </div>
+                                {% endif %}
+                                {% if p.aula_observacao %}
+                                <h6 class="fw-semibold text-secondary mb-1 mt-2"><i class="bi bi-chat-left-text me-1"></i>Observação</h6>
+                                <p class="mb-3" style="white-space: pre-line;">{{ p.aula_observacao }}</p>
+                                {% endif %}
+                                {% if p.aula_plano_texto %}
+                                <h6 class="fw-semibold text-secondary mb-1"><i class="bi bi-book me-1"></i>Plano de aula</h6>
+                                <p class="mb-3" style="white-space: pre-line;">{{ p.aula_plano_texto }}</p>
+                                {% endif %}
+                                {% if p.aula_plano_arquivo %}
+                                <h6 class="fw-semibold text-secondary mb-1"><i class="bi bi-paperclip me-1"></i>Arquivo do plano</h6>
+                                <a href="{{ url_for('static', filename='uploads/planos_aula/' + p.aula_plano_arquivo) }}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-secondary">
+                                    {{ p.aula_plano_arquivo_original or p.aula_plano_arquivo }}
+                                </a>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endif %}
                         {% endfor %}
                     </tbody>
                 </table>

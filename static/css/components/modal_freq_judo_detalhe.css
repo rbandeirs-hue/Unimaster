@@ -1,0 +1,252 @@
+/**
+ * Modal detalhamento de chamadas (filho do modal de perfil) — Bootstrap + tokens alinhados ao modal pai.
+ */
+:root {
+  --afd-backdrop-top: rgba(0, 0, 0, 0.52);
+  --afd-backdrop-child: rgba(0, 0, 0, 0.62);
+  --afd-emerald-bg: #d1fae5;
+  --afd-emerald-text: #047857;
+  --afd-rose-bg: #ffe4e6;
+  --afd-rose-text: #9f1239;
+  --afd-amber-bg: #fef3c7;
+  --afd-amber-text: #92400e;
+}
+
+/* Pilha: filho acima do pai; backdrop do filho mais escuro */
+.modal.modal-attendance-detail {
+  --bs-modal-zindex: 1070;
+}
+body.modal-open.attendance-child-open .modal:not(.modal-attendance-detail) {
+  z-index: 1055 !important;
+}
+body.modal-open.attendance-child-open .modal.modal-attendance-detail.show {
+  z-index: 1075 !important;
+}
+body.modal-open.attendance-child-open .modal-backdrop.fade.show {
+  z-index: 1050 !important;
+  opacity: var(--afd-backdrop-parent-opacity, 0.48);
+}
+body.modal-open.attendance-child-open .modal-backdrop.fade.show.afd-child-backdrop {
+  z-index: 1065 !important;
+  opacity: 0.62 !important;
+  background-color: #000;
+}
+
+.modal-attendance-detail .modal-dialog {
+  max-width: min(48rem, calc(100vw - 1rem));
+}
+@media (max-width: 639.98px) {
+  .modal-attendance-detail .modal-dialog {
+    max-width: 100%;
+    margin: 0.25rem;
+  }
+  .modal-attendance-detail .modal-content {
+    max-height: 95vh;
+  }
+}
+
+.modal-attendance-detail .modal-content {
+  border-radius: 0.85rem;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.28);
+}
+
+.modal-attendance-detail .afd-header-stats .afd-stat-pct--ok {
+  color: #047857;
+  font-weight: 700;
+}
+.modal-attendance-detail .afd-header-stats .afd-stat-pct--mid {
+  color: #b45309;
+  font-weight: 700;
+}
+.modal-attendance-detail .afd-header-stats .afd-stat-pct--low {
+  color: #be123c;
+  font-weight: 700;
+}
+
+.afd-chip-muted {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #6b7280;
+  background: #f3f4f6;
+  border-radius: 999px;
+  padding: 0.2rem 0.55rem;
+}
+
+.afd-filters-bar {
+  border-bottom: 1px solid #e5e7eb;
+  padding-top: 0.75rem;
+  padding-bottom: 0.75rem;
+}
+@media (min-width: 640px) {
+  .afd-filters-collapsible {
+    display: block !important;
+  }
+  .afd-filters-mobile-toggle {
+    display: none !important;
+  }
+}
+@media (max-width: 639.98px) {
+  .afd-filters-collapsible:not(.show) {
+    display: none !important;
+  }
+}
+
+.afd-scroll-host {
+  position: relative;
+  min-height: 200px;
+  max-height: min(52vh, 420px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+  background: #fff;
+}
+@media (max-width: 639.98px) {
+  .afd-scroll-host {
+    max-height: min(55vh, 480px);
+  }
+}
+
+.afd-month-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.55rem 0.75rem;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(6px);
+  border-bottom: 1px solid #e5e7eb;
+  font-weight: 700;
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+}
+.afd-month-header[aria-expanded="false"] + .afd-month-body {
+  display: none;
+}
+
+.afd-month-stats {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #4b5563;
+}
+.afd-month-pct--ok {
+  color: #047857;
+}
+.afd-month-pct--mid {
+  color: #b45309;
+}
+.afd-month-pct--low {
+  color: #be123c;
+}
+
+.afd-table-wrap table {
+  margin-bottom: 0;
+  font-size: 0.875rem;
+}
+.afd-row-hover:hover {
+  background: #f9fafb !important;
+  cursor: default;
+}
+.afd-row-hover {
+  content-visibility: auto;
+  contain-intrinsic-size: 42px;
+}
+.afd-row-striped:nth-child(even) {
+  background: rgba(249, 250, 251, 0.65);
+}
+
+.afd-time-empty {
+  color: #9ca3af;
+  font-style: italic;
+}
+
+.afd-badge-call {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.25rem 0.55rem;
+  border-radius: 999px;
+}
+.afd-badge-call .afd-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.afd-badge-presente {
+  background: var(--afd-emerald-bg);
+  color: var(--afd-emerald-text);
+}
+.afd-badge-presente .afd-dot {
+  background: #059669;
+}
+.afd-badge-falta {
+  background: var(--afd-rose-bg);
+  color: var(--afd-rose-text);
+}
+.afd-badge-falta .afd-dot {
+  background: #e11d48;
+}
+.afd-badge-outro {
+  background: var(--afd-amber-bg);
+  color: var(--afd-amber-text);
+}
+.afd-badge-outro .afd-dot {
+  background: #d97706;
+}
+
+/* Mobile cards */
+.afd-mobile-cards {
+  display: none;
+}
+@media (max-width: 639.98px) {
+  .afd-desktop-table {
+    display: none;
+  }
+  .afd-mobile-cards {
+    display: block;
+    padding: 0.5rem;
+  }
+  .afd-class-card {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.65rem 0.75rem;
+    border-radius: 0.5rem;
+    border: 1px solid #e5e7eb;
+    margin-bottom: 0.5rem;
+    background: #fff;
+  }
+  .afd-class-card:nth-child(even) {
+    background: rgba(249, 250, 251, 0.65);
+  }
+  .afd-class-card-date {
+    font-weight: 800;
+    font-size: 1rem;
+    color: #111827;
+    line-height: 1.2;
+  }
+}
+
+.afd-empty {
+  padding: 2rem 1rem;
+  text-align: center;
+  color: #6b7280;
+}
+
+.modal-attendance-detail .modal-footer {
+  border-top: 1px solid #e5e7eb;
+}
+
+/* Virtual spacer rows */
+.afd-vspacer {
+  width: 100%;
+  pointer-events: none;
+}

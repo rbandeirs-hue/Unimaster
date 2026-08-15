@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ academia_nome }} — Academia de Judô · Matrícula e Aula Experimental</title>
+  <meta name="description" content="{{ academia_nome }}: matrículas abertas e aula experimental gratuita. Disciplina, respeito e técnica.">
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
+  <style>
+    :root{
+      --bg:#1b1714; --fg:#f4f1e9; --card:#262019; --secondary:#2c261d;
+      --primary:#c5252b; --primary-fg:#fff; --accent:#d2a648; --accent-fg:#1b1714;
+      --muted-fg:#ada593; --border:#393227;
+      --grad-hero:linear-gradient(180deg, rgba(18,15,12,.45) 0%, rgba(18,15,12,.82) 68%, #1b1714 100%);
+      --grad-gold:linear-gradient(135deg,#e2bb5e,#a87b2e);
+      --shadow:0 20px 60px -20px rgba(0,0,0,.6); --glow:0 0 40px rgba(197,37,43,.35);
+    }
+    *{ box-sizing:border-box; }
+    html{ scroll-behavior:smooth; }
+    body{ margin:0; background:var(--bg); color:var(--fg); font-family:'Inter',system-ui,sans-serif; -webkit-font-smoothing:antialiased; }
+    a{ text-decoration:none; }
+    h1,h2,h3{ font-family:'Cinzel',serif; letter-spacing:.01em; }
+    /* container (Tailwind: mx-auto px-4, ~max 1280) */
+    .wrap{ max-width:1280px; margin:0 auto; padding:0 1rem; }
+    .eyebrow{ font-size:.75rem; text-transform:uppercase; letter-spacing:.3em; color:var(--accent); }
+    .btn{ display:inline-flex; align-items:center; justify-content:center; gap:.5rem; padding:.875rem 1.5rem; border-radius:8px; font-weight:600; font-size:1rem; transition:transform .15s, filter .15s, background .15s; }
+    .btn:hover{ transform:scale(1.04); }
+    .btn-primary{ background:var(--primary); color:var(--primary-fg); box-shadow:var(--glow); }
+    .btn-outline{ background:rgba(255,255,255,.06); color:var(--fg); border:1px solid var(--border); }
+    .btn-outline:hover{ background:var(--secondary); }
+    section[id]{ scroll-margin-top:72px; }
+
+    /* Header (h-16) */
+    .hdr{ position:fixed; top:0; left:0; right:0; z-index:40; border-bottom:1px solid rgba(57,50,39,.5); background:rgba(27,23,20,.8); backdrop-filter:blur(10px); }
+    .hdr-in{ height:64px; display:flex; align-items:center; justify-content:space-between; }
+    .brand{ display:flex; align-items:center; gap:.55rem; color:var(--fg); }
+    .brand .mark{ width:36px;height:36px;border-radius:50%;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-family:'Cinzel';font-weight:700;box-shadow:var(--glow);overflow:hidden; flex-shrink:0; }
+    .brand .mark img{ width:100%;height:100%;object-fit:cover;border-radius:50%; }
+    .brand .nm{ font-family:'Cinzel'; font-weight:600; font-size:.9rem; line-height:1.15; }
+    .brand .sb{ font-size:.6rem; letter-spacing:.2em; text-transform:uppercase; color:var(--muted-fg); }
+    .nav{ display:none; gap:2rem; font-size:.9rem; color:var(--muted-fg); }
+    .nav a{ color:var(--muted-fg); } .nav a:hover{ color:var(--fg); }
+    .hdr-cta{ background:var(--primary); color:#fff; padding:.5rem 1rem; border-radius:8px; font-size:.85rem; font-weight:600; box-shadow:var(--glow); display:inline-flex; align-items:center; gap:.4rem; white-space:nowrap; }
+
+    /* Hero (min-h-[100svh], items-center, py-24, max-w-2xl copy) */
+    .hero{ position:relative; min-height:100svh; display:flex; align-items:center; overflow:hidden; padding-top:64px; }
+    .hero img.bg{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+    .hero .ov{ position:absolute; inset:0; background:var(--grad-hero); }
+    .hero-in{ position:relative; z-index:1; padding:5rem 0; width:100%; }
+    .hero-copy{ max-width:42rem; }
+    .badge-open{ display:inline-flex; align-items:center; gap:.5rem; border:1px solid rgba(210,166,72,.35); background:rgba(27,23,20,.4); color:var(--accent); padding:.4rem 1rem; border-radius:999px; font-size:.72rem; text-transform:uppercase; letter-spacing:.22em; backdrop-filter:blur(4px); }
+    .badge-open .dot{ width:6px;height:6px;border-radius:50%;background:var(--accent); }
+    .hero h1{ font-size:2.7rem; font-weight:700; line-height:1.06; margin:1.5rem 0 0; }
+    .hero h1 .gold{ color:var(--accent); }
+    .hero p.lead{ margin:1.5rem 0 0; max-width:36rem; color:var(--muted-fg); font-size:1.125rem; line-height:1.55; }
+    .hero .mods{ margin-top:1.3rem; display:flex; flex-wrap:wrap; gap:.5rem; }
+    .hero .mods .m{ font-size:.78rem; border:1px solid var(--border); color:var(--fg); padding:.32rem .85rem; border-radius:999px; }
+    .hero .ctas{ margin-top:2.5rem; display:flex; flex-wrap:wrap; gap:1rem; }
+    .hero .ctas .btn{ padding:.95rem 1.6rem; font-size:1.02rem; }
+
+    /* Sections (py-24) */
+    .sec{ padding:6rem 0; }
+    .sec.alt{ background:rgba(44,38,29,.3); }
+    .sec-title{ max-width:42rem; }
+    .sec-title h2{ font-size:2.25rem; font-weight:700; margin:.7rem 0 0; line-height:1.1; }
+    .sec-title .rule{ height:2px; width:64px; background:var(--grad-gold); margin-top:1.25rem; }
+
+    .grid4{ display:grid; gap:1.5rem; grid-template-columns:1fr; margin-top:3.5rem; }
+    .bcard{ border:1px solid var(--border); background:var(--card); border-radius:14px; padding:1.5rem; transition:border-color .2s, box-shadow .2s; }
+    .bcard:hover{ border-color:rgba(210,166,72,.5); box-shadow:var(--shadow); }
+    .bcard .ic{ width:48px;height:48px;border-radius:10px;background:rgba(197,37,43,.12);color:var(--primary);display:flex;align-items:center;justify-content:center;font-size:1.35rem; }
+    .bcard h3{ font-size:1.25rem; margin:1.25rem 0 .5rem; }
+    .bcard p{ color:var(--muted-fg); font-size:.875rem; margin:0; line-height:1.6; }
+
+    .grid3{ display:grid; gap:1.5rem; grid-template-columns:1fr; margin-top:3.5rem; }
+    .tcard{ position:relative; border:1px solid var(--border); background:var(--card); border-radius:14px; padding:2rem; overflow:hidden; }
+    .tcard::after{ content:''; position:absolute; top:0; right:0; width:96px; height:96px; background:rgba(197,37,43,.1); border-bottom-left-radius:100%; }
+    .tcard h3{ font-size:1.5rem; margin:0; }
+    .tcard .age{ color:var(--accent); font-weight:600; font-size:.875rem; margin:.25rem 0 0; }
+    .tcard .row{ display:flex; align-items:center; gap:.75rem; color:var(--muted-fg); font-size:.875rem; margin-top:.75rem; }
+    .tcard .row i{ color:var(--accent); }
+    .tcard .tbtn{ margin-top:2rem; display:flex; width:100%; align-items:center; justify-content:center; gap:.4rem; border:1px solid var(--border); background:var(--bg); color:var(--fg); padding:.7rem; border-radius:8px; font-weight:600; font-size:.875rem; transition:background .15s,color .15s; }
+    .tcard .tbtn:hover{ background:var(--primary); color:#fff; border-color:var(--primary); }
+
+    /* Experimental (py-24) */
+    .exp{ position:relative; padding:6rem 0; overflow:hidden; }
+    .exp .bgg{ position:absolute; inset:0; background:linear-gradient(135deg, rgba(197,37,43,.2), var(--bg) 55%); }
+    .exp-card{ position:relative; max-width:48rem; margin:0 auto; border:1px solid rgba(210,166,72,.3); background:rgba(38,32,25,.85); backdrop-filter:blur(6px); border-radius:20px; padding:2.5rem 1.5rem; text-align:center; box-shadow:var(--shadow); }
+    .exp-card h2{ font-size:2.25rem; font-weight:700; margin:1.5rem 0 0; line-height:1.1; }
+    .exp-card p{ color:var(--muted-fg); font-size:1.125rem; max-width:36rem; margin:1.25rem auto 0; line-height:1.55; }
+    .exp-card .ctas{ margin-top:2.5rem; display:flex; gap:1rem; justify-content:center; flex-wrap:wrap; }
+
+    /* Location */
+    .loc{ display:grid; gap:2rem; grid-template-columns:1fr; margin-top:3.5rem; align-items:stretch; }
+    .loc .info{ border:1px solid var(--border); background:var(--card); border-radius:14px; padding:2rem; }
+    .loc .li{ display:flex; gap:1rem; align-items:flex-start; margin-bottom:1.5rem; }
+    .loc .li .ic{ width:44px;height:44px;border-radius:10px;background:rgba(197,37,43,.12);color:var(--primary);display:flex;align-items:center;justify-content:center;flex-shrink:0; }
+    .loc .li .lb{ font-size:.7rem; text-transform:uppercase; letter-spacing:.12em; color:var(--muted-fg); }
+    .loc .li .vl{ font-weight:600; margin-top:.2rem; line-height:1.5; }
+    .loc .map{ border:1px solid var(--border); border-radius:14px; overflow:hidden; box-shadow:var(--shadow); min-height:380px; }
+    .loc .map iframe{ width:100%; height:100%; min-height:380px; border:0; display:block; }
+
+    footer{ border-top:1px solid var(--border); background:rgba(44,38,29,.2); padding:3rem 0; }
+    .ft{ display:flex; flex-direction:column; align-items:center; text-align:center; justify-content:space-between; gap:1.2rem; }
+    .ft .mark{ width:40px;height:40px;border-radius:50%;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-family:'Cinzel';font-weight:700; }
+    .ft small{ color:var(--muted-fg); }
+
+    .fab{ position:fixed; right:1.5rem; bottom:1.5rem; z-index:50; display:inline-flex; align-items:center; gap:.5rem; background:#25D366; color:#fff; padding:.85rem 1.1rem; border-radius:999px; font-weight:600; font-size:.9rem; box-shadow:var(--shadow); }
+    .fab:hover{ transform:scale(1.1); transition:transform .15s; }
+
+    /* ≥768px (md) — sobe tamanhos e colunas, como o Tailwind md: */
+    @media(min-width:768px){
+      .nav{ display:flex; }
+      .hero h1{ font-size:4.5rem; line-height:1.05; }
+      .sec-title h2, .exp-card h2{ font-size:3rem; }
+      .exp-card{ padding:3.5rem; }
+      .grid4{ grid-template-columns:1fr 1fr; }
+      .grid3{ grid-template-columns:1fr 1fr 1fr; }
+      .ft{ flex-direction:row; text-align:left; }
+    }
+    @media(min-width:1024px){
+      .grid4{ grid-template-columns:1fr 1fr 1fr 1fr; }
+      .loc{ grid-template-columns:1fr 1fr; }
+    }
+    /* Telas bem pequenas: empilha os botões para facilitar o toque */
+    @media(max-width:480px){
+      .hero .ctas{ flex-direction:column; align-items:stretch; }
+      .hero .ctas .btn{ width:100%; }
+      .exp-card .ctas{ flex-direction:column; }
+      .exp-card .ctas .btn{ width:100%; }
+      .fab{ padding:.85rem; gap:0; font-size:0; }
+      .fab i{ font-size:1.5rem; }
+    }
+  </style>
+</head>
+<body id="top">
+  {% set zap = (info.telefone or '')|replace('(','')|replace(')','')|replace('-','')|replace(' ','')|replace('+','') %}
+  {% set zap_n = ('' if zap.startswith('55') else '55') ~ zap %}
+  {% macro wa(msg) %}https://wa.me/{{ zap_n }}?text={{ msg|urlencode }}{% endmacro %}
+
+  <!-- HEADER -->
+  <header class="hdr">
+    <div class="wrap hdr-in">
+      <a href="#top" class="brand">
+        <span class="mark">{% if logo_url %}<img src="{{ logo_url }}" alt="">{% else %}柔{% endif %}</span>
+        <span><span class="nm">{{ academia_nome }}</span><br><span class="sb">Academia de Judô</span></span>
+      </a>
+      <nav class="nav">
+        <a href="#beneficios">Benefícios</a>
+        <a href="#aulas">Aulas</a>
+        <a href="#experimental">Experimental</a>
+        <a href="#localizacao">Localização</a>
+      </nav>
+      {% if zap %}<a href="{{ wa('Olá! Gostaria de saber mais sobre aulas de judô.') }}" target="_blank" rel="noopener" class="hdr-cta"><i class="bi bi-whatsapp"></i> Fale Conosco</a>{% endif %}
+    </div>
+  </header>
+
+  <!-- HERO -->
+  <section class="hero">
+    <img class="bg" src="{{ url_for('static', filename='img/landing-hero-judo.jpg') }}" alt="Judocas em treino no dojô">
+    <div class="ov"></div>
+    <div class="wrap hero-in">
+      <div class="hero-copy">
+        <span class="badge-open"><span class="dot"></span> Matrículas Abertas</span>
+        <h1>Força, técnica e <span class="gold">honra</span> sobre o tatame.</h1>
+        <p class="lead">Na <strong style="color:var(--fg)">{{ academia_nome }}</strong>, formamos atletas e pessoas através do Judô — a Arte Suave. Aulas para crianças, jovens e adultos.</p>
+        {% if modalidades %}
+        <div class="mods">{% for m in modalidades %}<span class="m">{{ m }}</span>{% endfor %}</div>
+        {% endif %}
+        <div class="ctas">
+          <a href="{{ link_aula }}" class="btn btn-primary"><i class="bi bi-stars"></i> Aula Experimental Grátis</a>
+          <a href="{{ link_matricula }}" class="btn btn-outline"><i class="bi bi-mortarboard-fill"></i> Quero me matricular</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- BENEFÍCIOS -->
+  <section class="sec" id="beneficios">
+    <div class="wrap">
+      <div class="sec-title"><div class="eyebrow">Por que treinar conosco</div><h2>Mais que um esporte, um caminho.</h2><div class="rule"></div></div>
+      <div class="grid4">
+        <div class="bcard"><div class="ic"><i class="bi bi-shield-shaded"></i></div><h3>Disciplina &amp; Respeito</h3><p>Valores tradicionais do Judô aplicados dentro e fora do tatame.</p></div>
+        <div class="bcard"><div class="ic"><i class="bi bi-heart-pulse"></i></div><h3>Saúde &amp; Bem-estar</h3><p>Condicionamento físico completo, flexibilidade e autoconfiança.</p></div>
+        <div class="bcard"><div class="ic"><i class="bi bi-people-fill"></i></div><h3>Para toda a família</h3><p>Turmas separadas por idade e nível, do Judô Kids ao Adulto.</p></div>
+        <div class="bcard"><div class="ic"><i class="bi bi-award-fill"></i></div><h3>Equipe qualificada</h3><p>Professores graduados e experientes para guiar sua evolução.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- AULAS / HORÁRIOS -->
+  <section class="sec alt" id="aulas">
+    <div class="wrap">
+      <div class="sec-title"><div class="eyebrow">Nossas turmas</div><h2>Horários para todas as idades.</h2><div class="rule"></div></div>
+      {% if turmas %}
+      <div class="grid3">
+        {% for t in turmas %}
+        <div class="tcard">
+          <h3>{{ t.nome }}</h3>
+          {% if t.idade_txt %}<p class="age">{{ t.idade_txt }}</p>{% endif %}
+          {% if t.horario_txt %}<div class="row"><i class="bi bi-clock"></i> {{ t.horario_txt }}</div>{% endif %}
+          {% if t.Professor %}<div class="row"><i class="bi bi-mortarboard"></i> Prof. {{ t.Professor }}</div>{% endif %}
+          <a href="{% if zap %}{{ wa('Olá! Tenho interesse na turma ' ~ t.nome ~ '.') }}{% else %}{{ link_aula }}{% endif %}" {% if zap %}target="_blank" rel="noopener"{% endif %} class="tbtn">Quero esta turma</a>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p style="color:var(--muted-fg);margin-top:2rem">Fale conosco para conhecer os horários disponíveis.</p>
+      {% endif %}
+    </div>
+  </section>
+
+  <!-- EXPERIMENTAL -->
+  <section class="exp" id="experimental">
+    <div class="bgg"></div>
+    <div class="wrap">
+      <div class="exp-card">
+        <span class="badge-open">Gratuito</span>
+        <h2>Sua primeira aula é por nossa conta.</h2>
+        <p>Venha sentir o tatame. Agende sua aula experimental gratuita e descubra por que o Judô transforma vidas.</p>
+        <div class="ctas">
+          <a href="{{ link_aula }}" class="btn btn-primary"><i class="bi bi-stars"></i> Agendar Aula Experimental</a>
+          <a href="{{ link_matricula }}" class="btn btn-outline"><i class="bi bi-mortarboard-fill"></i> Fazer Matrícula</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- LOCALIZAÇÃO -->
+  {% if endereco_txt or info.cidade %}
+  <section class="sec" id="localizacao">
+    <div class="wrap">
+      <div class="sec-title"><div class="eyebrow">Venha nos visitar</div><h2>Onde estamos.</h2><div class="rule"></div></div>
+      <div class="loc">
+        <div class="info">
+          <div class="li"><div class="ic"><i class="bi bi-geo-alt-fill"></i></div><div><div class="lb">Endereço</div><div class="vl">{{ endereco_txt or (info.cidade ~ (' - ' ~ info.uf if info.uf else '')) }}{% if info.cep %} · CEP {{ info.cep }}{% endif %}</div></div></div>
+          {% if info.telefone %}<div class="li"><div class="ic"><i class="bi bi-whatsapp"></i></div><div><div class="lb">WhatsApp</div><div class="vl">{{ info.telefone }}</div></div></div>{% endif %}
+          {% if info.email %}<div class="li"><div class="ic"><i class="bi bi-envelope-fill"></i></div><div><div class="lb">E-mail</div><div class="vl">{{ info.email }}</div></div></div>{% endif %}
+          <div style="display:flex;gap:.7rem;flex-wrap:wrap;margin-top:.5rem">
+            {% if mapa_query %}<a href="https://www.google.com/maps/dir/?api=1&destination={{ mapa_query|urlencode }}" target="_blank" rel="noopener" class="btn btn-primary" style="padding:.7rem 1.1rem;font-size:.9rem"><i class="bi bi-geo-alt"></i> Como chegar</a>{% endif %}
+            {% if zap %}<a href="{{ wa('Olá! Gostaria de saber mais sobre aulas de judô.') }}" target="_blank" rel="noopener" class="btn btn-outline" style="padding:.7rem 1.1rem;font-size:.9rem"><i class="bi bi-whatsapp"></i> Fale conosco</a>{% endif %}
+          </div>
+        </div>
+        {% if mapa_query %}
+        <div class="map"><iframe title="Localização" loading="lazy" referrerpolicy="no-referrer-when-downgrade" src="https://maps.google.com/maps?q={{ mapa_query|urlencode }}&z=15&output=embed"></iframe></div>
+        {% endif %}
+      </div>
+    </div>
+  </section>
+  {% endif %}
+
+  <!-- FOOTER -->
+  <footer>
+    <div class="wrap ft">
+      <div style="display:flex;align-items:center;gap:.7rem">
+        <span class="mark">柔</span>
+        <div><div style="font-family:'Cinzel';font-weight:600">{{ academia_nome }}</div><small>Aulas de Judô</small></div>
+      </div>
+      <small>Jita Kyoei — Prosperidade mútua · Powered by Unimaster</small>
+    </div>
+  </footer>
+
+  {% if zap %}<a href="{{ wa('Olá! Gostaria de saber mais sobre aulas de judô.') }}" target="_blank" rel="noopener" class="fab"><i class="bi bi-whatsapp"></i> Fale Conosco</a>{% endif %}
+</body>
+</html>

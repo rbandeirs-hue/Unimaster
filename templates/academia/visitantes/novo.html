@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}Novo Visitante{% endblock %}
+{% block content %}
+<div class="container mt-4">
+    <div class="mb-4">
+        {% set back_url = url_for('academia.lista_visitantes', academia_id=academia_id) %}
+        {% include 'components/botao_voltar.html' %}
+        <h2 class="h4 fw-bold text-primary mb-1">Novo Visitante</h2>
+        <p class="text-muted mb-0">Cadastre um visitante e, se quiser, já agende a aula experimental.</p>
+    </div>
+
+    <div class="card shadow-sm" style="max-width: 640px;">
+        <div class="card-body p-4">
+            <form method="POST" action="{{ url_for('academia.novo_visitante', academia_id=academia_id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                <h6 class="fw-semibold mb-3"><i class="bi bi-person me-1"></i>Dados do visitante</h6>
+                <div class="mb-3">
+                    <label for="nome" class="form-label fw-semibold">Nome completo <span class="text-danger">*</span></label>
+                    <input type="text" id="nome" name="nome" class="form-control" required placeholder="Nome do visitante">
+                </div>
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="telefone" class="form-label fw-semibold">Telefone / WhatsApp</label>
+                        <input type="text" id="telefone" name="telefone" class="form-control" placeholder="(11) 99999-9999" maxlength="15" data-mask="phone">
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="email" class="form-label fw-semibold">E-mail</label>
+                        <input type="email" id="email" name="email" class="form-control" placeholder="email@exemplo.com">
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label for="data_nascimento" class="form-label fw-semibold">Data de nascimento</label>
+                    <input type="date" id="data_nascimento" name="data_nascimento" class="form-control">
+                </div>
+
+                <hr class="my-4">
+                <h6 class="fw-semibold mb-2"><i class="bi bi-stars me-1"></i>Aula experimental <span class="text-muted fw-normal small">(opcional)</span></h6>
+                <p class="small text-muted">Preencha turma e data para já agendar a aula experimental (entra como aprovada). Deixe em branco para apenas cadastrar o visitante.</p>
+                {% if turmas %}
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="turma_id" class="form-label fw-semibold">Turma</label>
+                        <select id="turma_id" name="turma_id" class="form-select">
+                            <option value="">— Não agendar —</option>
+                            {% for t in turmas %}
+                            <option value="{{ t.turma_id }}">{{ t.turma_nome }}{% if t.DiasHorario %} — {{ t.DiasHorario }}{% endif %}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="data_aula" class="form-label fw-semibold">Data da aula</label>
+                        <input type="date" id="data_aula" name="data_aula" class="form-control">
+                    </div>
+                </div>
+                {% else %}
+                <div class="alert alert-light border small mb-3">Esta academia ainda não tem turmas cadastradas — só é possível cadastrar o visitante.</div>
+                {% endif %}
+
+                <div class="d-flex gap-2 pt-2">
+                    <a href="{{ url_for('academia.lista_visitantes', academia_id=academia_id) }}" class="btn btn-outline-secondary">Cancelar</a>
+                    <button type="submit" class="btn btn-success"><i class="bi bi-check-lg me-1"></i> Salvar visitante</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<script>
+(function(){
+    var tel = document.getElementById('telefone');
+    if (tel) {
+        tel.addEventListener('input', function () {
+            var v = this.value.replace(/\D/g, '').slice(0, 11);
+            if (v.length > 10) this.value = '(' + v.slice(0,2) + ') ' + v.slice(2,7) + '-' + v.slice(7,11);
+            else if (v.length > 6) this.value = '(' + v.slice(0,2) + ') ' + v.slice(2,6) + '-' + v.slice(6);
+            else if (v.length > 2) this.value = '(' + v.slice(0,2) + ') ' + v.slice(2);
+            else if (v.length > 0) this.value = '(' + v;
+            else this.value = v;
+        });
+    }
+    var da = document.getElementById('data_aula');
+    if (da) { da.min = new Date().toISOString().split('T')[0]; }
+})();
+</script>
+{% endblock %}

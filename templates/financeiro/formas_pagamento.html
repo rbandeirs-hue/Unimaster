@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+{% block title %}Formas de pagamento{% endblock %}
+{% block content %}
+<div class="container mt-4">
+    <div class="mb-3">
+        {% if academias|length > 1 %}
+        <form method="GET" class="mb-2">
+            <label class="form-label small fw-semibold">Academia</label>
+            <select name="academia_id" class="form-select form-select-sm d-inline-block w-auto" onchange="this.form.submit()">
+                {% for ac in academias %}
+                <option value="{{ ac.id }}" {% if ac.id == academia_id %}selected{% endif %}>{{ ac.nome }}</option>
+                {% endfor %}
+            </select>
+        </form>
+        {% endif %}
+        {% include 'components/botao_voltar.html' %}
+        <h1 class="h4 fw-bold text-primary mb-1">Formas de pagamento</h1>
+        <p class="text-muted mb-0 small">
+            {% if use_catalog and modo_catalogo_associacao %}
+            Defina aqui as formas disponíveis para <strong>todas as academias</strong> desta associação. Cada academia escolhe depois quais ficam <strong>ativas</strong> nas configurações.
+            {% elif use_catalog and formas_modo_contexto == 'academia' %}
+            Apenas formas cadastradas pela <strong>associação</strong> aparecem aqui. Ative as que esta unidade aceita ao receber mensalidades; as <strong>desativadas</strong> não aparecem ao registrar pagamento.
+            {% else %}
+            Por academia: cadastre e gerencie dinheiro, PIX, boleto etc. (modo sem catálogo central — execute a migração <code>add_formas_pagamento_catalogo.sql</code> para associacao+academia.)
+            {% endif %}
+        </p>
+    </div>
+
+    {% if use_catalog and modo_catalogo_associacao %}
+    {# ── Associação: catálogo global ── #}
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body">
+            <h6 class="fw-semibold mb-3">Nova forma no catálogo</h6>
+            <form method="POST" class="row g-2 align-items-end">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="acao" value="adicionar_catalogo">
+                {% if current_user.has_role('admin') and id_associacao %}
+                <input type="hidden" name="associacao_id" value="{{ id_associacao }}">
+                {% endif %}
+                <div class="col-md-8">
+                    <label class="form-label small mb-0">Nome</label>
+                    <input type="text" name="nome" class="form-control" maxlength="80" placeholder="Ex.: Cartão débito" required>
+                </div>
+                <div class="col-md-4">
+                    <button type="submit" class="btn btn-primary w-100"><i class="bi bi-plus-lg me-1"></i>Adicionar ao catálogo</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm">
+        <div class="card-header bg-light">
+            <span class="fw-semibold">Catálogo da associação</span>
+        </div>
+        <div class="card-body p-0">
+            {% if formas_catalogo %}
+            <div class="table-responsive">
+                <table class="table table-hover mb-0 align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Nome</th>
+                            <th class="text-end" style="width:160px">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for f in formas_catalogo %}
+                        <tr>
+                            <td>{{ f.nome }}</td>
+                            <td class="text-end">
+                                <form method="POST" class="d-inline" onsubmit="return confirm('Remover esta forma do catálogo? As academias deixam de vê-la.');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <input type="hidden" name="acao" value="excluir_catalogo">
+                                    <input type="hidden" name="catalogo_id" value="{{ f.id }}">
+                                    {% if current_user.has_role('admin') and id_associacao %}
+                                    <input type="hidden" name="associacao_id" value="{{ id_associacao }}">
+                                    {% endif %}
+                                    <button type="submit" class="btn btn-sm btn-outline-danger">Excluir</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-muted p-3 mb-0">Nenhuma forma no catálogo. Adicione Dinheiro, PIX, etc.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    {% elif use_catalog and formas_modo_contexto == 'academia' %}
+    {# ── Academia: só ativar / desativar ── #}
+    <div class="alert alert-light border small mb-3">
+        <i class="bi bi-info-circle text-primary me-1"></i>
+        Para criar novas formas (nome), use o modo <strong>Associação</strong> → Formas de pagamento.
+    </div>
+    <div class="card border-0 shadow-sm">
+        <div class="card-header bg-light">
+            <span class="fw-semibold">Formas aceitas nesta academia</span>
+        </div>
+        <div class="card-body p-0">
+            {% if formas %}
+            <div class="table-responsive">
+                <table class="table table-hover mb-0 align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Nome</th>
+                            <th class="text-end" style="width:180px">Situação na unidade</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for f in formas %}
+                        <tr>
+                            <td class="align-middle">{{ f.nome }}</td>
+                            <td class="text-end">
+                                <div class="d-inline-flex flex-column flex-sm-row align-items-sm-center gap-2 justify-content-end">
+                                    {% if (f.ativo|default(0))|int == 1 %}
+                                    <span class="badge bg-success rounded-pill">Ativa</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary rounded-pill">Inativa</span>
+                                    {% endif %}
+                                    <form method="POST" class="d-inline m-0">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <input type="hidden" name="acao" value="toggle_academia_cat">
+                                        <input type="hidden" name="catalogo_id" value="{{ f.catalogo_id }}">
+                                        {% if academias|length > 1 %}
+                                        <input type="hidden" name="academia_id" value="{{ academia_id }}">
+                                        {% endif %}
+                                        {% if f.fp_id %}
+                                        <input type="hidden" name="fp_id" value="{{ f.fp_id }}">
+                                        {% endif %}
+                                        {% if (f.ativo|default(0))|int == 1 %}
+                                        <button type="submit" class="btn btn-sm btn-outline-secondary">Desativar</button>
+                                        {% else %}
+                                        <button type="submit" class="btn btn-sm btn-outline-success">Ativar</button>
+                                        {% endif %}
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-muted p-3 mb-0">O catálogo da associação ainda está vazio ou não foi possível carregar.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    {% else %}
+    {# ── Legado ── #}
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body">
+            <h6 class="fw-semibold mb-3">Nova forma</h6>
+            <form method="POST" class="row g-2 align-items-end">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="acao" value="adicionar">
+                {% if academias|length > 1 %}
+                <input type="hidden" name="academia_id" value="{{ academia_id }}">
+                {% endif %}
+                <div class="col-md-8">
+                    <label class="form-label small mb-0">Nome</label>
+                    <input type="text" name="nome" class="form-control" maxlength="80" placeholder="Ex.: Cartão débito" required>
+                </div>
+                <div class="col-md-4">
+                    <button type="submit" class="btn btn-primary w-100"><i class="bi bi-plus-lg me-1"></i>Adicionar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm">
+        <div class="card-header bg-light">
+            <span class="fw-semibold">Cadastradas</span>
+        </div>
+        <div class="card-body p-0">
+            {% if formas %}
+            <div class="table-responsive">
+                <table class="table table-hover mb-0 align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Nome</th>
+                            <th class="text-end" style="width:140px">Situação</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for f in formas %}
+                        <tr>
+                            <td>{{ f.nome }}</td>
+                            <td class="text-end">
+                                <form method="POST" class="d-inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <input type="hidden" name="acao" value="toggle">
+                                    <input type="hidden" name="id" value="{{ f.id }}">
+                                    {% if academias|length > 1 %}
+                                    <input type="hidden" name="academia_id" value="{{ academia_id }}">
+                                    {% endif %}
+                                    {% if f.ativo %}
+                                    <button type="submit" class="btn btn-sm btn-outline-secondary">Ativa — desativar</button>
+                                    {% else %}
+                                    <button type="submit" class="btn btn-sm btn-outline-success">Inativa — ativar</button>
+                                    {% endif %}
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-muted p-3 mb-0">Nenhuma forma cadastrada ou tabela ainda não criada no banco. Execute <code>migrations/add_formas_pagamento.sql</code> se necessário.</p>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

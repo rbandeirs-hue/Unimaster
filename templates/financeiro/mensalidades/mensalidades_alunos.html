@@ -3,8 +3,81 @@
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/financeiro/responsive.css') }}?v=3">
 {% endblock %}
+
+{# Badge da forma de pagamento recorrente do aluno (cartão/PIX recorrente) #}
+{% macro rec_badge(fr) %}
+  {% if fr %}
+  {% set _ativo = fr.status == 'ativa' %}
+  {% set _pix = fr.metodo == 'pix' %}
+  <span style="display:inline-flex;align-items:center;gap:.25rem;font-size:.68rem;font-weight:700;padding:.12rem .45rem;border-radius:999px;
+    {% if not _ativo %}background:#fef9c3;color:#854d0e;border:1px solid #fde68a;
+    {% elif _pix %}background:#ccfbf1;color:#0f766e;border:1px solid #99f6e4;
+    {% else %}background:#ede9fe;color:#5b21b6;border:1px solid #ddd6fe;{% endif %}"
+    title="{{ 'Link gerado, aguardando o aluno cadastrar' if not _ativo else 'Recorrência ativa' }}">
+    <i class="bi {{ 'bi-qr-code' if _pix else 'bi-credit-card' }}"></i>{{ 'PIX recorrente' if _pix else 'Cartão recorrente' }}{% if not _ativo %} · aguardando{% endif %}
+  </span>
+  {% endif %}
+{% endmacro %}
+
+{# Caixa de resultado da cobrança online: link + QR Code (InfinitePay/PIX) #}
+{% macro cobranca_online_box(uid, boleto_url, qrcode, copia_cola=None, valor=None, origem=None, registro_id=None) %}
+  {% if boleto_url or qrcode or copia_cola %}
+  {# `boleto_url` do Cora numa cobrança PIX é o PNG do QR Code hospedado por eles:
+     abrir esse link baixa um arquivo. Por isso o QR fica no modal e o link só
+     aparece rotulado como download quando é imagem. #}
+  {% set url_imagem = boleto_url and ('alt=media' in boleto_url or boleto_url.lower().endswith('.png')) %}
+  {# Só o modal: quem o abre é o próprio botão de PIX/cobrança da linha, e a
+     miniatura do QR saiu — poluía a listagem e o QR já está aqui em tamanho útil. #}
+  <div class="modal fade text-start js-modal-cobranca" id="modalCobranca{{ uid }}" tabindex="-1"
+       {% if origem and registro_id %}data-origem="{{ origem }}" data-registro="{{ registro_id }}"{% endif %}>
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-qr-code me-2"></i>Cobrança PIX</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body text-center">
+          {% if valor %}<p class="mb-2">Valor: <strong>R$ {{ "%.2f"|format(valor|float) }}</strong></p>{% endif %}
+          {% if qrcode %}
+          <img src="data:image/png;base64,{{ qrcode }}" alt="QR Code PIX" class="img-fluid mb-3" style="max-width:260px">
+          {% endif %}
+          {% if copia_cola %}
+          <label class="form-label small text-muted d-block text-start">PIX copia e cola</label>
+          <div class="input-group mb-2">
+            <input type="text" class="form-control" id="pixCopia{{ uid }}" value="{{ copia_cola }}" readonly>
+            <button class="btn btn-outline-primary js-copiar-link" type="button" data-link="{{ copia_cola }}"><i class="bi bi-clipboard"></i></button>
+          </div>
+          {% endif %}
+          {% if boleto_url %}
+          <a href="{{ boleto_url }}" target="_blank" rel="noopener" class="btn btn-outline-secondary btn-sm w-100">
+            <i class="bi bi-{{ 'download' if url_imagem else 'box-arrow-up-right' }} me-1"></i>
+            {{ 'Baixar imagem do QR Code' if url_imagem else 'Abrir página da cobrança' }}</a>
+          {% endif %}
+          {% if origem and registro_id %}
+          <p class="text-muted small mb-0 mt-2 js-aguardando">
+            <span class="spinner-border spinner-border-sm me-1" style="width:.8rem;height:.8rem"></span>
+            Aguardando o pagamento — esta janela fecha sozinha quando ele cair.
+          </p>
+          {% else %}
+          <p class="text-muted small mb-0 mt-2">Assim que o pagamento cair, a baixa é automática.</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+{% endmacro %}
+
+{# True quando o registro já tem cobrança online emitida e pagável na tela #}
+{% macro _tem_cobranca(rec) %}{% if rec.asaas_pix_copia_cola or rec.asaas_pix_qrcode or (rec.asaas_payment_id and rec.asaas_boleto_url) %}1{% endif %}{% endmacro %}
+
 {% block content %}
 <div class="container mt-4 mensalidades-alunos-page">
+    <div class="d-flex justify-content-end mb-2">
+      <a href="{{ url_for('financeiro.assinaturas_recorrentes', academia_id=academia_id) }}" class="btn btn-outline-primary btn-sm">
+        <i class="bi bi-arrow-repeat me-1"></i> Assinaturas recorrentes
+      </a>
+    </div>
     {% if academias and academias|length > 1 %}
     <form method="GET" class="mb-3">
         <label class="form-label small fw-semibold">Academia:</label>
@@ -29,6 +102,10 @@
             <a href="{{ url_for('financeiro.gerar_cobranca', academia_id=academia_id) if academia_id else url_for('financeiro.gerar_cobranca') }}" class="btn btn-primary btn-sm">
                 <i class="bi bi-plus-lg me-1"></i> Gerar
             </a>
+            <button type="button" class="btn btn-success btn-sm" id="btnLembretesWpp"
+                    data-url="{{ url_for('financeiro.lembretes_whatsapp_lote') }}" title="Enviar lembrete de mensalidade no WhatsApp para os pendentes/atrasados">
+                <i class="bi bi-whatsapp me-1"></i> Lembretes
+            </button>
         </div>
     </div>
     <h2 class="h4 fw-bold mb-3">Mensalidades por Aluno</h2>
@@ -155,7 +232,7 @@
                                 <input type="checkbox" class="form-check-input mt-1 cb-mensalidade" name="registro_id" form="form-excluir-lote" value="{{ m.id }}" id="cb_m_{{ m.id }}">
                                 {% endif %}
                                 <div>
-                                    <strong>{{ m.aluno_nome }}</strong>
+                                    <strong>{{ m.aluno_nome }}</strong> {{ rec_badge(forma_recorrencia_por_aluno.get(m.aluno_id)) }}
                                     <div class="text-muted small">{{ m.turma_nome or '-' }} · {{ m.plano_nome }}</div>
                                 </div>
                             </div>
@@ -206,24 +283,28 @@
                             <p class="small text-danger mb-1">{% if session.get('modo_painel') == 'associacao' %}Cadastre em <a href="{{ url_for('financeiro.formas_pagamento', academia_id=academia_id) }}">formas de pagamento</a>.{% elif session.get('modo_painel') == 'academia' and (current_user.has_role('gestor_academia') or current_user.has_role('admin')) %}Ative em <a href="{{ url_for('financeiro.formas_pagamento', academia_id=academia_id) }}">Formas de pagamento</a> (Configurações da academia).{% else %}Cadastro no modo Associação; ativação na academia em Configurações → Formas de pagamento.{% endif %}</p>
                             <button type="button" class="btn btn-sm btn-success w-100" disabled>Registrar Pagamento</button>
                             {% endif %}
-                            {% if asaas_on %}
-                            <div class="btn-group w-100 mb-1" role="group">
-                              <form method="POST" action="{{ url_for('financeiro.gerar_cobranca_asaas', ma_id=m.id) }}" class="w-50">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <input type="hidden" name="tipo" value="PIX">
-                                <button type="submit" class="btn btn-sm btn-outline-success w-100"><i class="bi bi-qr-code"></i> PIX</button>
-                              </form>
-                              <form method="POST" action="{{ url_for('financeiro.gerar_cobranca_asaas', ma_id=m.id) }}" class="w-50">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <input type="hidden" name="tipo" value="BOLETO">
-                                <button type="submit" class="btn btn-sm btn-outline-secondary w-100"><i class="bi bi-upc-scan"></i> Boleto</button>
-                              </form>
-                            </div>
-                            {% if m.asaas_pix_copia_cola or m.asaas_boleto_url %}
-                            <div class="small mb-1">
-                              {% if m.asaas_boleto_url %}<a href="{{ m.asaas_boleto_url }}" target="_blank" rel="noopener"><i class="bi bi-box-arrow-up-right"></i> Abrir cobrança</a>{% endif %}
-                            </div>
+                            {% if gateway_ativo or recorrencia_gw %}
+                            {% if _tem_cobranca(m)|trim %}
+                            {# Cobrança já emitida: o botão abre o QR em vez de gerar outra #}
+                            <button type="button" class="btn btn-sm btn-success w-100 mb-1"
+                                    data-bs-toggle="modal" data-bs-target="#modalCobrancaM{{ m.id }}">
+                              <i class="bi bi-qr-code"></i> Ver PIX / QR Code
+                            </button>
+                            {% else %}
+                            <button type="button" class="btn btn-sm btn-primary w-100 mb-1 js-gerar-cobranca"
+                                    data-ma="{{ m.id }}" data-aluno="{{ m.aluno_id }}"
+                                    data-valor="{{ '%.2f'|format(m.valor|float) }}" data-nome="{{ m.aluno_nome }}"
+                                    data-bs-toggle="modal" data-bs-target="#modalGerarCobranca">
+                              <i class="bi bi-cash-coin"></i> Gerar cobrança
+                            </button>
                             {% endif %}
+                            {{ cobranca_online_box('M' ~ m.id, m.asaas_boleto_url, m.asaas_pix_qrcode, m.asaas_pix_copia_cola, m.valor_final or m.valor, 'mensalidade', m.id) }}
+                            {% endif %}
+                            {% if m.status in ['pendente', 'atrasado'] %}
+                            <button type="button" class="btn btn-sm btn-outline-success w-100 mb-1 js-lembrete-wpp"
+                                    data-url="{{ url_for('financeiro.lembrete_whatsapp_individual', ma_id=m.id) }}">
+                              <i class="bi bi-whatsapp"></i> Lembrete WhatsApp
+                            </button>
                             {% endif %}
                             <form method="POST" action="{{ url_for('financeiro.cancelar_cobranca') }}" class="mb-0">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -301,7 +382,7 @@
                                 {% endif %}
                             </td>
                             {% endif %}
-                            <td>{{ m.aluno_nome }}</td>
+                            <td>{{ m.aluno_nome }} {{ rec_badge(forma_recorrencia_por_aluno.get(m.aluno_id)) }}</td>
                             <td>{{ m.turma_nome or '-' }}</td>
                             <td>{{ m.plano_nome }}</td>
                             <td>{{ m.data_vencimento|data_br if m.data_vencimento else '-' }}</td>
@@ -351,6 +432,12 @@
                                 {% else %}
                                 <span class="small text-danger me-1">{% if session.get('modo_painel') == 'associacao' %}Configure <a href="{{ url_for('financeiro.formas_pagamento', academia_id=academia_id) }}">formas de pagamento</a>.{% elif session.get('modo_painel') == 'academia' and (current_user.has_role('gestor_academia') or current_user.has_role('admin')) %}Configure <a href="{{ url_for('financeiro.formas_pagamento', academia_id=academia_id) }}">formas de pagamento</a>.{% else %}Associação cadastra; academia ativa em Configurações.{% endif %}</span>
                                 <button type="button" class="btn btn-sm btn-success me-1" disabled>Registrar</button>
+                                {% endif %}
+                                {% if m.status in ['pendente', 'atrasado'] %}
+                                <button type="button" class="btn btn-sm btn-outline-success me-1 js-lembrete-wpp"
+                                        data-url="{{ url_for('financeiro.lembrete_whatsapp_individual', ma_id=m.id) }}" title="Enviar lembrete no WhatsApp">
+                                    <i class="bi bi-whatsapp"></i>
+                                </button>
                                 {% endif %}
                                 <form method="POST" action="{{ url_for('financeiro.cancelar_cobranca') }}" class="d-inline">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -417,7 +504,7 @@
                 <div class="card border mb-2 shadow-sm">
                     <div class="card-body p-3">
                         <div class="d-flex justify-content-between align-items-start mb-2">
-                            <strong>{{ a.aluno_nome }}</strong>
+                            <strong>{{ a.aluno_nome }}</strong> {{ rec_badge(forma_recorrencia_por_aluno.get(a.aluno_id)) }}
                             <span class="badge {% if a.status == 'pago' %}bg-success{% elif a.status == 'atrasado' %}bg-danger{% else %}bg-warning text-dark{% endif %}">
                                 {{ a.status|capitalize }}
                             </span>
@@ -443,7 +530,15 @@
                                 </button>
                             </form>
                             {% if asaas_on %}
+                            {% set emitida = _tem_cobranca(a)|trim %}
                             <div class="btn-group w-100 mb-1" role="group">
+                              {% if emitida %}
+                              {# Já emitida: o mesmo botão abre o QR em vez de gerar outra cobrança #}
+                              <button type="button" class="btn btn-sm btn-success w-100"
+                                      data-bs-toggle="modal" data-bs-target="#modalCobrancaAvm{{ a.id }}">
+                                <i class="bi bi-qr-code"></i> Ver PIX / QR Code
+                              </button>
+                              {% else %}
                               <form method="POST" action="{{ url_for('financeiro.gerar_cobranca_asaas_avulsa', av_id=a.id) }}" class="w-50">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <input type="hidden" name="tipo" value="PIX">
@@ -454,12 +549,10 @@
                                 <input type="hidden" name="tipo" value="BOLETO">
                                 <button type="submit" class="btn btn-sm btn-outline-secondary w-100"><i class="bi bi-upc-scan"></i> Boleto</button>
                               </form>
+                              {% endif %}
                             </div>
-                            {% if a.asaas_pix_copia_cola or a.asaas_boleto_url %}
-                            <div class="small mb-1">
-                              {% if a.asaas_boleto_url %}<a href="{{ a.asaas_boleto_url }}" target="_blank" rel="noopener"><i class="bi bi-box-arrow-up-right"></i> Abrir cobrança</a>{% endif %}
-                            </div>
-                            {% endif %}
+                            {# id distinto do bloco desktop: os dois convivem no DOM #}
+                            {{ cobranca_online_box('Avm' ~ a.id, a.asaas_boleto_url, a.asaas_pix_qrcode, a.asaas_pix_copia_cola, a.valor, 'avulsa', a.id) }}
                             {% endif %}
                             {% else %}
                             <span class="text-muted small">Pgto: {{ a.data_pagamento|data_br if a.data_pagamento else '-' }}</span>
@@ -485,7 +578,7 @@
                     <tbody>
                         {% for a in avulsas %}
                         <tr>
-                            <td>{{ a.aluno_nome }}</td>
+                            <td>{{ a.aluno_nome }} {{ rec_badge(forma_recorrencia_por_aluno.get(a.aluno_id)) }}</td>
                             <td>{{ a.descricao or '-' }}</td>
                             <td>{{ a.data_vencimento|data_br if a.data_vencimento else '-' }}</td>
                             <td>R$ {{ "%.2f"|format(a.valor or 0) }}</td>
@@ -513,6 +606,13 @@
                                     </button>
                                 </form>
                                 {% if asaas_on %}
+                                {% if _tem_cobranca(a)|trim %}
+                                {# Já emitida: mesmo botão, agora abrindo o QR #}
+                                <button type="button" class="btn btn-sm btn-success ms-1"
+                                        data-bs-toggle="modal" data-bs-target="#modalCobrancaAvd{{ a.id }}">
+                                  <i class="bi bi-qr-code"></i> Ver PIX / QR Code
+                                </button>
+                                {% else %}
                                 <form method="POST" action="{{ url_for('financeiro.gerar_cobranca_asaas_avulsa', av_id=a.id) }}" class="d-inline ms-1">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                     <input type="hidden" name="tipo" value="PIX">
@@ -523,7 +623,8 @@
                                     <input type="hidden" name="tipo" value="BOLETO">
                                     <button type="submit" class="btn btn-sm btn-outline-secondary"><i class="bi bi-upc-scan"></i> Boleto</button>
                                 </form>
-                                {% if a.asaas_boleto_url %}<a href="{{ a.asaas_boleto_url }}" target="_blank" rel="noopener" class="btn btn-sm btn-link"><i class="bi bi-box-arrow-up-right"></i> Abrir</a>{% endif %}
+                                {% endif %}
+                                {{ cobranca_online_box('Avd' ~ a.id, a.asaas_boleto_url, a.asaas_pix_qrcode, a.asaas_pix_copia_cola, a.valor, 'avulsa', a.id) }}
                                 {% endif %}
                                 {% else %}
                                 {% if a.status == 'pago' %}
@@ -593,6 +694,57 @@
             </form>
         </div>
     </div>
+</div>
+
+<!-- Modal: Gerar cobrança (avulsa ou recorrente) -->
+<div class="modal fade" id="modalGerarCobranca" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content" style="border-radius:16px;overflow:hidden;border:0;">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-cash-coin me-2"></i>Gerar cobrança</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-1"><strong id="gcAluno"></strong></p>
+        <p class="text-muted small mb-3">Valor: <strong id="gcValor"></strong></p>
+
+        <form method="POST" id="formGcAvulsa">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="tipo" value="PIX">
+        </form>
+        <form method="POST" id="formGcRecorrente">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="valor" value="">
+          <input type="hidden" name="opcao_recorrencia" value="">
+        </form>
+
+        <div class="mb-3" id="gcBlocoAvulsa">
+          <div class="text-uppercase fw-bold text-muted small mb-2"><i class="bi bi-lightning-charge"></i> Cobrança avulsa <span class="fw-normal text-lowercase">(paga uma vez)</span></div>
+          <div class="d-flex gap-2 flex-wrap">
+            <button type="button" class="btn btn-outline-success btn-sm gc-avulsa" data-tipo="PIX" data-gw="asaas mercadopago efi"><i class="bi bi-qr-code"></i> PIX</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm gc-avulsa" data-tipo="BOLETO" data-gw="asaas mercadopago"><i class="bi bi-upc-scan"></i> Boleto</button>
+            <button type="button" class="btn btn-outline-primary btn-sm gc-avulsa" data-tipo="PIX" data-gw="infinitepay"><i class="bi bi-box-arrow-up-right"></i> Link de pagamento</button>
+          </div>
+        </div>
+
+        <div id="gcBlocoRecorrente">
+          <div class="text-uppercase fw-bold text-muted small mb-2"><i class="bi bi-arrow-repeat"></i> Mensalidade recorrente <span class="fw-normal text-lowercase">(todo mês)</span></div>
+          <div class="d-flex gap-2 flex-wrap">
+            {% for op in (recorrencia_opcoes or []) %}
+            <button type="button" class="btn btn-sm gc-recorrente {% if op.metodo == 'pix' %}btn-outline-info{% else %}btn-outline-primary{% endif %}" data-opcao="{{ op.val }}">
+              {% if op.metodo == 'pix' %}<i class="bi bi-qr-code"></i>{% else %}<i class="bi bi-credit-card"></i>{% endif %} {{ op.label }}
+            </button>
+            {% endfor %}
+          </div>
+          {% if not (recorrencia_opcoes or []) %}
+          <div class="text-muted small mt-2" id="gcRecIndisponivel">
+            <i class="bi bi-info-circle"></i> Recorrência disponível com <strong>Asaas</strong> (cartão/PIX) ou <strong>Mercado Pago</strong> (cartão). Configure em Configurações → Financeiro.
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <style>
@@ -1007,6 +1159,163 @@
                 if (subBtn) subBtn.disabled = false;
             });
     }, true);
+})();
+
+// ── Modal do QR: acompanha o pagamento e fecha sozinho ao confirmar ──
+(function () {
+  var STATUS_URL = "{{ url_for('financeiro.status_cobranca', origem='__O__', registro_id=0) }}";
+  var INTERVALO = 5000;   // consulta a cada 5s
+  var A_CADA_GW = 4;      // a cada 4 consultas, confirma direto no gateway
+
+  function toast(msg, tipo) {
+    var wrap = document.getElementById('toast-container');
+    if (!wrap) { alert(msg); return; }
+    var el = document.createElement('div');
+    el.className = 'toast align-items-center text-bg-' + (tipo || 'success') + ' border-0 mb-2';
+    el.setAttribute('role', 'alert');
+    el.innerHTML = '<div class="d-flex"><div class="toast-body"></div>' +
+      '<button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div>';
+    el.querySelector('.toast-body').textContent = msg;
+    wrap.appendChild(el);
+    new bootstrap.Toast(el, { delay: 6000 }).show();
+  }
+
+  document.querySelectorAll('.js-modal-cobranca[data-origem]').forEach(function (modalEl) {
+    var timer = null, voltas = 0;
+
+    function parar() { if (timer) { clearInterval(timer); timer = null; } }
+
+    function verificar() {
+      voltas += 1;
+      var url = STATUS_URL.replace('__O__', modalEl.dataset.origem)
+                          .replace(/\/0\//, '/' + modalEl.dataset.registro + '/');
+      if (voltas % A_CADA_GW === 0) url += '?gw=1';
+      fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (j) {
+          if (!j || !j.pago) return;
+          parar();
+          var inst = bootstrap.Modal.getInstance(modalEl);
+          if (inst) inst.hide();
+          toast('Pagamento confirmado! A cobrança foi baixada.', 'success');
+          // Recarrega para a linha aparecer já como paga.
+          setTimeout(function () { window.location.reload(); }, 1800);
+        })
+        .catch(function () { /* rede instável: tenta de novo no próximo ciclo */ });
+    }
+
+    modalEl.addEventListener('shown.bs.modal', function () {
+      parar(); voltas = 0;
+      timer = setInterval(verificar, INTERVALO);
+    });
+    modalEl.addEventListener('hidden.bs.modal', parar);
+  });
+})();
+
+// Copiar link de cobrança online (InfinitePay/PIX)
+document.addEventListener('click', function (ev) {
+    var btn = ev.target.closest('.js-copiar-link');
+    if (!btn) return;
+    ev.preventDefault();
+    var link = btn.getAttribute('data-link') || '';
+    var done = function () {
+        var orig = btn.innerHTML;
+        btn.innerHTML = '<i class="bi bi-check2"></i> Copiado';
+        setTimeout(function () { btn.innerHTML = orig; }, 1500);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(link).then(done).catch(function () { window.prompt('Copie o link:', link); });
+    } else {
+        window.prompt('Copie o link:', link);
+    }
+});
+
+// ── Modal "Gerar cobrança" (avulsa ou recorrente, cartão ou PIX) ──
+(function () {
+    var modalEl = document.getElementById('modalGerarCobranca');
+    if (!modalEl) return;
+    // Usa id=0 como sentinela e troca pelo id real (a rota exige int, não aceita string)
+    var URL_AVULSA = "{{ url_for('financeiro.gerar_cobranca_asaas', ma_id=0) }}";
+    var URL_RECORRENTE = "{{ url_for('financeiro.criar_assinatura_recorrente', aluno_id=0) }}";
+    var GW = "{{ gateway_ativo }}";       // gateway avulso ativo (escolhido nas configurações)
+    var fAvulsa = document.getElementById('formGcAvulsa');
+    var fRec = document.getElementById('formGcRecorrente');
+    var estado = { valor: '', nome: '' };
+
+    function listaGw(b) { return (b.getAttribute('data-gw') || '').split(' '); }
+
+    function aplicarGateway() {
+        var temAvulsa = false;
+        document.querySelectorAll('.gc-avulsa').forEach(function (b) {
+            var ok = listaGw(b).indexOf(GW) >= 0; b.classList.toggle('d-none', !ok); if (ok) temAvulsa = true;
+        });
+        var bloco = document.getElementById('gcBlocoAvulsa');
+        if (bloco) bloco.classList.toggle('d-none', !temAvulsa);
+        // Os botões de recorrência já vêm filtrados pelo servidor (gateway escolhido).
+    }
+
+    document.addEventListener('click', function (ev) {
+        var t = ev.target.closest('.js-gerar-cobranca');
+        if (!t) return;
+        estado.valor = t.getAttribute('data-valor') || '';
+        estado.nome = t.getAttribute('data-nome') || '';
+        fAvulsa.action = URL_AVULSA.replace(/\/0\/asaas$/, '/' + t.getAttribute('data-ma') + '/asaas');
+        fRec.action = URL_RECORRENTE.replace(/\/0\/assinatura-recorrente$/, '/' + t.getAttribute('data-aluno') + '/assinatura-recorrente');
+        fRec.querySelector('[name=valor]').value = estado.valor;
+        document.getElementById('gcAluno').textContent = estado.nome;
+        document.getElementById('gcValor').textContent = 'R$ ' + estado.valor;
+        aplicarGateway();
+    });
+
+    document.querySelectorAll('.gc-avulsa').forEach(function (b) {
+        b.addEventListener('click', function () {
+            fAvulsa.querySelector('[name=tipo]').value = b.getAttribute('data-tipo') || 'PIX';
+            fAvulsa.submit();
+        });
+    });
+    document.querySelectorAll('.gc-recorrente').forEach(function (b) {
+        b.addEventListener('click', function () {
+            var opcao = b.getAttribute('data-opcao') || '';
+            var label = opcao.indexOf('pix') >= 0 ? 'PIX recorrente' : 'cartão (débito automático)';
+            if (!confirm('Gerar mensalidade recorrente por ' + label + ' para ' + estado.nome +
+                         ' (R$ ' + estado.valor + '/mês)? O aluno cadastra uma vez e passa a ser cobrado automaticamente todo mês.')) return;
+            fRec.querySelector('[name=opcao_recorrencia]').value = opcao;
+            fRec.submit();
+        });
+    });
+})();
+</script>
+
+<script>
+// ===== Lembretes de mensalidade via WhatsApp =====
+(function(){
+  var CSRF = "{{ csrf_token() }}";
+  function post(url, body){ return fetch(url, {method:'POST', headers:{'X-CSRFToken':CSRF}, body: body}); }
+
+  // Botão individual (por linha)
+  document.addEventListener('click', function(e){
+    var b = e.target.closest('.js-lembrete-wpp');
+    if(!b) return;
+    e.preventDefault();
+    var orig = b.innerHTML; b.disabled = true; b.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+    post(b.getAttribute('data-url')).then(function(r){return r.json();}).then(function(d){
+      if(d.ok){ b.classList.remove('btn-outline-success'); b.classList.add('btn-success'); b.innerHTML='<i class="bi bi-check2"></i> Enviado'; }
+      else { b.disabled=false; b.innerHTML=orig; alert(d.msg || d.erro || 'Falha ao enviar. A academia está com o WhatsApp conectado?'); }
+    }).catch(function(){ b.disabled=false; b.innerHTML=orig; alert('Erro de rede.'); });
+  });
+
+  // Botão em lote
+  var btnLote = document.getElementById('btnLembretesWpp');
+  if(btnLote) btnLote.addEventListener('click', function(){
+    if(!confirm('Enviar lembrete de mensalidade no WhatsApp para todos os alunos com mensalidade pendente ou atrasada (vencendo nos próximos 3 dias ou já vencida)?')) return;
+    var orig = btnLote.innerHTML; btnLote.disabled = true; btnLote.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Enviando…';
+    post(btnLote.getAttribute('data-url')).then(function(r){return r.json();}).then(function(d){
+      btnLote.disabled=false; btnLote.innerHTML=orig;
+      var r = d.resumo || {};
+      if(r.motivo === 'automacao_desligada'){ alert('A automação está desligada, mas o envio manual continua. (Se não enviou, verifique a conexão do WhatsApp.)'); }
+      alert('Lembretes: ' + (r.enviados||0) + ' enviados, ' + (r.falhas||0) + ' falhas, ' + (r.sem_telefone||0) + ' sem telefone (de ' + (r.total||0) + ' pendentes).');
+    }).catch(function(){ btnLote.disabled=false; btnLote.innerHTML=orig; alert('Erro de rede.'); });
+  });
 })();
 </script>
 {% endblock %}

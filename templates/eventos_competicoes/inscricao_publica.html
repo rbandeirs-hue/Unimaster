@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% block title %}Inscrição — {{ evento.nome if evento else 'Competição' }}{% endblock %}
+{% block content %}
+<div class="container mt-4" style="max-width: 560px;">
+    {% if erro %}
+    <div class="alert alert-danger">{{ erro }}</div>
+    <p class="text-muted small">Em caso de dúvida, procure a organização da competição.</p>
+    {% elif ok %}
+    <div class="alert alert-success">Sua inscrição foi registrada.</div>
+    <p class="text-muted small">Guarde a confirmação. Você pode fechar esta página.</p>
+    {% elif evento %}
+    <h1 class="h4 fw-bold text-primary mb-1">{{ evento.nome }}</h1>
+    <p class="text-muted small mb-4">Preencha os dados para inscrição na competição (sem cadastro no sistema).</p>
+    <form method="POST" class="card shadow-sm border-0">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="card-body">
+            {% set academias_opts = academias_opts|default([]) %}
+            {% set professores_opts = professores_opts|default([]) %}
+            {% if academias_opts|length == 1 %}
+            <input type="hidden" name="id_academia" id="insc_academia" value="{{ academias_opts[0].id }}">
+            <div class="mb-3">
+                <span class="form-label fw-semibold d-block">Academia / local de treino</span>
+                <p class="mb-0 small"><strong>{{ academias_opts[0].nome }}</strong></p>
+            </div>
+            {% elif academias_opts|length > 1 %}
+            <div class="mb-3">
+                <label class="form-label fw-semibold">Academia / local de treino <span class="text-danger">*</span></label>
+                <select name="id_academia" id="insc_academia" class="form-select" required>
+                    <option value="">— Escolha —</option>
+                    {% for ac in academias_opts %}
+                    <option value="{{ ac.id }}">{{ ac.nome }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endif %}
+            <div class="mb-3">
+                <label class="form-label fw-semibold">Professor</label>
+                {% if professores_opts|length > 0 %}
+                <select name="professor_id" id="insc_professor_id" class="form-select mb-2">
+                    <option value="">— Escolha a academia acima —</option>
+                    {% set resp_ids = responsaveis_ids|default([]) %}
+                    {% for p in professores_opts %}
+                    <option value="{{ p.id }}" data-academia="{{ p.id_academia or '' }}"
+                            {% if p.id in resp_ids %}data-responsavel="1"{% endif %}
+                            {% if professor_pre and professor_pre.id == p.id %}selected{% endif %}>{{ p.nome }}{% if p.academia_nome %} — {{ p.academia_nome }}{% endif %}{% if p.id in resp_ids %} (responsável){% endif %}</option>
+                    {% endfor %}
+                </select>
+                {% endif %}
+                <input type="text" name="professor" class="form-control" maxlength="200" autocomplete="name" placeholder="Nome do professor (se não estiver na lista)">
+            </div>
+            <div class="mb-3">
+                <label class="form-label fw-semibold">Nome completo <span class="text-danger">*</span></label>
+                <input type="text" name="nome_completo" class="form-control" required maxlength="200" autocomplete="name">
+            </div>
+            <div class="mb-3">
+                <label class="form-label fw-semibold">Data de nascimento <span class="text-danger">*</span></label>
+                <input type="date" name="data_nascimento" class="form-control" required>
+            </div>
+            <div class="mb-3">
+                <label class="form-label fw-semibold">Peso (kg) <span class="text-danger">*</span></label>
+                <input type="text" name="peso" class="form-control" required inputmode="decimal" placeholder="Ex: 45,5">
+            </div>
+            <div class="mb-3">
+                <label class="form-label fw-semibold">Sexo <span class="text-danger">*</span></label>
+                <select name="sexo" class="form-select" required>
+                    <option value="">— Escolha —</option>
+                    <option value="M">Masculino</option>
+                    <option value="F">Feminino</option>
+                    <option value="O">Outro</option>
+                </select>
+                {% if evento.categorias_modo == 'aproximacao' %}
+                <p class="form-text text-muted small mb-0">Se já existir faixa compatível com data, sexo e peso, a categoria será atribuída na hora; caso contrário, a inscrição fica sem categoria até a organização cadastrar as faixas e atualizar.</p>
+                {% else %}
+                <p class="form-text text-muted small mb-0">Obrigatório para conferência e para competições que usem categorias por idade/peso/sexo.</p>
+                {% endif %}
+            </div>
+            <div class="mb-3">
+                <label class="form-label fw-semibold">Complemento do local <span class="text-muted fw-normal">(opcional)</span></label>
+                <input type="text" name="local_treino" class="form-control" maxlength="200" placeholder="Sala, bairro, observação…">
+            </div>
+            {% if categorias_opts and categorias_opts|length > 0 %}
+            <div class="mb-3">
+                <label class="form-label fw-semibold">Categoria (opcional)</label>
+                <select name="categoria" class="form-select">
+                    <option value="">— Escolher depois / não sei —</option>
+                    {% for c in categorias_opts %}
+                    <option value="{{ c.nome_categoria }}">{{ c.nome_categoria }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endif %}
+            <button type="submit" class="btn btn-primary w-100">Enviar inscrição</button>
+        </div>
+    </form>
+    {% endif %}
+</div>
+
+<script>
+  // Mostra no select de professor só os da academia escolhida.
+  (function () {
+    var acad = document.getElementById('insc_academia');
+    var prof = document.getElementById('insc_professor_id');
+    if (!acad || !prof) return;
+    var opcoes = Array.prototype.slice.call(prof.options).filter(function (o) { return o.value; });
+    var vazia = prof.querySelector('option[value=""]');
+
+    function valorAcademia() {
+      return acad.tagName === 'SELECT' ? acad.value : acad.value; // hidden ou select
+    }
+
+    function filtrar(preSelecionarResponsavel) {
+      var aid = String(valorAcademia() || '');
+      var visiveis = 0, responsavel = null;
+      opcoes.forEach(function (o) {
+        var mostra = aid && o.getAttribute('data-academia') === aid;
+        o.hidden = !mostra;
+        o.disabled = !mostra;
+        if (mostra) {
+          visiveis++;
+          // O responsável da academia vem marcado com data-responsavel="1".
+          if (o.getAttribute('data-responsavel') === '1' && !responsavel) responsavel = o;
+        }
+      });
+      // Se o professor selecionado não é da academia, limpa a seleção.
+      var sel = prof.options[prof.selectedIndex];
+      if (sel && sel.value && sel.hidden) prof.value = '';
+      // Ao trocar de academia, já deixa o responsável pré-selecionado (dá para trocar).
+      if (preSelecionarResponsavel && responsavel && !prof.value) prof.value = responsavel.value;
+      if (vazia) {
+        vazia.textContent = !aid ? '— Escolha a academia acima —'
+                           : (visiveis ? '— Outro professor —' : '— Nenhum professor nesta academia —');
+      }
+    }
+
+    if (acad.tagName === 'SELECT') acad.addEventListener('change', function () { filtrar(true); });
+    // Na carga, pré-seleciona o responsável só se nada veio marcado do servidor.
+    filtrar(!prof.value);
+  })();
+</script>
+{% endblock %}

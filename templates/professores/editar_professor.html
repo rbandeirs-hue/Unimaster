@@ -12,17 +12,22 @@
     <div class="card shadow-sm" style="max-width: 600px;">
         <div class="card-body p-4">
             <form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="mb-3">
-                    <label for="nome" class="form-label fw-semibold">Nome <span class="text-danger">*</span></label>
-                    <input type="text" id="nome" name="nome" class="form-control" required value="{{ professor.nome or '' }}">
-                </div>
-                <div class="mb-3">
-                    <label for="email" class="form-label fw-semibold">Email</label>
-                    <input type="email" id="email" name="email" class="form-control" value="{{ professor.email or '' }}">
-                </div>
-                <div class="mb-3">
-                    <label for="telefone" class="form-label fw-semibold">Telefone</label>
-                    <input type="text" id="telefone" name="telefone" class="form-control" value="{{ professor.telefone or '' }}" maxlength="15">
+                    <label class="form-label fw-semibold">Dados do professor</label>
+                    <div class="border rounded p-3 bg-light d-flex justify-content-between align-items-start flex-wrap gap-2">
+                        <div>
+                            <div class="fw-semibold"><i class="bi bi-person-badge me-1"></i>{{ professor.nome or '—' }}</div>
+                            <div class="small text-muted">{{ professor.email or 'Sem e-mail' }}</div>
+                            <div class="small text-muted">{{ professor.telefone or 'Sem telefone' }}</div>
+                        </div>
+                        {% if professor.usuario_id %}
+                        <a href="{{ url_for('usuarios.editar_usuario', user_id=professor.usuario_id, next=request.full_path) }}" class="btn btn-outline-primary btn-sm">
+                            <i class="bi bi-pencil-square me-1"></i>Editar no cadastro de usuários
+                        </a>
+                        {% endif %}
+                    </div>
+                    <small class="text-muted">Nome, e-mail e telefone vêm do cadastro do usuário vinculado e são editados lá.</small>
                 </div>
                 <div class="mb-3">
                     <label for="usuario_id" class="form-label fw-semibold">Vincular ao usuário</label>
@@ -32,7 +37,7 @@
                         <option value="{{ u.id }}" {% if professor.usuario_id == u.id %}selected{% endif %}>{{ u.nome }} ({{ u.email or '-' }})</option>
                         {% endfor %}
                     </select>
-                    <small class="text-muted">Associe este professor a um usuário do sistema para acesso ao painel.</small>
+                    <small class="text-muted">Associe este professor a um usuário do sistema para acesso ao painel. Se remover o vínculo ou desativar o professor, ele deixa de constar como responsável/auxiliar nas turmas.</small>
                 </div>
                 {% if modalidades %}
                 <div class="mb-4">
@@ -63,12 +68,4 @@
         </div>
     </div>
 </div>
-<script>
-document.getElementById('telefone').addEventListener('input', function(e) {
-    var v = e.target.value.replace(/\D/g, '');
-    if (v.length <= 2) e.target.value = v ? '(' + v : '';
-    else if (v.length <= 7) e.target.value = '(' + v.slice(0,2) + ') ' + v.slice(2);
-    else e.target.value = '(' + v.slice(0,2) + ') ' + v.slice(2,7) + '-' + v.slice(7,11);
-});
-</script>
 {% endblock %}

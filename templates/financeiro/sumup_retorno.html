@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Pagamento{% endblock %}
+{% block content %}
+<div class="container my-4" style="max-width: 520px;">
+  <div class="card border-0 shadow-sm" style="border-radius:16px;">
+    <div class="card-body p-4 text-center">
+      <div style="width:54px;height:54px;border-radius:14px;background:#e7f1ff;color:#0d6efd;display:inline-flex;align-items:center;justify-content:center;font-size:1.6rem;margin-bottom:.5rem;"><i class="bi bi-hourglass-split"></i></div>
+      <h5 class="fw-bold mb-2">Processando seu pagamento…</h5>
+      <p class="text-muted small mb-3">Assim que o pagamento for confirmado, esta página será atualizada.</p>
+      <div id="ret-status" class="badge bg-warning text-dark">Aguardando confirmação</div>
+    </div>
+  </div>
+</div>
+{% if checkout_id %}
+<script>
+(function () {
+  var URL_STATUS = {{ url_for('financeiro.sumup_status', checkout_id=checkout_id)|tojson }};
+  function checar() {
+    fetch(URL_STATUS).then(function (r) { return r.json(); }).then(function (j) {
+      if (j && j.pago) {
+        var b = document.getElementById('ret-status');
+        b.className = 'badge bg-success'; b.textContent = 'Pagamento confirmado!';
+      }
+    }).catch(function () {});
+  }
+  checar(); setInterval(checar, 5000);
+})();
+</script>
+{% endif %}
+{% endblock %}

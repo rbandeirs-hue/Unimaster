@@ -26,4 +26,15 @@ def filtro_visibilidade_sql(id_associacao=None, id_academia=None, prefix="m"):
             f"({p}.visibilidade='privada' AND {p}.id_associacao=%s AND ({p}.id_academia IS NULL OR {p}.id_academia = 0)))",
             (id_associacao,)
         )
-    return "", ()
+    elif id_academia is not None:
+        # Academia sem associação: só vê públicas e privadas da própria academia
+        return (
+            f" AND (COALESCE({p}.visibilidade,'publica')='publica' OR "
+            f"({p}.visibilidade='privada' AND {p}.id_academia=%s))",
+            (id_academia,)
+        )
+    # Sem contexto: oculta todas as privadas
+    return (
+        f" AND COALESCE({p}.visibilidade,'publica')='publica'",
+        ()
+    )

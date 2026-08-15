@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Chaves — {{ categoria_nome or 'Placar' }}</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: #f5f5f5;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .header-chaves {
+      background: #fff;
+      border-bottom: 1px solid #ddd;
+      padding: 8px 16px;
+      flex-shrink: 0;
+    }
+    .header-chaves h1 { font-size: 1.25rem; margin: 0; color: #333; }
+    .header-chaves .categoria { color: #666; font-size: 0.95rem; }
+    .conteudo-chaves {
+      flex: 1;
+      display: flex;
+      min-height: 0;
+      padding: 12px;
+      gap: 16px;
+    }
+    .col-bracket {
+      flex: 1;
+      overflow: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+    .col-resultado {
+      width: 280px;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    /* Bloco de atleta no estilo da imagem: número (verde), sigla (cinza), nome */
+    .match-row {
+      display: flex;
+      align-items: stretch;
+      margin-bottom: 2px;
+      position: relative;
+    }
+    .match-row .atleta-block {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      padding: 8px 10px;
+      background: #fff;
+      border: 1px solid #e0e0e0;
+      border-left: 4px solid #2e7d32;
+      min-height: 44px;
+    }
+    .match-row .atleta-block .num {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 26px;
+      background: #1b5e20;
+      color: #fff;
+      font-weight: 700;
+      font-size: 0.85rem;
+      margin-right: 10px;
+      flex-shrink: 0;
+    }
+    .match-row .atleta-block .sigla {
+      display: inline-block;
+      padding: 2px 8px;
+      background: #e0e0e0;
+      color: #555;
+      font-size: 0.75rem;
+      font-weight: 600;
+      margin-right: 10px;
+      flex-shrink: 0;
+    }
+    .match-row .atleta-block .nome {
+      font-weight: 700;
+      color: #222;
+      font-size: 0.95rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .match-row .atleta-block.azul { border-left-color: #1565c0; }
+    .match-row .atleta-block.azul .num { background: #0d47a1; }
+    .match-num {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      background: #c8e6c9;
+      color: #1b5e20;
+      font-weight: 700;
+      font-size: 0.8rem;
+      flex-shrink: 0;
+      margin-left: 4px;
+    }
+    .round-label {
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: #666;
+      text-transform: uppercase;
+      margin: 12px 0 4px 0;
+      padding-left: 2px;
+    }
+    .round-label:first-child { margin-top: 0; }
+    .match-group {
+      margin-bottom: 8px;
+    }
+    /* Painel RESULTADO */
+    .painel-resultado {
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    .painel-resultado .header {
+      background: #66bb6a;
+      color: #fff;
+      padding: 12px 16px;
+      font-weight: 700;
+      font-size: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .painel-resultado .header i { font-size: 1.2rem; }
+    .painel-resultado .item {
+      display: flex;
+      align-items: center;
+      padding: 12px 16px;
+      border-bottom: 1px solid #eee;
+      gap: 10px;
+    }
+    .painel-resultado .item:last-child { border-bottom: none; }
+    .painel-resultado .pos {
+      width: 28px;
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #e0e0e0;
+      color: #333;
+      font-weight: 700;
+      font-size: 0.9rem;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .painel-resultado .item.ouro .pos { background: #ffd54f; color: #5d4037; }
+    .painel-resultado .item.prata .pos { background: #e0e0e0; color: #424242; }
+    .painel-resultado .sigla {
+      padding: 2px 6px;
+      background: #f5f5f5;
+      font-size: 0.7rem;
+      font-weight: 600;
+      color: #555;
+      flex-shrink: 0;
+    }
+    .painel-resultado .nome { font-weight: 600; color: #333; }
+    .painel-resultado .vazio {
+      padding: 24px 16px;
+      text-align: center;
+      color: #999;
+      font-size: 0.9rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="header-chaves d-flex justify-content-between align-items-center">
+    <div>
+      <h1>{{ evento.nome if evento else 'Chaves' }}</h1>
+      <span class="categoria">{{ categoria_nome or 'Categoria' }}</span>
+    </div>
+  </div>
+
+  <div class="conteudo-chaves">
+    <div class="col-bracket">
+      {% if lutas %}
+      {% set round_names = {1: '1ª rodada', 2: 'Semifinal', 3: 'Final', 4: 'Disputa 3º'} %}
+      {% set ns = namespace(last_round=0) %}
+      {% for l in lutas %}
+        {% set r = l.round or 1 %}
+        {% if r != ns.last_round %}
+          {% set ns.last_round = r %}
+      <div class="round-label">{{ round_names.get(r, 'Rodada ' ~ r) }}</div>
+        {% endif %}
+      <div class="match-group">
+        <div class="match-row">
+          <div class="atleta-block">
+            <span class="num">1</span>
+            <span class="sigla">{{ (l.atleta_branco_academia or '-')[:3]|upper }}</span>
+            <span class="nome">{{ l.atleta_branco_nome or '—' }}</span>
+          </div>
+          <div class="match-num">{{ l.id }}</div>
+        </div>
+        <div class="match-row">
+          <div class="atleta-block azul">
+            <span class="num">2</span>
+            <span class="sigla">{{ (l.atleta_azul_academia or '-')[:3]|upper }}</span>
+            <span class="nome">{{ l.atleta_azul_nome or '—' }}</span>
+          </div>
+          <div class="match-num">{{ l.id }}</div>
+        </div>
+      </div>
+      {% endfor %}
+      {% else %}
+      <p class="text-muted p-3">Nenhuma luta nesta categoria. Gere a chave em Chaves.</p>
+      {% endif %}
+    </div>
+
+    <div class="col-resultado">
+      <div class="painel-resultado">
+        <div class="header">
+          <i class="bi bi-bar-chart-fill"></i> RESULTADO
+        </div>
+        {% if resultado_1 and resultado_2 %}
+        <div class="item ouro">
+          <span class="pos">1</span>
+          <i class="bi bi-trophy-fill text-warning"></i>
+          <span class="sigla">{{ (resultado_1.academia or '-')[:3]|upper }}</span>
+          <span class="nome">{{ resultado_1.nome }}</span>
+        </div>
+        <div class="item prata">
+          <span class="pos">2</span>
+          <i class="bi bi-trophy-fill text-secondary"></i>
+          <span class="sigla">{{ (resultado_2.academia or '-')[:3]|upper }}</span>
+          <span class="nome">{{ resultado_2.nome }}</span>
+        </div>
+        {% else %}
+        <div class="vazio">Finalize a final para exibir 1º e 2º lugar.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</body>
+</html>

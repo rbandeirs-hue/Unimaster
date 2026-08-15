@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Matrícula — {{ academia_nome }}</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
+  <style>
+    :root{ --bg:#13100e; --card:#221c17; --fg:#f4f1e9; --primary:#c5252b; --accent:#d2a648; --muted:#ada593; --border:#3a322a; --input:#1c1813; }
+    body{ background:var(--bg); color:var(--fg); font-family:'Inter',sans-serif; -webkit-font-smoothing:antialiased; }
+    .mat-wrap{ max-width:560px; margin:0 auto; padding:1.4rem 1rem 3rem; }
+    .topbar{ display:flex; justify-content:center; margin-bottom:1rem; }
+    .topbar a{ color:var(--muted); text-decoration:none; font-size:.85rem; } .topbar a:hover{ color:var(--fg); }
+    .mat-card{ background:var(--card); border:1px solid var(--border); border-radius:18px; box-shadow:0 24px 60px -24px rgba(0,0,0,.7); overflow:hidden; }
+    .mat-head{ background:linear-gradient(135deg,#3a1518,#1b1410); border-bottom:1px solid var(--border); padding:1.7rem 1.5rem 1.4rem; text-align:center; }
+    .mat-head .mark{ width:56px;height:56px;border-radius:50%;background:var(--primary);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-family:'Cinzel';font-weight:700;font-size:1.5rem;box-shadow:0 0 30px rgba(197,37,43,.45);overflow:hidden;margin-bottom:.6rem; }
+    .mat-head .mark img{ width:100%;height:100%;object-fit:cover;border-radius:50%; }
+    .mat-head .eyebrow{ font-size:.66rem; letter-spacing:.28em; text-transform:uppercase; color:var(--accent); }
+    .mat-head h1{ font-family:'Cinzel',serif; font-size:1.5rem; font-weight:700; margin:.15rem 0 0; color:#fff; }
+    .mat-head p{ margin:.2rem 0 0; color:var(--muted); font-size:.88rem; }
+    .mat-body{ padding:1.6rem 1.5rem; }
+    .form-label{ font-weight:600; font-size:.85rem; color:#e9e4d8; margin-bottom:.35rem; }
+    .text-danger{ color:var(--primary) !important; }
+    .form-control, .form-select{ background:var(--input); border:1px solid var(--border); color:var(--fg); border-radius:10px; padding:.6rem .85rem; }
+    .form-control::placeholder{ color:#7d7669; }
+    .form-control:focus, .form-select:focus{ background:#241e18; border-color:var(--primary); box-shadow:0 0 0 3px rgba(197,37,43,.22); color:var(--fg); }
+    .form-select option{ background:var(--card); color:var(--fg); }
+    .form-text{ color:#8a8275 !important; }
+    .form-check-input{ background-color:var(--input); border-color:var(--border); }
+    .form-check-input:checked{ background-color:var(--primary); border-color:var(--primary); }
+    .input-group-text{ background:#2a231c; border:1px solid var(--border); color:var(--muted); }
+    .mf-input-prefix{ position:relative; } .mf-input-prefix .mf-prefix{ position:absolute; left:.7rem; top:50%; transform:translateY(-50%); color:var(--muted); font-weight:600; }
+    .mf-input-prefix input{ padding-left:2.1rem; }
+    hr{ border-color:var(--border); opacity:1; }
+    .alert{ border-radius:10px; }
+    .btn-mat{ border-radius:10px; font-weight:700; padding:.85rem 1rem; background:var(--primary); border:0; color:#fff; box-shadow:0 8px 22px rgba(197,37,43,.3); }
+    .btn-mat:hover{ filter:brightness(1.08); color:#fff; }
+    .btn-outline-primary{ color:var(--accent); border-color:var(--accent); }
+    .btn-outline-primary:hover{ background:var(--accent); color:#1b1410; border-color:var(--accent); }
+    .badge.bg-success{ background:#15803d !important; }
+    .alert-success{ background:rgba(21,128,61,.15); border-color:rgba(21,128,61,.4); color:#bbf7d0; }
+    .alert-warning{ background:rgba(210,166,72,.12); border-color:rgba(210,166,72,.4); color:#f5deb0; }
+    .alert-light{ background:#2a231c; border-color:var(--border); color:var(--fg); }
+    .foot{ text-align:center; color:var(--muted); font-size:.8rem; margin-top:1rem; font-family:'Cinzel'; }
+    .text-muted{ color:var(--muted) !important; }
+  </style>
+</head>
+<body>
+<div class="mat-wrap">
+  <div class="topbar"><a href="{{ url_for('precadastro.landing', academia_slug=academia_slug) }}"><i class="bi bi-arrow-left"></i> Voltar ao site</a></div>
+  <div class="mat-card">
+    <div class="mat-head">
+      <div class="mark">{% if logo_url %}<img src="{{ logo_url }}" alt="">{% else %}柔{% endif %}</div>
+      <div class="eyebrow">Matrículas Abertas</div>
+      <h1>Matrícula</h1>
+      <p>{{ academia_nome }}</p>
+    </div>
+    <div class="mat-body">
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for cat, msg in messages %}
+        <div class="alert alert-{{ 'danger' if cat == 'danger' else cat }} py-2">{{ msg }}</div>
+        {% endfor %}
+      {% endwith %}
+
+      {% if resultado %}
+      <!-- ===== Resultado: pagamento ===== -->
+      <div class="text-center">
+        <div style="width:56px;height:56px;border-radius:14px;background:#dcfce7;color:#16a34a;display:inline-flex;align-items:center;justify-content:center;font-size:1.7rem;margin-bottom:.5rem;"><i class="bi bi-check-lg"></i></div>
+        <h4 class="fw-bold mb-1">Cadastro recebido!</h4>
+        {% if resultado.cupom and resultado.desconto %}
+        <p class="mb-1"><span class="text-muted text-decoration-line-through">R$ {{ "%.2f"|format(resultado.valor_original|float) }}</span>
+           <span class="badge bg-success ms-1">cupom {{ resultado.cupom }}: -R$ {{ "%.2f"|format(resultado.desconto|float) }}</span></p>
+        {% endif %}
+        {% if resultado.valor %}<p class="text-muted mb-3">Valor da matrícula: <strong>R$ {{ "%.2f"|format(resultado.valor|float) }}</strong></p>{% endif %}
+
+        {% if not resultado.avulso %}
+          <div class="alert alert-light border small text-start"><i class="bi bi-info-circle text-primary"></i> Pague a matrícula {% if resultado.tipo == 'LINK' %}pelo link abaixo{% else %}via PIX (QR Code ou copia e cola){% endif %} para concluir.</div>
+          {% if resultado.qrcode %}
+          <img src="data:image/png;base64,{{ resultado.qrcode }}" alt="QR Code" style="width:210px;height:210px;border:1px solid #e9ecef;border-radius:12px;padding:6px;background:#fff;">
+          <p class="text-muted small mt-2">Escaneie o QR Code para pagar</p>
+          {% endif %}
+          {% if resultado.copia_cola %}
+          <label class="form-label small d-block text-start">PIX copia e cola</label>
+          <div class="input-group mb-3">
+            <input type="text" class="form-control" id="copiaCola" value="{{ resultado.copia_cola }}" readonly>
+            <button class="btn btn-outline-primary" type="button" onclick="copiar('copiaCola', this)"><i class="bi bi-clipboard"></i></button>
+          </div>
+          {% endif %}
+          {% if resultado.link %}
+          <a href="{{ resultado.link }}" target="_blank" rel="noopener" class="btn btn-success btn-mat w-100 mb-2"><i class="bi bi-box-arrow-up-right me-1"></i> Abrir página de pagamento</a>
+          {% endif %}
+        {% else %}
+          <div class="alert alert-warning text-start">
+            <i class="bi bi-cash-coin"></i> Pagamento <strong>presencial/avulso</strong>.
+            {% if resultado.valor %}Pague <strong>R$ {{ "%.2f"|format(resultado.valor|float) }}</strong> {% endif %}
+            diretamente na {{ resultado.academia_nome }} para concluir a matrícula.
+          </div>
+        {% endif %}
+        <p class="text-muted small mt-2 mb-0">A academia confirmará sua matrícula.</p>
+      </div>
+
+      {% else %}
+      <!-- ===== Formulário ===== -->
+      <p class="text-muted mb-3">Preencha os dados do aluno para realizar a matrícula.</p>
+      <form method="POST" autocomplete="off">
+        <div class="mb-3">
+          <label class="form-label">Nome completo do aluno <span class="text-danger">*</span></label>
+          <input type="text" class="form-control" name="nome" required value="{{ form.get('nome','') }}">
+        </div>
+        <div class="row g-2 mb-3">
+          <div class="col-7">
+            <label class="form-label">Data de nascimento</label>
+            <input type="date" class="form-control" name="data_nascimento" value="{{ form.get('data_nascimento','') }}">
+          </div>
+          <div class="col-5">
+            <label class="form-label">Sexo</label>
+            <select class="form-select" name="sexo">
+              <option value="">—</option>
+              <option value="M" {% if form.get('sexo')=='M' %}selected{% endif %}>Masculino</option>
+              <option value="F" {% if form.get('sexo')=='F' %}selected{% endif %}>Feminino</option>
+              <option value="O" {% if form.get('sexo')=='O' %}selected{% endif %}>Outro</option>
+            </select>
+          </div>
+        </div>
+
+        <hr>
+        <div class="form-check form-switch mb-2">
+          <input class="form-check-input" type="checkbox" id="proprio" name="responsavel_eh_proprio" value="1" {% if form.get('responsavel_eh_proprio')=='1' %}checked{% endif %} onchange="togProprio()">
+          <label class="form-check-label fw-semibold" for="proprio">Responsável financeiro é o próprio aluno</label>
+        </div>
+        <div class="mb-3" id="campoRespNome">
+          <label class="form-label">Nome do responsável financeiro</label>
+          <input type="text" class="form-control" name="responsavel_financeiro_nome" id="respNome" value="{{ form.get('responsavel_financeiro_nome','') }}">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">CPF do responsável financeiro <span class="text-danger">*</span></label>
+          <input type="text" class="form-control" name="responsavel_financeiro_cpf" id="respCpf" required placeholder="000.000.000-00" maxlength="14" value="{{ form.get('responsavel_financeiro_cpf','') }}">
+        </div>
+
+        <div class="row g-2 mb-3">
+          <div class="col-6">
+            <label class="form-label">Contato (telefone)</label>
+            <input type="text" class="form-control" name="telefone" id="tel" placeholder="(00) 00000-0000" value="{{ form.get('telefone','') }}">
+          </div>
+          <div class="col-6">
+            <label class="form-label">E-mail</label>
+            <input type="email" class="form-control" name="email" placeholder="email@exemplo.com" value="{{ form.get('email','') }}">
+          </div>
+        </div>
+
+        <hr>
+        <div class="row g-2 mb-3">
+          <div class="col-7">
+            <label class="form-label">CEP</label>
+            <input type="text" class="form-control" name="cep" id="cep" placeholder="00000-000" maxlength="9" value="{{ form.get('cep','') }}">
+            <div class="form-text" id="cepStatus"></div>
+          </div>
+          <div class="col-5">
+            <label class="form-label">Número</label>
+            <input type="text" class="form-control" name="numero" id="numero" placeholder="123" value="{{ form.get('numero','') }}">
+          </div>
+          <div class="col-12">
+            <label class="form-label">Endereço</label>
+            <input type="text" class="form-control" name="rua" id="rua" placeholder="Rua / logradouro" value="{{ form.get('rua','') }}">
+          </div>
+          <div class="col-7">
+            <input type="text" class="form-control" name="bairro" id="bairro" placeholder="Bairro" value="{{ form.get('bairro','') }}">
+          </div>
+          <div class="col-5">
+            <input type="text" class="form-control" name="cidade" id="cidade" placeholder="Cidade" value="{{ form.get('cidade','') }}">
+          </div>
+        </div>
+        <p class="text-muted small mb-3"><i class="bi bi-info-circle"></i> O endereço agiliza o pagamento online (já vai preenchido no checkout).</p>
+
+        {% if valor_matricula %}
+        <hr>
+        {% if cupons_visiveis %}
+        <div class="alert alert-success py-2 small mb-2">
+          <i class="bi bi-ticket-perforated-fill"></i> Cupons disponíveis:
+          {% for c in cupons_visiveis %}
+          <button type="button" class="badge bg-success border-0 me-1 js-usar-cupom" data-codigo="{{ c.codigo }}" style="cursor:pointer">
+            {{ c.codigo }} ({% if c.tipo == 'percentual' %}{{ "%.0f"|format(c.valor|float) }}%{% else %}R$ {{ "%.2f"|format(c.valor|float) }}{% endif %} off)
+          </button>
+          {% endfor %}
+          <span class="text-muted">— clique para aplicar.</span>
+        </div>
+        {% endif %}
+        <label class="form-label">Cupom de desconto</label>
+        <div class="input-group mb-1">
+          <input type="text" class="form-control text-uppercase" name="cupom" id="cupom" placeholder="Digite o código" value="{{ form.get('cupom','') }}">
+          <button type="button" class="btn btn-outline-primary" id="btnAplicarCupom"><i class="bi bi-check2"></i> Aplicar</button>
+        </div>
+        <div class="small mb-2" id="cupomMsg"></div>
+
+        <div class="d-flex justify-content-between align-items-center mb-3 p-2" style="background:#2a231c;border:1px solid var(--border);border-radius:10px;">
+          <span class="text-muted">Total da matrícula</span>
+          <span class="fw-bold" id="totalMatricula" data-base="{{ '%.2f'|format(valor_matricula|float) }}">R$ {{ "%.2f"|format(valor_matricula|float) }}</span>
+        </div>
+        {% endif %}
+
+        <button type="submit" class="btn btn-primary btn-mat w-100" id="btnEnviar">
+          {% if valor_matricula %}<i class="bi bi-arrow-right-circle me-1"></i> <span id="lblEnviar">Continuar para pagamento (R$ {{ "%.2f"|format(valor_matricula|float) }})</span>{% else %}<i class="bi bi-check-lg me-1"></i> Enviar matrícula{% endif %}
+        </button>
+      </form>
+      {% endif %}
+
+    </div>
+  </div>
+  <p class="text-center text-muted small mt-3">Powered by Unimaster</p>
+</div>
+
+<script>
+  function mascaraCPF(el){var v=el.value.replace(/\D/g,'').slice(0,11);if(v.length>9)v=v.slice(0,3)+'.'+v.slice(3,6)+'.'+v.slice(6,9)+'-'+v.slice(9);else if(v.length>6)v=v.slice(0,3)+'.'+v.slice(3,6)+'.'+v.slice(6);else if(v.length>3)v=v.slice(0,3)+'.'+v.slice(3);el.value=v;}
+  function mascaraTel(el){var v=el.value.replace(/\D/g,'').slice(0,11);if(v.length>10)v='('+v.slice(0,2)+') '+v.slice(2,7)+'-'+v.slice(7);else if(v.length>6)v='('+v.slice(0,2)+') '+v.slice(2,6)+'-'+v.slice(6);else if(v.length>2)v='('+v.slice(0,2)+') '+v.slice(2);el.value=v;}
+  function togProprio(){var on=document.getElementById('proprio').checked;document.getElementById('campoRespNome').style.display=on?'none':'';}
+  function copiar(id,btn){var i=document.getElementById(id);i.select();try{document.execCommand('copy');}catch(e){}var o=btn.innerHTML;btn.innerHTML='<i class="bi bi-check2"></i>';setTimeout(function(){btn.innerHTML=o;},1500);}
+  var c=document.getElementById('respCpf'); if(c) c.addEventListener('input',function(){mascaraCPF(this);});
+  var t=document.getElementById('tel'); if(t) t.addEventListener('input',function(){mascaraTel(this);});
+
+  // Máscara + busca de CEP (ViaCEP) para já preencher o endereço
+  function mascaraCEP(el){var v=el.value.replace(/\D/g,'').slice(0,8);if(v.length>5)v=v.slice(0,5)+'-'+v.slice(5);el.value=v;}
+  var cep=document.getElementById('cep');
+  var ultimoCepBuscado='';
+  function buscarCEP(){
+    var d=(cep.value||'').replace(/\D/g,''); var st=document.getElementById('cepStatus');
+    if(d.length!==8){return;}
+    if(d===ultimoCepBuscado){return;}   // evita repetir a mesma busca
+    ultimoCepBuscado=d;
+    if(st){st.textContent='Buscando endereço...';st.className='form-text text-muted';}
+    fetch('https://viacep.com.br/ws/'+d+'/json/').then(function(r){return r.json();}).then(function(j){
+      if(j && !j.erro){
+        document.getElementById('rua').value=j.logradouro||'';
+        document.getElementById('bairro').value=j.bairro||'';
+        document.getElementById('cidade').value=j.localidade||'';
+        if(st){st.textContent='Endereço encontrado.';st.className='form-text text-success';}
+        var n=document.getElementById('numero'); if(n && !n.value) n.focus();
+      } else {
+        ultimoCepBuscado='';
+        if(st){st.textContent='CEP não encontrado.';st.className='form-text text-danger';}
+      }
+    }).catch(function(){ ultimoCepBuscado=''; if(st)st.textContent=''; });
+  }
+  if(cep){
+    cep.addEventListener('input',function(){ mascaraCEP(this); buscarCEP(); });  // busca ao completar 8 dígitos
+    cep.addEventListener('blur', buscarCEP);
+  }
+  togProprio();
+
+  // Cupom de desconto (validação ao vivo)
+  (function(){
+    var inp=document.getElementById('cupom'); if(!inp) return;
+    var msg=document.getElementById('cupomMsg');
+    var total=document.getElementById('totalMatricula');
+    var lbl=document.getElementById('lblEnviar');
+    var base=total?parseFloat(total.getAttribute('data-base')):0;
+    function fmt(v){return 'R$ '+Number(v).toFixed(2).replace('.',',');}
+    function setTotal(v){ if(total) total.textContent=fmt(v); if(lbl) lbl.textContent='Continuar para pagamento ('+fmt(v)+')'; }
+    function aplicar(){
+      var cod=(inp.value||'').trim().toUpperCase(); if(!cod){return;}
+      msg.innerHTML='<span class="text-muted">Validando...</span>';
+      var fd=new FormData(); fd.append('codigo',cod);
+      fetch("{{ url_for('precadastro.validar_cupom_publico', academia_slug=academia_slug) }}",{method:'POST',body:fd})
+        .then(function(r){return r.json();}).then(function(j){
+          if(j.valido){
+            msg.innerHTML='<span class="text-success"><i class="bi bi-check-circle"></i> '+j.mensagem+'</span>';
+            setTotal(j.valor_final);
+          } else {
+            msg.innerHTML='<span class="text-danger"><i class="bi bi-x-circle"></i> '+(j.mensagem||'Cupom inválido.')+'</span>';
+            setTotal(base);
+          }
+        }).catch(function(){ msg.innerHTML=''; });
+    }
+    document.getElementById('btnAplicarCupom').addEventListener('click',aplicar);
+    inp.addEventListener('keydown',function(e){ if(e.key==='Enter'){e.preventDefault();aplicar();} });
+    document.querySelectorAll('.js-usar-cupom').forEach(function(b){
+      b.addEventListener('click',function(){ inp.value=b.getAttribute('data-codigo'); aplicar(); });
+    });
+  })();
+</script>
+</body>
+</html>

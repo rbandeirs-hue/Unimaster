@@ -1,0 +1,31 @@
+{% extends "externo/base_externo.html" %}
+{% block title %}Súmulas — {{ evento.nome }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+  <h5 class="mb-0">Súmulas</h5>
+  {% if lutas %}
+  <a href="{{ url_for('externo.sumulas_imprimir_todas_externo', evento_id=evento.id) }}" target="_blank" class="btn btn-sm btn-outline-dark">Imprimir todas (A4 / PDF)</a>
+  {% endif %}
+</div>
+{% if lutas %}
+<div class="table-responsive">
+  <table class="table table-sm table-hover bg-white">
+    <thead><tr><th>Categoria</th><th>Branco</th><th>Azul</th><th>Status</th><th>Vencedor</th><th>Súmula</th></tr></thead>
+    <tbody>
+      {% for l in lutas %}
+      <tr>
+        <td>{{ l.nome_categoria or '-' }}</td>
+        <td>{{ l.atleta_branco_nome }}{% if l.atleta_branco_academia %} ({{ l.atleta_branco_academia }}){% endif %}</td>
+        <td>{{ l.atleta_azul_nome }}{% if l.atleta_azul_academia %} ({{ l.atleta_azul_academia }}){% endif %}</td>
+        <td><span class="badge {% if l.status == 'finalizada' %}bg-success{% elif l.status == 'em_andamento' %}bg-primary{% else %}bg-secondary{% endif %}">{{ l.status|replace('_', ' ')|title }}</span></td>
+        <td>{% if l.vencedor %}{{ l.atleta_branco_nome if l.vencedor == 'branco' else l.atleta_azul_nome if l.vencedor == 'azul' else 'Empate' }}{% else %}-{% endif %}</td>
+        <td><a href="{{ url_for('externo.sumula_luta_imprimir_externo', evento_id=evento.id, luta_id=l.id) }}" target="_blank" class="btn btn-sm btn-outline-secondary py-0">A4</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<p class="text-muted">Nenhuma luta cadastrada.</p>
+{% endif %}
+{% endblock %}

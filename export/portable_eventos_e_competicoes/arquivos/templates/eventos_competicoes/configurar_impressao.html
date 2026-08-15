@@ -1,0 +1,950 @@
+{% extends "base.html" %}
+{% block title %}Imprimir/Exportar{% if evento %} — {{ evento.nome }}{% endif %}{% endblock %}
+{% block content %}
+<div class="container mt-3 mt-md-5 px-2 px-md-3">
+    <div class="mb-3 mb-md-4">
+        {% set back_url = back_url or get_back_url_default() %}
+{% include 'components/botao_voltar.html' %}
+        <h2 class="h5 h4-md fw-bold text-primary">Imprimir/Exportar{% if evento %} — {{ evento.nome }}{% endif %}</h2>
+        <p class="text-muted mb-0 small small-md">Configure os campos, escala, layout e orientação antes de exportar ou imprimir.</p>
+    </div>
+
+    <div class="row">
+        <div class="col-12 col-lg-4 mb-3 mb-lg-4">
+            <div class="card shadow-sm h-100 d-flex flex-column">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="bi bi-gear-fill me-2"></i>Configurações</h5>
+                </div>
+                <div class="card-body flex-grow-1 d-flex flex-column" style="overflow: hidden;">
+                    <form id="formConfiguracao" class="d-flex flex-column h-100">
+                        <div style="overflow-y: auto; flex: 1; padding-right: 10px;">
+                        <!-- Campos para Exportar -->
+                        <div class="mb-4">
+                            <label class="form-label fw-semibold">
+                                <i class="bi bi-list-check me-1"></i>Campos para Exportar:
+                            </label>
+                            <div class="border rounded p-2" style="max-height: 180px; overflow-y: auto; overflow-x: hidden;" id="campos-disponiveis">
+                                {% if campos_form %}
+                                    {% for c in campos_form %}
+                                    {% if c.campo_chave %}
+                                    <div class="campo-item" data-chave="{{ c.campo_chave }}" data-label="{{ c.label }}">
+                                        <div class="form-check">
+                                            <input class="form-check-input campo-checkbox" 
+                                                   type="checkbox" 
+                                                   id="campo_{{ c.campo_chave }}" 
+                                                   value="{{ c.campo_chave }}" 
+                                                   checked>
+                                            <label class="form-check-label" for="campo_{{ c.campo_chave }}">
+                                                {{ c.label }}
+                                            </label>
+                                        </div>
+                                    </div>
+                                    {% endif %}
+                                    {% endfor %}
+                                {% else %}
+                                    <p class="text-muted small">Nenhum campo disponível</p>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <!-- Ordem dos Campos -->
+                        <div class="mb-4">
+                            <label class="form-label fw-semibold">
+                                <i class="bi bi-sort-down me-1"></i>Ordem dos Campos (arraste para reorganizar):
+                            </label>
+                            <div class="border rounded p-2 bg-light" style="min-height: 120px; max-height: 200px; overflow-y: auto; overflow-x: hidden;" id="campos-ordenados">
+                                <p class="text-muted small text-center mb-0 py-3">
+                                    <i class="bi bi-info-circle me-1"></i>
+                                    Os campos marcados acima aparecerão aqui. Arraste para organizar a ordem.
+                                </p>
+                            </div>
+                        </div>
+
+                        <!-- Ordenação dos Dados -->
+                        <div class="mb-4">
+                            <label class="form-label fw-semibold">
+                                <i class="bi bi-sort-alpha-down me-1"></i>Ordenar Dados por:
+                            </label>
+                            <div class="row g-2 mb-2">
+                                <div class="col-12 col-sm-8">
+                                    <select class="form-select form-select-sm" id="campo_ordenacao">
+                                        <option value="">-- Selecionar campo --</option>
+                                        {% if campos_form %}
+                                            {% for c in campos_form %}
+                                            {% if c.campo_chave %}
+                                            <option value="{{ c.campo_chave }}">{{ c.label }}</option>
+                                            {% endif %}
+                                            {% endfor %}
+                                        {% endif %}
+                                    </select>
+                                </div>
+                                <div class="col-12 col-sm-4">
+                                    <select class="form-select form-select-sm" id="direcao_ordenacao">
+                                        <option value="asc">Crescente</option>
+                                        <option value="desc">Decrescente</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <small class="text-muted d-block">
+                                <i class="bi bi-info-circle me-1"></i>
+                                Escolha o campo para ordenar os dados na tabela
+                            </small>
+                        </div>
+
+                        <!-- Orientação do PDF -->
+                        <div class="mb-4">
+                            <label class="form-label fw-semibold">
+                                <i class="bi bi-file-earmark-pdf me-1"></i>Orientação do PDF:
+                            </label>
+                            <div class="btn-group w-100" role="group">
+                                <input type="radio" class="btn-check" name="orientacao_pdf" id="orientacao_paisagem" value="paisagem" checked>
+                                <label class="btn btn-outline-primary" for="orientacao_paisagem">
+                                    <i class="bi bi-arrows-expand me-1"></i> Paisagem
+                                </label>
+                                
+                                <input type="radio" class="btn-check" name="orientacao_pdf" id="orientacao_retrato" value="retrato">
+                                <label class="btn btn-outline-primary" for="orientacao_retrato">
+                                    <i class="bi bi-arrows-collapse me-1"></i> Retrato
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Escala da Tabela -->
+                        <div class="mb-4">
+                            <label class="form-label fw-semibold">
+                                <i class="bi bi-zoom-in me-1"></i>Escala da Tabela (%):
+                            </label>
+                            <input type="range" class="form-range" id="escala_tabela" min="50" max="100" value="100" step="5" oninput="atualizarEscala(this.value)">
+                            <div class="d-flex justify-content-between">
+                                <small class="text-muted">50%</small>
+                                <small class="text-muted fw-bold" id="escala_valor">100%</small>
+                                <small class="text-muted">100%</small>
+                            </div>
+                            <small class="text-muted d-block mt-2">
+                                <i class="bi bi-info-circle me-1"></i>
+                                Reduza a escala se a tabela não estiver cabendo na página
+                            </small>
+                        </div>
+
+                        <!-- Tamanho da Fonte -->
+                        <div class="mb-4">
+                            <label class="form-label fw-semibold">
+                                <i class="bi bi-type me-1"></i>Tamanho da Fonte:
+                            </label>
+                            <select class="form-select" id="tamanho_fonte">
+                                <option value="8">Muito Pequeno (8pt)</option>
+                                <option value="9">Pequeno (9pt)</option>
+                                <option value="10" selected>Normal (10pt)</option>
+                                <option value="11">Médio (11pt)</option>
+                                <option value="12">Grande (12pt)</option>
+                            </select>
+                        </div>
+
+                        <!-- Margens -->
+                        <div class="mb-4">
+                            <label class="form-label fw-semibold">
+                                <i class="bi bi-border me-1"></i>Margens (mm):
+                            </label>
+                            <div class="row g-2">
+                                <div class="col-12 col-sm-6">
+                                    <label class="form-label small">Superior/Inferior:</label>
+                                    <input type="number" class="form-control form-control-sm" id="margem_vertical" value="20" min="5" max="50">
+                                </div>
+                                <div class="col-12 col-sm-6">
+                                    <label class="form-label small">Esquerda/Direita:</label>
+                                    <input type="number" class="form-control form-control-sm" id="margem_horizontal" value="20" min="5" max="50">
+                                </div>
+                            </div>
+                        </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-lg-8 mb-3 mb-lg-4">
+            <div class="card shadow-sm h-100 d-flex flex-column">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0"><i class="bi bi-eye me-2"></i>Visualização Prévia</h5>
+                </div>
+                <div class="card-body flex-grow-1 d-flex flex-column" style="overflow: hidden;">
+                    <div class="alert alert-info mb-3" style="flex-shrink: 0;">
+                        <i class="bi bi-info-circle me-2"></i>
+                        <strong>Prévia:</strong> Esta é uma visualização aproximada. O resultado final pode variar ligeiramente.
+                    </div>
+                    <div id="preview-container" class="preview-container-paisagem flex-grow-1" style="transform-origin: top left; transition: transform 0.3s ease; overflow-y: auto; overflow-x: auto; border: 1px solid #dee2e6; border-radius: 4px; padding: 15px; background: white; min-height: 0;">
+                        <div id="preview-content" style="width: 100%;">
+                            <!-- Conteúdo será carregado via JavaScript -->
+                            <p class="text-muted text-center py-5">Carregando prévia...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="mt-3 mt-md-4 d-flex flex-column flex-md-row gap-2 justify-content-end">
+        <a href="{{ back_url }}" class="btn btn-outline-secondary w-100 w-md-auto">
+            <i class="bi bi-x-circle me-1"></i> Cancelar
+        </a>
+        <button type="button" class="btn btn-success w-100 w-md-auto" onclick="exportar('excel')">
+            <i class="bi bi-file-earmark-excel me-1"></i> <span class="d-none d-sm-inline">Exportar </span>Excel (XLSX)
+        </button>
+        <button type="button" class="btn btn-primary w-100 w-md-auto" onclick="imprimir()">
+            <i class="bi bi-printer me-1"></i> Imprimir
+        </button>
+    </div>
+</div>
+
+<style>
+#preview-container {
+    transition: all 0.3s ease;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+.preview-container-paisagem {
+    max-width: 100% !important;
+    width: 100% !important;
+    margin: 0 !important;
+}
+.preview-container-retrato {
+    max-width: 600px !important;
+    width: 600px !important;
+    margin: 0 auto !important;
+}
+#preview-content {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    overflow-x: auto;
+}
+#campos-disponiveis::-webkit-scrollbar,
+#campos-ordenados::-webkit-scrollbar,
+#preview-container::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+#campos-disponiveis::-webkit-scrollbar-track,
+#campos-ordenados::-webkit-scrollbar-track,
+#preview-container::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+#campos-disponiveis::-webkit-scrollbar-thumb,
+#campos-ordenados::-webkit-scrollbar-thumb,
+#preview-container::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 4px;
+}
+#campos-disponiveis::-webkit-scrollbar-thumb:hover,
+#campos-ordenados::-webkit-scrollbar-thumb:hover,
+#preview-container::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
+.preview-table {
+    width: 100%;
+    max-width: 100%;
+    font-size: 10pt;
+    border-collapse: collapse;
+    table-layout: auto;
+    box-sizing: border-box;
+}
+.preview-table th,
+.preview-table td {
+    border: 1px solid #dee2e6;
+    padding: 6px 8px;
+    text-align: left;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+}
+.preview-table th {
+    background-color: #f8f9fa;
+    font-weight: 600;
+}
+.preview-table tbody tr:hover {
+    background-color: #f8f9fa;
+}
+.campo-item {
+    margin-bottom: 8px;
+    padding: 4px 0;
+    transition: all 0.2s;
+}
+.campo-item:hover {
+    background-color: #f8f9fa;
+    border-radius: 4px;
+    padding-left: 4px;
+    padding-right: 4px;
+}
+.campo-item.dragging {
+    opacity: 0.5;
+    background-color: #e7f1ff;
+}
+.campo-item .form-check {
+    display: flex;
+    align-items: flex-start;
+    padding-left: 0;
+    margin-bottom: 0;
+}
+.campo-item .form-check-input {
+    flex-shrink: 0;
+    margin-top: 0.25rem;
+    margin-left: 0;
+    margin-right: 8px;
+    width: 1.25em;
+    height: 1.25em;
+}
+.campo-item .form-check-label {
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    flex: 1;
+    padding-left: 0;
+    margin-left: 0;
+}
+.campo-item-ordenado {
+    display: flex;
+    align-items: center;
+    padding: 8px;
+    margin-bottom: 5px;
+    background: white;
+    border: 1px solid #0d6efd;
+    border-radius: 4px;
+    cursor: move;
+    gap: 8px;
+}
+.campo-item-ordenado:hover {
+    background-color: #e7f1ff;
+}
+.campo-item-ordenado .badge {
+    margin-right: 0;
+    min-width: 25px;
+    flex-shrink: 0;
+}
+.campo-item-ordenado .bi-grip-vertical {
+    margin-right: 0;
+    color: #6c757d;
+    cursor: move;
+    flex-shrink: 0;
+}
+.campo-item-ordenado .flex-grow-1 {
+    flex: 1;
+    min-width: 0;
+}
+.campo-item-ordenado .btn-group-vertical {
+    flex-shrink: 0;
+}
+
+/* Estilos responsivos para mobile */
+@media (max-width: 767.98px) {
+    .container {
+        padding-left: 8px;
+        padding-right: 8px;
+    }
+    
+    .card {
+        margin-bottom: 1rem;
+        border-radius: 0.5rem;
+    }
+    
+    .card-body {
+        padding: 0.75rem !important;
+    }
+    
+    .form-label {
+        font-size: 0.8rem;
+        margin-bottom: 0.5rem;
+    }
+    
+    .preview-container-retrato {
+        max-width: 100% !important;
+        width: 100% !important;
+        margin: 0 !important;
+    }
+    
+    .campo-item {
+        padding: 8px 6px !important;
+        margin-bottom: 6px;
+    }
+    
+    .campo-item .form-check-label {
+        font-size: 0.8rem;
+    }
+    
+    .campo-item-ordenado {
+        padding: 8px 6px;
+        font-size: 0.8rem;
+        gap: 6px;
+        margin-bottom: 4px;
+    }
+    
+    .campo-item-ordenado .badge {
+        min-width: 22px;
+        font-size: 0.7rem;
+        padding: 0.2em 0.35em;
+    }
+    
+    .campo-item-ordenado .btn-group-vertical {
+        margin-left: auto;
+    }
+    
+    .campo-item-ordenado .btn-group-vertical .btn {
+        padding: 2px 5px;
+        font-size: 0.65rem;
+        min-height: 28px;
+    }
+    
+    .btn-group {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+    }
+    
+    .btn-group .btn {
+        border-radius: 0.375rem !important;
+        margin-bottom: 0;
+        width: 100%;
+    }
+    
+    .btn-group .btn:first-child {
+        border-top-left-radius: 0.375rem !important;
+        border-top-right-radius: 0.375rem !important;
+        border-bottom-left-radius: 0 !important;
+        border-bottom-right-radius: 0 !important;
+    }
+    
+    .btn-group .btn:last-child {
+        border-top-left-radius: 0 !important;
+        border-top-right-radius: 0 !important;
+        border-bottom-left-radius: 0.375rem !important;
+        border-bottom-right-radius: 0.375rem !important;
+    }
+    
+    .alert {
+        font-size: 0.75rem;
+        padding: 0.5rem 0.75rem;
+        margin-bottom: 0.75rem;
+    }
+    
+    #campos-disponiveis,
+    #campos-ordenados {
+        max-height: 180px;
+        padding: 0.5rem !important;
+    }
+    
+    .form-range {
+        margin-bottom: 0.5rem;
+    }
+    
+    .form-range + .d-flex {
+        font-size: 0.75rem;
+    }
+    
+    .small {
+        font-size: 0.7rem !important;
+    }
+    
+    .form-select,
+    .form-control {
+        font-size: 0.875rem;
+        padding: 0.5rem 0.75rem;
+    }
+    
+    .card-header {
+        padding: 0.5rem 0.75rem !important;
+    }
+    
+    .card-header h5 {
+        font-size: 0.85rem;
+        line-height: 1.3;
+    }
+    
+    .preview-table {
+        font-size: 7pt;
+    }
+    
+    .preview-table th,
+    .preview-table td {
+        padding: 3px 4px;
+        font-size: 7pt;
+    }
+    
+    #preview-container {
+        padding: 8px !important;
+    }
+    
+    /* Melhorar scroll em mobile */
+    #preview-container,
+    #campos-disponiveis,
+    #campos-ordenados {
+        -webkit-overflow-scrolling: touch;
+    }
+}
+
+@media (min-width: 768px) {
+    .h4-md {
+        font-size: 1.5rem;
+    }
+    
+    .small-md {
+        font-size: 1rem;
+    }
+}
+
+/* Melhorias de toque para mobile */
+@media (hover: none) and (pointer: coarse) {
+    .campo-item-ordenado {
+        touch-action: none;
+    }
+    
+    .btn {
+        min-height: 44px;
+    }
+    
+    .form-check-input {
+        min-width: 20px;
+        min-height: 20px;
+    }
+}
+</style>
+
+<script>
+let camposSelecionados = [];
+let camposOrdenados = [];
+let configuracaoAtual = {
+    orientacao: 'paisagem',
+    escala: 100,
+    tamanhoFonte: 10,
+    margemVertical: 20,
+    margemHorizontal: 20,
+    campoOrdenacao: '',
+    direcaoOrdenacao: 'asc'
+};
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Inicializar campos selecionados
+    atualizarCamposSelecionados();
+    
+    // Carregar configuração salva se existir
+    {% if configuracao_exportacao and configuracao_exportacao.campos %}
+    const configSalva = {{ configuracao_exportacao|tojson }};
+    if (configSalva.campos && configSalva.campos.length > 0) {
+        // Desmarcar todos
+        document.querySelectorAll('.campo-checkbox').forEach(cb => cb.checked = false);
+        // Marcar apenas os salvos e manter ordem
+        camposOrdenados = configSalva.campos.map(c => c.chave || c.campo_chave || c);
+        configSalva.campos.forEach(campo => {
+            const chave = campo.chave || campo.campo_chave || campo;
+            const cb = document.getElementById(`campo_${chave}`);
+            if (cb) cb.checked = true;
+        });
+        atualizarCamposSelecionados();
+        // Garantir que a ordem seja aplicada
+        atualizarOrdemCampos();
+    }
+    if (configSalva.orientacao_pdf) {
+        const radioOrientacao = document.getElementById(`orientacao_${configSalva.orientacao_pdf}`);
+        if (radioOrientacao) {
+            radioOrientacao.checked = true;
+            configuracaoAtual.orientacao = configSalva.orientacao_pdf;
+        }
+    }
+    {% endif %}
+    
+    // Event listeners
+    document.querySelectorAll('.campo-checkbox').forEach(cb => {
+        cb.addEventListener('change', atualizarCamposSelecionados);
+    });
+    
+    document.querySelectorAll('input[name="orientacao_pdf"]').forEach(radio => {
+        radio.addEventListener('change', function() {
+            configuracaoAtual.orientacao = this.value;
+            atualizarPreviewOrientacao();
+        });
+    });
+    
+    // Garantir que a orientação inicial seja aplicada
+    atualizarPreviewOrientacao();
+    
+    document.getElementById('tamanho_fonte').addEventListener('change', function() {
+        configuracaoAtual.tamanhoFonte = parseInt(this.value);
+        atualizarPreview();
+    });
+    
+    document.getElementById('margem_vertical').addEventListener('input', function() {
+        configuracaoAtual.margemVertical = parseInt(this.value);
+    });
+    
+    document.getElementById('margem_horizontal').addEventListener('input', function() {
+        configuracaoAtual.margemHorizontal = parseInt(this.value);
+    });
+    
+    document.getElementById('campo_ordenacao').addEventListener('change', function() {
+        configuracaoAtual.campoOrdenacao = this.value;
+        atualizarPreview();
+    });
+    
+    document.getElementById('direcao_ordenacao').addEventListener('change', function() {
+        configuracaoAtual.direcaoOrdenacao = this.value;
+        atualizarPreview();
+    });
+    
+    // Configurar drag and drop
+    configurarDragAndDrop();
+    
+    // Carregar preview inicial (a orientação já foi aplicada acima se houver config salva)
+    atualizarPreviewOrientacao();
+});
+
+function atualizarCamposSelecionados() {
+    camposSelecionados = Array.from(document.querySelectorAll('.campo-checkbox:checked')).map(cb => cb.value);
+    
+    // Manter ordem dos campos já ordenados e adicionar novos no final
+    const novosCampos = camposSelecionados.filter(c => !camposOrdenados.includes(c));
+    camposOrdenados = camposOrdenados.filter(c => camposSelecionados.includes(c)).concat(novosCampos);
+    
+    atualizarOrdemCampos();
+    atualizarPreview();
+}
+
+function atualizarOrdemCampos() {
+    const container = document.getElementById('campos-ordenados');
+    if (camposOrdenados.length === 0) {
+        container.innerHTML = '<p class="text-muted small text-center mb-0 py-3"><i class="bi bi-info-circle me-1"></i>Os campos marcados acima aparecerão aqui. Arraste para organizar a ordem.</p>';
+        return;
+    }
+    
+    let html = '';
+    camposOrdenados.forEach((chave, index) => {
+        const item = document.querySelector(`.campo-item[data-chave="${chave}"]`);
+        if (item) {
+            const label = item.getAttribute('data-label');
+            html += `
+                <div class="campo-item-ordenado" data-chave="${chave}" draggable="true">
+                    <span class="badge bg-primary">${index + 1}</span>
+                    <i class="bi bi-grip-vertical d-none d-md-inline"></i>
+                    <span class="flex-grow-1">${label}</span>
+                    <div class="btn-group-vertical btn-group-sm d-md-none" role="group">
+                        <button type="button" class="btn btn-outline-secondary btn-sm campo-move-up" data-index="${index}" ${index === 0 ? 'disabled' : ''} style="padding: 2px 8px; line-height: 1;">
+                            <i class="bi bi-arrow-up"></i>
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm campo-move-down" data-index="${index}" ${index === camposOrdenados.length - 1 ? 'disabled' : ''} style="padding: 2px 8px; line-height: 1;">
+                            <i class="bi bi-arrow-down"></i>
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+    });
+    container.innerHTML = html;
+    
+    // Reconfigurar drag and drop após atualizar
+    configurarDragAndDrop();
+}
+
+function configurarDragAndDrop() {
+    const container = document.getElementById('campos-ordenados');
+    const items = container.querySelectorAll('.campo-item-ordenado');
+    
+    items.forEach(item => {
+        // Drag and drop para desktop
+        item.addEventListener('dragstart', function(e) {
+            this.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/html', this.outerHTML);
+            e.dataTransfer.setData('text/plain', this.getAttribute('data-chave'));
+        });
+        
+        item.addEventListener('dragend', function() {
+            this.classList.remove('dragging');
+        });
+        
+        item.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            const dragging = container.querySelector('.dragging');
+            if (dragging && dragging !== this) {
+                const allItems = Array.from(container.querySelectorAll('.campo-item-ordenado'));
+                const draggingIndex = allItems.indexOf(dragging);
+                const currentIndex = allItems.indexOf(this);
+                
+                if (draggingIndex < currentIndex) {
+                    container.insertBefore(dragging, this.nextSibling);
+                } else {
+                    container.insertBefore(dragging, this);
+                }
+            }
+        });
+        
+        item.addEventListener('drop', function(e) {
+            e.preventDefault();
+            const chave = e.dataTransfer.getData('text/plain');
+            const allItems = Array.from(container.querySelectorAll('.campo-item-ordenado'));
+            const newOrder = allItems.map(item => item.getAttribute('data-chave'));
+            camposOrdenados = newOrder;
+            atualizarOrdemCampos();
+            atualizarPreview();
+        });
+        
+        // Botões de seta para mobile
+        const btnUp = item.querySelector('.campo-move-up');
+        const btnDown = item.querySelector('.campo-move-down');
+        
+        if (btnUp) {
+            btnUp.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                const index = parseInt(this.getAttribute('data-index'));
+                if (index > 0) {
+                    [camposOrdenados[index - 1], camposOrdenados[index]] = [camposOrdenados[index], camposOrdenados[index - 1]];
+                    atualizarOrdemCampos();
+                    atualizarPreview();
+                }
+            });
+        }
+        
+        if (btnDown) {
+            btnDown.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                const index = parseInt(this.getAttribute('data-index'));
+                if (index < camposOrdenados.length - 1) {
+                    [camposOrdenados[index], camposOrdenados[index + 1]] = [camposOrdenados[index + 1], camposOrdenados[index]];
+                    atualizarOrdemCampos();
+                    atualizarPreview();
+                }
+            });
+        }
+    });
+}
+
+function atualizarPreviewOrientacao() {
+    const container = document.getElementById('preview-container');
+    const orientacao = document.querySelector('input[name="orientacao_pdf"]:checked')?.value || configuracaoAtual.orientacao || 'paisagem';
+    
+    // Atualizar configuração atual
+    configuracaoAtual.orientacao = orientacao;
+    
+    // Remover todas as classes de orientação primeiro
+    container.classList.remove('preview-container-paisagem', 'preview-container-retrato');
+    
+    if (orientacao === 'retrato') {
+        container.classList.add('preview-container-retrato');
+    } else {
+        container.classList.add('preview-container-paisagem');
+    }
+    
+    // Atualizar preview para refletir mudanças
+    atualizarPreview();
+}
+
+function atualizarEscala(valor) {
+    document.getElementById('escala_valor').textContent = valor + '%';
+    configuracaoAtual.escala = parseInt(valor);
+    const previewContent = document.getElementById('preview-content');
+    if (previewContent) {
+        const scale = valor / 100;
+        // Aplicar escala apenas ao conteúdo, não ao container para evitar overflow
+        previewContent.style.transform = `scale(${scale})`;
+        previewContent.style.transformOrigin = 'top left';
+        previewContent.style.width = scale < 1 ? `${100 / scale}%` : '100%';
+    }
+}
+
+function carregarPreview() {
+    const previewContent = document.getElementById('preview-content');
+    
+    if (camposSelecionados.length === 0) {
+        previewContent.innerHTML = '<p class="text-danger text-center py-5">Selecione pelo menos um campo para visualizar a prévia.</p>';
+        return;
+    }
+    
+    // Usar ordem dos campos ordenados
+    const camposParaPreview = camposOrdenados.length > 0 ? camposOrdenados : camposSelecionados;
+    
+    // Criar tabela de preview com dados reais
+    let html = '<table class="preview-table" style="font-size: ' + configuracaoAtual.tamanhoFonte + 'pt;">';
+    html += '<thead><tr><th style="width: auto; min-width: 30px;">#</th>';
+    
+    // Criar mapa de campos para acesso rápido
+    const camposMap = {};
+    {% for c in campos_form %}
+    camposMap['{{ c.campo_chave }}'] = '{{ c.label }}';
+    {% endfor %}
+    
+    camposParaPreview.forEach(chave => {
+        if (camposSelecionados.includes(chave) && camposMap[chave]) {
+            html += `<th style="width: auto; white-space: nowrap;">${camposMap[chave]}</th>`;
+        }
+    });
+    
+    html += '</tr></thead><tbody>';
+    
+    // Preparar dados para ordenação
+    let dadosInscricoes = [];
+    {% if preview_inscricoes %}
+    {% for insc in preview_inscricoes %}
+    {% set dados = insc.dados_form if insc.dados_form else {} %}
+    dadosInscricoes.push({
+        dados: {{ dados|tojson }},
+        academia_nome: '{{ insc.academia_nome or "" }}',
+        aluno_nome: '{{ insc.aluno_nome or "" }}',
+        id: {{ insc.id or 0 }}
+    });
+    {% endfor %}
+    
+    // Aplicar ordenação se configurada
+    if (configuracaoAtual.campoOrdenacao && configuracaoAtual.campoOrdenacao !== '') {
+        dadosInscricoes.sort(function(a, b) {
+            let valA = a.dados[configuracaoAtual.campoOrdenacao] || '';
+            let valB = b.dados[configuracaoAtual.campoOrdenacao] || '';
+            
+            // Converter para string para comparação
+            valA = String(valA).toLowerCase();
+            valB = String(valB).toLowerCase();
+            
+            // Tentar converter para número se possível
+            const numA = parseFloat(valA);
+            const numB = parseFloat(valB);
+            if (!isNaN(numA) && !isNaN(numB)) {
+                valA = numA;
+                valB = numB;
+            }
+            
+            if (configuracaoAtual.direcaoOrdenacao === 'asc') {
+                return valA > valB ? 1 : (valA < valB ? -1 : 0);
+            } else {
+                return valA < valB ? 1 : (valA > valB ? -1 : 0);
+            }
+        });
+    }
+    
+    // Adicionar dados reais das inscrições (ordenados)
+    dadosInscricoes.forEach(function(insc, index) {
+        html += '<tr><td>' + (index + 1) + '</td>';
+    
+        camposParaPreview.forEach(chave => {
+            if (camposSelecionados.includes(chave)) {
+                let val = insc.dados[chave] || '';
+                {% for c in campos_form %}
+                if (chave === '{{ c.campo_chave }}') {
+                    {% if c.campo_chave == 'sexo' %}
+                        if (val === 'M') val = 'Masculino';
+                        else if (val === 'F') val = 'Feminino';
+                        else val = val || '-';
+                    {% elif c.campo_chave in ['data_nascimento', 'ultimo_exame_faixa', 'rg_data_emissao', 'data_cadastro_zempo'] %}
+                        if (val) {
+                            let dataVal = String(val).substring(0, 10);
+                            if (dataVal.length === 10 && dataVal.indexOf('-') !== -1) {
+                                val = dataVal.substring(8, 10) + '/' + dataVal.substring(5, 7) + '/' + dataVal.substring(0, 4);
+                            }
+                        } else {
+                            val = '-';
+                        }
+                    {% else %}
+                        val = val || '-';
+                    {% endif %}
+                    html += '<td style="white-space: normal; word-wrap: break-word; max-width: 200px;">' + String(val).replace(/'/g, "\\'").replace(/"/g, '\\"') + '</td>';
+                }
+                {% endfor %}
+            }
+        });
+        
+        html += '</tr>';
+    });
+    {% else %}
+    // Se não houver dados, mostrar exemplo
+    const camposParaPreview = camposOrdenados.length > 0 ? camposOrdenados : camposSelecionados;
+    for (let i = 1; i <= 3; i++) {
+        html += '<tr><td>' + i + '</td>';
+        camposParaPreview.forEach(chave => {
+            if (camposSelecionados.includes(chave)) {
+                html += '<td style="white-space: normal; word-wrap: break-word;">Exemplo de dado ' + i + '</td>';
+            }
+        });
+        html += '</tr>';
+    }
+    {% endif %}
+    
+    html += '</tbody></table>';
+    previewContent.innerHTML = html;
+}
+
+function atualizarPreview() {
+    carregarPreview();
+}
+
+function exportar(formato) {
+    if (camposSelecionados.length === 0) {
+        alert('Selecione pelo menos um campo para exportar.');
+        return;
+    }
+    
+    const params = new URLSearchParams();
+    // Usar ordem dos campos ordenados
+    const camposParaExportar = camposOrdenados.length > 0 ? camposOrdenados : camposSelecionados;
+    camposParaExportar.forEach(chave => {
+        if (chave && camposSelecionados.includes(chave)) {
+            params.append('campos', chave);
+        }
+    });
+    
+    // Adicionar configurações
+    const orientacao = document.querySelector('input[name="orientacao_pdf"]:checked').value;
+    if (formato === 'pdf') {
+        params.append('orientacao', orientacao);
+        params.append('escala', configuracaoAtual.escala);
+        params.append('tamanho_fonte', configuracaoAtual.tamanhoFonte);
+        params.append('margem_vertical', configuracaoAtual.margemVertical);
+        params.append('margem_horizontal', configuracaoAtual.margemHorizontal);
+    }
+    
+    // Adicionar ordenação
+    if (configuracaoAtual.campoOrdenacao) {
+        params.append('ordenar_por', configuracaoAtual.campoOrdenacao);
+        params.append('ordenar_direcao', configuracaoAtual.direcaoOrdenacao);
+    }
+    
+    {% if evento and evento.id %}
+    const url = '{{ url_for("eventos_competicoes.exportar", evento_id=evento.id, formato="FORMATO") }}'.replace('FORMATO', formato) + '&' + params.toString();
+    window.location.href = url;
+    {% endif %}
+}
+
+function imprimir() {
+    if (camposSelecionados.length === 0) {
+        alert('Selecione pelo menos um campo para imprimir.');
+        return;
+    }
+    
+    // Redirecionar para página de impressão com parâmetros
+    const params = new URLSearchParams();
+    // Usar ordem dos campos ordenados
+    const camposParaExportar = camposOrdenados.length > 0 ? camposOrdenados : camposSelecionados;
+    camposParaExportar.forEach(chave => {
+        if (chave && camposSelecionados.includes(chave)) {
+            params.append('campos', chave);
+        }
+    });
+    params.append('agrupamento', '{{ agrupamento }}');
+    params.append('escala', configuracaoAtual.escala);
+    params.append('tamanho_fonte', configuracaoAtual.tamanhoFonte);
+    params.append('margem_vertical', configuracaoAtual.margemVertical);
+    params.append('margem_horizontal', configuracaoAtual.margemHorizontal);
+    
+    // Adicionar orientação
+    const orientacao = document.querySelector('input[name="orientacao_pdf"]:checked')?.value || configuracaoAtual.orientacao || 'paisagem';
+    params.append('orientacao', orientacao);
+    
+    // Adicionar ordenação
+    if (configuracaoAtual.campoOrdenacao) {
+        params.append('ordenar_por', configuracaoAtual.campoOrdenacao);
+        params.append('ordenar_direcao', configuracaoAtual.direcaoOrdenacao);
+    }
+    
+    {% if evento and evento.id %}
+    const url = '{{ url_for("eventos_competicoes.imprimir", evento_id=evento.id) }}?' + params.toString();
+    window.open(url, '_blank');
+    {% endif %}
+}
+</script>
+{% endblock %}

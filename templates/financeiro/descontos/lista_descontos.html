@@ -3,18 +3,36 @@
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/financeiro/responsive.css') }}?v=1">
 <style>
-.descontos-page .desconto-card { border-radius: 12px; border: 1px solid #e9ecef; transition: all 0.2s; }
+.descontos-page .desconto-card { border-radius: 14px; border: 1px solid #e9ecef; transition: all 0.2s; }
 .descontos-page .desconto-card:hover { border-color: #ffc107; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
-.descontos-page .desconto-card .desconto-nome { font-weight: 600; font-size: 1rem; }
-.descontos-page .desconto-card .desconto-meta { font-size: 0.85rem; color: #6c757d; }
-.descontos-page .desconto-card .desconto-valor { font-weight: 600; color: #198754; }
-@media (max-width: 767.98px) {
-  .descontos-page .container { padding-left: 0.75rem; padding-right: 0.75rem; }
-  .descontos-page .desconto-card .card-body { padding: 1rem !important; }
-  .descontos-page .desconto-card .btn { min-height: 44px; min-width: 44px; }
-  .descontos-page .d-flex.flex-wrap.justify-content-between { flex-direction: column !important; align-items: stretch !important; }
-  .descontos-page .d-flex.flex-wrap.justify-content-between .btn { width: 100%; }
-  .descontos-page h2 { font-size: 1.25rem !important; }
+.descontos-page .desconto-card .desconto-nome { font-weight: 700; font-size: 1.02rem; }
+.descontos-page .desconto-valor { font-weight: 700; color: #198754; font-size: 1.05rem; }
+
+/* Badges de tipo */
+.descontos-page .tipo-pill {
+  display: inline-flex; align-items: center; gap: .35rem;
+  padding: .28rem .6rem; border-radius: 999px; font-size: .78rem; font-weight: 600;
+  border: 1px solid transparent; white-space: nowrap;
+}
+.descontos-page .tipo-pill--perc { background: rgba(13,110,253,.1); color: #0d6efd; border-color: rgba(13,110,253,.22); }
+.descontos-page .tipo-pill--fixo { background: rgba(25,135,84,.1); color: #198754; border-color: rgba(25,135,84,.22); }
+
+.descontos-page .cond-pill {
+  display: inline-flex; align-items: center; gap: .35rem;
+  padding: .24rem .55rem; border-radius: 999px; font-size: .76rem; font-weight: 600;
+}
+.descontos-page .cond-pill--diadia { background: rgba(255,193,7,.16); color: #997404; }
+.descontos-page .cond-pill--sempre { background: rgba(108,117,125,.14); color: #495057; }
+
+.descontos-page .table thead th { font-size: .78rem; text-transform: uppercase; letter-spacing: .03em; color: #6c757d; border-bottom-width: 1px; }
+.descontos-page .table td { vertical-align: middle; }
+.descontos-page .page-hero {
+  background: linear-gradient(135deg, rgba(255,193,7,.10) 0%, rgba(255,255,255,0) 60%);
+  border: 1px solid #f0e6c8; border-radius: 16px; padding: 1.1rem 1.35rem;
+}
+.descontos-page .hero-icon {
+  width: 46px; height: 46px; border-radius: 12px; flex-shrink: 0;
+  background: #ffc107; color: #212529; display: flex; align-items: center; justify-content: center; font-size: 1.4rem;
 }
 @media (min-width: 768px) {
   .descontos-page .descontos-cards { display: none; }
@@ -23,21 +41,48 @@
 @media (max-width: 767.98px) {
   .descontos-page .descontos-table-wrap { display: none; }
   .descontos-page .descontos-cards { display: block; }
+  .descontos-page .container { padding-left: 0.75rem; padding-right: 0.75rem; }
+  .descontos-page .desconto-card .btn { min-height: 44px; }
+  .descontos-page .page-hero .btn { width: 100%; }
 }
 </style>
 {% endblock %}
 {% block content %}
+
+{# ---- Helpers de exibição ---- #}
+{% macro tipo_pill(d) %}
+  {% if (d.tipo or 'percentual') == 'percentual' %}
+    <span class="tipo-pill tipo-pill--perc"><i class="bi bi-percent"></i> Percentual</span>
+  {% else %}
+    <span class="tipo-pill tipo-pill--fixo"><i class="bi bi-currency-dollar"></i> Valor fixo</span>
+  {% endif %}
+{% endmacro %}
+{% macro valor_fmt(d) %}
+  {% if (d.tipo or 'percentual') == 'percentual' %}
+    {{ ('%g' % (d.valor or 0)) }}%
+  {% else %}
+    R$ {{ ("%.2f" % (d.valor or 0))|replace('.', ',') }}
+  {% endif %}
+{% endmacro %}
+
 <div class="container mt-4 descontos-page">
-    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-        <div>
-            {% set back_url = url_for('financeiro.dashboard', academia_id=academia_id) if academia_id else url_for('financeiro.dashboard') %}
-            {% include 'components/botao_voltar.html' %}
+    <div class="mb-3">
+        {% set back_url = url_for('financeiro.dashboard', academia_id=academia_id) if academia_id else url_for('financeiro.dashboard') %}
+        {% include 'components/botao_voltar.html' %}
+    </div>
+
+    <div class="page-hero d-flex flex-wrap align-items-center gap-3 mb-4">
+        <div class="hero-icon"><i class="bi bi-tags-fill"></i></div>
+        <div class="flex-grow-1 min-w-0">
+            <h2 class="h4 fw-bold mb-1">Descontos</h2>
+            <p class="text-muted small mb-0">
+                {% if descontos %}{{ descontos|length }} desconto(s) cadastrado(s). {% endif %}Aplique-os às mensalidades e cobranças dos alunos.
+            </p>
         </div>
-        <a href="{{ url_for('financeiro.cadastrar_desconto') }}{% if academia_id %}?academia_id={{ academia_id }}{% endif %}" class="btn btn-warning">
-            <i class="bi bi-plus-lg me-1"></i><span class="d-none d-sm-inline">Cadastrar Desconto</span><span class="d-inline d-sm-none">Novo</span>
+        <a href="{{ url_for('financeiro.cadastrar_desconto') }}{% if academia_id %}?academia_id={{ academia_id }}{% endif %}" class="btn btn-warning fw-semibold">
+            <i class="bi bi-plus-lg me-1"></i><span class="d-none d-sm-inline">Cadastrar Desconto</span><span class="d-inline d-sm-none">Novo desconto</span>
         </a>
     </div>
-    <h2 class="h4 fw-bold mb-3">Descontos</h2>
 
     {% if descontos %}
     <!-- Cards (mobile) -->
@@ -45,18 +90,26 @@
         {% for d in descontos %}
         <div class="col-12">
             <div class="card desconto-card border-0 shadow-sm">
-                <div class="card-body d-flex flex-wrap justify-content-between align-items-center gap-2">
-                    <div class="min-w-0 flex-grow-1">
-                        <div class="desconto-nome">{{ d.nome }}</div>
-                        <div class="desconto-meta d-flex flex-wrap gap-2 mt-1">
-                            <span>{{ d.tipo or 'percentual' }}</span>
-                            <span class="desconto-valor">{{ "%.2f" % (d.valor or 0) }}{{ '%' if (d.tipo or '') == 'percentual' else ' R$' }}</span>
-                            {% if d.get('aplicar_apenas_pagamento_em_dia', 1) %}<span class="badge bg-success">Só em dia</span>{% else %}<span class="badge bg-secondary">Sempre</span>{% endif %}
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start gap-2">
+                        <div class="min-w-0">
+                            <div class="desconto-nome text-truncate">{{ d.nome }}</div>
+                            <div class="mt-2">{{ tipo_pill(d) }}</div>
+                        </div>
+                        <div class="text-end flex-shrink-0">
+                            <div class="desconto-valor">{{ valor_fmt(d) }}</div>
                         </div>
                     </div>
-                    <a href="{{ url_for('financeiro.editar_desconto', desconto_id=d.id) }}{% if academia_id %}?academia_id={{ academia_id }}{% endif %}" class="btn btn-sm btn-outline-primary flex-shrink-0">
-                        <i class="bi bi-pencil-fill"></i><span class="d-none d-sm-inline ms-1">Editar</span>
-                    </a>
+                    <div class="d-flex justify-content-between align-items-center gap-2 mt-3 pt-3 border-top">
+                        {% if d.get('aplicar_apenas_pagamento_em_dia', 1) %}
+                        <span class="cond-pill cond-pill--diadia"><i class="bi bi-calendar-check"></i> Só se pagar em dia</span>
+                        {% else %}
+                        <span class="cond-pill cond-pill--sempre"><i class="bi bi-infinity"></i> Sempre aplica</span>
+                        {% endif %}
+                        <a href="{{ url_for('financeiro.editar_desconto', desconto_id=d.id) }}{% if academia_id %}?academia_id={{ academia_id }}{% endif %}" class="btn btn-sm btn-outline-primary flex-shrink-0">
+                            <i class="bi bi-pencil-fill"></i><span class="ms-1">Editar</span>
+                        </a>
+                    </div>
                 </div>
             </div>
         </div>
@@ -67,25 +120,33 @@
     <div class="descontos-table-wrap card border-0 shadow-sm">
         <div class="card-body">
             <div class="table-responsive">
-                <table class="table table-hover mb-0">
+                <table class="table table-hover align-middle mb-0">
                     <thead>
                         <tr>
                             <th>Nome</th>
                             <th>Tipo</th>
                             <th>Valor</th>
-                            <th>Não aplicar se atrasada</th>
-                            <th>Ações</th>
+                            <th>Quando aplica</th>
+                            <th class="text-end">Ações</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for d in descontos %}
                         <tr>
-                            <td>{{ d.nome }}</td>
-                            <td>{{ d.tipo or 'percentual' }}</td>
-                            <td>{{ "%.2f" % (d.valor or 0) }}{{ '%' if (d.tipo or '') == 'percentual' else ' R$' }}</td>
-                            <td>{% if d.get('aplicar_apenas_pagamento_em_dia', 1) %}<span class="badge bg-success">Sim</span>{% else %}<span class="badge bg-secondary">Não</span>{% endif %}</td>
+                            <td class="fw-semibold">{{ d.nome }}</td>
+                            <td>{{ tipo_pill(d) }}</td>
+                            <td class="desconto-valor">{{ valor_fmt(d) }}</td>
                             <td>
-                                <a href="{{ url_for('financeiro.editar_desconto', desconto_id=d.id) }}{% if academia_id %}?academia_id={{ academia_id }}{% endif %}" class="btn btn-sm btn-outline-primary">Editar</a>
+                                {% if d.get('aplicar_apenas_pagamento_em_dia', 1) %}
+                                <span class="cond-pill cond-pill--diadia"><i class="bi bi-calendar-check"></i> Só se pagar em dia</span>
+                                {% else %}
+                                <span class="cond-pill cond-pill--sempre"><i class="bi bi-infinity"></i> Sempre aplica</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-end">
+                                <a href="{{ url_for('financeiro.editar_desconto', desconto_id=d.id) }}{% if academia_id %}?academia_id={{ academia_id }}{% endif %}" class="btn btn-sm btn-outline-primary">
+                                    <i class="bi bi-pencil-fill me-1"></i>Editar
+                                </a>
                             </td>
                         </tr>
                         {% endfor %}
@@ -96,8 +157,12 @@
     </div>
     {% else %}
     <div class="card border-0 shadow-sm">
-        <div class="card-body">
-            <p class="text-muted mb-0">Nenhum desconto cadastrado.</p>
+        <div class="card-body text-center py-5">
+            <i class="bi bi-tags text-muted" style="font-size: 2.5rem;"></i>
+            <p class="text-muted mb-3 mt-2">Nenhum desconto cadastrado ainda.</p>
+            <a href="{{ url_for('financeiro.cadastrar_desconto') }}{% if academia_id %}?academia_id={{ academia_id }}{% endif %}" class="btn btn-warning fw-semibold">
+                <i class="bi bi-plus-lg me-1"></i>Cadastrar o primeiro desconto
+            </a>
         </div>
     </div>
     {% endif %}

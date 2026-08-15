@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Pagamento da matrícula — {{ p.nome }}{% endblock %}
+{% block content %}
+<div class="container my-4" style="max-width: 560px;">
+  <div class="mb-3">
+    <a href="{{ back_url }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Voltar</a>
+  </div>
+
+  <div class="card border-0 shadow-sm" style="border-radius:16px;overflow:hidden;">
+    <div class="card-body p-4 text-center">
+      <div style="width:54px;height:54px;border-radius:14px;background:#e7f1ff;color:#0d6efd;display:inline-flex;align-items:center;justify-content:center;font-size:1.6rem;margin-bottom:.5rem;"><i class="bi bi-mortarboard-fill"></i></div>
+      <h4 class="fw-bold mb-1">Pagamento da matrícula</h4>
+      <p class="text-muted mb-1">{{ p.nome }}
+        {% if p.matricula_valor %}· R$ {{ "%.2f"|format(p.matricula_valor|float) }}{% endif %}
+        {% if p.matricula_gateway %}· via {{ {'asaas':'Asaas','mercadopago':'Mercado Pago','infinitepay':'InfinitePay','efi':'EFÍ','sumup':'SumUp'}.get(p.matricula_gateway, p.matricula_gateway) }}{% endif %}
+      </p>
+      {% if p.matricula_status == 'pago' %}
+      <div class="badge bg-success mb-3">Matrícula paga</div>
+      {% else %}
+      <div class="badge bg-warning text-dark mb-3">Pagamento pendente</div>
+      {% endif %}
+
+      {% if p.matricula_qrcode %}
+      <div><img src="data:image/png;base64,{{ p.matricula_qrcode }}" alt="QR Code" style="width:200px;height:200px;border:1px solid #e9ecef;border-radius:12px;padding:6px;background:#fff;"></div>
+      <p class="text-muted small mt-2">Escaneie o QR Code para pagar</p>
+      {% endif %}
+
+      {% if p.matricula_copia_cola %}
+      <label class="form-label small fw-semibold d-block text-start">PIX copia e cola</label>
+      <div class="input-group mb-3">
+        <input type="text" class="form-control" id="copiaCola" value="{{ p.matricula_copia_cola }}" readonly>
+        <button class="btn btn-outline-primary" type="button" onclick="copiar('copiaCola', this)"><i class="bi bi-clipboard"></i></button>
+      </div>
+      {% endif %}
+
+      {% if p.matricula_link %}
+      <label class="form-label small fw-semibold d-block text-start">Link de pagamento</label>
+      <div class="input-group mb-3">
+        <input type="text" class="form-control" id="linkPag" value="{{ p.matricula_link }}" readonly>
+        <button class="btn btn-outline-primary" type="button" onclick="copiar('linkPag', this)"><i class="bi bi-clipboard"></i></button>
+      </div>
+      <a href="{{ p.matricula_link }}" target="_blank" rel="noopener" class="btn btn-success w-100 mb-2"><i class="bi bi-box-arrow-up-right me-1"></i> Abrir página de pagamento</a>
+      {% endif %}
+
+      <div class="d-flex gap-2">
+        {% if p.email %}
+        <form method="POST" action="{{ url_for('precadastro.matricula_reenviar_email', precad_id=p.id) }}" class="flex-fill">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn btn-outline-primary w-100"><i class="bi bi-envelope me-1"></i> Reenviar por e-mail</button>
+        </form>
+        {% endif %}
+        {% if p.telefone and p.matricula_link %}
+        <a href="https://wa.me/55{{ p.telefone|replace('(','')|replace(')','')|replace('-','')|replace(' ','') }}?text={{ ('Link para pagamento da matrícula: ' ~ p.matricula_link) | urlencode }}"
+           target="_blank" rel="noopener" class="btn btn-outline-success flex-fill"><i class="bi bi-whatsapp me-1"></i> WhatsApp</a>
+        {% endif %}
+      </div>
+      {% if p.email %}<p class="text-muted small mt-2 mb-0">E-mail cadastrado: {{ p.email }}</p>{% endif %}
+    </div>
+  </div>
+</div>
+
+<script>
+  function copiar(id, btn) {
+    var i = document.getElementById(id); i.select();
+    var ok = function(){ var o=btn.innerHTML; btn.innerHTML='<i class="bi bi-check2"></i>'; setTimeout(function(){btn.innerHTML=o;},1500); };
+    if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(i.value).then(ok).catch(function(){ try{document.execCommand('copy');}catch(e){} ok(); }); }
+    else { try{document.execCommand('copy');}catch(e){} ok(); }
+  }
+</script>
+{% endblock %}

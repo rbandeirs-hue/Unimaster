@@ -2,145 +2,297 @@
 {% block title %}Cadastrar Novo Usuário{% endblock %}
 
 {% block content %}
-<div class="container my-4 my-md-5">
-  <div class="card shadow-lg border-0 rounded-3 mx-auto" style="max-width: 650px;">
-    <div class="card-header bg-primary text-white text-center py-3 rounded-top-3">
-      <h5 class="mb-0 fw-bold d-flex align-items-center justify-content-center flex-wrap">
-        <i class="bi bi-person-plus-fill me-2"></i> Cadastro de Novo Usuário
-      </h5>
+<style>
+  :root {
+    --c-bg: #f5f7fb;
+    --c-surface: #ffffff;
+    --c-border: #e5e9f2;
+    --c-text: #1f2937;
+    --c-muted: #6b7280;
+    --c-primary: #0d6efd;
+    --c-primary-soft: #e8f1ff;
+  }
+  .form-page { max-width: 920px; margin: 0 auto; }
+
+  .form-page-header {
+    background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+    border: 1px solid var(--c-border);
+    border-radius: 16px;
+    padding: 1.4rem 1.6rem;
+    margin-bottom: 1.25rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    box-shadow: 0 1px 3px rgba(15,23,42,.04);
+  }
+  .form-page-header .ic {
+    width: 52px; height: 52px;
+    background: var(--c-primary-soft); color: var(--c-primary);
+    border-radius: 12px;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 1.4rem;
+    flex-shrink: 0;
+  }
+  .form-page-header h1 {
+    font-size: 1.4rem; font-weight: 700; margin: 0; color: var(--c-text);
+  }
+  .form-page-header .subtitle {
+    font-size: .9rem; color: var(--c-muted); margin: .15rem 0 0 0;
+  }
+
+  .section-card {
+    background: var(--c-surface);
+    border: 1px solid var(--c-border);
+    border-radius: 16px;
+    padding: 1.35rem 1.5rem;
+    margin-bottom: 1.1rem;
+    box-shadow: 0 1px 3px rgba(15,23,42,.04);
+  }
+  .section-title {
+    display: flex; align-items: center; gap: .55rem;
+    font-size: .9rem; font-weight: 700;
+    color: var(--c-text);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    margin-bottom: 1rem;
+    padding-bottom: .65rem;
+    border-bottom: 1px solid var(--c-border);
+  }
+  .section-title i { color: var(--c-primary); font-size: 1rem; }
+  .section-help {
+    font-size: .82rem; color: var(--c-muted);
+    margin: -.4rem 0 .8rem 0;
+  }
+
+  .form-label { color: #374151; font-weight: 600; font-size: .88rem; }
+  .form-control, .form-select {
+    border-radius: 10px;
+    border: 1px solid var(--c-border);
+    padding: .6rem .85rem;
+    background: #f9fafb;
+    transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
+  }
+  .form-control:focus, .form-select:focus {
+    border-color: var(--c-primary);
+    box-shadow: 0 0 0 3px rgba(13,110,253,.15);
+    background: #fff;
+  }
+  .input-icon-wrap { position: relative; }
+  .input-icon-wrap > i {
+    position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+    color: var(--c-muted); pointer-events: none; font-size: 1rem;
+  }
+  .input-icon-wrap > .form-control { padding-left: 2.4rem; }
+
+  /* Role pills */
+  .role-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: .55rem;
+  }
+  .role-pill {
+    position: relative;
+    display: flex; align-items: center; gap: .55rem;
+    padding: .65rem .85rem;
+    background: #f9fafb;
+    border: 1.5px solid var(--c-border);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all .15s ease;
+    user-select: none;
+  }
+  .role-pill input { position: absolute; opacity: 0; pointer-events: none; }
+  .role-pill:hover { border-color: #cfe0ff; background: #f3f8ff; }
+  .role-pill.checked { border-color: var(--c-primary); background: var(--c-primary-soft); color: #0a4cab; }
+  .role-pill .check-ic {
+    width: 20px; height: 20px; border-radius: 50%;
+    border: 1.5px solid #cbd5e1;
+    display: inline-flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    font-size: .75rem; color: transparent;
+    transition: all .15s ease;
+  }
+  .role-pill.checked .check-ic {
+    background: var(--c-primary); border-color: var(--c-primary); color: #fff;
+  }
+  .role-pill .role-name { font-size: .88rem; font-weight: 600; }
+
+  /* Academias pills (mesma ideia, cor verde) */
+  .acad-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: .55rem;
+  }
+  .acad-pill {
+    position: relative;
+    display: flex; align-items: center; gap: .55rem;
+    padding: .65rem .85rem;
+    background: #f9fafb;
+    border: 1.5px solid var(--c-border);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all .15s ease;
+  }
+  .acad-pill input { position: absolute; opacity: 0; pointer-events: none; }
+  .acad-pill:hover { border-color: #a7f3d0; background: #f0fdf4; }
+  .acad-pill.checked { border-color: #10b981; background: #ecfdf5; color: #065f46; }
+  .acad-pill .check-ic {
+    width: 20px; height: 20px; border-radius: 50%;
+    border: 1.5px solid #cbd5e1;
+    display: inline-flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    font-size: .75rem; color: transparent;
+    transition: all .15s ease;
+  }
+  .acad-pill.checked .check-ic {
+    background: #10b981; border-color: #10b981; color: #fff;
+  }
+  .acad-pill i.bi-building { color: #6b7280; }
+  .acad-pill.checked i.bi-building { color: #047857; }
+
+  /* Footer actions */
+  .form-actions {
+    display: flex; flex-wrap: wrap; gap: .6rem;
+    justify-content: flex-end;
+    padding: 1rem 0 0 0;
+  }
+  .form-actions .btn-primary {
+    background: var(--c-primary); border: none;
+    padding: .7rem 1.5rem;
+    font-weight: 600;
+    border-radius: 10px;
+    box-shadow: 0 2px 6px rgba(13,110,253,.25);
+  }
+  .form-actions .btn-primary:hover {
+    box-shadow: 0 4px 12px rgba(13,110,253,.35);
+    transform: translateY(-1px);
+  }
+
+  .password-strength { font-size: .78rem; margin-top: .35rem; font-weight: 600; }
+  .password-strength.weak { color: #dc3545; }
+  .password-strength.medium { color: #d97706; }
+  .password-strength.strong { color: #059669; }
+
+  @media (max-width: 575.98px) {
+    .form-page-header { padding: 1rem; border-radius: 12px; flex-direction: column; align-items: flex-start; }
+    .section-card { padding: 1rem; border-radius: 12px; }
+    .role-grid, .acad-grid { grid-template-columns: 1fr; }
+    .form-actions .btn { width: 100%; }
+  }
+</style>
+
+<div class="container my-4 my-md-5 form-page">
+
+  <div class="form-page-header">
+    <div class="ic"><i class="bi bi-person-plus-fill"></i></div>
+    <div class="flex-grow-1">
+      <h1>Novo Usuário</h1>
+      <p class="subtitle">Cadastre um novo usuário e defina o acesso ao sistema.</p>
     </div>
+    {% set back_url = back_url or get_back_url_default() %}
+    {% include 'components/botao_voltar.html' %}
+  </div>
 
-    <div class="card-body p-4 p-md-5">
-      <p class="text-muted text-center mb-4">
-        Preencha os dados abaixo para criar uma nova conta de acesso ao sistema.
-      </p>
+  <form method="POST" action="{{ url_for('usuarios.cadastro_usuario') }}" class="needs-validation" novalidate>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="next" value="{{ back_url }}">
 
-      <form method="POST" action="{{ url_for('usuarios.cadastro_usuario') }}" class="needs-validation" novalidate>
-        <input type="hidden" name="next" value="{{ back_url }}">
+    <!-- IDENTIFICAÇÃO -->
+    <div class="section-card">
+      <div class="section-title"><i class="bi bi-person-vcard"></i> Identificação</div>
 
-        <!-- Nome -->
-        <div class="mb-3">
-          <label for="nome" class="form-label fw-semibold">Nome Completo</label>
-          <input type="text" class="form-control" id="nome" name="nome"
-                 placeholder="Ex: João da Silva" required>
+      <div class="row g-3">
+        <div class="col-12">
+          <label for="nome" class="form-label">Nome completo</label>
+          <div class="input-icon-wrap">
+            <i class="bi bi-person"></i>
+            <input type="text" class="form-control" id="nome" name="nome"
+                   placeholder="Ex: João da Silva" required>
+          </div>
           <div class="invalid-feedback">Informe o nome completo.</div>
         </div>
 
-        <!-- Email -->
-        <div class="mb-3">
-          <label for="email" class="form-label fw-semibold">Email</label>
-          <input type="email" class="form-control" id="email" name="email"
-                 placeholder="exemplo@academia.com" value="" required autocomplete="off">
-          <div class="form-text">Este será o login do usuário.</div>
-          <div class="invalid-feedback">Informe um email válido.</div>
-        </div>
-
-        <!-- Senha -->
-        <div class="row g-3 mb-3">
-          <div class="col-12 col-md-6">
-            <label for="senha" class="form-label fw-semibold">Senha</label>
-            <input type="password" class="form-control" id="senha" name="senha" value="" required autocomplete="new-password">
-            <div class="invalid-feedback">Defina uma senha.</div>
+        <div class="col-12 col-md-6">
+          <label for="cpf" class="form-label">CPF <span class="text-danger">*</span></label>
+          <div class="input-icon-wrap">
+            <i class="bi bi-person-badge"></i>
+            <input type="text" inputmode="numeric" class="form-control" id="cpf" name="cpf"
+                   placeholder="000.000.000-00" maxlength="14" required autocomplete="off">
           </div>
+          <small class="text-muted">Login do sistema. Para alunos, vincula automaticamente ao cadastro existente com mesmo CPF.</small>
         </div>
 
-        <!-- Roles -->
-        <div class="mb-3">
-          <label class="form-label fw-semibold">Níveis de Acesso (Roles)</label>
-          <div class="row g-2">
-            {% for role in roles %}
-            <div class="col-12 col-md-6">
-              <div class="form-check">
-                <input class="form-check-input" type="checkbox" name="roles" id="role_{{ role.id }}"
-                       value="{{ role.id }}">
-                <label class="form-check-label" for="role_{{ role.id }}">
-                  {{ role.nome }}
-                </label>
-              </div>
-            </div>
-            {% endfor %}
+        <div class="col-12 col-md-6">
+          <label for="email" class="form-label">E-mail</label>
+          <div class="input-icon-wrap">
+            <i class="bi bi-envelope"></i>
+            <input type="email" class="form-control" id="email" name="email"
+                   placeholder="exemplo@academia.com" required autocomplete="off">
           </div>
-          <div class="form-text">Selecione pelo menos uma role.</div>
+          <small class="text-muted">Usado para recuperação de senha.</small>
         </div>
-
-        <!-- Academias vinculadas -->
-        {% if academias_disponiveis %}
-        <div class="mb-3">
-          <label class="form-label fw-semibold">Academias vinculadas (opcional)</label>
-          <div class="row g-2">
-            {% for ac in academias_disponiveis %}
-            <div class="col-12 col-md-6">
-              <div class="form-check">
-                <input class="form-check-input" type="checkbox" name="academias" id="academia_{{ ac.id }}" value="{{ ac.id }}">
-                <label class="form-check-label" for="academia_{{ ac.id }}">{{ ac.nome }}</label>
-              </div>
-            </div>
-            {% endfor %}
-          </div>
-          <div class="form-text">Marque as academias às quais o usuário terá acesso.</div>
-        </div>
-        {% endif %}
-
-        <!-- Botões -->
-        <div class="d-flex flex-column flex-md-row justify-content-center align-items-center gap-3 mt-4">
-          <button type="submit" class="btn btn-primary w-100 w-md-auto btn-lg">
-            <i class="bi bi-save me-2"></i> Cadastrar Usuário
-          </button>
-          {% set back_url = back_url or get_back_url_default() %}
-{% include 'components/botao_voltar.html' %}
-        </div>
-      </form>
+      </div>
     </div>
-  </div>
+
+    <!-- ACESSO -->
+    <div class="section-card">
+      <div class="section-title"><i class="bi bi-shield-lock"></i> Acesso</div>
+      <div class="row g-3">
+        <div class="col-12 col-md-6">
+          <label for="senha" class="form-label">Senha</label>
+          <div class="input-icon-wrap">
+            <i class="bi bi-lock"></i>
+            <input type="password" class="form-control" id="senha" name="senha" required autocomplete="new-password" minlength="6">
+          </div>
+          <div id="senhaForca" class="password-strength" style="display:none;"></div>
+          <small class="text-muted">Mínimo 6 caracteres.</small>
+        </div>
+      </div>
+    </div>
+
+    <!-- ROLES -->
+    <div class="section-card">
+      <div class="section-title"><i class="bi bi-people"></i> Níveis de acesso (Roles)</div>
+      <div class="section-help">Selecione um ou mais papéis. Determina o que o usuário pode fazer no sistema.</div>
+      <div class="role-grid">
+        {% for role in roles %}
+        <label class="role-pill" data-role-pill>
+          <input type="checkbox" name="roles" value="{{ role.id }}" id="role_{{ role.id }}">
+          <span class="check-ic"><i class="bi bi-check-lg"></i></span>
+          <span class="role-name">{{ role.nome }}</span>
+        </label>
+        {% endfor %}
+      </div>
+      <div class="form-text mt-2">Marque pelo menos uma role.</div>
+    </div>
+
+    <!-- ACADEMIAS -->
+    {% if academias_disponiveis %}
+    <div class="section-card">
+      <div class="section-title"><i class="bi bi-building"></i> Academias vinculadas</div>
+      <div class="section-help">Marque as academias às quais o usuário terá acesso (opcional).</div>
+      <div class="acad-grid">
+        {% for ac in academias_disponiveis %}
+        <label class="acad-pill" data-acad-pill>
+          <input type="checkbox" name="academias" value="{{ ac.id }}" id="academia_{{ ac.id }}">
+          <span class="check-ic"><i class="bi bi-check-lg"></i></span>
+          <i class="bi bi-building"></i>
+          <span>{{ ac.nome }}</span>
+        </label>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    <div class="form-actions">
+      {% set back_url = back_url or get_back_url_default() %}
+      {% include 'components/botao_voltar.html' %}
+      <button type="submit" class="btn btn-primary">
+        <i class="bi bi-save me-1"></i> Cadastrar usuário
+      </button>
+    </div>
+  </form>
 </div>
-{% endblock %}
-
-{% block extra_css %}
-<style>
-  /* 🔹 Ajustes para telas pequenas */
-  @media (max-width: 576px) {
-    .card {
-      border-radius: 0 !important;
-      box-shadow: none !important;
-    }
-    .card-body {
-      padding: 1.5rem !important;
-    }
-    h5 {
-      font-size: 1.2rem;
-      text-align: center;
-    }
-    .btn-lg {
-      font-size: 1rem;
-      padding: 0.75rem 1rem;
-    }
-    .form-control,
-    .form-select {
-      font-size: 1rem;
-      padding: 0.6rem 0.75rem;
-    }
-  }
-
-  /* 🔹 Efeitos visuais */
-  .form-control:focus, .form-select:focus {
-    box-shadow: 0 0 0 0.2rem rgba(13,110,253,0.25);
-  }
-
-  .form-label {
-    color: #343a40;
-  }
-
-  /* 🔹 Realce de validação */
-  .was-validated .form-control:invalid,
-  .was-validated .form-select:invalid {
-    border-color: #dc3545;
-  }
-
-  .was-validated .form-control:valid,
-  .was-validated .form-select:valid {
-    border-color: #198754;
-  }
-</style>
 {% endblock %}
 
 {% block extra_js %}
@@ -151,12 +303,76 @@
     const forms = document.querySelectorAll('.needs-validation');
     Array.from(forms).forEach(function (form) {
       form.addEventListener('submit', function (event) {
+        // Garantir que ao menos uma role esteja marcada
+        const roles = form.querySelectorAll('input[name="roles"]:checked');
+        if (roles.length === 0) {
+          event.preventDefault();
+          alert('Selecione pelo menos um nível de acesso (role).');
+          return;
+        }
         if (!form.checkValidity()) {
           event.preventDefault();
           event.stopPropagation();
         }
         form.classList.add('was-validated');
       }, false);
+    });
+  })();
+
+  // Máscara CPF
+  (function () {
+    const cpf = document.getElementById('cpf');
+    if (!cpf) return;
+    cpf.addEventListener('input', function (e) {
+      const d = e.target.value.replace(/\D/g, '').slice(0, 11);
+      let out = d;
+      if (d.length > 9) out = d.replace(/(\d{3})(\d{3})(\d{3})(\d{1,2})/, '$1.$2.$3-$4');
+      else if (d.length > 6) out = d.replace(/(\d{3})(\d{3})(\d{1,3})/, '$1.$2.$3');
+      else if (d.length > 3) out = d.replace(/(\d{3})(\d{1,3})/, '$1.$2');
+      e.target.value = out;
+    });
+  })();
+
+  // Pills checkable
+  (function () {
+    function bind(selector) {
+      document.querySelectorAll(selector).forEach(function (pill) {
+        const cb = pill.querySelector('input[type="checkbox"]');
+        if (!cb) return;
+        const sync = function () { pill.classList.toggle('checked', cb.checked); };
+        cb.addEventListener('change', sync);
+        pill.addEventListener('click', function (e) {
+          // Se clicou direto no input/label oficial, deixar
+          if (e.target.tagName === 'INPUT') return;
+          e.preventDefault();
+          cb.checked = !cb.checked;
+          sync();
+        });
+        sync();
+      });
+    }
+    bind('[data-role-pill]');
+    bind('[data-acad-pill]');
+  })();
+
+  // Indicador de força da senha
+  (function () {
+    const senha = document.getElementById('senha');
+    const ind = document.getElementById('senhaForca');
+    if (!senha || !ind) return;
+    senha.addEventListener('input', function () {
+      const v = senha.value || '';
+      if (!v) { ind.style.display = 'none'; return; }
+      let score = 0;
+      if (v.length >= 6) score++;
+      if (v.length >= 10) score++;
+      if (/[A-Z]/.test(v) && /[a-z]/.test(v)) score++;
+      if (/\d/.test(v)) score++;
+      if (/[^A-Za-z0-9]/.test(v)) score++;
+      ind.style.display = '';
+      if (score <= 2) { ind.className = 'password-strength weak'; ind.textContent = '● Senha fraca'; }
+      else if (score === 3) { ind.className = 'password-strength medium'; ind.textContent = '●● Senha média'; }
+      else { ind.className = 'password-strength strong'; ind.textContent = '●●● Senha forte'; }
     });
   })();
 </script>

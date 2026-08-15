@@ -1,0 +1,655 @@
+/* =============================================================
+   Bracket — Visual estilo poster profissional
+   Foto / avatar grande · Nome · Academia · Linhas de conexão
+   ============================================================= */
+
+:root {
+  --bg:          #0a0c10;
+  --surface:     #111418;
+  --surface-2:   #181c22;
+  --border:      #252b35;
+  --text:        #e8edf3;
+  --muted:       #5a6270;
+  --blue:        #1565c0;
+  --blue-lt:     #4fa3e0;
+  --gold:        #c8960c;
+  --gold-lt:     #f0cc4a;
+  --green:       #2ea043;
+  --red:         #da3633;
+  --line:        #2d3748;
+  /* Cards compactos para enxergar a chave inteira */
+  --card-w:      104px;
+  --avatar-h:    96px;
+  --round-gap:   44px;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  min-height: 100vh;
+}
+
+/* ── Header ──────────────────────────────────────────────── */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 28px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+.comp-nome {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 2px;
+}
+
+h1 { font-size: 18px; font-weight: 700; }
+
+.header-actions { display: flex; align-items: center; gap: 10px; }
+
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.dot--live {
+  background: var(--green);
+  box-shadow: 0 0 0 3px rgba(46,160,67,.2);
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%,100% { box-shadow: 0 0 0 3px rgba(46,160,67,.2); }
+  50%      { box-shadow: 0 0 0 7px rgba(46,160,67,0); }
+}
+
+.btn-refresh {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  padding: 6px 13px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: border-color .15s, color .15s;
+  text-decoration: none;
+}
+
+.btn-refresh:hover { border-color: var(--blue-lt); color: var(--text); }
+
+/* ── Bracket container ───────────────────────────────────── */
+#bracket-container {
+  overflow-x: auto;
+  padding: 28px 24px 28px;
+}
+
+#bracket-scroll {
+  position: relative;
+  display: inline-flex;
+  align-items: flex-start;
+}
+
+#bracket {
+  display: flex;
+  align-items: stretch;
+  gap: var(--round-gap);
+}
+
+/* ── SVG connectors ──────────────────────────────────────── */
+#connectors {
+  position: absolute;
+  top: 0; left: 0;
+  pointer-events: none;
+  overflow: visible;
+}
+
+/* ── Round column ────────────────────────────────────────── */
+.round-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.round-label {
+  font-size: 8px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--muted);
+  margin-bottom: 10px;
+  white-space: nowrap;
+}
+
+.round-matches {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  justify-content: space-around;
+}
+
+/* ── Match slot ──────────────────────────────────────────── */
+.match-slot {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex: 1;
+  padding: 8px 0;
+}
+
+.bracket-mesa-btn {
+  flex-shrink: 0;
+  background: rgba(21, 101, 192, 0.15);
+  border: 1px solid rgba(79, 163, 224, 0.35);
+  color: var(--blue-lt);
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+  text-decoration: none;
+  transition: background 0.15s;
+}
+
+.bracket-mesa-btn:hover {
+  background: rgba(21, 101, 192, 0.3);
+  color: #fff;
+}
+
+.bracket-luta-encerrada {
+  flex-shrink: 0;
+  font-size: 14px;
+  color: var(--green);
+  font-weight: 800;
+  padding: 0 4px;
+  opacity: 0.85;
+}
+
+.bracket-terceiro-match {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* ── Match card ──────────────────────────────────────────── */
+.match-card {
+  display: flex;
+  gap: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px;
+  position: relative;
+  transition: box-shadow .2s;
+}
+
+.match-card:hover {
+  box-shadow: 0 0 0 1px var(--blue-lt), 0 6px 20px rgba(0,0,0,.5);
+}
+
+.match-card--campeao {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  padding: 10px 8px;
+  border-color: rgba(46, 160, 67, 0.45);
+  box-shadow: 0 0 0 1px rgba(46, 160, 67, 0.25);
+}
+
+.match-card--campeao .athlete.winner-campeao {
+  width: 100%;
+  max-width: 132px;
+  margin: 0 auto;
+  transform: scale(1.07);
+  transform-origin: center top;
+}
+
+.match-card-campeao-bottom {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.match-card-campeao-bottom .athlete.loser {
+  opacity: 0.42;
+}
+
+/* ── Athlete card (portrait) ─────────────────────────────── */
+.athlete {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: var(--card-w);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  transition: opacity .35s, border-color .3s;
+  position: relative;
+}
+
+/* Faixa de cor no topo */
+.athlete::before {
+  content: '';
+  display: block;
+  height: 3px;
+  width: 100%;
+  flex-shrink: 0;
+}
+
+.athlete.azul::before   { background: var(--blue); }
+.athlete.branco::before { background: #5a6270; }
+
+/* ── Foto / Avatar ───────────────────────────────────────── */
+.ac-foto {
+  width: 100%;
+  height: var(--avatar-h);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: #0d1117;
+  flex-shrink: 0;
+}
+
+.ac-foto img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top center;
+}
+
+.ac-iniciais {
+  font-size: 1.65rem;
+  font-weight: 900;
+  letter-spacing: -0.5px;
+  line-height: 1;
+}
+
+.athlete.azul   .ac-iniciais { color: var(--blue-lt); }
+.athlete.branco .ac-iniciais { color: #8b949e; }
+.athlete.vago   .ac-iniciais { color: var(--muted); }
+
+/* ── Info texto ──────────────────────────────────────────── */
+.ac-info {
+  width: 100%;
+  padding: 5px 5px 6px;
+  text-align: center;
+}
+
+.ac-nome {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.25;
+}
+
+.ac-team {
+  font-size: 8px;
+  color: var(--muted);
+  margin-top: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Score badge ─────────────────────────────────────────── */
+.ac-score {
+  font-size: 13px;
+  font-weight: 900;
+  margin-top: 1px;
+  color: var(--muted);
+}
+
+/* ── States ──────────────────────────────────────────────── */
+/* Vencedor de fase intermediária (amarelo / ouro) */
+.athlete.winner {
+  border-color: var(--gold-lt);
+  background: rgba(200, 150, 12, 0.14);
+  box-shadow: 0 0 0 1px rgba(240, 204, 74, 0.4);
+}
+
+.athlete.winner::before  { background: linear-gradient(90deg, var(--gold), var(--gold-lt)); }
+.athlete.winner .ac-nome { color: #f0d060; }
+.athlete.winner .ac-score { color: #f0d060; }
+
+.athlete.winner::after {
+  content: '✓';
+  position: absolute;
+  top: 4px;
+  right: 5px;
+  font-size: 11px;
+  font-weight: 900;
+  color: var(--gold-lt);
+  line-height: 1;
+}
+
+/* Campeão da final (ou luta decisiva melhor de 3) — verde */
+.athlete.winner-campeao {
+  border-color: var(--green);
+  background: rgba(46, 160, 67, 0.14);
+  box-shadow: 0 0 0 2px rgba(46, 160, 67, 0.45);
+}
+
+.athlete.winner-campeao::before  { background: var(--green); }
+.athlete.winner-campeao .ac-nome { color: #56d364; }
+.athlete.winner-campeao .ac-score { color: #56d364; }
+
+.athlete.winner-campeao::after {
+  content: '✓';
+  position: absolute;
+  top: 4px;
+  right: 5px;
+  font-size: 12px;
+  font-weight: 900;
+  color: var(--green);
+  line-height: 1;
+}
+
+.athlete.loser {
+  opacity: 0.28;
+}
+
+.athlete.vago {
+  border-style: dashed;
+  border-color: #1e2530;
+}
+
+.athlete.vago .ac-nome { color: var(--muted); font-style: italic; font-weight: 400; }
+
+/* ── VS divider ──────────────────────────────────────────── */
+.vs-divider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 8px;
+  font-weight: 800;
+  color: var(--muted);
+  letter-spacing: 0.5px;
+  padding: 0 1px;
+  flex-shrink: 0;
+}
+
+/* ── Animação de entrada (atleta avançou) ────────────────── */
+@keyframes slideIn {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.athlete.novo { animation: slideIn .4s ease forwards; }
+
+/* ── Repescagem / pódio (abaixo da chave principal) ─────── */
+#secao-3lugar {
+  padding: 0 24px 36px;
+}
+
+.bracket-inferior-wrap {
+  margin-top: 8px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+
+.bracket-inferior-titulo {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 16px;
+}
+
+.bracket-inferior-scroll {
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+
+.bracket-inferior-trilha {
+  display: flex;
+  align-items: stretch;
+  gap: var(--round-gap);
+  min-height: 80px;
+}
+
+/* ── Empty state ─────────────────────────────────────────── */
+.state-msg {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 260px;
+  color: var(--muted);
+  font-size: 14px;
+  gap: 8px;
+}
+
+/* ── Rodízio ─────────────────────────────────────────────── */
+.rodizio-wrap {
+  min-width: 420px;
+  padding: 0 8px;
+}
+
+.rodizio-titulo {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 20px;
+}
+
+.rodizio-lutas {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.rodizio-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.rodizio-num {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  letter-spacing: 1px;
+  min-width: 52px;
+  text-align: right;
+  text-transform: uppercase;
+}
+
+.rodizio-mesa-btn {
+  background: rgba(21,101,192,.15);
+  border: 1px solid rgba(79,163,224,.3);
+  color: var(--blue-lt);
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: background .15s;
+  text-decoration: none;
+}
+
+.rodizio-mesa-btn:hover { background: rgba(21,101,192,.3); }
+
+.rodizio-encerrada {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--green);
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+/* ── Classificação ───────────────────────────────────────── */
+.classif-wrap {
+  padding: 32px 32px 48px;
+}
+
+.classif-titulo {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.classif-sub {
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 12px;
+  font-style: italic;
+}
+
+.classif-table {
+  border-collapse: collapse;
+  font-size: 14px;
+  min-width: 420px;
+}
+
+.classif-table th {
+  text-align: left;
+  padding: 8px 14px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+}
+
+.classif-table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.classif-pos  { font-size: 18px; text-align: center; width: 40px; }
+.classif-nome { font-weight: 700; }
+.classif-team { color: var(--muted); font-size: 12px; }
+.classif-v    { color: var(--green); font-weight: 800; text-align: center; }
+.classif-d    { color: var(--red);   font-weight: 600; text-align: center; }
+.classif-pts  { font-weight: 800; text-align: center; }
+
+.classif-1 td { background: rgba(200,150,12,.06); }
+.classif-2 td { background: rgba(120,120,130,.06); }
+.classif-3 td { background: rgba(120,80,30,.06); }
+
+/* ── Colocações (final da página) ─────────────────────────── */
+#secao-colocacoes {
+  padding: 0 24px 48px;
+  max-width: 560px;
+}
+
+.colocacoes-wrap {
+  border-top: 1px solid var(--border);
+  padding-top: 20px;
+}
+
+.colocacoes-titulo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 14px;
+}
+
+.colocacoes-titulo-ico {
+  font-size: 16px;
+  line-height: 1;
+  filter: drop-shadow(0 0 8px rgba(200, 150, 12, 0.35));
+}
+
+.colocacoes-lista {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.coloc-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  border-left-width: 4px;
+}
+
+.coloc-item.coloc-lugar-1 { border-left-color: #d4a012; }
+.coloc-item.coloc-lugar-2 { border-left-color: #8b92a0; }
+.coloc-item.coloc-lugar-3 { border-left-color: #a67c52; }
+.coloc-item.coloc-lugar-4 { border-left-color: var(--muted); }
+
+.coloc-medal {
+  flex-shrink: 0;
+  font-size: 2.25rem;
+  line-height: 1;
+  width: 2.75rem;
+  text-align: center;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.45));
+}
+
+.coloc-item.coloc-lugar-1 .coloc-medal { filter: drop-shadow(0 0 10px rgba(212, 160, 18, 0.35)); }
+.coloc-item.coloc-lugar-2 .coloc-medal { filter: drop-shadow(0 0 8px rgba(180, 190, 200, 0.2)); }
+.coloc-item.coloc-lugar-3 .coloc-medal { filter: drop-shadow(0 0 8px rgba(166, 124, 82, 0.3)); }
+
+.coloc-corpo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+}
+
+.coloc-label {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.coloc-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.coloc-nome {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.coloc-acad {
+  font-size: 12px;
+  color: var(--muted);
+}

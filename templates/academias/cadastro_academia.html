@@ -23,6 +23,7 @@
         </div>
         <div class="card-body p-4">
             <form method="POST" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="next" value="{{ back_url }}">
                 <div class="mb-4">
                     <label for="logo" class="form-label fw-semibold">Logo da Academia</label>
@@ -50,21 +51,65 @@
                     </div>
                 </div>
 
-                <div class="row">
-                    <div class="col-md-6 mb-3">
-                        <label for="responsavel" class="form-label fw-semibold">Responsável</label>
-                        <input type="text" id="responsavel" name="responsavel" class="form-control" placeholder="Nome do responsável">
+                <!-- ===== Gestor da Academia (definido primeiro: o contato da academia vem do gestor) ===== -->
+                <!-- Contato da academia: NÃO é digitado, é puxado do gestor -->
+                <input type="hidden" name="responsavel" id="responsavel">
+                <input type="hidden" name="telefone" id="telefone">
+                <input type="hidden" name="email" id="email">
+                <input type="hidden" name="gestor_usuario_id" id="gestor_usuario_id" value="">
+
+                <div class="mb-3">
+                    <h6 class="fw-semibold mb-0"><i class="bi bi-person-badge me-2"></i>Gestor da Academia</h6>
+                    <p class="small text-muted mb-0">O responsável, telefone e e-mail da academia serão os mesmos do gestor. Busque um usuário já cadastrado ou crie um novo gestor.</p>
+                </div>
+
+                <div class="btn-group mb-3" role="group" aria-label="Tipo de gestor">
+                    <input type="radio" class="btn-check" name="gestor_modo" id="gestorModoExistente" value="existente" autocomplete="off" checked>
+                    <label class="btn btn-outline-primary btn-sm" for="gestorModoExistente"><i class="bi bi-search me-1"></i>Buscar usuário existente</label>
+                    <input type="radio" class="btn-check" name="gestor_modo" id="gestorModoNovo" value="novo" autocomplete="off">
+                    <label class="btn btn-outline-primary btn-sm" for="gestorModoNovo"><i class="bi bi-person-plus me-1"></i>Criar novo gestor</label>
+                </div>
+
+                <!-- Busca de usuário já cadastrado -->
+                <div id="gestorBuscaWrap" class="mb-3">
+                    <label for="gestorBuscaInput" class="form-label fw-semibold">Buscar gestor no cadastro de usuários</label>
+                    <div class="position-relative">
+                        <input type="text" id="gestorBuscaInput" class="form-control" placeholder="Digite nome, e-mail ou CPF..." autocomplete="off">
+                        <div id="gestorBuscaResultados" class="list-group position-absolute w-100 shadow-sm" style="z-index:1050; max-height:260px; overflow-y:auto; display:none;"></div>
                     </div>
-                    <div class="col-md-6 mb-3">
-                        <label for="telefone" class="form-label fw-semibold">Telefone</label>
-                        <input type="text" id="telefone" name="telefone" class="form-control" placeholder="(11) 99999-9999" data-mask="phone">
+                    <small class="text-muted">Os dados de contato da academia serão os mesmos do usuário selecionado.</small>
+                    <div id="gestorSelecionado" class="alert alert-success d-flex justify-content-between align-items-center mt-2 mb-0 py-2 px-3" style="display:none;">
+                        <span><i class="bi bi-person-check me-1"></i><span id="gestorSelecionadoTexto"></span></span>
+                        <button type="button" class="btn-close" id="gestorLimparSelecao" aria-label="Remover"></button>
                     </div>
                 </div>
 
-                <div class="row">
-                    <div class="col-md-6 mb-3">
-                        <label for="email" class="form-label fw-semibold">Email</label>
-                        <input type="email" id="email" name="email" class="form-control" placeholder="contato@academia.com">
+                <!-- Dados de novo gestor -->
+                <div id="gestorNovoWrap" style="display:none;">
+                    <div class="row">
+                        <div class="col-md-8 mb-3">
+                            <label for="gestor_nome" class="form-label fw-semibold">Nome do Gestor <span class="text-danger">*</span></label>
+                            <input type="text" id="gestor_nome" name="gestor_nome" class="form-control" placeholder="Nome completo do gestor" autocomplete="off" value="">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="gestor_cpf" class="form-label fw-semibold">CPF do Gestor <span class="text-danger">*</span></label>
+                            <input type="text" id="gestor_cpf" name="gestor_cpf" class="form-control" placeholder="000.000.000-00" maxlength="14" autocomplete="off" data-mask="cpf" value="">
+                            <small class="text-muted">Será usado para login no sistema.</small>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label for="gestor_telefone" class="form-label fw-semibold">Telefone do Gestor <span class="text-danger">*</span></label>
+                            <input type="text" id="gestor_telefone" name="gestor_telefone" class="form-control" placeholder="(11) 99999-9999" autocomplete="off" data-mask="phone" value="">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="gestor_email" class="form-label fw-semibold">E-mail do Gestor <span class="text-danger">*</span></label>
+                            <input type="email" id="gestor_email" name="gestor_email" class="form-control" placeholder="email@exemplo.com" autocomplete="off" value="">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="gestor_senha" class="form-label fw-semibold">Senha do Gestor <span class="text-danger">*</span></label>
+                            <input type="password" id="gestor_senha" name="gestor_senha" class="form-control" placeholder="Mínimo 6 caracteres" minlength="6" autocomplete="new-password" value="">
+                        </div>
                     </div>
                 </div>
 
@@ -150,37 +195,6 @@
                     {% if not modalidades %}<small class="text-muted">Nenhuma modalidade cadastrada. Cadastre em Configurações.</small>{% endif %}
                 </div>
 
-                <hr class="my-4">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <div>
-                        <h6 class="fw-semibold mb-0"><i class="bi bi-person-badge me-2"></i>Dados do Gestor da Academia</h6>
-                        <p class="small text-muted mb-0">Será criado um usuário gestor automaticamente vinculado a esta academia.</p>
-                    </div>
-                    <button type="button" class="btn btn-outline-info btn-sm" id="btnReplicarResponsavel" title="Replicar dados do responsável">
-                        <i class="bi bi-arrow-left-right me-1"></i>Usar dados do responsável
-                    </button>
-                </div>
-
-                <div class="row">
-                    <div class="col-md-12 mb-3">
-                        <label for="gestor_nome" class="form-label fw-semibold">Nome do Gestor <span class="text-danger">*</span></label>
-                        <input type="text" id="gestor_nome" name="gestor_nome" class="form-control" required placeholder="Nome completo do gestor" autocomplete="off" value="">
-                    </div>
-                </div>
-
-                <div class="row">
-                    <div class="col-md-6 mb-3">
-                        <label for="gestor_email" class="form-label fw-semibold">E-mail do Gestor <span class="text-danger">*</span></label>
-                        <input type="email" id="gestor_email" name="gestor_email" class="form-control" required placeholder="email@exemplo.com" autocomplete="off" value="">
-                        <small class="text-muted">Será usado para login no sistema.</small>
-                    </div>
-                    <div class="col-md-6 mb-3">
-                        <label for="gestor_senha" class="form-label fw-semibold">Senha do Gestor <span class="text-danger">*</span></label>
-                        <input type="password" id="gestor_senha" name="gestor_senha" class="form-control" required placeholder="Mínimo 6 caracteres" minlength="6" autocomplete="new-password" value="">
-                        <small class="text-muted">Mínimo de 6 caracteres.</small>
-                    </div>
-                </div>
-
                 <div class="d-flex justify-content-between pt-2">
                     {% set back_url = back_url or get_back_url_default() %}
 {% include 'components/botao_voltar.html' %}
@@ -230,6 +244,20 @@ function aplicarMascaraTelefone(input) {
 document.querySelectorAll('input[data-mask="phone"]').forEach(function (el) {
     el.addEventListener('input', function () {
         aplicarMascaraTelefone(this);
+    });
+});
+
+// Máscara de CPF
+function aplicarMascaraCPF(input) {
+    let v = input.value.replace(/\D/g, '').slice(0, 11);
+    if (v.length > 9)      v = `${v.slice(0,3)}.${v.slice(3,6)}.${v.slice(6,9)}-${v.slice(9)}`;
+    else if (v.length > 6) v = `${v.slice(0,3)}.${v.slice(3,6)}.${v.slice(6)}`;
+    else if (v.length > 3) v = `${v.slice(0,3)}.${v.slice(3)}`;
+    input.value = v;
+}
+document.querySelectorAll('input[data-mask="cpf"]').forEach(function (el) {
+    el.addEventListener('input', function () {
+        aplicarMascaraCPF(this);
     });
 });
 
@@ -293,45 +321,142 @@ if (cepInput) {
     });
 }
 
-// Botão para replicar dados do responsável
-const btnReplicarResponsavel = document.getElementById('btnReplicarResponsavel');
-if (btnReplicarResponsavel) {
-    btnReplicarResponsavel.addEventListener('click', function() {
-        const responsavelNome = document.getElementById('responsavel').value.trim();
-        const responsavelEmail = document.getElementById('email').value.trim();
-        
-        if (!responsavelNome) {
-            alert('Preencha o campo "Responsável" antes de replicar os dados.');
-            document.getElementById('responsavel').focus();
+</script>
+<script>
+// Gestor: alternância entre usuário existente x novo + busca no cadastro de usuários
+(function () {
+    var URL_BUSCA = "{{ url_for('associacao.buscar_usuarios_gestor') }}";
+    var radiosModo = document.querySelectorAll('input[name="gestor_modo"]');
+    var buscaWrap = document.getElementById('gestorBuscaWrap');
+    var novoWrap = document.getElementById('gestorNovoWrap');
+    var hiddenId = document.getElementById('gestor_usuario_id');
+    var input = document.getElementById('gestorBuscaInput');
+    var resultados = document.getElementById('gestorBuscaResultados');
+    var selecionado = document.getElementById('gestorSelecionado');
+    var selecionadoTexto = document.getElementById('gestorSelecionadoTexto');
+    var btnLimpar = document.getElementById('gestorLimparSelecao');
+    var camposNovo = ['gestor_nome', 'gestor_cpf', 'gestor_telefone', 'gestor_email', 'gestor_senha'];
+    var form = hiddenId ? hiddenId.closest('form') : null;
+
+    if (!buscaWrap || !novoWrap) return;
+
+    function setRequiredNovo(req) {
+        camposNovo.forEach(function (id) {
+            var el = document.getElementById(id);
+            if (el) { el.required = req; }
+        });
+    }
+
+    function modoAtual() {
+        var r = document.querySelector('input[name="gestor_modo"]:checked');
+        return r ? r.value : 'existente';
+    }
+
+    function aplicarModo() {
+        var modo = modoAtual();
+        if (modo === 'novo') {
+            novoWrap.style.display = '';
+            buscaWrap.style.display = 'none';
+            setRequiredNovo(true);
+            limparSelecao();
+        } else {
+            novoWrap.style.display = 'none';
+            buscaWrap.style.display = '';
+            setRequiredNovo(false);
+        }
+    }
+
+    function limparSelecao() {
+        if (hiddenId) hiddenId.value = '';
+        if (selecionado) selecionado.style.display = 'none';
+        if (input) input.style.display = '';
+    }
+
+    function esconderResultados() {
+        if (resultados) { resultados.style.display = 'none'; resultados.innerHTML = ''; }
+    }
+
+    function selecionarUsuario(u) {
+        if (hiddenId) hiddenId.value = u.id;
+        var desc = u.nome || 'Usuário';
+        if (u.email) desc += ' — ' + u.email;
+        if (selecionadoTexto) selecionadoTexto.textContent = desc;
+        if (selecionado) selecionado.style.display = 'flex';
+        if (input) { input.value = ''; input.style.display = 'none'; }
+        esconderResultados();
+    }
+
+    function renderResultados(usuarios) {
+        if (!resultados) return;
+        if (!usuarios || !usuarios.length) {
+            resultados.innerHTML = '<div class="list-group-item small text-muted">Nenhum usuário encontrado.</div>';
+            resultados.style.display = 'block';
             return;
         }
-        
-        if (!responsavelEmail) {
-            alert('Preencha o campo "Email" da academia antes de replicar os dados.');
-            document.getElementById('email').focus();
-            return;
+        resultados.innerHTML = '';
+        usuarios.forEach(function (u) {
+            var item = document.createElement('button');
+            item.type = 'button';
+            item.className = 'list-group-item list-group-item-action';
+            var sub = [];
+            if (u.email) sub.push(u.email);
+            if (u.cpf) sub.push('CPF: ' + u.cpf);
+            item.innerHTML = '<div class="fw-semibold">' + (u.nome || '') + '</div>'
+                + (sub.length ? '<div class="small text-muted">' + sub.join(' · ') + '</div>' : '');
+            item.addEventListener('click', function () { selecionarUsuario(u); });
+            resultados.appendChild(item);
+        });
+        resultados.style.display = 'block';
+    }
+
+    var timer = null;
+    if (input) {
+        input.addEventListener('input', function () {
+            var termo = this.value.trim();
+            if (timer) clearTimeout(timer);
+            if (termo.length < 2) { esconderResultados(); return; }
+            timer = setTimeout(function () {
+                fetch(URL_BUSCA + '?q=' + encodeURIComponent(termo), { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                    .then(function (r) { return r.json(); })
+                    .then(function (data) {
+                        if (data && data.ok) renderResultados(data.usuarios);
+                        else esconderResultados();
+                    })
+                    .catch(function () { esconderResultados(); });
+            }, 300);
+        });
+    }
+
+    if (btnLimpar) {
+        btnLimpar.addEventListener('click', function () {
+            limparSelecao();
+            if (input) input.focus();
+        });
+    }
+
+    // Fecha a lista ao clicar fora
+    document.addEventListener('click', function (e) {
+        if (resultados && !resultados.contains(e.target) && e.target !== input) {
+            esconderResultados();
         }
-        
-        // Replicar nome e email
-        document.getElementById('gestor_nome').value = responsavelNome;
-        document.getElementById('gestor_email').value = responsavelEmail;
-        
-        // Focar no campo de senha
-        document.getElementById('gestor_senha').focus();
-        
-        // Feedback visual
-        const btn = this;
-        const originalText = btn.innerHTML;
-        btn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Dados replicados!';
-        btn.classList.remove('btn-outline-info');
-        btn.classList.add('btn-success');
-        
-        setTimeout(function() {
-            btn.innerHTML = originalText;
-            btn.classList.remove('btn-success');
-            btn.classList.add('btn-outline-info');
-        }, 2000);
     });
-}
+
+    radiosModo.forEach(function (r) {
+        r.addEventListener('change', aplicarModo);
+    });
+
+    // Impede envio em modo "existente" sem usuário selecionado
+    if (form) {
+        form.addEventListener('submit', function (e) {
+            if (modoAtual() === 'existente' && (!hiddenId || !hiddenId.value)) {
+                e.preventDefault();
+                alert('Selecione um usuário existente para ser o gestor, ou escolha "Criar novo gestor".');
+                if (input) input.focus();
+            }
+        });
+    }
+
+    aplicarModo();
+})();
 </script>
 {% endblock %}

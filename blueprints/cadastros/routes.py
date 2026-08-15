@@ -45,6 +45,15 @@ def gerenciar_graduacoes():
         "carencia_minima" if "carencia_minima" in colunas_info else None
     )
     col_observacao = "observacao" if "observacao" in colunas_info else None
+    col_modalidade_id = "modalidade_id" if "modalidade_id" in colunas_info else None
+
+    modalidades = []
+    if col_modalidade_id:
+        try:
+            cursor.execute("SELECT id, nome FROM modalidade WHERE ativo = 1 ORDER BY nome")
+            modalidades = cursor.fetchall()
+        except Exception:
+            modalidades = []
 
     def coluna_numerica(nome_coluna):
         tipo = colunas_info.get(nome_coluna, "")
@@ -63,6 +72,7 @@ def gerenciar_graduacoes():
             request.form.getlist("carencia_minima") if col_carencia_minima else []
         )
         observacoes = request.form.getlist("observacao") if col_observacao else []
+        modalidades_ids = request.form.getlist("modalidade_id") if col_modalidade_id else []
 
         total = len(ids)
         listas = [faixas, graduacoes, categorias]
@@ -78,6 +88,8 @@ def gerenciar_graduacoes():
             listas.append(carencias_minimas)
         if col_observacao:
             listas.append(observacoes)
+        if col_modalidade_id:
+            listas.append(modalidades_ids)
 
         if not all(len(lst) == total for lst in listas):
             db.close()
@@ -138,6 +150,9 @@ def gerenciar_graduacoes():
                     valores.append(
                         normalizar_valor(col_observacao, observacoes[idx])
                     )
+                if col_modalidade_id:
+                    set_partes.append("modalidade_id=%s")
+                    valores.append(parse_int(modalidades_ids[idx]))
 
                 valores.append(ids[idx])
                 cursor.execute(
@@ -170,6 +185,8 @@ def gerenciar_graduacoes():
             select_cols.append(col_carencia_minima)
         if col_observacao:
             select_cols.append(col_observacao)
+        if col_modalidade_id:
+            select_cols.append(col_modalidade_id)
 
         cursor.execute(
             f"""
@@ -193,6 +210,8 @@ def gerenciar_graduacoes():
         col_carencia=col_carencia,
         col_carencia_minima=col_carencia_minima,
         col_observacao=col_observacao,
+        col_modalidade_id=col_modalidade_id,
+        modalidades=modalidades,
     )
 
 

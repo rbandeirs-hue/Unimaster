@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+{% block title %}Migrações para o Zempo{% endblock %}
+{% block content %}
+<div class="container-fluid" style="max-width:1280px;">
+
+  <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+    <div>
+      <h1 class="h4 mb-1"><i class="bi bi-cloud-upload-fill text-primary me-2"></i>Migração para o Zempo</h1>
+      <p class="text-muted small mb-0">
+        Solicitações das academias. Marque quem você quer cadastrar no Zempo.
+      </p>
+    </div>
+    <div class="d-flex gap-2">
+      <a href="{{ url_for('zempo.solicitar') }}" class="btn btn-sm btn-outline-secondary">Alunos</a>
+      <a href="{{ url_for('zempo.configuracao') }}" class="btn btn-sm btn-outline-secondary">
+        <i class="bi bi-gear me-1"></i>Credenciais
+      </a>
+    </div>
+  </div>
+
+  {# Padrão: só o que ainda exige ação. Migrados e rejeitados viram histórico. #}
+  <div class="d-flex flex-wrap gap-1 mb-3">
+    {% set filtros = [
+        ('pendentes', 'Aguardando ação', 'primary'),
+        ('aguardando_academia', 'Na academia', 'warning'),
+        ('aguardando_associacao', 'Comigo', 'info'),
+        ('erro', 'Com erro', 'danger'),
+        ('migrada', 'Migradas', 'success'),
+        ('rejeitada', 'Rejeitadas', 'secondary'),
+        ('todos', 'Todas', 'dark')
+    ] %}
+    {% for chave, rotulo, cor in filtros %}
+      {% set n = contagem.get(chave, 0) %}
+      {% if n or chave in ('pendentes', 'todos') %}
+      <a href="{{ url_for('zempo.migracoes', status=chave) }}"
+         class="btn btn-sm {{ 'btn-' ~ cor if status_filtro == chave else 'btn-outline-' ~ cor }}">
+        {{ rotulo }}
+        <span class="badge bg-light text-dark ms-1">{{ n }}</span>
+      </a>
+      {% endif %}
+    {% endfor %}
+  </div>
+
+  <form method="post" action="{{ url_for('zempo.migrar') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <div class="card shadow-sm">
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th style="width:36px;"><input type="checkbox" class="form-check-input" id="marcarTodos"></th>
+              <th>Aluno</th>
+              <th>Academia</th>
+              <th>Solicitado por</th>
+              <th>Status</th>
+              <th>Observação</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for sol in solicitacoes %}
+            <tr>
+              {% if sol.status == 'migrada' %}
+                {% set impedimento = 'Já migrado (' ~ (sol.zempo_numero or '') ~ ') — só pode ser excluído da fila.' %}
+              {% elif sol.status == 'rejeitada' %}
+                {% set impedimento = 'Solicitação rejeitada — só pode ser excluída da fila.' %}
+              {% elif sol.status == 'aguardando_academia' %}
+                {% set impedimento = 'A academia ainda não conferiu os dados.' %}
+              {% elif sol.faltando %}
+                {% set impedimento = 'Faltam dados exigidos pela CBJ: ' ~ sol.faltando | map(attribute=1) | join(', ') ~ '.' %}
+              {% else %}
+                {% set impedimento = '' %}
+              {% endif %}
+              {# Sempre selecionável: mesmo o que não pode migrar precisa poder ser
+                 excluído da fila. Cada ação valida no servidor o que aceita. #}
+              <td>
+                <input type="checkbox" class="form-check-input marcavel"
+                       name="solicitacao_ids" value="{{ sol.id }}"
+                       {% if impedimento %}title="{{ impedimento }}"{% endif %}>
+              </td>
+              <td>
+                <div class="fw-semibold">{{ sol.aluno_nome }}</div>
+                <div class="text-muted small">{{ sol.cpf or 'sem CPF' }}</div>
+              </td>
+              <td class="small">{{ sol.academia_nome or '—' }}</td>
+              <td class="small">
+                {{ sol.solicitante or '—' }}
+                {% if sol.solicitado_em %}
+                  <div class="text-muted">{{ sol.solicitado_em.strftime('%d/%m/%Y %H:%M') }}</div>
+                {% endif %}
+              </td>
+              <td>
+                {% if sol.status == 'migrada' %}
+                  <span class="badge bg-success">{{ sol.zempo_numero }}</span>
+                {% elif sol.status == 'erro' %}
+                  <span class="badge bg-danger">Erro</span>
+                {% elif sol.status == 'rejeitada' %}
+                  <span class="badge bg-secondary">Rejeitada</span>
+                {% else %}
+                  <span class="badge bg-warning text-dark">Pendente</span>
+                {% endif %}
+              </td>
+              <td class="small">
+                {% if sol.faltando %}
+                  <span class="text-danger">
+                    Faltam: {{ sol.faltando | map(attribute=1) | join(', ') }}
+                  </span>
+                {% elif sol.mensagem %}
+                  <span class="text-muted">{{ sol.mensagem }}</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="6" class="text-center text-muted py-4">
+              {% if status_filtro == 'pendentes' %}
+                Nenhuma solicitação aguardando ação.
+                {% if contagem.get('todos') %}
+                  <a href="{{ url_for('zempo.migracoes', status='todos') }}">Ver todas as {{ contagem.todos }}</a>
+                {% endif %}
+              {% else %}
+                Nenhuma solicitação neste filtro.
+              {% endif %}
+            </td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="mt-3 d-flex flex-wrap gap-2">
+      <button type="submit" class="btn btn-primary"
+              onclick="return confirm('Isso cria os cadastros diretamente no Zempo da CBJ. Confirmar?');">
+        <i class="bi bi-cloud-upload me-1"></i> Migrar selecionados
+      </button>
+      <button type="submit" class="btn btn-outline-danger"
+              formaction="{{ url_for('zempo.excluir_solicitacoes') }}"
+              formnovalidate
+              onclick="return confirm('Excluir as solicitações selecionadas da fila? O aluno e o cadastro no Zempo não são afetados.');">
+        <i class="bi bi-trash me-1"></i> Excluir da fila
+      </button>
+    </div>
+  </form>
+</div>
+
+<script>
+  document.getElementById('marcarTodos')?.addEventListener('change', function () {
+    document.querySelectorAll('.marcavel').forEach(cb => cb.checked = this.checked);
+  });
+</script>
+{% endblock %}

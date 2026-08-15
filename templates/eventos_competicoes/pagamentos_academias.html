@@ -230,6 +230,7 @@
                                         <i class="bi bi-plus-circle me-1"></i><span class="d-none d-md-inline">Abatimento</span><span class="d-md-none">Abatimento</span>
                                     </button>
                                     <form method="POST" action="{{ url_for('eventos_competicoes.registrar_abatimento', evento_id=evento.id, pagamento_id=pag.id) }}" class="d-inline" onsubmit="return confirm('Quitar o valor total pendente de R$ {{ (pag.valor_pendente or 0)|round(2) }}?')">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                         <input type="hidden" name="valor_abatimento" value="{{ pag.valor_pendente }}">
                                         <input type="hidden" name="observacoes" value="Pagamento total quitado">
                                         <button type="submit" class="btn btn-sm btn-success" title="Quitar valor total pendente">
@@ -238,12 +239,14 @@
                                     </form>
                                     {% else %}
                                     <form method="POST" action="{{ url_for('eventos_competicoes.confirmar_pagamento_academia', evento_id=evento.id, pagamento_id=pag.id) }}" class="d-inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                         <button type="submit" class="btn btn-sm btn-success" title="Confirmar pagamento geral">
                                             <i class="bi bi-check-circle me-1"></i>Confirmar
                                         </button>
                                     </form>
                                     {% if pag.valor_pago > 0 %}
                                     <form method="POST" action="{{ url_for('eventos_competicoes.cancelar_pagamento_academia', evento_id=evento.id, pagamento_id=pag.id) }}" class="d-inline" onsubmit="return confirm('Cancelar pagamento? Isso reverterá o último abatimento ou pagamento total. O status voltará para pendente.')">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                         <button type="submit" class="btn btn-sm btn-warning" title="Cancelar pagamento - reverter para pendente">
                                             <i class="bi bi-x-circle me-1"></i><span class="d-none d-md-inline">Cancelar Pagamento</span><span class="d-md-none">Cancelar</span>
                                         </button>
@@ -251,6 +254,7 @@
                                     {% endif %}
                                     {% endif %}
                                     <form method="POST" action="{{ url_for('eventos_competicoes.cancelar_inscricoes_academia', evento_id=evento.id) }}" class="d-inline" onsubmit="return confirm('Cancelar todas as inscrições da academia {{ pag.academia_nome }}? Isso removerá {{ pag.total_inscricoes }} inscrição(ões). Esta ação não pode ser desfeita.')">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                         <input type="hidden" name="academia_id" value="{{ pag.academia_id }}">
                                         <button type="submit" class="btn btn-sm btn-outline-danger" title="Cancelar todas as inscrições desta academia">
                                             <i class="bi bi-trash me-1"></i><span class="d-none d-md-inline">Cancelar Inscrições</span><span class="d-md-none">Cancelar</span>
@@ -261,6 +265,7 @@
                                 <div class="d-flex gap-1 justify-content-end flex-wrap">
                                     {% if pag.valor_total_esperado > 0 %}
                                     <form method="POST" action="{{ url_for('eventos_competicoes.criar_registro_pagamento', evento_id=evento.id) }}" class="d-inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                         <input type="hidden" name="academia_id" value="{{ pag.academia_id }}">
                                         <button type="submit" class="btn btn-sm btn-outline-info" title="Criar registro de pagamento para esta academia">
                                             <i class="bi bi-plus-circle me-1"></i><span class="d-none d-md-inline">Criar Registro</span><span class="d-md-none">Criar</span>
@@ -270,6 +275,7 @@
                                     <span class="text-muted small">Sem valor configurado</span>
                                     {% endif %}
                                     <form method="POST" action="{{ url_for('eventos_competicoes.cancelar_inscricoes_academia', evento_id=evento.id) }}" class="d-inline" onsubmit="return confirm('Cancelar todas as inscrições da academia {{ pag.academia_nome }}? Isso removerá {{ pag.total_inscricoes }} inscrição(ões). Esta ação não pode ser desfeita.')">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                         <input type="hidden" name="academia_id" value="{{ pag.academia_id }}">
                                         <button type="submit" class="btn btn-sm btn-outline-danger" title="Cancelar todas as inscrições desta academia">
                                             <i class="bi bi-trash me-1"></i><span class="d-none d-md-inline">Cancelar Inscrições</span><span class="d-md-none">Cancelar</span>
@@ -293,6 +299,7 @@
                                             {% if abat.observacoes %} — {{ abat.observacoes }}{% endif %}
                                         </span>
                                         <form method="POST" action="{{ url_for('eventos_competicoes.cancelar_abatimento', evento_id=evento.id, pagamento_id=pag.id, abatimento_id=abat.id) }}" class="d-inline" onsubmit="return confirm('Cancelar este abatimento de R$ {{ '%.2f'|format(abat.valor) }}? O valor será revertido para pendente.')">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                             <button type="submit" class="btn btn-sm btn-outline-danger" title="Cancelar este abatimento">
                                                 <i class="bi bi-x-circle"></i>
                                             </button>
@@ -321,6 +328,7 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
                 </div>
                 <form method="POST" action="{{ url_for('eventos_competicoes.registrar_abatimento', evento_id=evento.id, pagamento_id=pag.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <div class="modal-body">
                         <div class="mb-3">
                             <label class="form-label">Academia</label>

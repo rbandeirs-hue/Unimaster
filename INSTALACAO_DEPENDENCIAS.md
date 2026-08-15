@@ -1,16 +1,18 @@
 # 📦 Guia de Instalação de Dependências - Unimaster
 
+**Produção (Linux):** `deploy/subir.sh` + `deploy/PRODUCAO.md` (Gunicorn, systemd, Nginx, `.venv`).
+
 ## 🚀 Instalação Rápida
 
-### 1. Criar ambiente virtual (recomendado)
+### 1. Criar ambiente virtual (obrigatório: nome `.venv`)
 ```bash
-# Windows
-python -m venv venv
-venv\Scripts\activate
+# Linux/Mac (produção e desenvolvimento)
+python3 -m venv .venv
+source .venv/bin/activate
 
-# Linux/Mac
-python3 -m venv venv
-source venv/bin/activate
+# Windows
+python -m venv .venv
+.venv\Scripts\activate
 ```
 
 ### 2. Instalar dependências
@@ -177,5 +179,5 @@ Após instalar as dependências:
 
 1. Configurar banco de dados em `config.py`
 2. Executar migrações SQL (se necessário)
-3. Iniciar aplicação: `python app.py`
-4. Acessar: `http://localhost:5000`
+3. Desenvolvimento local: `export UNIMASTER_USE_DEV_SERVER=1 && .venv/bin/python app.py` (ou ver `deploy/PRODUCAO.md`)
+4. Produção: Gunicorn + systemd + Nginx — `deploy/unimaster.service`, `gunicorn.conf.py`, `wsgi:app`

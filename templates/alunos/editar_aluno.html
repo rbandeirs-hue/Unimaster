@@ -101,6 +101,7 @@
         <div class="card-body p-4">
 
             <form method="POST" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="next" value="{{ back_url }}">
 
                 <!-- ===================================================== -->
@@ -133,17 +134,18 @@
                                value="{{ aluno.nacionalidade or '' }}">
                     </div>
 
-                    <div class="col-md-4 mb-3">
-                        <label class="form-label fw-semibold">Graduação *</label>
-                        <select class="form-control" name="graduacao_id" required>
+                    <div class="col-md-4 mb-3" id="graduacao_container">
+                        <label class="form-label fw-semibold">Graduação</label>
+                        <select class="form-control" name="graduacao_id" id="graduacao_id">
                             <option value="">Selecione</option>
                             {% for g in graduacoes %}
-                            <option value="{{ g.id }}"
+                            <option value="{{ g.id }}" data-modalidade-id="{{ g.modalidade_id if g.modalidade_id is defined and g.modalidade_id is not none else '' }}"
                                 {% if aluno.graduacao_id == g.id %}selected{% endif %}>
                                 {{ g.get('faixa', '') }} - {{ g.get('graduacao', '') }}{% if g.get('categoria') %} - {{ g.get('categoria') }}{% endif %}
                             </option>
                             {% endfor %}
                         </select>
+                        <small class="text-muted d-none" id="graduacao_empty_hint">Nenhuma graduação disponível para a(s) modalidade(s) selecionada(s).</small>
                     </div>
                 </div>
 
@@ -180,6 +182,59 @@
                                value="{{ aluno.associacao_nome }}" readonly>
                     </div>
                 </div>
+
+                {% if academias_vinculadas %}
+                <div class="row">
+                  <div class="col-12 mb-3">
+                    <label class="form-label fw-semibold">
+                      Academias onde treina
+                      <i class="bi bi-info-circle text-muted"
+                         title="A principal é a academia de origem e é a que conta nos relatórios. As demais também veem e atendem o aluno."></i>
+                    </label>
+                    <div class="border rounded p-2">
+                      <div class="d-flex flex-wrap gap-2 align-items-center">
+                        {% for ac in academias_vinculadas %}
+                          <span class="badge {{ 'bg-primary' if ac.principal else 'bg-secondary' }} d-inline-flex align-items-center gap-1 py-2">
+                            {% if ac.principal %}<i class="bi bi-star-fill" style="font-size:.7rem;"></i>{% endif %}
+                            {{ ac.nome }}
+                            {% if ac.principal %}
+                              <span class="small fw-normal">(principal)</span>
+                            {% elif pode_vincular_academia %}
+                              {# Submits próprios, fora do <form> principal, para não salvar o cadastro junto. #}
+                              <button type="submit" class="btn btn-sm btn-link text-white p-0 ms-1 text-decoration-none"
+                                      form="principal_{{ ac.id }}" title="Tornar academia principal"
+                                      style="font-size:.72rem;"
+                                      onclick="return confirm('Tornar {{ ac.nome }} a academia principal deste aluno?');">
+                                tornar principal
+                              </button>
+                              <button type="submit" class="btn-close btn-close-white btn-sm ms-1"
+                                      form="desvincular_{{ ac.id }}" title="Remover vínculo"
+                                      onclick="return confirm('Remover o vínculo com {{ ac.nome }}?');"></button>
+                            {% endif %}
+                          </span>
+                        {% endfor %}
+                      </div>
+
+                      {% if pode_vincular_academia and academias_para_vincular %}
+                      <div class="input-group input-group-sm mt-2" style="max-width:420px;">
+                        <select name="academia_id" class="form-select" form="vincular_academia">
+                          <option value="">Vincular a outra academia…</option>
+                          {% for ac in academias_para_vincular %}
+                            <option value="{{ ac.id }}">{{ ac.nome }}</option>
+                          {% endfor %}
+                        </select>
+                        <button type="submit" class="btn btn-outline-primary" form="vincular_academia">
+                          <i class="bi bi-plus-lg me-1"></i>Vincular
+                        </button>
+                      </div>
+                      <div class="form-text">
+                        Só academias da mesma associação. O aluno passa a aparecer nas duas.
+                      </div>
+                      {% endif %}
+                    </div>
+                  </div>
+                </div>
+                {% endif %}
 
                 <!-- ===================================================== -->
                 <!-- 3 — Filiação -->
@@ -524,7 +579,7 @@
                 </h6>
 
                 <div class="row align-items-end">
-                    <div class="col-md-6 mb-3">
+                    <div class="col-md-4 mb-3">
                         <label class="form-label fw-semibold">Nome</label>
                         <input type="text" class="form-control" name="responsavel_financeiro_nome"
                                id="responsavel_financeiro_nome"
@@ -532,12 +587,22 @@
                                value="{{ aluno.responsavel_financeiro_nome }}">
                     </div>
 
-                    <div class="col-md-4 mb-3">
+                    <div class="col-md-3 mb-3">
                         <label class="form-label fw-semibold">CPF</label>
                         <input type="text" class="form-control" data-mask="cpf"
                                placeholder="CPF do responsável financeiro"
                                name="responsavel_financeiro_cpf"
                                value="{{ aluno.responsavel_financeiro_cpf }}">
+                    </div>
+
+                    <div class="col-md-3 mb-3">
+                        <label class="form-label fw-semibold">Telefone <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" data-mask="phone" required
+                               placeholder="(00) 00000-0000"
+                               id="responsavel_financeiro_telefone"
+                               name="responsavel_financeiro_telefone"
+                               value="{{ aluno.responsavel_financeiro_telefone or '' }}">
+                        <small class="text-muted">Usado na cobrança online (InfinitePay).</small>
                     </div>
 
                     <div class="col-md-2 mb-3 d-grid">
@@ -576,7 +641,7 @@
                                 <i class="bi bi-camera-fill"></i> Câmera
                             </button>
 
-                            <input type="file" name="foto_arquivo" id="fotoArquivoEditarAluno" class="form-control" accept="image/*">
+                            <input type="file" name="foto_arquivo" id="fotoArquivoEditarAluno" class="form-control" accept="image/*" capture="environment">
 
                         </div>
                     </div>
@@ -599,6 +664,27 @@
         </div>
     </div>
 </div>
+
+{# Formulários dos vínculos de academia: ficam fora do <form> principal, senão o
+   navegador aninharia formulários (inválido) e o cadastro seria salvo junto. #}
+{% if pode_vincular_academia and academias_vinculadas %}
+  <form id="vincular_academia" method="POST"
+        action="{{ url_for('alunos.vincular_academia', aluno_id=aluno.id) }}" class="d-none">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  </form>
+  {% for ac in academias_vinculadas if not ac.principal %}
+    <form id="desvincular_{{ ac.id }}" method="POST"
+          action="{{ url_for('alunos.desvincular_academia', aluno_id=aluno.id) }}" class="d-none">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="academia_id" value="{{ ac.id }}">
+    </form>
+    <form id="principal_{{ ac.id }}" method="POST"
+          action="{{ url_for('alunos.tornar_principal_academia', aluno_id=aluno.id) }}" class="d-none">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="academia_id" value="{{ ac.id }}">
+    </form>
+  {% endfor %}
+{% endif %}
 
 <!-- ===================================================== -->
 <!-- MODAL DE CÂMERA -->
@@ -631,6 +717,24 @@
     let stream, devices = [], currentIndex = 0, isFrontCamera = false;
     let usingFrontCamera = true;
     let frontCameras = [], backCameras = [], currentDeviceId = null;
+
+    // 🟦 Controle de prontidão da câmera (evita capturar foto em branco)
+    const _btnCap = document.getElementById("btnCapturar");
+    const _btnCapHTML = _btnCap ? _btnCap.innerHTML : '';
+    function setCapturaPronta(pronto) {
+        if (!_btnCap) return;
+        _btnCap.disabled = !pronto;
+        _btnCap.innerHTML = pronto
+            ? _btnCapHTML
+            : '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Carregando...';
+    }
+    (function () {
+        const v = document.getElementById("cameraVideo");
+        if (!v) return;
+        const marcarPronta = () => { if (v.videoWidth > 0) setCapturaPronta(true); };
+        v.addEventListener('loadedmetadata', marcarPronta);
+        v.addEventListener('playing', marcarPronta);
+    })();
 
     async function listarCameras() {
         // Solicitar permissão primeiro para obter labels dos dispositivos
@@ -693,7 +797,8 @@
         
         // Limpar srcObject antes de iniciar novo stream
         video.srcObject = null;
-        
+        setCapturaPronta(false);
+
         // Aguardar um pouco mais para garantir que o stream anterior foi completamente liberado
         await new Promise(resolve => setTimeout(resolve, 300));
 
@@ -857,6 +962,7 @@
 
         const video = document.getElementById("cameraVideo");
         video.srcObject = null;
+        setCapturaPronta(false);
         await new Promise(resolve => setTimeout(resolve, 300));
 
         const constraints = {
@@ -897,18 +1003,25 @@
 
     $("#btnCapturar").click(function () {
         let video = document.getElementById("cameraVideo");
+        if (!video.videoWidth || video.readyState < 2) {
+            alert("Aguarde a câmera carregar e tente novamente.");
+            return;
+        }
         let canvas = document.getElementById("cameraCanvas");
         let ctx = canvas.getContext("2d");
 
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
+        var MAXDIM = 1080;
+        var vw = video.videoWidth, vh = video.videoHeight;
+        var escala = Math.min(1, MAXDIM / Math.max(vw, vh));
+        canvas.width = Math.round(vw * escala);
+        canvas.height = Math.round(vh * escala);
 
         // Aplicar mesma transformação ao capturar (espelhar se for câmera frontal)
         if (isFrontCamera) {
             ctx.translate(canvas.width, 0);
             ctx.scale(-1, 1);
         }
-        ctx.drawImage(video, 0, 0);
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
         $("#cameraCanvas").show();
         $("#cameraVideo").hide();
@@ -933,7 +1046,7 @@
     });
 
     $("#btnConfirmarFoto").click(function () {
-        const dataURL = document.getElementById("cameraCanvas").toDataURL("image/png");
+        const dataURL = document.getElementById("cameraCanvas").toDataURL("image/jpeg", 0.82);
         $("#fotoInput").val(dataURL);
         $("#miniatura").attr("src", dataURL).removeClass("d-none");
         $("#cameraModal").fadeOut();
@@ -1016,6 +1129,7 @@
     $("#btnMesmoResponsavelFinanceiro").click(function () {
         $("#responsavel_financeiro_nome").val($("input[name='nome']").val());
         $("#responsavel_financeiro_cpf").val($("input[name='cpf']").val()).trigger('input');
+        $("#responsavel_financeiro_telefone").val($("input[name='telefone_celular']").val()).trigger('input');
     });
 
     function atualizarResponsavel() {
@@ -1076,6 +1190,46 @@
     document.getElementById('cadastro_zempo')?.addEventListener('change', atualizarCamposZempo);
     document.getElementById('cadastro_zempo_gestor')?.addEventListener('change', atualizarCamposZempo);
     atualizarCamposZempo();
+
+    // Preservar a graduação que o aluno já tinha (independentemente das modalidades).
+    // Sem isso, abrir + salvar a ficha apaga a graduação se a modalidade não bater.
+    const _gradSelectInicial = document.getElementById('graduacao_id');
+    const _graduacaoInicialId = _gradSelectInicial ? _gradSelectInicial.value : '';
+
+    function atualizarGraduacoesPorModalidade() {
+        const gradContainer = document.getElementById('graduacao_container');
+        const gradSelect = document.getElementById('graduacao_id');
+        if (!gradContainer || !gradSelect) return;
+        const hint = document.getElementById('graduacao_empty_hint');
+        // Conta modalidades marcadas (checkboxes) E as enviadas como hidden (modo só-leitura),
+        // senão a faixa não aparece quando as modalidades não são checkboxes editáveis.
+        const modalidadesMarcadas = Array.from(document.querySelectorAll('input[name="aluno_modalidade_ids"]'))
+            .filter(el => el.type !== 'checkbox' || el.checked)
+            .map(el => String(el.value));
+        let visiveis = 0;
+        Array.from(gradSelect.options).forEach((opt) => {
+            if (!opt.value) return;
+            const modId = opt.dataset.modalidadeId || '';
+            // A graduação atual do aluno fica SEMPRE visível, mesmo que a modalidade
+            // não esteja marcada (preserva o histórico já cadastrado).
+            const ehAtualDoAluno = _graduacaoInicialId && opt.value === _graduacaoInicialId;
+            const mostrar = ehAtualDoAluno
+                || (modalidadesMarcadas.length > 0 && (!modId || modalidadesMarcadas.includes(modId)));
+            opt.hidden = !mostrar;
+            if (mostrar) visiveis += 1;
+            // NUNCA limpar uma seleção existente automaticamente — o usuário decide.
+        });
+        // O container fica visível enquanto houver opção visível (incluindo a atual do aluno).
+        const exibir = visiveis > 0;
+        gradContainer.style.display = exibir ? '' : 'none';
+        gradSelect.required = false;
+        if (hint) hint.classList.toggle('d-none', exibir || modalidadesMarcadas.length === 0);
+    }
+
+    document.querySelectorAll('input[name="aluno_modalidade_ids"]').forEach(function(el) {
+        el.addEventListener('change', atualizarGraduacoesPorModalidade);
+    });
+    atualizarGraduacoesPorModalidade();
 
 </script>
 {% endblock %}
