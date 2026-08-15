@@ -5474,6 +5474,56 @@ def _preprocessar_mensalidade_quitar_opcional(conn, cur, registro_id, partes, ac
     return True, None
 
 
+@bp_financeiro.route("/mensalidades/<int:registro_id>/valor-na-data")
+@login_required
+def valor_mensalidade_na_data(registro_id):
+    """Total devido de uma mensalidade numa data (juros e multa contados até ela).
+
+    A tela de registrar pagamento chama isto quando a data da linha muda, para
+    exibir o valor daquele dia em vez do valor de hoje.
+    """
+    ids = _get_academias_ids()
+    if not ids:
+        return jsonify({"erro": "sem academia"}), 403
+    try:
+        data_ref = date.fromisoformat((request.args.get("data") or "")[:10])
+    except (ValueError, TypeError):
+        return jsonify({"erro": "data inválida"}), 400
+
+    ph = ",".join(["%s"] * len(ids))
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute(
+            f"""SELECT ma.id, ma.aluno_id, ma.valor, ma.data_vencimento, ma.status, ma.status_pagamento,
+                       ma.valor_original, ma.desconto_aplicado, ma.id_desconto,
+                       COALESCE(ma.remover_juros, 0) AS remover_juros,
+                       m.id_academia, a.id_academia AS aluno_id_academia,
+                       COALESCE(m.aplicar_juros_multas, 0) AS aplicar_juros_multas,
+                       COALESCE(m.percentual_multa_mes, 2) AS percentual_multa_mes,
+                       COALESCE(m.percentual_juros_dia, 0.033) AS percentual_juros_dia
+                FROM mensalidade_aluno ma
+                JOIN mensalidades m ON m.id = ma.mensalidade_id
+                JOIN alunos a ON a.id = ma.aluno_id
+                WHERE ma.id = %s AND (m.id_academia IN ({ph}) OR a.id_academia IN ({ph}))""",
+            (registro_id,) + tuple(ids) + tuple(ids),
+        )
+        ma = cur.fetchone()
+    finally:
+        conn.close()
+
+    if not ma:
+        return jsonify({"erro": "não encontrada"}), 404
+
+    _ma_enriquecer_exibicao(ma, ma["aluno_id"], ma.get("id_academia"), hoje=data_ref)
+    return jsonify({
+        "total": round(float(ma.get("valor_final") or ma.get("valor") or 0), 2),
+        "multa": float(ma.get("multa_val") or 0),
+        "juros": float(ma.get("juros_val") or 0),
+        "data": data_ref.isoformat(),
+    })
+
+
 def _registrar_pagamento_mensalidade_partes(conn, cur, registro_id, id_academia, partes):
     """
     Quita mensalidade com uma ou mais linhas (forma, valor, data cada).
@@ -5503,7 +5553,21 @@ def _registrar_pagamento_mensalidade_partes(conn, cur, registro_id, id_academia,
     dcur.close()
     if not ma or ma.get("aluno_nome") is None:
         return False, "Mensalidade não encontrada."
-    _ma_enriquecer_exibicao(ma, ma["aluno_id"], ma.get("id_academia") or id_academia)
+
+    # Juros e multa contam até a DATA DO PAGAMENTO informada, não até hoje.
+    # Lançar no dia 15 um pagamento feito no dia 12 cobrava três dias de juros a
+    # mais — o atraso era do lançamento, não do aluno. Pagamento em várias
+    # linhas usa a data mais recente (quando a dívida foi de fato quitada).
+    data_ref = None
+    for p in partes:
+        try:
+            d = date.fromisoformat((p.get("data_pagamento") or "").strip()[:10])
+        except (ValueError, TypeError):
+            continue
+        if data_ref is None or d > data_ref:
+            data_ref = d
+
+    _ma_enriquecer_exibicao(ma, ma["aluno_id"], ma.get("id_academia") or id_academia, hoje=data_ref)
     valor_total = round(float(ma.get("valor_final") or ma.get("valor") or 0), 2)
     total_zero = valor_total <= 0.001
     descricao_base = f"Mensalidade {ma.get('plano_nome')} - {ma.get('aluno_nome')}"
@@ -5565,8 +5629,10 @@ def _registrar_pagamento_mensalidade_partes(conn, cur, registro_id, id_academia,
     # UI e _ma_enriquecer podem arredondar centavos de forma ligeiramente diferente
     _tol = 0.001 if total_zero else 0.05
     if abs(soma - valor_total) > _tol:
+        _quando = f" para pagamento em {data_ref.strftime('%d/%m/%Y')}" if data_ref else ""
         return False, (
-            f"A soma das parcelas (R$ {soma:.2f}) deve igualar o total devido (R$ {valor_total:.2f})."
+            f"A soma das parcelas (R$ {soma:.2f}) deve igualar o total devido{_quando}: "
+            f"R$ {valor_total:.2f}."
         )
 
     data_ma = max(datas_dt).strftime("%Y-%m-%d")
@@ -6005,8 +6071,15 @@ def cancelar_pagamento():
     try:
         ph = ",".join(["%s"] * len(ids))
         if tipo == "mensalidade_aluno":
+            # A academia sai do ALUNO, não do plano: mensalidade cujo plano é de
+            # outra academia (ou sem plano) ficava impossível de cancelar. E vale
+            # cancelar também quando só `status_pagamento` está como pago —
+            # estado deixado por cancelamentos que falharam no meio.
             cur.execute(
-                f"SELECT ma.id FROM mensalidade_aluno ma JOIN mensalidades m ON m.id = ma.mensalidade_id WHERE ma.id = %s AND m.id_academia IN ({ph}) AND ma.status = 'pago'",
+                f"""SELECT ma.id FROM mensalidade_aluno ma
+                    JOIN alunos a ON a.id = ma.aluno_id
+                    WHERE ma.id = %s AND a.id_academia IN ({ph})
+                      AND (ma.status = 'pago' OR ma.status_pagamento = 'pago')""",
                 (registro_id,) + tuple(ids),
             )
         else:
@@ -6033,44 +6106,28 @@ def cancelar_pagamento():
                 if receita:
                     cur.execute("DELETE FROM receitas WHERE id = %s", (receita["id"],))
             
-            # Reverter status da mensalidade (pendente ou atrasado conforme vencimento)
-            try:
-                cur.execute(
-                    """
-                    UPDATE mensalidade_aluno SET
-                      status = CASE
-                        WHEN data_vencimento IS NOT NULL AND data_vencimento < CURDATE() THEN 'atrasado'
-                        ELSE 'pendente'
-                      END,
-                      status_pagamento = NULL,
-                      data_pagamento = NULL,
-                      valor_pago = NULL,
-                      id_forma_pagamento = NULL
-                    WHERE id = %s
-                    """,
-                    (registro_id,),
-                )
-            except Exception:
-                try:
-                    cur.execute(
-                        """
-                        UPDATE mensalidade_aluno SET
-                          status = CASE
-                            WHEN data_vencimento IS NOT NULL AND data_vencimento < CURDATE() THEN 'atrasado'
-                            ELSE 'pendente'
-                          END,
-                          status_pagamento = NULL,
-                          data_pagamento = NULL,
-                          valor_pago = NULL
-                        WHERE id = %s
-                        """,
-                        (registro_id,),
-                    )
-                except Exception:
-                    cur.execute(
-                        "UPDATE mensalidade_aluno SET status='pendente', data_pagamento=NULL, valor_pago=NULL WHERE id=%s",
-                        (registro_id,),
-                    )
+            # Reverter status da mensalidade (pendente ou atrasado conforme vencimento).
+            #
+            # `status_pagamento` é NOT NULL (enum com default 'pendente'): tentar
+            # gravar NULL estourava a query. O fallback antigo então revertia só o
+            # `status`, deixando `status_pagamento='pago'` para trás — e como
+            # `_status_efetivo` trata isso como pago, a tela continuava mostrando
+            # a mensalidade quitada. Era esse o "não está cancelando".
+            cur.execute(
+                """
+                UPDATE mensalidade_aluno SET
+                  status = CASE
+                    WHEN data_vencimento IS NOT NULL AND data_vencimento < CURDATE() THEN 'atrasado'
+                    ELSE 'pendente'
+                  END,
+                  status_pagamento = 'pendente',
+                  data_pagamento = NULL,
+                  valor_pago = NULL,
+                  id_forma_pagamento = NULL
+                WHERE id = %s
+                """,
+                (registro_id,),
+            )
         else:
             # Buscar e excluir receita associada
             receita = None
@@ -6091,6 +6148,9 @@ def cancelar_pagamento():
         flash("Pagamento cancelado. Status revertido para pendente e receita excluída.", "success")
     except Exception as e:
         conn.rollback()
+        current_app.logger.error(
+            f"Cancelar pagamento falhou ({tipo} {registro_id}): {e}", exc_info=True
+        )
         flash("Ocorreu um erro. Tente novamente mais tarde.", "danger")
     conn.close()
     next_url = (request.form.get("next") or "").strip()

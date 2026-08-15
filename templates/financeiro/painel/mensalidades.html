@@ -114,6 +114,20 @@
                 </form>
                 {% endif %}
               </div>
+              {% else %}
+              {# Pago: permite desfazer, para corrigir baixa lançada por engano #}
+              <div class="fp-acoes">
+                <form method="POST" action="{{ url_for('financeiro.cancelar_pagamento') }}"
+                      style="display:inline"
+                      onsubmit="return confirm('Cancelar o pagamento desta mensalidade? O status volta para pendente e a receita lançada é excluída.')">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <input type="hidden" name="tipo" value="mensalidade_aluno">
+                  <input type="hidden" name="registro_id" value="{{ r.id }}">
+                  <input type="hidden" name="next" value="{{ url_for('financeiro_painel.mensalidades', academia_id=academia_id, mes=mes_chave) }}">
+                  <button class="fp-btn-mini fp-btn-mini--warn" type="submit"
+                          title="Desfazer a baixa deste pagamento">Cancelar pagamento</button>
+                </form>
+              </div>
               {% endif %}
             </td>
           </tr>

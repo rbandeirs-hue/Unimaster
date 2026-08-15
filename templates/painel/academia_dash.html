@@ -42,9 +42,45 @@
         <label class="form-label small fw-semibold mb-1">Ano</label>
         <input type="number" name="ano" class="form-control form-control-sm" value="{{ ano }}" min="2000" max="2100" style="width:100px;">
       </div>
+      {% if turmas_opts %}
+      <div>
+        <label class="form-label small fw-semibold mb-1">Turma</label>
+        <select name="turma_id" class="form-select form-select-sm" style="max-width:220px">
+          <option value="">Todas as turmas</option>
+          {% for t in turmas_opts %}<option value="{{ t.id }}" {% if t.id == turma_id %}selected{% endif %}>{{ t.nome }}</option>{% endfor %}
+        </select>
+      </div>
+      {% endif %}
+      {% if modalidades_opts %}
+      <div>
+        <label class="form-label small fw-semibold mb-1">Modalidade</label>
+        <select name="modalidade_id" class="form-select form-select-sm" style="max-width:200px">
+          <option value="">Todas as modalidades</option>
+          {% for m in modalidades_opts %}<option value="{{ m.id }}" {% if m.id == modalidade_id %}selected{% endif %}>{{ m.nome }}</option>{% endfor %}
+        </select>
+      </div>
+      {% endif %}
       <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-funnel me-1"></i>Aplicar</button>
+      {% if dash.filtrado %}
+      <a href="{{ url_for('academia.dash', academia_id=academia_id, mes=mes, ano=ano) }}"
+         class="btn btn-outline-secondary btn-sm"><i class="bi bi-x-lg me-1"></i>Limpar recorte</a>
+      {% endif %}
     </form>
   </div>
+
+  {% if dash.filtrado %}
+  <div class="alert alert-info py-2 px-3 small d-flex align-items-center gap-2 mb-3">
+    <i class="bi bi-funnel-fill"></i>
+    <div>
+      Indicadores recortados por
+      {% if turma_id %}<strong>{{ (turmas_opts | selectattr('id','equalto',turma_id) | first).nome }}</strong>{% endif %}
+      {% if turma_id and modalidade_id %} e {% endif %}
+      {% if modalidade_id %}<strong>{{ (modalidades_opts | selectattr('id','equalto',modalidade_id) | first).nome }}</strong>{% endif %}
+      — alunos, inadimplência e mensalidades seguem esse grupo.
+      <span class="text-muted">Receitas e despesas continuam da academia inteira: são lançamentos sem vínculo com turma.</span>
+    </div>
+  </div>
+  {% endif %}
 
   <!-- ===================== ALUNOS ===================== -->
   <h6 class="text-uppercase text-muted fw-bold small mb-2"><i class="bi bi-people-fill me-1"></i>Alunos</h6>
@@ -84,6 +120,12 @@
     <span class="badge bg-warning-subtle text-warning">Suspensos: {{ dash.suspensos }}</span>
     <span class="badge bg-info-subtle text-info">Formados: {{ dash.formados }}</span>
     <span class="badge bg-primary-subtle text-primary">Total: {{ dash.total_alunos }}</span>
+    {% if dash.posicao_historica %}
+    <span class="text-muted small align-self-center">
+      <i class="bi bi-clock-history"></i> posição em {{ dash.posicao_data.strftime('%d/%m/%Y') }}
+      — matriculados até a data e ainda não inativados
+    </span>
+    {% endif %}
   </div>
 
   <!-- ===================== FINANCEIRO ===================== -->

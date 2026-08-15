@@ -1008,6 +1008,64 @@
         true
     );
 
+    // Trocar a data do pagamento recalcula o total: juros e multa contam até o
+    // dia em que o aluno pagou, não até o dia em que a baixa está sendo lançada.
+    document.addEventListener('change', function (ev) {
+        var inpData = ev.target && ev.target.closest && ev.target.closest('.js-fin-inp-data');
+        if (!inpData) return;
+        var modalPag = inpData.closest('#' + MODAL_ID);
+        if (!modalPag) return;
+        var form = modalPag.querySelector('.js-modal-pagamento-mensal-form');
+        var tipoInp = form && form.querySelector('.js-fin-pag-tipo-inp');
+        if (!form || !form.dataset.registroId) return;
+        if (tipoInp && tipoInp.value && tipoInp.value !== 'mensalidade_aluno') return;
+        var linhasBox = modalPag.querySelector('.js-fin-pag-linhas');
+        var rows = linhasBox ? linhasBox.querySelectorAll('.js-fin-pag-linha') : [];
+        // Com várias linhas vale a data mais recente — a mesma regra do servidor.
+        var maior = '';
+        rows.forEach(function (r) {
+            var d = r.querySelector('.js-fin-inp-data');
+            if (d && d.value && d.value > maior) maior = d.value;
+        });
+        if (!maior) return;
+
+        fetch('/financeiro/mensalidades/' + form.dataset.registroId + '/valor-na-data?data=' + maior, {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (j) {
+                if (!j || typeof j.total !== 'number') return;
+                var antigo = parseFloat(form.dataset.valorTotal || '0') || 0;
+                if (Math.abs(antigo - j.total) < 0.005) return;
+                form.dataset.valorTotal = j.total.toFixed(2);
+                var totEl = modalPag.querySelector('.js-fin-pag-total');
+                if (totEl) totEl.textContent = fmtBRL(j.total);
+                var sub = modalPag.querySelector('.js-fin-pag-sub');
+                if (sub) {
+                    var extra = (j.juros || j.multa)
+                        ? ' (multa R$ ' + fmtBRL(j.multa) + ' + juros R$ ' + fmtBRL(j.juros) + ' até ' +
+                          maior.split('-').reverse().join('/') + ')'
+                        : '';
+                    sub.textContent = 'O valor total deve ser exatamente R$ ' + fmtBRL(j.total) + extra + '.';
+                }
+                // Uma linha só: ajusta direto. Várias: recalcula a última, mantendo as demais.
+                if (rows.length === 1) {
+                    var inp0 = rows[0].querySelector('.js-fin-inp-valor');
+                    if (inp0) inp0.value = fmtBRL(j.total);
+                } else if (rows.length > 1) {
+                    var soma = 0;
+                    for (var i = 0; i < rows.length - 1; i++) {
+                        var vi = parseValorLinha((rows[i].querySelector('.js-fin-inp-valor') || {}).value || '0');
+                        if (!isNaN(vi)) soma += vi;
+                    }
+                    var ult = rows[rows.length - 1].querySelector('.js-fin-inp-valor');
+                    if (ult) ult.value = fmtBRL(Math.max(0, Math.round((j.total - soma) * 100) / 100));
+                }
+                atualizaSomaPag(modalPag);
+            })
+            .catch(function () { /* sem rede: o servidor ainda valida no envio */ });
+    });
+
     document.addEventListener(
         'click',
         function (ev) {

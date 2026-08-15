@@ -906,21 +906,44 @@ def _get_academia_stats(academia_id=None):
 # =====================================================
 # 🔹 Dash da Academia (apenas estatísticas)
 # =====================================================
-def _kpis_mes(cur, academia_id, ano, mes):
-    """KPIs de um mês específico (alunos novos/baixas, receitas/despesas, mensalidades previsto/recebido)."""
+def _filtro_alunos_sql(turma_id=None, modalidade_id=None):
+    """Recorte de turma/modalidade para consultas que usam a tabela `alunos` como `a`.
+
+    Devolve (fragmento_sql, params). Aluno pode estar em mais de uma turma e em
+    mais de uma modalidade, daí o `IN (SELECT ...)` em vez de JOIN — evita
+    duplicar linhas e inflar as somas.
+    """
+    cond, params = "", []
+    if turma_id:
+        cond += " AND a.id IN (SELECT at.aluno_id FROM aluno_turmas at WHERE at.TurmaID=%s)"
+        params.append(turma_id)
+    if modalidade_id:
+        cond += " AND a.id IN (SELECT am.aluno_id FROM aluno_modalidades am WHERE am.modalidade_id=%s)"
+        params.append(modalidade_id)
+    return cond, params
+
+
+def _kpis_mes(cur, academia_id, ano, mes, filtro_cond="", filtro_params=()):
+    """KPIs de um mês específico (alunos novos/baixas, receitas/despesas, mensalidades previsto/recebido).
+
+    `filtro_cond`/`filtro_params` restringem a turma/modalidade os indicadores que
+    passam por aluno. Receitas e despesas ficam de fora do recorte: são lançamentos
+    da academia, sem vínculo com turma.
+    """
     import calendar
     ini = date(ano, mes, 1)
     fim = date(ano, mes, calendar.monthrange(ano, mes)[1])
     k = {"ano": ano, "mes": mes}
+    fp = tuple(filtro_params)
 
     cur.execute(
-        "SELECT COUNT(*) c FROM alunos WHERE id_academia=%s AND data_matricula BETWEEN %s AND %s",
-        (academia_id, ini, fim),
+        f"SELECT COUNT(*) c FROM alunos a WHERE a.id_academia=%s AND a.data_matricula BETWEEN %s AND %s{filtro_cond}",
+        (academia_id, ini, fim) + fp,
     )
     k["novos"] = cur.fetchone()["c"] or 0
     cur.execute(
-        "SELECT COUNT(*) c FROM alunos WHERE id_academia=%s AND data_inativacao BETWEEN %s AND %s",
-        (academia_id, ini, fim),
+        f"SELECT COUNT(*) c FROM alunos a WHERE a.id_academia=%s AND a.data_inativacao BETWEEN %s AND %s{filtro_cond}",
+        (academia_id, ini, fim) + fp,
     )
     k["baixas"] = cur.fetchone()["c"] or 0
 
@@ -937,43 +960,79 @@ def _kpis_mes(cur, academia_id, ano, mes):
     k["saldo"] = k["receitas"] - k["despesas"]
 
     cur.execute(
-        """SELECT COALESCE(SUM(ma.valor),0) v FROM mensalidade_aluno ma
-           JOIN alunos a ON a.id = ma.aluno_id
-           WHERE a.id_academia=%s AND ma.status <> 'cancelado'
-             AND ma.data_vencimento BETWEEN %s AND %s""",
-        (academia_id, ini, fim),
+        f"""SELECT COALESCE(SUM(ma.valor),0) v FROM mensalidade_aluno ma
+            JOIN alunos a ON a.id = ma.aluno_id
+            WHERE a.id_academia=%s AND ma.status <> 'cancelado'
+              AND ma.data_vencimento BETWEEN %s AND %s{filtro_cond}""",
+        (academia_id, ini, fim) + fp,
     )
     k["mens_previsto"] = float(cur.fetchone()["v"] or 0)
     cur.execute(
-        """SELECT COALESCE(SUM(COALESCE(ma.valor_pago, ma.valor)),0) v FROM mensalidade_aluno ma
-           JOIN alunos a ON a.id = ma.aluno_id
-           WHERE a.id_academia=%s AND ma.status = 'pago'
-             AND ma.data_pagamento BETWEEN %s AND %s""",
-        (academia_id, ini, fim),
+        f"""SELECT COALESCE(SUM(COALESCE(ma.valor_pago, ma.valor)),0) v FROM mensalidade_aluno ma
+            JOIN alunos a ON a.id = ma.aluno_id
+            WHERE a.id_academia=%s AND ma.status = 'pago'
+              AND ma.data_pagamento BETWEEN %s AND %s{filtro_cond}""",
+        (academia_id, ini, fim) + fp,
     )
     k["mens_recebido"] = float(cur.fetchone()["v"] or 0)
     return k
 
 
-def _get_academia_dashboard(academia_id, ano, mes):
-    """Monta todos os KPIs do dashboard do modo academia para o mês/ano informados."""
+def _get_academia_dashboard(academia_id, ano, mes, turma_id=None, modalidade_id=None):
+    """Monta todos os KPIs do dashboard do modo academia para o mês/ano informados.
+
+    `turma_id`/`modalidade_id` recortam tudo o que passa por aluno (quadro de
+    alunos, inadimplência, mensalidades), permitindo comparar o desempenho de
+    cada turma ou modalidade. Receitas e despesas continuam sendo da academia
+    inteira — não têm vínculo com turma —, e a tela avisa isso.
+    """
     d = {"ano": ano, "mes": mes}
+    fcond, fparams = _filtro_alunos_sql(turma_id, modalidade_id)
+    fp = tuple(fparams)
+    d["filtrado"] = bool(fcond)
     conn = get_db_connection()
     cur = conn.cursor(dictionary=True)
     try:
         # Mês atual e mês anterior (para comparativo)
-        atual = _kpis_mes(cur, academia_id, ano, mes)
+        atual = _kpis_mes(cur, academia_id, ano, mes, fcond, fp)
         pmes, pano = (12, ano - 1) if mes == 1 else (mes - 1, ano)
-        anterior = _kpis_mes(cur, academia_id, pano, pmes)
+        anterior = _kpis_mes(cur, academia_id, pano, pmes, fcond, fp)
         d["atual"] = atual
         d["anterior"] = anterior
 
-        # Snapshot de alunos por status (atual)
+        # Quadro de alunos NA POSIÇÃO DO MÊS ESCOLHIDO.
+        #
+        # Antes isto era um `SELECT ... FROM alunos` sem recorte de data: uma foto
+        # do estado de hoje, que não mudava ao trocar o mês — janeiro exibia o
+        # mesmo total de agosto. Agora conta quem já estava matriculado até o fim
+        # do mês e ainda não tinha sido inativado.
+        #
+        # Mês corrente (ou futuro) usa o status real de cada aluno, que é exato
+        # hoje e permite separar suspenso/formado. Para meses passados só dá para
+        # reconstruir ativo/inativo, porque `status` guarda apenas a situação
+        # atual — quem saiu sem `data_inativacao` preenchida conta como ativo até
+        # aparecer a data.
+        import calendar as _cal_pos
+        fim_ref = min(date(ano, mes, _cal_pos.monthrange(ano, mes)[1]), date.today())
+        mes_corrente = (ano, mes) >= (date.today().year, date.today().month)
+
         cur.execute(
-            "SELECT status, COUNT(*) c FROM alunos WHERE id_academia=%s GROUP BY status",
-            (academia_id,),
+            f"""SELECT a.status, a.data_inativacao
+                FROM alunos a
+                WHERE a.id_academia=%s AND (a.data_matricula IS NULL OR a.data_matricula <= %s){fcond}""",
+            (academia_id, fim_ref) + fp,
         )
-        por_status = {(r["status"] or "ativo"): r["c"] for r in cur.fetchall()}
+        linhas = cur.fetchall()
+
+        por_status = {}
+        for r in linhas:
+            saiu = r["data_inativacao"] is not None and r["data_inativacao"] <= fim_ref
+            if mes_corrente:
+                chave = r["status"] or "ativo"
+            else:
+                chave = "inativo" if saiu else "ativo"
+            por_status[chave] = por_status.get(chave, 0) + 1
+
         ativos = por_status.get("ativo", 0)
         d["por_status"] = por_status
         d["ativos"] = ativos
@@ -981,14 +1040,16 @@ def _get_academia_dashboard(academia_id, ano, mes):
         d["suspensos"] = por_status.get("suspenso", 0)
         d["formados"] = por_status.get("formado", 0)
         d["total_alunos"] = sum(por_status.values())
+        d["posicao_historica"] = not mes_corrente
+        d["posicao_data"] = fim_ref
 
         # Inadimplência (snapshot atual): atrasado OU pendente vencido
         cond_atraso = "(ma.status='atrasado' OR (ma.status='pendente' AND ma.data_vencimento < CURDATE()))"
         cur.execute(
             f"""SELECT COALESCE(SUM(ma.valor),0) v, COUNT(DISTINCT ma.aluno_id) a
                 FROM mensalidade_aluno ma JOIN alunos a ON a.id = ma.aluno_id
-                WHERE a.id_academia=%s AND {cond_atraso}""",
-            (academia_id,),
+                WHERE a.id_academia=%s AND {cond_atraso}{fcond}""",
+            (academia_id,) + fp,
         )
         row = cur.fetchone()
         d["atrasado_valor"] = float(row["v"] or 0)
@@ -1004,9 +1065,9 @@ def _get_academia_dashboard(academia_id, ano, mes):
             f"""SELECT a.id, a.nome, COUNT(*) qtd, COALESCE(SUM(ma.valor),0) total,
                        MIN(ma.data_vencimento) venc
                 FROM mensalidade_aluno ma JOIN alunos a ON a.id = ma.aluno_id
-                WHERE a.id_academia=%s AND {cond_atraso}
+                WHERE a.id_academia=%s AND {cond_atraso}{fcond}
                 GROUP BY a.id, a.nome ORDER BY total DESC LIMIT 10""",
-            (academia_id,),
+            (academia_id,) + fp,
         )
         d["inadimplentes"] = cur.fetchall()
 
@@ -1018,25 +1079,25 @@ def _get_academia_dashboard(academia_id, ano, mes):
 
         # MRR (receita recorrente): soma da mensalidade mais recente (não cancelada) de cada aluno ativo
         cur.execute(
-            """SELECT COALESCE(SUM(t.valor),0) v FROM (
-                 SELECT ma.valor
-                 FROM mensalidade_aluno ma JOIN alunos a ON a.id = ma.aluno_id
-                 WHERE a.id_academia=%s AND a.status='ativo' AND ma.status<>'cancelado'
-                   AND ma.id = (SELECT ma2.id FROM mensalidade_aluno ma2
-                                WHERE ma2.aluno_id = ma.aluno_id AND ma2.status<>'cancelado'
-                                ORDER BY ma2.data_vencimento DESC, ma2.id DESC LIMIT 1)
-               ) t""",
-            (academia_id,),
+            f"""SELECT COALESCE(SUM(t.valor),0) v FROM (
+                  SELECT ma.valor
+                  FROM mensalidade_aluno ma JOIN alunos a ON a.id = ma.aluno_id
+                  WHERE a.id_academia=%s AND a.status='ativo' AND ma.status<>'cancelado'{fcond}
+                    AND ma.id = (SELECT ma2.id FROM mensalidade_aluno ma2
+                                 WHERE ma2.aluno_id = ma.aluno_id AND ma2.status<>'cancelado'
+                                 ORDER BY ma2.data_vencimento DESC, ma2.id DESC LIMIT 1)
+                ) t""",
+            (academia_id,) + fp,
         )
         d["mrr"] = float(cur.fetchone()["v"] or 0)
 
         # Mensalidades vencendo nos próximos 7 dias (ainda pendentes)
         cur.execute(
-            """SELECT COALESCE(SUM(ma.valor),0) v, COUNT(*) c
-               FROM mensalidade_aluno ma JOIN alunos a ON a.id = ma.aluno_id
-               WHERE a.id_academia=%s AND ma.status='pendente'
-                 AND ma.data_vencimento BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 7 DAY)""",
-            (academia_id,),
+            f"""SELECT COALESCE(SUM(ma.valor),0) v, COUNT(*) c
+                FROM mensalidade_aluno ma JOIN alunos a ON a.id = ma.aluno_id
+                WHERE a.id_academia=%s AND ma.status='pendente'
+                  AND ma.data_vencimento BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 7 DAY){fcond}""",
+            (academia_id,) + fp,
         )
         row = cur.fetchone()
         d["venc7_valor"] = float(row["v"] or 0)
@@ -1061,9 +1122,10 @@ def _get_academia_dashboard(academia_id, ano, mes):
                       COALESCE(SUM(COALESCE(ma.valor_pago, ma.valor)),0) total
                FROM mensalidade_aluno ma JOIN alunos a ON a.id = ma.aluno_id
                LEFT JOIN formas_pagamento fp ON fp.id = ma.id_forma_pagamento
-               WHERE a.id_academia=%s AND ma.status='pago' AND ma.data_pagamento BETWEEN %s AND %s
+               WHERE a.id_academia=%s AND ma.status='pago' AND ma.data_pagamento BETWEEN %s AND %s"""
+            + fcond + """
                GROUP BY fp.nome ORDER BY total DESC""",
-            (academia_id, ini_mes, fim_mes),
+            (academia_id, ini_mes, fim_mes) + fp,
         )
         d["por_forma"] = [{"nome": r["nome"], "total": float(r["total"] or 0)} for r in cur.fetchall()]
 
@@ -1072,7 +1134,7 @@ def _get_academia_dashboard(academia_id, ano, mes):
         serie = []
         sm, sy = mes, ano
         for _ in range(6):
-            km = _kpis_mes(cur, academia_id, sy, sm)
+            km = _kpis_mes(cur, academia_id, sy, sm, fcond, fp)
             serie.append({
                 "label": f"{meses_pt[sm-1]}/{str(sy)[2:]}",
                 "receitas": km["receitas"],
@@ -1110,8 +1172,41 @@ def dash():
     if ano < 2000 or ano > 2100:
         ano = hoje.year
 
+    turma_id = request.args.get("turma_id", type=int) or None
+    modalidade_id = request.args.get("modalidade_id", type=int) or None
+
+    # Opções dos filtros: turmas da academia e modalidades que os alunos dela cursam.
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute(
+            "SELECT TurmaID AS id, Nome AS nome FROM turmas WHERE id_academia=%s ORDER BY Nome",
+            (academia_id,),
+        )
+        turmas_opts = cur.fetchall()
+        cur.execute(
+            """SELECT DISTINCT md.id, md.nome
+               FROM modalidade md
+               JOIN aluno_modalidades am ON am.modalidade_id = md.id
+               JOIN alunos a ON a.id = am.aluno_id
+               WHERE a.id_academia=%s ORDER BY md.nome""",
+            (academia_id,),
+        )
+        modalidades_opts = cur.fetchall()
+    except Exception:
+        turmas_opts, modalidades_opts = [], []
+    finally:
+        cur.close()
+        conn.close()
+
+    # Filtro inválido para esta academia não pode virar recorte vazio silencioso.
+    if turma_id and turma_id not in [t["id"] for t in turmas_opts]:
+        turma_id = None
+    if modalidade_id and modalidade_id not in [m["id"] for m in modalidades_opts]:
+        modalidade_id = None
+
     stats = _get_academia_stats(academia_id)
-    dash_data = _get_academia_dashboard(academia_id, ano, mes)
+    dash_data = _get_academia_dashboard(academia_id, ano, mes, turma_id, modalidade_id)
     return render_template(
         "painel/academia_dash.html",
         stats=stats,
@@ -1120,6 +1215,10 @@ def dash():
         dash=dash_data,
         mes=mes,
         ano=ano,
+        turmas_opts=turmas_opts,
+        modalidades_opts=modalidades_opts,
+        turma_id=turma_id,
+        modalidade_id=modalidade_id,
     )
 
 
