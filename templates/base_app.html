@@ -195,14 +195,29 @@
     {# ----------------------------------------------------------- conteúdo #}
     <main class="sh__conteudo {% block conteudo_classe %}{% endblock %}">
       {% block cabecalho %}
+      {# O cabeçalho do shell só aparece se a tela declarar alguma parte dele.
+         Sem isso, a tela migrada que ainda tem <h1> próprio dentro de
+         `content` mostraria dois títulos — ou, pior, um <h1> vazio abrindo um
+         buraco no topo. Assim a migração é uma linha: trocar o `extends`.
+         Quando a tela subir o título para `pagina_titulo`, o cabeçalho do
+         shell entra e ela apaga o seu. #}
+      {% set _sh_titulo = self.pagina_titulo() | trim %}
+      {% set _sh_sub = self.pagina_subtitulo() | trim %}
+      {% set _sh_acoes = self.pagina_acoes() | trim %}
+      {% if _sh_titulo or _sh_sub or _sh_acoes %}
       <div class="sh__cabecalho">
         <div>
-          <h1 class="sh__titulo">{% block pagina_titulo %}{% endblock %}</h1>
-          <p class="sh__subtitulo">{% block pagina_subtitulo %}{% endblock %}</p>
+          {% if _sh_titulo %}<h1 class="sh__titulo">{{ _sh_titulo }}</h1>{% endif %}
+          {% if _sh_sub %}<p class="sh__subtitulo">{{ _sh_sub }}</p>{% endif %}
         </div>
-        <div class="sh__acoes">{% block pagina_acoes %}{% endblock %}</div>
+        {% if _sh_acoes %}<div class="sh__acoes">{{ _sh_acoes }}</div>{% endif %}
       </div>
+      {% endif %}
       {% endblock %}
+
+      {% block pagina_titulo %}{% endblock %}
+      {% block pagina_subtitulo %}{% endblock %}
+      {% block pagina_acoes %}{% endblock %}
 
       {% block content %}{% endblock %}
     </main>
