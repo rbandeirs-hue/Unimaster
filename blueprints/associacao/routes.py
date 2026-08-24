@@ -1820,7 +1820,6 @@ def precadastro():
                     conn.commit()
                 
                 # Gerar link público
-                from flask import url_for
                 link_publico = url_for("precadastro.form_publico", academia_slug=academia_slug or academia_selecionada_id, _external=True)
         
     except Exception as e:

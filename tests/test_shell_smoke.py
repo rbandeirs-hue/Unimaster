@@ -32,8 +32,14 @@ USUARIO_POR_MODO = {
     "professor": 3,
     "aluno": 3,
     "responsavel": 3,
-    "visitante": 15,
+    "visitante": 271,
 }
+
+# O único gestor de federação da base não tem CPF cadastrado, e o sistema
+# desvia quem está nessa situação para /auth/cadastrar-cpf antes de qualquer
+# tela. Logo, o modo federação não chega a ser exercido pelas rotas: a
+# lateral dele é conferida por `test_menu_de_todo_modo_tem_itens`.
+MODOS_SEM_USUARIO_COMPLETO = {"federacao"}
 
 # Nada que mude estado. O casamento é sobre o nome do endpoint.
 PROIBIDO = re.compile(
@@ -98,6 +104,23 @@ def test_nenhuma_tela_devolve_500():
     assert visitadas > 0, "nenhuma rota visitada — o mapa de rotas está vazio?"
     resumo = "\n".join("  [%s] %s -> %s" % (m, e, s) for m, e, s, _ in falhas)
     assert not falhas, "%d tela(s) com erro 500:\n%s" % (len(falhas), resumo)
+
+
+def test_menu_de_todo_modo_tem_itens():
+    """Todo modo tem lateral navegável — inclusive os que as rotas não alcançam.
+
+    Sem isto, um modo cujo usuário de teste não consegue entrar (federação)
+    passaria despercebido com a lateral vazia.
+    """
+    from app import app
+    from utils.menu import menu_do_modo
+
+    with app.test_request_context("/"):
+        for modo in USUARIO_POR_MODO:
+            grupos = menu_do_modo(modo, {"academia_id": ACADEMIA_TESTE})
+            itens = [i for _, itens in grupos for i in itens]
+            assert itens, "menu vazio no modo %s" % modo
+            assert all(i.href for i in itens), "item sem rota no modo %s" % modo
 
 
 if __name__ == "__main__":

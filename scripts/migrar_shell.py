@@ -40,7 +40,10 @@ FORA = {
     "historico_parcial.html",
 }
 PREFIXOS_FORA = ("externo/", "precadastro/form_publico", "precadastro/matricula_publica",
-                 "precadastro/aula_experimental_publica", "auth/")
+                 "precadastro/aula_experimental_publica", "auth/",
+                 # Cadastro no Zempo aberto por token: quem preenche não tem
+                 # login, e uma lateral do sistema ali não faria sentido.
+                 "zempo/publico_")
 
 # Ondas, por área. A ordem sai do plano: academia primeiro (o menu já está
 # validado), depois os modos de uma pessoa só, depois os de gestão.
