@@ -211,23 +211,25 @@
          buraco no topo. Assim a migração é uma linha: trocar o `extends`.
          Quando a tela subir o título para `pagina_titulo`, o cabeçalho do
          shell entra e ela apaga o seu. #}
-      {% set _sh_titulo = self.pagina_titulo() | trim %}
-      {% set _sh_sub = self.pagina_subtitulo() | trim %}
-      {% set _sh_acoes = self.pagina_acoes() | trim %}
-      {% if _sh_titulo or _sh_sub or _sh_acoes %}
+      {# `{% raw %}{% set %}{% endraw %}` em volta do bloco declara E captura de uma vez: o bloco
+         existe para o filho preencher, mas o que ele produz vai para a
+         variável em vez de ser escrito aqui. Declarar os blocos soltos mais
+         abaixo — como estava — fazia título, subtítulo e ações saírem uma
+         segunda vez logo depois do cabeçalho, e era daí que vinha o botão de
+         voltar duplicado. #}
+      {% set _sh_titulo %}{% block pagina_titulo %}{% endblock %}{% endset %}
+      {% set _sh_sub %}{% block pagina_subtitulo %}{% endblock %}{% endset %}
+      {% set _sh_acoes %}{% block pagina_acoes %}{% endblock %}{% endset %}
+      {% if _sh_titulo | trim or _sh_sub | trim or _sh_acoes | trim %}
       <div class="sh__cabecalho">
         <div>
-          {% if _sh_titulo %}<h1 class="sh__titulo">{{ _sh_titulo }}</h1>{% endif %}
-          {% if _sh_sub %}<p class="sh__subtitulo">{{ _sh_sub }}</p>{% endif %}
+          {% if _sh_titulo | trim %}<h1 class="sh__titulo">{{ _sh_titulo | trim }}</h1>{% endif %}
+          {% if _sh_sub | trim %}<p class="sh__subtitulo">{{ _sh_sub | trim }}</p>{% endif %}
         </div>
-        {% if _sh_acoes %}<div class="sh__acoes">{{ _sh_acoes }}</div>{% endif %}
+        {% if _sh_acoes | trim %}<div class="sh__acoes">{{ _sh_acoes | trim }}</div>{% endif %}
       </div>
       {% endif %}
       {% endblock %}
-
-      {% block pagina_titulo %}{% endblock %}
-      {% block pagina_subtitulo %}{% endblock %}
-      {% block pagina_acoes %}{% endblock %}
 
       {% block content %}{% endblock %}
     </main>

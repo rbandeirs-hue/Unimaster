@@ -1,5 +1,14 @@
-{# Componente padrão de botão Voltar #}
-{# Uso: {% set back_url = back_url or get_back_url_default() %}{% include 'components/botao_voltar.html' %} #}
-<a href="{{ back_url }}" class="btn btn-outline-secondary btn-voltar-padrao">
+{# Botão Voltar padrão.
+
+   O destino vem de `url_voltar()`, que resolve nesta ordem: o `back_url` que
+   a tela passou, o `?next=` da URL, o item da lateral a que a tela pertence
+   (editar turma → Turmas) e, por último, a home do modo. Antes o padrão era
+   sempre a home do modo, e sair de uma tela de edição jogava o usuário no
+   painel em vez de devolver para a lista de onde ele veio.
+
+   Uso:  {% include 'components/botao_voltar.html' %}
+   ou:   {% set back_url = url_for('turmas.lista_turmas') %} antes do include. #}
+<a href="{{ url_voltar(back_url if back_url is defined else None) }}"
+   class="btn btn-outline-secondary btn-voltar-padrao">
   <i class="bi bi-arrow-left me-1"></i> Voltar
 </a>

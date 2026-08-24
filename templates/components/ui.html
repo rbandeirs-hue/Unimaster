@@ -99,15 +99,11 @@
    navegação e vira só o retorno do fluxo — por isso mora em `pagina_acoes`,
    secundário, e não solto no meio do conteúdo.
 
-   ATENÇÃO: `get_back_url_default` vem de context processor, não é global do
-   Jinja. Quem usar esta macro precisa importar COM contexto:
-
-       {% from 'components/ui.html' import voltar with context %}
-
-   Sem o `with context` a macro estoura com 'get_back_url_default' is
-   undefined — ou passe o destino explicitamente em `href`. #}
+   O destino vem de `url_voltar()` (global do Jinja, definido em app.py), que
+   prefere, nesta ordem: o `href` explícito, o `?next=` da URL, o item da
+   lateral a que a tela pertence e a home do modo. #}
 {% macro voltar(href=None, texto='Voltar') %}
-<a href="{{ href or get_back_url_default() }}" class="sh__btn">
+<a href="{{ url_voltar(href) }}" class="sh__btn">
   <i class="bi bi-arrow-left"></i> {{ texto }}
 </a>
 {% endmacro %}

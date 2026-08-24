@@ -159,6 +159,54 @@ def test_toda_pagina_carrega_o_css_que_usa():
     assert not faltando, "%d página(s) sem o CSS que usam:\n%s" % (len(faltando), resumo)
 
 
+# `bi-arrow-left` sem sufixo: `bi-arrow-left-right` é outro ícone e não conta.
+_RX_VOLTAR = re.compile(r'<i class="bi bi-arrow-left(?![-\w])')
+_RX_VOLTAR_HREF = re.compile(r'<a href="([^"]*)"[^>]*>\s*<i class="bi bi-arrow-left(?![-\w])')
+
+
+def _paginas(app):
+    """(modo, rota, html) de toda tela que responde 200 com HTML."""
+    for modo in USUARIO_POR_MODO:
+        if modo in MODOS_SEM_USUARIO_COMPLETO:
+            continue
+        c = _cliente(app, modo)
+        for _endpoint, rule in _rotas_visitaveis(app):
+            resp = c.get(rule, follow_redirects=True)
+            if resp.status_code != 200:
+                continue
+            if "text/html" not in (resp.headers.get("Content-Type") or ""):
+                continue
+            html = resp.get_data(as_text=True)
+            if "<html" in html:
+                yield modo, rule, html
+
+
+def test_voltar_aparece_uma_vez_so():
+    """Duas causas já produziram botão duplicado, ambas invisíveis para os
+    testes que só olhavam o status: os blocos `pagina_*` declarados soltos no
+    base_app (que os renderizava uma segunda vez) e telas com o Voltar no
+    cabeçalho e outro colado no botão de salvar."""
+    from app import app
+    app.config["WTF_CSRF_ENABLED"] = False
+    dup = [(m, r, len(_RX_VOLTAR.findall(h))) for m, r, h in _paginas(app)
+           if len(_RX_VOLTAR.findall(h)) > 1]
+    resumo = "\n".join("  [%s] %s -> %d botões" % d for d in dup[:20])
+    assert not dup, "%d página(s) com Voltar duplicado:\n%s" % (len(dup), resumo)
+
+
+def test_voltar_nao_aponta_para_a_propria_tela():
+    """Voltar que recarrega a página é o sintoma de destino mal resolvido."""
+    from app import app
+    app.config["WTF_CSRF_ENABLED"] = False
+    ruins = []
+    for modo, rule, html in _paginas(app):
+        m = _RX_VOLTAR_HREF.search(html)
+        if m and m.group(1).split("?")[0].rstrip("/") == rule.rstrip("/"):
+            ruins.append((modo, rule))
+    resumo = "\n".join("  [%s] %s" % r for r in ruins[:20])
+    assert not ruins, "%d página(s) com Voltar para si mesmas:\n%s" % (len(ruins), resumo)
+
+
 if __name__ == "__main__":
     visitadas, falhas = coletar_falhas()
     print("visitas: %d   falhas: %d" % (visitadas, len(falhas)))

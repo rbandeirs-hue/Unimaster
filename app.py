@@ -420,27 +420,8 @@ def injetar_modos_e_contexto():
         return mapeamento.get(modo, "")
 
     def get_back_url_default():
-        """Retorna a URL padrão de retorno baseada no modo atual."""
-        if not hasattr(current_user, 'is_authenticated') or not current_user.is_authenticated:
-            return url_for("auth.login")
-        modo = session.get("modo_painel") or ""
-        if modo == "admin":
-            return url_for("painel.gerenciamento_admin")
-        elif modo == "federacao":
-            return url_for("federacao.gerenciamento_federacao")
-        elif modo == "associacao":
-            return url_for("associacao.gerenciamento_associacao")
-        elif modo == "academia":
-            return url_for("academia.painel_academia")
-        elif modo == "professor":
-            return url_for("professor.painel_professor")
-        elif modo == "aluno":
-            return url_for("painel_aluno.meu_perfil")
-        elif modo == "responsavel":
-            return url_for("painel_responsavel.meu_perfil")
-        elif modo == "visitante":
-            return url_for("visitante.painel")
-        return url_for("painel.home")
+        """Home do modo atual. Mantido pelo nome, que os templates já usam."""
+        return _home_do_modo()
 
     logo_url, contexto_nome, _ = get_contexto_logo_e_nome(current_user, session)
     from utils.push_notifications import VAPID_PUBLIC_KEY
@@ -491,6 +472,89 @@ MENU_POR_BLUEPRINT = {
     "visitante": "gerenciamento",
     "zempo": "zempo",
 }
+
+
+def _home_do_modo():
+    """Tela inicial do modo de acesso corrente.
+
+    Estava aninhada dentro do context processor e por isso não dava para
+    reaproveitar em `url_voltar`. Mesmo conteúdo, agora no nível do módulo.
+    """
+    from flask_login import current_user
+    from flask import session
+
+    if not getattr(current_user, "is_authenticated", False):
+        return url_for("auth.login")
+    destinos = {
+        "admin": "painel.gerenciamento_admin",
+        "federacao": "federacao.gerenciamento_federacao",
+        "associacao": "associacao.gerenciamento_associacao",
+        "academia": "academia.painel_academia",
+        "professor": "professor.painel_professor",
+        "aluno": "painel_aluno.meu_perfil",
+        "responsavel": "painel_responsavel.meu_perfil",
+        "visitante": "visitante.painel",
+    }
+    return url_for(destinos.get(session.get("modo_painel") or "", "painel.home"))
+
+
+@app.template_global()
+def url_voltar(explicito=None):
+    """Para onde o botão "Voltar" deve levar, na ordem que faz sentido.
+
+    Antes o padrão era sempre a home do modo: sair de "cadastrar turma" caía
+    no painel da academia em vez de devolver para a lista de turmas. Com a
+    lateral fixa isso fica pior — o botão parece navegar para trás e na
+    verdade chuta o usuário para o começo.
+
+    A ordem:
+      1. `?next=` da URL — intenção declarada por quem trouxe o usuário até
+         aqui (aceito só se for caminho interno, para não virar redirecionador
+         aberto);
+      2. o destino que a tela passou, SE ele for mais específico que a home do
+         modo. Muitas views montam `back_url` como
+         "?next= ou referrer ou painel", e o terceiro braço é justamente o
+         destino errado que queremos evitar;
+      3. o item da barra lateral a que esta tela pertence — o "pai" natural
+         dela (cadastrar turma -> Turmas, editar usuário -> Usuários);
+      4. a home do modo, como último recurso.
+    """
+    from flask import has_request_context, request, g
+    from flask_login import current_user
+
+    if not has_request_context():
+        return explicito or "/"
+
+    def _caminho(u):
+        return (u or "").split("?")[0].rstrip("/") or "/"
+
+    # 1. ?next= interno
+    proximo = (request.args.get("next") or "").strip()
+    if proximo.startswith("/") and not proximo.startswith("//"):
+        return proximo
+
+    home = _home_do_modo()
+
+    # 2. destino explícito, se disser algo além da home do modo
+    if explicito and _caminho(explicito) != _caminho(home):
+        return explicito
+
+    # 3. o item da lateral correspondente a esta tela
+    try:
+        if getattr(current_user, "is_authenticated", False):
+            chave = MENU_POR_BLUEPRINT.get(request.blueprint or "")
+            ctx = getattr(g, "_shell_ctx", None) or {}
+            aqui = _caminho(request.path)
+            for _rotulo, itens in (ctx.get("menu_grupos") or []):
+                for item in itens:
+                    # Não devolve a própria tela como destino de "voltar":
+                    # numa tela de lista o pai é a home do modo, não ela mesma.
+                    if item.chave == chave and _caminho(item.href) != aqui:
+                        return item.href
+    except Exception:
+        pass
+
+    return explicito or home
 
 
 @app.context_processor
