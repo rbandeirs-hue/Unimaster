@@ -7,6 +7,59 @@ Levantado sobre o código em 24/08/2026, branch `redesign-design-system`.
 
 ---
 
+## ✅ Estado da execução — concluída em 24/08/2026
+
+| | Antes | Depois |
+|---|---|---|
+| Telas logadas com menu lateral | 45 (24%) | **199 (100%)** |
+| Telas em `base.html` | 141 | **4** (todas públicas/setup) |
+| `base.html` | 1.205 linhas | **250** |
+| Modos com lateral | 1 (academia) | **8** |
+| Subsistemas de JS perdidos ao migrar | 5 | **0** |
+
+Sem menu lateral, de propósito (herdam tokens, não o chrome): as 10 telas de
+`externo/`, a inscrição pública de academia, o cadastro no Zempo por token (3)
+e o `primeiro_usuario.html`.
+
+**Ondas executadas:** 0 (fundação) → 1 (academia, 77) → 2 (aluno/responsável/
+visitante, 20) → 3 (admin/federação/associação, 33) → 4 (zempo e avulsas, 10),
+mais a reescrita do `solicitacoes/hub.html` e a remoção dos protótipos órfãos
+(`base_um.html`, `base_um2.html`, `components/_shell.html`,
+`components/sidebar.html`).
+
+**Verificação:** `tests/test_shell_smoke.py` — 1.312 visitas em 8 modos, 0
+falhas; auditoria estática da cadeia de herança; conferência de lateral, CSRF,
+tema e notificações nos 7 modos alcançáveis por rota (federação não tem usuário
+com CPF na base, e é coberto por teste de unidade do menu).
+
+**Bugs corrigidos no caminho**, ambos encontrados pelo próprio processo:
+
+1. `lista_alunos.html:3652` — POST em JSON sem `X-CSRFToken` para uma rota não
+   isenta: matricular aluno em turma respondia 400.
+2. `associacao.precadastro` — `from flask import url_for` dentro da função
+   sombreava o import do topo, e o caminho de acesso negado estourava 500.
+
+**Decisões tomadas** (as 5 perguntas da seção 7):
+
+1. **Botão voltar** — mantido funcionando (`botao_voltar.css` agora entra no
+   shell). Não foi removido em massa: com o cabeçalho do shell condicional, ele
+   não duplica nada. Sai tela a tela na passada de refino.
+2. **Modo noturno** — mantido. O tema virou arquivo e o shell ganhou o botão de
+   alternar, que não tinha.
+3. **Troca de academia** — o indicador virou link para `academia.escolher_academia`,
+   no lugar de "saia e entre de novo".
+4. **Ordem** — academia → aluno/responsável → admin/federação/associação → zempo.
+5. **Protótipos órfãos** — removidos.
+
+**O que ficou para a passada de refino** (não é bloqueio, é acabamento): subir o
+`<h1>` de ~107 telas para `pagina_titulo`, e então apagar o título inline e o
+botão voltar de cada uma. Enquanto isso não acontece, cada tela mostra o próprio
+cabeçalho dentro do conteúdo — que é como ela já era.
+
+---
+
+---
+
 ## 1. Onde estamos
 
 | Base | Telas | Tem menu lateral? |

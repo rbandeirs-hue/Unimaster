@@ -1,51 +1,49 @@
-{% extends 'base_um2.html' %}
-{% set um_ativo = 'solicitacoes' %}
+{% extends "base_app.html" %}
+{% set menu_ativo = 'solicitacoes' %}
 {% block title %}Aprovar Solicitações{% endblock %}
 
-{% block um_css %}
-  .lin-sol { display:grid; grid-template-columns:minmax(0,2fr) 150px 150px 120px; gap:14px; }
-  @media (max-width: 900px) {
-    .lin-sol { grid-template-columns:1fr 96px; gap:10px; }
-    .col-esconde { display:none !important; }
+{% block extra_css %}
+<link rel="stylesheet" href="{{ asset('css/base/listas.css') }}">
+<style>
+  /* Uma coluna por informação; no celular sobram tipo e ação. */
+  .lin-sol { grid-template-columns: minmax(0, 2fr) 150px 150px 120px; }
+  @media (max-width: 767.98px) {
+    .lin-sol { grid-template-columns: minmax(0, 1fr) 96px; }
+    .lin-sol .col-esconde { display: none; }
   }
+</style>
 {% endblock %}
 
-{% block um_conteudo %}
+{% block pagina_titulo %}Aprovar Solicitações{% endblock %}
+{% block pagina_subtitulo %}Pedidos que dependem de uma decisão da academia.{% endblock %}
+
+{% block content %}
 {# O hub lista os TIPOS de solicitação. Hoje só existe "visita em academia";
    quando entrarem outros tipos, cada um vira uma linha desta tabela. #}
 {% set total_pendente = (visita_origem or 0) + (visita_destino or 0) %}
 
-<div style="display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap">
-  <div style="display:flex; flex-direction:column; gap:6px">
-    <div class="um-h1">Aprovar Solicitações</div>
-    <div class="um-sub">Pedidos que dependem de uma decisão da academia.</div>
+<div class="sh__faixa">
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Aguardando decisão</span>
+    <span class="sh__faixa-valor {% if total_pendente %}sh__faixa-valor--alerta{% endif %}">{{ total_pendente }}</span>
+    <span class="lst-sub">Somando os dois lados</span>
   </div>
-  {% set back_url = back_url or get_back_url_default() %}
-  <a class="um-btn" href="{{ back_url }}"><i class="bi bi-arrow-left" style="font-size:12px"></i> Voltar</a>
-</div>
-
-<div class="um-faixa">
-  <div class="um-kpi">
-    <span class="um-kpi-lbl">Aguardando decisão</span>
-    <span class="um-kpi-val" {% if total_pendente %}style="color:#C8102E"{% endif %}>{{ total_pendente }}</span>
-    <span class="um-kpi-nota">Somando os dois lados</span>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Como origem</span>
+    <span class="sh__faixa-valor">{{ visita_origem }}</span>
+    <span class="lst-sub">Seus alunos pedindo para visitar outra academia</span>
   </div>
-  <div class="um-kpi">
-    <span class="um-kpi-lbl">Como origem</span>
-    <span class="um-kpi-val">{{ visita_origem }}</span>
-    <span class="um-kpi-nota">Seus alunos pedindo para visitar outra academia</span>
-  </div>
-  <div class="um-kpi">
-    <span class="um-kpi-lbl">Como destino</span>
-    <span class="um-kpi-val">{{ visita_destino }}</span>
-    <span class="um-kpi-nota">Alunos de fora pedindo para treinar aqui</span>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Como destino</span>
+    <span class="sh__faixa-valor">{{ visita_destino }}</span>
+    <span class="lst-sub">Alunos de fora pedindo para treinar aqui</span>
   </div>
 </div>
 
-{% if academias|length > 1 %}
-<form method="GET" class="um-filtros">
-  <div class="um-filtro" style="flex:0 1 280px">
-    <label for="f-academia">Academia</label>
+{% if academias | length > 1 %}
+<form method="GET" class="lst-filtros">
+  <div class="lst-campo lst-campo--largo">
+    <label class="lst-campo__rotulo" for="f-academia">Academia</label>
     <select id="f-academia" name="academia_id" onchange="this.form.submit()">
       {% for ac in academias %}
       <option value="{{ ac.id }}" {% if ac.id == academia_id %}selected{% endif %}>{{ ac.nome }}</option>
@@ -55,43 +53,40 @@
 </form>
 {% endif %}
 
-<div class="um-card" style="overflow:hidden">
-  <div class="um-cab">
-    <span class="um-secao">Tipos de solicitação</span>
-    <span class="um-kpi-nota">1 tipo ativo</span>
+<div class="lst-quadro">
+  <div class="lst-quadro__topo">
+    <span class="lst-quadro__titulo">Tipos de solicitação</span>
+    <span class="lst-quadro__meta">1 tipo ativo</span>
   </div>
-  <div class="um-rolagem">
-    <div class="lst-largura" style="--lst-min:640px">
-      <div class="lin-sol um-th">
+  <div class="lst-rolagem">
+    <div class="lst-largura" style="--lst-min: 640px">
+      <div class="lst-linha lst-cab lin-sol">
         <div>Tipo</div>
-        <div class="col-esconde" style="text-align:center">Como origem</div>
-        <div class="col-esconde" style="text-align:center">Como destino</div>
-        <div style="text-align:right">Ação</div>
+        <div class="col-esconde text-center">Como origem</div>
+        <div class="col-esconde text-center">Como destino</div>
+        <div class="lst-fim">Ação</div>
       </div>
 
-      <div class="lin-sol um-td">
-        <div style="display:flex; align-items:center; gap:11px; min-width:0">
-          <span style="flex:none; width:32px; height:32px; border-radius:3px; background:#FAFAF9; border:1px solid #e7e5e4;
-                       display:flex; align-items:center; justify-content:center; color:#57534e">
-            <i class="bi bi-geo-alt" style="font-size:14px"></i>
-          </span>
-          <div style="min-width:0">
-            <div style="font-weight:500">Visita em academia</div>
-            <div class="um-kpi-nota">Aluno treina em outra academia da associação</div>
+      <div class="lst-linha lst-item lin-sol">
+        <div class="lst-pessoa">
+          <span class="lst-avatar lst-avatar--iniciais"><i class="bi bi-geo-alt"></i></span>
+          <div class="lst-corta">
+            <span class="lst-nome">Visita em academia</span>
+            <span class="lst-sub">Aluno treina em outra academia da associação</span>
           </div>
         </div>
-        <div class="col-esconde" style="text-align:center">
+        <div class="col-esconde text-center">
           {% if visita_origem %}
-          <span class="um-tag" style="border-color:#fecaca; background:#fef2f2; color:#991b1b">{{ visita_origem }} pendente{{ 's' if visita_origem != 1 }}</span>
-          {% else %}<span style="color:#a8a29e">—</span>{% endif %}
+          <span class="lst-tag lst-tag--alerta">{{ visita_origem }} pendente{{ 's' if visita_origem != 1 }}</span>
+          {% else %}<span class="lst-vazio-celula">—</span>{% endif %}
         </div>
-        <div class="col-esconde" style="text-align:center">
+        <div class="col-esconde text-center">
           {% if visita_destino %}
-          <span class="um-tag" style="border-color:#fecaca; background:#fef2f2; color:#991b1b">{{ visita_destino }} pendente{{ 's' if visita_destino != 1 }}</span>
-          {% else %}<span style="color:#a8a29e">—</span>{% endif %}
+          <span class="lst-tag lst-tag--alerta">{{ visita_destino }} pendente{{ 's' if visita_destino != 1 }}</span>
+          {% else %}<span class="lst-vazio-celula">—</span>{% endif %}
         </div>
-        <div style="text-align:right">
-          <a class="um-btn" href="{{ url_for('solicitacoes.visita_lista', academia_id=academia_id) }}">Abrir</a>
+        <div class="lst-fim">
+          <a class="sh__btn" href="{{ url_for('solicitacoes.visita_lista', academia_id=academia_id) }}">Abrir</a>
         </div>
       </div>
     </div>
@@ -99,10 +94,6 @@
 </div>
 
 {% if not total_pendente %}
-<div class="um-card" style="padding:26px 16px; text-align:center">
-  <div style="font:400 13px/1.5 'Public Sans',sans-serif; color:#a8a29e">
-    Nenhuma solicitação aguardando decisão nesta academia.
-  </div>
-</div>
+<div class="lst-vazio">Nenhuma solicitação aguardando decisão nesta academia.</div>
 {% endif %}
 {% endblock %}
