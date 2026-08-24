@@ -1,269 +1,206 @@
-{% extends "base.html" %}
-{% block title %}Visitantes — {{ academias[0].nome if academias else 'Academia' }}{% endblock %}
+{% extends "base_academia.html" %}
+{% set menu_ativo = 'visitantes' %}
+{% block title %}Visitantes{% endblock %}
+
+{% block pagina_titulo %}Visitantes{% endblock %}
+{% block pagina_subtitulo %}Histórico e gestão de visitantes da academia.{% endblock %}
+
 {% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/academia/visitantes_responsive.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/base/listas.css') }}">
+<style>
+  /* Sete colunas de dados = sete faixas no grid; cada coluna escondida sai
+     junto com a sua célula, senão os títulos se encavalam.
+     Os limites medem a JANELA e o conteúdo é ~300px menor (barra lateral de
+     285px), por isso cada um é o tamanho útil desejado + 300px. */
+  .lin-vis { grid-template-columns: minmax(0,1.8fr) 84px minmax(0,1.2fr) 104px 116px 100px 104px; }
+
+  @media (max-width: 1400px) {                      /* conteúdo ~1100px */
+    .lin-vis { grid-template-columns: minmax(0,1.8fr) minmax(0,1.2fr) 104px 116px 100px 104px; }
+    .col-idade { display: none !important; }
+  }
+  @media (max-width: 1240px) {                      /* conteúdo ~940px */
+    .lin-vis { grid-template-columns: minmax(0,1.8fr) minmax(0,1.2fr) 104px 100px 104px; }
+    .col-ultima { display: none !important; }
+  }
+  @media (max-width: 1080px) {                      /* conteúdo ~780px */
+    .lin-vis { grid-template-columns: minmax(0,1.8fr) minmax(0,1.2fr) 100px 104px; }
+    .col-aulas { display: none !important; }
+  }
+  @media (max-width: 1024px) {                      /* barra lateral recolhe */
+    .lin-vis { grid-template-columns: minmax(0,1.8fr) minmax(0,1.2fr) 104px 116px 100px 104px; }
+    .col-aulas, .col-ultima { display: block !important; }
+  }
+  @media (max-width: 900px) {
+    .lin-vis { grid-template-columns: minmax(0,1.8fr) minmax(0,1.2fr) 100px 104px; }
+    .col-aulas, .col-ultima { display: none !important; }
+  }
+  @media (max-width: 700px) {
+    .lin-vis { grid-template-columns: minmax(0,1.6fr) 100px 104px; }
+    .col-contato { display: none !important; }
+  }
+  @media (max-width: 540px) {
+    .lin-vis { grid-template-columns: 1fr 104px; }
+    .col-status { display: none !important; }
+  }
+</style>
 {% endblock %}
+
+{% block pagina_acoes %}
+  <a href="{{ url_for('academia.novo_visitante', academia_id=academia_id) }}" class="sh__btn sh__btn--forte">
+    <i class="bi bi-person-plus"></i> Novo visitante
+  </a>
+{% endblock %}
+
 {% block content %}
-<div class="container mt-4">
-    <div class="mb-4">
-        {% if academias|length > 1 %}
-        <form method="GET" class="mb-3">
-            <label class="form-label small fw-semibold d-block mb-2">Academia:</label>
-            <select name="academia_id" class="form-select form-select-sm w-100 w-md-auto" onchange="this.form.submit()">
-                {% for ac in academias %}
-                <option value="{{ ac.id }}" {% if ac.id == academia_id %}selected{% endif %}>{{ ac.nome }}</option>
-                {% endfor %}
-            </select>
-        </form>
-        {% endif %}
-        {% set back_url = url_for('academia.painel_academia', academia_id=academia_id) %}
-        {% include 'components/botao_voltar.html' %}
-        <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3">
-            <div>
-                <h2 class="h4 fw-bold text-primary mb-1">Visitantes</h2>
-                <p class="text-muted mb-0">Histórico e gestão de visitantes.</p>
-            </div>
-            <div class="btn-group w-100 w-md-auto">
-                <a href="{{ url_for('academia.novo_visitante', academia_id=academia_id) }}" class="btn btn-success">
-                    <i class="bi bi-person-plus me-2"></i>Novo Visitante
-                </a>
-                <a href="{{ url_for('academia.solicitacoes_aulas', academia_id=academia_id) }}" class="btn btn-primary">
-                    <i class="bi bi-calendar-check me-2"></i>Solicitações de Aulas
-                </a>
-                <a href="{{ url_for('academia.pagamentos_diaria', academia_id=academia_id) }}" class="btn btn-outline-warning">
-                    <i class="bi bi-wallet2 me-2"></i>Pagamentos de Diária
-                </a>
-                <a href="{{ url_for('academia.solicitacoes_mensalidade', academia_id=academia_id) }}" class="btn btn-outline-success">
-                    <i class="bi bi-person-check me-2"></i>Matrículas Realizadas
-                </a>
-            </div>
-        </div>
-    </div>
+{# As quatro telas de visitante viram abas; o número é o que espera decisão. #}
+<nav class="lst-abas">
+  {% set abas_itens = [
+    ('Visitantes', url_for('academia.lista_visitantes', academia_id=academia_id), stats.total_visitantes, true),
+    ('Solicitações de aulas', url_for('academia.solicitacoes_aulas', academia_id=academia_id), abas.solicitacoes, false),
+    ('Pagamentos de diária', url_for('academia.pagamentos_diaria', academia_id=academia_id), abas.diarias, false),
+    ('Matrículas realizadas', url_for('academia.solicitacoes_mensalidade', academia_id=academia_id), abas.matriculas, false)
+  ] %}
+  {% for nome, href, qtd, ativa in abas_itens %}
+  <a href="{{ href }}" class="lst-aba {% if ativa %}is-ativa{% endif %}">
+    {{ nome }}<span class="lst-aba__n {% if qtd and not ativa %}is-alerta{% endif %}">{{ qtd or 0 }}</span>
+  </a>
+  {% endfor %}
+</nav>
 
-    <!-- Estatísticas -->
-    <div class="row g-3 mb-4">
-        <div class="col-12 col-md-4">
-            <div class="card shadow-sm border-primary">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <h6 class="text-muted mb-1">Total de Visitantes</h6>
-                            <h3 class="mb-0 fw-bold text-primary">{{ stats.total_visitantes or 0 }}</h3>
-                        </div>
-                        <i class="bi bi-people-fill display-6 text-primary opacity-50"></i>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-12 col-md-4">
-            <div class="card shadow-sm border-success">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <h6 class="text-muted mb-1">Visitantes Ativos</h6>
-                            <h3 class="mb-0 fw-bold text-success">{{ stats.visitantes_ativos or 0 }}</h3>
-                        </div>
-                        <i class="bi bi-person-check-fill display-6 text-success opacity-50"></i>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-12 col-md-4">
-            <div class="card shadow-sm border-info">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <h6 class="text-muted mb-1">Com Aulas Agendadas</h6>
-                            <h3 class="mb-0 fw-bold text-info">{{ stats.visitantes_com_aulas or 0 }}</h3>
-                        </div>
-                        <i class="bi bi-calendar-event display-6 text-info opacity-50"></i>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Lista de Visitantes -->
-    {% if visitantes %}
-    <!-- Desktop: Tabela -->
-    <div class="card shadow-sm border-0 d-none d-md-block">
-        <div class="card-body">
-            <div class="table-responsive">
-                <table class="table table-hover">
-                    <thead>
-                        <tr>
-                            <th>Foto</th>
-                            <th>Nome</th>
-                            <th>Idade</th>
-                            <th>Contato</th>
-                            <th>Aulas</th>
-                            <th>Última Aula</th>
-                            <th>Status</th>
-                            <th>Ações</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for v in visitantes %}
-                        <tr>
-                            <td>
-                                {% if v.foto_url %}
-                                <img src="{{ url_for('static', filename=v.foto_url) }}" 
-                                     alt="{{ v.nome }}" 
-                                     class="rounded-circle" 
-                                     style="width: 40px; height: 40px; object-fit: cover;">
-                                {% else %}
-                                <div class="rounded-circle bg-secondary d-flex align-items-center justify-content-center" 
-                                     style="width: 40px; height: 40px;">
-                                    <i class="bi bi-person text-white"></i>
-                                </div>
-                                {% endif %}
-                            </td>
-                            <td>
-                                <strong>{{ v.nome }}</strong>
-                                {% if v.usuario_email %}
-                                <br><small class="text-muted">{{ v.usuario_email }}</small>
-                                {% endif %}
-                            </td>
-                            <td>
-                                {% if v.idade %}
-                                {{ v.idade }} anos
-                                {% else %}
-                                <span class="text-muted">-</span>
-                                {% endif %}
-                            </td>
-                            <td>
-                                {% if v.telefone %}
-                                {{ v.telefone }}
-                                {% else %}
-                                <span class="text-muted">-</span>
-                                {% endif %}
-                            </td>
-                            <td>
-                                <span class="badge bg-info">{{ v.total_aulas or 0 }}</span>
-                                {% if v.total_aulas > 0 %}
-                                <br><small class="text-muted">{{ v.aulas_presentes or 0 }} presentes</small>
-                                {% endif %}
-                            </td>
-                            <td>
-                                {% if v.ultima_aula %}
-                                {{ v.ultima_aula|data_br }}
-                                {% else %}
-                                <span class="text-muted">-</span>
-                                {% endif %}
-                            </td>
-                            <td>
-                                {% if v.ativo %}
-                                <span class="badge bg-success">Ativo</span>
-                                {% else %}
-                                <span class="badge bg-secondary">Inativo</span>
-                                {% endif %}
-                            </td>
-                            <td>
-                                <a href="{{ url_for('academia.detalhes_visitante', visitante_id=v.id, academia_id=academia_id) }}" 
-                                   class="btn btn-sm btn-outline-primary">
-                                    <i class="bi bi-eye me-1"></i>Ver
-                                </a>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-    
-    <!-- Mobile: Cards -->
-    <div class="visitantes-mobile d-md-none">
-        {% for v in visitantes %}
-        <div class="visitante-card">
-            <div class="visitante-card-header">
-                <div class="visitante-foto">
-                    {% if v.foto_url %}
-                    <img src="{{ url_for('static', filename=v.foto_url) }}" 
-                         alt="{{ v.nome }}" 
-                         class="rounded-circle" 
-                         style="width: 50px; height: 50px; object-fit: cover;">
-                    {% else %}
-                    <div class="rounded-circle bg-secondary d-flex align-items-center justify-content-center" 
-                         style="width: 50px; height: 50px;">
-                        <i class="bi bi-person text-white"></i>
-                    </div>
-                    {% endif %}
-                </div>
-                <div class="visitante-info">
-                    <strong>{{ v.nome }}</strong>
-                    {% if v.usuario_email %}
-                    <small>{{ v.usuario_email }}</small>
-                    {% endif %}
-                </div>
-                <div>
-                    {% if v.ativo %}
-                    <span class="badge bg-success">Ativo</span>
-                    {% else %}
-                    <span class="badge bg-secondary">Inativo</span>
-                    {% endif %}
-                </div>
-            </div>
-            
-            <div class="visitante-detalhes">
-                <div class="visitante-detalhe-item">
-                    <span class="visitante-detalhe-label">Idade</span>
-                    <span class="visitante-detalhe-value">
-                        {% if v.idade %}
-                        {{ v.idade }} anos
-                        {% else %}
-                        <span class="text-muted">-</span>
-                        {% endif %}
-                    </span>
-                </div>
-                <div class="visitante-detalhe-item">
-                    <span class="visitante-detalhe-label">Contato</span>
-                    <span class="visitante-detalhe-value">
-                        {% if v.telefone %}
-                        {{ v.telefone }}
-                        {% else %}
-                        <span class="text-muted">-</span>
-                        {% endif %}
-                    </span>
-                </div>
-                <div class="visitante-detalhe-item">
-                    <span class="visitante-detalhe-label">Aulas</span>
-                    <span class="visitante-detalhe-value">
-                        <span class="badge bg-info">{{ v.total_aulas or 0 }}</span>
-                        {% if v.total_aulas > 0 %}
-                        <small class="text-muted d-block mt-1">{{ v.aulas_presentes or 0 }} presentes</small>
-                        {% endif %}
-                    </span>
-                </div>
-                <div class="visitante-detalhe-item">
-                    <span class="visitante-detalhe-label">Última Aula</span>
-                    <span class="visitante-detalhe-value">
-                        {% if v.ultima_aula %}
-                        {{ v.ultima_aula|data_br }}
-                        {% else %}
-                        <span class="text-muted">-</span>
-                        {% endif %}
-                    </span>
-                </div>
-            </div>
-            
-            <div class="visitante-acoes">
-                <a href="{{ url_for('academia.detalhes_visitante', visitante_id=v.id, academia_id=academia_id) }}" 
-                   class="btn btn-outline-primary">
-                    <i class="bi bi-eye me-1"></i>Ver Detalhes
-                </a>
-            </div>
-        </div>
-        {% endfor %}
-    </div>
-    {% else %}
-    <div class="card shadow-sm border-0">
-        <div class="card-body text-center py-5">
-            <i class="bi bi-people display-1 text-muted mb-3"></i>
-            <h5 class="text-muted">Nenhum visitante encontrado</h5>
-            <p class="text-muted mb-0">Ainda não há visitantes cadastrados nesta academia.</p>
-        </div>
-    </div>
-    {% endif %}
+<div class="sh__faixa">
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Total de visitantes</span>
+    <span class="sh__faixa-valor">{{ stats.total_visitantes or 0 }}</span>
+    <span class="lst-sub">Cadastrados na academia</span>
+  </div>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Visitantes ativos</span>
+    <span class="sh__faixa-valor">{{ stats.visitantes_ativos or 0 }}</span>
+    <span class="lst-sub">Podem agendar aulas</span>
+  </div>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Com aulas agendadas</span>
+    <span class="sh__faixa-valor">{{ stats.visitantes_com_aulas or 0 }}</span>
+    <span class="lst-sub">Aguardando comparecimento</span>
+  </div>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Convertidos em aluno</span>
+    <span class="sh__faixa-valor">{{ stats.convertidos or 0 }}</span>
+    <span class="lst-sub">Matrículas a partir de visita</span>
+  </div>
 </div>
+
+<form method="GET" class="lst-filtros">
+  <label class="lst-campo lst-campo--largo">
+    <span class="lst-campo__rotulo">Buscar</span>
+    <input type="text" name="busca" value="{{ busca }}" placeholder="Nome ou telefone" autocomplete="off">
+  </label>
+  <label class="lst-campo lst-campo--curto">
+    <span class="lst-campo__rotulo">Status</span>
+    <select name="status">
+      <option value="">Todos</option>
+      <option value="ativo" {% if status_f == 'ativo' %}selected{% endif %}>Ativos</option>
+      <option value="inativo" {% if status_f == 'inativo' %}selected{% endif %}>Inativos</option>
+    </select>
+  </label>
+  <label class="lst-campo lst-campo--curto">
+    <span class="lst-campo__rotulo">Última aula</span>
+    <select name="ultima_aula">
+      <option value="">Qualquer data</option>
+      <option value="30" {% if ultima_f == '30' %}selected{% endif %}>Últimos 30 dias</option>
+      <option value="90" {% if ultima_f == '90' %}selected{% endif %}>Últimos 90 dias</option>
+      <option value="sem" {% if ultima_f == 'sem' %}selected{% endif %}>Nunca treinou</option>
+    </select>
+  </label>
+  <div class="lst-filtros__acoes">
+    <button type="submit" class="sh__btn sh__btn--forte">Filtrar</button>
+    {% if filtrado %}
+    <a href="{{ url_for('academia.lista_visitantes', academia_id=academia_id) }}" class="sh__btn">Limpar</a>
+    {% endif %}
+  </div>
+</form>
+
+<section class="lst-quadro">
+  <header class="lst-quadro__topo">
+    <h2 class="lst-quadro__titulo">Visitantes</h2>
+    <span class="lst-quadro__meta">
+      {{ visitantes|length }} visitante{{ 's' if visitantes|length != 1 }}{% if filtrado %} de {{ total_sem_filtro }}{% endif %}
+    </span>
+  </header>
+
+  <div class="lst-rolagem">
+    <div class="lst-largura" style="--lst-min:520px">
+      <div class="lst-linha lin-vis lst-cab">
+        <div>Visitante</div>
+        <div class="col-idade">Idade</div>
+        <div class="col-contato">Contato</div>
+        <div class="col-aulas">Aulas</div>
+        <div class="col-ultima">Última aula</div>
+        <div class="col-status">Status</div>
+        <div class="lst-fim">Ações</div>
+      </div>
+
+      {% for v in visitantes %}
+      {% set partes = (v.nome or '?').split() %}
+      <div class="lst-linha lin-vis lst-item {% if not v.ativo %}is-inativo{% endif %}">
+        <div class="lst-pessoa">
+          {% if v.foto_url %}
+          <img src="{{ url_for('static', filename=v.foto_url) }}" alt="" class="lst-avatar">
+          {% else %}
+          <span class="lst-avatar lst-avatar--iniciais">
+            {{ partes[0][0]|upper }}{{ partes[-1][0]|upper if partes|length > 1 else '' }}
+          </span>
+          {% endif %}
+          <span style="min-width:0">
+            <a class="lst-nome" href="{{ url_for('academia.detalhes_visitante', visitante_id=v.id, academia_id=academia_id) }}">{{ v.nome }}</a>
+            {% if v.usuario_email %}<span class="lst-sub">{{ v.usuario_email }}</span>{% endif %}
+          </span>
+        </div>
+
+        <div class="col-idade">{{ (v.idade ~ ' anos') if v.idade else '—' }}</div>
+
+        <div class="col-contato lst-corta">{{ v.telefone|telefone_br if v.telefone else '—' }}</div>
+
+        <div class="col-aulas">
+          {% if v.total_aulas %}
+          <span class="lst-tag">{{ v.aulas_presentes or 0 }} de {{ v.total_aulas }}</span>
+          {% else %}<span class="lst-vazio-celula">—</span>{% endif %}
+        </div>
+
+        <div class="col-ultima">{{ v.ultima_aula|data_br if v.ultima_aula else '—' }}</div>
+
+        <div class="col-status">
+          <span class="lst-situacao {% if v.ativo %}is-ativo{% endif %}"><i></i>{{ 'Ativo' if v.ativo else 'Inativo' }}</span>
+        </div>
+
+        <div class="lst-acoes">
+          <a class="lst-acao" title="Ver detalhes de {{ v.nome }}" aria-label="Ver detalhes de {{ v.nome }}"
+             href="{{ url_for('academia.detalhes_visitante', visitante_id=v.id, academia_id=academia_id) }}">
+            <i class="bi bi-eye"></i>
+          </a>
+          {% if v.telefone %}
+          <a class="lst-acao" title="Falar com {{ v.nome }} no WhatsApp" aria-label="WhatsApp de {{ v.nome }}"
+             target="_blank" rel="noopener"
+             href="https://wa.me/55{{ v.telefone|replace('(','')|replace(')','')|replace('-','')|replace(' ','') }}">
+            <i class="bi bi-whatsapp"></i>
+          </a>
+          {% endif %}
+          <a class="lst-acao" title="Cadastrar {{ v.nome }} como aluno" aria-label="Cadastrar {{ v.nome }} como aluno"
+             href="{{ url_for('alunos.cadastrar_aluno', academia_id=academia_id) }}">
+            <i class="bi bi-person-check"></i>
+          </a>
+        </div>
+      </div>
+      {% else %}
+      <p class="lst-vazio">
+        {% if filtrado %}Nenhum visitante encontrado com esses filtros.{% else %}Nenhum visitante cadastrado ainda.{% endif %}
+      </p>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<footer class="lst-rodape">
+  © {{ current_year }} {{ academia.nome if academia else 'Unimaster' }}. Todos os direitos reservados.
+</footer>
 {% endblock %}

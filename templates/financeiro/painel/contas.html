@@ -1,0 +1,178 @@
+{% extends "financeiro/painel/_base.html" %}
+{% set fin_aba = 'contas' %}
+{% block title %}Contas — Financeiro{% endblock %}
+
+{% block pagina_titulo %}Financeiro{% endblock %}
+{% block pagina_subtitulo %}Onde o dinheiro está · saldo total {{ fmt_moeda(total) }}{% endblock %}
+
+{% block fin_css %}
+<style>
+  .lin-conta { grid-template-columns: minmax(0,1.6fr) 130px 140px 150px 120px; }
+  @media (max-width: 900px) {
+    .lin-conta { grid-template-columns: minmax(0,1.6fr) 150px 120px; }
+    .col-tipo, .col-inicial { display: none !important; }
+  }
+  .cta-negativo { color: #a4131f; }
+  .cta-caixa { padding: 1.25rem; }
+  .cta-formas { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: .75rem; }
+</style>
+{% endblock %}
+
+{% block fin_conteudo %}
+{% if not contas %}
+<section class="lst-quadro">
+  <p class="lst-vazio">
+    Nenhuma conta financeira ainda. A forma de pagamento diz <em>como</em> o aluno pagou;
+    a conta diz <em>onde</em> o dinheiro ficou.
+    <a href="{{ url_for('financeiro_painel.controle', academia_id=academia_id) }}">Preparar contas automaticamente</a>.
+  </p>
+</section>
+{% else %}
+
+<div class="sh__faixa">
+  {% for c in contas if c.ativo %}
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">{{ c.nome }}</span>
+    <span class="sh__faixa-valor fin-valor {% if c.saldo < 0 %}cta-negativo{% endif %}">{{ fmt_moeda(c.saldo) }}</span>
+    <span class="lst-sub">{{ c.tipo|capitalize }}</span>
+  </div>
+  {% endfor %}
+</div>
+
+<section class="lst-quadro">
+  <header class="lst-quadro__topo">
+    <h2 class="lst-quadro__titulo">Contas</h2>
+    <span class="lst-quadro__meta">Total {{ fmt_moeda(total) }}</span>
+  </header>
+  <div class="lst-rolagem">
+    <div class="lst-largura" style="--lst-min:520px">
+      <div class="lst-linha lin-conta lst-cab">
+        <div>Conta</div>
+        <div class="col-tipo">Tipo</div>
+        <div class="col-inicial lst-num">Saldo inicial</div>
+        <div class="lst-num">Saldo atual</div>
+        <div class="lst-fim">Extrato</div>
+      </div>
+      {% for c in contas %}
+      <div class="lst-linha lin-conta lst-item {% if not c.ativo %}is-inativo{% endif %}">
+        <div style="min-width:0">
+          <span class="lst-nome">{{ c.nome }}</span>
+          <span class="lst-sub">{{ 'Ativa' if c.ativo else 'Inativa' }}</span>
+        </div>
+        <div class="col-tipo"><span class="lst-tag">{{ c.tipo|capitalize }}</span></div>
+        <div class="col-inicial lst-num">{{ fmt_moeda(c.saldo_inicial) }}</div>
+        <div class="lst-num fin-valor {% if c.saldo < 0 %}cta-negativo{% endif %}">{{ fmt_moeda(c.saldo) }}</div>
+        <div class="lst-acoes">
+          <a class="lst-acao" title="Ver extrato de {{ c.nome }}" aria-label="Extrato de {{ c.nome }}"
+             href="{{ url_for('financeiro_painel.extrato', academia_id=academia_id, conta=c.id) }}">
+            <i class="bi bi-list-ul"></i>
+          </a>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+{% if pode_gerir %}
+<section class="lst-quadro mt-3">
+  <header class="lst-quadro__topo">
+    <h2 class="lst-quadro__titulo">Destino de cada forma de pagamento</h2>
+    <span class="lst-quadro__meta">Define em qual conta a baixa entra</span>
+  </header>
+  <form method="POST" action="{{ url_for('financeiro_painel.contas_vincular_forma') }}" class="cta-caixa">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
+    <div class="cta-formas">
+      {% for f in formas %}
+      <label class="lst-campo">
+        <span class="lst-campo__rotulo">{{ f.nome }}</span>
+        <select name="forma_{{ f.id }}">
+          <option value="">— sem conta definida —</option>
+          {% for c in contas if c.ativo %}
+          <option value="{{ c.id }}" {% if f.id_conta_padrao == c.id %}selected{% endif %}>{{ c.nome }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      {% else %}
+      <p class="lst-sub">Nenhuma forma de pagamento cadastrada.</p>
+      {% endfor %}
+    </div>
+    {% if formas %}
+    <button type="submit" class="sh__btn sh__btn--forte mt-3">Salvar destinos</button>
+    {% endif %}
+  </form>
+</section>
+
+<section class="lst-quadro mt-3">
+  <header class="lst-quadro__topo">
+    <h2 class="lst-quadro__titulo">Transferir entre contas</h2>
+    <span class="lst-quadro__meta">Não é receita nem despesa — o total não muda</span>
+  </header>
+  <form method="POST" action="{{ url_for('financeiro_painel.contas_transferir') }}" class="cta-caixa">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
+    <div class="lst-filtros">
+      <label class="lst-campo lst-campo--curto">
+        <span class="lst-campo__rotulo">De</span>
+        <select name="origem" required>
+          {% for c in contas if c.ativo %}<option value="{{ c.id }}">{{ c.nome }} · {{ fmt_moeda(c.saldo) }}</option>{% endfor %}
+        </select>
+      </label>
+      <label class="lst-campo lst-campo--curto">
+        <span class="lst-campo__rotulo">Para</span>
+        <select name="destino" required>
+          {% for c in contas if c.ativo %}<option value="{{ c.id }}">{{ c.nome }}</option>{% endfor %}
+        </select>
+      </label>
+      <label class="lst-campo lst-campo--curto">
+        <span class="lst-campo__rotulo">Valor</span>
+        <input type="text" name="valor" placeholder="0,00" required>
+      </label>
+      <label class="lst-campo lst-campo--largo">
+        <span class="lst-campo__rotulo">Descrição</span>
+        <input type="text" name="descricao" placeholder="Opcional">
+      </label>
+      <div class="lst-filtros__acoes">
+        <button type="submit" class="sh__btn sh__btn--forte">Transferir</button>
+      </div>
+    </div>
+  </form>
+</section>
+{% endif %}
+{% endif %}
+
+{% if pode_gerir %}
+<section class="lst-quadro mt-3">
+  <header class="lst-quadro__topo">
+    <h2 class="lst-quadro__titulo">Nova conta</h2>
+  </header>
+  <form method="POST" action="{{ url_for('financeiro_painel.contas_nova') }}" class="cta-caixa">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
+    <div class="lst-filtros">
+      <label class="lst-campo lst-campo--largo">
+        <span class="lst-campo__rotulo">Nome</span>
+        <input type="text" name="nome" placeholder="Ex.: Nubank, Caixa físico" required>
+      </label>
+      <label class="lst-campo lst-campo--curto">
+        <span class="lst-campo__rotulo">Tipo</span>
+        <select name="tipo">
+          {% for chave, rot in [('caixa','Caixa físico'), ('banco','Banco'), ('pix','Pix'),
+                                ('cartao','Cartão'), ('carteira','Carteira'), ('outra','Outra')] %}
+          <option value="{{ chave }}">{{ rot }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="lst-campo lst-campo--curto">
+        <span class="lst-campo__rotulo">Saldo inicial</span>
+        <input type="text" name="saldo_inicial" placeholder="0,00">
+      </label>
+      <div class="lst-filtros__acoes">
+        <button type="submit" class="sh__btn sh__btn--forte">Criar conta</button>
+      </div>
+    </div>
+  </form>
+</section>
+{% endif %}
+{% endblock %}

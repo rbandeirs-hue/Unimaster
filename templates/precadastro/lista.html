@@ -1,611 +1,429 @@
-{% extends "base.html" %}
-{% block title %}Pré-cadastro — {{ academia_nome }}{% endblock %}
-{% block content %}
+{% extends "base_academia.html" %}
+{% set menu_ativo = 'precadastro' %}
+{% block title %}Pré-cadastro{% endblock %}
+
+{% block pagina_titulo %}Pré-cadastro{% endblock %}
+{% block pagina_subtitulo %}Interessados que se cadastraram pelo formulário público da {{ academia_nome }}.{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/base/listas.css') }}">
 <style>
-  :root {
-    --c-surface: #ffffff;
-    --c-border: #e5e9f2;
-    --c-text: #1f2937;
-    --c-muted: #6b7280;
-    --c-primary: #0d6efd;
-    --c-primary-soft: #e8f1ff;
+  /* Os limites medem a JANELA, mas o conteúdo é ~300px menor (barra lateral
+     de 285px): cada limite é o tamanho útil desejado + 300px. Sem essa soma
+     as colunas só sumiam depois de a tabela já não caber, e sobrava rolagem. */
+  .lin-pre { grid-template-columns: minmax(0,1.5fr) minmax(0,1.5fr) 140px 112px 118px 150px; }
+
+  @media (max-width: 1320px) {                      /* conteúdo ~1020px */
+    .lin-pre { grid-template-columns: minmax(0,1.5fr) minmax(0,1.5fr) 140px 118px 150px; }
+    .col-nasc { display: none !important; }
+  }
+  @media (max-width: 1180px) {                      /* conteúdo ~880px */
+    .lin-pre { grid-template-columns: minmax(0,1.5fr) minmax(0,1.5fr) 140px 150px; }
+    .col-receb { display: none !important; }
+  }
+  @media (max-width: 1024px) {                      /* barra lateral recolhe */
+    .lin-pre { grid-template-columns: minmax(0,1.5fr) minmax(0,1.5fr) 140px 118px 150px; }
+    .col-receb { display: block !important; }
+  }
+  @media (max-width: 900px) {
+    .lin-pre { grid-template-columns: minmax(0,1.5fr) minmax(0,1.5fr) 140px 150px; }
+    .col-receb { display: none !important; }
+  }
+  @media (max-width: 760px) {
+    .lin-pre { grid-template-columns: minmax(0,1.4fr) 140px 150px; }
+    .col-email { display: none !important; }
+  }
+  @media (max-width: 560px) {
+    .lin-pre { grid-template-columns: 1fr 150px; }
+    .col-tel { display: none !important; }
   }
 
-  .precad-page { max-width: 1280px; margin: 0 auto; }
+  /* Links públicos: nome + descrição + URL de um lado, ações do outro. */
+  .pre-link {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--u-space-3);
+    flex-wrap: wrap;
+    padding: .8rem 1.25rem;
+    border-bottom: 1px solid #f2f0ec;
+  }
+  .pre-link:last-of-type { border-bottom: 0; }
+  .pre-link__nome { font-weight: 600; font-size: .95rem; }
+  .pre-link__desc { color: var(--sh-ink-soft); font-size: .82rem; }
+  .pre-link__url {
+    margin-top: .15rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: .8rem;
+    color: var(--sh-ink-soft);
+    word-break: break-all;
+  }
+  .pre-link__acoes { display: flex; gap: .5rem; flex: none; }
 
-  /* Header */
-  .precad-header {
-    background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
-    border: 1px solid var(--c-border);
-    border-radius: 16px;
-    padding: 1.4rem 1.6rem;
-    margin-bottom: 1.1rem;
-    box-shadow: 0 1px 3px rgba(15,23,42,.04);
+  .pre-rodape-links {
+    display: flex;
+    align-items: flex-end;
+    gap: var(--u-space-3);
+    flex-wrap: wrap;
+    padding: 1rem 1.25rem;
+    border-top: 1px solid var(--sh-line);
+    background: #fdfcfa;
   }
-  .precad-header h1 {
-    font-size: 1.45rem; font-weight: 700; margin: 0;
-    color: var(--c-text);
-    display: flex; align-items: center; gap: .55rem;
-  }
-  .precad-header h1 .icon-wrap {
-    width: 40px; height: 40px;
-    background: var(--c-primary-soft); color: var(--c-primary);
-    border-radius: 10px;
-    display: inline-flex; align-items: center; justify-content: center;
-    font-size: 1.1rem;
-  }
-  .precad-header .subtitle {
-    font-size: .9rem; color: var(--c-muted);
-    margin-top: .25rem;
-  }
-  .precad-stats { display: flex; flex-wrap: wrap; gap: .45rem; margin-top: .65rem; }
-  .precad-chip {
-    display: inline-flex; align-items: center; gap: .35rem;
-    background: var(--c-primary-soft); color: var(--c-primary);
-    padding: .35rem .8rem; border-radius: 999px;
-    font-size: .8rem; font-weight: 600;
-  }
-
-  /* Card de link público */
-  .link-card {
-    background: var(--c-surface);
-    border: 1px solid var(--c-border);
-    border-radius: 14px;
-    padding: 1rem 1.15rem;
-    margin-bottom: 1.1rem;
-    box-shadow: 0 1px 3px rgba(15,23,42,.03);
-  }
-  .link-card-label {
-    display: flex; align-items: center; gap: .4rem;
-    font-size: .82rem; font-weight: 600;
-    color: var(--c-text);
-    margin-bottom: .55rem;
-  }
-  .link-card-label i { color: var(--c-primary); }
-  .link-input-wrap { display: flex; gap: .5rem; flex-wrap: wrap; }
-  .link-input {
-    flex: 1; min-width: 220px;
-    border-radius: 10px;
-    border: 1px solid var(--c-border);
-    background: #f9fafb;
-    padding: .55rem .85rem;
-    font-family: ui-monospace, SFMono-Regular, "Menlo", "Monaco", "Consolas", monospace;
-    font-size: .82rem;
-    color: var(--c-text);
-  }
-  .link-input:focus { outline: none; border-color: var(--c-primary); background: #fff; }
-  .btn-link-act {
-    border-radius: 10px;
-    padding: .55rem .9rem;
-    border: 1px solid var(--c-border);
-    background: #fff;
-    color: var(--c-text);
-    font-size: .82rem;
-    font-weight: 600;
-    cursor: pointer;
-    display: inline-flex; align-items: center; gap: .35rem;
-    transition: all .15s ease;
-    text-decoration: none;
-  }
-  .btn-link-act:hover { border-color: var(--c-primary); color: var(--c-primary); background: #f8fbff; }
-  .btn-link-act.copiado { background: #ecfdf5; border-color: #10b981; color: #047857; }
-
-  /* Toolbar busca */
-  .toolbar {
-    background: var(--c-surface);
-    border: 1px solid var(--c-border);
-    border-radius: 14px;
-    padding: .85rem 1rem;
-    margin-bottom: 1.1rem;
-    display: flex; align-items: center; flex-wrap: wrap; gap: .75rem;
-    box-shadow: 0 1px 3px rgba(15,23,42,.03);
-  }
-  .toolbar .search-wrap { flex: 1 1 280px; position: relative; }
-  .toolbar .search-wrap > i.bi-search {
-    position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
-    color: var(--c-muted); pointer-events: none;
-  }
-  .toolbar .search-input {
-    width: 100%;
-    border-radius: 10px;
-    border: 1px solid var(--c-border);
-    background: #f9fafb;
-    padding: .6rem 2.4rem .6rem 2.4rem;
-  }
-  .toolbar .search-input:focus {
-    outline: none;
-    border-color: var(--c-primary);
-    box-shadow: 0 0 0 3px rgba(13,110,253,.15);
-    background: #fff;
-  }
-  .toolbar .clear-btn {
-    position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
-    background: transparent; border: 0; color: var(--c-muted);
-    cursor: pointer; padding: 0; line-height: 1;
-    display: none;
-  }
-  .toolbar .clear-btn.show { display: inline-block; }
-  .toolbar .filter-label {
-    font-size: .78rem; color: var(--c-muted); font-weight: 600;
-    text-transform: uppercase; letter-spacing: .04em;
-  }
-  .toolbar .form-select-sm {
-    border-radius: 10px;
-    border: 1px solid var(--c-border);
-    background: #f9fafb;
-    min-width: 200px;
-  }
-
-  /* Grid de pré-cadastros */
-  .precad-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
-    gap: .85rem;
-  }
-  .precad-card {
-    background: var(--c-surface);
-    border: 1px solid var(--c-border);
-    border-radius: 14px;
-    padding: 1rem 1.1rem;
-    display: flex; flex-direction: column;
-    transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease;
-  }
-  .precad-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 22px rgba(15,23,42,.07);
-    border-color: #cfd6e2;
-  }
-  .precad-top { display: flex; gap: .8rem; align-items: center; margin-bottom: .5rem; }
-  .precad-avatar, .precad-avatar-init {
-    width: 52px; height: 52px;
-    border-radius: 50%;
-    object-fit: cover;
-    flex-shrink: 0;
-    border: 2px solid #fff;
-    box-shadow: 0 0 0 1px var(--c-border);
-  }
-  .precad-avatar-init {
-    color: #fff; font-weight: 700; font-size: 1.05rem;
-    display: inline-flex; align-items: center; justify-content: center;
-  }
-  .precad-name {
-    margin: 0; font-size: 1rem; font-weight: 700; line-height: 1.3;
-    color: var(--c-text);
-    word-break: break-word;
-  }
-  .precad-meta-line {
-    display: flex; align-items: center; gap: .4rem;
-    font-size: .82rem; color: var(--c-muted);
-    padding: .15rem 0;
-    word-break: break-word;
-  }
-  .precad-meta-line i { color: #94a3b8; flex-shrink: 0; }
-  .precad-data-chip {
-    font-size: .7rem; font-weight: 600;
-    padding: .2rem .55rem;
-    background: #f3f4f6; color: #4b5563;
-    border-radius: 999px;
-    align-self: flex-start;
-    margin-top: .35rem;
-  }
-
-  .precad-actions {
-    display: flex; gap: .4rem;
-    margin-top: auto;
-    padding-top: .75rem;
-    border-top: 1px solid #f1f3f5;
-  }
-  .precad-actions .btn-act {
-    flex: 1;
-    border-radius: 10px;
-    padding: .5rem .65rem;
-    font-size: .8rem; font-weight: 600;
-    border: 1px solid var(--c-border);
-    background: #fff;
-    color: var(--c-text);
-    text-decoration: none;
-    display: inline-flex; align-items: center; justify-content: center; gap: .35rem;
-    transition: all .15s ease;
-    cursor: pointer;
-  }
-  .precad-actions .btn-act.icon-only { flex: 0 0 38px; padding: .5rem; }
-  .precad-actions .btn-act.primary { background: #ecfdf5; border-color: #a7f3d0; color: #047857; }
-  .precad-actions .btn-act.primary:hover { background: #10b981; border-color: #10b981; color: #fff; }
-  .precad-actions .btn-act:hover { border-color: var(--c-primary); color: var(--c-primary); background: #f8fbff; }
-  .precad-actions .btn-act.danger:hover { border-color: #dc2626; color: #b91c1c; background: #fef2f2; }
-  .precad-actions form { margin: 0; flex: 0 0 38px; }
-  .precad-actions form .btn-act { width: 100%; }
-
-  /* Empty state */
-  .empty-state {
-    background: var(--c-surface);
-    border: 1px dashed var(--c-border);
-    border-radius: 16px;
-    padding: 3rem 1rem;
-    text-align: center;
-    color: var(--c-muted);
-  }
-  .empty-state i.bi-person-x { font-size: 3rem; color: #d1d5db; display: block; margin-bottom: .75rem; }
-  .empty-state .empty-title { color: var(--c-text); font-weight: 600; margin-bottom: .25rem; }
-
-  /* Paginação */
-  .pagination .page-link {
-    border-radius: 8px !important;
-    margin: 0 2px;
-    border: 1px solid var(--c-border);
-    color: var(--c-text);
-  }
-  .pagination .page-item.active .page-link {
-    background: var(--c-primary);
-    border-color: var(--c-primary);
-    color: #fff;
-  }
-
-  @media (max-width: 575.98px) {
-    .precad-header { padding: 1rem; border-radius: 12px; }
-    .precad-header h1 { font-size: 1.2rem; }
-    .toolbar { padding: .75rem; }
-    .toolbar .form-select-sm { width: 100%; min-width: 0; }
-    .precad-grid { grid-template-columns: 1fr; gap: .75rem; }
-  }
+  .pre-valor { display: flex; align-items: center; gap: .45rem; }
+  .pre-valor span { color: var(--sh-ink-soft); font-size: .93rem; }
+  .pre-valor input { width: 120px; }
 </style>
+{% endblock %}
 
-{% set palette = ['#6366f1','#0ea5e9','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#14b8a6','#f97316'] %}
+{% block content %}
+{# ------------------------------------------------------------ links públicos #}
+<section class="lst-quadro">
+  <header class="lst-quadro__topo">
+    <h2 class="lst-quadro__titulo">Links públicos</h2>
+    <span class="lst-quadro__meta">Compartilhe por WhatsApp, bio ou anúncio</span>
+  </header>
 
-<div class="container my-4 my-md-5 precad-page">
-  <div class="precad-header">
-    <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3">
-      <div class="flex-grow-1">
-        {% set back_url = back_url or get_back_url_default() %}
-        {% include 'components/botao_voltar.html' %}
-        <h1>
-          <span class="icon-wrap"><i class="bi bi-person-plus-fill"></i></span>
-          Pré-cadastro
-          {% if academia_nome %}<span class="text-muted fw-normal" style="font-size:1rem;">— {{ academia_nome }}</span>{% endif %}
-        </h1>
-        <p class="subtitle mb-0">Interessados que se cadastraram via formulário público.</p>
-        <div class="precad-stats">
-          <span class="precad-chip">
-            <i class="bi bi-people-fill"></i>
-            {{ precadastros|length }} {% if precadastros|length == 1 %}pré-cadastro{% else %}pré-cadastros{% endif %}{% if total_paginas > 1 %} · página {{ pagina_atual }}/{{ total_paginas }}{% endif %}
-          </span>
-        </div>
-      </div>
+  {% for nome, desc, url in [
+      ('Página da academia', 'modalidades, horários, localização e botões de matrícula', link_landing),
+      ('Pré-cadastro', 'formulário curto de interesse', link_publico),
+      ('Aula experimental', 'agendamento de aula avulsa', link_aula_experimental),
+      ('Matrícula', 'o aluno preenche os dados e recebe a cobrança', link_matricula)
+    ] %}
+  <div class="pre-link">
+    <div style="min-width:0; flex:1 1 320px">
+      <span class="pre-link__nome">{{ nome }}</span>
+      <span class="pre-link__desc"> {{ desc }}</span>
+      <div class="pre-link__url">{{ url }}</div>
     </div>
-  </div>
-
-  <!-- Landing page da academia (página completa) -->
-  <div class="link-card" style="border:2px solid #c7d2fe;background:linear-gradient(135deg,#eef2ff,#faf5ff)">
-    <div class="link-card-label">
-      <i class="bi bi-globe2"></i> Página da academia (landing page)
-      <span class="text-muted" style="font-weight:400;font-size:.8rem">— página completa com modalidades, horários, localização e botões de matrícula/aula experimental</span>
-    </div>
-    <div class="link-input-wrap">
-      <input type="text" class="link-input" id="linkLanding" value="{{ link_landing }}" readonly>
-      <button type="button" class="btn-link-act" id="btnCopiarLinkLanding" title="Copiar link">
-        <i class="bi bi-clipboard"></i> <span class="lbl">Copiar</span>
+    <div class="pre-link__acoes">
+      <button type="button" class="sh__btn js-copiar" data-url="{{ url }}">
+        <i class="bi bi-clipboard"></i> Copiar
       </button>
-      <a href="{{ link_landing }}" target="_blank" rel="noopener" class="btn-link-act" title="Abrir página da academia">
+      <a class="sh__btn" href="{{ url }}" target="_blank" rel="noopener">
         <i class="bi bi-box-arrow-up-right"></i> Abrir
       </a>
     </div>
   </div>
+  {% endfor %}
 
-  <!-- Link público compartilhável -->
-  <div class="link-card">
-    <div class="link-card-label">
-      <i class="bi bi-link-45deg"></i> Link público para pré-cadastro
-    </div>
-    <div class="link-input-wrap">
-      <input type="text" class="link-input" id="linkPrecad" value="{{ link_publico }}" readonly>
-      <button type="button" class="btn-link-act" id="btnCopiarLink" title="Copiar link">
-        <i class="bi bi-clipboard"></i> <span class="lbl">Copiar</span>
-      </button>
-      <a href="{{ link_publico }}" target="_blank" rel="noopener" class="btn-link-act" title="Abrir formulário público">
-        <i class="bi bi-box-arrow-up-right"></i> Abrir
-      </a>
-    </div>
-  </div>
-
-  <!-- Link público de aula experimental -->
-  <div class="link-card">
-    <div class="link-card-label">
-      <i class="bi bi-stars"></i> Link público para aula experimental
-    </div>
-    <div class="link-input-wrap">
-      <input type="text" class="link-input" id="linkAulaExp" value="{{ link_aula_experimental }}" readonly>
-      <button type="button" class="btn-link-act" id="btnCopiarLinkAulaExp" title="Copiar link">
-        <i class="bi bi-clipboard"></i> <span class="lbl">Copiar</span>
-      </button>
-      <a href="{{ link_aula_experimental }}" target="_blank" rel="noopener" class="btn-link-act" title="Abrir formulário de aula experimental">
-        <i class="bi bi-box-arrow-up-right"></i> Abrir
-      </a>
-    </div>
-  </div>
-
-  <!-- Link de matrícula (gera cobrança) -->
-  <div class="link-card">
-    <div class="link-card-label">
-      <i class="bi bi-mortarboard-fill"></i> Link de matrícula
-      <span class="text-muted" style="font-weight:400;font-size:.8rem">— o aluno preenche os dados e recebe a cobrança da matrícula{% if not valor_matricula %} (defina o valor abaixo){% endif %}</span>
-    </div>
-    <div class="link-input-wrap">
-      <input type="text" class="link-input" id="linkMatricula" value="{{ link_matricula }}" readonly>
-      <button type="button" class="btn-link-act" id="btnCopiarLinkMatricula" title="Copiar link">
-        <i class="bi bi-clipboard"></i> <span class="lbl">Copiar</span>
-      </button>
-      <a href="{{ link_matricula }}" target="_blank" rel="noopener" class="btn-link-act" title="Abrir formulário de matrícula">
-        <i class="bi bi-box-arrow-up-right"></i> Abrir
-      </a>
-    </div>
-    <form method="POST" action="{{ url_for('precadastro.salvar_valor_matricula') }}" class="d-flex align-items-center gap-2 mt-2" style="flex-wrap:wrap">
+  <div class="pre-rodape-links">
+    <form method="POST" action="{{ url_for('precadastro.salvar_valor_matricula') }}"
+          style="display:flex; align-items:flex-end; gap:.75rem; flex-wrap:wrap">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <label class="small fw-semibold mb-0">Valor da matrícula:</label>
-      <div class="input-group input-group-sm" style="width:auto">
-        <span class="input-group-text">R$</span>
-        <input type="text" class="form-control form-control-sm" name="valor_matricula" style="width:120px"
-               value="{% if valor_matricula %}{{ '%.2f'|format(valor_matricula|float) }}{% endif %}" placeholder="0,00">
-      </div>
-      <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-check-lg"></i> Salvar</button>
-      <a href="{{ url_for('precadastro.cupons', academia_id=academia_id) }}" class="btn btn-sm btn-outline-success"><i class="bi bi-ticket-perforated"></i> Cupons de desconto</a>
-      <span class="text-muted small">Sem gateway configurado → o aluno recebe o valor para pagamento avulso.</span>
+      <input type="hidden" name="academia_id" value="{{ academia_id }}">
+      <label class="lst-campo" style="flex:none">
+        <span class="lst-campo__rotulo">Valor da matrícula</span>
+        <span class="pre-valor">
+          <span>R$</span>
+          <input type="text" name="valor_matricula" inputmode="decimal" placeholder="0,00"
+                 value="{{ '%.2f'|format(valor_matricula|float)|replace('.', ',') if valor_matricula is not none else '' }}">
+        </span>
+      </label>
+      <button type="submit" class="sh__btn sh__btn--forte"><i class="bi bi-check-lg"></i> Salvar valor</button>
     </form>
-  </div>
-
-  <!-- Toolbar -->
-  <form method="GET" action="{{ url_for('precadastro.lista') }}" id="formBuscaPrecad" class="toolbar">
-    <div class="search-wrap">
-      <i class="bi bi-search"></i>
-      <input type="text" class="search-input" id="inputBuscaPrecad"
-             name="busca" placeholder="Buscar por nome, e-mail, telefone ou CPF…"
-             value="{{ busca or '' }}" autocomplete="off">
-      <button type="button" class="clear-btn {% if busca %}show{% endif %}" id="btnLimparBusca" title="Limpar">
-        <i class="bi bi-x-circle-fill"></i>
-      </button>
-    </div>
-    {% if academias|length > 1 %}
-    <div class="d-flex align-items-center gap-2">
-      <span class="filter-label d-none d-md-inline">Academia</span>
-      <select name="academia_id" class="form-select form-select-sm" onchange="this.form.submit()">
-        {% for ac in academias %}
-        <option value="{{ ac.id }}" {% if ac.id == academia_id %}selected{% endif %}>{{ ac.nome }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    {% else %}
-      {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
-    {% endif %}
-  </form>
-
-  <!-- Lista de pré-cadastros -->
-  {% if precadastros %}
-  <div class="precad-grid">
-    {% for p in precadastros %}
-    {% set cor = palette[(p.id or 0) % palette|length] %}
-    <article class="precad-card">
-      <div class="precad-top">
-        {% if p.foto %}
-          <img src="{{ url_for('static', filename='uploads/precadastro/' ~ p.foto) }}" alt="{{ p.nome }}" class="precad-avatar"
-               onerror="this.outerHTML='<span class=&quot;precad-avatar-init&quot; style=&quot;background:{{ cor }}&quot;>{{ (p.nome or '?')[:1] }}</span>'">
-        {% else %}
-          <span class="precad-avatar-init" style="background: {{ cor }}">{{ (p.nome or '?')[:1] }}</span>
-        {% endif %}
-        <div class="flex-grow-1 min-w-0">
-          <p class="precad-name">{{ p.nome }}
-            {% if p.origem == 'matricula' %}
-            <span class="badge bg-success-subtle text-success ms-1"><i class="bi bi-mortarboard-fill me-1"></i>Matrícula</span>
-              {% if p.matricula_status == 'pago' %}<span class="badge bg-success ms-1">Paga</span>
-              {% elif p.matricula_status == 'pendente' %}<span class="badge bg-warning text-dark ms-1">Pagamento pendente</span>{% endif %}
-            {% elif p.origem == 'aula_experimental' %}
-            <span class="badge bg-primary-subtle text-primary ms-1"><i class="bi bi-stars me-1"></i>Aula experimental</span>
-            {% else %}
-            <span class="badge bg-secondary-subtle text-secondary ms-1"><i class="bi bi-person-plus me-1"></i>Pré-cadastro</span>
-            {% endif %}
-          </p>
-          {% if p.created_at %}
-          <span class="precad-data-chip">
-            <i class="bi bi-clock-history me-1"></i>
-            {{ p.created_at.strftime('%d/%m/%Y %H:%M') if p.created_at.strftime is defined else p.created_at }}
-          </span>
-          {% endif %}
-        </div>
-      </div>
-
-      {% if p.email %}
-      <div class="precad-meta-line">
-        <i class="bi bi-envelope"></i>
-        <span>{{ p.email }}</span>
-      </div>
-      {% endif %}
-      {% if p.telefone %}
-      <div class="precad-meta-line">
-        <i class="bi bi-telephone"></i>
-        <span>{{ p.telefone }}</span>
-      </div>
-      {% endif %}
-      {% if p.data_nascimento %}
-      <div class="precad-meta-line">
-        <i class="bi bi-calendar2-event"></i>
-        <span>{{ p.data_nascimento|data_br if p.data_nascimento|data_br else p.data_nascimento }}</span>
-        {% if p.sexo %} · <span class="text-muted">{{ p.sexo }}</span>{% endif %}
-      </div>
-      {% endif %}
-
-      <div class="precad-actions">
-        {% if p.origem == 'matricula' and p.tem_pagamento %}
-        <a href="{{ url_for('precadastro.matricula_pagamento', precad_id=p.id) }}" class="btn-act primary" title="Link de pagamento da matrícula (ver / reenviar)">
-          <i class="bi bi-credit-card-2-front-fill"></i> Pagamento
-        </a>
-        {% endif %}
-        <a href="{{ url_for('precadastro.promover', precadastro_id=p.id) }}" class="btn-act primary" title="Promover para aluno">
-          <i class="bi bi-person-check-fill"></i> Promover
-        </a>
-        <a href="{{ url_for('precadastro.editar', precadastro_id=p.id) }}" class="btn-act icon-only" title="Editar">
-          <i class="bi bi-pencil-fill"></i>
-        </a>
-        <form method="POST" action="{{ url_for('precadastro.excluir', precadastro_id=p.id) }}"
-              onsubmit="return confirm('Excluir o pré-cadastro de {{ p.nome }}? Esta ação não pode ser desfeita.');">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <button type="submit" class="btn-act icon-only danger" title="Excluir">
-            <i class="bi bi-trash-fill"></i>
-          </button>
-        </form>
-      </div>
-    </article>
-    {% endfor %}
-  </div>
-  {% else %}
-  <div class="empty-state">
-    <i class="bi bi-person-x"></i>
-    <div class="empty-title">
-      {% if busca %}
-      Nenhum pré-cadastro encontrado para "{{ busca }}".
+    <a class="sh__btn" href="{{ url_for('precadastro.cupons', academia_id=academia_id) }}">
+      <i class="bi bi-ticket-perforated"></i> Cupons de desconto
+    </a>
+    <span class="lst-quadro__meta" style="flex:1 1 220px">
+      {% if gateway_ativo %}
+        Cobrança da matrícula emitida pelo gateway
+        {{ {'asaas':'Asaas','mercadopago':'Mercado Pago','infinitepay':'InfinitePay',
+            'efi':'Efí','cora':'Cora','sumup':'SumUp'}.get(gateway_ativo, gateway_ativo|capitalize) }}.
       {% else %}
-      Nenhum pré-cadastro nesta academia.
+        Sem gateway configurado, o aluno recebe o valor para pagamento avulso.
       {% endif %}
-    </div>
-    {% if busca %}
-    <a href="{{ url_for('precadastro.lista', academia_id=academia_id) }}" class="btn btn-link text-decoration-none mt-2">Limpar busca</a>
-    {% else %}
-    <p class="small">Compartilhe o link acima para começar a receber pré-cadastros.</p>
-    {% endif %}
+    </span>
   </div>
-  {% endif %}
+</section>
 
-  {% if total_paginas > 1 %}
-  <nav class="mt-4">
-    <ul class="pagination justify-content-center pagination-sm">
-      <li class="page-item {% if pagina_atual == 1 %}disabled{% endif %}">
-        <a class="page-link" href="{{ url_for('precadastro.lista', busca=busca, academia_id=academia_id, page=pagina_atual-1) }}">
-          <i class="bi bi-chevron-left"></i>
-        </a>
-      </li>
-      {% for p in range(1, total_paginas + 1) %}
-      <li class="page-item {% if p == pagina_atual %}active{% endif %}">
-        <a class="page-link" href="{{ url_for('precadastro.lista', busca=busca, academia_id=academia_id, page=p) }}">{{ p }}</a>
-      </li>
-      {% endfor %}
-      <li class="page-item {% if pagina_atual == total_paginas %}disabled{% endif %}">
-        <a class="page-link" href="{{ url_for('precadastro.lista', busca=busca, academia_id=academia_id, page=pagina_atual+1) }}">
-          <i class="bi bi-chevron-right"></i>
-        </a>
-      </li>
-    </ul>
-  </nav>
-  {% endif %}
+{# -------------------------------------------------------------- indicadores #}
+<div class="sh__faixa">
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Pré-cadastros</span>
+    <span class="sh__faixa-valor">{{ stats.precadastro }}</span>
+    <span class="lst-sub">Aguardando contato</span>
+  </div>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Aulas experimentais</span>
+    <span class="sh__faixa-valor">{{ stats.aula_experimental }}</span>
+    <span class="lst-sub">Agendadas pelo link</span>
+  </div>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Matrículas pelo link</span>
+    <span class="sh__faixa-valor">{{ stats.matricula }}</span>
+    <span class="lst-sub">Concluídas no formulário</span>
+  </div>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Matrículas pagas</span>
+    <span class="sh__faixa-valor">{{ stats.matriculas_pagas }}</span>
+    <span class="lst-sub">Pagamento confirmado</span>
+  </div>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Promovidos a aluno</span>
+    <span class="sh__faixa-valor">{{ stats.promovidos }}</span>
+    <span class="lst-sub">Já viraram matrícula</span>
+  </div>
 </div>
 
+{# ------------------------------------------------------------------ filtros #}
+<form method="GET" action="{{ url_for('precadastro.lista') }}" class="lst-filtros">
+  <label class="lst-campo lst-campo--largo">
+    <span class="lst-campo__rotulo">Buscar</span>
+    <input type="text" name="busca" value="{{ busca }}" placeholder="Nome, e-mail, telefone ou CPF" autocomplete="off">
+  </label>
+  <label class="lst-campo lst-campo--curto">
+    <span class="lst-campo__rotulo">Origem</span>
+    <select name="origem">
+      <option value="">Todas</option>
+      <option value="precadastro" {% if origem_filtro == 'precadastro' %}selected{% endif %}>Pré-cadastro</option>
+      <option value="aula_experimental" {% if origem_filtro == 'aula_experimental' %}selected{% endif %}>Aula experimental</option>
+      <option value="matricula" {% if origem_filtro == 'matricula' %}selected{% endif %}>Matrícula</option>
+    </select>
+  </label>
+  <div class="lst-filtros__acoes">
+    <button type="submit" class="sh__btn sh__btn--forte">Filtrar</button>
+    {% if filtrado %}
+    <a href="{{ url_for('precadastro.lista', academia_id=academia_id) }}" class="sh__btn">Limpar</a>
+    {% endif %}
+  </div>
+</form>
+
+{# ------------------------------------------------------------------- tabela #}
+<section class="lst-quadro">
+  <header class="lst-quadro__topo">
+    <h2 class="lst-quadro__titulo">Interessados</h2>
+    <span class="lst-quadro__meta">{{ total }} pré-cadastro{{ 's' if total != 1 }}</span>
+  </header>
+
+  <div class="lst-rolagem">
+    <div class="lst-largura" style="--lst-min:540px">
+      <div class="lst-linha lin-pre lst-cab">
+        <div>Interessado</div>
+        <div class="col-email">E-mail</div>
+        <div class="col-tel">Telefone</div>
+        <div class="col-nasc">Nascimento</div>
+        <div class="col-receb">Recebido em</div>
+        <div class="lst-fim">Ações</div>
+      </div>
+
+      {% for p in precadastros %}
+      {% set partes = (p.nome or '?').split() %}
+      {% set rotulo_origem = {'matricula': 'Matrícula', 'aula_experimental': 'Aula experimental'}.get(p.origem, 'Pré-cadastro') %}
+      <div class="lst-linha lin-pre lst-item">
+        <div class="lst-pessoa">
+          {% set iniciais = partes[0][0]|upper ~ (partes[-1][0]|upper if partes|length > 1 else '') %}
+          {% if p.foto %}
+          {# As fotos são gravadas em static/uploads/precadastro/; se o arquivo
+             sumir, o onerror devolve as iniciais em vez do ícone quebrado. #}
+          <img src="{{ url_for('static', filename='uploads/precadastro/' ~ p.foto) }}"
+               alt="" class="lst-avatar"
+               onerror="this.outerHTML='<span class=&quot;lst-avatar lst-avatar--iniciais&quot;>{{ iniciais }}</span>'">
+          {% else %}
+          <span class="lst-avatar lst-avatar--iniciais">{{ iniciais }}</span>
+          {% endif %}
+          <span style="min-width:0">
+            <span class="lst-nome">{{ p.nome }}</span>
+            <span class="lst-sub">
+              {{ rotulo_origem }}
+              {%- if p.origem == 'matricula' %}
+              {# Quem já pagou a matrícula: é o que decide se dá para promover. #}
+              {%- if p.matricula_status == 'pago' %}
+              · <span class="lst-tag lst-tag--ok">Matrícula paga</span>
+              {%- elif p.tem_pagamento %}
+              · <span class="lst-tag lst-tag--alerta">Aguardando pagamento</span>
+              {%- endif %}
+              {%- endif %}
+            </span>
+          </span>
+        </div>
+
+        <div class="col-email lst-corta">
+          {% if p.email %}<a href="mailto:{{ p.email }}">{{ p.email }}</a>{% else %}<span class="lst-vazio-celula">—</span>{% endif %}
+        </div>
+
+        <div class="col-tel">{{ p.telefone|telefone_br if p.telefone else '—' }}</div>
+
+        <div class="col-nasc">{{ p.data_nascimento|data_br if p.data_nascimento else '—' }}</div>
+
+        <div class="col-receb">{{ p.created_at.strftime('%d/%m %H:%M') if p.created_at else '—' }}</div>
+
+        <div class="lst-acoes">
+          {% if p.origem == 'matricula' and p.tem_pagamento %}
+          {# Matrícula com link de cobrança: ver / reenviar o pagamento. #}
+          <a class="lst-acao js-modal-matricula" data-titulo="Pagamento da matrícula"
+             href="{{ url_for('precadastro.matricula_pagamento', precad_id=p.id) }}"
+             title="Link de pagamento da matrícula de {{ p.nome }}"
+             aria-label="Pagamento da matrícula de {{ p.nome }}">
+            <i class="bi bi-credit-card-2-front"></i>
+          </a>
+          {% endif %}
+          {% if p.origem == 'matricula' and p.matricula_status != 'pago' %}
+          {# Baixa manual: nem todo mundo consegue pagar pela cobrança online e
+             manda PIX direto — sem isto a matrícula ficava pendente para sempre. #}
+          <a class="lst-acao js-modal-matricula" data-titulo="Registrar pagamento"
+             href="{{ url_for('precadastro.matricula_registrar_pagamento', precad_id=p.id) }}"
+             title="Registrar pagamento da matrícula de {{ p.nome }}"
+             aria-label="Registrar pagamento da matrícula de {{ p.nome }}">
+            <i class="bi bi-cash-coin"></i>
+          </a>
+          {% endif %}
+          <a class="sh__btn sh__btn--forte" style="padding:.35rem .7rem"
+             href="{{ url_for('precadastro.promover', precadastro_id=p.id) }}">Promover</a>
+          <a class="lst-acao" title="Editar {{ p.nome }}" aria-label="Editar {{ p.nome }}"
+             href="{{ url_for('precadastro.editar', precadastro_id=p.id) }}">
+            <i class="bi bi-pencil"></i>
+          </a>
+          <form method="POST" action="{{ url_for('precadastro.excluir', precadastro_id=p.id) }}"
+                class="js-excluir-precad" data-nome="{{ p.nome }}" style="display:inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="lst-acao lst-acao--perigo"
+                    title="Excluir {{ p.nome }}" aria-label="Excluir {{ p.nome }}">
+              <i class="bi bi-trash"></i>
+            </button>
+          </form>
+        </div>
+      </div>
+      {% else %}
+      <p class="lst-vazio">
+        {% if filtrado %}Nenhum interessado encontrado com esses filtros.{% else %}Nenhum pré-cadastro recebido ainda.{% endif %}
+      </p>
+      {% endfor %}
+    </div>
+  </div>
+
+  {% if total_paginas > 1 %}
+  <div class="lst-paginacao">
+    <span class="lst-quadro__meta">Página {{ pagina_atual }} de {{ total_paginas }}</span>
+    <div style="display:flex; gap:.5rem">
+      {% if pagina_atual > 1 %}
+      <a class="sh__btn" href="{{ url_for('precadastro.lista', academia_id=academia_id, busca=busca, origem=origem_filtro, page=pagina_atual-1) }}">Anterior</a>
+      {% endif %}
+      {% if pagina_atual < total_paginas %}
+      <a class="sh__btn" href="{{ url_for('precadastro.lista', academia_id=academia_id, busca=busca, origem=origem_filtro, page=pagina_atual+1) }}">Próxima</a>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+</section>
+
+<footer class="lst-rodape">
+  © {{ current_year }} {{ academia_nome }}. Todos os direitos reservados.
+</footer>
+
+{% include 'components/_modal.html' %}
+{# Uma caixa só para as duas telas de matrícula: o conteúdo vem por fetch da
+   própria rota. Guardar 15 modais prontos na página carregaria um QR Code
+   base64 por linha — pesado e quase sempre inútil. #}
+<div class="um-modal" id="modalMatricula" onclick="umFechar(event,'modalMatricula')">
+  <div class="um-modal-cx" onclick="event.stopPropagation()">
+    <div class="um-modal-h">
+      <div>
+        <div class="um-modal-t" id="mmTitulo">Matrícula</div>
+        <div class="um-modal-s" id="mmSub"></div>
+      </div>
+      <button type="button" class="um-x" onclick="umFecharId('modalMatricula')" aria-label="Fechar">
+        <i class="bi bi-x-lg"></i>
+      </button>
+    </div>
+    <div class="um-modal-b" id="mmCorpo"></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
 <script>
-document.addEventListener('DOMContentLoaded', function () {
-  // Copiar link público
-  var btnCopiar = document.getElementById('btnCopiarLink');
-  if (btnCopiar) {
-    btnCopiar.addEventListener('click', function () {
-      var inp = document.getElementById('linkPrecad');
-      var url = inp.value;
-      var lbl = btnCopiar.querySelector('.lbl');
-      var ic = btnCopiar.querySelector('i');
-      function ok() {
-        btnCopiar.classList.add('copiado');
-        if (ic) ic.className = 'bi bi-check2';
-        if (lbl) lbl.textContent = 'Copiado!';
-        setTimeout(function () {
-          btnCopiar.classList.remove('copiado');
-          if (ic) ic.className = 'bi bi-clipboard';
-          if (lbl) lbl.textContent = 'Copiar';
-        }, 2000);
-      }
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(url).then(ok).catch(function () {
-          inp.select(); document.execCommand('copy'); ok();
-        });
-      } else {
-        inp.select(); document.execCommand('copy'); ok();
-      }
-    });
-  }
-
-  // Copiar link de aula experimental
-  var btnCopiarAE = document.getElementById('btnCopiarLinkAulaExp');
-  if (btnCopiarAE) {
-    btnCopiarAE.addEventListener('click', function () {
-      var inp = document.getElementById('linkAulaExp');
-      var url = inp.value;
-      var lbl = btnCopiarAE.querySelector('.lbl');
-      var ic = btnCopiarAE.querySelector('i');
-      function ok() {
-        btnCopiarAE.classList.add('copiado');
-        if (ic) ic.className = 'bi bi-check2';
-        if (lbl) lbl.textContent = 'Copiado!';
-        setTimeout(function () {
-          btnCopiarAE.classList.remove('copiado');
-          if (ic) ic.className = 'bi bi-clipboard';
-          if (lbl) lbl.textContent = 'Copiar';
-        }, 2000);
-      }
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(url).then(ok).catch(function () {
-          inp.select(); document.execCommand('copy'); ok();
-        });
-      } else {
-        inp.select(); document.execCommand('copy'); ok();
-      }
-    });
-  }
-
-  var btnCopiarLand = document.getElementById('btnCopiarLinkLanding');
-  if (btnCopiarLand) {
-    btnCopiarLand.addEventListener('click', function () {
-      var inp = document.getElementById('linkLanding');
-      var lbl = btnCopiarLand.querySelector('.lbl'); var ic = btnCopiarLand.querySelector('i');
-      function ok(){ btnCopiarLand.classList.add('copiado'); if(ic)ic.className='bi bi-check2'; if(lbl)lbl.textContent='Copiado!';
-        setTimeout(function(){ btnCopiarLand.classList.remove('copiado'); if(ic)ic.className='bi bi-clipboard'; if(lbl)lbl.textContent='Copiar'; },2000); }
-      if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(inp.value).then(ok).catch(function(){ inp.select(); document.execCommand('copy'); ok(); }); }
-      else { inp.select(); document.execCommand('copy'); ok(); }
-    });
-  }
-
-  var btnCopiarMat = document.getElementById('btnCopiarLinkMatricula');
-  if (btnCopiarMat) {
-    btnCopiarMat.addEventListener('click', function () {
-      var inp = document.getElementById('linkMatricula');
-      var lbl = btnCopiarMat.querySelector('.lbl');
-      var ic = btnCopiarMat.querySelector('i');
-      function ok() {
-        btnCopiarMat.classList.add('copiado');
-        if (ic) ic.className = 'bi bi-check2';
-        if (lbl) lbl.textContent = 'Copiado!';
-        setTimeout(function () {
-          btnCopiarMat.classList.remove('copiado');
-          if (ic) ic.className = 'bi bi-clipboard';
-          if (lbl) lbl.textContent = 'Copiar';
-        }, 2000);
-      }
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(inp.value).then(ok).catch(function () { inp.select(); document.execCommand('copy'); ok(); });
-      } else { inp.select(); document.execCommand('copy'); ok(); }
-    });
-  }
-
-  // Busca dinâmica (debounce + auto-submit)
-  var form = document.getElementById('formBuscaPrecad');
-  var input = document.getElementById('inputBuscaPrecad');
-  var btnLimpar = document.getElementById('btnLimparBusca');
-  if (input && form) {
-    var timer = null;
-    input.addEventListener('input', function () {
-      if (btnLimpar) btnLimpar.classList.toggle('show', !!input.value);
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(function () { form.submit(); }, 450);
-    });
-    if (btnLimpar) {
-      btnLimpar.addEventListener('click', function () {
-        input.value = '';
-        btnLimpar.classList.remove('show');
-        form.submit();
-      });
+// Copiar link público: usa a área de transferência quando disponível e cai
+// para um textarea temporário em navegador antigo ou origem sem HTTPS.
+document.querySelectorAll('.js-copiar').forEach(function (botao) {
+  botao.addEventListener('click', function () {
+    var url = botao.dataset.url || '';
+    var original = botao.innerHTML;
+    function avisar() {
+      botao.innerHTML = '<i class="bi bi-check-lg"></i> Copiado';
+      setTimeout(function () { botao.innerHTML = original; }, 1600);
     }
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(url).then(avisar);
+    } else {
+      var t = document.createElement('textarea');
+      t.value = url;
+      t.style.position = 'fixed';
+      t.style.opacity = '0';
+      document.body.appendChild(t);
+      t.select();
+      try { document.execCommand('copy'); avisar(); } finally { document.body.removeChild(t); }
+    }
+  });
+});
+
+document.querySelectorAll('.js-excluir-precad').forEach(function (form) {
+  form.addEventListener('submit', function (e) {
+    if (!confirm('Excluir o pré-cadastro de ' + (form.dataset.nome || 'este interessado') + '?')) e.preventDefault();
+  });
+});
+
+// ------------------------------------------------ modais da matrícula
+// As telas de pagamento e de baixa manual são carregadas da própria rota, em
+// fragmento. O href continua válido: se o fetch falhar, o link abre a página.
+var mmCorpo = document.getElementById('mmCorpo');
+
+// O fragmento entra por innerHTML, então o script dele não executaria: as
+// funções que os botões chamam ficam aqui, na página.
+function copiar(id, btn) {
+  var i = document.getElementById(id);
+  if (!i) return;
+  i.select();
+  var ok = function () {
+    var o = btn.innerHTML;
+    btn.innerHTML = '<i class="bi bi-check2"></i>';
+    setTimeout(function () { btn.innerHTML = o; }, 1500);
+  };
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(i.value).then(ok).catch(function () {
+      try { document.execCommand('copy'); } catch (e) {}
+      ok();
+    });
+  } else {
+    try { document.execCommand('copy'); } catch (e) {}
+    ok();
   }
+}
+
+function mmCarregar(url, titulo, sub) {
+  document.getElementById('mmTitulo').textContent = titulo || 'Matrícula';
+  document.getElementById('mmSub').textContent = sub || '';
+  mmCorpo.innerHTML = '<p class="text-muted mb-0">Carregando…</p>';
+  umAbrir('modalMatricula');
+  fetch(url + (url.indexOf('?') === -1 ? '?' : '&') + 'parcial=1',
+        { headers: { 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin' })
+    .then(function (r) { if (!r.ok) throw new Error(r.status); return r.text(); })
+    .then(function (html) {
+      mmCorpo.innerHTML = html;
+      // Dentro da caixa, "Cancelar" fecha o modal em vez de navegar, e o botão
+      // de baixa troca o conteúdo sem fechar e reabrir.
+      mmCorpo.querySelectorAll('.js-cancela').forEach(function (a) {
+        a.addEventListener('click', function (e) { e.preventDefault(); umFecharId('modalMatricula'); });
+      });
+      mmCorpo.querySelectorAll('.js-abre-baixa').forEach(function (a) {
+        a.addEventListener('click', function (e) {
+          e.preventDefault();
+          mmCarregar(a.getAttribute('href'), 'Registrar pagamento', sub || '');
+        });
+      });
+    })
+    .catch(function () {
+      mmCorpo.innerHTML = '<p class="text-danger mb-0">Não foi possível carregar aqui. '
+        + '<a href="' + url + '">Abrir em página cheia</a>.</p>';
+    });
+}
+
+document.querySelectorAll('.js-modal-matricula').forEach(function (link) {
+  link.addEventListener('click', function (e) {
+    e.preventDefault();
+    var linha = link.closest('.lst-linha');
+    var nome = linha ? (linha.querySelector('.lst-nome') || {}).textContent : '';
+    mmCarregar(link.getAttribute('href'), link.dataset.titulo, (nome || '').trim());
+  });
 });
 </script>
 {% endblock %}

@@ -954,6 +954,14 @@ def _tipo_calendario_para_sinc(tipo_ec, natureza_ec):
     return "competicao"
 
 
+def _rotulo_tipo_evento(ev):
+    """Rótulo da coluna Tipo na lista da academia. Festival aparece como festival
+    porque é assim que a associação cadastra e como o calendário o exibe."""
+    if (ev.get("natureza") or "") == "festival":
+        return "Festival"
+    return "Competição" if ev.get("tipo") == "competicao" else "Evento"
+
+
 def _url_lista_eventos_competicoes(tipo_filtro=None, academia_id=None):
     """URL da lista conforme o menu: eventos gerais, competições ou visão completa."""
     kwargs = {}
@@ -2137,8 +2145,8 @@ def _lista_eventos_competicoes_core(tipo_filtro):
             if not ids_acad:
                 flash("Nenhuma academia vinculada.", "warning")
                 return redirect(url_for("painel.home"))
-            # Eventos e competições são telas separadas: sem filtro, a academia vai
-            # para a de eventos, em vez de uma lista misturada rotulada "Eventos".
+            # A tela da academia mostra eventos e competições em abas, mas cada aba
+            # continua tendo URL própria (o menu lateral aponta para Eventos).
             if tipo_filtro not in ("evento", "competicao"):
                 return redirect(url_for("eventos_competicoes.lista_eventos",
                                         academia_id=request.args.get("academia_id")))
@@ -2146,48 +2154,79 @@ def _lista_eventos_competicoes_core(tipo_filtro):
             if academia_id_arg not in ids_acad:
                 academia_id_arg = ids_acad[0]
             url_kw["academia_id"] = academia_id_arg
-            cur.execute("""
-                SELECT ec.id, ec.nome, ec.descricao, ec.tipo, ec.data_inicio, ec.data_fim, ec.id_formulario, f.nome as formulario_nome,
-                       COALESCE(ea.aderiu, 0) as aderiu, ea.academia_id
+            # Traz os dois tipos: a aba inativa ainda precisa do total no contador.
+            sql_academia = """
+                SELECT ec.id, ec.nome, ec.descricao, ec.tipo, {natureza} ec.data_inicio, ec.data_fim,
+                       ec.id_formulario, f.nome as formulario_nome,
+                       COALESCE(ea.aderiu, 0) as aderiu, ea.academia_id,
+                       (SELECT COUNT(*) FROM eventos_competicoes_inscricoes i
+                         WHERE i.evento_id = ec.id AND i.academia_id = %s) as inscritos
                 FROM eventos_competicoes ec
                 INNER JOIN academias ac ON ac.id_associacao = ec.id_associacao AND ac.id = %s
                 LEFT JOIN formularios f ON f.id = ec.id_formulario
                 LEFT JOIN eventos_competicoes_adesao ea ON ea.evento_id = ec.id AND ea.academia_id = %s
-                """ + ("WHERE ec.tipo = %s " if tipo_filtro in ("evento", "competicao") else "") + """
                 ORDER BY ec.data_fim DESC
-            """, ((academia_id_arg, academia_id_arg) + ((tipo_filtro,) if tipo_filtro in ("evento", "competicao") else ())))
-            eventos = cur.fetchall()
-            for ev in eventos:
+            """
+            params_academia = (academia_id_arg, academia_id_arg, academia_id_arg)
+            try:
+                cur.execute(sql_academia.format(natureza="ec.natureza,"), params_academia)
+            except Exception as ex_ac:
+                err_ac = str(ex_ac).lower()
+                if "natureza" in err_ac or "1054" in err_ac or "unknown column" in err_ac:
+                    cur.execute(sql_academia.format(natureza=""), params_academia)
+                else:
+                    raise
+            todos = cur.fetchall()
+            for ev in todos:
                 ev["encerrado"] = _evento_encerrado(ev)
+                ev["aderido"] = bool(ev.get("aderiu"))
+                ev["inscricoes_abertas"] = not ev["encerrado"]
+                ev["encerra"] = ev.get("data_fim")
+                ev["formulario"] = ev.get("formulario_nome")
+                ev["inscritos"] = int(ev.get("inscritos") or 0)
+                ev["tipo_label"] = _rotulo_tipo_evento(ev)
+
+            eventos = [ev for ev in todos if ev.get("tipo") != "competicao"]
+            competicoes = [ev for ev in todos if ev.get("tipo") == "competicao"]
+            aba = "competicoes" if tipo_filtro == "competicao" else "eventos"
+            itens = competicoes if aba == "competicoes" else eventos
+
+            busca = (request.args.get("q") or "").strip().lower()
+            if busca:
+                itens = [ev for ev in itens if busca in (ev.get("nome") or "").lower()]
+            f_adesao = request.args.get("adesao")
+            if f_adesao in ("sim", "nao"):
+                itens = [ev for ev in itens if ev["aderido"] == (f_adesao == "sim")]
+            f_inscricoes = request.args.get("inscricoes")
+            if f_inscricoes in ("abertas", "encerradas"):
+                itens = [ev for ev in itens if ev["inscricoes_abertas"] == (f_inscricoes == "abertas")]
+            filtrado = bool(busca) or f_adesao in ("sim", "nao") or f_inscricoes in ("abertas", "encerradas")
+
+            # Anexos só dos que vão aparecer na tabela.
+            for ev in itens:
                 cur.execute("""
                     SELECT id, nome_arquivo, tamanho_bytes, descricao
                     FROM eventos_competicoes_anexos
                     WHERE evento_id = %s
                     ORDER BY created_at DESC
                 """, (ev["id"],))
-                anexos = cur.fetchall()
-                for anexo in anexos:
-                    tamanho = anexo.get("tamanho_bytes") or 0
-                    if tamanho < 1024:
-                        anexo["tamanho_formatado"] = f"{tamanho} B"
-                    elif tamanho < 1024 * 1024:
-                        anexo["tamanho_formatado"] = f"{tamanho / 1024:.1f} KB"
-                    else:
-                        anexo["tamanho_formatado"] = f"{tamanho / (1024 * 1024):.1f} MB"
-                ev["anexos"] = anexos
+                ev["anexos"] = cur.fetchall()
+
             cur.execute("SELECT id, nome FROM academias WHERE id IN (%s) ORDER BY nome" % ",".join(["%s"] * len(ids_acad)), tuple(ids_acad))
             academias_sel = cur.fetchall()
             return render_template(
                 "eventos_competicoes/lista_academia.html",
+                aba=aba,
                 eventos=eventos,
+                competicoes=competicoes,
+                itens=itens,
+                filtrado=filtrado,
                 academias=academias_sel,
                 academias_ids=ids_acad,
                 academia_id=academia_id_arg,
+                academia=next((ac for ac in academias_sel if ac["id"] == academia_id_arg), None),
                 back_url=url_for("academia.painel_academia", academia_id=academia_id_arg) if academia_id_arg else url_for("painel.home"),
                 tipo_filtro=tipo_filtro,
-                url_lista_eventos=url_for("eventos_competicoes.lista_eventos", **url_kw),
-                url_lista_competicoes=url_for("eventos_competicoes.lista_competicoes", **url_kw),
-                url_lista_todos=url_for("eventos_competicoes.lista", **url_kw),
             )
 
         flash("Acesso negado.", "danger")
@@ -3633,9 +3672,20 @@ def inscritos(evento_id):
         # Locais de treino da academia, marcando os já vinculados a este evento.
         locais_evento = _locais_do_evento(cur, evento_id, academia_id)
 
+        # O shell usa `academia`/`academias` na lateral, no seletor do topo e no rodapé.
+        cur.execute("SELECT id, nome FROM academias WHERE id = %s", (academia_id,))
+        academia = cur.fetchone()
+        ids_acad = _get_ids_academias(cur)
+        academias = []
+        if ids_acad:
+            cur.execute("SELECT id, nome FROM academias WHERE id IN (%s) ORDER BY nome"
+                        % ",".join(["%s"] * len(ids_acad)), tuple(ids_acad))
+            academias = cur.fetchall()
+
         return render_template("eventos_competicoes/inscritos.html",
             evento=ev, inscricoes=inscricoes, academia_id=academia_id, encerrado=encerrado, campos_form=campos_form,
             link_inscricao=link_inscricao, locais_evento=locais_evento,
+            academia=academia, academias=academias,
             back_url=_url_lista_eventos_competicoes(ev.get("tipo"), academia_id=academia_id))
     finally:
         cur.close()
@@ -4405,9 +4455,19 @@ def incluir_avulso(evento_id):
                     flash(f"{dados['nome']} inscrito(a).", "success")
             return redirect(url_for("eventos_competicoes.inscritos", evento_id=evento_id, academia_id=academia_id))
 
+        # O shell usa `academia`/`academias` na lateral e no seletor do topo.
+        cur.execute("SELECT id, nome FROM academias WHERE id = %s", (academia_id,))
+        academia = cur.fetchone()
+        ids_acad = _get_ids_academias(cur)
+        academias = []
+        if ids_acad:
+            cur.execute("SELECT id, nome FROM academias WHERE id IN (%s) ORDER BY nome"
+                        % ",".join(["%s"] * len(ids_acad)), tuple(ids_acad))
+            academias = cur.fetchall()
+
         return render_template("eventos_competicoes/incluir_avulso.html",
             evento=ev, alunos=alunos, academia_id=academia_id, campos_form=campos_form,
-            graduacoes=graduacoes,
+            graduacoes=graduacoes, academia=academia, academias=academias,
             back_url=url_for("eventos_competicoes.inscritos", evento_id=evento_id, academia_id=academia_id))
     finally:
         cur.close()

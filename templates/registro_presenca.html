@@ -1,95 +1,172 @@
-{% extends "base.html" %}
+{% extends "base_academia.html" %}
+{% set menu_ativo = 'presencas' %}
+{% block pagina_titulo %}Registro de Presença{% endblock %}
+{% block pagina_subtitulo %}Marque os alunos presentes e grave a chamada.{% endblock %}
+{% block pagina_acoes %}
+  {% set back_url = back_url or get_back_url_default() %}
+  <a href="{{ back_url }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Voltar</a>
+{% endblock %}
 {% block content %}
 <style>
-.registro-aluno-card { cursor: pointer; transition: background 0.2s, border-color 0.2s; }
-.registro-aluno-card:hover { background: #fff9e6; border-color: #ffc107 !important; }
-.registro-aluno-card:has(input:checked) { background: #fff3cd; border-color: #ffc107 !important; }
-.registro-aluno-foto { width: 56px; height: 56px; object-fit: cover; border: 2px solid #e9ecef; }
-.registro-aluno-foto-placeholder { background: #f8f9fa; font-size: 1.5rem; }
-.registro-aluno-nome { word-break: break-word; line-height: 1.2; }
-.registro-aluno-card .form-check-input { margin-top: 0.25rem; flex-shrink: 0; }
+/* Cartão do aluno: selecionado fica verde, como no desenho da tela. O estado
+   continua vindo do checkbox — o :has apenas reflete visualmente. */
+.registro-aluno-card {
+  cursor: pointer;
+  border: 1px solid var(--sh-line) !important;
+  border-radius: var(--u-radius) !important;
+  background: #fff;
+  transition: background .2s, border-color .2s, box-shadow .2s;
+}
+.registro-aluno-card:hover { border-color: #cfcbc4 !important; box-shadow: var(--u-shadow-sm); }
+.registro-aluno-card:has(input:checked) {
+  background: #f2fbf5;
+  border-color: #86cea3 !important;
+}
+.registro-aluno-card .form-check-input { margin-top: .25rem; flex-shrink: 0; width: 1.25rem; height: 1.25rem; }
+.registro-aluno-card:has(input:checked) .form-check-input {
+  background-color: var(--u-success);
+  border-color: var(--u-success);
+}
+.registro-aluno-foto { width: 64px; height: 64px; object-fit: cover; border: 0; }
+.registro-aluno-foto-placeholder { background: #f1efeb; font-size: 1.6rem; color: #b6b2ab; }
+.registro-aluno-nome { word-break: break-word; line-height: 1.25; font-size: .98rem; }
 
-/* Resumo da chamada — mini-dashboard */
-.registro-chamada-stats .registro-stat-card {
-  display: flex;
+/* Faixa do aluno: quadradinho na cor da graduação + nome. As faixas seguem a
+   nomenclatura do cadastro, com as combinadas (cinza/azul) em degradê. */
+.registro-aluno-faixa {
+  display: inline-flex;
   align-items: center;
-  gap: 0.75rem;
-  padding: 0.9rem 1rem;
-  border-radius: 14px;
-  border: 1px solid rgba(0,0,0,.08);
-  height: 100%;
-  min-height: 76px;
-  box-shadow: 0 1px 3px rgba(0,0,0,.06);
-  transition: box-shadow 0.2s, transform 0.15s;
+  gap: .35rem;
+  margin-top: .25rem;
+  font-size: .78rem;
+  color: var(--sh-ink-soft);
 }
-.registro-chamada-stats .registro-stat-card:hover {
-  box-shadow: 0 4px 12px rgba(0,0,0,.08);
-}
-.registro-stat-total {
-  background: linear-gradient(145deg, #f8fafc 0%, #e8eef5 100%);
-  border-color: #cbd5e1 !important;
-}
-.registro-stat-total .registro-stat-icon { color: #475569; }
-.registro-stat-pres {
-  background: linear-gradient(145deg, #ecfdf5 0%, #d1fae5 100%);
-  border-color: #6ee7b7 !important;
-}
-.registro-stat-pres .registro-stat-icon { color: #059669; }
-.registro-stat-pres .registro-stat-label { color: #047857; }
-.registro-stat-falt {
-  background: linear-gradient(145deg, #fef2f2 0%, #fecaca 55%, #fee2e2 100%);
-  border-color: #fca5a5 !important;
-}
-.registro-stat-falt .registro-stat-icon { color: #dc2626; }
-.registro-stat-falt .registro-stat-label { color: #b91c1c; }
-.registro-stat-icon {
-  font-size: 1.85rem;
-  line-height: 1;
+.registro-faixa-cor {
+  width: 14px; height: 9px;
+  border-radius: 2px;
+  border: 1px solid rgba(0, 0, 0, .18);
+  background: #e9e7e3;
   flex-shrink: 0;
-  opacity: 0.92;
 }
-.registro-stat-body {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  line-height: 1.1;
-  min-width: 0;
+.faixa-branca        { background: #ffffff; }
+.faixa-cinza         { background: #9ca3af; }
+.faixa-azul          { background: #2563eb; }
+.faixa-amarela       { background: #facc15; }
+.faixa-laranja       { background: #f97316; }
+.faixa-verde         { background: #16a34a; }
+.faixa-roxa          { background: #7c3aed; }
+.faixa-marrom        { background: #78350f; }
+.faixa-preta         { background: #111111; }
+.faixa-vermelha      { background: #dc2626; }
+.faixa-coral         { background: #fb7185; }
+.faixa-cinza-branca  { background: linear-gradient(90deg, #9ca3af 50%, #ffffff 50%); }
+.faixa-cinza-azul    { background: linear-gradient(90deg, #9ca3af 50%, #2563eb 50%); }
+.faixa-cinza-preta   { background: linear-gradient(90deg, #9ca3af 50%, #111111 50%); }
+.faixa-azul-branca   { background: linear-gradient(90deg, #2563eb 50%, #ffffff 50%); }
+.faixa-amarela-branca{ background: linear-gradient(90deg, #facc15 50%, #ffffff 50%); }
+.faixa-verde-branca  { background: linear-gradient(90deg, #16a34a 50%, #ffffff 50%); }
+.faixa-laranja-branca{ background: linear-gradient(90deg, #f97316 50%, #ffffff 50%); }
+
+/* Resumo da chamada: uma faixa só, com divisórias — sem gradiente nem cor de
+   fundo por card. O que informa é o número; a cor fica no valor. */
+#registroChamadaResumoRoot {
+  background: #fff;
+  border: 1px solid var(--sh-line);
+  border-radius: var(--u-radius);
+  padding: 1.15rem 1.4rem;
 }
+.registro-chamada-stats { --bs-gutter-x: 0; }
+.registro-chamada-stats .registro-stat-card {
+  display: block;
+  padding: 0 1.4rem;
+  height: 100%;
+  border: 0;
+  border-left: 1px solid var(--sh-line);
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+.registro-chamada-stats > [class*="col-"]:first-child .registro-stat-card {
+  border-left: 0;
+  padding-left: 0;
+}
+.registro-stat-icon { display: none; }   /* o mockup usa só rótulo e número */
+.registro-stat-body { display: flex; flex-direction: column-reverse; }
 .registro-stat-value {
-  font-size: clamp(1.45rem, 4vw, 1.85rem);
-  font-weight: 800;
-  letter-spacing: -0.03em;
+  font-size: 1.75rem;
+  font-weight: 600;
+  letter-spacing: -.02em;
   font-variant-numeric: tabular-nums;
-  color: #0f172a;
+  color: var(--sh-ink);
+  line-height: 1.1;
 }
-.registro-stat-pres .registro-stat-value { color: #065f46; }
-.registro-stat-falt .registro-stat-value { color: #991b1b; }
+.registro-stat-pres .registro-stat-value { color: var(--u-success); }
+.registro-stat-falt .registro-stat-value { color: var(--sh-ink); }
 .registro-stat-label {
-  font-size: 0.68rem;
+  font-size: .68rem;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-weight: 700;
-  color: #64748b;
-  margin-top: 0.2rem;
+  letter-spacing: .12em;
+  font-weight: 600;
+  color: var(--sh-ink-soft);
+  margin-bottom: .35rem;
 }
-.registro-chamada-bar-wrap {
-  margin-top: 0.35rem;
-}
+.registro-chamada-bar-wrap { margin-top: 1rem; }
 .registro-chamada-bar-wrap .progress {
   border-radius: 999px;
   overflow: hidden;
-  background: rgba(0,0,0,.06);
+  background: #ececea;
+  height: 6px !important;
 }
-.registro-chamada-bar-wrap .progress-bar {
-  border-radius: 999px;
-  transition: width 0.35s ease;
-}
+.registro-chamada-bar-wrap .progress-bar { border-radius: 999px; transition: width .35s ease; }
 .registro-chamada-bar-caption {
-  font-size: 0.72rem;
-  color: #64748b;
-  margin-top: 0.35rem;
+  font-size: .82rem;
+  color: var(--sh-ink-soft);
+  margin-top: .6rem;
+  text-align: left !important;
 }
-.registro-chamada-bar-caption strong { font-weight: 700; color: #334155; }
+.registro-chamada-bar-caption strong { font-weight: 600; color: var(--sh-ink); }
+
+/* Blocos brancos da tela, no lugar do card com cabeçalho amarelo. */
+.registro-bloco { background: transparent; }
+.registro-bloco-corpo { display: flex; flex-direction: column; gap: 1.25rem; }
+#formFiltrosRegistroPresenca {
+  background: #fff;
+  border: 1px solid var(--sh-line);
+  border-radius: var(--u-radius);
+  padding: 1.25rem 1.4rem;
+  margin-bottom: 0 !important;
+}
+/* Barra de ações fixa no rodapé: as três ações da chamada sempre à mão,
+   sem precisar rolar até o fim da lista. */
+.registro-acoes-rodape {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  flex-wrap: wrap;
+  background: #fff;
+  border: 1px solid var(--sh-line);
+  border-radius: var(--u-radius);
+  padding: .85rem 1rem;
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, .05);
+}
+.registro-acoes-rodape .registro-acoes-esq { display: flex; gap: .6rem; flex-wrap: wrap; }
+.registro-acoes-rodape .btn-registrar {
+  margin-left: auto;
+  background: var(--sh-red);
+  border-color: var(--sh-red);
+  color: #fff;
+  font-weight: 600;
+  padding: .6rem 1.4rem;
+}
+.registro-acoes-rodape .btn-registrar:hover { background: #c40018; border-color: #c40018; color: #fff; }
+@media (max-width: 575.98px) {
+  .registro-acoes-rodape { flex-direction: column; align-items: stretch; }
+  .registro-acoes-rodape .registro-acoes-esq { display: grid; grid-template-columns: 1fr 1fr; }
+  .registro-acoes-rodape .btn-registrar { margin-left: 0; width: 100%; }
+}
 
 /* Outra academia modal */
 .oa-item { display: flex; align-items: center; gap: 0.75rem; padding: 0.6rem 0.75rem; border-radius: 10px; cursor: pointer; transition: background 0.15s; }
@@ -254,27 +331,45 @@
 }
 
 /* Avulso modal */
-.avulso-hero { background: linear-gradient(135deg,#1e3a8a 0%,#2563eb 100%); padding: 1.5rem 1.5rem 1.25rem; text-align: center; color: #fff; }
-.avulso-hero-icon { font-size: 2rem; opacity: 0.9; margin-bottom: 0.35rem; }
-.avulso-hero-title { font-size: 1.05rem; font-weight: 700; margin: 0; }
-.avulso-hero-sub { font-size: 0.8rem; opacity: 0.75; margin: 0.2rem 0 0; }
-.avulso-foto-preview { width: 80px; height: 80px; border-radius: 50%; object-fit: cover; border: 3px solid #2563eb; display: none; }
-.avulso-foto-wrap { display: flex; flex-direction: column; align-items: center; gap: 0.5rem; margin-bottom: 1.125rem; }
-.avulso-foto-label { display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; border: 1.5px dashed #93c5fd; border-radius: 10px; cursor: pointer; color: #2563eb; font-size: 0.85rem; font-weight: 600; transition: background 0.15s, border-color 0.15s; }
-.avulso-foto-label:hover { background: #eff6ff; border-color: #2563eb; }
+/* Cabeçalho do registro avulso: sem o degradê azul, alinhado aos demais
+   modais — fundo branco, texto escuro e divisória fina. */
+.avulso-hero {
+  position: relative;
+  background: #fff;
+  padding: 1.25rem 1.4rem 1.1rem;
+  text-align: left;
+  color: var(--sh-ink);
+  border-bottom: 1px solid var(--sh-line);
+}
+.avulso-hero .btn-close { filter: none; }
+.avulso-hero-icon { font-size: 1.4rem; color: var(--sh-ink-soft); margin-bottom: .3rem; }
+.avulso-hero-title { font-size: 1.05rem; font-weight: 600; margin: 0; }
+.avulso-hero-sub { font-size: .85rem; color: var(--sh-ink-soft); margin: .15rem 0 0; max-width: 40ch; }
+.avulso-foto-preview {
+  width: 84px; height: 84px; border-radius: 50%; object-fit: cover;
+  border: 1px solid var(--sh-line); display: none;
+}
+.avulso-foto-wrap { display: flex; flex-direction: column; align-items: center; gap: .5rem; margin-bottom: 1.125rem; }
+.avulso-foto-label {
+  display: flex; align-items: center; gap: .5rem;
+  padding: .55rem 1rem;
+  border: 1px dashed #cfcbc4;
+  border-radius: var(--u-radius-sm);
+  cursor: pointer;
+  color: var(--sh-ink);
+  font-size: .88rem; font-weight: 500;
+  transition: background .15s, border-color .15s;
+}
+.avulso-foto-label:hover { background: var(--sh-page-bg); border-color: var(--sh-ink-soft); }
 </style>
-<div class="row justify-content-center">
-  <div class="col-md-8 col-sm-12">
+{# Título, subtítulo e o botão Voltar agora vêm do layout (base_academia.html),
+   nos blocos pagina_titulo / pagina_subtitulo / pagina_acoes. Aqui fica só o
+   conteúdo, em blocos brancos sem cabeçalho colorido. #}
+<div class="row">
+  <div class="col-12">
 
-    <!-- Botão Voltar -->
-    {% set back_url = back_url or get_back_url_default() %}
-{% include 'components/botao_voltar.html' %}
-
-    <div class="card shadow">
-      <div class="card-header bg-warning text-dark">
-        <h4 class="mb-0">Registro de Presença</h4>
-      </div>
-      <div class="card-body">
+    <div class="registro-bloco">
+      <div class="registro-bloco-corpo">
 
         <!-- Seleção de Turma e Data -->
         <form method="get" class="mb-3 row g-3" id="formFiltrosRegistroPresenca">
@@ -365,12 +460,12 @@
             <div class="registro-chamada-bar-wrap px-1">
               <div class="progress" style="height: 8px;" title="Percentual de presença nesta tela">
                 <div class="progress-bar bg-success" id="registroChamadaBarra" role="progressbar"
-                     style="width: {% if chamada_presenca_consolidada and registro_chamada_total %}{{ (100 * registro_chamada_presentes / registro_chamada_total)|round(1) }}{% else %}0{% endif %}%;"
+                     style="width: {% if registro_chamada_total %}{{ (100 * registro_chamada_presentes / registro_chamada_total)|round(1) }}{% else %}0{% endif %}%;"
                      aria-valuenow="{{ registro_chamada_presentes }}" aria-valuemin="0" aria-valuemax="{{ registro_chamada_total or 1 }}"></div>
               </div>
               <div class="registro-chamada-bar-caption text-center">
-                Presença: <strong id="registroChamadaPct">{% if chamada_presenca_consolidada and registro_chamada_total %}{{ (100 * registro_chamada_presentes / registro_chamada_total)|round|int }}%{% else %}—{% endif %}</strong>
-                <span class="text-muted">{% if chamada_presenca_consolidada %} · marque os checkboxes para atualizar{% else %} · use <strong>Registrar Presença</strong> para gravar; até lá não há faltas consolidadas{% endif %}</span>
+                Presença: <strong id="registroChamadaPct">{% if registro_chamada_total %}{{ (100 * registro_chamada_presentes / registro_chamada_total)|round|int }}%{% else %}—{% endif %}</strong>
+                <span class="text-muted">{% if chamada_presenca_consolidada %} · chamada gravada; alterações valem ao registrar de novo{% else %} · prévia da seleção — use <strong>Registrar Presença</strong> para gravar{% endif %}</span>
               </div>
             </div>
           </div>
@@ -397,6 +492,12 @@
                   </div>
                   {% endif %}
                   <span class="registro-aluno-nome small fw-semibold">{{ aluno.nome }}</span>
+                  {% if aluno.faixa_aluno %}
+                  <span class="registro-aluno-faixa">
+                    <span class="registro-faixa-cor faixa-{{ aluno.faixa_aluno|lower|replace(' ', '-')|replace('/', '-') }}"></span>
+                    {{ aluno.faixa_aluno|capitalize }}
+                  </span>
+                  {% endif %}
                   {% if aluno.presenca_avulsa %}<span class="badge bg-secondary mt-1">Avulso</span>{% elif aluno.visitante %}<span class="badge bg-info mt-1">Visitante</span>{% elif aluno.aluno_visita %}<span class="badge bg-warning mt-1">Aluno em Visita</span>{% elif aluno.aluno_outra_turma %}<span class="badge bg-primary mt-1">Outra turma</span>{% endif %}
                   {% if aluno.aluno_visita and aluno.academia_origem_nome %}<div class="small text-muted mt-1"><i class="bi bi-building me-1"></i>{{ aluno.academia_origem_nome }}</div>{% endif %}
                   {% if aluno.visitando_outra_academia %}
@@ -427,20 +528,19 @@
             </div>
           </div>
 
-          <div class="row g-2 mb-3">
-            <div class="col-12 col-md-6">
-              <button type="button" class="btn btn-outline-secondary w-100 py-2 d-flex align-items-center justify-content-center gap-2" data-bs-toggle="modal" data-bs-target="#modalObservacaoAula" id="btnAbrirObservacao">
-                <i class="bi bi-journal-text"></i><span class="fw-semibold">Observação da aula</span>
+          <div class="registro-acoes-rodape">
+            <div class="registro-acoes-esq">
+              <button type="button" class="btn btn-outline-secondary d-flex align-items-center gap-2" data-bs-toggle="modal" data-bs-target="#modalObservacaoAula" id="btnAbrirObservacao">
+                <i class="bi bi-journal-text"></i><span>Observação da aula</span>
+              </button>
+              <button type="button" class="btn btn-outline-secondary d-flex align-items-center gap-2" data-bs-toggle="modal" data-bs-target="#modalPlanoAulaTexto" id="btnAbrirPlanoTexto">
+                <i class="bi bi-book"></i><span>Plano de aula</span>
               </button>
             </div>
-            <div class="col-12 col-md-6">
-              <button type="button" class="btn btn-outline-secondary w-100 py-2 d-flex align-items-center justify-content-center gap-2" data-bs-toggle="modal" data-bs-target="#modalPlanoAulaTexto" id="btnAbrirPlanoTexto">
-                <i class="bi bi-book"></i><span class="fw-semibold">Plano de aula</span>
-              </button>
-            </div>
+            <button type="submit" class="btn btn-registrar">
+              <i class="bi bi-check-lg me-1"></i>Registrar Presença
+            </button>
           </div>
-
-          <button type="submit" class="btn btn-warning w-100">Registrar Presença</button>
         </form>
 
         <div class="modal fade" id="modalObservacaoAula" tabindex="-1" aria-labelledby="lblObsAula" aria-hidden="true">
@@ -849,27 +949,19 @@ function removerCardExterno(btn, id) {
     const p = checked.length;
     elT.textContent = String(t);
     elP.textContent = String(p);
-    if (consolidada) {
-      elF.textContent = String(Math.max(0, t - p));
-      const ratio = t > 0 ? (100 * p) / t : 0;
-      if (bar) {
-        bar.style.width = `${Math.min(100, Math.max(0, ratio))}%`;
-        bar.setAttribute("aria-valuenow", String(p));
-        bar.setAttribute("aria-valuemax", String(t > 0 ? t : 1));
-      }
-      if (pctEl) {
-        pctEl.textContent = t > 0 ? `${Math.round(ratio)}%` : "—";
-      }
-    } else {
-      elF.textContent = "0";
-      if (bar) {
-        bar.style.width = "0%";
-        bar.setAttribute("aria-valuenow", String(p));
-        bar.setAttribute("aria-valuemax", String(t > 0 ? t : 1));
-      }
-      if (pctEl) {
-        pctEl.textContent = "—";
-      }
+    // O medidor acompanha a seleção mesmo antes de gravar: antes ele ficava
+    // parado em zero até a chamada ser consolidada, o que dava a impressão de
+    // que marcar aluno não surtia efeito. Continua sendo só leitura de tela —
+    // nada é gravado enquanto Registrar Presença não for acionado.
+    elF.textContent = String(Math.max(0, t - p));
+    const ratio = t > 0 ? (100 * p) / t : 0;
+    if (bar) {
+      bar.style.width = `${Math.min(100, Math.max(0, ratio))}%`;
+      bar.setAttribute("aria-valuenow", String(p));
+      bar.setAttribute("aria-valuemax", String(t > 0 ? t : 1));
+    }
+    if (pctEl) {
+      pctEl.textContent = t > 0 ? `${Math.round(ratio)}%` : "—";
     }
   };
   form.addEventListener("change", window.syncResumoChamada);

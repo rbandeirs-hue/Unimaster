@@ -19,6 +19,20 @@ bp_calendario = Blueprint('calendario', __name__, url_prefix='/calendario')
 # 🔹 HELPERS
 # ============================================================
 
+MESES_PT = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+            'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
+
+
+def _hora_txt(hora):
+    """HH:MM a partir de time, timedelta ou string — os três aparecem no banco."""
+    if hora is None:
+        return ''
+    if hasattr(hora, 'strftime'):
+        return hora.strftime('%H:%M')
+    texto = str(hora)
+    return texto[:5] if len(texto) >= 5 else texto
+
+
 def _hora_para_sort(hora):
     """Converte hora (time/timedelta/str) para string ordenável HH:MM."""
     if hora is None:
@@ -93,6 +107,42 @@ def _get_academias_ids():
         return [nivel_id] if nivel_id else []
     
     return []
+
+
+def _ctx_shell(nivel=None, nivel_id=None):
+    """Contexto que o `base_academia.html` consome: item ativo da lateral,
+    seletor de academia do topo e nome no rodapé.
+
+    Fora do modo academia (federação, associação) devolve `academia=None`; a
+    lateral já esconde sozinha os itens que dependem de uma academia."""
+    if nivel == 'academia' and nivel_id:
+        academia_id = nivel_id
+    else:
+        academia_id = getattr(current_user, 'id_academia', None)
+
+    ids = _get_academias_ids() or []
+    if academia_id and academia_id not in ids:
+        ids = [academia_id] + ids
+    if not ids:
+        return {'academia': None, 'academias': [], 'academia_id': academia_id}
+
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute(
+            "SELECT id, nome FROM academias WHERE id IN (%s) ORDER BY nome"
+            % ",".join(["%s"] * len(ids)), tuple(ids))
+        academias = cur.fetchall()
+    except Exception:
+        academias = []
+    finally:
+        cur.close()
+        conn.close()
+
+    if not academia_id and len(academias) == 1:
+        academia_id = academias[0]['id']
+    academia = next((a for a in academias if a['id'] == academia_id), None)
+    return {'academia': academia, 'academias': academias, 'academia_id': academia_id}
 
 
 def _sincronizar_feriados_nacionais(ano, nivel, nivel_id):
@@ -593,6 +643,59 @@ def visualizar():
         eventos_por_data[data_str].append(evento)
     
     hoje_str = date.today().strftime('%Y-%m-%d')
+
+    # --------------------------------------------------------------- grade
+    # A tela monta a grade a partir de `celulas`; a montagem fica aqui porque
+    # o Jinja não tem calendário e a versão anterior calculava o primeiro dia
+    # da semana com aritmética de congruência dentro do template.
+    visao = request.args.get('visao', 'mes')
+    if visao not in ('mes', 'lista'):
+        visao = 'mes'
+    tipo_filtro = request.args.get('tipo') or ''
+    dia_filtro = request.args.get('dia', type=int)
+
+    def _horario(ev):
+        ini, fim = ev.get('hora_inicio'), ev.get('hora_fim')
+        if not ini:
+            return 'Dia inteiro'
+        return f"{_hora_txt(ini)} – {_hora_txt(fim)}" if fim else _hora_txt(ini)
+
+    def _item(ev):
+        return {
+            'id': ev.get('id'),
+            'nome': ev.get('titulo'),
+            'tipo': (ev.get('tipo') or 'evento'),
+            'horario': _horario(ev),
+            'cor': ev.get('cor'),
+        }
+
+    primeiro = date(ano, mes, 1)
+    ultimo_dia = (date(ano + (mes == 12), (mes % 12) + 1, 1) - timedelta(days=1)).day
+    # weekday(): segunda=0. A grade começa no domingo, então o deslocamento é
+    # (weekday + 1) % 7.
+    vazias_inicio = (primeiro.weekday() + 1) % 7
+
+    celulas = [{'dia': None, 'hoje': False, 'itens': []} for _ in range(vazias_inicio)]
+    for dia in range(1, ultimo_dia + 1):
+        data_str = '%04d-%02d-%02d' % (ano, mes, dia)
+        itens = [_item(ev) for ev in eventos_por_data.get(data_str, [])
+                 if not tipo_filtro or (ev.get('tipo') or 'evento') == tipo_filtro]
+        celulas.append({'dia': dia, 'hoje': data_str == hoje_str, 'itens': itens})
+    while len(celulas) % 7:
+        celulas.append({'dia': None, 'hoje': False, 'itens': []})
+
+    lancamentos = []
+    for data_str in sorted(eventos_por_data.keys()):
+        for ev in eventos_por_data[data_str]:
+            if tipo_filtro and (ev.get('tipo') or 'evento') != tipo_filtro:
+                continue
+            item = _item(ev)
+            item['data'] = ev.get('data_inicio')
+            lancamentos.append(item)
+    if dia_filtro:
+        lancamentos = [l for l in lancamentos
+                       if getattr(l['data'], 'day', None) == dia_filtro]
+
     return render_template('calendario/visualizar.html',
                           nivel=nivel,
                           nivel_id=nivel_id,
@@ -600,7 +703,19 @@ def visualizar():
                           ano=ano,
                           eventos_por_data=eventos_por_data,
                           contexto=contexto,
-                          hoje_str=hoje_str)
+                          hoje_str=hoje_str,
+                          menu_ativo='calendario',
+                          visao=visao,
+                          tipo_filtro=tipo_filtro,
+                          dia_filtro=dia_filtro,
+                          celulas=celulas,
+                          lancamentos=lancamentos,
+                          mes_label='%s de %s' % (MESES_PT[mes - 1], ano),
+                          mes_ant=(mes - 1) or 12,
+                          ano_ant=ano if mes > 1 else ano - 1,
+                          mes_prox=(mes % 12) + 1,
+                          ano_prox=ano if mes < 12 else ano + 1,
+                          **_ctx_shell(nivel, nivel_id))
 
 
 @bp_calendario.route('/aluno')
@@ -973,7 +1088,8 @@ def sincronizar():
                           nivel_id=nivel_id,
                           historico=historico,
                           ano_atual=ano_atual,
-                          conflitos_pendentes=conflitos_pendentes if nivel == 'academia' else 0)
+                          conflitos_pendentes=conflitos_pendentes if nivel == 'academia' else 0,
+                          **_ctx_shell(nivel, nivel_id))
 
 
 @bp_calendario.route('/sincronizar/feriados', methods=['POST'])
@@ -1465,7 +1581,8 @@ def sincronizar_pdf():
                                    eventos=eventos,
                                    arquivo_nome=arquivo_nome,
                                    nivel=nivel,
-                                   nivel_id=nivel_id)
+                                   nivel_id=nivel_id,
+                                   **_ctx_shell(nivel, nivel_id))
         
         # Ação: importar eventos selecionados
         if acao == 'importar':
@@ -1479,7 +1596,8 @@ def sincronizar_pdf():
                                            eventos=eventos,
                                            arquivo_nome=arquivo_nome,
                                            nivel=nivel,
-                                           nivel_id=nivel_id)
+                                           nivel_id=nivel_id,
+                                           **_ctx_shell(nivel, nivel_id))
                 return redirect(url_for('calendario.sincronizar_pdf'))
             
             eventos = session.get('calendario_pdf_eventos', [])
@@ -1562,7 +1680,8 @@ def sincronizar_pdf():
             
             return redirect(url_for('calendario.sincronizar'))
     
-    return render_template('calendario/pdf_upload.html', nivel=nivel, nivel_id=nivel_id)
+    return render_template('calendario/pdf_upload.html', nivel=nivel, nivel_id=nivel_id,
+                           **_ctx_shell(nivel, nivel_id))
 
 
 @bp_calendario.route('/conflitos')
@@ -1576,8 +1695,6 @@ def conflitos_aula_feriado():
 
     conn = get_db_connection()
     cur = conn.cursor(dictionary=True)
-    cur.execute("SELECT id, nome FROM academias WHERE id = %s", (nivel_id,))
-    academia = cur.fetchone()
     cur.execute("""
         SELECT c.*, e.titulo as aula_titulo, e.hora_inicio, e.hora_fim
         FROM conflitos_aula_feriado c
@@ -1590,7 +1707,8 @@ def conflitos_aula_feriado():
     conn.close()
 
     return render_template('calendario/conflitos_aula_feriado.html',
-                          conflitos=conflitos, academia=academia, nivel_id=nivel_id)
+                          conflitos=conflitos, nivel=nivel, nivel_id=nivel_id,
+                          **_ctx_shell(nivel, nivel_id))
 
 
 @bp_calendario.route('/conflitos/<int:conflito_id>/resolver', methods=['POST'])
@@ -1717,7 +1835,8 @@ def novo_evento():
             cur.close()
             conn.close()
     
-    return render_template('calendario/novo_evento.html', nivel=nivel, nivel_id=nivel_id)
+    return render_template('calendario/novo_evento.html', nivel=nivel, nivel_id=nivel_id,
+                           **_ctx_shell(nivel, nivel_id))
 
 
 @bp_calendario.route('/aprovacoes')
@@ -1757,7 +1876,8 @@ def aprovacoes():
     return render_template('calendario/aprovacoes.html',
                           aprovacoes=aprovacoes_pendentes,
                           nivel=nivel,
-                          nivel_id=nivel_id)
+                          nivel_id=nivel_id,
+                          **_ctx_shell(nivel, nivel_id))
 
 
 @bp_calendario.route('/aprovacoes/<int:aprovacao_id>/aprovar', methods=['POST'])
@@ -1948,7 +2068,8 @@ def lista_eventos():
     
     return render_template('calendario/lista_eventos.html',
                           eventos=eventos, nivel=nivel, nivel_id=nivel_id,
-                          contexto=contexto, mes=mes, ano=ano, filtro=filtro)
+                          contexto=contexto, mes=mes, ano=ano, filtro=filtro,
+                          **_ctx_shell(nivel, nivel_id))
 
 
 @bp_calendario.route('/evento/<int:evento_id>/cancelar', methods=['POST'])
@@ -2092,4 +2213,5 @@ def criar_excecao(evento_id):
     cur.close()
     conn.close()
     
-    return render_template('calendario/criar_excecao.html', evento=evento, nivel=nivel, nivel_id=nivel_id)
+    return render_template('calendario/criar_excecao.html', evento=evento, nivel=nivel, nivel_id=nivel_id,
+                           **_ctx_shell(nivel, nivel_id))

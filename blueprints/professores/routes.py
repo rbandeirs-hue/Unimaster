@@ -58,6 +58,11 @@ def lista(academia_id):
         return redirect(url_for("painel.home"))
 
     origin = request.args.get("origin", "")
+    busca = (request.args.get("busca") or "").strip()
+    modalidade_filtro = request.args.get("modalidade_id", type=int)
+    situacao = (request.args.get("situacao") or "").strip().lower()
+    if situacao not in ("ativo", "inativo"):
+        situacao = ""
 
     db = get_db_connection()
     cur = db.cursor(dictionary=True)
@@ -117,8 +122,52 @@ def lista(academia_id):
         for r in cur.fetchall():
             mods_por_prof.setdefault(r["professor_id"], []).append(r["nome"])
         for p in professores:
-            p["modalidades_nomes"] = ", ".join(mods_por_prof.get(p["id"], [])) or "—"
+            nomes = mods_por_prof.get(p["id"], [])
+            p["modalidades"] = nomes
+            p["modalidades_nomes"] = ", ".join(nomes) or "—"
+
+    # Opções do filtro de modalidade: as que a academia realmente pratica.
+    cur.execute(
+        """
+        SELECT DISTINCT m.id, m.nome
+        FROM modalidade m
+        JOIN academia_modalidades am ON am.modalidade_id = m.id
+        WHERE am.academia_id = %s AND m.ativo = 1
+        ORDER BY m.nome
+        """,
+        (academia_id,),
+    )
+    modalidades_opts = cur.fetchall()
     db.close()
+
+    # Os indicadores do topo contam a equipe INTEIRA — são o retrato da academia
+    # e não podem encolher quando o gestor filtra a tabela.
+    total_professores = len(professores)
+    total_ativos = sum(1 for p in professores if p.get("ativo"))
+    por_modalidade = []
+    for m in modalidades_opts:
+        n = sum(1 for p in professores if m["nome"] in (p.get("modalidades") or []))
+        if n:
+            por_modalidade.append({"id": m["id"], "nome": m["nome"], "total": n})
+    por_modalidade.sort(key=lambda x: (-x["total"], x["nome"]))
+
+    # Filtros aplicados só à listagem.
+    if busca:
+        alvo = busca.lower()
+        professores = [
+            p for p in professores
+            if alvo in (p.get("nome") or "").lower()
+            or alvo in (p.get("email") or "").lower()
+            or alvo in "".join(filter(str.isdigit, str(p.get("telefone") or "")))
+        ]
+    if modalidade_filtro:
+        nome_mod = next((m["nome"] for m in modalidades_opts if m["id"] == modalidade_filtro), None)
+        if nome_mod:
+            professores = [p for p in professores if nome_mod in (p.get("modalidades") or [])]
+    if situacao == "ativo":
+        professores = [p for p in professores if p.get("ativo")]
+    elif situacao == "inativo":
+        professores = [p for p in professores if not p.get("ativo")]
 
     return render_template(
         "professores/lista_professores.html",
@@ -126,6 +175,14 @@ def lista(academia_id):
         academia=academia,
         academia_id=academia_id,
         origin=origin,
+        busca=busca,
+        modalidade_id=modalidade_filtro,
+        situacao=situacao,
+        modalidades_opts=modalidades_opts,
+        total_professores=total_professores,
+        total_ativos=total_ativos,
+        por_modalidade=por_modalidade,
+        filtrado=bool(busca or modalidade_filtro or situacao),
     )
 
 

@@ -1,288 +1,189 @@
-{% extends "base.html" %}
+{% extends "base_academia.html" %}
+{% set menu_ativo = 'turmas' %}
 {% block title %}Turmas{% endblock %}
+
+{% block pagina_titulo %}Turmas{% endblock %}
+{% block pagina_subtitulo %}Gerencie as turmas, horários, professores e matrículas.{% endblock %}
+
+{% block pagina_acoes %}
+  {% set back_url = back_url or get_back_url_default() %}
+  <a href="{{ back_url }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Voltar</a>
+  <a href="{{ url_for('turmas.cadastro_turma', academia_id=academia_id, next=request.full_path) if academia_id else url_for('turmas.cadastro_turma', next=request.full_path) }}"
+     class="sh__btn sh__btn--forte">
+    <i class="bi bi-plus-lg"></i> Nova Turma
+  </a>
+{% endblock %}
 
 {% block content %}
 <style>
-  :root {
-    --c-surface: #fff;
-    --c-border: #e5e9f2;
-    --c-text: #1f2937;
-    --c-muted: #6b7280;
-    --c-primary: #0d6efd;
-    --c-primary-soft: #e8f1ff;
-  }
-
-  .turmas-page { max-width: 1280px; margin: 0 auto; }
-
-  .turmas-header {
-    background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
-    border: 1px solid var(--c-border);
-    border-radius: 16px;
-    padding: 1.4rem 1.6rem;
-    margin-bottom: 1.1rem;
-    box-shadow: 0 1px 3px rgba(15,23,42,.04);
-  }
-  .turmas-header h1 {
-    font-size: 1.45rem; font-weight: 700; margin: 0;
-    color: var(--c-text);
-    display: flex; align-items: center; gap: .55rem;
-  }
-  .turmas-header h1 .icon-wrap {
-    width: 40px; height: 40px;
-    background: var(--c-primary-soft); color: var(--c-primary);
-    border-radius: 10px;
-    display: inline-flex; align-items: center; justify-content: center;
-    font-size: 1.1rem;
-  }
-  .turmas-header .subtitle {
-    font-size: .9rem; color: var(--c-muted);
-    margin-top: .25rem;
-  }
-  .turmas-stats { display: flex; flex-wrap: wrap; gap: .45rem; margin-top: .65rem; }
-  .turmas-chip {
-    display: inline-flex; align-items: center; gap: .35rem;
-    background: var(--c-primary-soft); color: var(--c-primary);
-    padding: .35rem .8rem; border-radius: 999px;
-    font-size: .8rem; font-weight: 600;
-  }
-  .turmas-chip.alt { background: #ecfdf5; color: #047857; }
-  .turmas-header .btn-novo {
-    background: var(--c-primary); border: none; color: #fff;
-    padding: .65rem 1.1rem; border-radius: 10px;
-    font-weight: 600; box-shadow: 0 2px 6px rgba(13,110,253,.25);
-    text-decoration: none;
-    display: inline-flex; align-items: center; gap: .35rem;
-    transition: transform .15s ease, box-shadow .15s ease;
-  }
-  .turmas-header .btn-novo:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(13,110,253,.35);
-    color: #fff;
-  }
-
-  /* Toolbar */
-  .toolbar {
-    background: var(--c-surface);
-    border: 1px solid var(--c-border);
-    border-radius: 14px;
-    padding: .85rem 1rem;
-    margin-bottom: 1.1rem;
+  /* Filtros: mesma caixa branca dos demais blocos da tela. */
+  .tur-filtros {
     display: flex;
     align-items: center;
-    flex-wrap: wrap;
     gap: .75rem;
-    box-shadow: 0 1px 3px rgba(15,23,42,.03);
-  }
-  .toolbar .search-input-wrap { flex: 1 1 280px; position: relative; }
-  .toolbar .search-input-wrap > i.bi-search {
-    position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
-    color: var(--c-muted); pointer-events: none;
-  }
-  .toolbar .search-input-wrap > .form-control {
-    border-radius: 10px;
-    border: 1px solid var(--c-border);
-    padding: .6rem 2.4rem .6rem 2.4rem;
-    background: #f9fafb;
-  }
-  .toolbar .search-input-wrap > .form-control:focus {
-    border-color: var(--c-primary);
-    box-shadow: 0 0 0 3px rgba(13,110,253,.15);
+    flex-wrap: wrap;
     background: #fff;
+    border: 1px solid var(--sh-line);
+    border-radius: var(--u-radius);
+    padding: .8rem;
+    margin: 1.25rem 0 0;
   }
-  .toolbar .clear-btn {
-    position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
-    background: transparent; border: 0; color: var(--c-muted);
-    cursor: pointer; padding: 0; line-height: 1;
+  .tur-busca { position: relative; flex: 1 1 320px; }
+  .tur-busca > .bi-search {
+    position: absolute; left: .9rem; top: 50%; transform: translateY(-50%);
+    color: var(--sh-ink-soft); pointer-events: none;
+  }
+  .tur-busca input {
+    width: 100%; height: 44px;
+    padding: 0 2.4rem;
+    border: 1px solid var(--sh-line);
+    border-radius: var(--u-radius-sm);
+    background: #fff;
+    color: var(--sh-ink);
+    font-size: .95rem;
+  }
+  .tur-busca input:focus {
+    outline: none;
+    border-color: #cfcbc4;
+    box-shadow: 0 0 0 3px rgba(28, 28, 28, .06);
+  }
+  .tur-busca .tur-limpar {
+    position: absolute; right: .85rem; top: 50%; transform: translateY(-50%);
+    background: none; border: 0; padding: 0; line-height: 1;
+    color: var(--sh-ink-soft); cursor: pointer;
     display: none;
   }
-  .toolbar .clear-btn.show { display: inline-block; }
-  .toolbar .form-select-sm {
-    border-radius: 10px;
-    border: 1px solid var(--c-border);
-    background: #f9fafb;
-    min-width: 200px;
-  }
-  .toolbar .filter-label {
-    font-size: .78rem; color: var(--c-muted); font-weight: 600;
-    text-transform: uppercase; letter-spacing: .04em;
-  }
-
-  /* Section header (modalidade) */
-  .section-header {
-    display: flex; align-items: center; gap: .65rem;
-    margin: .25rem 0 .85rem 0;
-    padding: 0 .25rem;
-  }
-  .section-header h6 {
-    margin: 0;
-    font-size: .8rem; font-weight: 700;
-    color: var(--c-text);
-    text-transform: uppercase; letter-spacing: .06em;
-  }
-  .section-header .line {
-    flex: 1; height: 1px; background: var(--c-border);
-  }
-  .section-header .count {
-    font-size: .72rem; color: var(--c-muted);
-    background: #f3f4f6; padding: .2rem .55rem; border-radius: 999px;
-    font-weight: 600;
+  .tur-busca .tur-limpar.is-visivel { display: block; }
+  /* `width: 100%` do .form-select empurraria o campo para a linha de baixo. */
+  .tur-filtros select {
+    flex: 0 0 auto;
+    width: auto;
+    height: 44px;
+    min-width: 210px;
+    border: 1px solid var(--sh-line);
+    border-radius: var(--u-radius-sm);
+    color: var(--sh-ink);
+    font-size: .95rem;
   }
 
-  /* Grid + cards */
-  .turmas-grid {
+  /* Contador ao lado do nome da modalidade, antes da régua da seção. */
+  .tur-conta {
+    padding: .1rem .5rem;
+    border-radius: var(--u-radius-pill);
+    background: #f1efeb;
+    color: var(--sh-ink-soft);
+    font-size: .72rem;
+    letter-spacing: 0;
+  }
+
+  /* ------------------------------------------------------------- cards */
+  .tur-grade {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
-    gap: 1rem;
-    margin-bottom: 1.5rem;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: var(--u-space-3);
   }
-  .turma-card {
-    background: var(--c-surface);
-    border: 1px solid var(--c-border);
-    border-radius: 14px;
-    padding: 1.1rem 1.15rem;
-    position: relative;
-    overflow: hidden;
-    transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease;
-    display: flex; flex-direction: column;
+  .tur-card {
+    display: flex;
+    flex-direction: column;
+    background: #fff;
+    border: 1px solid var(--sh-line);
+    border-radius: var(--u-radius);
+    padding: 1.15rem 1.25rem;
+    transition: border-color var(--u-transition), box-shadow var(--u-transition);
   }
-  .turma-card::before {
-    content: "";
-    position: absolute; top: 0; left: 0; right: 0; height: 4px;
-    background: var(--accent-color, var(--c-primary));
-  }
-  .turma-card:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 10px 24px rgba(15,23,42,.08);
-    border-color: #cfd6e2;
-  }
+  .tur-card:hover { border-color: #d8d5d0; box-shadow: var(--u-shadow-sm); }
 
-  .turma-card .titulo-row {
+  .tur-topo {
     display: flex; align-items: flex-start; justify-content: space-between;
-    gap: .5rem;
-    margin-bottom: .65rem;
+    gap: .6rem; margin-bottom: .75rem;
   }
-  .turma-card .nome {
-    font-size: 1.02rem; font-weight: 700; color: var(--c-text);
-    line-height: 1.3;
-    margin: 0;
-    word-break: break-word;
-  }
-  .turma-card .modalidade-pill {
-    font-size: .7rem; font-weight: 600;
-    padding: .2rem .55rem;
-    background: var(--accent-soft, var(--c-primary-soft));
-    color: var(--accent-color, var(--c-primary));
-    border-radius: 999px;
-    white-space: nowrap;
+  .tur-nome { font-size: 1.05rem; font-weight: 600; margin: 0; line-height: 1.3; word-break: break-word; }
+  .tur-mod {
     flex-shrink: 0;
+    padding: .15rem .55rem;
+    border: 1px solid var(--sh-line);
+    border-radius: var(--u-radius-pill);
+    background: var(--sh-page-bg);
+    color: var(--sh-ink-soft);
+    font-size: .74rem;
+    white-space: nowrap;
   }
 
-  .turma-card .info {
-    display: flex; align-items: center; gap: .5rem;
-    font-size: .85rem; color: var(--c-muted);
-    padding: .25rem 0;
+  .tur-info {
+    display: flex; align-items: center; gap: .6rem;
+    padding: .18rem 0;
+    font-size: .9rem;
+    color: var(--sh-ink);
   }
-  .turma-card .info i {
-    width: 16px; flex-shrink: 0; color: #94a3b8;
-  }
+  .tur-info i { width: 1.1rem; text-align: center; color: var(--sh-ink-soft); flex-shrink: 0; }
 
-  .turma-card .badges-row {
-    display: flex; flex-wrap: wrap; gap: .35rem;
-    margin-top: .65rem;
+  /* Ocupação: a barra só aparece cheia quando a turma controla limite. */
+  .tur-ocupacao {
+    height: 5px;
+    margin: .9rem 0 .55rem;
+    border-radius: var(--u-radius-pill);
+    background: #eceae6;
+    overflow: hidden;
   }
-  .turma-card .chip {
-    font-size: .72rem; font-weight: 600;
-    padding: .25rem .6rem;
-    border-radius: 999px;
-    background: #f3f4f6; color: #374151;
-    border: 1px solid #e5e7eb;
-  }
-  .turma-card .chip.success { background: #ecfdf5; color: #047857; border-color: #a7f3d0; }
-  .turma-card .chip.warn { background: #fef3c7; color: #92400e; border-color: #fde68a; }
-  .turma-card .chip.danger { background: #fef2f2; color: #b91c1c; border-color: #fecaca; }
-  .turma-card .chip.muted { background: #eef2f7; color: #475569; border-color: #cbd5e1; }
+  .tur-ocupacao span { display: block; height: 100%; background: var(--sh-ink-soft); }
+  .tur-ocupacao--ok span { background: #17803d; }
+  .tur-ocupacao--cheia span { background: var(--sh-red); }
 
-  .turma-card .actions {
-    display: flex; gap: .4rem; margin-top: auto;
-    padding-top: .85rem; border-top: 1px solid #f1f3f5;
+  .tur-rodape {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: .6rem;
+    font-size: .84rem;
+    color: var(--sh-ink-soft);
   }
-  .turma-card .btn-act {
-    flex: 1;
-    border-radius: 10px;
-    padding: .5rem .65rem;
-    font-size: .82rem; font-weight: 600;
-    border: 1px solid var(--c-border);
-    background: #fff; color: var(--c-text);
-    display: inline-flex; align-items: center; justify-content: center; gap: .35rem;
-    cursor: pointer;
-    transition: all .15s ease;
-    text-decoration: none;
-  }
-  .turma-card .btn-act:hover { border-color: var(--c-primary); color: var(--c-primary); background: #f8fbff; }
-  .turma-card .btn-act.primary { background: var(--c-primary); color: #fff; border-color: var(--c-primary); }
-  .turma-card .btn-act.primary:hover { background: #0856c5; border-color: #0856c5; }
-  .turma-card .btn-act.disabled, .turma-card .btn-act:disabled {
-    background: #f3f4f6; color: #9ca3af; border-color: #e5e7eb;
-    cursor: not-allowed;
-  }
-  .turma-card .btn-act.icon-only { flex: 0 0 38px; padding: .5rem; }
-  .turma-card .btn-act.btn-excluir-turma:hover {
-    border-color: #dc2626;
-    background: #fef2f2;
-    color: #b91c1c;
-  }
+  .tur-estado { font-weight: 600; }
+  .tur-estado--ok { color: #17803d; }
+  .tur-estado--cheia { color: var(--sh-red); }
 
-  /* Empty */
-  .empty-state {
-    background: var(--c-surface);
-    border: 1px dashed var(--c-border);
-    border-radius: 16px;
+  .tur-acoes { display: flex; gap: .5rem; margin-top: 1.05rem; }
+  .tur-acoes .sh__btn { flex: 1; justify-content: center; padding: .6rem .8rem; font-size: .88rem; }
+  .tur-acoes .sh__btn--icone { flex: 0 0 42px; padding: .6rem 0; }
+  .tur-acoes .tur-excluir:hover { border-color: var(--sh-red); color: var(--sh-red); background: #fff5f6; }
+
+  /* ------------------------------------------------------------- vazio */
+  .tur-vazio {
+    background: #fff;
+    border: 1px dashed var(--sh-line);
+    border-radius: var(--u-radius);
     padding: 3rem 1rem;
     text-align: center;
-    color: var(--c-muted);
+    color: var(--sh-ink-soft);
   }
-  .empty-state i.bi-journal-x {
-    font-size: 3rem; color: #d1d5db; display: block; margin-bottom: .75rem;
-  }
-  .empty-state .empty-title { color: var(--c-text); font-weight: 600; margin-bottom: .25rem; }
+  .tur-vazio i { font-size: 2.6rem; display: block; margin-bottom: .75rem; color: #cfcbc4; }
+  .tur-vazio strong { display: block; color: var(--sh-ink); font-weight: 600; margin-bottom: .5rem; }
 
   @media (max-width: 575.98px) {
-    .turmas-header { padding: 1rem; border-radius: 12px; }
-    .turmas-header h1 { font-size: 1.2rem; }
-    .toolbar { padding: .75rem; }
-    .toolbar .form-select-sm { width: 100%; min-width: 0; }
-    .turmas-grid { grid-template-columns: 1fr; gap: .8rem; }
-    .turma-card .actions { flex-direction: column; }
-    .turma-card .actions .btn-act.icon-only { width: 100%; }
+    .tur-grade { grid-template-columns: 1fr; }
+    .tur-filtros select { width: 100%; min-width: 0; }
+    .tur-acoes { flex-wrap: wrap; }
   }
 
-  /* Modais (estilo enxuto) */
-  .aluno-mini-card {
-    cursor: pointer; border-radius: 10px; padding: .65rem;
-    border: 1.5px solid var(--c-border);
-    transition: all .15s ease;
+  /* --------------------------------------------------- cards dos modais */
+  .aluno-mini-card, .aluno-mini-card-vinculado {
     display: flex; align-items: center; gap: .65rem;
+    padding: .65rem;
+    border: 1px solid var(--sh-line);
+    border-radius: var(--u-radius-sm);
     background: #fff;
   }
-  .aluno-mini-card:hover { border-color: var(--c-primary); background: #f8fbff; }
-  .aluno-mini-card .foto-mini, .aluno-mini-card .foto-mini-placeholder {
-    width: 44px; height: 44px; border-radius: 50%; object-fit: cover; background: #e9ecef;
-    display: flex; align-items: center; justify-content: center; color: #6c757d;
-    flex-shrink: 0;
-  }
-  .aluno-mini-card .nome-mini { font-weight: 600; margin: 0; font-size: .9rem; }
+  .aluno-mini-card { cursor: pointer; transition: border-color var(--u-transition), background var(--u-transition); }
+  .aluno-mini-card:hover { border-color: #cfcbc4; background: var(--sh-page-bg); }
   .aluno-mini-card.readonly { cursor: default; }
-  .aluno-mini-card-vinculado {
-    position: relative; border-radius: 10px; padding: .65rem 2.5rem .65rem .65rem;
-    border: 1.5px solid var(--c-border);
-    display: flex; align-items: center; gap: .65rem; background: #fff;
-  }
+  .aluno-mini-card-vinculado { position: relative; padding-right: 2.5rem; }
+  .aluno-mini-card .foto-mini, .aluno-mini-card .foto-mini-placeholder,
   .aluno-mini-card-vinculado .foto-mini, .aluno-mini-card-vinculado .foto-mini-placeholder {
-    width: 44px; height: 44px; border-radius: 50%; object-fit: cover; background: #e9ecef;
-    display: flex; align-items: center; justify-content: center; color: #6c757d;
-    flex-shrink: 0;
+    width: 44px; height: 44px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 50%; object-fit: cover;
+    background: #eceae6; color: var(--sh-ink-soft);
   }
-  .aluno-mini-card-vinculado .nome-mini { font-weight: 600; margin: 0; flex: 1; font-size: .9rem; }
+  .aluno-mini-card .nome-mini, .aluno-mini-card-vinculado .nome-mini {
+    margin: 0; font-size: .92rem; font-weight: 600; flex: 1;
+  }
   .aluno-mini-card-vinculado .btn-remover-turma {
     position: absolute; top: .35rem; right: .35rem;
     padding: .2rem .35rem; font-size: .75rem; line-height: 1;
@@ -292,135 +193,121 @@
   }
 </style>
 
-{% set palette = [
-  {'c':'#0d6efd','s':'#e8f1ff'},
-  {'c':'#10b981','s':'#ecfdf5'},
-  {'c':'#f59e0b','s':'#fef3c7'},
-  {'c':'#8b5cf6','s':'#f3e8ff'},
-  {'c':'#ec4899','s':'#fdf2f8'},
-  {'c':'#06b6d4','s':'#ecfeff'},
-  {'c':'#ef4444','s':'#fef2f2'},
-] %}
-
-<div class="container my-4 turmas-page">
-  <div class="turmas-header">
-    <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3">
-      <div class="flex-grow-1">
-        {% set back_url = back_url or get_back_url_default() %}
-        {% include 'components/botao_voltar.html' %}
-        <h1>
-          <span class="icon-wrap"><i class="bi bi-collection-fill"></i></span>
-          Turmas
-        </h1>
-        <p class="subtitle mb-0">Gerencie as turmas, horários, professores e matrículas.</p>
-        <div class="turmas-stats">
-          <span class="turmas-chip">
-            <i class="bi bi-collection"></i>
-            {{ turmas|length }} turma{{ 's' if turmas|length != 1 else '' }}
-          </span>
-          {% set total_alunos = turmas | sum(attribute='matricula_count') %}
-          <span class="turmas-chip alt">
-            <i class="bi bi-people-fill"></i>
-            {{ total_alunos }} matrícula{{ 's' if total_alunos != 1 else '' }}
-          </span>
-        </div>
-      </div>
-      <a href="{{ url_for('turmas.cadastro_turma', academia_id=academia_id, next=request.full_path) if (academia_id is defined and academia_id) else url_for('turmas.cadastro_turma', next=request.full_path) }}" class="btn-novo">
-        <i class="bi bi-plus-lg"></i> Nova Turma
-      </a>
-    </div>
+{# ------------------------------------------------------------ números #}
+{% set total_alunos = turmas | sum(attribute='matricula_count') %}
+{% set total_lotadas = turmas | selectattr('vagas_cheia') | list | length %}
+<div class="sh__faixa">
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Turmas</span>
+    <span class="sh__faixa-valor">{{ turmas|length }}</span>
   </div>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Matrículas</span>
+    <span class="sh__faixa-valor">{{ total_alunos }}</span>
+  </div>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Lotadas</span>
+    <span class="sh__faixa-valor {% if total_lotadas %}sh__faixa-valor--alerta{% endif %}">{{ total_lotadas }}</span>
+  </div>
+</div>
 
-  <form method="GET" action="{{ url_for('turmas.lista_turmas') }}" id="formBuscaTurmas" class="toolbar">
-    <div class="search-input-wrap">
-      <i class="bi bi-search"></i>
-      <input type="text" class="form-control" name="busca" id="inputBuscaTurmas"
-             placeholder="Buscar por nome, professor ou horário…"
-             value="{{ busca or '' }}" autocomplete="off">
-      <button type="button" class="clear-btn {% if busca %}show{% endif %}" id="btnLimparBusca" title="Limpar">
-        <i class="bi bi-x-circle-fill"></i>
-      </button>
-    </div>
-    {% if academias|length > 1 %}
-    <div class="d-flex align-items-center gap-2">
-      <span class="filter-label d-none d-md-inline">Academia</span>
-      <select name="academia_id" class="form-select form-select-sm" onchange="this.form.submit()">
-        {% for ac in academias %}
-        <option value="{{ ac.id }}" {% if ac.id == academia_id %}selected{% endif %}>{{ ac.nome }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    {% else %}
-      {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
-    {% endif %}
-  </form>
+{# ------------------------------------------------------------ filtros #}
+<form method="GET" action="{{ url_for('turmas.lista_turmas') }}" id="formBuscaTurmas" class="tur-filtros">
+  <div class="tur-busca">
+    <i class="bi bi-search"></i>
+    <input type="text" name="busca" id="inputBuscaTurmas"
+           placeholder="Buscar por nome, professor ou horário…"
+           value="{{ busca or '' }}" autocomplete="off">
+    <button type="button" class="tur-limpar {% if busca %}is-visivel{% endif %}" id="btnLimparBusca" title="Limpar">
+      <i class="bi bi-x-circle-fill"></i>
+    </button>
+  </div>
+  {% if academias|length > 1 %}
+  <select name="academia_id" class="form-select" onchange="this.form.submit()" aria-label="Academia">
+    {% for ac in academias %}
+    <option value="{{ ac.id }}" {% if ac.id == academia_id %}selected{% endif %}>{{ ac.nome }}</option>
+    {% endfor %}
+  </select>
+  {% elif academia_id %}
+  <input type="hidden" name="academia_id" value="{{ academia_id }}">
+  {% endif %}
+</form>
 
-  {% if turmas %}
-  {% set ns = namespace(idx=0) %}
+{# ------------------------------------------------------------- turmas #}
+{% if turmas %}
   {% for modalidade_nome, turmas_grupo in turmas_agrupadas %}
-  <div class="section-header">
-    <h6>{{ modalidade_nome }}</h6>
-    <span class="count">{{ turmas_grupo|length }}</span>
-    <span class="line"></span>
+  <div class="sh__secao">
+    {{ modalidade_nome }}
+    <span class="tur-conta">{{ turmas_grupo|length }}</span>
   </div>
-  <div class="turmas-grid">
+
+  <div class="tur-grade">
     {% for turma in turmas_grupo %}
-      {% set cor = palette[ns.idx % palette|length] %}
-      {% set ns.idx = ns.idx + 1 %}
-      <div class="turma-card" style="--accent-color: {{ cor.c }}; --accent-soft: {{ cor.s }};">
-        <div class="titulo-row">
-          <h2 class="nome">{{ turma.Nome }}</h2>
+      {% set cap = turma.Capacidade or 0 %}
+      {% set restam = cap - turma.matricula_count %}
+      {% set pct = 0 if (turma.vagas_ilimitada or not cap)
+                   else (100 if turma.matricula_count >= cap else (turma.matricula_count * 100) // cap) %}
+      <div class="tur-card">
+        <div class="tur-topo">
+          <h2 class="tur-nome">{{ turma.Nome }}</h2>
           {% if turma.modalidade_nome and turma.modalidade_nome != 'Sem modalidade' %}
-          <span class="modalidade-pill">{{ turma.modalidade_nome }}</span>
+          <span class="tur-mod">{{ turma.modalidade_nome }}</span>
           {% endif %}
         </div>
 
-        <div class="info">
+        <div class="tur-info">
           <i class="bi bi-clock"></i>
           <span>{{ turma.horario_display or turma.DiasHorario or '—' }}</span>
         </div>
-        <div class="info">
+        <div class="tur-info">
           <i class="bi bi-person-badge"></i>
           <span>{{ turma.professor_responsavel_nome or '—' }}</span>
         </div>
-        <div class="info">
+        <div class="tur-info">
           <i class="bi bi-people"></i>
-          <span>{{ turma.matricula_count }} {{ 'aluno' if turma.matricula_count == 1 else 'alunos' }}{% if not turma.vagas_ilimitada %} · {{ turma.vagas_display }}{% endif %}</span>
+          <span>
+            {{ turma.matricula_count }} {{ 'aluno' if turma.matricula_count == 1 else 'alunos' }}
+            {%- if not turma.vagas_ilimitada %} · {{ cap }} vaga{{ 's' if cap != 1 }}{% endif %}
+          </span>
         </div>
 
-        <div class="badges-row">
-          {% if turma.IdadeMin and turma.IdadeMax %}
-          <span class="chip muted"><i class="bi bi-calendar2-event me-1"></i>{{ turma.IdadeMin }}-{{ turma.IdadeMax }} anos</span>
-          {% endif %}
+        <div class="tur-ocupacao {% if turma.vagas_cheia %}tur-ocupacao--cheia{% elif not turma.vagas_ilimitada %}tur-ocupacao--ok{% endif %}">
+          <span style="width: {{ pct }}%"></span>
+        </div>
+
+        <div class="tur-rodape">
+          <span>
+            {%- if turma.IdadeMin and turma.IdadeMax %}{{ turma.IdadeMin }}-{{ turma.IdadeMax }} anos{% endif -%}
+          </span>
           {% if turma.vagas_ilimitada %}
-            <span class="chip success"><i class="bi bi-infinity me-1"></i>Vagas ilimitadas</span>
+            <span class="tur-estado">Vagas ilimitadas</span>
           {% elif turma.vagas_cheia %}
-            <span class="chip danger"><i class="bi bi-exclamation-triangle-fill me-1"></i>Lotada</span>
+            <span class="tur-estado tur-estado--cheia">Lotada</span>
           {% else %}
-            <span class="chip success"><i class="bi bi-check-circle-fill me-1"></i>Vagas disponíveis</span>
+            <span class="tur-estado tur-estado--ok">{{ restam }} vaga{{ 's' if restam != 1 }} disponíve{{ 'l' if restam == 1 else 'is' }}</span>
           {% endif %}
         </div>
 
-        <div class="actions">
-          <button type="button" class="btn-act primary {% if not turma.pode_matricular %}disabled{% endif %}"
-                  title="{% if not turma.pode_matricular %}Vagas esgotadas{% else %}Matricular aluno{% endif %}"
+        <div class="tur-acoes">
+          <button type="button" class="sh__btn {% if turma.pode_matricular %}sh__btn--forte{% else %}is-inativo{% endif %}"
+                  title="{% if turma.pode_matricular %}Matricular aluno{% else %}Vagas esgotadas{% endif %}"
                   {% if turma.pode_matricular %}data-bs-toggle="modal" data-bs-target="#modalMatricular"{% else %}disabled{% endif %}
                   data-turma-id="{{ turma.TurmaID }}" data-turma-nome="{{ turma.Nome }}">
             <i class="bi bi-person-plus"></i> Matricular
           </button>
-          <button type="button" class="btn-act"
+          <button type="button" class="sh__btn"
                   title="Ver alunos"
                   data-bs-toggle="modal" data-bs-target="#modalVinculados"
                   data-turma-id="{{ turma.TurmaID }}" data-turma-nome="{{ turma.Nome }}">
             <i class="bi bi-people"></i> Alunos
           </button>
           <a href="{{ url_for('turmas.editar_turma', turma_id=turma.TurmaID, next=request.full_path) }}"
-             class="btn-act icon-only" title="Editar turma">
+             class="sh__btn sh__btn--icone" title="Editar turma" aria-label="Editar turma">
             <i class="bi bi-pencil"></i>
           </a>
           <button type="button"
-                  class="btn-act icon-only btn-excluir-turma"
-                  title="Excluir turma"
+                  class="sh__btn sh__btn--icone tur-excluir btn-excluir-turma"
+                  title="Excluir turma" aria-label="Excluir turma"
                   data-turma-id="{{ turma.TurmaID }}"
                   data-turma-nome="{{ turma.Nome }}"
                   data-turma-matriculas="{{ turma.matricula_count }}">
@@ -431,38 +318,38 @@
     {% endfor %}
   </div>
   {% endfor %}
-  {% else %}
-  <div class="empty-state">
-    <i class="bi bi-journal-x"></i>
-    <div class="empty-title">
-      {% if busca %}
-        Nenhuma turma encontrada para "{{ busca }}".
-      {% else %}
-        Nenhuma turma cadastrada nesta academia.
-      {% endif %}
-    </div>
+{% else %}
+<div class="tur-vazio">
+  <i class="bi bi-journal-x"></i>
+  <strong>
     {% if busca %}
-    <a href="{{ url_for('turmas.lista_turmas', academia_id=academia_id) }}" class="btn btn-link text-decoration-none mt-2">Limpar busca</a>
+      Nenhuma turma encontrada para "{{ busca }}".
     {% else %}
-    <a href="{{ url_for('turmas.cadastro_turma', academia_id=academia_id, next=request.full_path) if academia_id else url_for('turmas.cadastro_turma', next=request.full_path) }}" class="btn btn-primary mt-3">
-      <i class="bi bi-plus-lg me-1"></i> Cadastrar primeira turma
-    </a>
+      Nenhuma turma cadastrada nesta academia.
     {% endif %}
-  </div>
+  </strong>
+  {% if busca %}
+  <a href="{{ url_for('turmas.lista_turmas', academia_id=academia_id) }}" class="sh__btn">Limpar busca</a>
+  {% else %}
+  <a href="{{ url_for('turmas.cadastro_turma', academia_id=academia_id, next=request.full_path) if academia_id else url_for('turmas.cadastro_turma', next=request.full_path) }}"
+     class="sh__btn sh__btn--forte">
+    <i class="bi bi-plus-lg"></i> Cadastrar primeira turma
+  </a>
   {% endif %}
 </div>
+{% endif %}
 
 <!-- Modal Matricular Aluno -->
 <div class="modal fade" id="modalMatricular" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
-    <div class="modal-content" style="border-radius: 16px; overflow: hidden;">
-      <div class="modal-header" style="background: linear-gradient(135deg,#fff,#f8fafc); border-bottom: 1px solid var(--c-border);">
-        <h5 class="modal-title fw-bold"><i class="bi bi-person-plus-fill me-2 text-primary"></i>Matricular em <span id="modalMatricularTurmaNome"></span></h5>
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Matricular em <span id="modalMatricularTurmaNome"></span></h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
         <div class="d-flex gap-2 mb-3">
-          <button type="button" class="btn btn-sm btn-outline-primary active" id="btnModoNormal" onclick="alternarModoMatricula('normal')">
+          <button type="button" class="btn btn-sm btn-outline-secondary active" id="btnModoNormal" onclick="alternarModoMatricula('normal')">
             <i class="bi bi-list-check"></i> Normal
           </button>
           <button type="button" class="btn btn-sm btn-outline-warning" id="btnModoExcecao" onclick="alternarModoMatricula('excecao')">
@@ -478,7 +365,7 @@
           <small class="text-muted">Busca dinâmica · ignora limite de idade.</small>
         </div>
         <div id="modalMatricularLoading" class="text-center py-4">
-          <div class="spinner-border text-primary" role="status"></div>
+          <div class="spinner-border" role="status"></div>
           <p class="mt-2 text-muted small">Carregando alunos…</p>
         </div>
         <div id="modalMatricularLista" class="row g-2" style="display:none;"></div>
@@ -494,14 +381,14 @@
 <!-- Modal Ver Alunos Vinculados -->
 <div class="modal fade" id="modalVinculados" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
-    <div class="modal-content" style="border-radius: 16px; overflow: hidden;">
-      <div class="modal-header" style="background: linear-gradient(135deg,#fff,#f8fafc); border-bottom: 1px solid var(--c-border);">
-        <h5 class="modal-title fw-bold"><i class="bi bi-people-fill me-2 text-primary"></i>Alunos em <span id="modalVinculadosTurmaNome"></span></h5>
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Alunos em <span id="modalVinculadosTurmaNome"></span></h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
         <div id="modalVinculadosLoading" class="text-center py-4">
-          <div class="spinner-border text-primary" role="status"></div>
+          <div class="spinner-border" role="status"></div>
           <p class="mt-2 text-muted small">Carregando…</p>
         </div>
         <div id="modalVinculadosLista" class="row g-2" style="display:none;"></div>
@@ -513,7 +400,9 @@
     </div>
   </div>
 </div>
+{% endblock %}
 
+{% block extra_js %}
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
@@ -526,14 +415,14 @@ document.addEventListener('DOMContentLoaded', function () {
     if (inputBuscaTurmas && formBuscaTurmas) {
         var timer = null;
         inputBuscaTurmas.addEventListener('input', function () {
-            if (btnLimparBusca) btnLimparBusca.classList.toggle('show', !!inputBuscaTurmas.value);
+            if (btnLimparBusca) btnLimparBusca.classList.toggle('is-visivel', !!inputBuscaTurmas.value);
             if (timer) clearTimeout(timer);
             timer = setTimeout(function () { formBuscaTurmas.submit(); }, 450);
         });
         if (btnLimparBusca) {
             btnLimparBusca.addEventListener('click', function () {
                 inputBuscaTurmas.value = '';
-                btnLimparBusca.classList.remove('show');
+                btnLimparBusca.classList.remove('is-visivel');
                 formBuscaTurmas.submit();
             });
         }
@@ -552,7 +441,7 @@ document.addEventListener('DOMContentLoaded', function () {
             }
             if (!confirm(msg)) return;
             btn.disabled = true;
-            var card = btn.closest('.turma-card');
+            var card = btn.closest('.tur-card');
             fetch(urlExcluirTurma.replace('999', id), {
                 method: 'POST',
                 headers: {

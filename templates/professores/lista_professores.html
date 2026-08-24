@@ -1,262 +1,197 @@
-{% extends "base.html" %}
-{% block title %}Professores — {{ academia.nome }}{% endblock %}
+{% extends "base_academia.html" %}
+{% set menu_ativo = 'professores' %}
+{% block title %}Professores — Unimaster Judô{% endblock %}
+
+{% block pagina_titulo %}Professores{% endblock %}
+{% block pagina_subtitulo %}Vincule usuários como professores e gerencie suas modalidades.{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/painel/dash.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/painel/professores.css') }}">
+{% endblock %}
+
+{% block pagina_acoes %}
+<a href="{{ url_for('professores.cadastrar', academia_id=academia_id) }}{% if origin %}?origin={{ origin }}{% endif %}"
+   class="dash-btn dash-btn--solido">
+  <i class="bi bi-person-plus-fill"></i> Vincular professor
+</a>
+{% endblock %}
+
 {% block content %}
-<style>
-  :root {
-    --c-surface: #fff;
-    --c-border: #e5e9f2;
-    --c-text: #1f2937;
-    --c-muted: #6b7280;
-    --c-primary: #0d6efd;
-    --c-primary-soft: #e8f1ff;
-  }
-
-  .prof-page { max-width: 1240px; margin: 0 auto; }
-
-  .prof-header {
-    background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
-    border: 1px solid var(--c-border);
-    border-radius: 16px;
-    padding: 1.4rem 1.6rem;
-    margin-bottom: 1.1rem;
-    box-shadow: 0 1px 3px rgba(15,23,42,.04);
-  }
-  .prof-header h1 {
-    font-size: 1.45rem; font-weight: 700; margin: 0;
-    color: var(--c-text);
-    display: flex; align-items: center; gap: .55rem;
-  }
-  .prof-header h1 .icon-wrap {
-    width: 40px; height: 40px;
-    background: var(--c-primary-soft); color: var(--c-primary);
-    border-radius: 10px;
-    display: inline-flex; align-items: center; justify-content: center;
-    font-size: 1.1rem;
-  }
-  .prof-header .subtitle { font-size: .9rem; color: var(--c-muted); margin-top: .25rem; }
-  .prof-header .stats { display: flex; flex-wrap: wrap; gap: .45rem; margin-top: .65rem; }
-  .prof-chip {
-    background: var(--c-primary-soft); color: var(--c-primary);
-    padding: .35rem .8rem; border-radius: 999px;
-    font-size: .8rem; font-weight: 600;
-    display: inline-flex; align-items: center; gap: .35rem;
-  }
-  .prof-chip.alt-success { background: #ecfdf5; color: #047857; }
-  .prof-chip.alt-muted { background: #f3f4f6; color: #4b5563; }
-
-  .prof-header .btn-novo {
-    background: var(--c-primary); border: none; color: #fff;
-    padding: .65rem 1.1rem; border-radius: 10px; font-weight: 600;
-    box-shadow: 0 2px 6px rgba(13,110,253,.25);
-    text-decoration: none; display: inline-flex; align-items: center; gap: .35rem;
-    transition: transform .15s, box-shadow .15s;
-  }
-  .prof-header .btn-novo:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(13,110,253,.35); color: #fff; }
-
-  .prof-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
-    gap: .9rem;
-  }
-  .prof-card {
-    background: var(--c-surface);
-    border: 1px solid var(--c-border);
-    border-radius: 14px;
-    padding: 1.1rem 1.15rem;
-    display: flex; flex-direction: column;
-    transition: transform .15s, box-shadow .15s, border-color .15s;
-  }
-  .prof-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 18px rgba(15,23,42,.07);
-    border-color: #cfd6e2;
-  }
-  .prof-card.is-inativo { opacity: .68; }
-
-  .prof-top { display: flex; align-items: center; gap: .85rem; margin-bottom: .8rem; }
-  .prof-avatar, .prof-avatar-init {
-    width: 56px; height: 56px;
-    border-radius: 50%;
-    flex-shrink: 0;
-    border: 2px solid #fff;
-    box-shadow: 0 0 0 1px var(--c-border);
-  }
-  .prof-avatar { object-fit: cover; }
-  .prof-avatar-init {
-    color: #fff;
-    font-weight: 700; font-size: 1.05rem;
-    display: inline-flex; align-items: center; justify-content: center;
-    text-transform: uppercase;
-  }
-  .prof-name {
-    margin: 0 0 .15rem 0; font-size: 1rem; font-weight: 700; color: var(--c-text);
-    line-height: 1.3;
-    word-break: break-word;
-  }
-  .prof-status-chip {
-    font-size: .7rem; font-weight: 600;
-    padding: .2rem .55rem; border-radius: 999px;
-    display: inline-flex; align-items: center; gap: .25rem;
-  }
-  .prof-status-chip.ativo { background: #ecfdf5; color: #047857; }
-  .prof-status-chip.inativo { background: #f3f4f6; color: #6b7280; }
-
-  .prof-info-line {
-    display: flex; align-items: center; gap: .45rem;
-    font-size: .82rem; color: var(--c-muted);
-    padding: .15rem 0;
-    word-break: break-word;
-  }
-  .prof-info-line i { color: #94a3b8; flex-shrink: 0; }
-  .prof-modalidades {
-    display: flex; flex-wrap: wrap; gap: .3rem;
-    margin-top: .55rem;
-  }
-  .prof-mod-pill {
-    font-size: .7rem; font-weight: 600;
-    background: #eef2ff; color: #4338ca;
-    border: 1px solid #c7d2fe;
-    padding: .15rem .55rem; border-radius: 999px;
-  }
-
-  .prof-actions {
-    display: flex; gap: .35rem; margin-top: auto;
-    padding-top: .85rem; border-top: 1px solid #f1f3f5;
-  }
-  .prof-actions .btn-act {
-    flex: 1;
-    border-radius: 10px;
-    padding: .5rem .65rem;
-    font-size: .82rem; font-weight: 600;
-    border: 1px solid var(--c-border); background: #fff; color: var(--c-text);
-    text-decoration: none;
-    display: inline-flex; align-items: center; justify-content: center; gap: .35rem;
-    cursor: pointer; transition: all .15s ease;
-  }
-  .prof-actions .btn-act:hover { border-color: var(--c-primary); color: var(--c-primary); background: #f8fbff; }
-  .prof-actions .btn-act.danger:hover { border-color: #dc2626; color: #b91c1c; background: #fef2f2; }
-  .prof-actions form { margin: 0; flex: 0 0 auto; }
-  .prof-actions form .btn-act { width: 42px; padding: .5rem; }
-
-  .empty-state {
-    background: var(--c-surface);
-    border: 1px dashed var(--c-border);
-    border-radius: 16px;
-    padding: 3rem 1rem;
-    text-align: center;
-    color: var(--c-muted);
-  }
-  .empty-state i.bi-people-fill { font-size: 3rem; color: #d1d5db; display: block; margin-bottom: .75rem; }
-
-  @media (max-width: 575.98px) {
-    .prof-header { padding: 1rem; border-radius: 12px; }
-    .prof-header h1 { font-size: 1.2rem; }
-    .prof-grid { grid-template-columns: 1fr; gap: .75rem; }
-  }
-</style>
-
-{% set palette = ['#0d6efd','#10b981','#f59e0b','#8b5cf6','#ec4899','#06b6d4','#ef4444','#14b8a6'] %}
-
-<div class="container my-4 prof-page">
-  <div class="prof-header">
-    <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3">
-      <div class="flex-grow-1">
-        {% set back_url = url_for('academia.painel_academia', academia_id=academia_id) if academia_id else url_for('academia.painel_academia') %}
-        {% include 'components/botao_voltar.html' %}
-        <h1>
-          <span class="icon-wrap"><i class="bi bi-mortarboard-fill"></i></span>
-          Professores
-          {% if academia and academia.nome %}<span class="text-muted fw-normal" style="font-size:1rem;">— {{ academia.nome }}</span>{% endif %}
-        </h1>
-        <p class="subtitle mb-0">Vincule usuários como professores e gerencie suas modalidades.</p>
-        {% if professores %}
-        {% set _ativos = professores | selectattr('ativo') | list | length %}
-        {% set _inativos = professores|length - _ativos %}
-        <div class="stats">
-          <span class="prof-chip">
-            <i class="bi bi-people-fill"></i>
-            {{ professores|length }} professor{% if professores|length != 1 %}es{% endif %}
-          </span>
-          {% if _ativos %}<span class="prof-chip alt-success"><i class="bi bi-check-circle-fill"></i>{{ _ativos }} ativo{% if _ativos != 1 %}s{% endif %}</span>{% endif %}
-          {% if _inativos %}<span class="prof-chip alt-muted"><i class="bi bi-pause-circle-fill"></i>{{ _inativos }} inativo{% if _inativos != 1 %}s{% endif %}</span>{% endif %}
-        </div>
-        {% endif %}
-      </div>
-      <a href="{{ url_for('professores.cadastrar', academia_id=academia_id) }}{% if origin %}?origin={{ origin }}{% endif %}" class="btn-novo">
-        <i class="bi bi-person-plus-fill"></i>
-        <span class="d-none d-sm-inline">Vincular como professor</span>
-        <span class="d-inline d-sm-none">Novo</span>
-      </a>
+{# ------------------------------------------------------------- indicadores #}
+{# Contam a equipe inteira, não o resultado do filtro: são o retrato da
+   academia. Só entram as modalidades que têm ao menos um professor. #}
+<section class="dash-card prof-kpis">
+  <div class="prof-kpi">
+    <div class="prof-kpi__rotulo">Professores</div>
+    <div class="prof-kpi__valor">{{ total_professores }}</div>
+    <div class="prof-kpi__legenda">Vinculados à academia</div>
+  </div>
+  <div class="prof-kpi">
+    <div class="prof-kpi__rotulo">Ativos</div>
+    <div class="prof-kpi__valor is-positivo">{{ total_ativos }}</div>
+    <div class="prof-kpi__legenda">Podem lançar presença</div>
+  </div>
+  {% for m in por_modalidade[:2] %}
+  <div class="prof-kpi">
+    <div class="prof-kpi__rotulo">{{ m.nome }}</div>
+    <div class="prof-kpi__valor">{{ m.total }}</div>
+    <div class="prof-kpi__legenda">Professores na modalidade</div>
+  </div>
+  {% endfor %}
+  {% if por_modalidade|length > 2 %}
+  {# Com muitas modalidades, as demais viram uma lista compacta em vez de
+     empurrar a faixa para uma segunda linha de cartões. #}
+  <div class="prof-kpi">
+    <div class="prof-kpi__rotulo">Outras modalidades</div>
+    <div class="prof-kpi__valor">{{ por_modalidade|length - 2 }}</div>
+    <div class="prof-kpi__legenda">
+      {% for m in por_modalidade[2:] %}{{ m.nome }} ({{ m.total }}){% if not loop.last %} · {% endif %}{% endfor %}
     </div>
   </div>
+  {% endif %}
+</section>
+
+{# ----------------------------------------------------------------- filtros #}
+<form method="GET" class="dash-card dash-filtros">
+  {% if origin %}<input type="hidden" name="origin" value="{{ origin }}">{% endif %}
+  <label class="dash-campo prof-campo--busca">
+    <span class="dash-campo__label">Buscar</span>
+    <input type="search" name="busca" value="{{ busca }}" class="form-control"
+           placeholder="Nome, e-mail ou telefone" autocomplete="off">
+  </label>
+  <label class="dash-campo">
+    <span class="dash-campo__label">Modalidade</span>
+    <select name="modalidade_id" class="form-select" {% if not modalidades_opts %}disabled{% endif %}>
+      <option value="">Todas</option>
+      {% for m in modalidades_opts %}
+      <option value="{{ m.id }}" {% if modalidade_id == m.id %}selected{% endif %}>{{ m.nome }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label class="dash-campo">
+    <span class="dash-campo__label">Situação</span>
+    <select name="situacao" class="form-select">
+      <option value="">Todos</option>
+      <option value="ativo" {% if situacao == 'ativo' %}selected{% endif %}>Ativos</option>
+      <option value="inativo" {% if situacao == 'inativo' %}selected{% endif %}>Inativos</option>
+    </select>
+  </label>
+  <div class="dash-filtros__acoes">
+    <button type="submit" class="dash-btn dash-btn--solido">Filtrar</button>
+    {% if filtrado %}
+    <a href="{{ url_for('professores.lista', academia_id=academia_id) }}" class="dash-btn">Limpar</a>
+    {% endif %}
+  </div>
+</form>
+
+{# ------------------------------------------------------------------ tabela #}
+<section class="dash-card">
+  <header class="dash-card__topo">
+    <h2 class="dash-card__titulo">Equipe técnica</h2>
+    <span class="dash-card__meta">
+      {{ professores|length }} professor{{ 'es' if professores|length != 1 }}
+      {% if filtrado %} de {{ total_professores }}{% endif %}
+    </span>
+  </header>
 
   {% if professores %}
-  <div class="prof-grid">
-    {% for p in professores %}
-    {% set cor = palette[(p.id or 0) % palette|length] %}
-    {% set parts = (p.nome or 'P').split() %}
-    {% set iniciais = (parts[0][0] ~ (parts[-1][0] if parts|length > 1 else ''))|upper %}
-    <article class="prof-card {% if not p.ativo %}is-inativo{% endif %}">
-      <div class="prof-top">
-        {% if p.foto_url %}
-          <img src="{{ p.foto_url }}" alt="" class="prof-avatar"
-               onerror="this.outerHTML='<span class=&quot;prof-avatar-init&quot; style=&quot;background:{{ cor }}&quot;>{{ iniciais }}</span>'">
-        {% else %}
-          <span class="prof-avatar-init" style="background: {{ cor }}">{{ iniciais }}</span>
-        {% endif %}
-        <div class="flex-grow-1 min-w-0">
-          <p class="prof-name">{{ p.nome }}</p>
-          <span class="prof-status-chip {{ 'ativo' if p.ativo else 'inativo' }}">
-            <i class="bi bi-{{ 'check-circle-fill' if p.ativo else 'pause-circle-fill' }}"></i>
-            {{ 'Ativo' if p.ativo else 'Inativo' }}
-          </span>
-        </div>
-      </div>
-
-      {% if p.email %}
-      <div class="prof-info-line">
-        <i class="bi bi-envelope"></i>
-        <span>{{ p.email }}</span>
-      </div>
-      {% endif %}
-      {% if p.telefone %}
-      <div class="prof-info-line">
-        <i class="bi bi-telephone"></i>
-        <span>{{ p.telefone|telefone_br }}</span>
-      </div>
-      {% endif %}
-
-      {% if p.modalidades_nomes and p.modalidades_nomes != '—' %}
-      <div class="prof-modalidades">
-        {% for nome_mod in p.modalidades_nomes.split(', ') %}
-        <span class="prof-mod-pill">{{ nome_mod }}</span>
+  <div class="dash-tabela-wrap">
+    <table class="dash-tabela prof-tabela">
+      <thead>
+        <tr>
+          <th>Professor</th>
+          <th>E-mail</th>
+          <th>Telefone</th>
+          <th>Modalidades</th>
+          <th>Situação</th>
+          <th class="is-num">Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in professores %}
+        {% set partes = (p.nome or 'P').split() %}
+        {% set iniciais = (partes[0][0] ~ (partes[-1][0] if partes|length > 1 else ''))|upper %}
+        <tr {% if not p.ativo %}class="is-inativo"{% endif %}>
+          <td>
+            <div class="prof-pessoa">
+              {% if p.foto_url %}
+              <img src="{{ p.foto_url }}" alt="" class="prof-avatar">
+              {% else %}
+              <span class="prof-avatar prof-avatar--iniciais">{{ iniciais }}</span>
+              {% endif %}
+              <span class="prof-pessoa__nome">{{ p.nome }}</span>
+            </div>
+          </td>
+          <td>
+            {% if p.email %}
+            <a href="mailto:{{ p.email }}" class="prof-email">{{ p.email }}</a>
+            {% else %}<span class="prof-vazio">—</span>{% endif %}
+          </td>
+          <td>
+            {% if p.telefone %}{{ p.telefone|telefone_br }}{% else %}<span class="prof-vazio">—</span>{% endif %}
+          </td>
+          <td>
+            {% if p.modalidades %}
+            <span class="prof-mods">
+              {% for nome_mod in p.modalidades %}<span class="prof-tag">{{ nome_mod }}</span>{% endfor %}
+            </span>
+            {% else %}<span class="prof-vazio">—</span>{% endif %}
+          </td>
+          <td>
+            <span class="prof-situacao {{ 'is-ativo' if p.ativo else 'is-inativo' }}">
+              <i></i>{{ 'Ativo' if p.ativo else 'Inativo' }}
+            </span>
+          </td>
+          <td class="is-num">
+            <div class="prof-acoes">
+              <a href="{{ url_for('professores.editar', professor_id=p.id) }}{% if origin %}?origin={{ origin }}{% endif %}"
+                 class="prof-acao" title="Editar {{ p.nome }}" aria-label="Editar {{ p.nome }}">
+                <i class="bi bi-pencil"></i>
+              </a>
+              <form method="POST" action="{{ url_for('professores.excluir', professor_id=p.id) }}"
+                    class="d-inline js-prof-excluir" data-nome="{{ p.nome }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="origin" value="{{ origin or '' }}">
+                <button type="submit" class="prof-acao prof-acao--perigo"
+                        title="Remover {{ p.nome }}" aria-label="Remover {{ p.nome }}">
+                  <i class="bi bi-trash"></i>
+                </button>
+              </form>
+            </div>
+          </td>
+        </tr>
         {% endfor %}
-      </div>
-      {% endif %}
-
-      <div class="prof-actions">
-        <a href="{{ url_for('professores.editar', professor_id=p.id) }}{% if origin %}?origin={{ origin }}{% endif %}" class="btn-act">
-          <i class="bi bi-pencil-fill"></i> Editar
-        </a>
-        <form method="post" action="{{ url_for('professores.excluir', professor_id=p.id) }}"
-              onsubmit="return confirm('Excluir o professor {{ p.nome }}?');">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <input type="hidden" name="origin" value="{{ origin or '' }}">
-          <button type="submit" class="btn-act danger" title="Excluir"><i class="bi bi-trash-fill"></i></button>
-        </form>
-      </div>
-    </article>
-    {% endfor %}
+      </tbody>
+    </table>
   </div>
+  {% elif filtrado %}
+  <p class="dash-vazio">Nenhum professor encontrado com esses filtros.</p>
   {% else %}
-  <div class="empty-state">
-    <i class="bi bi-people-fill"></i>
-    <p class="fw-semibold mb-1" style="color: var(--c-text);">Nenhum professor vinculado</p>
-    <p class="small mb-3">Vincule um usuário do sistema como professor para começar a montar turmas.</p>
-    <a href="{{ url_for('professores.cadastrar', academia_id=academia_id) }}{% if origin %}?origin={{ origin }}{% endif %}" class="btn btn-primary">
-      <i class="bi bi-person-plus-fill me-1"></i> Vincular usuário
+  <div class="prof-zero">
+    <i class="bi bi-person-badge"></i>
+    <p class="mb-1 fw-semibold">Nenhum professor vinculado ainda</p>
+    <p class="dash-vazio mb-3">Vincule um usuário para que ele possa lançar presença e conduzir turmas.</p>
+    <a href="{{ url_for('professores.cadastrar', academia_id=academia_id) }}" class="dash-btn dash-btn--solido">
+      <i class="bi bi-person-plus-fill"></i> Vincular professor
     </a>
   </div>
   {% endif %}
-</div>
+</section>
+
+<footer class="dash-rodape">
+  © {{ current_year }} {{ academia.nome }}. Todos os direitos reservados.
+</footer>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Confirmação antes de remover o vínculo — a ação apaga o professor da academia.
+document.querySelectorAll('.js-prof-excluir').forEach(function (form) {
+  form.addEventListener('submit', function (e) {
+    var nome = form.dataset.nome || 'este professor';
+    if (!confirm('Remover ' + nome + ' da equipe desta academia?')) e.preventDefault();
+  });
+});
+</script>
 {% endblock %}

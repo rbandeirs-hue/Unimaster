@@ -1,162 +1,164 @@
-{% extends "financeiro/painel/_layout.html" %}
-{% block title %}Descontos{% endblock %}
+{% extends "financeiro/painel/_base.html" %}
+{% set fin_aba = 'descontos' %}
+{% block title %}Descontos — Financeiro{% endblock %}
 
-{% block conteudo %}
-<div class="fp-page fp-page--form">
+{% block pagina_titulo %}Financeiro{% endblock %}
+{% block pagina_subtitulo %}Regras de desconto aplicáveis às mensalidades{% endblock %}
 
-  <div class="fp-head fp-head--row">
-    <div>
-      <h1 class="fp-h1">Descontos</h1>
-      <p class="fp-sub">{{ n_ativos }} ativos · {{ n_inativos }} inativos</p>
-    </div>
-    <a class="fp-btn" href="{{ url_for('financeiro_painel.descontos', academia_id=academia_id, novo=1) }}">+ Novo Desconto</a>
-  </div>
+{% block fin_css %}
+<style>
+  .lin-desc { grid-template-columns: minmax(0,1.6fr) 130px 120px minmax(0,1.6fr) 120px 110px; }
+  @media (max-width: 1320px) {
+    .lin-desc { grid-template-columns: minmax(0,1.6fr) 130px 120px 120px 110px; }
+    .col-motivo { display: none !important; }
+  }
+  @media (max-width: 1024px) {
+    .lin-desc { grid-template-columns: minmax(0,1.6fr) 130px 120px minmax(0,1.6fr) 120px 110px; }
+    .col-motivo { display: block !important; }
+  }
+  @media (max-width: 900px) {
+    .lin-desc { grid-template-columns: minmax(0,1.6fr) 120px 120px 110px; }
+    .col-motivo, .col-tipo { display: none !important; }
+  }
+  @media (max-width: 620px) {
+    .lin-desc { grid-template-columns: minmax(0,1.5fr) 120px 110px; }
+    .col-situacao { display: none !important; }
+  }
+</style>
+{% endblock %}
 
-  {% if mostrar_form %}
-  <form class="fp-card fp-card--form" method="POST" action="{{ url_for('financeiro_painel.descontos_salvar') }}"
-        id="fp-form-desconto">
+{% block pagina_acoes %}
+  <a class="sh__btn sh__btn--forte" href="{{ url_for('financeiro_painel.descontos', academia_id=academia_id, novo=1) }}">
+    <i class="bi bi-plus-lg"></i> Novo desconto
+  </a>
+{% endblock %}
+
+{% block fin_conteudo %}
+{% if em_edicao or request.args.get('novo') %}
+<section class="lst-quadro">
+  <header class="lst-quadro__topo">
+    <h2 class="lst-quadro__titulo">{{ 'Editar desconto' if em_edicao else 'Novo desconto' }}</h2>
+  </header>
+  <form method="POST" action="{{ url_for('financeiro_painel.descontos_salvar') }}" class="lst-filtros" style="border:0; margin:0">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
     {% if em_edicao %}<input type="hidden" name="id" value="{{ em_edicao.id }}">{% endif %}
 
-    <h2 class="fp-h2 fp-h2--form">{{ 'Editar Desconto' if em_edicao else 'Novo Desconto' }}</h2>
-
-    <div class="fp-form-grid">
-      <div>
-        <label class="fp-label" for="ds-nome">Nome *</label>
-        <input class="fp-input" id="ds-nome" name="nome" required maxlength="120"
-               value="{{ em_edicao.nome if em_edicao else '' }}" placeholder="Ex: Desconto Irmão">
-      </div>
-      <div>
-        <label class="fp-label" for="ds-tipo">Tipo *</label>
-        <select class="fp-input" id="ds-tipo" name="tipo">
-          <option value="percentual" {% if not em_edicao or em_edicao.tipo == 'percentual' %}selected{% endif %}>Percentual (%)</option>
-          <option value="valor_fixo" {% if em_edicao and em_edicao.tipo == 'valor_fixo' %}selected{% endif %}>Valor Fixo (R$)</option>
-        </select>
-      </div>
-      <div>
-        <label class="fp-label" for="ds-valor"><span id="ds-valor-label">Percentual (%)</span> *</label>
-        <input class="fp-input" id="ds-valor" name="valor" type="number" min="0" step="0.01" required
-               value="{{ '%.2f'|format(em_edicao.valor) if em_edicao else '' }}" placeholder="Ex: 15">
-      </div>
-      <div>
-        <label class="fp-label" for="ds-ativo">Status</label>
-        <select class="fp-input" id="ds-ativo" name="ativo">
-          <option value="ativo" {% if not em_edicao or em_edicao.ativo %}selected{% endif %}>Ativo</option>
-          <option value="inativo" {% if em_edicao and not em_edicao.ativo %}selected{% endif %}>Inativo</option>
-        </select>
-      </div>
-      <div class="fp-span-2">
-        <label class="fp-label" for="ds-desc">Motivo / Observação</label>
-        <input class="fp-input" id="ds-desc" name="descricao" maxlength="255"
-               value="{{ em_edicao.descricao or '' if em_edicao else '' }}" placeholder="Descreva o motivo do desconto">
-      </div>
-    </div>
-
-    <div class="fp-preview" id="ds-preview" hidden>
-      <div class="fp-preview__label">Simulação sobre mensalidade de {{ fmt_moeda(150) }}:</div>
-      <div class="fp-preview__linha">
-        <span class="fp-preview__de">{{ fmt_moeda(150) }}</span>
-        <span class="fp-preview__desc" id="ds-preview-desc"></span>
-        <span class="fp-preview__para" id="ds-preview-final"></span>
-      </div>
-    </div>
-
-    <div class="fp-form-acoes">
-      <button class="fp-btn" type="submit">{{ 'Salvar' if em_edicao else 'Cadastrar' }}</button>
-      <a class="fp-btn-ghost" href="{{ url_for('financeiro_painel.descontos', academia_id=academia_id) }}">Cancelar</a>
+    <label class="lst-campo lst-campo--largo">
+      <span class="lst-campo__rotulo">Nome *</span>
+      <input name="nome" required maxlength="120" value="{{ em_edicao.nome if em_edicao else '' }}" placeholder="Família, Bolsista…">
+    </label>
+    <label class="lst-campo lst-campo--curto">
+      <span class="lst-campo__rotulo">Tipo *</span>
+      <select name="tipo" id="dsTipo">
+        <option value="percentual" {% if not em_edicao or em_edicao.tipo == 'percentual' %}selected{% endif %}>Percentual (%)</option>
+        <option value="valor_fixo" {% if em_edicao and em_edicao.tipo == 'valor_fixo' %}selected{% endif %}>Valor fixo (R$)</option>
+      </select>
+    </label>
+    <label class="lst-campo lst-campo--curto">
+      <span class="lst-campo__rotulo" id="dsValorRotulo">Percentual (%)</span>
+      <input name="valor" id="dsValor" type="number" min="0" step="0.01" required
+             value="{{ '%.2f'|format(em_edicao.valor|float) if em_edicao else '' }}" placeholder="Ex: 15">
+    </label>
+    <label class="lst-campo lst-campo--curto">
+      <span class="lst-campo__rotulo">Status</span>
+      <select name="ativo">
+        <option value="ativo" {% if not em_edicao or em_edicao.ativo %}selected{% endif %}>Ativo</option>
+        <option value="inativo" {% if em_edicao and not em_edicao.ativo %}selected{% endif %}>Inativo</option>
+      </select>
+    </label>
+    <label class="lst-campo lst-campo--largo">
+      <span class="lst-campo__rotulo">Motivo / observação</span>
+      <input name="descricao" maxlength="255" value="{{ em_edicao.descricao or '' if em_edicao else '' }}"
+             placeholder="Descreva o motivo do desconto">
+    </label>
+    <div class="lst-filtros__acoes">
+      <button type="submit" class="sh__btn sh__btn--forte">{{ 'Salvar' if em_edicao else 'Cadastrar' }}</button>
+      <a class="sh__btn" href="{{ url_for('financeiro_painel.descontos', academia_id=academia_id) }}">Cancelar</a>
     </div>
   </form>
-  {% endif %}
+</section>
+{% endif %}
 
-  <div class="fp-filtro__opcoes" style="margin-bottom:16px">
-    {% for f, rotulo in [('todos', 'Todos'), ('ativo', 'Ativos'), ('inativo', 'Inativos')] %}
-    <a class="fp-pill {% if filtro == f %}is-active{% endif %}"
-       href="{{ url_for('financeiro_painel.descontos', academia_id=academia_id, filtro=f) }}">{{ rotulo }}</a>
-    {% endfor %}
-  </div>
+<nav class="lst-abas">
+  {% for f, rotulo in [('todos', 'Todos'), ('ativo', 'Ativos'), ('inativo', 'Inativos')] %}
+  <a class="lst-aba {% if filtro == f %}is-ativa{% endif %}"
+     href="{{ url_for('financeiro_painel.descontos', academia_id=academia_id, filtro=f) }}">{{ rotulo }}</a>
+  {% endfor %}
+</nav>
 
-  <div class="fp-card fp-card--table">
-    <div class="fp-table-wrap">
-      <table class="fp-table">
-        <thead>
-          <tr><th>Nome</th><th>Tipo</th><th>Desconto</th><th>Motivo</th><th>Status</th><th></th></tr>
-        </thead>
-        <tbody>
-          {% for d in lista %}
-          <tr class="{% if not d.ativo %}is-off{% endif %}">
-            <td class="fp-td-nome">{{ d.nome }}</td>
-            <td>
-              <span class="fp-badge fp-badge--{{ 'percentual' if d.tipo == 'percentual' else 'fixo' }}">
-                {{ 'Percentual' if d.tipo == 'percentual' else 'Valor Fixo' }}
-              </span>
-            </td>
-            <td style="font-family:var(--fp-mono);font-size:14px;font-weight:600;color:var(--fp-accent)">
-              {% if d.tipo == 'percentual' %}{{ '%g'|format(d.valor|float) }}%{% else %}{{ fmt_moeda(d.valor) }}{% endif %}
-            </td>
-            <td class="fp-td-sub" style="max-width:240px">{{ d.descricao or '—' }}</td>
-            <td>
-              <span class="fp-badge fp-badge--{{ 'ativo' if d.ativo else 'inativo' }}">{{ 'Ativo' if d.ativo else 'Inativo' }}</span>
-            </td>
-            <td>
-              <div class="fp-acoes">
-                <a class="fp-btn-mini" href="{{ url_for('financeiro_painel.descontos', academia_id=academia_id, editar=d.id) }}">Editar</a>
-                <form method="POST" action="{{ url_for('financeiro_painel.descontos_alternar', desconto_id=d.id) }}" style="display:inline">
-                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                  {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
-                  <button class="fp-btn-mini" type="submit">{{ 'Desativar' if d.ativo else 'Ativar' }}</button>
-                </form>
-                <form method="POST" action="{{ url_for('financeiro_painel.descontos_excluir', desconto_id=d.id) }}" style="display:inline"
-                      onsubmit="return confirm('Excluir o desconto {{ d.nome|e }}?')">
-                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                  {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
-                  <button class="fp-btn-mini fp-btn-mini--danger" type="submit">×</button>
-                </form>
-              </div>
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+<section class="lst-quadro">
+  <header class="lst-quadro__topo">
+    <h2 class="lst-quadro__titulo">Descontos cadastrados</h2>
+    <span class="lst-quadro__meta">{{ lista|length }} desconto{{ 's' if lista|length != 1 }}</span>
+  </header>
+  <div class="lst-rolagem">
+    <div class="lst-largura" style="--lst-min:540px">
+      <div class="lst-linha lin-desc lst-cab">
+        <div>Nome</div>
+        <div class="col-tipo">Tipo</div>
+        <div class="lst-num">Desconto</div>
+        <div class="col-motivo">Motivo</div>
+        <div class="col-situacao">Situação</div>
+        <div class="lst-fim">Ações</div>
+      </div>
+
+      {% for d in lista %}
+      <div class="lst-linha lin-desc lst-item {% if not d.ativo %}is-inativo{% endif %}">
+        <div class="lst-corta"><span class="lst-nome">{{ d.nome }}</span></div>
+        <div class="col-tipo">
+          <span class="lst-tag">{{ 'Percentual' if d.tipo == 'percentual' else 'Valor fixo' }}</span>
+        </div>
+        <div class="lst-num fin-valor">
+          {% if d.tipo == 'percentual' %}{{ '%g'|format(d.valor|float) }}%{% else %}{{ fmt_moeda(d.valor) }}{% endif %}
+        </div>
+        <div class="col-motivo lst-corta">{{ d.descricao or '—' }}</div>
+        <div class="col-situacao">
+          <span class="lst-situacao {% if d.ativo %}is-ativo{% endif %}"><i></i>{{ 'Ativo' if d.ativo else 'Inativo' }}</span>
+        </div>
+        <div class="lst-acoes">
+          <a class="lst-acao" title="Editar {{ d.nome }}" aria-label="Editar {{ d.nome }}"
+             href="{{ url_for('financeiro_painel.descontos', academia_id=academia_id, editar=d.id) }}">
+            <i class="bi bi-pencil"></i>
+          </a>
+          <form method="POST" action="{{ url_for('financeiro_painel.descontos_alternar', desconto_id=d.id) }}" style="display:inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
+            <button type="submit" class="lst-acao" title="{{ 'Desativar' if d.ativo else 'Ativar' }} {{ d.nome }}"
+                    aria-label="{{ 'Desativar' if d.ativo else 'Ativar' }} {{ d.nome }}">
+              <i class="bi bi-{{ 'pause-circle' if d.ativo else 'play-circle' }}"></i>
+            </button>
+          </form>
+          <form method="POST" action="{{ url_for('financeiro_painel.descontos_excluir', desconto_id=d.id) }}" style="display:inline"
+                onsubmit="return confirm('Excluir o desconto {{ d.nome|e }}?')">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
+            <button type="submit" class="lst-acao lst-acao--perigo" title="Excluir {{ d.nome }}" aria-label="Excluir {{ d.nome }}">
+              <i class="bi bi-trash"></i>
+            </button>
+          </form>
+        </div>
+      </div>
+      {% else %}
+      <p class="lst-vazio">Nenhum desconto cadastrado.</p>
+      {% endfor %}
     </div>
-    {% if not lista %}
-    <div class="fp-empty">Nenhum desconto encontrado.</div>
-    {% endif %}
   </div>
-
-</div>
+</section>
 {% endblock %}
 
-{% block scripts %}
-{% if mostrar_form %}
+{% block extra_js %}
 <script>
-  // Simulação em tempo real sobre uma mensalidade de R$ 150 — igual ao mockup.
-  (function () {
-    var tipo = document.getElementById('ds-tipo');
-    var valor = document.getElementById('ds-valor');
-    var rotulo = document.getElementById('ds-valor-label');
-    var box = document.getElementById('ds-preview');
-    var desc = document.getElementById('ds-preview-desc');
-    var final = document.getElementById('ds-preview-final');
-    var BASE = 150;
-
-    function moeda(n) {
-      return 'R$ ' + n.toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-    }
-    function atualizar() {
-      var pct = tipo.value === 'percentual';
-      rotulo.textContent = pct ? 'Percentual (%)' : 'Valor (R$)';
-      valor.placeholder = pct ? 'Ex: 15' : 'Ex: 20,00';
-      var v = parseFloat(valor.value) || 0;
-      if (v <= 0) { box.hidden = true; return; }
-      box.hidden = false;
-      desc.textContent = pct ? '−' + v + '%' : '−' + moeda(v);
-      final.textContent = moeda(Math.max(0, pct ? BASE - (BASE * v / 100) : BASE - v));
-    }
-    tipo.addEventListener('change', atualizar);
-    valor.addEventListener('input', atualizar);
-    atualizar();
-  })();
+// O rótulo do valor acompanha o tipo: "15" quer dizer 15% ou R$ 15,00.
+(function () {
+  var tipo = document.getElementById('dsTipo');
+  var rotulo = document.getElementById('dsValorRotulo');
+  if (!tipo || !rotulo) return;
+  function pintar() {
+    rotulo.textContent = tipo.value === 'percentual' ? 'Percentual (%)' : 'Valor fixo (R$)';
+  }
+  tipo.addEventListener('change', pintar);
+  pintar();
+})();
 </script>
-{% endif %}
 {% endblock %}

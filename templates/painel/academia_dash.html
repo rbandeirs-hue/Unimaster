@@ -1,330 +1,348 @@
-{% extends "base.html" %}
-{% block title %}Painel — Academia{% endblock %}
-{% block content %}
+{% extends "base_academia.html" %}
+{% set menu_ativo = 'indicadores' %}
+{% block title %}Painel da academia — Unimaster Judô{% endblock %}
+
 {% set meses_nomes = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'] %}
-{% macro delta_num(a, b) %}
+
+{% block pagina_titulo %}Painel da academia{% endblock %}
+{% block pagina_subtitulo %}Indicadores de alunos e financeiro · {{ meses_nomes[mes-1] }} de {{ ano }}{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/painel/dash.css') }}">
+{% endblock %}
+
+{% block content %}
+{# --------------------------------------------------------------------------
+   Comparativos com o mês anterior.
+
+   A frase vem pronta e já nomeia o mês ("1 menos que julho") porque "▼ 1 vs mês
+   ant." obrigava o leitor a lembrar qual mês estava selecionado.
+   -------------------------------------------------------------------------- #}
+{% macro delta_num(a, b, sufixo='') %}
   {% set d = (a or 0) - (b or 0) %}
-  {% if d > 0 %}<span class="text-success small fw-semibold">▲ {{ d }}</span>
-  {% elif d < 0 %}<span class="text-danger small fw-semibold">▼ {{ -d }}</span>
-  {% else %}<span class="text-muted small">— igual</span>{% endif %}
+  {% if d > 0 %}<span class="dash-delta is-alta">{{ d }} a mais que {{ dash.mes_anterior_nome }}</span>
+  {% elif d < 0 %}<span class="dash-delta is-baixa">{{ -d }} {{ 'menos' if -d == 1 else 'a menos' }} que {{ dash.mes_anterior_nome }}</span>
+  {% else %}<span class="dash-delta">Igual a {{ dash.mes_anterior_nome }}</span>{% endif %}
 {% endmacro %}
+
 {% macro delta_money(a, b) %}
   {% set d = (a or 0) - (b or 0) %}
-  {% if d > 0 %}<span class="text-success small fw-semibold">▲ R$ {{ "%.2f"|format(d) }}</span>
-  {% elif d < 0 %}<span class="text-danger small fw-semibold">▼ R$ {{ "%.2f"|format(-d) }}</span>
-  {% else %}<span class="text-muted small">— igual</span>{% endif %}
+  {% if d > 0 %}<span class="dash-delta is-alta">+ R$ {{ d|moeda_br }} vs {{ dash.mes_anterior_nome }}</span>
+  {% elif d < 0 %}<span class="dash-delta is-baixa">− R$ {{ -d|moeda_br }} vs {{ dash.mes_anterior_nome }}</span>
+  {% else %}<span class="dash-delta">Igual a {{ dash.mes_anterior_nome }}</span>{% endif %}
 {% endmacro %}
 
-<div class="container mt-4 painel-academia-dash">
+{# Indicador de um bloco: rótulo pequeno, número grande, legenda embaixo. #}
+{% macro indicador(valor, rotulo, legenda=None, tom='') %}
+<div class="dash-ind">
+  <div class="dash-ind__rotulo">{{ rotulo }}</div>
+  <div class="dash-ind__valor {% if tom %}is-{{ tom }}{% endif %}">{{ valor }}</div>
+  {% if legenda %}<div class="dash-ind__legenda">{{ legenda|safe }}</div>{% endif %}
+</div>
+{% endmacro %}
 
-  <!-- Cabeçalho + filtros -->
-  <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-4">
-    <div>
-      <h2 class="h4 fw-bold text-primary mb-1"><i class="bi bi-speedometer2 me-2"></i>Painel da Academia</h2>
-      <p class="text-muted mb-0">Indicadores de alunos e financeiro — {{ meses_nomes[mes-1] }}/{{ ano }}</p>
-    </div>
-    <form method="GET" class="d-flex flex-wrap gap-2 align-items-end">
-      {% if academias|length > 1 %}
-      <div>
-        <label class="form-label small fw-semibold mb-1">Academia</label>
-        <select name="academia_id" class="form-select form-select-sm">
-          {% for ac in academias %}<option value="{{ ac.id }}" {% if ac.id == academia_id %}selected{% endif %}>{{ ac.nome }}</option>{% endfor %}
-        </select>
-      </div>
-      {% endif %}
-      <div>
-        <label class="form-label small fw-semibold mb-1">Mês</label>
-        <select name="mes" class="form-select form-select-sm">
-          {% for i in range(1,13) %}<option value="{{ i }}" {% if i == mes %}selected{% endif %}>{{ meses_nomes[i-1] }}</option>{% endfor %}
-        </select>
-      </div>
-      <div>
-        <label class="form-label small fw-semibold mb-1">Ano</label>
-        <input type="number" name="ano" class="form-control form-control-sm" value="{{ ano }}" min="2000" max="2100" style="width:100px;">
-      </div>
-      {% if turmas_opts %}
-      <div>
-        <label class="form-label small fw-semibold mb-1">Turma</label>
-        <select name="turma_id" class="form-select form-select-sm" style="max-width:220px">
-          <option value="">Todas as turmas</option>
-          {% for t in turmas_opts %}<option value="{{ t.id }}" {% if t.id == turma_id %}selected{% endif %}>{{ t.nome }}</option>{% endfor %}
-        </select>
-      </div>
-      {% endif %}
-      {% if modalidades_opts %}
-      <div>
-        <label class="form-label small fw-semibold mb-1">Modalidade</label>
-        <select name="modalidade_id" class="form-select form-select-sm" style="max-width:200px">
-          <option value="">Todas as modalidades</option>
-          {% for m in modalidades_opts %}<option value="{{ m.id }}" {% if m.id == modalidade_id %}selected{% endif %}>{{ m.nome }}</option>{% endfor %}
-        </select>
-      </div>
-      {% endif %}
-      <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-funnel me-1"></i>Aplicar</button>
-      {% if dash.filtrado %}
-      <a href="{{ url_for('academia.dash', academia_id=academia_id, mes=mes, ano=ano) }}"
-         class="btn btn-outline-secondary btn-sm"><i class="bi bi-x-lg me-1"></i>Limpar recorte</a>
-      {% endif %}
-    </form>
-  </div>
-
-  {% if dash.filtrado %}
-  <div class="alert alert-info py-2 px-3 small d-flex align-items-center gap-2 mb-3">
-    <i class="bi bi-funnel-fill"></i>
-    <div>
-      Indicadores recortados por
-      {% if turma_id %}<strong>{{ (turmas_opts | selectattr('id','equalto',turma_id) | first).nome }}</strong>{% endif %}
-      {% if turma_id and modalidade_id %} e {% endif %}
-      {% if modalidade_id %}<strong>{{ (modalidades_opts | selectattr('id','equalto',modalidade_id) | first).nome }}</strong>{% endif %}
-      — alunos, inadimplência e mensalidades seguem esse grupo.
-      <span class="text-muted">Receitas e despesas continuam da academia inteira: são lançamentos sem vínculo com turma.</span>
-    </div>
-  </div>
+{# ----------------------------------------------------------------- filtros #}
+<form method="GET" class="dash-card dash-filtros">
+  {% if academias|length > 1 %}
+  <label class="dash-campo">
+    <span class="dash-campo__label">Academia</span>
+    <select name="academia_id" class="form-select">
+      {% for ac in academias %}<option value="{{ ac.id }}" {% if ac.id == academia_id %}selected{% endif %}>{{ ac.nome }}</option>{% endfor %}
+    </select>
+  </label>
   {% endif %}
+  <label class="dash-campo">
+    <span class="dash-campo__label">Mês</span>
+    <select name="mes" class="form-select">
+      {% for i in range(1,13) %}<option value="{{ i }}" {% if i == mes %}selected{% endif %}>{{ meses_nomes[i-1] }}</option>{% endfor %}
+    </select>
+  </label>
+  <label class="dash-campo">
+    <span class="dash-campo__label">Ano</span>
+    <select name="ano" class="form-select">
+      {% for a in range(ano-4, ano+2) %}<option value="{{ a }}" {% if a == ano %}selected{% endif %}>{{ a }}</option>{% endfor %}
+    </select>
+  </label>
+  <label class="dash-campo">
+    <span class="dash-campo__label">Turma</span>
+    <select name="turma_id" class="form-select" {% if not turmas_opts %}disabled{% endif %}>
+      <option value="">Todas as turmas</option>
+      {% for t in turmas_opts %}<option value="{{ t.id }}" {% if t.id == turma_id %}selected{% endif %}>{{ t.nome }}</option>{% endfor %}
+    </select>
+  </label>
+  <label class="dash-campo">
+    <span class="dash-campo__label">Modalidade</span>
+    <select name="modalidade_id" class="form-select" {% if not modalidades_opts %}disabled{% endif %}>
+      <option value="">Todas as modalidades</option>
+      {% for m in modalidades_opts %}<option value="{{ m.id }}" {% if m.id == modalidade_id %}selected{% endif %}>{{ m.nome }}</option>{% endfor %}
+    </select>
+  </label>
+  <div class="dash-filtros__acoes">
+    <button type="submit" class="dash-btn dash-btn--solido">Aplicar</button>
+    <a href="{{ url_for('academia.dash', academia_id=academia_id) }}" class="dash-btn">Limpar</a>
+  </div>
+</form>
 
-  <!-- ===================== ALUNOS ===================== -->
-  <h6 class="text-uppercase text-muted fw-bold small mb-2"><i class="bi bi-people-fill me-1"></i>Alunos</h6>
-  <div class="row g-3 mb-4">
-    <div class="col-6 col-lg-3">
-      <div class="card shadow-sm border-primary h-100"><div class="card-body py-3 text-center">
-        <div class="display-6 fw-bold text-primary">{{ dash.ativos }}</div>
-        <div class="small text-muted">Alunos ativos</div>
-      </div></div>
-    </div>
-    <div class="col-6 col-lg-3">
-      <div class="card shadow-sm border-success h-100"><div class="card-body py-3 text-center">
-        <div class="display-6 fw-bold text-success">{{ dash.atual.novos }}</div>
-        <div class="small text-muted">Novos no mês</div>
-        <div>{{ delta_num(dash.atual.novos, dash.anterior.novos) }} <span class="text-muted small">vs mês ant.</span></div>
-      </div></div>
-    </div>
-    <div class="col-6 col-lg-3">
-      <div class="card shadow-sm border-danger h-100"><div class="card-body py-3 text-center">
-        <div class="display-6 fw-bold text-danger">{{ dash.atual.baixas }}</div>
-        <div class="small text-muted">Baixas no mês</div>
-        <div>{{ delta_num(dash.atual.baixas, dash.anterior.baixas) }} <span class="text-muted small">vs mês ant.</span></div>
-      </div></div>
-    </div>
-    <div class="col-6 col-lg-3">
-      {% set sa = dash.saldo_alunos %}
-      <div class="card shadow-sm {{ 'border-success' if sa >= 0 else 'border-warning' }} h-100"><div class="card-body py-3 text-center">
-        <div class="display-6 fw-bold {{ 'text-success' if sa >= 0 else 'text-warning' }}">{{ '+' if sa > 0 else '' }}{{ sa }}</div>
-        <div class="small text-muted">Saldo (novos − baixas)</div>
-        <div class="small text-muted">Churn: {{ dash.churn_pct }}%</div>
-      </div></div>
-    </div>
-  </div>
-  <div class="d-flex flex-wrap gap-2 mb-4">
-    <span class="badge bg-success-subtle text-success">Ativos: {{ dash.ativos }}</span>
-    <span class="badge bg-secondary-subtle text-secondary">Inativos: {{ dash.inativos }}</span>
-    <span class="badge bg-warning-subtle text-warning">Suspensos: {{ dash.suspensos }}</span>
-    <span class="badge bg-info-subtle text-info">Formados: {{ dash.formados }}</span>
-    <span class="badge bg-primary-subtle text-primary">Total: {{ dash.total_alunos }}</span>
-    {% if dash.posicao_historica %}
-    <span class="text-muted small align-self-center">
-      <i class="bi bi-clock-history"></i> posição em {{ dash.posicao_data.strftime('%d/%m/%Y') }}
-      — matriculados até a data e ainda não inativados
-    </span>
-    {% endif %}
-  </div>
+{% if dash.filtrado %}
+<p class="dash-aviso">
+  <i class="bi bi-funnel-fill"></i>
+  Alunos, inadimplência e mensalidades seguem o recorte selecionado. Receitas e
+  despesas continuam da academia inteira — são lançamentos sem vínculo com turma.
+</p>
+{% endif %}
 
-  <!-- ===================== FINANCEIRO ===================== -->
-  <h6 class="text-uppercase text-muted fw-bold small mb-2"><i class="bi bi-cash-stack me-1"></i>Financeiro — {{ meses_nomes[mes-1] }}/{{ ano }}</h6>
-  <div class="row g-3 mb-3">
-    <div class="col-6 col-lg-3">
-      <div class="card shadow-sm border-success h-100"><div class="card-body py-3 text-center">
-        <div class="h5 fw-bold text-success mb-0">R$ {{ "%.2f"|format(dash.atual.receitas) }}</div>
-        <div class="small text-muted">Receitas</div>
-        <div>{{ delta_money(dash.atual.receitas, dash.anterior.receitas) }}</div>
-      </div></div>
+{# ------------------------------------------------------------------ alunos #}
+<section class="dash-card">
+  <header class="dash-card__topo">
+    <h2 class="dash-card__titulo">Alunos</h2>
+    <div class="dash-chips">
+      <span class="dash-chip">Ativos <b>{{ dash.ativos }}</b></span>
+      <span class="dash-chip">Inativos <b>{{ dash.inativos }}</b></span>
+      <span class="dash-chip">Suspensos <b>{{ dash.suspensos }}</b></span>
+      <span class="dash-chip">Formados <b>{{ dash.formados }}</b></span>
+      <span class="dash-chip">Total <b>{{ dash.total_alunos }}</b></span>
     </div>
-    <div class="col-6 col-lg-3">
-      <div class="card shadow-sm border-danger h-100"><div class="card-body py-3 text-center">
-        <div class="h5 fw-bold text-danger mb-0">R$ {{ "%.2f"|format(dash.atual.despesas) }}</div>
-        <div class="small text-muted">Despesas</div>
-        <div>{{ delta_money(dash.atual.despesas, dash.anterior.despesas) }}</div>
-      </div></div>
-    </div>
-    <div class="col-6 col-lg-3">
-      {% set sl = dash.atual.saldo %}
-      <div class="card shadow-sm {{ 'border-success' if sl >= 0 else 'border-warning' }} h-100"><div class="card-body py-3 text-center">
-        <div class="h5 fw-bold {{ 'text-success' if sl >= 0 else 'text-warning' }} mb-0">R$ {{ "%.2f"|format(sl) }}</div>
-        <div class="small text-muted">Saldo</div>
-        <div>{{ delta_money(dash.atual.saldo, dash.anterior.saldo) }}</div>
-      </div></div>
-    </div>
-    <div class="col-6 col-lg-3">
-      <div class="card shadow-sm border-info h-100"><div class="card-body py-3 text-center">
-        <div class="h5 fw-bold text-info mb-0">R$ {{ "%.2f"|format(dash.ticket_medio) }}</div>
-        <div class="small text-muted">Ticket médio (recebido/ativo)</div>
-      </div></div>
-    </div>
+  </header>
+  <div class="dash-grid dash-grid--4">
+    {{ indicador(dash.ativos, 'Alunos ativos', 'Matrículas em vigor') }}
+    {% set leg_novos %}{{ delta_num(dash.atual.novos, dash.anterior.novos) }}{% endset %}
+    {{ indicador(dash.atual.novos, 'Novos no mês', leg_novos) }}
+    {% set leg_baixas %}{{ delta_num(dash.atual.baixas, dash.anterior.baixas) }}{% endset %}
+    {{ indicador(dash.atual.baixas, 'Baixas no mês', leg_baixas) }}
+    {% set sa = dash.saldo_alunos %}
+    {{ indicador(('+' if sa > 0 else '') ~ sa, 'Saldo do mês',
+                 'Churn ' ~ ('%.1f'|format(dash.churn_pct))|replace('.', ',') ~ '%',
+                 'positivo' if sa > 0 else ('negativo' if sa < 0 else '')) }}
   </div>
-  <div class="row g-3 mb-4">
-    <div class="col-12 col-lg-6">
-      <div class="card shadow-sm border-0 h-100"><div class="card-body">
-        <div class="d-flex justify-content-between mb-1">
-          <span class="fw-semibold">Mensalidades: recebido x previsto</span>
-          <span class="small text-muted">R$ {{ "%.2f"|format(dash.atual.mens_recebido) }} / R$ {{ "%.2f"|format(dash.atual.mens_previsto) }}</span>
-        </div>
-        {% set pct = (dash.atual.mens_recebido / dash.atual.mens_previsto * 100) if dash.atual.mens_previsto else 0 %}
-        <div class="progress" style="height:22px;">
-          <div class="progress-bar bg-success" role="progressbar" style="width: {{ pct if pct <= 100 else 100 }}%;">{{ "%.0f"|format(pct) }}%</div>
-        </div>
-        <div class="small text-muted mt-1">Previsto = mensalidades que vencem no mês · Recebido = pagas no mês.</div>
-      </div></div>
-    </div>
-    <div class="col-12 col-lg-6">
-      <div class="card shadow-sm border-warning h-100"><div class="card-body d-flex flex-column justify-content-center">
-        <div class="d-flex justify-content-between align-items-center">
-          <div>
-            <div class="h4 fw-bold text-warning mb-0">{{ dash.inadimplencia_pct }}%</div>
-            <div class="small text-muted">Inadimplência (alunos em atraso)</div>
-          </div>
-          <div class="text-end">
-            <div class="h5 fw-bold text-danger mb-0">R$ {{ "%.2f"|format(dash.atrasado_valor) }}</div>
-            <div class="small text-muted">{{ dash.inadimplentes_qtd }} aluno(s) em atraso</div>
-          </div>
-        </div>
-      </div></div>
-    </div>
+  {% if dash.posicao_historica %}
+  <p class="dash-nota"><i class="bi bi-clock-history"></i>
+    Posição em {{ dash.posicao_data.strftime('%d/%m/%Y') }} — matriculados até a data e ainda não inativados.</p>
+  {% endif %}
+</section>
+
+{# -------------------------------------------------------------- financeiro #}
+<section class="dash-card">
+  <header class="dash-card__topo">
+    <h2 class="dash-card__titulo">Financeiro · {{ meses_nomes[mes-1] }} de {{ ano }}</h2>
+    <a href="{{ url_for('financeiro.painel_mensalidades', academia_id=academia_id) }}" class="dash-link">Ver mensalidades →</a>
+  </header>
+  <div class="dash-grid dash-grid--4">
+    {% set leg_rec %}{{ delta_money(dash.atual.receitas, dash.anterior.receitas) }}{% endset %}
+    {{ indicador('R$ ' ~ dash.atual.receitas|moeda_br, 'Receitas', leg_rec, 'positivo') }}
+    {% set leg_desp %}{{ delta_money(dash.atual.despesas, dash.anterior.despesas) }}{% endset %}
+    {{ indicador('R$ ' ~ dash.atual.despesas|moeda_br, 'Despesas', leg_desp) }}
+    {% set sl = dash.atual.saldo %}
+    {% set leg_saldo %}{{ delta_money(dash.atual.saldo, dash.anterior.saldo) }}{% endset %}
+    {{ indicador('R$ ' ~ sl|moeda_br, 'Saldo', leg_saldo, 'positivo' if sl >= 0 else 'negativo') }}
+    {{ indicador('R$ ' ~ dash.ticket_medio|moeda_br, 'Ticket médio',
+                 'Mensalidades recebidas ÷ ' ~ dash.ativos ~ ' aluno' ~ ('s' if dash.ativos != 1 else '') ~ ' ativo' ~ ('s' if dash.ativos != 1 else '')) }}
   </div>
 
-  <!-- ===================== FINANCEIRO AVANÇADO ===================== -->
-  <h6 class="text-uppercase text-muted fw-bold small mb-2"><i class="bi bi-graph-up me-1"></i>Financeiro avançado</h6>
-  <div class="row g-3 mb-4">
-    <div class="col-6 col-lg-3">
-      <div class="card shadow-sm border-success h-100"><div class="card-body py-3 text-center">
-        <div class="h5 fw-bold text-success mb-0">R$ {{ "%.2f"|format(dash.mrr) }}</div>
-        <div class="small text-muted">Receita recorrente (MRR)</div>
-        <div class="small text-muted">mensalidade ativa × alunos ativos</div>
-      </div></div>
-    </div>
-    <div class="col-6 col-lg-3">
-      <div class="card shadow-sm border-warning h-100"><div class="card-body py-3 text-center">
-        <div class="h5 fw-bold text-warning mb-0">R$ {{ "%.2f"|format(dash.venc7_valor) }}</div>
-        <div class="small text-muted">Vencendo em 7 dias</div>
-        <div class="small text-muted">{{ dash.venc7_qtd }} cobrança(s)</div>
-      </div></div>
-    </div>
-    <div class="col-6 col-lg-3">
-      <div class="card shadow-sm border-success h-100"><div class="card-body py-3 text-center">
-        <div class="h6 fw-bold text-success mb-0">R$ {{ "%.2f"|format(dash.receitas_ano) }}</div>
-        <div class="small text-muted">Receitas no ano (YTD)</div>
-        <div class="h6 fw-bold text-danger mt-1 mb-0">R$ {{ "%.2f"|format(dash.despesas_ano) }}</div>
-        <div class="small text-muted">Despesas no ano</div>
-      </div></div>
-    </div>
-    <div class="col-6 col-lg-3">
-      {% set sy = dash.saldo_ano %}
-      <div class="card shadow-sm {{ 'border-success' if sy >= 0 else 'border-warning' }} h-100"><div class="card-body py-3 text-center">
-        <div class="h4 fw-bold {{ 'text-success' if sy >= 0 else 'text-warning' }} mb-0">R$ {{ "%.2f"|format(sy) }}</div>
-        <div class="small text-muted">Saldo acumulado no ano</div>
-      </div></div>
-    </div>
-  </div>
-  <div class="card shadow-sm border-0 mb-4"><div class="card-body">
-    <h6 class="fw-bold mb-3">Receita por forma de pagamento — {{ meses_nomes[mes-1] }}/{{ ano }}</h6>
-    {% if dash.por_forma %}
-    {% set total_forma = dash.por_forma | sum(attribute='total') %}
-    {% for f in dash.por_forma %}
-    <div class="mb-2">
-      <div class="d-flex justify-content-between small">
-        <span>{{ f.nome }}</span>
-        <span class="fw-semibold">R$ {{ "%.2f"|format(f.total) }}</span>
+  <div class="dash-barras">
+    <div class="dash-barra">
+      <div class="dash-barra__topo">
+        <span class="dash-barra__nome">Mensalidades recebidas</span>
+        <span class="dash-barra__valor">R$ {{ dash.atual.mens_recebido|moeda_br }} de R$ {{ dash.atual.mens_previsto|moeda_br }}</span>
       </div>
-      <div class="progress" style="height:8px;">
-        <div class="progress-bar bg-success" style="width: {{ (f.total / total_forma * 100) if total_forma else 0 }}%;"></div>
+      <div class="dash-barra__trilho">
+        {# a largura é dado, por isso é o único style inline que permanece #}
+        <div class="dash-barra__preenchimento is-verde" style="width: {{ dash.mens_pct if dash.mens_pct <= 100 else 100 }}%"></div>
       </div>
+      <p class="dash-barra__nota">
+        {{ ('%.0f'|format(dash.mens_pct)) }}% do previsto. Previsto = mensalidades que vencem no mês.
+      </p>
     </div>
-    {% endfor %}
-    {% else %}
-    <p class="text-muted mb-0 small">Nenhum recebimento de mensalidade registrado neste mês.</p>
-    {% endif %}
-  </div></div>
 
-  <!-- ===================== GRÁFICO ===================== -->
-  <div class="row g-3 mb-4">
-    <div class="col-12 col-lg-6">
-      <div class="card shadow-sm border-0 h-100"><div class="card-body">
-        <h6 class="fw-bold mb-3">Receitas x Despesas (6 meses)</h6>
-        <canvas id="chartFin" height="160"></canvas>
-      </div></div>
-    </div>
-    <div class="col-12 col-lg-6">
-      <div class="card shadow-sm border-0 h-100"><div class="card-body">
-        <h6 class="fw-bold mb-3">Novos x Baixas (6 meses)</h6>
-        <canvas id="chartAlunos" height="160"></canvas>
-      </div></div>
+    <div class="dash-barra">
+      <div class="dash-barra__topo">
+        <span class="dash-barra__nome">Inadimplência</span>
+        <span class="dash-barra__valor is-negativo">R$ {{ dash.atrasado_valor|moeda_br }} em atraso</span>
+      </div>
+      <div class="dash-barra__trilho">
+        <div class="dash-barra__preenchimento is-vermelho" style="width: {{ dash.inadimplencia_pct if dash.inadimplencia_pct <= 100 else 100 }}%"></div>
+      </div>
+      <p class="dash-barra__nota">
+        {% if dash.inadimplentes_qtd %}
+          {{ dash.inadimplentes_qtd }} de {{ dash.ativos }} aluno{{ 's' if dash.ativos != 1 }} ativo{{ 's' if dash.ativos != 1 }} com cobrança vencida.
+        {% else %}
+          Nenhum aluno ativo com cobrança vencida.
+        {% endif %}
+      </p>
     </div>
   </div>
 
-  <!-- ===================== INADIMPLENTES ===================== -->
-  <div class="card shadow-sm border-0 mb-4">
-    <div class="card-body">
-      <div class="d-flex justify-content-between align-items-center mb-3">
-        <h6 class="fw-bold mb-0"><i class="bi bi-exclamation-triangle text-warning me-1"></i>Alunos inadimplentes</h6>
-        <a href="{{ url_for('financeiro.painel_mensalidades', academia_id=academia_id) }}" class="btn btn-outline-primary btn-sm">Ver mensalidades</a>
-      </div>
-      {% if dash.inadimplentes %}
-      <div class="table-responsive">
-        <table class="table table-sm align-middle mb-0">
-          <thead><tr><th>Aluno</th><th class="text-center">Cobranças</th><th class="text-end">Total em atraso</th><th>Vencimento + antigo</th></tr></thead>
-          <tbody>
-            {% for i in dash.inadimplentes %}
-            <tr>
-              <td>{{ i.nome }}</td>
-              <td class="text-center">{{ i.qtd }}</td>
-              <td class="text-end text-danger fw-semibold">R$ {{ "%.2f"|format(i.total) }}</td>
-              <td>{{ i.venc|data_br if i.venc else '-' }}</td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
+  {% if not dash.conciliacao_ok %}
+  {# Os dois números acima medem coisas diferentes; quando divergem, a tela diz
+     por quê em vez de deixar o gestor comparando R$ 5,00 com R$ 30,00. #}
+  <p class="dash-aviso">
+    <i class="bi bi-info-circle"></i>
+    <span>
+      <b>Receitas</b> soma tudo que entrou no caixa no mês (R$ {{ dash.atual.receitas|moeda_br }});
+      <b>Mensalidades recebidas</b> soma as baixas de mensalidade (R$ {{ dash.atual.mens_recebido|moeda_br }}).
+      {% if dash.conciliacao_dif > 0 %}
+        Há R$ {{ dash.conciliacao_dif|moeda_br }} em mensalidades baixadas sem lançamento correspondente em receitas.
       {% else %}
-      <p class="text-muted mb-0">Nenhum aluno em atraso. 🎉</p>
+        Há R$ {{ -dash.conciliacao_dif|moeda_br }} lançados como receita de mensalidade sem baixa correspondente.
       {% endif %}
-    </div>
-  </div>
+    </span>
+  </p>
+  {% endif %}
+</section>
 
-  <!-- Atalhos -->
-  <div class="d-flex flex-wrap gap-2">
-    <a href="{{ url_for('alunos.lista_alunos', academia_id=academia_id) }}" class="btn btn-outline-primary btn-sm"><i class="bi bi-people me-1"></i>Alunos</a>
-    <a href="{{ url_for('financeiro.painel_mensalidades', academia_id=academia_id) }}" class="btn btn-outline-success btn-sm"><i class="bi bi-calendar-check me-1"></i>Mensalidades</a>
-    <a href="{{ url_for('financeiro.lista_receitas', academia_id=academia_id) }}" class="btn btn-outline-success btn-sm"><i class="bi bi-cash-coin me-1"></i>Receitas</a>
-    <a href="{{ url_for('financeiro.lista_despesas', academia_id=academia_id) }}" class="btn btn-outline-danger btn-sm"><i class="bi bi-cash-stack me-1"></i>Despesas</a>
-  </div>
+{# ----------------------------------------------- financeiro avançado + série #}
+<div class="dash-duas">
+  <section class="dash-card">
+    <header class="dash-card__topo">
+      <h2 class="dash-card__titulo">Financeiro avançado</h2>
+    </header>
+    <ul class="dash-linhas">
+      <li>
+        <div>
+          <span class="dash-linhas__nome">Receita recorrente (MRR)</span>
+          <span class="dash-linhas__desc">Mensalidade ativa × alunos ativos</span>
+        </div>
+        <span class="dash-linhas__valor is-positivo">R$ {{ dash.mrr|moeda_br }}</span>
+      </li>
+      <li>
+        <div>
+          <span class="dash-linhas__nome">Vencendo em 7 dias</span>
+          <span class="dash-linhas__desc">{{ dash.venc7_qtd }} cobrança{{ 's' if dash.venc7_qtd != 1 }}</span>
+        </div>
+        <span class="dash-linhas__valor">R$ {{ dash.venc7_valor|moeda_br }}</span>
+      </li>
+      <li>
+        <div>
+          <span class="dash-linhas__nome">Receitas no ano</span>
+          <span class="dash-linhas__desc">Despesas no ano: R$ {{ dash.despesas_ano|moeda_br }}</span>
+        </div>
+        <span class="dash-linhas__valor is-positivo">R$ {{ dash.receitas_ano|moeda_br }}</span>
+      </li>
+      <li>
+        <div>
+          <span class="dash-linhas__nome">Saldo acumulado no ano</span>
+          <span class="dash-linhas__desc">Janeiro a {{ dash.mes_nome }} de {{ ano }}</span>
+        </div>
+        <span class="dash-linhas__valor {{ 'is-positivo' if dash.saldo_ano >= 0 else 'is-negativo' }}">R$ {{ dash.saldo_ano|moeda_br }}</span>
+      </li>
+    </ul>
+  </section>
+
+  <section class="dash-card">
+    <header class="dash-card__topo">
+      <h2 class="dash-card__titulo">Receitas x despesas</h2>
+      <span class="dash-card__meta">6 meses</span>
+    </header>
+    <canvas id="chartFin" height="200"></canvas>
+  </section>
 </div>
 
+{% if dash.por_forma %}
+<section class="dash-card">
+  <header class="dash-card__topo">
+    <h2 class="dash-card__titulo">Receita por forma de pagamento</h2>
+    <span class="dash-card__meta">{{ meses_nomes[mes-1] }} de {{ ano }}</span>
+  </header>
+  {% set total_forma = dash.por_forma | sum(attribute='total') %}
+  {% for f in dash.por_forma %}
+  <div class="dash-barra dash-barra--fina">
+    <div class="dash-barra__topo">
+      <span class="dash-barra__nome">{{ f.nome }}</span>
+      <span class="dash-barra__valor">R$ {{ f.total|moeda_br }}</span>
+    </div>
+    <div class="dash-barra__trilho">
+      <div class="dash-barra__preenchimento is-verde" style="width: {{ (f.total / total_forma * 100) if total_forma else 0 }}%"></div>
+    </div>
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
+
+{# ----------------------------------------------------------- inadimplentes #}
+<section class="dash-card">
+  <header class="dash-card__topo">
+    <h2 class="dash-card__titulo dash-card__titulo--alerta">
+      <i class="bi bi-exclamation-triangle-fill"></i> Alunos inadimplentes
+    </h2>
+    <div class="dash-card__acoes">
+      {% if dash.inadimplentes %}
+      <a href="{{ url_for('financeiro.painel_mensalidades', academia_id=academia_id, filtro='atrasadas') }}" class="dash-btn dash-btn--whats">
+        <i class="bi bi-whatsapp"></i> Cobrar por WhatsApp
+      </a>
+      {% endif %}
+      <a href="{{ url_for('financeiro.painel_mensalidades', academia_id=academia_id) }}" class="dash-btn">Ver mensalidades</a>
+    </div>
+  </header>
+
+  {% if dash.inadimplentes %}
+  <div class="dash-tabela-wrap">
+    <table class="dash-tabela">
+      <thead>
+        <tr>
+          <th>Aluno</th>
+          <th class="is-num">Cobranças</th>
+          <th class="is-num">Em atraso</th>
+          <th>Vencimento + antigo</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for i in dash.inadimplentes %}
+        <tr>
+          <td>
+            <a href="{{ url_for('alunos.ficha_aluno', aluno_id=i.id) }}" class="dash-tabela__link">{{ i.nome }}</a>
+          </td>
+          <td class="is-num">{{ i.qtd }}</td>
+          <td class="is-num is-negativo">R$ {{ i.total|moeda_br }}</td>
+          <td>{{ i.venc|data_br if i.venc else '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="dash-vazio">Nenhum aluno ativo com cobrança vencida.</p>
+  {% endif %}
+</section>
+
+{# ---------------------------------------------------------------- atalhos #}
+<nav class="dash-atalhos">
+  <a href="{{ url_for('alunos.lista_alunos', academia_id=academia_id) }}" class="dash-btn"><i class="bi bi-people"></i> Alunos</a>
+  <a href="{{ url_for('financeiro.painel_mensalidades', academia_id=academia_id) }}" class="dash-btn"><i class="bi bi-calendar-check"></i> Mensalidades</a>
+  <a href="{{ url_for('financeiro.lista_receitas', academia_id=academia_id) }}" class="dash-btn"><i class="bi bi-arrow-down-circle"></i> Receitas</a>
+  <a href="{{ url_for('financeiro.lista_despesas', academia_id=academia_id) }}" class="dash-btn"><i class="bi bi-arrow-up-circle"></i> Despesas</a>
+</nav>
+
+<footer class="dash-rodape">
+  © {{ ano }} {{ academia.nome if academia else 'Unimaster' }}. Todos os direitos reservados.
+</footer>
+{% endblock %}
+
+{% block extra_js %}
 <script id="dashSerie" type="application/json">{{ dash.serie|tojson }}</script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script>
 (function () {
   var serie = [];
   try { serie = JSON.parse(document.getElementById('dashSerie').textContent); } catch (e) {}
-  if (!window.Chart || !serie.length) return;
-  var labels = serie.map(function (s) { return s.label; });
-  new Chart(document.getElementById('chartFin'), {
+  var alvo = document.getElementById('chartFin');
+  if (!window.Chart || !serie.length || !alvo) return;
+  new Chart(alvo, {
     type: 'bar',
-    data: { labels: labels, datasets: [
-      { label: 'Receitas', data: serie.map(function (s){return s.receitas;}), backgroundColor: 'rgba(25,135,84,.7)' },
-      { label: 'Despesas', data: serie.map(function (s){return s.despesas;}), backgroundColor: 'rgba(220,53,69,.7)' }
-    ]},
-    options: { responsive: true, plugins: { legend: { position: 'bottom' } }, scales: { y: { beginAtZero: true } } }
-  });
-  new Chart(document.getElementById('chartAlunos'), {
-    type: 'bar',
-    data: { labels: labels, datasets: [
-      { label: 'Novos', data: serie.map(function (s){return s.novos;}), backgroundColor: 'rgba(13,110,253,.7)' },
-      { label: 'Baixas', data: serie.map(function (s){return s.baixas;}), backgroundColor: 'rgba(255,193,7,.8)' }
-    ]},
-    options: { responsive: true, plugins: { legend: { position: 'bottom' } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
+    data: {
+      labels: serie.map(function (s) { return s.label; }),
+      datasets: [
+        { label: 'Receitas', data: serie.map(function (s) { return s.receitas; }), backgroundColor: '#198754', borderRadius: 3 },
+        { label: 'Despesas', data: serie.map(function (s) { return s.despesas; }), backgroundColor: '#dee2e6', borderRadius: 3 }
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, boxHeight: 10, usePointStyle: false } } },
+      scales: {
+        y: { beginAtZero: true, border: { display: false }, grid: { color: '#f1f3f5' } },
+        x: { grid: { display: false }, border: { display: false } }
+      }
+    }
   });
 })();
 </script>
-<style>
-.painel-academia-dash .card { border-radius: 0.85rem; transition: 0.2s ease; }
-.painel-academia-dash .card:hover { transform: translateY(-3px); box-shadow: 0 0.5rem 1.2rem rgba(0,0,0,0.12) !important; }
-</style>
 {% endblock %}

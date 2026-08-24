@@ -365,16 +365,357 @@ def _voltar_painel_url_seguro():
     return url_for("painel.home")
 
 
+_MESES_NOMES = (
+    "", "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+    "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
+)
+
+# Rótulo de cada reação na tela da academia — o backend continua guardando a
+# chave curta (heart, cake…), aqui só se dá nome a ela para quem lê.
+REACOES_PAINEL = (
+    ("clap", "Força e saúde", "bi-hand-thumbs-up"),
+    ("party", "Comemorações", "bi-balloon"),
+    ("cake", "Bom treino", "bi-award"),
+    ("heart", "Carinho", "bi-heart"),
+)
+
+
+def _iniciais(nome: str) -> str:
+    partes = (nome or "?").split()
+    if not partes:
+        return "?"
+    return (partes[0][0] + (partes[-1][0] if len(partes) > 1 else "")).upper()
+
+
+def _idade_no_aniversario(nasc, ano: int):
+    """Idade que a pessoa completa (ou completou) no aniversário do ano dado."""
+    if not nasc:
+        return None
+    return ano - nasc.year
+
+
+def _usuario_eh_staff_academia() -> bool:
+    return bool(
+        current_user.has_role("gestor_academia")
+        or current_user.has_role("admin")
+        or current_user.has_role("professor")
+        or current_user.has_role("gestor_associacao")
+        or current_user.has_role("gestor_federacao")
+    )
+
+
+def _academia_do_painel():
+    from blueprints.academia.routes import _get_academia_gerenciamento
+
+    try:
+        aid, _ = _get_academia_gerenciamento()
+        return aid
+    except Exception:
+        return None
+
+
+def _parabenizados_por_whatsapp(cur, academia_id, ano: int, mes: int) -> dict:
+    """{aluno_id: data do último parabéns enviado} a partir de whatsapp_envios.
+
+    A tabela pode não existir (migração não rodada): nesse caso a tela mostra
+    todo mundo como não parabenizado, em vez de deixar de abrir.
+    """
+    if not academia_id:
+        return {}
+    try:
+        cur.execute(
+            """SELECT referencia_id, MAX(data_ref) AS ultima
+               FROM whatsapp_envios
+               WHERE id_academia = %s AND tipo = 'aniversario'
+                 AND YEAR(data_ref) = %s AND MONTH(data_ref) = %s
+               GROUP BY referencia_id""",
+            (academia_id, ano, mes),
+        )
+        return {int(r["referencia_id"]): r["ultima"] for r in cur.fetchall() or []}
+    except Exception:
+        return {}
+
+
+def _contagem_parabens_live(cur, ref: str, ids) -> dict:
+    """{aluno_id: nº de parabéns publicados na página do aniversariante}."""
+    if not ids:
+        return {}
+    try:
+        ph = ",".join(["%s"] * len(ids))
+        cur.execute(
+            f"""SELECT aluno_id, COUNT(*) AS c FROM aniversario_live_eventos
+                WHERE ref_mes_ano = %s AND acao = 'parabens' AND aluno_id IN ({ph})
+                GROUP BY aluno_id""",
+            (ref,) + tuple(ids),
+        )
+        return {int(r["aluno_id"]): int(r["c"] or 0) for r in cur.fetchall() or []}
+    except Exception:
+        return {}
+
+
+def _detalhe_aluno_painel(cur, aluno_id: int, ref: str):
+    """Ficha do aniversariante selecionado: contato, mural e reações."""
+    cur.execute(
+        """SELECT a.id, a.nome, a.foto, a.data_nascimento, a.id_academia,
+                  a.telefone, a.tel_celular,
+                  a.responsavel_nome, a.responsavel_parentesco,
+                  a.responsavel_financeiro_nome, a.responsavel_financeiro_telefone,
+                  GROUP_CONCAT(t.Nome ORDER BY t.Nome SEPARATOR ', ') AS turmas
+           FROM alunos a
+           LEFT JOIN aluno_turmas at2 ON at2.aluno_id = a.id
+           LEFT JOIN turmas t ON t.TurmaID = at2.TurmaID
+           WHERE a.id = %s AND COALESCE(a.ativo, 1) = 1
+           GROUP BY a.id""",
+        (aluno_id,),
+    )
+    row = cur.fetchone()
+    if not row:
+        return None
+
+    reacoes, mural, total_parabens = [], [], 0
+    try:
+        cur.execute(
+            """SELECT acao, COUNT(*) AS c FROM aniversario_live_eventos
+               WHERE aluno_id = %s AND ref_mes_ano = %s GROUP BY acao""",
+            (aluno_id, ref),
+        )
+        por_acao = {(r["acao"] or "").lower(): int(r["c"] or 0) for r in cur.fetchall() or []}
+        total_parabens = por_acao.get("parabens", 0)
+        reacoes = [
+            {"chave": k, "rotulo": rot, "icone": ic, "total": por_acao.get(k, 0)}
+            for k, rot, ic in REACOES_PAINEL
+        ]
+    except Exception:
+        reacoes = [
+            {"chave": k, "rotulo": rot, "icone": ic, "total": 0}
+            for k, rot, ic in REACOES_PAINEL
+        ]
+
+    try:
+        cur.execute(
+            """SELECT m.id, m.corpo, m.remetente, m.criado_em, u.nome AS autor_nome,
+                      u.perfil AS autor_perfil
+               FROM aniversario_mensagens m
+               LEFT JOIN usuarios u ON u.id = m.usuario_id
+               WHERE m.aluno_id = %s AND m.ref_mes_ano = %s
+               ORDER BY m.criado_em DESC, m.id DESC
+               LIMIT 40""",
+            (aluno_id, ref),
+        )
+        mural = cur.fetchall() or []
+    except Exception:
+        mural = []
+
+    telefone = (
+        (row.get("responsavel_financeiro_telefone") or "").strip()
+        or (row.get("tel_celular") or "").strip()
+        or (row.get("telefone") or "").strip()
+    )
+    responsavel = (
+        (row.get("responsavel_financeiro_nome") or "").strip()
+        or (row.get("responsavel_nome") or "").strip()
+    )
+    return {
+        "row": row,
+        "telefone": telefone,
+        "responsavel": responsavel,
+        "reacoes": reacoes,
+        "total_parabens": total_parabens,
+        "mural": mural,
+    }
+
+
+def _painel_academia_contexto(mes: int, aluno_sel_id):
+    """Monta a tela de aniversariantes da academia (as duas abas)."""
+    hoje = date.today()
+    ano = hoje.year
+    ref = f"{ano}-{mes:02d}"
+    academia_id = _academia_do_painel()
+
+    itens = _listar_aniversariantes_mes(mes) or []
+
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        ids = [int(a["id"]) for a in itens if a.get("id")]
+        enviados = _parabenizados_por_whatsapp(cur, academia_id, ano, mes)
+        parabens_live = _contagem_parabens_live(cur, ref, ids)
+
+        hoje_lista, proximos, passados = [], [], []
+        for a in itens:
+            nasc = _parse_data_nascimento(a.get("data_nascimento"))
+            if not nasc:
+                continue
+            dia = nasc.day
+            idade = _idade_no_aniversario(nasc, ano)
+            no_dia = (mes == hoje.month and dia == hoje.day and ano == hoje.year)
+            futuro = (ano, mes, dia) > (hoje.year, hoje.month, hoje.day)
+            item = {
+                "id": int(a["id"]),
+                "nome": a.get("nome") or "",
+                "iniciais": _iniciais(a.get("nome")),
+                "foto_url": _foto_url(a.get("foto")),
+                "turmas": (a.get("turmas") or "").strip(),
+                "dia": dia,
+                "data_label": f"{dia} de {_MESES_PT[mes][:3]}",
+                "idade": idade,
+                "idade_label": (f"faz {idade} anos" if (no_dia or futuro) else f"fez {idade} anos"),
+                "hoje": no_dia,
+                "futuro": futuro,
+                "parabenizado": int(a["id"]) in enviados,
+                "parabens_live": parabens_live.get(int(a["id"]), 0),
+            }
+            if no_dia:
+                hoje_lista.append(item)
+            elif futuro:
+                proximos.append(item)
+            else:
+                passados.append(item)
+
+        # Já passaram: o mais recente primeiro é o que a secretaria procura.
+        passados.sort(key=lambda x: x["dia"], reverse=True)
+
+        # Elegível a parabéns = o dia já chegou. É sobre esses que faz sentido
+        # medir quem já recebeu mensagem.
+        elegiveis = hoje_lista + passados
+        parabenizados = sum(1 for x in elegiveis if x["parabenizado"])
+
+        # Seleção: o pedido explícito, senão quem faz aniversário hoje.
+        selecionado_id = aluno_sel_id
+        if selecionado_id not in ids:
+            selecionado_id = (hoje_lista or passados or proximos or [{"id": None}])[0]["id"]
+
+        detalhe = _detalhe_aluno_painel(cur, selecionado_id, ref) if selecionado_id else None
+        selecionado = None
+        if detalhe:
+            base = next((x for x in (hoje_lista + proximos + passados)
+                         if x["id"] == selecionado_id), None)
+            selecionado = dict(base or {})
+            selecionado.update({
+                "telefone": detalhe["telefone"],
+                "responsavel": detalhe["responsavel"],
+                "reacoes": detalhe["reacoes"],
+                "total_parabens": detalhe["total_parabens"],
+                "mural": detalhe["mural"],
+                "ultimo_whatsapp": enviados.get(selecionado_id),
+            })
+            # Colegas da mesma turma que ainda vêm no mês — o "próximos da turma".
+            selecionado["proximos_turma"] = [
+                x for x in (hoje_lista + proximos)
+                if x["id"] != selecionado_id
+            ][:6]
+    finally:
+        cur.close()
+        conn.close()
+
+    mensagem_modelo, modelo_ativo = "", True
+    if academia_id:
+        try:
+            from utils.whatsapp_lembretes import mensagem_aniversario
+            linha = None
+            if selecionado:
+                linha = {"nome": selecionado.get("nome"),
+                         "responsavel_financeiro_nome": selecionado.get("responsavel")}
+            mensagem_modelo, modelo_ativo = mensagem_aniversario(academia_id, linha)
+        except Exception:
+            current_app.logger.info("aniversariantes: modelo de WhatsApp indisponível")
+
+    return {
+        "mes": mes,
+        "ano": ano,
+        "ref_mes_ano": ref,
+        "meses_nomes": _MESES_NOMES,
+        "mes_nome": _MESES_NOMES[mes],
+        "hoje_label": f"{hoje.day} de {_MESES_NOMES[hoje.month].lower()}",
+        "mes_corrente": mes == hoje.month,
+        "aniv_hoje": hoje_lista,
+        "aniv_proximos": proximos,
+        "aniv_passados": passados,
+        "kpis": {
+            "no_mes": len(hoje_lista) + len(proximos) + len(passados),
+            "hoje": len(hoje_lista),
+            "proximos": len(proximos),
+            "parabenizados": parabenizados,
+            "elegiveis": len(elegiveis),
+        },
+        "selecionado": selecionado,
+        "mensagem_modelo": mensagem_modelo,
+        "modelo_ativo": modelo_ativo,
+        "academia_id": academia_id,
+    }
+
+
 @bp_aniversariante_live.route("/")
 @login_required
 def pagina():
-    """SPA: HTML com meta CSRF e URLs estáticas."""
+    """Aniversariantes do mês.
+
+    No modo academia a tela é a da secretaria (server-side, dentro do shell da
+    academia). Nos demais modos — aluno, responsável, professor fora do painel —
+    continua a SPA de celebração, que roda no layout deles.
+    """
     aluno_escopo = request.args.get("aluno_id", type=int)
+
+    if (session.get("modo_painel") or "") == "academia" and _usuario_eh_staff_academia():
+        mes = request.args.get("mes", type=int) or date.today().month
+        if mes < 1 or mes > 12:
+            mes = date.today().month
+        ctx = _painel_academia_contexto(mes, aluno_escopo)
+        return render_template("aniversariante_live/painel.html", **ctx)
+
     return render_template(
         "aniversariante_live/index.html",
         voltar_painel_url=_voltar_painel_url_seguro(),
         aniv_aluno_escopo=aluno_escopo,
     )
+
+
+@bp_aniversariante_live.route("/whatsapp", methods=["POST"])
+@login_required
+def api_whatsapp_parabens():
+    """Dispara o parabéns por WhatsApp: um aluno, ou todos os de hoje.
+
+    É o envio manual da secretaria — não depende de a automação diária estar
+    ligada, só do modelo de mensagem estar ativo.
+    """
+    if not _usuario_eh_staff_academia():
+        return jsonify({"ok": False, "msg": "Sem permissão"}), 403
+
+    data = request.get_json(silent=True) or {}
+    forcar = bool(data.get("forcar"))
+    from utils.whatsapp_lembretes import enviar_aniversario_aluno
+
+    alvos = data.get("alunos")
+    if not alvos:
+        aluno_id = data.get("aluno_id")
+        alvos = [aluno_id] if aluno_id else []
+    try:
+        alvos = [int(x) for x in alvos][:60]
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "msg": "aluno_id inválido"}), 400
+    if not alvos:
+        return jsonify({"ok": False, "msg": "Nenhum aniversariante informado."}), 400
+
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        permitidos = [a for a in alvos if aniv_msg._staff_may_access_aluno(cur, a)[0]]
+    finally:
+        cur.close()
+        conn.close()
+    if not permitidos:
+        return jsonify({"ok": False, "msg": "Sem permissão sobre estes alunos."}), 403
+
+    resultados = [dict(enviar_aniversario_aluno(a, forcar=forcar), aluno_id=a) for a in permitidos]
+    enviados = sum(1 for r in resultados if r.get("ok"))
+    motivos = [r.get("motivo") for r in resultados if not r.get("ok")]
+    return jsonify({
+        "ok": enviados > 0,
+        "enviados": enviados,
+        "total": len(resultados),
+        "motivos": motivos,
+        "resultados": resultados,
+    })
 
 
 @bp_aniversariante_live.route("/aniversariantes", methods=["GET"])

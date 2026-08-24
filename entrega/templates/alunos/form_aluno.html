@@ -1,0 +1,343 @@
+{% extends 'base_um.html' %}
+{% set um_ativo = 'alunos' %}
+{% set editando = aluno is defined and aluno %}
+{% block title %}{{ 'Editar Aluno' if editando else 'Novo Aluno' }}{% endblock %}
+
+{% block um_css %}
+  .cols { display:grid; grid-template-columns:minmax(0,1fr) 232px; gap:20px; align-items:start; padding-bottom:96px; }
+  .sec { background:#fff; border:1px solid #e4e4e7; border-radius:10px; overflow:hidden; }
+  .sec-h { padding:13px 18px; border-bottom:1px solid #f4f4f5; font:600 14px/1 'Inter',sans-serif;
+    color:#18181b; display:flex; align-items:center; gap:9px; }
+  .sec-h i { font-size:13px; color:#a1a1aa; }
+  .sec-b { padding:18px; display:grid; grid-template-columns:repeat(12,1fr); gap:16px; }
+  .fld { display:flex; flex-direction:column; gap:6px; min-width:0; }
+  .chk { display:flex; align-items:center; gap:8px; font:400 13px/1.3 'Inter',sans-serif; color:#3f3f46; cursor:pointer; }
+  .chk input { width:15px; height:15px; padding:0; accent-color:#C8102E; }
+  .rail a { padding:7px 10px; border-radius:7px; font:500 12.5px/1 'Inter',sans-serif; color:#3f3f46; }
+  .rail a:hover { background:#fafafa; }
+  .grid-2 { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:16px; }
+  .barra { position:sticky; bottom:0; z-index:10; background:#fff; border-top:1px solid #e4e4e7;
+    margin:0 -32px -40px; padding:12px 32px; display:flex; align-items:center;
+    justify-content:space-between; gap:12px; flex-wrap:wrap; }
+  input[readonly] { background:#f4f4f5; color:#71717a; }
+  @media (max-width: 1180px) {
+    .rail { display:none !important; }
+    .cols { grid-template-columns:minmax(0,1fr) !important; }
+  }
+  @media (max-width: 1040px) { .foto-row { flex-direction:column !important; align-items:stretch !important; } }
+  @media (max-width: 900px) {
+    .sec-b { padding:14px !important; gap:14px !important; }
+    .sec-b > .fld, .sec-b > div { grid-column:1 / -1 !important; }
+    .grid-2 { grid-template-columns:1fr !important; }
+    .cols { padding-bottom:120px !important; }
+    .barra { margin:0 -16px -40px; padding:12px 16px; }
+  }
+{% endblock %}
+
+{% block um_conteudo %}
+{% set d = aluno if editando else none %}
+
+<div style="display:flex; align-items:center; gap:8px; font:400 12.5px/1 'Inter',sans-serif; color:#a1a1aa">
+  <a href="{{ url_for('alunos.lista_alunos') }}" style="color:#71717a">Alunos</a>
+  <i class="bi bi-chevron-right" style="font-size:9px"></i>
+  {% if editando %}
+  <a href="{{ url_for('alunos.ficha', id=d.id) }}" style="color:#71717a">{{ d.nome }}</a>
+  <i class="bi bi-chevron-right" style="font-size:9px"></i>
+  <span style="color:#18181b">Editar cadastro</span>
+  {% else %}
+  <span style="color:#18181b">Novo aluno</span>
+  {% endif %}
+</div>
+
+<div style="display:flex; flex-direction:column; gap:6px">
+  <div class="um-h1">{{ 'Editar Aluno' if editando else 'Novo Aluno' }}</div>
+  <div class="um-sub">{{ 'Atualize os dados necessários abaixo.' if editando else 'Campos com * são obrigatórios; o resto pode ser completado depois.' }}</div>
+</div>
+
+<form method="POST" enctype="multipart/form-data"
+      action="{{ url_for('alunos.editar', id=d.id) if editando else url_for('alunos.novo') }}">
+<div class="cols">
+  <div style="display:flex; flex-direction:column; gap:16px">
+
+    {# ---------------------------------- FOTO --------------------------------- #}
+    <div class="sec" id="foto">
+      <div class="sec-h"><i class="bi bi-camera-fill"></i>Foto</div>
+      <div class="sec-b foto-row" style="display:flex; align-items:center; gap:20px">
+        <div style="width:104px; height:104px; border-radius:10px; background:#f4f4f5; border:1px solid #e4e4e7; display:flex; align-items:center; justify-content:center; color:#a1a1aa; flex-shrink:0; overflow:hidden">
+          {% if d and d.foto %}<img src="{{ d.foto }}" alt="" style="width:100%; height:100%; object-fit:cover">
+          {% else %}<i class="bi bi-person-fill" style="font-size:40px"></i>{% endif %}
+        </div>
+        <div style="flex:1; min-width:0; display:flex; flex-direction:column; gap:9px">
+          <label>{{ 'Enviar nova foto' if editando else 'Foto do aluno' }}</label>
+          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap">
+            <label class="um-btn"><i class="bi bi-camera-fill" style="font-size:12px"></i>Câmera
+              <input type="file" name="foto" accept="image/*" capture="user" style="display:none">
+            </label>
+            <label style="flex:1; min-width:180px; display:flex; align-items:center; gap:10px; padding:9px 12px; border:1px dashed #d4d4d8; border-radius:8px; font:400 12.5px/1 'Inter',sans-serif; color:#a1a1aa; cursor:pointer">
+              <i class="bi bi-upload" style="font-size:12px"></i>Escolher arquivo
+              <input type="file" name="foto_arquivo" accept="image/*" style="display:none">
+            </label>
+          </div>
+          <div style="font:400 11.5px/1.4 'Inter',sans-serif; color:#a1a1aa">JPG, PNG, GIF ou WebP.</div>
+        </div>
+      </div>
+    </div>
+
+    {# ------------------------------ DADOS PESSOAIS --------------------------- #}
+    <div class="sec" id="dados">
+      <div class="sec-h"><i class="bi bi-person-fill"></i>Dados Pessoais</div>
+      <div class="sec-b">
+        <div class="fld" style="grid-column:span 12"><label>Nome completo *</label>
+          <input type="text" name="nome" required value="{{ d.nome if d else '' }}" placeholder="Nome completo"></div>
+        <div class="fld" style="grid-column:span 4"><label>Data de nascimento *</label>
+          <input type="date" name="nascimento" required value="{{ d.nascimento_iso if d else '' }}"></div>
+        <div class="fld" style="grid-column:span 4"><label>Nacionalidade</label>
+          <input type="text" name="nacionalidade" value="{{ d.nacionalidade if d else 'Brasileira' }}" placeholder="Nacionalidade"></div>
+        <div class="fld" style="grid-column:span 4"><label>Graduação</label>
+          <select name="graduacao_id">
+            <option value="">— Selecione —</option>
+            {% for g in graduacoes %}<option value="{{ g.id }}" {% if d and d.graduacao_id == g.id %}selected{% endif %}>{{ g.nome }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="fld" style="grid-column:span 4"><label>Sexo</label>
+          <select name="sexo">
+            {% for v, n in [('', '— Selecione —'), ('F','Feminino'), ('M','Masculino'), ('O','Outro')] %}
+            <option value="{{ v }}" {% if d and d.sexo == v %}selected{% endif %}>{{ n }}</option>{% endfor %}
+          </select>
+        </div>
+      </div>
+    </div>
+
+    {# --------------------------------- VÍNCULOS ------------------------------ #}
+    <div class="sec" id="vinculos">
+      <div class="sec-h"><i class="bi bi-diagram-3"></i>Vínculos</div>
+      <div class="sec-b">
+        <div class="fld" style="grid-column:span 6"><label>Academia</label>
+          <input type="text" value="{{ academia.nome }}" readonly>
+          <input type="hidden" name="academia_id" value="{{ academia.id }}"></div>
+        <div class="fld" style="grid-column:span 6"><label>Associação</label>
+          <input type="text" value="{{ academia.associacao or '—' }}" readonly></div>
+
+        {% if editando %}
+        <div class="fld" style="grid-column:span 12">
+          <label>Academias onde treina</label>
+          <div style="border:1px solid #e4e4e7; border-radius:8px; padding:12px; display:flex; flex-direction:column; gap:10px">
+            <div style="display:flex; flex-wrap:wrap; gap:8px">
+              {% for v in d.academias_vinculadas %}
+              {% if v.principal %}
+              <span style="display:inline-flex; align-items:center; gap:7px; padding:6px 11px; border-radius:999px; background:#18181b; color:#fff; font:500 12px/1.2 'Inter',sans-serif">
+                <i class="bi bi-star-fill" style="font-size:9px"></i>{{ v.nome }} <span style="font-weight:400; color:rgba(255,255,255,.6)">(principal)</span>
+              </span>
+              {% else %}
+              <span style="display:inline-flex; align-items:center; gap:9px; padding:6px 11px; border-radius:999px; border:1px solid #e4e4e7; color:#3f3f46; font:500 12px/1.2 'Inter',sans-serif">
+                {{ v.nome }}
+                <a href="{{ url_for('alunos.tornar_principal', id=d.id, academia_id=v.id) }}" style="font-weight:500">tornar principal</a>
+                <a href="{{ url_for('alunos.desvincular', id=d.id, academia_id=v.id) }}" style="color:#a1a1aa"><i class="bi bi-x" style="font-size:12px"></i></a>
+              </span>
+              {% endif %}
+              {% endfor %}
+            </div>
+            <div style="display:flex; gap:8px; max-width:420px">
+              <select name="vincular_academia_id" style="flex:1">
+                <option value="">Vincular a outra academia…</option>
+                {% for a in academias_irmas %}<option value="{{ a.id }}">{{ a.nome }}</option>{% endfor %}
+              </select>
+              <button class="um-btn" type="submit" name="acao" value="vincular" style="white-space:nowrap"><i class="bi bi-plus-lg" style="font-size:11px"></i>Vincular</button>
+            </div>
+            <div style="font:400 12px/1.5 'Inter',sans-serif; color:#a1a1aa">Só academias da mesma associação. O aluno passa a aparecer nas duas.</div>
+          </div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    {# --------------------------------- FILIAÇÃO ------------------------------ #}
+    <div class="sec" id="filiacao">
+      <div class="sec-h"><i class="bi bi-people-fill"></i>Filiação</div>
+      <div class="sec-b">
+        <div class="fld" style="grid-column:span 6"><label>Nome do Pai</label>
+          <input type="text" name="pai" value="{{ d.pai if d else '' }}" placeholder="Nome do pai"></div>
+        <div class="fld" style="grid-column:span 6"><label>Nome da Mãe</label>
+          <input type="text" name="mae" value="{{ d.mae if d else '' }}" placeholder="Nome da mãe"></div>
+      </div>
+    </div>
+
+    {# --------------------------- TURMA E MODALIDADES ------------------------- #}
+    <div class="sec" id="turmas">
+      <div class="sec-h"><i class="bi bi-person-badge"></i>Turma e Modalidades</div>
+      <div class="sec-b">
+        <div class="fld" style="grid-column:span 12">
+          <label>Turma(s)</label>
+          <div style="font:400 12px/1.4 'Inter',sans-serif; color:#a1a1aa">Marque uma ou mais turmas em que o aluno está matriculado</div>
+          <div style="display:flex; flex-wrap:wrap; gap:14px; padding-top:4px">
+            {% for t in turmas %}
+            <label class="chk"><input type="checkbox" name="turma_ids" value="{{ t.id }}"
+              {% if d and t.id in d.turma_ids %}checked{% endif %}>{{ t.nome }} ({{ t.categoria }}, {{ t.dias }} {{ t.horario }})</label>
+            {% endfor %}
+          </div>
+        </div>
+        <div class="fld" style="grid-column:span 12">
+          <label>Modalidades *</label>
+          <div style="display:flex; flex-wrap:wrap; gap:14px; padding-top:4px">
+            {% for m in modalidades %}
+            <label class="chk"><input type="checkbox" name="modalidade_ids" value="{{ m.id }}"
+              {% if d and m.id in d.modalidade_ids %}checked{% endif %}>{{ m.nome }}</label>
+            {% endfor %}
+          </div>
+        </div>
+        <div style="grid-column:span 12; border-top:1px solid #f4f4f5; padding-top:16px; display:grid; grid-template-columns:repeat(12,1fr); gap:16px">
+          <div style="grid-column:span 12">
+            <label class="chk"><input type="checkbox" name="zempo" {% if d and d.zempo %}checked{% endif %}>Cadastro no Zempo</label>
+          </div>
+          <div class="fld" style="grid-column:span 4"><label>Registro Zempo nº</label>
+            <input type="text" name="zempo_numero" value="{{ d.zempo_numero if d else '' }}" placeholder="Número do registro Zempo"></div>
+          <div class="fld" style="grid-column:span 4"><label>Data de Cadastro Zempo</label>
+            <input type="date" name="zempo_data" value="{{ d.zempo_data_iso if d else '' }}"></div>
+          <div class="fld" style="grid-column:span 4"><label>Peso</label>
+            <input type="number" step="0.1" name="peso" value="{{ d.peso if d else '' }}" placeholder="Peso (kg)"></div>
+        </div>
+      </div>
+    </div>
+
+    {# -------------------------------- DOCUMENTOS ----------------------------- #}
+    <div class="sec" id="documentos">
+      <div class="sec-h"><i class="bi bi-file-text"></i>Documentos</div>
+      <div class="sec-b">
+        <div class="fld" style="grid-column:span 4"><label>Data da Última Graduação</label>
+          <input type="date" name="ultima_graduacao" value="{{ d.ultima_graduacao_iso if d else '' }}"></div>
+        <div class="fld" style="grid-column:span 4"><label>CPF</label>
+          <input type="text" name="cpf" value="{{ d.cpf if d else '' }}" placeholder="000.000.000-00"></div>
+        <div class="fld" style="grid-column:span 4"><label>RG</label>
+          <input type="text" name="rg" value="{{ d.rg if d else '' }}" placeholder="RG"></div>
+        <div class="fld" style="grid-column:span 4"><label>Órgão Emissor / UF</label>
+          <input type="text" name="orgao_emissor" value="{{ d.orgao_emissor if d else '' }}" placeholder="Ex: SDS/PE"></div>
+        <div class="fld" style="grid-column:span 4"><label>Data de emissão</label>
+          <input type="date" name="emissao" value="{{ d.emissao_iso if d else '' }}"></div>
+      </div>
+    </div>
+
+    {# --------------------------------- ENDEREÇO ------------------------------ #}
+    <div class="sec" id="endereco">
+      <div class="sec-h"><i class="bi bi-geo-alt-fill"></i>Endereço</div>
+      <div class="sec-b">
+        <div class="fld" style="grid-column:span 3"><label>CEP</label>
+          <div style="display:flex; gap:6px">
+            <input type="text" name="cep" id="umCep" value="{{ d.cep if d else '' }}" placeholder="00000-000">
+            <button class="um-ico" type="button" style="width:38px; flex-shrink:0" title="Buscar CEP" onclick="umBuscarCep()"><i class="bi bi-search" style="font-size:12px"></i></button>
+          </div>
+        </div>
+        <div class="fld" style="grid-column:span 6"><label>Endereço</label>
+          <input type="text" name="endereco" id="umEndereco" value="{{ d.endereco if d else '' }}" placeholder="Endereço completo"></div>
+        <div class="fld" style="grid-column:span 3"><label>Número</label>
+          <input type="text" name="numero" value="{{ d.numero if d else '' }}" placeholder="Número"></div>
+        <div class="fld" style="grid-column:span 4"><label>Bairro</label>
+          <input type="text" name="bairro" id="umBairro" value="{{ d.bairro if d else '' }}" placeholder="Bairro"></div>
+        <div class="fld" style="grid-column:span 4"><label>Cidade</label>
+          <input type="text" name="cidade" id="umCidade" value="{{ d.cidade if d else '' }}" placeholder="Cidade"></div>
+        <div class="fld" style="grid-column:span 4"><label>Estado</label>
+          <input type="text" name="estado" id="umEstado" value="{{ d.estado if d else '' }}" placeholder="UF" maxlength="2"></div>
+        <div class="fld" style="grid-column:span 12"><label>Complemento</label>
+          <input type="text" name="complemento" value="{{ d.complemento if d else '' }}" placeholder="Complemento"></div>
+      </div>
+    </div>
+
+    {# --------------------------------- CONTATOS ------------------------------ #}
+    <div class="sec" id="contatos">
+      <div class="sec-h"><i class="bi bi-telephone-fill"></i>Contatos</div>
+      <div class="sec-b">
+        <div class="fld" style="grid-column:span 6"><label>Grau de parentesco</label>
+          <select name="parentesco">
+            {% for v in ['', 'Pai', 'Mãe', 'Avô/Avó', 'Tio/Tia', 'Outro'] %}
+            <option value="{{ v }}" {% if d and d.parentesco == v %}selected{% endif %}>{{ v or '— Selecione —' }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="fld" style="grid-column:span 6"><label>Responsável (menor)</label>
+          <input type="text" name="responsavel" value="{{ d.responsavel if d else '' }}" placeholder="Nome do responsável"></div>
+        <div class="fld" style="grid-column:span 6"><label>Email *</label>
+          <input type="email" name="email" required value="{{ d.email if d else '' }}" placeholder="email@exemplo.com"></div>
+        <div class="fld" style="grid-column:span 6"><label>Telefone Celular *</label>
+          <input type="text" name="celular" required value="{{ d.celular if d else '' }}" placeholder="(00) 00000-0000"></div>
+        <div class="fld" style="grid-column:span 4"><label>Telefone Residencial</label>
+          <input type="text" name="residencial" value="{{ d.residencial if d else '' }}" placeholder="(00) 0000-0000"></div>
+        <div class="fld" style="grid-column:span 4"><label>Telefone Comercial</label>
+          <input type="text" name="comercial" value="{{ d.comercial if d else '' }}" placeholder="(00) 0000-0000"></div>
+        <div class="fld" style="grid-column:span 4"><label>Outro Telefone</label>
+          <input type="text" name="outro_telefone" value="{{ d.outro_telefone if d else '' }}" placeholder="(00) 0000-0000"></div>
+        <div class="fld" style="grid-column:span 12"><label>Observações</label>
+          <textarea name="observacoes" rows="3" placeholder="Observações adicionais">{{ d.observacoes if d else '' }}</textarea></div>
+      </div>
+    </div>
+
+    {# -------------------------- RESPONSÁVEL FINANCEIRO ----------------------- #}
+    <div class="sec" id="responsavel">
+      <div class="sec-h"><i class="bi bi-cash"></i>Responsável Financeiro</div>
+      <div class="sec-b">
+        <div class="fld" style="grid-column:span 5"><label>Nome</label>
+          <input type="text" name="resp_fin_nome" id="umRespNome" value="{{ d.resp_fin_nome if d else '' }}" placeholder="Nome do responsável financeiro"></div>
+        <div class="fld" style="grid-column:span 3"><label>CPF</label>
+          <input type="text" name="resp_fin_cpf" id="umRespCpf" value="{{ d.resp_fin_cpf if d else '' }}" placeholder="CPF do responsável"></div>
+        <div class="fld" style="grid-column:span 4"><label>Telefone *</label>
+          <input type="text" name="resp_fin_tel" id="umRespTel" required value="{{ d.resp_fin_tel if d else '' }}" placeholder="(00) 00000-0000">
+          <div style="font:400 12px/1.4 'Inter',sans-serif; color:#a1a1aa">Usado na cobrança online (InfinitePay).</div>
+        </div>
+        <div style="grid-column:span 12">
+          <button class="um-btn" type="button" onclick="umMesmoAluno()"><i class="bi bi-person-check" style="font-size:12px"></i>Mesmo aluno</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  {# ------------------------------ ÍNDICE LATERAL ---------------------------- #}
+  <div class="rail" style="position:sticky; top:0; display:flex; flex-direction:column; gap:14px">
+    <div class="um-card" style="padding:12px 8px; display:flex; flex-direction:column; gap:1px">
+      <div style="padding:4px 10px 8px; font:500 11px/1 'Inter',sans-serif; color:#a1a1aa; text-transform:uppercase; letter-spacing:.08em">Seções</div>
+      {% for id, nome in [('foto','Foto'), ('dados','Dados Pessoais'), ('vinculos','Vínculos'),
+                          ('filiacao','Filiação'), ('turmas','Turma e Modalidades'),
+                          ('documentos','Documentos'), ('endereco','Endereço'),
+                          ('contatos','Contatos'), ('responsavel','Responsável Financeiro')] %}
+      <a href="#{{ id }}">{{ nome }}</a>
+      {% endfor %}
+    </div>
+    <div class="um-card" style="padding:14px">
+      <div style="font:400 12px/1.5 'Inter',sans-serif; color:#71717a">Campos com * são obrigatórios.</div>
+    </div>
+  </div>
+</div>
+
+{# ------------------------------- BARRA FIXA ------------------------------- #}
+<div class="barra">
+  <a class="um-btn" href="{{ url_for('alunos.ficha', id=d.id) if editando else url_for('alunos.lista_alunos') }}">
+    <i class="bi bi-arrow-left" style="font-size:12px"></i>Cancelar</a>
+  <button class="um-btn-primario" type="submit"><i class="bi bi-check-lg" style="font-size:13px"></i>
+    {{ 'Salvar Alterações' if editando else 'Cadastrar aluno' }}</button>
+</div>
+</form>
+{% endblock %}
+
+{% block um_js %}
+<script>
+/* CEP via ViaCEP — preenche endereço, bairro, cidade e UF */
+async function umBuscarCep() {
+  const cep = document.getElementById('umCep').value.replace(/\D/g, '');
+  if (cep.length !== 8) return;
+  try {
+    const r = await fetch('https://viacep.com.br/ws/' + cep + '/json/');
+    const d = await r.json();
+    if (d.erro) return;
+    document.getElementById('umEndereco').value = d.logradouro || '';
+    document.getElementById('umBairro').value = d.bairro || '';
+    document.getElementById('umCidade').value = d.localidade || '';
+    document.getElementById('umEstado').value = d.uf || '';
+  } catch (e) {}
+}
+document.getElementById('umCep').addEventListener('blur', umBuscarCep);
+
+/* Copia nome, CPF e celular do aluno para o responsável financeiro */
+function umMesmoAluno() {
+  document.getElementById('umRespNome').value = document.querySelector('[name=nome]').value;
+  document.getElementById('umRespCpf').value = document.querySelector('[name=cpf]').value;
+  document.getElementById('umRespTel').value = document.querySelector('[name=celular]').value;
+}
+</script>
+{% endblock %}

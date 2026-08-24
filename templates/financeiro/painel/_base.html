@@ -1,0 +1,49 @@
+{# =========================================================================
+   Financeiro — base das telas do módulo
+   =========================================================================
+   Antes o financeiro tinha shell próprio (`_layout.html`): barra lateral e
+   tema escuro só dele, com o resto do sistema do lado de fora. Agora estende
+   o shell padrão e as oito telas viram abas, para o gestor não trocar de
+   ambiente ao abrir o financeiro.
+
+   Cada tela define: `fin_aba` (aba destacada), `pagina_titulo`,
+   `pagina_subtitulo`, `pagina_acoes` e o bloco `fin_conteudo`.
+   ========================================================================= #}
+{% extends "base_academia.html" %}
+{% set menu_ativo = 'financeiro' %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/base/listas.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/painel/financeiro.css') }}">
+{% block fin_css %}{% endblock %}
+{% endblock %}
+
+{% block content %}
+{% set _a = {'academia_id': academia_id} if academia_id else {} %}
+<nav class="lst-abas fin-abas">
+  {% for chave, rotulo, endpoint in [
+      ('dashboard',    'Dashboard',           'financeiro_painel.dashboard'),
+      ('mensalidades', 'Mensalidades',        'financeiro_painel.mensalidades'),
+      ('planos',       'Planos',              'financeiro_painel.planos'),
+      ('formas',       'Formas de pagamento', 'financeiro_painel.formas'),
+      ('descontos',    'Descontos',           'financeiro_painel.descontos'),
+      ('cobrancas',    'Gerar cobranças',     'financeiro_painel.cobrancas'),
+      ('receitas',     'Receitas',            'financeiro.lista_receitas'),
+      ('despesas',     'Despesas',            'financeiro.lista_despesas'),
+      ('historico',    'Histórico',           'financeiro_painel.historico'),
+      ('alunos',       'Alunos',              'financeiro_painel.alunos'),
+      ('contas',       'Contas',              'financeiro_painel.contas'),
+      ('extrato',      'Extrato',             'financeiro_painel.extrato'),
+      ('controle',     'Controle',            'financeiro_painel.controle')
+    ] %}
+  <a href="{{ url_for(endpoint, **_a) }}"
+     class="lst-aba {% if (fin_aba or ativo) == chave %}is-ativa{% endif %}">{{ rotulo }}</a>
+  {% endfor %}
+</nav>
+
+{% block fin_conteudo %}{% endblock %}
+
+<footer class="lst-rodape">
+  © {{ current_year }} {{ academia_nome or 'Unimaster' }}. Todos os direitos reservados.
+</footer>
+{% endblock %}

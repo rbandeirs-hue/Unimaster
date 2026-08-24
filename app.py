@@ -143,6 +143,21 @@ def aplicar_headers_seguranca(response):
     response.headers["Permissions-Policy"] = "geolocation=(), microphone=(self), camera=(self)"
     # Strict-Transport-Security: ativar quando o servidor usar HTTPS
     # response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+
+    # Página autenticada não vai para o cache do navegador. Sem isto o "voltar"
+    # depois do logout reexibe a tela do usuário anterior, e a troca de conta no
+    # mesmo navegador mostrava a academia antiga vinda do cache. Estáticos
+    # continuam cacheáveis — é o que mantém a navegação rápida.
+    endpoint = request.endpoint or ""
+    if response.mimetype == "text/html" and not endpoint.endswith("static"):
+        try:
+            autenticado = current_user.is_authenticated
+        except Exception:
+            autenticado = False
+        if autenticado or endpoint.startswith("auth."):
+            response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, private"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
     return response
 
 
@@ -172,6 +187,104 @@ def _exigir_cpf_cadastrado():
     if endpoint.endswith(".static"):
         return None
     return redirect(url_for("auth.cadastrar_cpf"))
+
+
+# ============================================================
+# 🔹 Cadastro do aluno incompleto: completa no primeiro acesso
+# ============================================================
+# Promover um pré-cadastro deixava o gestor na ficha do aluno para digitar o
+# que faltava. Os dados são da família, então quem preenche é ela, na primeira
+# vez que entra. Vale nos modos aluno e responsável — em criança o login sai no
+# CPF do responsável financeiro, e só olhar o modo aluno deixaria esse caso de
+# fora. Um gestor que também é aluno continua gerenciando normalmente, porque
+# no modo academia a verificação nem roda.
+_CADASTRO_ALUNO_PERMITIDOS = {
+    "auth.login",
+    "auth.logout",
+    "auth.cadastrar_cpf",
+    "auth.esqueci_senha",
+    "auth.redefinir_senha",
+    "painel.home",
+    "painel.escolher_modo",
+    "painel_aluno.completar_cadastro",
+    "static",
+}
+
+
+@app.before_request
+def _exigir_cadastro_aluno_completo():
+    from flask import session
+
+    if not current_user.is_authenticated:
+        return None
+    if session.get("modo_painel") not in ("aluno", "responsavel"):
+        return None
+    endpoint = request.endpoint or ""
+    if endpoint in _CADASTRO_ALUNO_PERMITIDOS or endpoint.endswith(".static"):
+        return None
+    # Chamadas de dados não podem virar redirecionamento de tela.
+    if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+        return None
+    try:
+        from blueprints.aluno.painel import alunos_com_cadastro_pendente
+
+        if alunos_com_cadastro_pendente(current_user.id):
+            return redirect(url_for("painel_aluno.completar_cadastro"))
+    except Exception:
+        # Nunca derrubar a navegação por causa da checagem.
+        return None
+    return None
+
+
+# ============================================================
+# 🔹 Escolha da academia na entrada (quem administra mais de uma)
+# ============================================================
+# Sem esta etapa, a academia ativa era decidida por `?academia_id=` na URL e
+# podia trocar no meio do caminho — com risco de lançar dados na academia
+# errada. Agora escolhe-se uma vez, na entrada, e ela vale a sessão toda.
+_ESCOLHA_ACADEMIA_PERMITIDOS = {
+    "auth.login",
+    "auth.logout",
+    "auth.cadastrar_cpf",
+    "auth.esqueci_senha",
+    "auth.redefinir_senha",
+    "academia.escolher_academia",
+    "painel.escolher_modo",
+    "static",
+}
+
+
+@app.before_request
+def _exigir_academia_escolhida():
+    if not current_user.is_authenticated:
+        return None
+    endpoint = request.endpoint or ""
+    if endpoint in _ESCOLHA_ACADEMIA_PERMITIDOS or endpoint.endswith(".static"):
+        return None
+    # Requisições de dados (JSON/fetch) não devem virar redirecionamento de tela.
+    if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+        return None
+    try:
+        from blueprints.academia.routes import academia_travada, precisa_escolher_academia
+
+        if precisa_escolher_academia():
+            return redirect(url_for("academia.escolher_academia", next=request.full_path))
+
+        # Já escolheu: um `academia_id` divergente na URL é reescrito para a
+        # academia da sessão. Cada tela grava a academia a partir do próprio
+        # parâmetro, então travar só no resolvedor central não bastava — um
+        # link antigo continuava trocando o contexto.
+        travada = academia_travada()
+        pedido = request.args.get("academia_id", type=int)
+        if travada and pedido and pedido != travada and request.method == "GET":
+            args = request.args.to_dict(flat=True)
+            args["academia_id"] = travada
+            return redirect(url_for(request.endpoint, **{**(request.view_args or {}), **args}))
+    except Exception:
+        # Se a checagem falhar por qualquer motivo, o sistema segue aberto:
+        # esta é uma etapa de organização, não de segurança.
+        return None
+    return None
 
 
 # ============================================================
@@ -320,6 +433,48 @@ def injetar_modos_e_contexto():
 
 
 # ============================================================
+# 🔹 Context processor: contexto do shell da academia
+# ============================================================
+@app.context_processor
+def injetar_contexto_academia():
+    """Garante `academia`, `academias` e `academia_id` no shell da academia.
+
+    O `base_academia.html` monta a lateral e o seletor de academia com estas
+    três variáveis. Nem toda tela que usa o shell as passa no render_template
+    (calendário, usuários, presença…) e, sem elas, a lateral perdia o item
+    Professores e o seletor de academia sumia — era possível entrar na tela mas
+    não navegar a partir dela.
+
+    Só custa consulta para quem está no modo academia; e o que a view passa no
+    render_template continua tendo prioridade sobre o que sai daqui.
+    """
+    from flask import has_request_context, session, g
+    from flask_login import current_user
+
+    if not has_request_context():
+        return {}
+    if not getattr(current_user, "is_authenticated", False):
+        return {}
+    if session.get("modo_painel") != "academia":
+        return {}
+
+    cache = getattr(g, "_shell_academia", None)
+    if cache is None:
+        cache = {"academia": None, "academias": [], "academia_id": None}
+        try:
+            from blueprints.academia.routes import _get_academia_gerenciamento
+            academia_id, academias = _get_academia_gerenciamento()
+            cache["academia_id"] = academia_id
+            cache["academias"] = academias
+            cache["academia"] = next(
+                (a for a in academias if a.get("id") == academia_id), None)
+        except Exception as e:
+            app.logger.info("Contexto do shell da academia indisponível (%s)", e)
+        g._shell_academia = cache
+    return dict(cache)
+
+
+# ============================================================
 # 🔹 Filtro Jinja: data em formato BR (dd/mm/yyyy)
 # ============================================================
 def _formatar_data_br(valor):
@@ -402,6 +557,20 @@ def filtro_hora_fmt(valor):
     if len(s) >= 5 and s[2] in (":", "."):
         return s[:5].replace(".", ":")
     return s
+
+
+@app.template_filter("moeda_br")
+def filtro_moeda_br(valor):
+    """Formata valor no padrão brasileiro: 1234.5 -> '1.234,50'.
+
+    Sem o 'R$' — quem chama decide se o símbolo entra, para não duplicar em
+    telas que já têm a coluna marcada como monetária.
+    """
+    try:
+        n = float(valor or 0)
+    except (TypeError, ValueError):
+        return "0,00"
+    return f"{n:,.2f}".replace(",", "\x00").replace(".", ",").replace("\x00", ".")
 
 
 @app.template_filter("telefone_br")

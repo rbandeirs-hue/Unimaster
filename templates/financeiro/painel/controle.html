@@ -1,0 +1,140 @@
+{% extends "financeiro/painel/_base.html" %}
+{% set fin_aba = 'controle' %}
+{% block title %}Controle financeiro{% endblock %}
+
+{% block pagina_titulo %}Financeiro{% endblock %}
+{% block pagina_subtitulo %}Nível do controle e situação dos dados · patrimônio {{ fmt_moeda(saldo_total) }}{% endblock %}
+
+{% block fin_css %}
+<style>
+  .ctl-modos { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: .9rem; padding: 1.25rem; }
+  .ctl-modo {
+    border: 1px solid var(--sh-line); border-radius: var(--u-radius);
+    padding: 1rem 1.1rem; display: flex; flex-direction: column; gap: .45rem;
+  }
+  .ctl-modo.is-atual { border-color: var(--sh-ink); box-shadow: 0 0 0 3px rgba(28,28,28,.06); }
+  .ctl-modo__nome { font-weight: 600; display: flex; align-items: center; gap: .5rem; }
+  .ctl-modo__desc { color: var(--sh-ink-soft); font-size: .88rem; margin: 0; }
+  .ctl-caixa { padding: 1.25rem; }
+  .lin-diag { grid-template-columns: 120px minmax(0,1.8fr) 110px 140px; }
+  @media (max-width: 820px) { .lin-diag { grid-template-columns: 110px minmax(0,1.6fr) 130px; } .col-qtd { display:none !important; } }
+</style>
+{% endblock %}
+
+{% block fin_conteudo %}
+<section class="lst-quadro">
+  <header class="lst-quadro__topo">
+    <h2 class="lst-quadro__titulo">Nível do controle</h2>
+    <span class="lst-quadro__meta">Hoje: <strong>{{ modo|capitalize }}</strong></span>
+  </header>
+
+  <form method="POST" class="ctl-modos">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
+    <input type="hidden" name="acao" value="modo">
+
+    {% for chave, nome, desc in [
+        ('desativado', 'Desativado', 'O módulo financeiro não interfere nas operações. Nada é bloqueado e o saldo não é acompanhado.'),
+        ('parcial', 'Parcial', 'Registra receitas, despesas, saldos e extratos, mas não bloqueia por falta de saldo — a conta pode ficar negativa, com alerta. É o modo de implantação.'),
+        ('total', 'Total', 'O saldo passa a ser fiel: saída maior que o disponível é recusada. Exige que as pendências abaixo estejam resolvidas.')] %}
+    <div class="ctl-modo {% if modo == chave %}is-atual{% endif %}">
+      <span class="ctl-modo__nome">
+        {{ nome }}
+        {% if modo == chave %}<span class="lst-tag lst-tag--ok">Em uso</span>{% endif %}
+      </span>
+      <p class="ctl-modo__desc">{{ desc }}</p>
+      {% if pode_gerir and modo != chave %}
+      <button type="submit" name="modo" value="{{ chave }}" class="sh__btn"
+              {% if chave == 'total' and not diagnostico.pode_ativar_total %}disabled
+              title="Resolva as pendências antes de ativar"{% endif %}>Usar este</button>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </form>
+</section>
+
+<section class="lst-quadro mt-3">
+  <header class="lst-quadro__topo">
+    <h2 class="lst-quadro__titulo">Situação dos dados</h2>
+    <span class="lst-quadro__meta">
+      {% if diagnostico.pode_ativar_total %}Pronto para o Controle Total
+      {% else %}{{ diagnostico.bloqueios|length }} pendência{{ 's' if diagnostico.bloqueios|length != 1 }} bloqueando{% endif %}
+    </span>
+  </header>
+
+  <div class="lst-rolagem">
+    <div class="lst-largura" style="--lst-min:520px">
+      <div class="lst-linha lin-diag lst-cab">
+        <div>Situação</div>
+        <div>O que é</div>
+        <div class="col-qtd lst-num">Qtd.</div>
+        <div class="lst-num">Valor</div>
+      </div>
+      {% for a in diagnostico.achados %}
+      <div class="lst-linha lin-diag lst-item">
+        <div>
+          {% if a.bloqueia %}<span class="lst-tag lst-tag--alerta">Bloqueia</span>
+          {% else %}<span class="lst-tag">Alerta</span>{% endif %}
+        </div>
+        <div style="min-width:0">
+          <span class="lst-nome lst-corta">{{ a.titulo }}</span>
+          <span class="lst-sub">{{ a.explicacao }}</span>
+        </div>
+        <div class="col-qtd lst-num">{{ a.quantidade }}</div>
+        <div class="lst-num fin-valor">{{ fmt_moeda(a.valor) }}</div>
+      </div>
+      {% else %}
+      <p class="lst-vazio">Nenhuma pendência: os dados estão consistentes.</p>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+{% if pode_gerir %}
+<section class="lst-quadro mt-3">
+  <header class="lst-quadro__topo">
+    <h2 class="lst-quadro__titulo">Implantação</h2>
+    <span class="lst-quadro__meta">Dois passos, nesta ordem</span>
+  </header>
+  <div class="ctl-caixa d-flex flex-column gap-3">
+    <div>
+      <form method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
+        <input type="hidden" name="acao" value="preparar_contas">
+        <button type="submit" class="sh__btn">1 · Preparar contas</button>
+      </form>
+      <p class="lst-sub mt-2 mb-0">
+        Cria uma conta para cada forma de pagamento em uso e as amarra. Depois dá para
+        renomear, agrupar duas formas na mesma conta ou informar o saldo inicial em
+        <a href="{{ url_for('financeiro_painel.contas', academia_id=academia_id) }}">Contas</a>.
+        Rodar de novo não duplica nada.
+      </p>
+    </div>
+
+    <div>
+      <form method="POST"
+            onsubmit="return confirm('Espelhar as receitas e despesas já existentes no razão? A ação é registrada na auditoria.');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
+        <input type="hidden" name="acao" value="importar_legado">
+        <button type="submit" class="sh__btn" {% if not diagnostico.contas_cadastradas %}disabled title="Prepare as contas primeiro"{% endif %}>
+          2 · Importar o histórico para o razão
+        </button>
+      </form>
+      <p class="lst-sub mt-2 mb-0">
+        {% if previa %}
+          Vai espelhar <strong>{{ previa.receitas }}</strong> receita{{ 's' if previa.receitas != 1 }}
+          ({{ fmt_moeda(previa.valor_entradas) }}) e <strong>{{ previa.despesas }}</strong>
+          despesa{{ 's' if previa.despesas != 1 }} ({{ fmt_moeda(previa.valor_saidas) }}).
+          As linhas originais não são alteradas — recebem só a marca do lançamento, o que
+          impede o mesmo dinheiro de ser contado duas vezes se a rotina rodar de novo.
+        {% else %}
+          Prepare as contas primeiro para ver a prévia.
+        {% endif %}
+      </p>
+    </div>
+  </div>
+</section>
+{% endif %}
+{% endblock %}

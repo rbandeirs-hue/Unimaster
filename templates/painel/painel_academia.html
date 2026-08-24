@@ -1,290 +1,114 @@
-{% extends "base.html" %}
+{% extends "base_academia.html" %}
+{% from 'components/ui.html' import celula %}
+{% set menu_ativo = 'gerenciamento' %}
 {% block title %}Gerenciamento — {{ academia.nome if academia else 'Academia' }}{% endblock %}
+
+{% block pagina_titulo %}{{ academia.nome if academia else 'Academia' }}{% endblock %}
+{% block pagina_subtitulo %}
+  {{ resumo.alunos_ativos }} aluno{{ 's' if resumo.alunos_ativos != 1 }} ativo{{ 's' if resumo.alunos_ativos != 1 }}
+  · {{ resumo.turmas }} turma{{ 's' if resumo.turmas != 1 }}
+  · {{ resumo.modalidades }} modalidade{{ 's' if resumo.modalidades != 1 }}
+{% endblock %}
+
+{% block pagina_acoes %}
+  <a href="{{ url_for('presencas.painel_presenca', academia_id=academia_id) }}" class="sh__btn">
+    <i class="bi bi-check2-square"></i> Registrar presença
+  </a>
+  <a href="{{ url_for('alunos.cadastrar_aluno', academia_id=academia_id) }}" class="sh__btn sh__btn--forte">
+    <i class="bi bi-person-plus"></i> Novo aluno
+  </a>
+{% endblock %}
+
 {% block content %}
-<div class="container mt-5">
-    <div class="mb-4">
-        {% if academias|length > 1 %}
-        <form method="GET" class="mb-3">
-            <label class="form-label small fw-semibold">Academia:</label>
-            <select name="academia_id" class="form-select form-select-sm d-inline-block w-auto" onchange="this.form.submit()">
-                {% for ac in academias %}
-                <option value="{{ ac.id }}" {% if ac.id == academia_id %}selected{% endif %}>{{ ac.nome }}</option>
-                {% endfor %}
-            </select>
-        </form>
-        {% endif %}
-        <h2 class="h4 fw-bold text-primary">Gerenciamento — {{ academia.nome if academia else 'Academia' }}</h2>
-        <p class="text-muted mb-0">Acesse os módulos da academia.</p>
-    </div>
 
-    <div class="row g-4">
-        <!-- Painel / Indicadores -->
-        <div class="col-xl-3 col-lg-4 col-md-6">
-            <a href="{{ url_for('academia.dash', academia_id=academia_id) }}" class="card-action-link text-decoration-none">
-                <div class="card h-100 shadow-sm border-primary">
-                    <div class="card-body text-center p-4">
-                        <i class="bi bi-speedometer2 display-5 mb-3 text-primary"></i>
-                        <h5 class="card-title fw-bold">Painel / Indicadores</h5>
-                        <p class="card-text small text-muted mb-0">KPIs de alunos e financeiro: novos, baixas, mensalidades e inadimplência.</p>
-                    </div>
-                </div>
-            </a>
-        </div>
-        <div class="col-xl-3 col-lg-4 col-md-6">
-            {% include 'components/aniversariantes_menu_card.html' %}
-        </div>
-        <!-- Eventos -->
-        <div class="col-xl-3 col-lg-4 col-md-6">
-            <a href="{{ url_for('eventos_competicoes.lista_eventos', academia_id=academia_id) }}" class="card-action-link text-decoration-none">
-                <div class="card h-100 shadow-sm border-info">
-                    <div class="card-body text-center p-4">
-                        <i class="bi bi-calendar-event display-5 mb-3 text-info"></i>
-                        <h5 class="card-title fw-bold">Eventos</h5>
-                        <p class="card-text small text-muted mb-0">Aderir a eventos e inscrever alunos.</p>
-                    </div>
-                </div>
-            </a>
-        </div>
+{# ------------------------------------------------- precisa da sua atenção #}
+{% set alertas = [
+  {'n': resumo.solicitacoes_pendentes,
+   'texto': 'solicitação pendente' if resumo.solicitacoes_pendentes == 1 else 'solicitações pendentes',
+   'acao': 'Analisar', 'href': url_for('solicitacoes.lista', academia_id=academia_id), 'urgente': true},
+  {'n': resumo.mensalidades_atraso,
+   'texto': 'mensalidade em atraso' if resumo.mensalidades_atraso == 1 else 'mensalidades em atraso',
+   'acao': 'Ver inadimplência', 'href': url_for('financeiro.mensalidades_alunos', academia_id=academia_id), 'urgente': true},
+  {'n': resumo.precadastros,
+   'texto': 'pré-cadastro a converter' if resumo.precadastros == 1 else 'pré-cadastros a converter',
+   'acao': 'Converter', 'href': url_for('precadastro.lista', academia_id=academia_id), 'urgente': false},
+  {'n': resumo.aniversariantes,
+   'texto': 'aniversariante no mês' if resumo.aniversariantes == 1 else 'aniversariantes no mês',
+   'acao': 'Parabenizar',
+   'href': url_for('aniversariante_live.pagina'), 'urgente': false}
+] %}
+{% set alertas_ativos = alertas | selectattr('n') | list %}
 
-        <!-- Competições -->
-        <div class="col-xl-3 col-lg-4 col-md-6">
-            <a href="{{ url_for('eventos_competicoes.lista_competicoes', academia_id=academia_id) }}" class="card-action-link text-decoration-none">
-                <div class="card h-100 shadow-sm border-danger">
-                    <div class="card-body text-center p-4">
-                        <i class="bi bi-trophy display-5 mb-3 text-danger"></i>
-                        <h5 class="card-title fw-bold">Competições</h5>
-                        <p class="card-text small text-muted mb-0">Aderir a competições e inscrever atletas.</p>
-                    </div>
-                </div>
-            </a>
-        </div>
-
-        <!-- Locais de treino -->
-        <div class="col-xl-3 col-lg-4 col-md-6">
-            <a href="{{ url_for('academia.locais_treino', academia_id=academia_id) }}" class="card-action-link text-decoration-none">
-                <div class="card h-100 shadow-sm border-primary">
-                    <div class="card-body text-center p-4">
-                        <i class="bi bi-geo-alt-fill display-5 mb-3 text-primary"></i>
-                        <h5 class="card-title fw-bold">Locais de treino</h5>
-                        <p class="card-text small text-muted mb-0">Escolas e núcleos onde seus alunos treinam.</p>
-                    </div>
-                </div>
-            </a>
-        </div>
-
-        <!-- Calendário -->
-        <div class="col-xl-3 col-lg-4 col-md-6">
-            <a href="{{ url_for('calendario.index') }}" class="card-action-link text-decoration-none">
-                <div class="card h-100 shadow-sm border-info">
-                    <div class="card-body text-center p-4">
-                        <i class="bi bi-calendar-event display-5 mb-3 text-info"></i>
-                        <h5 class="card-title fw-bold">Calendário</h5>
-                        <p class="card-text small text-muted mb-0">Eventos, feriados e turmas.</p>
-                    </div>
-                </div>
-            </a>
-        </div>
-        
-        <!-- Usuários -->
-        <div class="col-xl-3 col-lg-4 col-md-6">
-            <a href="{{ url_for('academia.lista_usuarios', academia_id=academia_id) }}" class="card-action-link text-decoration-none">
-                <div class="card h-100 shadow-sm border-primary">
-                    <div class="card-body text-center p-4">
-                        <i class="bi bi-person-lines-fill display-5 mb-3 text-primary"></i>
-                        <h5 class="card-title fw-bold">Usuários</h5>
-                        <p class="card-text small text-muted mb-0">Usuários vinculados à academia.</p>
-                    </div>
-                </div>
-            </a>
-        </div>
-
-        <!-- Pré-cadastro -->
-        <div class="col-xl-3 col-lg-4 col-md-6">
-            <a href="{{ url_for('precadastro.lista', academia_id=academia_id) }}" class="card-action-link text-decoration-none">
-                <div class="card h-100 shadow-sm border-warning">
-                    <div class="card-body text-center p-4">
-                        <i class="bi bi-person-plus display-5 mb-3 text-warning"></i>
-                        <h5 class="card-title fw-bold">Pré-cadastro</h5>
-                        <p class="card-text small text-muted mb-0">Pré-cadastros para converter em alunos.</p>
-                    </div>
-                </div>
-            </a>
-        </div>
-
-        <!-- WhatsApp -->
-        <div class="col-xl-3 col-lg-4 col-md-6">
-            <a href="{{ url_for('academia.whatsapp_config', academia_id=academia_id) }}" class="card-action-link text-decoration-none">
-                <div class="card h-100 shadow-sm border-success">
-                    <div class="card-body text-center p-4">
-                        <i class="bi bi-whatsapp display-5 mb-3 text-success"></i>
-                        <h5 class="card-title fw-bold">WhatsApp</h5>
-                        <p class="card-text small text-muted mb-0">Conectar o número e enviar lembretes e avisos automáticos.</p>
-                    </div>
-                </div>
-            </a>
-        </div>
-
-        <!-- Alunos -->
-        <div class="col-xl-3 col-lg-4 col-md-6">
-            <a href="{{ url_for('alunos.lista_alunos', academia_id=academia_id) }}" class="card-action-link text-decoration-none">
-                <div class="card h-100 shadow-sm border-success">
-                    <div class="card-body text-center p-4">
-                        <i class="bi bi-people-fill display-5 mb-3 text-success"></i>
-                        <h5 class="card-title fw-bold">Alunos</h5>
-                        <p class="card-text small text-muted mb-0">Lista e gestão de alunos.</p>
-                    </div>
-                </div>
-            </a>
-        </div>
-
-        <!-- Turmas -->
-        <div class="col-xl-3 col-lg-4 col-md-6">
-            <a href="{{ url_for('turmas.lista_turmas', academia_id=academia_id) }}" class="card-action-link text-decoration-none">
-                <div class="card h-100 shadow-sm border-info">
-                    <div class="card-body text-center p-4">
-                        <i class="bi bi-collection-fill display-5 mb-3 text-info"></i>
-                        <h5 class="card-title fw-bold">Turmas</h5>
-                        <p class="card-text small text-muted mb-0">Turmas e horários.</p>
-                    </div>
-                </div>
-            </a>
-        </div>
-
-        <!-- Professores -->
-        {% if academia %}
-        <div class="col-xl-3 col-lg-4 col-md-6">
-            <a href="{{ url_for('professores.lista', academia_id=academia.id) }}" class="card-action-link text-decoration-none">
-                <div class="card h-100 shadow-sm border-warning">
-                    <div class="card-body text-center p-4">
-                        <i class="bi bi-person-badge-fill display-5 mb-3 text-warning"></i>
-                        <h5 class="card-title fw-bold">Professores</h5>
-                        <p class="card-text small text-muted mb-0">Gestão de professores.</p>
-                    </div>
-                </div>
-            </a>
-        </div>
-        {% endif %}
-
-        <!-- Aprovar Solicitações -->
-        <div class="col-xl-3 col-lg-4 col-md-6">
-            <a href="{{ url_for('solicitacoes.lista', academia_id=academia_id) }}" class="card-action-link text-decoration-none">
-                <div class="card h-100 shadow-sm border-info">
-                    <div class="card-body text-center p-4">
-                        <i class="bi bi-clipboard-check display-5 mb-3 text-info"></i>
-                        <h5 class="card-title fw-bold">Aprovar Solicitações</h5>
-                        <p class="card-text small text-muted mb-0">Visitas em academias e outros tipos de aprovação.</p>
-                    </div>
-                </div>
-            </a>
-        </div>
-
-        <!-- Cadastro no Zempo -->
-        <div class="col-xl-3 col-lg-4 col-md-6">
-            <a href="{{ url_for('zempo.solicitar', academia_id=academia_id) }}" class="card-action-link text-decoration-none">
-                <div class="card h-100 shadow-sm border-primary">
-                    <div class="card-body text-center p-4">
-                        <i class="bi bi-person-vcard display-5 mb-3 text-primary"></i>
-                        <h5 class="card-title fw-bold">
-                            Cadastro no Zempo
-                            {% if zempo_prontos %}
-                                <span class="badge bg-primary ms-1">{{ zempo_prontos }}</span>
-                            {% endif %}
-                        </h5>
-                        <p class="card-text small text-muted mb-0">
-                            {% if zempo_prontos %}
-                                {{ zempo_prontos }} aluno(s) prontos para solicitar o cadastro no Zempo.
-                            {% else %}
-                                Veja o que falta em cada aluno e solicite o cadastro no Zempo.
-                            {% endif %}
-                        </p>
-                    </div>
-                </div>
-            </a>
-        </div>
-
-        <!-- Presença -->
-        <div class="col-xl-3 col-lg-4 col-md-6">
-            <a href="{{ url_for('presencas.painel_presenca', academia_id=academia_id) }}" class="card-action-link text-decoration-none">
-                <div class="card h-100 shadow-sm border-secondary">
-                    <div class="card-body text-center p-4">
-                        <i class="bi bi-clipboard-check-fill display-5 mb-3 text-secondary"></i>
-                        <h5 class="card-title fw-bold">Presença</h5>
-                        <p class="card-text small text-muted mb-0">Registro, relatório e histórico de frequência.</p>
-                    </div>
-                </div>
-            </a>
-        </div>
-
-        <!-- Ranking de frequência -->
-        <div class="col-xl-3 col-lg-4 col-md-6">
-            <a href="{{ url_for('presencas.ranking_frequencia_pagina') }}" class="card-action-link text-decoration-none">
-                <div class="card h-100 shadow-sm border-warning">
-                    <div class="card-body text-center p-4">
-                        <i class="bi bi-trophy-fill display-5 mb-3 text-warning"></i>
-                        <h5 class="card-title fw-bold">Ranking de frequência</h5>
-                        <p class="card-text small text-muted mb-0">Pódio por turma — mês e ano.</p>
-                    </div>
-                </div>
-            </a>
-        </div>
-
-        <!-- Financeiro — apenas em modo academia (quem pode acessar painel academia) -->
-        {% if session.get('modo_painel') == 'academia' and (current_user.has_role('gestor_academia') or current_user.has_role('admin') or current_user.has_role('professor') or current_user.has_role('gestor_federacao') or current_user.has_role('gestor_associacao')) %}
-        <div class="col-xl-3 col-lg-4 col-md-6">
-            <a href="{{ url_for('financeiro.dashboard', academia_id=academia_id) }}" class="card-action-link text-decoration-none">
-                <div class="card h-100 shadow-sm border-success">
-                    <div class="card-body text-center p-4">
-                        <i class="bi bi-cash-coin display-5 mb-3 text-success"></i>
-                        <h5 class="card-title fw-bold">Financeiro</h5>
-                        <p class="card-text small text-muted mb-0">Receitas, despesas e descontos.</p>
-                    </div>
-                </div>
-            </a>
-        </div>
-        {% endif %}
-
-        <!-- Visitantes -->
-        <div class="col-xl-3 col-lg-4 col-md-6">
-            <a href="{{ url_for('academia.lista_visitantes', academia_id=academia_id) }}" class="card-action-link text-decoration-none">
-                <div class="card h-100 shadow-sm border-info">
-                    <div class="card-body text-center p-4">
-                        <i class="bi bi-person-check display-5 mb-3 text-info"></i>
-                        <h5 class="card-title fw-bold">Visitantes</h5>
-                        <p class="card-text small text-muted mb-0">Histórico e aprovação de aulas experimentais.</p>
-                    </div>
-                </div>
-            </a>
-        </div>
-
-        <!-- Configurações -->
-        <div class="col-xl-3 col-lg-4 col-md-6">
-            <a href="{{ url_for('academia.configuracoes_academia', academia_id=academia_id) }}" class="card-action-link text-decoration-none">
-                <div class="card h-100 shadow-sm border-secondary">
-                    <div class="card-body text-center p-4">
-                        <i class="bi bi-sliders display-5 mb-3 text-secondary"></i>
-                        <h5 class="card-title fw-bold">Configurações</h5>
-                        <p class="card-text small text-muted mb-0">Editar dados da academia.</p>
-                    </div>
-                </div>
-            </a>
-        </div>
-
-        <!-- Modalidades -->
-        <div class="col-xl-3 col-lg-4 col-md-6">
-            <a href="{{ url_for('configuracoes.modalidades_lista', academia_id=academia_id) }}" class="card-action-link text-decoration-none">
-                <div class="card h-100 shadow-sm border-warning">
-                    <div class="card-body text-center p-4">
-                        <i class="bi bi-collection-fill display-5 mb-3 text-warning"></i>
-                        <h5 class="card-title fw-bold">Modalidades</h5>
-                        <p class="card-text small text-muted mb-0">Cadastro de modalidades públicas e privadas da academia.</p>
-                    </div>
-                </div>
-            </a>
-        </div>
-    </div>
+{% if alertas_ativos %}
+<div class="sh__secao">Precisa da sua atenção</div>
+<div class="sh__atencao">
+  {% for a in alertas_ativos %}
+  <a href="{{ a.href }}" class="sh__alerta {% if a.urgente %}sh__alerta--urgente{% endif %}">
+    <span class="sh__alerta-num">{{ a.n }}</span><span class="sh__alerta-txt">{{ a.texto }}</span>
+    <span class="sh__alerta-link">{{ a.acao }} &rarr;</span>
+  </a>
+  {% endfor %}
 </div>
-<style>
-.card-action-link .card { transition: transform 0.2s, box-shadow 0.2s; }
-.card-action-link:hover .card { transform: translateY(-4px); box-shadow: 0 0.5rem 1rem rgba(0,0,0,0.1) !important; }
-</style>
+{% endif %}
+
+{# ------------------------------------------------------------ alunos e turmas #}
+<div class="sh__secao">Alunos e turmas</div>
+<div class="sh__grade">
+  {{ celula(url_for('alunos.lista_alunos', academia_id=academia_id), 'bi-people', 'Alunos',
+            'Cadastro, fichas, graduações e histórico.') }}
+  {{ celula(url_for('turmas.lista_turmas', academia_id=academia_id), 'bi-collection', 'Turmas',
+            'Horários, locais e professores responsáveis.') }}
+  {{ celula(url_for('presencas.painel_presenca', academia_id=academia_id), 'bi-check2-square', 'Presenças',
+            'Chamada diária e ranking de frequência.') }}
+  {{ celula(url_for('precadastro.lista', academia_id=academia_id), 'bi-person-plus', 'Pré-cadastro',
+            'Pré-cadastros para converter em alunos.') }}
+  {{ celula(url_for('academia.lista_visitantes', academia_id=academia_id), 'bi-door-open', 'Visitantes',
+            'Aulas experimentais e retorno de contato.') }}
+  {{ celula(url_for('aniversariante_live.pagina'), 'bi-balloon', 'Aniversariantes',
+            'Aniversariantes do mês — parabenize e veja as reações.',
+            aniversariantes|length if aniversariantes else None) }}
+  {% if academia %}
+  {{ celula(url_for('professores.lista', academia_id=academia.id), 'bi-person-badge', 'Professores',
+            'Equipe técnica e turmas atribuídas.') }}
+  {% endif %}
+</div>
+
+{# ---------------------------------------------------------- gestão da academia #}
+<div class="sh__secao">Gestão da academia</div>
+<div class="sh__grade">
+  {{ celula(url_for('academia.dash', academia_id=academia_id), 'bi-speedometer2', 'Painel / Indicadores',
+            'Novos, baixas, mensalidades e inadimplência.') }}
+  {% if session.get('modo_painel') == 'academia' and (current_user.has_role('gestor_academia') or current_user.has_role('admin') or current_user.has_role('professor') or current_user.has_role('gestor_federacao') or current_user.has_role('gestor_associacao')) %}
+  {{ celula(url_for('financeiro.dashboard', academia_id=academia_id), 'bi-cash-coin', 'Financeiro',
+            'Mensalidades, recebimentos e despesas.') }}
+  {% endif %}
+  {{ celula(url_for('academia.locais_treino', academia_id=academia_id), 'bi-geo-alt', 'Locais de treino',
+            'Escolas e núcleos onde seus alunos treinam.') }}
+  {{ celula(url_for('configuracoes.modalidades_lista', academia_id=academia_id), 'bi-diagram-3', 'Modalidades',
+            'Modalidades, planos e valores.') }}
+  {{ celula(url_for('academia.lista_usuarios', academia_id=academia_id), 'bi-person-gear', 'Usuários',
+            'Usuários vinculados à academia e permissões.') }}
+  {{ celula(url_for('academia.whatsapp_config', academia_id=academia_id), 'bi-whatsapp', 'WhatsApp',
+            'Mensagens e avisos em massa.') }}
+  {{ celula(url_for('zempo.solicitar', academia_id=academia_id), 'bi-person-vcard', 'Cadastro no Zempo',
+            'Solicite o cadastro dos alunos na federação.', zempo_prontos) }}
+  {{ celula(url_for('academia.configuracoes_academia', academia_id=academia_id), 'bi-gear', 'Configurações',
+            'Dados da academia, cobrança e integrações.') }}
+</div>
+
+{# --------------------------------------------------------- atividades e eventos #}
+<div class="sh__secao">Atividades e eventos</div>
+<div class="sh__grade">
+  {{ celula(url_for('eventos_competicoes.lista_eventos', academia_id=academia_id), 'bi-calendar-event', 'Eventos',
+            'Aderir a eventos e inscrever alunos.') }}
+  {{ celula(url_for('eventos_competicoes.lista_competicoes', academia_id=academia_id), 'bi-trophy', 'Competições',
+            'Aderir a competições e inscrever atletas.') }}
+  {{ celula(url_for('calendario.index'), 'bi-calendar3', 'Calendário',
+            'Eventos, feriados e turmas.') }}
+  {{ celula(url_for('presencas.ranking_frequencia_pagina'), 'bi-bar-chart', 'Ranking de frequência',
+            'Pódio por turma — mês e ano.') }}
+  {{ celula(url_for('solicitacoes.lista', academia_id=academia_id), 'bi-inbox', 'Solicitações',
+            'Pedidos de alunos e responsáveis.') }}
+</div>
+
 {% endblock %}

@@ -1,0 +1,235 @@
+{# =====================================================================
+   Gerenciamento da Academia — hub redesenhado.
+   Substitui templates/painel/painel_academia.html
+   Usa o shell novo (base_um.html + components/_shell.html).
+   Rota atual (academia.painel_academia) já fornece: academia, academias,
+   academia_id, aniversariantes, aniversariantes_hoje, zempo_prontos.
+   Contadores extras (solicitacoes_pendentes, mensalidades_atrasadas,
+   precadastros_pendentes, total_alunos, total_turmas) são OPCIONAIS —
+   cada bloco só aparece se a variável existir. Ver INTEGRAR.md.
+   ===================================================================== #}
+{% extends 'base_um.html' %}
+{% set um_ativo = 'gerenciamento' %}
+{% block title %}Gerenciamento — {{ academia.nome if academia else 'Academia' }}{% endblock %}
+
+{% block um_css %}
+  .hub-cab { display:flex; align-items:flex-end; justify-content:space-between; gap:24px; flex-wrap:wrap; }
+  .hub-aviso { display:grid; grid-template-columns:repeat(auto-fit,minmax(228px,1fr)); gap:12px; }
+  .hub-aviso a { display:flex; flex-direction:column; gap:12px; padding:16px 18px; background:#fff;
+    border:1px solid #e4e4e7; border-left:3px solid #d4d4d8; border-radius:10px; text-decoration:none; }
+  .hub-aviso a.urgente { border-left-color:#C8102E; }
+  .hub-aviso a:hover { border-color:#d4d4d8; box-shadow:0 4px 10px -6px rgba(0,0,0,.14); }
+  .hub-num { font:600 26px/1 'Inter',sans-serif; color:#18181b; letter-spacing:-.02em; }
+  .hub-aviso-txt { font:500 13px/1.35 'Inter',sans-serif; color:#18181b; }
+  .hub-aviso-acao { font:500 12px/1 'Inter',sans-serif; color:#52525b; }
+  .hub-aviso a.urgente .hub-aviso-acao { color:#C8102E; }
+  .hub-grupo { display:flex; align-items:center; gap:12px; }
+  .hub-grupo span:first-child { font:600 11px/1 'Inter',sans-serif; letter-spacing:.12em;
+    text-transform:uppercase; color:#71717a; }
+  .hub-grupo span:last-child { flex:1; height:1px; background:#e4e4e7; }
+  .hub-mods { display:grid; grid-template-columns:repeat(auto-fill,minmax(258px,1fr)); gap:1px;
+    background:#e4e4e7; border:1px solid #e4e4e7; border-radius:10px; overflow:hidden; }
+  .hub-mod { display:flex; align-items:flex-start; gap:13px; padding:17px 18px; background:#fff; text-decoration:none; }
+  .hub-mod:hover { background:#fafafa; }
+  .hub-mod i { font-size:16px; color:#52525b; margin-top:2px; }
+  .hub-mod-nome { font:600 13.5px/1.3 'Inter',sans-serif; color:#18181b; }
+  .hub-mod-desc { font:400 12px/1.55 'Inter',sans-serif; color:#71717a; text-wrap:pretty; }
+  @media (max-width:900px) { .hub-cab { align-items:flex-start; } }
+{% endblock %}
+
+{% block um_conteudo %}
+{% set aca = academia_id %}
+
+<div class="hub-cab">
+  <div style="display:flex; flex-direction:column; gap:7px">
+    <h1 class="um-h1" style="font-size:24px">{{ academia.nome if academia else 'Academia' }}</h1>
+    <div class="um-sub">
+      {% if total_alunos is defined %}{{ total_alunos }} alunos ativos{% else %}Gerenciamento da academia{% endif %}
+      {%- if total_turmas is defined %} &middot; {{ total_turmas }} turmas{% endif %}
+    </div>
+  </div>
+  <div style="display:flex; gap:9px; flex-wrap:wrap">
+    <a href="{{ url_for('presencas.ata_presenca', academia_id=aca) }}" class="um-btn">
+      <i class="bi bi-clipboard-check"></i> Registrar presença
+    </a>
+    <a href="{{ url_for('alunos.cadastrar_aluno', academia_id=aca) }}" class="um-btn-primario">
+      <i class="bi bi-person-plus"></i> Novo aluno
+    </a>
+  </div>
+</div>
+
+{% if academias|length > 1 %}
+<form method="GET" style="display:flex; align-items:center; gap:10px">
+  <label style="white-space:nowrap">Academia</label>
+  <select name="academia_id" onchange="this.form.submit()" style="width:auto; min-width:220px">
+    {% for ac in academias %}
+    <option value="{{ ac.id }}" {% if ac.id == academia_id %}selected{% endif %}>{{ ac.nome }}</option>
+    {% endfor %}
+  </select>
+</form>
+{% endif %}
+
+{# ── Precisa da sua atenção ─────────────────────────────────────────── #}
+{% set tem_aviso = (aniversariantes and aniversariantes|length > 0)
+                or (zempo_prontos is defined and zempo_prontos)
+                or (solicitacoes_pendentes is defined and solicitacoes_pendentes)
+                or (mensalidades_atrasadas is defined and mensalidades_atrasadas)
+                or (precadastros_pendentes is defined and precadastros_pendentes) %}
+{% if tem_aviso %}
+<div style="display:flex; flex-direction:column; gap:12px; margin-top:6px">
+  <div class="hub-grupo"><span>Precisa da sua atenção</span><span></span></div>
+  <div class="hub-aviso">
+
+    {% if solicitacoes_pendentes is defined and solicitacoes_pendentes %}
+    <a href="{{ url_for('solicitacoes.lista', academia_id=aca) }}" class="urgente">
+      <div style="display:flex; align-items:baseline; gap:9px">
+        <span class="hub-num">{{ solicitacoes_pendentes }}</span>
+        <span class="hub-aviso-txt">solicitaç{{ 'ões pendentes' if solicitacoes_pendentes != 1 else 'ão pendente' }}</span>
+      </div>
+      <span class="hub-aviso-acao">Analisar &rarr;</span>
+    </a>
+    {% endif %}
+
+    {% if mensalidades_atrasadas is defined and mensalidades_atrasadas %}
+    <a href="{{ url_for('financeiro.mensalidades_alunos', academia_id=aca, status='atrasado') }}" class="urgente">
+      <div style="display:flex; align-items:baseline; gap:9px">
+        <span class="hub-num">{{ mensalidades_atrasadas }}</span>
+        <span class="hub-aviso-txt">mensalidade{{ 's' if mensalidades_atrasadas != 1 }} em atraso</span>
+      </div>
+      <span class="hub-aviso-acao">Ver inadimplência &rarr;</span>
+    </a>
+    {% endif %}
+
+    {% if precadastros_pendentes is defined and precadastros_pendentes %}
+    <a href="{{ url_for('precadastro.lista', academia_id=aca) }}">
+      <div style="display:flex; align-items:baseline; gap:9px">
+        <span class="hub-num">{{ precadastros_pendentes }}</span>
+        <span class="hub-aviso-txt">pré-cadastro{{ 's' if precadastros_pendentes != 1 }} a converter</span>
+      </div>
+      <span class="hub-aviso-acao">Converter &rarr;</span>
+    </a>
+    {% endif %}
+
+    {% if aniversariantes and aniversariantes|length > 0 %}
+    <a href="{{ url_for('alunos.lista_alunos', academia_id=aca) }}">
+      <div style="display:flex; align-items:baseline; gap:9px">
+        <span class="hub-num">{{ aniversariantes|length }}</span>
+        <span class="hub-aviso-txt">
+          {% if aniversariantes_hoje and aniversariantes_hoje|length > 0 %}
+            aniversariante{{ 's' if aniversariantes|length != 1 }} no mês ({{ aniversariantes_hoje|length }} hoje)
+          {% else %}
+            aniversariante{{ 's' if aniversariantes|length != 1 }} no mês
+          {% endif %}
+        </span>
+      </div>
+      <span class="hub-aviso-acao">Ver alunos &rarr;</span>
+    </a>
+    {% endif %}
+
+    {% if zempo_prontos is defined and zempo_prontos %}
+    <a href="{{ url_for('alunos.lista_alunos', academia_id=aca) }}">
+      <div style="display:flex; align-items:baseline; gap:9px">
+        <span class="hub-num">{{ zempo_prontos }}</span>
+        <span class="hub-aviso-txt">aluno{{ 's' if zempo_prontos != 1 }} pronto{{ 's' if zempo_prontos != 1 }} para Zempo</span>
+      </div>
+      <span class="hub-aviso-acao">Solicitar &rarr;</span>
+    </a>
+    {% endif %}
+
+  </div>
+</div>
+{% endif %}
+
+{# ── Alunos e turmas ────────────────────────────────────────────────── #}
+<div style="display:flex; flex-direction:column; gap:12px; margin-top:6px">
+  <div class="hub-grupo"><span>Alunos e turmas</span><span></span></div>
+  <div class="hub-mods">
+    <a class="hub-mod" href="{{ url_for('alunos.lista_alunos', academia_id=aca) }}">
+      <i class="bi bi-people-fill"></i>
+      <div><div class="hub-mod-nome">Alunos</div><div class="hub-mod-desc">Cadastro, fichas, graduações e histórico.</div></div>
+    </a>
+    <a class="hub-mod" href="{{ url_for('turmas.lista_turmas', academia_id=aca) }}">
+      <i class="bi bi-collection-fill"></i>
+      <div><div class="hub-mod-nome">Turmas</div><div class="hub-mod-desc">Turmas, horários e professores responsáveis.</div></div>
+    </a>
+    <a class="hub-mod" href="{{ url_for('presencas.painel_presenca', academia_id=aca) }}">
+      <i class="bi bi-clipboard-check-fill"></i>
+      <div><div class="hub-mod-nome">Presença</div><div class="hub-mod-desc">Registro, relatório e histórico de frequência.</div></div>
+    </a>
+    <a class="hub-mod" href="{{ url_for('presencas.ranking_frequencia_pagina') }}">
+      <i class="bi bi-trophy-fill"></i>
+      <div><div class="hub-mod-nome">Ranking de frequência</div><div class="hub-mod-desc">Alunos mais e menos presentes no período.</div></div>
+    </a>
+    <a class="hub-mod" href="{{ url_for('precadastro.lista', academia_id=aca) }}">
+      <i class="bi bi-person-plus"></i>
+      <div><div class="hub-mod-nome">Pré-cadastro</div><div class="hub-mod-desc">Pré-cadastros para converter em alunos.</div></div>
+    </a>
+    <a class="hub-mod" href="{{ url_for('academia.lista_visitantes', academia_id=aca) }}">
+      <i class="bi bi-person-check"></i>
+      <div><div class="hub-mod-nome">Visitantes</div><div class="hub-mod-desc">Histórico e aprovação de aulas experimentais.</div></div>
+    </a>
+    {% if academia %}
+    <a class="hub-mod" href="{{ url_for('professores.lista', academia_id=academia.id) }}">
+      <i class="bi bi-person-badge-fill"></i>
+      <div><div class="hub-mod-nome">Professores</div><div class="hub-mod-desc">Equipe técnica e turmas atribuídas.</div></div>
+    </a>
+    {% endif %}
+  </div>
+</div>
+
+{# ── Gestão da academia ─────────────────────────────────────────────── #}
+<div style="display:flex; flex-direction:column; gap:12px; margin-top:6px">
+  <div class="hub-grupo"><span>Gestão da academia</span><span></span></div>
+  <div class="hub-mods">
+    <a class="hub-mod" href="{{ url_for('academia.dash', academia_id=aca) }}">
+      <i class="bi bi-speedometer2"></i>
+      <div><div class="hub-mod-nome">Painel / Indicadores</div><div class="hub-mod-desc">Novos, baixas, mensalidades e inadimplência.</div></div>
+    </a>
+    {% if session.get('modo_painel') == 'academia' and (current_user.has_role('gestor_academia') or current_user.has_role('admin') or current_user.has_role('professor') or current_user.has_role('gestor_federacao') or current_user.has_role('gestor_associacao')) %}
+    <a class="hub-mod" href="{{ url_for('financeiro.dashboard', academia_id=aca) }}">
+      <i class="bi bi-cash-coin"></i>
+      <div><div class="hub-mod-nome">Financeiro</div><div class="hub-mod-desc">Receitas, despesas, mensalidades e descontos.</div></div>
+    </a>
+    {% endif %}
+    <a class="hub-mod" href="{{ url_for('academia.locais_treino', academia_id=aca) }}">
+      <i class="bi bi-geo-alt-fill"></i>
+      <div><div class="hub-mod-nome">Locais de treino</div><div class="hub-mod-desc">Escolas e núcleos onde seus alunos treinam.</div></div>
+    </a>
+    <a class="hub-mod" href="{{ url_for('configuracoes.modalidades_lista', academia_id=aca) }}">
+      <i class="bi bi-diagram-3-fill"></i>
+      <div><div class="hub-mod-nome">Modalidades</div><div class="hub-mod-desc">Modalidades, planos e valores.</div></div>
+    </a>
+    <a class="hub-mod" href="{{ url_for('academia.lista_usuarios', academia_id=aca) }}">
+      <i class="bi bi-person-lines-fill"></i>
+      <div><div class="hub-mod-nome">Usuários</div><div class="hub-mod-desc">Usuários vinculados à academia e permissões.</div></div>
+    </a>
+    <a class="hub-mod" href="{{ url_for('academia.whatsapp_config', academia_id=aca) }}">
+      <i class="bi bi-whatsapp"></i>
+      <div><div class="hub-mod-nome">WhatsApp</div><div class="hub-mod-desc">Mensagens, avisos e aniversários.</div></div>
+    </a>
+    <a class="hub-mod" href="{{ url_for('academia.configuracoes_academia', academia_id=aca) }}">
+      <i class="bi bi-sliders"></i>
+      <div><div class="hub-mod-nome">Configurações</div><div class="hub-mod-desc">Dados da academia, diária e pagamentos.</div></div>
+    </a>
+  </div>
+</div>
+
+{# ── Atividades e eventos ───────────────────────────────────────────── #}
+<div style="display:flex; flex-direction:column; gap:12px; margin-top:6px">
+  <div class="hub-grupo"><span>Atividades e eventos</span><span></span></div>
+  <div class="hub-mods">
+    <a class="hub-mod" href="{{ url_for('eventos_competicoes.lista_eventos', academia_id=aca) }}">
+      <i class="bi bi-calendar-event"></i>
+      <div><div class="hub-mod-nome">Eventos e competições</div><div class="hub-mod-desc">Aderir a eventos e inscrever alunos.</div></div>
+    </a>
+    <a class="hub-mod" href="{{ url_for('calendario.index') }}">
+      <i class="bi bi-calendar3"></i>
+      <div><div class="hub-mod-nome">Calendário</div><div class="hub-mod-desc">Eventos, feriados e turmas.</div></div>
+    </a>
+    <a class="hub-mod" href="{{ url_for('solicitacoes.lista', academia_id=aca) }}">
+      <i class="bi bi-inbox-fill"></i>
+      <div><div class="hub-mod-nome">Aprovar solicitações</div><div class="hub-mod-desc">Visitas em academias e outros tipos de aprovação.</div></div>
+    </a>
+  </div>
+</div>
+{% endblock %}

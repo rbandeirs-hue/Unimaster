@@ -1,8 +1,9 @@
-{% extends "base.html" %}
-{% block title %}Mensalidades Alunos{% endblock %}
-{% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/financeiro/responsive.css') }}?v=3">
-{% endblock %}
+{% extends "base_academia.html" %}
+{% from "financeiro/_modal_gerar_cobranca.html" import modal_gerar_cobranca %}
+{% from "financeiro/_modal_alterar_vencimento.html" import modal_alterar_vencimento with context %}
+{% from "financeiro/_modal_trocar_pacote.html" import modal_trocar_pacote with context %}
+{% set menu_ativo = 'financeiro' %}
+{% block title %}Mensalidades por aluno{% endblock %}
 
 {# Badge da forma de pagamento recorrente do aluno (cartão/PIX recorrente) #}
 {% macro rec_badge(fr) %}
@@ -71,630 +72,522 @@
 {# True quando o registro já tem cobrança online emitida e pagável na tela #}
 {% macro _tem_cobranca(rec) %}{% if rec.asaas_pix_copia_cola or rec.asaas_pix_qrcode or (rec.asaas_payment_id and rec.asaas_boleto_url) %}1{% endif %}{% endmacro %}
 
+{% block pagina_titulo %}Mensalidades por aluno{% endblock %}
+{% block pagina_subtitulo %}
+  Cobranças mensais e avulsas
+  {%- set _meses = ['','Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'] -%}
+  {% if mes %} · {{ _meses[mes] }} de {{ ano }}{% else %} · todos os meses de {{ ano }}{% endif %}
+{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/base/listas.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/painel/financeiro.css') }}">
+<style>
+  /* Uma marcação só para celular e desktop: cada coluna some junto com a sua
+     célula, senão os títulos se encavalam. Os limites medem a JANELA — o
+     conteúdo é ~300px menor por causa da barra lateral. */
+  .lin-mens { grid-template-columns: 34px minmax(0,1.6fr) 120px 130px 110px 150px 130px 200px; }
+  .lin-avul { grid-template-columns: minmax(0,1.4fr) minmax(0,1.2fr) 110px 120px 130px 220px; }
+
+  @media (max-width: 1500px) {
+    .lin-mens { grid-template-columns: 34px minmax(0,1.6fr) 130px 110px 150px 130px 200px; }
+    .col-turma { display: none !important; }
+  }
+  @media (max-width: 1340px) {
+    .lin-mens { grid-template-columns: 34px minmax(0,1.6fr) 110px 150px 130px 200px; }
+    .lin-avul { grid-template-columns: minmax(0,1.4fr) 110px 120px 130px 220px; }
+    .col-plano, .col-descricao { display: none !important; }
+  }
+  @media (max-width: 1180px) {
+    .lin-mens { grid-template-columns: 34px minmax(0,1.6fr) 150px 130px 200px; }
+    .lin-avul { grid-template-columns: minmax(0,1.4fr) 120px 130px 220px; }
+    .col-venc { display: none !important; }
+  }
+  @media (max-width: 1024px) {            /* a barra lateral recolhe: cabe mais */
+    .lin-mens { grid-template-columns: 34px minmax(0,1.6fr) 110px 150px 130px 200px; }
+    .lin-avul { grid-template-columns: minmax(0,1.4fr) 110px 120px 130px 220px; }
+    .col-venc { display: block !important; }
+  }
+  @media (max-width: 820px) {
+    .lin-mens { grid-template-columns: 34px minmax(0,1.6fr) 150px 200px; }
+    .lin-avul { grid-template-columns: minmax(0,1.4fr) 120px 220px; }
+    .col-venc, .col-situacao { display: none !important; }
+  }
+
+  /* A célula de valor empilha integral, desconto e juros. */
+  .fin-val { display: flex; flex-direction: column; gap: .1rem; align-items: flex-end; text-align: right; }
+  .fin-val__final { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .fin-val__desconto { color: #16713c; }
+  .fin-val__juros { color: #9a6700; }
+
+  /* Faixa de indicadores clicável: cada item filtra por situação. */
+  .fin-kpi-link { text-decoration: none; color: inherit; }
+  .fin-kpi-link:hover .sh__faixa-valor { color: var(--sh-ink); }
+  .sh__faixa-item.is-filtrando { background: #fdf6f6; box-shadow: inset 0 -2px 0 #C8102E; }
+
+  .lst-acoes--larga { flex-wrap: wrap; gap: .3rem; }
+</style>
+{% endblock %}
+
+{% block pagina_acoes %}
+  {% set _a = {'academia_id': academia_id} if academia_id else {} %}
+  <a href="{{ url_for('financeiro.assinaturas_recorrentes', **_a) }}" class="sh__btn">
+    <i class="bi bi-arrow-repeat"></i> Assinaturas
+  </a>
+  <a href="{{ url_for('financeiro.aplicar_desconto', **_a) }}" class="sh__btn">
+    <i class="bi bi-percent"></i> Desconto
+  </a>
+  <button type="button" class="sh__btn" id="btnLembretesWpp"
+          data-url="{{ url_for('financeiro.lembretes_whatsapp_lote') }}"
+          title="Enviar lembrete de mensalidade no WhatsApp para os pendentes e atrasados">
+    <i class="bi bi-whatsapp"></i> Lembretes
+  </button>
+  {% if aluno_filtro %}
+  {# Filtrada por um aluno: gera para ele aqui mesmo, sem abrir a tela geral. #}
+  <button type="button" class="sh__btn sh__btn--forte"
+          data-bs-toggle="modal" data-bs-target="#modalNovaCobranca">
+    <i class="bi bi-plus-lg"></i> Gerar cobrança
+  </button>
+  <button type="button" class="sh__btn"
+          data-bs-toggle="modal" data-bs-target="#modalAlterarVencimento{{ aluno_filtro }}"
+          title="Mudar o dia de vencimento das mensalidades deste aluno">
+    <i class="bi bi-calendar-event"></i> Alterar vencimento
+  </button>
+  {% if planos_cobranca and planos_cobranca|length > 1 %}
+  <button type="button" class="sh__btn"
+          data-bs-toggle="modal" data-bs-target="#modalTrocarPacote{{ aluno_filtro }}"
+          title="Trocar o plano de mensalidade deste aluno">
+    <i class="bi bi-arrow-left-right"></i> Trocar pacote
+  </button>
+  {% endif %}
+  {% else %}
+  <a href="{{ url_for('financeiro.gerar_cobranca', **_a) }}" class="sh__btn sh__btn--forte">
+    <i class="bi bi-plus-lg"></i> Gerar cobrança
+  </a>
+  {% endif %}
+  {# Aberta pela ficha do aluno, a volta é para a ficha; caso contrário, para o
+     painel do financeiro, que é de onde a tela é acessada normalmente. #}
+  {% if aluno_filtro %}
+  <a href="{{ url_for('alunos.ficha_aluno', aluno_id=aluno_filtro) }}" class="sh__btn">
+    <i class="bi bi-arrow-left"></i> Voltar para {{ (aluno_filtro_nome or 'o aluno').split()[0] }}
+  </a>
+  {% else %}
+  <a href="{{ url_for('financeiro.painel_mensalidades', **_a) }}" class="sh__btn">
+    <i class="bi bi-arrow-left"></i> Voltar
+  </a>
+  {% endif %}
+{% endblock %}
+
 {% block content %}
-<div class="container mt-4 mensalidades-alunos-page">
-    <div class="d-flex justify-content-end mb-2">
-      <a href="{{ url_for('financeiro.assinaturas_recorrentes', academia_id=academia_id) }}" class="btn btn-outline-primary btn-sm">
-        <i class="bi bi-arrow-repeat me-1"></i> Assinaturas recorrentes
-      </a>
-    </div>
-    {% if academias and academias|length > 1 %}
-    <form method="GET" class="mb-3">
-        <label class="form-label small fw-semibold">Academia:</label>
-        <select name="academia_id" class="form-select form-select-sm d-inline-block w-auto" onchange="this.form.submit()">
-            {% for ac in academias %}
-            <option value="{{ ac.id }}" {% if ac.id == academia_id %}selected{% endif %}>{{ ac.nome }}</option>
-            {% endfor %}
-        </select>
-        <input type="hidden" name="mes" value="{{ mes or '' }}">
-        <input type="hidden" name="ano" value="{{ ano or '' }}">
-        <input type="hidden" name="busca" value="{{ busca or '' }}">
-        {% if filtro_status %}<input type="hidden" name="status" value="{{ filtro_status }}">{% endif %}
-    </form>
+{% set _base = {'academia_id': academia_id, 'mes': mes or '', 'ano': ano, 'busca': busca or ''} %}
+
+<div class="sh__faixa">
+  {% for chave, rotulo, nota in [
+      ('pago', 'Pagas', 'Baixa registrada'),
+      ('pendente', 'Pendentes', 'Dentro do prazo'),
+      ('atrasado', 'Atrasadas', 'Vencidas sem pagamento'),
+      ('aguardando_confirmacao', 'Aguardando', 'Aluno informou o pagamento')] %}
+  {# Clicar filtra por situação; clicar de novo no mesmo card limpa o filtro. #}
+  <a class="sh__faixa-item fin-kpi-link {% if filtro_status == chave %}is-filtrando{% endif %}"
+     href="{{ url_for('financeiro.mensalidades_alunos', status=(chave if filtro_status != chave else None), **_base) }}">
+    <span class="sh__faixa-rotulo">{{ rotulo }}</span>
+    <span class="sh__faixa-valor {% if chave == 'atrasado' and contagens.get('atrasado', 0) %}sh__faixa-valor--alerta{% endif %}">{{ contagens.get(chave, 0) }}</span>
+    <span class="lst-sub">{{ nota }}</span>
+  </a>
+  {% endfor %}
+</div>
+
+{% if aluno_filtro %}
+{# Aberto pela ficha do aluno: a tela precisa dizer que está recortada, senão
+   a lista curta parece dado faltando. #}
+<div class="lst-quadro" style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;padding:.85rem 1.25rem">
+  <i class="bi bi-funnel"></i>
+  <span>Mostrando apenas as mensalidades de <strong>{{ aluno_filtro_nome or 'um aluno' }}</strong>.</span>
+  <a class="sh__btn" style="margin-left:auto"
+     href="{{ url_for('financeiro.mensalidades_alunos', academia_id=academia_id, mes=mes or '', ano=ano) }}">
+    Ver de todos
+  </a>
+</div>
+{% endif %}
+
+<form method="GET" class="lst-filtros">
+  {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
+  {% if filtro_status %}<input type="hidden" name="status" value="{{ filtro_status }}">{% endif %}
+  {% if aluno_filtro %}<input type="hidden" name="aluno_id" value="{{ aluno_filtro }}">{% endif %}
+  {% if academias and academias|length > 1 %}
+  <label class="lst-campo lst-campo--curto">
+    <span class="lst-campo__rotulo">Academia</span>
+    <select name="academia_id" onchange="this.form.submit()">
+      {% for ac in academias %}
+      <option value="{{ ac.id }}" {% if ac.id == academia_id %}selected{% endif %}>{{ ac.nome }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  {% endif %}
+  <label class="lst-campo lst-campo--curto">
+    <span class="lst-campo__rotulo">Mês</span>
+    <select name="mes">
+      <option value="" {% if not mes %}selected{% endif %}>Todos os meses</option>
+      {% for i in range(1, 13) %}
+      <option value="{{ i }}" {% if mes == i %}selected{% endif %}>{{ ['','Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'][i] }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label class="lst-campo lst-campo--curto">
+    <span class="lst-campo__rotulo">Ano</span>
+    <select name="ano">
+      {% for a in range(ano_atual - 5, ano_atual + 5) %}
+      <option value="{{ a }}" {% if ano == a %}selected{% endif %}>{{ a }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label class="lst-campo lst-campo--largo">
+    <span class="lst-campo__rotulo">Buscar</span>
+    <input type="text" name="busca" value="{{ busca or '' }}" placeholder="Nome do aluno" autocomplete="off">
+  </label>
+  <div class="lst-filtros__acoes">
+    <button type="submit" class="sh__btn sh__btn--forte">Filtrar</button>
+    {% if filtro_status or busca %}
+    <a href="{{ url_for('financeiro.mensalidades_alunos', academia_id=academia_id, mes=mes or '', ano=ano) }}" class="sh__btn">Limpar</a>
     {% endif %}
-    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3 mensalidades-alunos-header">
-        {% set back_url = url_for('financeiro.painel_mensalidades', academia_id=academia_id) if academia_id else url_for('financeiro.painel_mensalidades') %}
-        {% include 'components/botao_voltar.html' %}
-        <div class="d-flex gap-2 flex-wrap">
-            <a href="{{ url_for('financeiro.aplicar_desconto', academia_id=academia_id) if academia_id else url_for('financeiro.aplicar_desconto') }}" class="btn btn-outline-info btn-sm">
-                <i class="bi bi-percent me-1"></i> Desconto
-            </a>
-            <a href="{{ url_for('financeiro.gerar_cobranca', academia_id=academia_id) if academia_id else url_for('financeiro.gerar_cobranca') }}" class="btn btn-primary btn-sm">
-                <i class="bi bi-plus-lg me-1"></i> Gerar
-            </a>
-            <button type="button" class="btn btn-success btn-sm" id="btnLembretesWpp"
-                    data-url="{{ url_for('financeiro.lembretes_whatsapp_lote') }}" title="Enviar lembrete de mensalidade no WhatsApp para os pendentes/atrasados">
-                <i class="bi bi-whatsapp me-1"></i> Lembretes
-            </button>
-        </div>
-    </div>
-    <h2 class="h4 fw-bold mb-3">Mensalidades por Aluno</h2>
+  </div>
+</form>
 
-    {# Dashboard cards — clicáveis para filtrar por status (clicar novamente remove filtro) #}
-    <div class="row g-3 mb-4">
-        <div class="col-6 col-md-3">
-            <a href="{{ url_for('financeiro.mensalidades_alunos', academia_id=academia_id, mes=mes or '', ano=ano, busca=busca or '', status='pago' if filtro_status != 'pago' else None) }}" class="text-decoration-none">
-            <div class="card border-0 shadow-sm h-100 {% if filtro_status == 'pago' %}border-2 border-success{% endif %}" style="cursor:pointer; transition: all 0.2s;">
-                <div class="card-body py-3">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <span class="text-muted small">Pagas</span>
-                        <span class="badge bg-success fs-6">{{ contagens.get('pago', 0) }}</span>
-                    </div>
-                </div>
-            </div>
-            </a>
-        </div>
-        <div class="col-6 col-md-3">
-            <a href="{{ url_for('financeiro.mensalidades_alunos', academia_id=academia_id, mes=mes or '', ano=ano, busca=busca or '', status='pendente' if filtro_status != 'pendente' else None) }}" class="text-decoration-none">
-            <div class="card border-0 shadow-sm h-100 {% if filtro_status == 'pendente' %}border-2 border-warning{% endif %}" style="cursor:pointer; transition: all 0.2s;">
-                <div class="card-body py-3">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <span class="text-muted small">Pendentes</span>
-                        <span class="badge bg-warning text-dark fs-6">{{ contagens.get('pendente', 0) }}</span>
-                    </div>
-                </div>
-            </div>
-            </a>
-        </div>
-        <div class="col-6 col-md-3">
-            <a href="{{ url_for('financeiro.mensalidades_alunos', academia_id=academia_id, mes=mes or '', ano=ano, busca=busca or '', status='atrasado' if filtro_status != 'atrasado' else None) }}" class="text-decoration-none">
-            <div class="card border-0 shadow-sm h-100 {% if filtro_status == 'atrasado' %}border-2 border-danger{% endif %}" style="cursor:pointer; transition: all 0.2s;">
-                <div class="card-body py-3">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <span class="text-muted small">Atrasadas</span>
-                        <span class="badge bg-danger fs-6">{{ contagens.get('atrasado', 0) }}</span>
-                    </div>
-                </div>
-            </div>
-            </a>
-        </div>
-        <div class="col-6 col-md-3">
-            <a href="{{ url_for('financeiro.mensalidades_alunos', academia_id=academia_id, mes=mes or '', ano=ano, busca=busca or '', status='aguardando_confirmacao' if filtro_status != 'aguardando_confirmacao' else None) }}" class="text-decoration-none">
-            <div class="card border-0 shadow-sm h-100 {% if filtro_status == 'aguardando_confirmacao' %}border-2 border-info{% endif %}" style="cursor:pointer; transition: all 0.2s;">
-                <div class="card-body py-3">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <span class="text-muted small">Aguardando</span>
-                        <span class="badge bg-info fs-6">{{ contagens.get('aguardando_confirmacao', 0) }}</span>
-                    </div>
-                </div>
-            </div>
-            </a>
-        </div>
-    </div>
+{% if mensalidades or avulsas %}
+{% set mensalidades_cancelaveis = mensalidades | selectattr('status_efetivo', 'in', ['pendente', 'atrasado']) | list %}
 
-    {# Filtros #}
-    <form method="GET" class="row g-2 mb-3 mensalidades-alunos-filtros">
+<section class="lst-quadro">
+  <header class="lst-quadro__topo">
+    <h2 class="lst-quadro__titulo">Mensalidades</h2>
+    <div class="d-flex align-items-center gap-3 flex-wrap">
+      <span class="lst-quadro__meta">{{ mensalidades|length }} registro{{ 's' if mensalidades|length != 1 }}</span>
+      {% if mensalidades_cancelaveis %}
+      <label class="lst-sub d-inline-flex align-items-center gap-2 mb-0">
+        <input class="form-check-input mt-0" type="checkbox" id="selecionar_todas_mensalidades" title="Selecionar todas">
+        Selecionar todas
+      </label>
+      <form method="POST" action="{{ url_for('financeiro.cancelar_cobrancas_lote') }}" id="form-excluir-lote">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <input type="hidden" name="academia_id" value="{{ academia_id }}">
-        {% if filtro_status %}<input type="hidden" name="status" value="{{ filtro_status }}">{% endif %}
-        <div class="col-6 col-sm-auto">
-            <select name="mes" class="form-select form-select-sm">
-                <option value="" {% if not mes %}selected{% endif %}>Todos os meses</option>
-                {% for i in range(1, 13) %}
-                <option value="{{ i }}" {% if mes == i %}selected{% endif %}>{{ ['','Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][i] }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="col-6 col-sm-auto">
-            <select name="ano" class="form-select form-select-sm">
-                {% for a in range(ano_atual - 5, ano_atual + 5) %}
-                <option value="{{ a }}" {% if ano == a %}selected{% endif %}>{{ a }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="col-12 col-sm">
-            <input type="text" name="busca" class="form-control form-control-sm" placeholder="Buscar aluno..." value="{{ busca or '' }}">
-        </div>
-        <div class="col-12 col-sm-auto">
-            <button type="submit" class="btn btn-sm btn-outline-secondary w-100">Filtrar</button>
-        </div>
-    </form>
+        <button type="submit" class="sh__btn" id="btn-excluir-lote" disabled
+                onclick="return confirm('Excluir as mensalidades selecionadas?');">
+          <i class="bi bi-trash"></i> Excluir selecionadas
+        </button>
+      </form>
+      {% endif %}
+    </div>
+  </header>
 
-    {% if filtro_status %}
-    <p class="text-muted small mb-2">
-        <span class="badge bg-secondary me-1">Filtro:</span>
-        {{ 'Aguardando Confirmação' if filtro_status == 'aguardando_confirmacao' else filtro_status|capitalize }}
-        <a href="{{ url_for('financeiro.mensalidades_alunos', academia_id=academia_id, mes=mes or '', ano=ano, busca=busca or '') }}" class="ms-2 small">Limpar</a>
-    </p>
-    {% endif %}
+  <div class="lst-rolagem">
+    <div class="lst-largura" style="--lst-min:560px">
+      <div class="lst-linha lin-mens lst-cab">
+        <div>{% if mensalidades_cancelaveis %}<input type="checkbox" class="form-check-input mt-0" id="selecionar_todas_tabela" title="Selecionar todas">{% endif %}</div>
+        <div>Aluno</div>
+        <div class="col-turma">Turma</div>
+        <div class="col-plano">Plano</div>
+        <div class="col-venc">Vencimento</div>
+        <div class="lst-num">Valor</div>
+        <div class="col-situacao">Situação</div>
+        <div class="lst-fim">Ações</div>
+      </div>
 
-    {% if mensalidades or avulsas %}
-    <div class="card border-0 shadow-sm mb-4">
-        <div class="card-header bg-light d-flex flex-wrap justify-content-between align-items-center gap-2">
-            <h6 class="mb-0"><i class="bi bi-calendar-check me-2"></i>Mensalidades</h6>
-            {% set mensalidades_cancelaveis = mensalidades | selectattr('status_efetivo', 'in', ['pendente', 'atrasado']) | list %}
-            {% if mensalidades_cancelaveis %}
-            <div class="d-flex align-items-center gap-2 flex-wrap">
-                <div class="form-check mb-0">
-                    <input class="form-check-input" type="checkbox" id="selecionar_todas_mensalidades" title="Selecionar todas">
-                    <label class="form-check-label small" for="selecionar_todas_mensalidades">Selecionar todas</label>
-                </div>
-                <form method="POST" action="{{ url_for('financeiro.cancelar_cobrancas_lote') }}" class="d-inline" id="form-excluir-lote">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <input type="hidden" name="academia_id" value="{{ academia_id }}">
-                    <button type="submit" class="btn btn-sm btn-outline-danger" id="btn-excluir-lote" disabled onclick="return confirm('Excluir as mensalidades selecionadas?');">
-                        <i class="bi bi-trash me-1"></i> Excluir selecionadas
-                    </button>
-                </form>
-            </div>
+      {% for m in mensalidades %}
+      {% set vp = (m.valor_final if m.tem_desconto else (m.valor_final or m.valor or 0)) | float %}
+      <div class="lst-linha lin-mens lst-item">
+        <div>
+          {% if mensalidades_cancelaveis and m.status_efetivo in ['pendente', 'atrasado'] %}
+          <input type="checkbox" class="form-check-input mt-0 cb-mensalidade" name="registro_id"
+                 form="form-excluir-lote" value="{{ m.id }}" id="cb_t_{{ m.id }}"
+                 aria-label="Selecionar mensalidade de {{ m.aluno_nome }}">
+          {% endif %}
+        </div>
+
+        <div style="min-width:0">
+          <span class="lst-nome">{{ m.aluno_nome }}</span>
+          <span class="lst-sub">
+            {{ rec_badge(forma_recorrencia_por_aluno.get(m.aluno_id)) }}
+            {{ m.plano_nome }}{% if m.data_vencimento %} · vence {{ m.data_vencimento|data_br }}{% endif %}
+          </span>
+        </div>
+
+        <div class="col-turma lst-corta">{{ m.turma_nome or '—' }}</div>
+        <div class="col-plano lst-corta">{{ m.plano_nome }}</div>
+        <div class="col-venc">{{ m.data_vencimento|data_br if m.data_vencimento else '—' }}</div>
+
+        <div class="lst-num">
+          {% if m.tem_desconto %}
+          <span class="fin-val">
+            <span class="fin-val__final">R$ {{ "%.2f"|format(m.valor_final or 0) }}</span>
+            <span class="lst-sub">integral R$ {{ "%.2f"|format(m.valor_integral or 0) }}</span>
+            <span class="lst-sub fin-val__desconto">
+              −R$ {{ "%.2f"|format(m.valor_desconto or 0) }}{% if m.desconto_nome %} {{ m.desconto_nome }}{% endif %}
+            </span>
+            {% if m.tem_juros %}
+            <span class="lst-sub fin-val__juros">+ multa R$ {{ "%.2f"|format(m.multa_val or 0) }} e juros R$ {{ "%.2f"|format(m.juros_val or 0) }}</span>
             {% endif %}
+          </span>
+          {% elif m.tem_juros %}
+          <span class="fin-val">
+            <span class="fin-val__final">R$ {{ "%.2f"|format(m.valor_final or m.valor or 0) }}</span>
+            <span class="lst-sub">base R$ {{ "%.2f"|format(m.valor_original or m.valor or 0) }}</span>
+            <span class="lst-sub fin-val__juros">multa 2% R$ {{ "%.2f"|format(m.multa_val or 0) }} · juros 0,033%/dia R$ {{ "%.2f"|format(m.juros_val or 0) }}</span>
+          </span>
+          {% else %}
+          <span class="fin-val"><span class="fin-val__final">R$ {{ "%.2f"|format(m.valor or 0) }}</span></span>
+          {% endif %}
         </div>
-        <div class="card-body p-0">
-            {% if mensalidades %}
-            {# Mobile: cards #}
-            <div class="d-md-none p-2 mensalidades-mobile-cards">
-                {% for m in mensalidades %}
-                {% set vp = (m.valor_final if m.tem_desconto else (m.valor_final or m.valor or 0)) | float %}
-                <div class="card border mb-2 shadow-sm">
-                    <div class="card-body p-3">
-                        <div class="d-flex justify-content-between align-items-start mb-2">
-                            <div class="d-flex align-items-start gap-2">
-                                {% if m.status_efetivo in ['pendente', 'atrasado'] %}
-                                <input type="checkbox" class="form-check-input mt-1 cb-mensalidade" name="registro_id" form="form-excluir-lote" value="{{ m.id }}" id="cb_m_{{ m.id }}">
-                                {% endif %}
-                                <div>
-                                    <strong>{{ m.aluno_nome }}</strong> {{ rec_badge(forma_recorrencia_por_aluno.get(m.aluno_id)) }}
-                                    <div class="text-muted small">{{ m.turma_nome or '-' }} · {{ m.plano_nome }}</div>
-                                </div>
-                            </div>
-                            <span class="badge {% if m.status_efetivo == 'pago' %}bg-success{% elif m.status_efetivo == 'atrasado' %}bg-danger{% elif m.status_efetivo == 'aguardando_confirmacao' %}bg-info{% else %}bg-warning text-dark{% endif %}">
-                                {{ 'Aguardando Confirmação' if m.status_efetivo == 'aguardando_confirmacao' else (m.status_efetivo|capitalize) }}
-                            </span>
-                        </div>
-                        <div class="small mb-2">
-                            <span class="text-muted">Venc:</span> {{ m.data_vencimento|data_br if m.data_vencimento else '-' }}
-                        </div>
-                        {% if m.tem_desconto %}
-                        <div class="small mb-2">
-                            <span class="text-muted">Integral:</span> R$ {{ "%.2f"|format(m.valor_integral or 0) }}{% if m.tem_juros %} <span class="text-warning">(Multa: R$ {{ "%.2f"|format(m.multa_val or 0) }} + Juros: R$ {{ "%.2f"|format(m.juros_val or 0) }})</span>{% endif %} ·
-                            <span class="text-success">Desc: -R$ {{ "%.2f"|format(m.valor_desconto or 0) }}</span><br>
-                            <strong>A pagar: R$ {{ "%.2f"|format(m.valor_final or 0) }}</strong>
-                        </div>
-                        {% elif m.tem_juros %}
-                        <div class="small mb-2">
-                            <span class="text-muted">Base:</span> R$ {{ "%.2f"|format(m.valor_original or m.valor or 0) }} ·
-                            <span class="text-warning">Multa 2%: R$ {{ "%.2f"|format(m.multa_val or 0) }} · Juros 0,033%/dia: R$ {{ "%.2f"|format(m.juros_val or 0) }}</span><br>
-                            <strong>Total: R$ {{ "%.2f"|format(m.valor_final or m.valor or 0) }}</strong>
-                        </div>
-                        {% else %}
-                        <div class="mb-2"><strong>R$ {{ "%.2f"|format(m.valor or 0) }}</strong></div>
-                        {% endif %}
-                        <div class="d-flex flex-column gap-1 mensalidade-acoes">
-                            {% if m.tem_juros and m.status_efetivo in ['pendente', 'atrasado', 'aguardando_confirmacao'] %}
-                            <form method="POST" action="{{ url_for('financeiro.remover_juros_mensalidade') }}" class="mb-0">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <input type="hidden" name="registro_id" value="{{ m.id }}">
-                                <input type="hidden" name="academia_id" value="{{ academia_id }}">
-                                <button type="submit" class="btn btn-sm btn-outline-warning w-100" onclick="return confirm('Remover juros e multa desta mensalidade? (ex: pagou em dia mas informou fora do vencimento)');">
-                                    <i class="bi bi-dash-circle"></i> Remover juros
-                                </button>
-                            </form>
-                            {% endif %}
-                            {% if m.status_efetivo in ['pendente', 'atrasado'] %}
-                            {% if formas_lista %}
-                            <button type="button" class="btn btn-sm btn-success w-100 js-fin-open-modal-pagamento-financeiro"
-                                    data-post-url="{{ url_for('financeiro.registrar_pagamento') }}"
-                                    data-fluxo="registrar"
-                                    data-registro-id="{{ m.id }}"
-                                    data-competencia="{% if m.data_vencimento %}{{ '%02d/%04d'|format(m.data_vencimento.month, m.data_vencimento.year) }}{% endif %}"
-                                    data-valor-total="{{ '%.2f'|format(vp) }}">
-                                <i class="bi bi-cash-coin"></i> Registrar Pagamento
-                            </button>
-                            {% else %}
-                            <p class="small text-danger mb-1">{% if session.get('modo_painel') == 'associacao' %}Cadastre em <a href="{{ url_for('financeiro.formas_pagamento', academia_id=academia_id) }}">formas de pagamento</a>.{% elif session.get('modo_painel') == 'academia' and (current_user.has_role('gestor_academia') or current_user.has_role('admin')) %}Ative em <a href="{{ url_for('financeiro.formas_pagamento', academia_id=academia_id) }}">Formas de pagamento</a> (Configurações da academia).{% else %}Cadastro no modo Associação; ativação na academia em Configurações → Formas de pagamento.{% endif %}</p>
-                            <button type="button" class="btn btn-sm btn-success w-100" disabled>Registrar Pagamento</button>
-                            {% endif %}
-                            {% if gateway_ativo or recorrencia_gw %}
-                            {% if _tem_cobranca(m)|trim %}
-                            {# Cobrança já emitida: o botão abre o QR em vez de gerar outra #}
-                            <button type="button" class="btn btn-sm btn-success w-100 mb-1"
-                                    data-bs-toggle="modal" data-bs-target="#modalCobrancaM{{ m.id }}">
-                              <i class="bi bi-qr-code"></i> Ver PIX / QR Code
-                            </button>
-                            {% else %}
-                            <button type="button" class="btn btn-sm btn-primary w-100 mb-1 js-gerar-cobranca"
-                                    data-ma="{{ m.id }}" data-aluno="{{ m.aluno_id }}"
-                                    data-valor="{{ '%.2f'|format(m.valor|float) }}" data-nome="{{ m.aluno_nome }}"
-                                    data-bs-toggle="modal" data-bs-target="#modalGerarCobranca">
-                              <i class="bi bi-cash-coin"></i> Gerar cobrança
-                            </button>
-                            {% endif %}
-                            {{ cobranca_online_box('M' ~ m.id, m.asaas_boleto_url, m.asaas_pix_qrcode, m.asaas_pix_copia_cola, m.valor_final or m.valor, 'mensalidade', m.id) }}
-                            {% endif %}
-                            {% if m.status in ['pendente', 'atrasado'] %}
-                            <button type="button" class="btn btn-sm btn-outline-success w-100 mb-1 js-lembrete-wpp"
-                                    data-url="{{ url_for('financeiro.lembrete_whatsapp_individual', ma_id=m.id) }}">
-                              <i class="bi bi-whatsapp"></i> Lembrete WhatsApp
-                            </button>
-                            {% endif %}
-                            <form method="POST" action="{{ url_for('financeiro.cancelar_cobranca') }}" class="mb-0">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <input type="hidden" name="tipo" value="mensalidade_aluno">
-                                <input type="hidden" name="registro_id" value="{{ m.id }}">
-                                <button type="submit" class="btn btn-sm btn-outline-danger w-100" onclick="return confirm('Cancelar esta mensalidade?');">
-                                    <i class="bi bi-x-circle"></i> Cancelar
-                                </button>
-                            </form>
-                            {% elif m.status_efetivo == 'aguardando_confirmacao' %}
-                            {% if formas_lista %}
-                            <button type="button" class="btn btn-sm btn-info w-100 js-fin-open-modal-pagamento-financeiro"
-                                    data-post-url="{{ url_for('financeiro.confirmar_pagamento_mensalidade', registro_id=m.id) }}"
-                                    data-fluxo="confirmar"
-                                    data-valor-total="{{ '%.2f'|format(vp) }}"
-                                    data-competencia="{% if m.data_vencimento %}{{ '%02d/%04d'|format(m.data_vencimento.month, m.data_vencimento.year) }}{% endif %}"
-                                    {% if m.comprovante_url %}data-comprovante-href="{{ url_for('static', filename='uploads/' + m.comprovante_url) }}"{% endif %}
-                                    {% if m.comentario_informado %}data-comentario="{{ m.comentario_informado|e }}"{% endif %}>
-                                <i class="bi bi-check-circle"></i> Confirmar
-                            </button>
-                            {% else %}
-                            <p class="small text-danger mb-1">{% if session.get('modo_painel') == 'associacao' %}Cadastre formas de pagamento.{% elif session.get('modo_painel') == 'academia' and (current_user.has_role('gestor_academia') or current_user.has_role('admin')) %}Configure em Configurações → Formas de pagamento.{% else %}Cadastro apenas no modo Associação.{% endif %}</p>
-                            <button type="button" class="btn btn-sm btn-info w-100" disabled><i class="bi bi-check-circle"></i> Confirmar</button>
-                            {% endif %}
-                            {% else %}
-                            {% if m.status_efetivo == 'pago' %}
-                            <form method="POST" action="{{ url_for('financeiro.cancelar_pagamento') }}" class="mb-1">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <input type="hidden" name="tipo" value="mensalidade_aluno">
-                                <input type="hidden" name="registro_id" value="{{ m.id }}">
-                                <button type="submit" class="btn btn-sm btn-outline-warning w-100" onclick="return confirm('Cancelar pagamento desta mensalidade? O status será revertido para pendente e a receita será cancelada.');">
-                                    <i class="bi bi-x-circle"></i> Cancelar Pagamento
-                                </button>
-                            </form>
-                            {% endif %}
-                            {% if m.comprovante_url %}
-                            <a href="{{ url_for('static', filename='uploads/' + m.comprovante_url) }}" target="_blank" class="btn btn-sm btn-outline-secondary" title="Ver comprovante">
-                                <i class="bi bi-file-earmark-image"></i> Comprovante
-                            </a>
-                            {% endif %}
-                            {% if m.data_pagamento %}<span class="text-muted small">Pgto: {{ m.data_pagamento|data_br }}</span>{% endif %}
-                            {% endif %}
-                        </div>
-                    </div>
-                </div>
-                {% endfor %}
-            </div>
-            {# Desktop: table #}
-            <div class="table-responsive d-none d-md-block">
-                <table class="table table-hover mb-0">
-                    <thead class="table-light">
-                        <tr>
-                            {% if mensalidades_cancelaveis %}
-                            <th style="width: 36px;"><input type="checkbox" class="form-check-input" id="selecionar_todas_tabela" title="Selecionar todas"></th>
-                            {% endif %}
-                            <th>Aluno</th>
-                            <th>Turma</th>
-                            <th>Plano</th>
-                            <th>Vencimento</th>
-                            <th>Valor</th>
-                            <th>Status</th>
-                            <th>Ação</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for m in mensalidades %}
-                        {% set vp = (m.valor_final if m.tem_desconto else (m.valor_final or m.valor or 0)) | float %}
-                        <tr>
-                            {% if mensalidades_cancelaveis %}
-                            <td>
-                                {% if m.status_efetivo in ['pendente', 'atrasado'] %}
-                                <input type="checkbox" class="form-check-input cb-mensalidade" name="registro_id" form="form-excluir-lote" value="{{ m.id }}" id="cb_t_{{ m.id }}">
-                                {% else %}
-                                <span class="text-muted">—</span>
-                                {% endif %}
-                            </td>
-                            {% endif %}
-                            <td>{{ m.aluno_nome }} {{ rec_badge(forma_recorrencia_por_aluno.get(m.aluno_id)) }}</td>
-                            <td>{{ m.turma_nome or '-' }}</td>
-                            <td>{{ m.plano_nome }}</td>
-                            <td>{{ m.data_vencimento|data_br if m.data_vencimento else '-' }}</td>
-                            <td>
-                                {% if m.tem_desconto %}
-                                <div class="d-flex flex-column gap-1">
-                                    <span class="text-muted small"><strong>Valor integral:</strong> R$ {{ "%.2f"|format(m.valor_integral or 0) }}{% if m.tem_juros %} <span class="text-warning">(Multa: R$ {{ "%.2f"|format(m.multa_val or 0) }} + Juros: R$ {{ "%.2f"|format(m.juros_val or 0) }})</span>{% endif %}</span>
-                                    <span class="text-success small"><strong>Desconto{% if m.desconto_nome %} {{ m.desconto_nome }}{% endif %}:</strong> -R$ {{ "%.2f"|format(m.valor_desconto or 0) }}</span>
-                                    <span class="fw-bold text-dark"><strong>Valor a pagar:</strong> R$ {{ "%.2f"|format(m.valor_final or 0) }}</span>
-                                </div>
-                                {% elif m.tem_juros %}
-                                <div class="d-flex flex-column gap-1">
-                                    <span class="text-muted small"><strong>Base:</strong> R$ {{ "%.2f"|format(m.valor_original or m.valor or 0) }}</span>
-                                    <span class="text-warning small"><strong>Multa 2%:</strong> R$ {{ "%.2f"|format(m.multa_val or 0) }} · <strong>Juros 0,033%/dia:</strong> R$ {{ "%.2f"|format(m.juros_val or 0) }}</span>
-                                    <span class="fw-bold text-dark"><strong>Total:</strong> R$ {{ "%.2f"|format(m.valor_final or m.valor or 0) }}</span>
-                                </div>
-                                {% else %}
-                                R$ {{ "%.2f"|format(m.valor or 0) }}
-                                {% endif %}
-                            </td>
-                            <td>
-                                <span class="badge {% if m.status_efetivo == 'pago' %}bg-success{% elif m.status_efetivo == 'atrasado' %}bg-danger{% elif m.status_efetivo == 'aguardando_confirmacao' %}bg-info{% else %}bg-warning text-dark{% endif %}">
-                                    {{ 'Aguardando Confirmação' if m.status_efetivo == 'aguardando_confirmacao' else (m.status_efetivo|capitalize) }}
-                                </span>
-                            </td>
-                            <td>
-                                {% if m.tem_juros and m.status_efetivo in ['pendente', 'atrasado', 'aguardando_confirmacao'] %}
-                                <form method="POST" action="{{ url_for('financeiro.remover_juros_mensalidade') }}" class="d-inline me-1">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                    <input type="hidden" name="registro_id" value="{{ m.id }}">
-                                    <input type="hidden" name="academia_id" value="{{ academia_id }}">
-                                    <button type="submit" class="btn btn-sm btn-outline-warning" onclick="return confirm('Remover juros e multa desta mensalidade? (ex: pagou em dia mas informou fora do vencimento)');">
-                                        <i class="bi bi-dash-circle"></i> Remover juros
-                                    </button>
-                                </form>
-                                {% endif %}
-                                {% if m.status_efetivo in ['pendente', 'atrasado'] %}
-                                {% if formas_lista %}
-                                <button type="button" class="btn btn-sm btn-success me-1 js-fin-open-modal-pagamento-financeiro"
-                                        data-post-url="{{ url_for('financeiro.registrar_pagamento') }}"
-                                        data-fluxo="registrar"
-                                        data-registro-id="{{ m.id }}"
-                                        data-competencia="{% if m.data_vencimento %}{{ '%02d/%04d'|format(m.data_vencimento.month, m.data_vencimento.year) }}{% endif %}"
-                                        data-valor-total="{{ '%.2f'|format(vp) }}">
-                                    <i class="bi bi-cash-coin"></i> Registrar Pagamento
-                                </button>
-                                {% else %}
-                                <span class="small text-danger me-1">{% if session.get('modo_painel') == 'associacao' %}Configure <a href="{{ url_for('financeiro.formas_pagamento', academia_id=academia_id) }}">formas de pagamento</a>.{% elif session.get('modo_painel') == 'academia' and (current_user.has_role('gestor_academia') or current_user.has_role('admin')) %}Configure <a href="{{ url_for('financeiro.formas_pagamento', academia_id=academia_id) }}">formas de pagamento</a>.{% else %}Associação cadastra; academia ativa em Configurações.{% endif %}</span>
-                                <button type="button" class="btn btn-sm btn-success me-1" disabled>Registrar</button>
-                                {% endif %}
-                                {% if m.status in ['pendente', 'atrasado'] %}
-                                <button type="button" class="btn btn-sm btn-outline-success me-1 js-lembrete-wpp"
-                                        data-url="{{ url_for('financeiro.lembrete_whatsapp_individual', ma_id=m.id) }}" title="Enviar lembrete no WhatsApp">
-                                    <i class="bi bi-whatsapp"></i>
-                                </button>
-                                {% endif %}
-                                <form method="POST" action="{{ url_for('financeiro.cancelar_cobranca') }}" class="d-inline">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                    <input type="hidden" name="tipo" value="mensalidade_aluno">
-                                    <input type="hidden" name="registro_id" value="{{ m.id }}">
-                                    <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Cancelar esta mensalidade?');">
-                                        <i class="bi bi-x-circle"></i> Cancelar
-                                    </button>
-                                </form>
-                                {% elif m.status_efetivo == 'aguardando_confirmacao' %}
-                                {% if formas_lista %}
-                                <button type="button" class="btn btn-sm btn-info js-fin-open-modal-pagamento-financeiro"
-                                        data-post-url="{{ url_for('financeiro.confirmar_pagamento_mensalidade', registro_id=m.id) }}"
-                                        data-fluxo="confirmar"
-                                        data-valor-total="{{ '%.2f'|format(vp) }}"
-                                        data-competencia="{% if m.data_vencimento %}{{ '%02d/%04d'|format(m.data_vencimento.month, m.data_vencimento.year) }}{% endif %}"
-                                        {% if m.comprovante_url %}data-comprovante-href="{{ url_for('static', filename='uploads/' + m.comprovante_url) }}"{% endif %}
-                                        {% if m.comentario_informado %}data-comentario="{{ m.comentario_informado|e }}"{% endif %}>
-                                    <i class="bi bi-check-circle"></i> Confirmar
-                                </button>
-                                {% else %}
-                                <span class="small text-danger me-1">Sem formas de pagamento.</span>
-                                <button type="button" class="btn btn-sm btn-info" disabled><i class="bi bi-check-circle"></i> Confirmar</button>
-                                {% endif %}
-                                {% else %}
-                                {% if m.status_efetivo == 'pago' %}
-                                <form method="POST" action="{{ url_for('financeiro.cancelar_pagamento') }}" class="d-inline me-1">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                    <input type="hidden" name="tipo" value="mensalidade_aluno">
-                                    <input type="hidden" name="registro_id" value="{{ m.id }}">
-                                    <button type="submit" class="btn btn-sm btn-outline-warning" onclick="return confirm('Cancelar pagamento desta mensalidade? O status será revertido para pendente e a receita será cancelada.');">
-                                        <i class="bi bi-x-circle"></i> Cancelar Pagamento
-                                    </button>
-                                </form>
-                                {% endif %}
-                                {% if m.comprovante_url %}
-                                <a href="{{ url_for('static', filename='uploads/' + m.comprovante_url) }}" target="_blank" class="btn btn-sm btn-outline-secondary" title="Ver comprovante">
-                                    <i class="bi bi-file-earmark-image"></i>
-                                </a>
-                                {% endif %}
-                                <span class="text-muted small ms-1">{{ m.data_pagamento|data_br if m.data_pagamento else '' }}</span>
-                                {% endif %}
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
+
+        <div class="col-situacao">
+          {% if m.status_efetivo == 'pago' %}
+          <span class="lst-situacao is-ativo"><i></i>Pago</span>
+          {% elif m.status_efetivo == 'atrasado' %}
+          <span class="lst-tag lst-tag--alerta">Atrasado</span>
+          {% elif m.status_efetivo == 'aguardando_confirmacao' %}
+          <span class="lst-tag">Aguardando</span>
+          {% else %}
+          <span class="lst-situacao"><i></i>Pendente</span>
+          {% endif %}
+          {% if m.remover_juros and m.status_efetivo != 'pago' %}
+          {# Sem esta marca, a mensalidade atrasada sem juros parecia erro de cálculo. #}
+          <span class="lst-tag" title="Esta mensalidade está isenta de juros e multa">Isento de juros</span>
+          {% endif %}
+        </div>
+
+        <div class="lst-acoes lst-acoes--larga">
+          {% if m.status_efetivo in ['pendente', 'atrasado', 'aguardando_confirmacao']
+                and (m.tem_juros or m.remover_juros) %}
+          {# Isentar e voltar a cobrar são o mesmo botão. Antes só existia
+             "remover": uma vez isenta, a mensalidade parava de mostrar juros e
+             o botão sumia junto — não dava para entender por que o valor não
+             subia, nem desfazer. #}
+          <form method="POST"
+                action="{{ url_for('financeiro_painel.mensalidades_juros', registro_id=m.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="academia_id" value="{{ academia_id }}">
+            <input type="hidden" name="voltar" value="{{ request.full_path }}">
+            <input type="hidden" name="acao" value="{{ 'reaplicar' if m.remover_juros else 'remover' }}">
+            <button type="submit" class="lst-acao"
+                    title="{% if m.remover_juros %}Voltar a cobrar juros e multa{% else %}Não cobrar juros e multa desta mensalidade{% endif %}"
+                    aria-label="{{ 'Cobrar juros de' if m.remover_juros else 'Isentar de juros' }} {{ m.aluno_nome }}"
+                    onclick="return confirm({% if m.remover_juros %}'Voltar a cobrar juros e multa desta mensalidade?'{% else %}'Remover juros e multa desta mensalidade? (ex: pagou em dia mas informou fora do vencimento)'{% endif %});">
+              <i class="bi bi-{{ 'percent' if m.remover_juros else 'dash-circle' }}"></i>
+            </button>
+          </form>
+          {% endif %}
+
+          {% if m.status_efetivo in ['pendente', 'atrasado'] %}
+            {% if formas_lista %}
+            <button type="button" class="sh__btn js-fin-open-modal-pagamento-financeiro" style="padding:.35rem .7rem"
+                    data-post-url="{{ url_for('financeiro.registrar_pagamento') }}"
+                    data-fluxo="registrar"
+                    data-registro-id="{{ m.id }}"
+                    data-competencia="{% if m.data_vencimento %}{{ '%02d/%04d'|format(m.data_vencimento.month, m.data_vencimento.year) }}{% endif %}"
+                    data-saldo-carteira="{{ '%.2f'|format(saldos_carteira.get(m.aluno_id, 0) if saldos_carteira else 0) }}"
+                    data-vencimento="{{ m.data_vencimento.strftime('%Y-%m-%d') if m.data_vencimento else '' }}"
+                    data-plano-id="{{ m.mensalidade_id or '' }}"
+                    data-valor-total="{{ '%.2f'|format(vp) }}">Registrar</button>
             {% else %}
-            <p class="text-muted p-3 mb-0">Nenhuma mensalidade encontrada.</p>
+            <a class="lst-sub" href="{{ url_for('financeiro.formas_pagamento', academia_id=academia_id) }}">Cadastre uma forma de pagamento</a>
             {% endif %}
-        </div>
-    </div>
-
-    <div class="card border-0 shadow-sm">
-        <div class="card-header bg-light">
-            <h6 class="mb-0"><i class="bi bi-receipt me-2"></i>Cobranças avulsas</h6>
-        </div>
-        <div class="card-body p-0">
-            {% if avulsas %}
-            {# Mobile: cards #}
-            <div class="d-md-none p-2 avulsas-mobile-cards">
-                {% for a in avulsas %}
-                <div class="card border mb-2 shadow-sm">
-                    <div class="card-body p-3">
-                        <div class="d-flex justify-content-between align-items-start mb-2">
-                            <strong>{{ a.aluno_nome }}</strong> {{ rec_badge(forma_recorrencia_por_aluno.get(a.aluno_id)) }}
-                            <span class="badge {% if a.status == 'pago' %}bg-success{% elif a.status == 'atrasado' %}bg-danger{% else %}bg-warning text-dark{% endif %}">
-                                {{ a.status|capitalize }}
-                            </span>
-                        </div>
-                        <div class="small mb-2">{{ a.descricao or '-' }}</div>
-                        <div class="mb-2"><strong>R$ {{ "%.2f"|format(a.valor or 0) }}</strong> · Venc: {{ a.data_vencimento|data_br if a.data_vencimento else '-' }}</div>
-                        <div class="mensalidade-acoes">
-                            {% if a.status in ['pendente', 'atrasado'] %}
-                            <form method="POST" action="{{ url_for('financeiro.registrar_pagamento') }}" class="mb-1">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <input type="hidden" name="tipo" value="cobranca_avulsa">
-                                <input type="hidden" name="registro_id" value="{{ a.id }}">
-                                <button type="submit" class="btn btn-sm btn-success w-100" onclick="return confirm('Registrar pagamento manual desta cobrança? Uma receita será gerada automaticamente.');">
-                                    <i class="bi bi-cash-coin"></i> Registrar Pagamento
-                                </button>
-                            </form>
-                            <form method="POST" action="{{ url_for('financeiro.cancelar_cobranca') }}" class="mb-1">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <input type="hidden" name="tipo" value="cobranca_avulsa">
-                                <input type="hidden" name="registro_id" value="{{ a.id }}">
-                                <button type="submit" class="btn btn-sm btn-outline-danger w-100" onclick="return confirm('Cancelar esta cobrança?');">
-                                    <i class="bi bi-x-circle"></i> Cancelar
-                                </button>
-                            </form>
-                            {% if asaas_on %}
-                            {% set emitida = _tem_cobranca(a)|trim %}
-                            <div class="btn-group w-100 mb-1" role="group">
-                              {% if emitida %}
-                              {# Já emitida: o mesmo botão abre o QR em vez de gerar outra cobrança #}
-                              <button type="button" class="btn btn-sm btn-success w-100"
-                                      data-bs-toggle="modal" data-bs-target="#modalCobrancaAvm{{ a.id }}">
-                                <i class="bi bi-qr-code"></i> Ver PIX / QR Code
-                              </button>
-                              {% else %}
-                              <form method="POST" action="{{ url_for('financeiro.gerar_cobranca_asaas_avulsa', av_id=a.id) }}" class="w-50">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <input type="hidden" name="tipo" value="PIX">
-                                <button type="submit" class="btn btn-sm btn-outline-success w-100"><i class="bi bi-qr-code"></i> PIX</button>
-                              </form>
-                              <form method="POST" action="{{ url_for('financeiro.gerar_cobranca_asaas_avulsa', av_id=a.id) }}" class="w-50">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <input type="hidden" name="tipo" value="BOLETO">
-                                <button type="submit" class="btn btn-sm btn-outline-secondary w-100"><i class="bi bi-upc-scan"></i> Boleto</button>
-                              </form>
-                              {% endif %}
-                            </div>
-                            {# id distinto do bloco desktop: os dois convivem no DOM #}
-                            {{ cobranca_online_box('Avm' ~ a.id, a.asaas_boleto_url, a.asaas_pix_qrcode, a.asaas_pix_copia_cola, a.valor, 'avulsa', a.id) }}
-                            {% endif %}
-                            {% else %}
-                            <span class="text-muted small">Pgto: {{ a.data_pagamento|data_br if a.data_pagamento else '-' }}</span>
-                            {% endif %}
-                        </div>
-                    </div>
-                </div>
-                {% endfor %}
-            </div>
-            {# Desktop: table #}
-            <div class="table-responsive d-none d-md-block">
-                <table class="table table-hover mb-0">
-                    <thead class="table-light">
-                        <tr>
-                            <th>Aluno</th>
-                            <th>Descrição</th>
-                            <th>Vencimento</th>
-                            <th>Valor</th>
-                            <th>Status</th>
-                            <th>Ação</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for a in avulsas %}
-                        <tr>
-                            <td>{{ a.aluno_nome }} {{ rec_badge(forma_recorrencia_por_aluno.get(a.aluno_id)) }}</td>
-                            <td>{{ a.descricao or '-' }}</td>
-                            <td>{{ a.data_vencimento|data_br if a.data_vencimento else '-' }}</td>
-                            <td>R$ {{ "%.2f"|format(a.valor or 0) }}</td>
-                            <td>
-                                <span class="badge {% if a.status == 'pago' %}bg-success{% elif a.status == 'atrasado' %}bg-danger{% else %}bg-warning text-dark{% endif %}">
-                                    {{ a.status|capitalize }}
-                                </span>
-                            </td>
-                            <td>
-                                {% if a.status in ['pendente', 'atrasado'] %}
-                                <form method="POST" action="{{ url_for('financeiro.registrar_pagamento') }}" class="d-inline me-1">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                    <input type="hidden" name="tipo" value="cobranca_avulsa">
-                                    <input type="hidden" name="registro_id" value="{{ a.id }}">
-                                    <button type="submit" class="btn btn-sm btn-success" onclick="return confirm('Registrar pagamento manual desta cobrança? Uma receita será gerada automaticamente.');">
-                                        <i class="bi bi-cash-coin"></i> Registrar Pagamento
-                                    </button>
-                                </form>
-                                <form method="POST" action="{{ url_for('financeiro.cancelar_cobranca') }}" class="d-inline">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                    <input type="hidden" name="tipo" value="cobranca_avulsa">
-                                    <input type="hidden" name="registro_id" value="{{ a.id }}">
-                                    <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Cancelar esta cobrança?');">
-                                        <i class="bi bi-x-circle"></i> Cancelar
-                                    </button>
-                                </form>
-                                {% if asaas_on %}
-                                {% if _tem_cobranca(a)|trim %}
-                                {# Já emitida: mesmo botão, agora abrindo o QR #}
-                                <button type="button" class="btn btn-sm btn-success ms-1"
-                                        data-bs-toggle="modal" data-bs-target="#modalCobrancaAvd{{ a.id }}">
-                                  <i class="bi bi-qr-code"></i> Ver PIX / QR Code
-                                </button>
-                                {% else %}
-                                <form method="POST" action="{{ url_for('financeiro.gerar_cobranca_asaas_avulsa', av_id=a.id) }}" class="d-inline ms-1">
-                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                    <input type="hidden" name="tipo" value="PIX">
-                                    <button type="submit" class="btn btn-sm btn-outline-success"><i class="bi bi-qr-code"></i> PIX</button>
-                                </form>
-                                <form method="POST" action="{{ url_for('financeiro.gerar_cobranca_asaas_avulsa', av_id=a.id) }}" class="d-inline ms-1">
-                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                    <input type="hidden" name="tipo" value="BOLETO">
-                                    <button type="submit" class="btn btn-sm btn-outline-secondary"><i class="bi bi-upc-scan"></i> Boleto</button>
-                                </form>
-                                {% endif %}
-                                {{ cobranca_online_box('Avd' ~ a.id, a.asaas_boleto_url, a.asaas_pix_qrcode, a.asaas_pix_copia_cola, a.valor, 'avulsa', a.id) }}
-                                {% endif %}
-                                {% else %}
-                                {% if a.status == 'pago' %}
-                                <form method="POST" action="{{ url_for('financeiro.cancelar_pagamento') }}" class="d-inline me-1">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                    <input type="hidden" name="tipo" value="cobranca_avulsa">
-                                    <input type="hidden" name="registro_id" value="{{ a.id }}">
-                                    <button type="submit" class="btn btn-sm btn-outline-warning" onclick="return confirm('Cancelar pagamento desta cobrança? O status será revertido para pendente e a receita será cancelada.');">
-                                        <i class="bi bi-x-circle"></i> Cancelar Pagamento
-                                    </button>
-                                </form>
-                                {% endif %}
-                                <span class="text-muted small">{{ a.data_pagamento|data_br if a.data_pagamento else '' }}</span>
-                                {% endif %}
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-            {% else %}
-            <p class="text-muted p-3 mb-0">Nenhuma cobrança avulsa.</p>
+            {% if gateway_ativo or recorrencia_gw %}
+              {% if _tem_cobranca(m)|trim %}
+              <button type="button" class="lst-acao" title="Ver PIX / QR Code"
+                      aria-label="Ver PIX de {{ m.aluno_nome }}"
+                      data-bs-toggle="modal" data-bs-target="#modalCobrancaM{{ m.id }}">
+                <i class="bi bi-qr-code"></i>
+              </button>
+              {% else %}
+              <button type="button" class="lst-acao js-gerar-cobranca" title="Gerar cobrança online"
+                      aria-label="Gerar cobrança online para {{ m.aluno_nome }}"
+                      data-ma="{{ m.id }}" data-aluno="{{ m.aluno_id }}"
+                      data-valor="{{ '%.2f'|format(m.valor|float) }}" data-nome="{{ m.aluno_nome }}"
+                      data-bs-toggle="modal" data-bs-target="#modalGerarCobranca">
+                <i class="bi bi-cash-coin"></i>
+              </button>
+              {% endif %}
+              {{ cobranca_online_box('M' ~ m.id, m.asaas_boleto_url, m.asaas_pix_qrcode, m.asaas_pix_copia_cola, m.valor_final or m.valor, 'mensalidade', m.id) }}
             {% endif %}
-        </div>
-    </div>
-    {% else %}
-    <div class="card border-0 shadow-sm">
-        <div class="card-body">
-            <p class="text-muted mb-0">Nenhuma cobrança registrada. <a href="{{ url_for('financeiro.gerar_cobranca', academia_id=academia_id) }}">Gerar cobrança</a>.</p>
-        </div>
-    </div>
-    {% endif %}
-</div>
-
-{# Modal pagamento (várias formas) — Mensalidades por aluno #}
-<div class="modal fade" id="modalPagamentoMensalidadesFinanceiro" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
-    <div class="modal-dialog modal-dialog-centered modal-lg">
-        <div class="modal-content">
-            <div class="modal-header border-0 pb-0">
-                <h5 class="modal-title fw-bold js-fin-pag-titulo">Pagamento</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
-            </div>
-            <form class="js-modal-pagamento-mensal-form js-fin-modal-pagamento-page" method="post" action="#" novalidate>
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <div class="modal-body pt-0">
-                    <div class="js-fin-pag-extra d-none mb-2 small border-bottom pb-2"></div>
-                    <p class="small text-muted mb-3 js-fin-pag-sub"></p>
-                    <script type="application/json" class="js-formas-json-src">{{ formas_lista | default([]) | tojson }}</script>
-                    <div class="js-fin-pag-linhas mb-2"></div>
-                    <p class="small text-muted mb-2 mb-md-3">Para dividir em duas formas, altere o valor da primeira linha; a segunda abre automaticamente com o restante.</p>
-                    <div class="mt-3 d-flex flex-wrap justify-content-between align-items-center gap-2 small border-top pt-3">
-                        <span>Soma: <strong class="js-fin-pag-soma text-primary">0,00</strong></span>
-                        <span>Total devido: <strong class="js-fin-pag-total">0,00</strong></span>
-                    </div>
-                    <div class="alert alert-danger py-2 mt-2 mb-0 d-none js-fin-pag-erro-soma" role="alert">A soma dos valores deve igualar o total devido.</div>
-                    <input type="hidden" name="next" value="" class="js-fin-pag-next-hidden">
-                    <input type="hidden" name="pagamentos_json" value="" class="js-fin-pag-json-inp">
-                    <input type="hidden" name="tipo" value="mensalidade_aluno" class="js-fin-pag-tipo-inp" disabled>
-                    <input type="hidden" name="registro_id" value="" class="js-fin-pag-reg-inp" disabled>
-                </div>
-                <div class="modal-footer border-0 bg-light">
-                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-success btn-sm js-fin-pag-submit">
-                        <i class="bi bi-check-lg me-1"></i>Confirmar pagamento
-                    </button>
-                </div>
+            {% if m.status in ['pendente', 'atrasado'] %}
+            <button type="button" class="lst-acao js-lembrete-wpp" title="Enviar lembrete no WhatsApp"
+                    aria-label="Enviar lembrete no WhatsApp para {{ m.aluno_nome }}"
+                    data-url="{{ url_for('financeiro.lembrete_whatsapp_individual', ma_id=m.id) }}">
+              <i class="bi bi-whatsapp"></i>
+            </button>
+            {% endif %}
+            <form method="POST" action="{{ url_for('financeiro.cancelar_cobranca') }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="tipo" value="mensalidade_aluno">
+              <input type="hidden" name="registro_id" value="{{ m.id }}">
+              <input type="hidden" name="next" value="{{ request.full_path }}">
+              <button type="submit" class="lst-acao lst-acao--perigo" title="Cancelar mensalidade"
+                      aria-label="Cancelar mensalidade de {{ m.aluno_nome }}"
+                      onclick="return confirm('Cancelar a mensalidade de {{ m.aluno_nome|e }} — {% if m.data_vencimento %}venc. {{ m.data_vencimento.strftime('%d/%m/%Y') }}{% endif %} (R$ {{ '%.2f'|format(m.valor or 0)|replace('.', ',') }})?\n\nA cobrança sai da lista. Só faça isso se for realmente esta.');">
+                <i class="bi bi-x-circle"></i>
+              </button>
             </form>
+
+          {% elif m.status_efetivo == 'aguardando_confirmacao' %}
+            {% if formas_lista %}
+            <button type="button" class="sh__btn sh__btn--forte js-fin-open-modal-pagamento-financeiro" style="padding:.35rem .7rem"
+                    data-post-url="{{ url_for('financeiro.confirmar_pagamento_mensalidade', registro_id=m.id) }}"
+                    data-fluxo="confirmar"
+                    data-valor-total="{{ '%.2f'|format(vp) }}"
+                    data-competencia="{% if m.data_vencimento %}{{ '%02d/%04d'|format(m.data_vencimento.month, m.data_vencimento.year) }}{% endif %}"
+                    {% if m.comprovante_url %}data-comprovante-href="{{ url_for('static', filename='uploads/' + m.comprovante_url) }}"{% endif %}
+                    {% if m.comentario_informado %}data-comentario="{{ m.comentario_informado|e }}"{% endif %}>Confirmar</button>
+            {% else %}
+            <a class="lst-sub" href="{{ url_for('financeiro.formas_pagamento', academia_id=academia_id) }}">Cadastre uma forma de pagamento</a>
+            {% endif %}
+
+          {% else %}
+            {% if m.status_efetivo == 'pago' %}
+            <form method="POST" action="{{ url_for('financeiro.cancelar_pagamento') }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              {# Sem isto a rota remonta a URL da lista e perde o filtro do aluno. #}
+              <input type="hidden" name="next" value="{{ request.full_path }}">
+              <input type="hidden" name="tipo" value="mensalidade_aluno">
+              <input type="hidden" name="registro_id" value="{{ m.id }}">
+              <button type="submit" class="lst-acao" title="Desfazer a baixa deste pagamento"
+                      aria-label="Cancelar pagamento de {{ m.aluno_nome }}"
+                      onclick="return confirm({% if m.pago_auto %}'Cancelar pagamento desta mensalidade? Como foi confirmado automaticamente pelo gateway, o valor vira crédito na carteira do aluno.'{% else %}'Cancelar pagamento desta mensalidade? O status será revertido para pendente e a receita será cancelada.'{% endif %});">
+                <i class="bi bi-arrow-counterclockwise"></i>
+              </button>
+            </form>
+            {% endif %}
+            {% if m.comprovante_url %}
+            <a class="lst-acao" title="Ver comprovante" aria-label="Ver comprovante de {{ m.aluno_nome }}"
+               href="{{ url_for('static', filename='uploads/' + m.comprovante_url) }}" target="_blank" rel="noopener">
+              <i class="bi bi-file-earmark-image"></i>
+            </a>
+            {% endif %}
+            {% if m.data_pagamento %}<span class="lst-sub">{{ m.data_pagamento|data_br }}</span>{% endif %}
+          {% endif %}
         </div>
+      </div>
+      {% else %}
+      <p class="lst-vazio">Nenhuma mensalidade encontrada com esses filtros.</p>
+      {% endfor %}
     </div>
-</div>
+  </div>
+</section>
+
+<section class="lst-quadro mt-3">
+  <header class="lst-quadro__topo">
+    <h2 class="lst-quadro__titulo">Cobranças avulsas</h2>
+    <span class="lst-quadro__meta">{{ avulsas|length }} cobrança{{ 's' if avulsas|length != 1 }}</span>
+  </header>
+
+  <div class="lst-rolagem">
+    <div class="lst-largura" style="--lst-min:520px">
+      <div class="lst-linha lin-avul lst-cab">
+        <div>Aluno</div>
+        <div class="col-descricao">Descrição</div>
+        <div class="col-venc">Vencimento</div>
+        <div class="lst-num">Valor</div>
+        <div class="col-situacao">Situação</div>
+        <div class="lst-fim">Ações</div>
+      </div>
+
+      {% for a in avulsas %}
+      <div class="lst-linha lin-avul lst-item">
+        <div style="min-width:0">
+          <span class="lst-nome">{{ a.aluno_nome }}</span>
+          <span class="lst-sub">
+            {{ rec_badge(forma_recorrencia_por_aluno.get(a.aluno_id)) }}
+            {{ a.descricao or 'Sem descrição' }}
+          </span>
+        </div>
+        <div class="col-descricao lst-corta">{{ a.descricao or '—' }}</div>
+        <div class="col-venc">{{ a.data_vencimento|data_br if a.data_vencimento else '—' }}</div>
+        <div class="lst-num"><span class="fin-val"><span class="fin-val__final">R$ {{ "%.2f"|format(a.valor or 0) }}</span></span></div>
+        <div class="col-situacao">
+          {% if a.status == 'pago' %}<span class="lst-situacao is-ativo"><i></i>Pago</span>
+          {% elif a.status == 'atrasado' %}<span class="lst-tag lst-tag--alerta">Atrasado</span>
+          {% else %}<span class="lst-situacao"><i></i>Pendente</span>{% endif %}
+        </div>
+
+        <div class="lst-acoes lst-acoes--larga">
+          {% if a.status in ['pendente', 'atrasado'] %}
+          <form method="POST" action="{{ url_for('financeiro.registrar_pagamento') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="tipo" value="cobranca_avulsa">
+            <input type="hidden" name="registro_id" value="{{ a.id }}">
+            <button type="submit" class="sh__btn" style="padding:.35rem .7rem"
+                    onclick="return confirm('Registrar pagamento manual desta cobrança? Uma receita será gerada automaticamente.');">Registrar</button>
+          </form>
+          <form method="POST" action="{{ url_for('financeiro.cancelar_cobranca') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="tipo" value="cobranca_avulsa">
+            <input type="hidden" name="registro_id" value="{{ a.id }}">
+            <button type="submit" class="lst-acao lst-acao--perigo" title="Cancelar cobrança"
+                    aria-label="Cancelar cobrança de {{ a.aluno_nome }}"
+                    onclick="return confirm('Cancelar esta cobrança?');">
+              <i class="bi bi-x-circle"></i>
+            </button>
+          </form>
+          {% if asaas_on %}
+            {% if _tem_cobranca(a)|trim %}
+            <button type="button" class="lst-acao" title="Ver PIX / QR Code"
+                    aria-label="Ver PIX de {{ a.aluno_nome }}"
+                    data-bs-toggle="modal" data-bs-target="#modalCobrancaAvd{{ a.id }}">
+              <i class="bi bi-qr-code"></i>
+            </button>
+            {% else %}
+            <form method="POST" action="{{ url_for('financeiro.gerar_cobranca_asaas_avulsa', av_id=a.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="tipo" value="PIX">
+              <button type="submit" class="lst-acao" title="Gerar cobrança PIX" aria-label="Gerar PIX"><i class="bi bi-qr-code"></i></button>
+            </form>
+            <form method="POST" action="{{ url_for('financeiro.gerar_cobranca_asaas_avulsa', av_id=a.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="tipo" value="BOLETO">
+              <button type="submit" class="lst-acao" title="Gerar boleto" aria-label="Gerar boleto"><i class="bi bi-upc-scan"></i></button>
+            </form>
+            {% endif %}
+            {{ cobranca_online_box('Avd' ~ a.id, a.asaas_boleto_url, a.asaas_pix_qrcode, a.asaas_pix_copia_cola, a.valor, 'avulsa', a.id) }}
+          {% endif %}
+          {% else %}
+            {% if a.status == 'pago' %}
+            <form method="POST" action="{{ url_for('financeiro.cancelar_pagamento') }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              {# Sem isto a rota remonta a URL da lista e perde o filtro do aluno. #}
+              <input type="hidden" name="next" value="{{ request.full_path }}">
+              <input type="hidden" name="tipo" value="cobranca_avulsa">
+              <input type="hidden" name="registro_id" value="{{ a.id }}">
+              <button type="submit" class="lst-acao" title="Desfazer a baixa deste pagamento"
+                      aria-label="Cancelar pagamento de {{ a.aluno_nome }}"
+                      onclick="return confirm('Cancelar pagamento desta cobrança? O status será revertido para pendente e a receita será cancelada.');">
+                <i class="bi bi-arrow-counterclockwise"></i>
+              </button>
+            </form>
+            {% endif %}
+            {% if a.data_pagamento %}<span class="lst-sub">{{ a.data_pagamento|data_br }}</span>{% endif %}
+          {% endif %}
+        </div>
+      </div>
+      {% else %}
+      <p class="lst-vazio">Nenhuma cobrança avulsa.</p>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+{% else %}
+<section class="lst-quadro">
+  <p class="lst-vazio">
+    Nenhuma cobrança registrada.
+    <a href="{{ url_for('financeiro.gerar_cobranca', academia_id=academia_id) }}">Gerar cobrança</a>.
+  </p>
+</section>
+{% endif %}
+
+{# A rota manda `academias` + `academia_id`; o nome sai daí. #}
+{% set _ac_atual = (academias | selectattr('id', 'equalto', academia_id) | first) if academias else None %}
+<footer class="lst-rodape">
+  © {{ current_year }} {{ (_ac_atual.nome if _ac_atual else None) or academia_nome or 'Unimaster' }}. Todos os direitos reservados.
+</footer>
+
+{% include "financeiro/_modal_pagamento_mensalidade.html" %}
 
 <!-- Modal: Gerar cobrança (avulsa ou recorrente) -->
 <div class="modal fade" id="modalGerarCobranca" tabindex="-1" aria-hidden="true">
@@ -780,444 +673,6 @@
 })();
 </script>
 <script>
-(function () {
-    var MODAL_ID = 'modalPagamentoMensalidadesFinanceiro';
-
-    function escapeFinHtml(s) {
-        if (s === null || s === undefined) return '';
-        var d = document.createElement('div');
-        d.textContent = s;
-        return d.innerHTML;
-    }
-    function parseValorLinha(s) {
-        if (!s) return NaN;
-        var t = String(s).trim();
-        if (t.indexOf(',') >= 0) t = t.replace(/\./g, '').replace(',', '.');
-        return parseFloat(t);
-    }
-    function fmtBRL(n) {
-        var x = Math.round(Number(n) * 100) / 100;
-        return x.toFixed(2).replace('.', ',');
-    }
-    function atualizaSomaPag(modalPag) {
-        var soma = 0;
-        modalPag.querySelectorAll('.js-fin-pag-linha').forEach(function (row) {
-            var inp = row.querySelector('.js-fin-inp-valor');
-            if (!inp) return;
-            var v = parseValorLinha(inp.value);
-            if (!isNaN(v)) soma += v;
-        });
-        var se = modalPag.querySelector('.js-fin-pag-soma');
-        if (se) se.textContent = fmtBRL(soma);
-    }
-    function removerLinhasExtras(modalPag) {
-        var linhasBox = modalPag.querySelector('.js-fin-pag-linhas');
-        if (!linhasBox) return;
-        while (linhasBox.querySelectorAll('.js-fin-pag-linha').length > 1) {
-            var nodes = linhasBox.querySelectorAll('.js-fin-pag-linha');
-            if (nodes.length <= 1) break;
-            nodes[nodes.length - 1].remove();
-        }
-    }
-    function aplicarRegraLinhasPagamento(modalPag, changedRow) {
-        var form = modalPag.querySelector('.js-modal-pagamento-mensal-form');
-        if (!form) return;
-        var T = parseFloat(form.dataset.valorTotal || '0') || 0;
-        var linhasBox = modalPag.querySelector('.js-fin-pag-linhas');
-        if (!linhasBox) return;
-        var rows = linhasBox.querySelectorAll('.js-fin-pag-linha');
-        if (!rows.length) return;
-        var idx = Array.prototype.indexOf.call(rows, changedRow);
-        if (idx < 0) return;
-        if (idx >= 1) {
-            atualizaSomaPag(modalPag);
-            return;
-        }
-        var inp0 = rows[0].querySelector('.js-fin-inp-valor');
-        var raw0 = inp0 ? (inp0.value || '').trim() : '';
-        var v1 = raw0 === '' ? NaN : parseValorLinha(inp0.value);
-        if (rows.length === 1) {
-            if (!isNaN(v1) && v1 > 0 && T - v1 > 0.02) {
-                var formasSrc = modalPag.querySelector('.js-formas-json-src');
-                var formas = [];
-                try {
-                    formas = JSON.parse((formasSrc && formasSrc.textContent) || '[]');
-                } catch (e0) {
-                    formas = [];
-                }
-                var dataEl = rows[0].querySelector('.js-fin-inp-data');
-                var dt =
-                    dataEl && dataEl.value
-                        ? dataEl.value
-                        : new Date().toISOString().slice(0, 10);
-                var rest = Math.round((T - v1) * 100) / 100;
-                criarLinha(formas, rest, dt, modalPag);
-            }
-            atualizaSomaPag(modalPag);
-            return;
-        }
-        if (raw0 === '' || isNaN(v1) || v1 <= 0) {
-            removerLinhasExtras(modalPag);
-            rows = linhasBox.querySelectorAll('.js-fin-pag-linha');
-            inp0 = rows[0] && rows[0].querySelector('.js-fin-inp-valor');
-            if (inp0) inp0.value = fmtBRL(T);
-            atualizaSomaPag(modalPag);
-            return;
-        }
-        if (Math.abs(v1 - T) <= 0.02 || v1 >= T) {
-            removerLinhasExtras(modalPag);
-            rows = linhasBox.querySelectorAll('.js-fin-pag-linha');
-            inp0 = rows[0] && rows[0].querySelector('.js-fin-inp-valor');
-            if (inp0) inp0.value = fmtBRL(T);
-            atualizaSomaPag(modalPag);
-            return;
-        }
-        var inp1 = rows[1].querySelector('.js-fin-inp-valor');
-        if (inp1) {
-            var r = Math.round((T - v1) * 100) / 100;
-            inp1.value = r > 0 ? fmtBRL(r) : '';
-        }
-        atualizaSomaPag(modalPag);
-    }
-    function criarLinha(formas, valorDefault, dataDefault, modalPag) {
-        var opts = (formas || []).map(function (f) {
-            return '<option value="' + String(f.id) + '">' + escapeFinHtml(f.nome) + '</option>';
-        }).join('');
-        var vd = valorDefault != null && valorDefault !== '' ? fmtBRL(Number(valorDefault)) : '';
-        var div = document.createElement('div');
-        div.className = 'row g-2 mb-2 align-items-end js-fin-pag-linha';
-        div.innerHTML =
-            '<div class="col-md-5 col-12"><label class="small text-muted mb-0">Forma de pagamento</label>' +
-            '<select class="form-select form-select-sm js-fin-sel-fp"><option value="">Selecione…</option>' +
-            opts +
-            '</select></div>' +
-            '<div class="col-md-3 col-6"><label class="small text-muted mb-0">Valor (R$)</label>' +
-            '<input type="text" class="form-control form-control-sm js-fin-inp-valor" inputmode="decimal" autocomplete="off" required value="' +
-            vd +
-            '"></div>' +
-            '<div class="col-md-3 col-6"><label class="small text-muted mb-0">Data do pagamento</label>' +
-            '<input type="date" class="form-control form-control-sm js-fin-inp-data" required value="' +
-            (dataDefault || '') +
-            '"></div>' +
-            '<div class="col-md-1 col-12 text-md-end pb-md-2">' +
-            '<button type="button" class="btn btn-outline-danger btn-sm js-fin-pag-del-line mt-3 mt-md-0" title="Remover esta forma e voltar o valor total à primeira linha"><i class="bi bi-x-lg"></i></button></div>';
-        var linhas = modalPag.querySelector('.js-fin-pag-linhas');
-        if (linhas) linhas.appendChild(div);
-        atualizaSomaPag(modalPag);
-    }
-    var finPagTimers = {};
-
-    function preencherExtra(modalPag, btn) {
-        var ex = modalPag.querySelector('.js-fin-pag-extra');
-        if (!ex) return;
-        ex.classList.add('d-none');
-        ex.innerHTML = '';
-        var h = btn.getAttribute('data-comprovante-href');
-        var c = btn.getAttribute('data-comentario');
-        if (!h && !c) return;
-        ex.classList.remove('d-none');
-        if (h) {
-            var a = document.createElement('a');
-            a.href = h;
-            a.target = '_blank';
-            a.rel = 'noopener';
-            a.className = 'd-inline-block fw-semibold';
-            a.innerHTML = '<i class="bi bi-file-earmark-image me-1"></i>Ver comprovante';
-            ex.appendChild(a);
-        }
-        if (c) {
-            var p = document.createElement('p');
-            p.className = 'mb-0 mt-1 text-muted small';
-            p.textContent = c;
-            ex.appendChild(p);
-        }
-    }
-
-    document.addEventListener(
-        'click',
-        function (ev) {
-            var btn = ev.target && ev.target.closest && ev.target.closest('.js-fin-open-modal-pagamento-financeiro');
-            if (!btn) return;
-            var modalPag = document.getElementById(MODAL_ID);
-            if (!modalPag) return;
-            var form = modalPag.querySelector('.js-modal-pagamento-mensal-form');
-            if (!form) return;
-            var formasSrc = modalPag.querySelector('.js-formas-json-src');
-            var formas = [];
-            try {
-                formas = JSON.parse((formasSrc && formasSrc.textContent) || '[]');
-            } catch (e1) {
-                formas = [];
-            }
-            if (!formas.length) return;
-            form.dataset.postUrl = btn.getAttribute('data-post-url') || '';
-            form.dataset.fluxo = btn.getAttribute('data-fluxo') || '';
-            form.dataset.registroId = btn.getAttribute('data-registro-id') || '';
-            form.dataset.valorTotal = btn.getAttribute('data-valor-total') || '0';
-            var vtot = parseFloat(form.dataset.valorTotal) || 0;
-            var comp = btn.getAttribute('data-competencia') || '';
-            var fluxo = form.dataset.fluxo;
-            var tit = modalPag.querySelector('.js-fin-pag-titulo');
-            if (tit) {
-                tit.textContent =
-                    (fluxo === 'confirmar' ? 'Confirmar pagamento' : 'Registrar pagamento') +
-                    (comp ? ' — Competência ' + comp : '');
-            }
-            var sub = modalPag.querySelector('.js-fin-pag-sub');
-            if (sub) {
-                sub.textContent =
-                    'O valor total deve ser exatamente R$ ' +
-                    fmtBRL(vtot) +
-                    '. Para duas formas, altere o valor da primeira linha; a segunda abre com o restante.';
-            }
-            preencherExtra(modalPag, btn);
-            var totEl = modalPag.querySelector('.js-fin-pag-total');
-            if (totEl) totEl.textContent = fmtBRL(vtot);
-            var linhasBox = modalPag.querySelector('.js-fin-pag-linhas');
-            if (linhasBox) linhasBox.innerHTML = '';
-            var hoje = new Date().toISOString().slice(0, 10);
-            criarLinha(formas, vtot, hoje, modalPag);
-            var tipoInp = form.querySelector('.js-fin-pag-tipo-inp');
-            var regInp = form.querySelector('.js-fin-pag-reg-inp');
-            if (fluxo === 'registrar') {
-                if (tipoInp) {
-                    tipoInp.removeAttribute('disabled');
-                    tipoInp.value = 'mensalidade_aluno';
-                }
-                if (regInp) {
-                    regInp.removeAttribute('disabled');
-                    regInp.value = form.dataset.registroId || '';
-                }
-            } else {
-                if (tipoInp) {
-                    tipoInp.setAttribute('disabled', 'disabled');
-                    tipoInp.value = '';
-                }
-                if (regInp) {
-                    regInp.setAttribute('disabled', 'disabled');
-                    regInp.value = '';
-                }
-            }
-            var errBox = modalPag.querySelector('.js-fin-pag-erro-soma');
-            if (errBox) errBox.classList.add('d-none');
-            var nextInp = form.querySelector('.js-fin-pag-next-hidden');
-            if (nextInp) nextInp.value = window.location.pathname + window.location.search;
-            var inst = bootstrap.Modal.getOrCreateInstance(modalPag);
-            inst.show();
-        },
-        true
-    );
-
-    // Trocar a data do pagamento recalcula o total: juros e multa contam até o
-    // dia em que o aluno pagou, não até o dia em que a baixa está sendo lançada.
-    document.addEventListener('change', function (ev) {
-        var inpData = ev.target && ev.target.closest && ev.target.closest('.js-fin-inp-data');
-        if (!inpData) return;
-        var modalPag = inpData.closest('#' + MODAL_ID);
-        if (!modalPag) return;
-        var form = modalPag.querySelector('.js-modal-pagamento-mensal-form');
-        var tipoInp = form && form.querySelector('.js-fin-pag-tipo-inp');
-        if (!form || !form.dataset.registroId) return;
-        if (tipoInp && tipoInp.value && tipoInp.value !== 'mensalidade_aluno') return;
-        var linhasBox = modalPag.querySelector('.js-fin-pag-linhas');
-        var rows = linhasBox ? linhasBox.querySelectorAll('.js-fin-pag-linha') : [];
-        // Com várias linhas vale a data mais recente — a mesma regra do servidor.
-        var maior = '';
-        rows.forEach(function (r) {
-            var d = r.querySelector('.js-fin-inp-data');
-            if (d && d.value && d.value > maior) maior = d.value;
-        });
-        if (!maior) return;
-
-        fetch('/financeiro/mensalidades/' + form.dataset.registroId + '/valor-na-data?data=' + maior, {
-            headers: { 'X-Requested-With': 'XMLHttpRequest' }
-        })
-            .then(function (r) { return r.ok ? r.json() : null; })
-            .then(function (j) {
-                if (!j || typeof j.total !== 'number') return;
-                var antigo = parseFloat(form.dataset.valorTotal || '0') || 0;
-                if (Math.abs(antigo - j.total) < 0.005) return;
-                form.dataset.valorTotal = j.total.toFixed(2);
-                var totEl = modalPag.querySelector('.js-fin-pag-total');
-                if (totEl) totEl.textContent = fmtBRL(j.total);
-                var sub = modalPag.querySelector('.js-fin-pag-sub');
-                if (sub) {
-                    var extra = (j.juros || j.multa)
-                        ? ' (multa R$ ' + fmtBRL(j.multa) + ' + juros R$ ' + fmtBRL(j.juros) + ' até ' +
-                          maior.split('-').reverse().join('/') + ')'
-                        : '';
-                    sub.textContent = 'O valor total deve ser exatamente R$ ' + fmtBRL(j.total) + extra + '.';
-                }
-                // Uma linha só: ajusta direto. Várias: recalcula a última, mantendo as demais.
-                if (rows.length === 1) {
-                    var inp0 = rows[0].querySelector('.js-fin-inp-valor');
-                    if (inp0) inp0.value = fmtBRL(j.total);
-                } else if (rows.length > 1) {
-                    var soma = 0;
-                    for (var i = 0; i < rows.length - 1; i++) {
-                        var vi = parseValorLinha((rows[i].querySelector('.js-fin-inp-valor') || {}).value || '0');
-                        if (!isNaN(vi)) soma += vi;
-                    }
-                    var ult = rows[rows.length - 1].querySelector('.js-fin-inp-valor');
-                    if (ult) ult.value = fmtBRL(Math.max(0, Math.round((j.total - soma) * 100) / 100));
-                }
-                atualizaSomaPag(modalPag);
-            })
-            .catch(function () { /* sem rede: o servidor ainda valida no envio */ });
-    });
-
-    document.addEventListener(
-        'click',
-        function (ev) {
-            var delBtn = ev.target && ev.target.closest && ev.target.closest('.js-fin-pag-del-line');
-            if (!delBtn) return;
-            var modalPag = delBtn.closest('#' + MODAL_ID);
-            var linhasBox = modalPag && modalPag.querySelector('.js-fin-pag-linhas');
-            var row = delBtn.closest('.js-fin-pag-linha');
-            if (!modalPag || !linhasBox || !row) return;
-            if (linhasBox.querySelectorAll('.js-fin-pag-linha').length <= 1) return;
-            row.remove();
-            var form = modalPag.querySelector('.js-modal-pagamento-mensal-form');
-            var T = parseFloat(form && form.dataset.valorTotal ? form.dataset.valorTotal : '0') || 0;
-            var rowsLeft = linhasBox.querySelectorAll('.js-fin-pag-linha');
-            if (rowsLeft.length === 1) {
-                var inp0 = rowsLeft[0].querySelector('.js-fin-inp-valor');
-                if (inp0) inp0.value = fmtBRL(T);
-            }
-            atualizaSomaPag(modalPag);
-        },
-        true
-    );
-
-    document.addEventListener(
-        'input',
-        function (ev) {
-            var t = ev.target;
-            if (!t || !t.classList.contains('js-fin-inp-valor')) return;
-            var modalPag = document.getElementById(MODAL_ID);
-            if (!modalPag || !modalPag.contains(t)) return;
-            var row = t.closest('.js-fin-pag-linha');
-            if (!row) return;
-            var rows = modalPag.querySelectorAll('.js-fin-pag-linha');
-            var idx = Array.prototype.indexOf.call(rows, row);
-            if (idx === 0) {
-                clearTimeout(finPagTimers[MODAL_ID]);
-                finPagTimers[MODAL_ID] = setTimeout(function () {
-                    aplicarRegraLinhasPagamento(modalPag, row);
-                    delete finPagTimers[MODAL_ID];
-                }, 400);
-            } else {
-                atualizaSomaPag(modalPag);
-            }
-        },
-        true
-    );
-    document.addEventListener(
-        'blur',
-        function (ev) {
-            var t = ev.target;
-            if (!t || !t.classList.contains('js-fin-inp-valor')) return;
-            var modalPag = document.getElementById(MODAL_ID);
-            if (!modalPag || !modalPag.contains(t)) return;
-            var row = t.closest('.js-fin-pag-linha');
-            var rows = modalPag.querySelectorAll('.js-fin-pag-linha');
-            if (Array.prototype.indexOf.call(rows, row) !== 0) return;
-            clearTimeout(finPagTimers[MODAL_ID]);
-            aplicarRegraLinhasPagamento(modalPag, row);
-        },
-        true
-    );
-
-    document.addEventListener('submit', function (ev) {
-        var form = ev.target;
-        if (!form.classList || !form.classList.contains('js-fin-modal-pagamento-page')) return;
-        ev.preventDefault();
-        var modalPag = document.getElementById(MODAL_ID);
-        if (!modalPag) return;
-        var fluxo = form.dataset.fluxo;
-        var postUrl = form.dataset.postUrl;
-        var valorTotal = parseFloat(form.dataset.valorTotal || '0') || 0;
-        var zeroTotal = valorTotal <= 0.001;
-        var partes = [];
-        var ok = true;
-        modalPag.querySelectorAll('.js-fin-pag-linha').forEach(function (row) {
-            var sid = row.querySelector('.js-fin-sel-fp');
-            var vin = row.querySelector('.js-fin-inp-valor');
-            var din = row.querySelector('.js-fin-inp-data');
-            var fid = sid && sid.value ? parseInt(sid.value, 10) : 0;
-            var rawV = vin && (vin.value || '').trim() ? String(vin.value).trim() : '';
-            var vv = rawV === '' ? 0 : parseValorLinha(vin.value);
-            var ds = din && din.value ? din.value.trim() : '';
-            if (!ds) {
-                ok = false;
-                return;
-            }
-            if (isNaN(vv) || vv < 0) {
-                ok = false;
-                return;
-            }
-            if (zeroTotal) {
-                partes.push({
-                    forma_pagamento_id: fid > 0 ? fid : 0,
-                    valor: Math.round(vv * 100) / 100,
-                    data_pagamento: ds
-                });
-            } else {
-                if (!fid || vv <= 0) ok = false;
-                else
-                    partes.push({
-                        forma_pagamento_id: fid,
-                        valor: Math.round(vv * 100) / 100,
-                        data_pagamento: ds
-                    });
-            }
-        });
-        if (!ok || !partes.length) {
-            window.alert(
-                zeroTotal
-                    ? 'Informe a data em cada linha (valor 0,00). A forma de pagamento é opcional quando o total for zero.'
-                    : 'Preencha forma, valor e data em cada linha.'
-            );
-            return;
-        }
-        var soma = Math.round(partes.reduce(function (a, p) { return a + p.valor; }, 0) * 100) / 100;
-        var tolSoma = zeroTotal ? 0.001 : 0.02;
-        if (Math.abs(soma - valorTotal) > tolSoma) {
-            var errBox = modalPag.querySelector('.js-fin-pag-erro-soma');
-            if (errBox) errBox.classList.remove('d-none');
-            return;
-        }
-        var nextInp = form.querySelector('.js-fin-pag-next-hidden');
-        var payload = new URLSearchParams();
-        payload.append('next', nextInp ? nextInp.value || '' : '');
-        payload.append('pagamentos_json', JSON.stringify(partes));
-        if (fluxo === 'registrar') {
-            payload.append('tipo', 'mensalidade_aluno');
-            payload.append('registro_id', form.dataset.registroId || '');
-        }
-        var subBtn = form.querySelector('.js-fin-pag-submit');
-        if (subBtn) subBtn.disabled = true;
-        fetch(postUrl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
-                'X-Requested-With': 'XMLHttpRequest'
-            },
-            body: payload.toString(),
-            credentials: 'same-origin'
-        })
-            .then(function (response) {
-                if (!response.ok) throw new Error('Falha ao registrar pagamento');
-                window.location.reload();
-            })
-            .catch(function () {
-                window.location.reload();
-            })
-            .finally(function () {
-                if (subBtn) subBtn.disabled = false;
-            });
-    }, true);
-})();
 
 // ── Modal do QR: acompanha o pagamento e fecha sozinho ao confirmar ──
 (function () {
@@ -1376,4 +831,21 @@ document.addEventListener('click', function (ev) {
   });
 })();
 </script>
+
+{% if aluno_filtro %}
+{# Cobrança rápida para o aluno filtrado, sem sair desta tela. #}
+{{ modal_gerar_cobranca(aluno_filtro, aluno_filtro_nome or 'aluno', academia_id,
+                        planos_cobranca, request.full_path, mes or 1, ano, descontos) }}
+
+{# Mudança do dia de vencimento do aluno filtrado, com o proporcional do período. #}
+{{ modal_alterar_vencimento(aluno_filtro, aluno_filtro_nome or 'aluno',
+                            dia_vencimento_atual, request.full_path) }}
+
+{% if planos_cobranca and planos_cobranca|length > 1 %}
+{# Troca de pacote do aluno filtrado, com o alcance escolhido no modal. #}
+{{ modal_trocar_pacote(aluno_filtro, aluno_filtro_nome or 'aluno', planos_cobranca,
+                       pacote_atual_id, pacote_atual_nome, request.full_path) }}
+{% endif %}
+{% endif %}
+
 {% endblock %}

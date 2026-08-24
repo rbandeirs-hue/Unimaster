@@ -1,0 +1,118 @@
+{% extends 'base_um2.html' %}
+{% set um_ativo = 'usuarios' %}
+{% block title %}Usuários{% endblock %}
+
+{% block um_css %}
+  .lin-usu { display:grid; grid-template-columns:minmax(220px,1fr) 150px minmax(200px,1fr) 170px 110px 96px; gap:0 14px; }
+  .rol-usu { min-width:1060px; }
+  .seg { display:flex; padding:3px; border:1px solid #d6d3d1; border-radius:3px; background:#fff; }
+  .seg a { padding:7px 13px; border-radius:2px; font:400 12.5px/1 'Public Sans',sans-serif; color:#78716c; white-space:nowrap; }
+  .seg a.on { background:#1C1917; font-weight:600; color:#FAFAF9; }
+  .pag { display:flex; gap:4px; align-items:center; flex-wrap:wrap; }
+  .pag a { min-width:32px; height:32px; padding:0 9px; display:flex; align-items:center; justify-content:center;
+    border:1px solid #d6d3d1; border-radius:3px; background:#fff; font:400 12.5px/1 'Public Sans',sans-serif; color:#57534e; }
+  .pag a.on { background:#1C1917; border-color:#1C1917; font-weight:600; color:#FAFAF9; }
+{% endblock %}
+
+{% block um_conteudo %}
+{% set situacao = request.args.get('situacao', 'ativos') %}
+
+<div style="display:flex; align-items:flex-end; justify-content:space-between; gap:20px; flex-wrap:wrap">
+  <div style="display:flex; flex-direction:column; gap:7px">
+    <h1 class="um-h1" style="margin:0">Usuários</h1>
+    <div class="um-sub">Contas cadastradas em {{ academia.nome }} e seus papéis de acesso.</div>
+  </div>
+  <a href="{{ url_for('usuarios.novo') }}" class="um-btn-primario"><i class="bi bi-person-plus" style="font-size:14px"></i>Novo usuário</a>
+</div>
+
+<div class="um-faixa">
+  <div class="um-kpi"><span class="um-kpi-lbl">Usuários</span><span class="um-kpi-val">{{ total }}</span><span class="um-kpi-nota">Contas na academia</span></div>
+  <div class="um-kpi"><span class="um-kpi-lbl">Ativos</span><span class="um-kpi-val" style="color:#15803d">{{ total_ativos }}</span><span class="um-kpi-nota">Com acesso liberado</span></div>
+  <div class="um-kpi"><span class="um-kpi-lbl">Inativos</span><span class="um-kpi-val">{{ total_inativos }}</span><span class="um-kpi-nota">Acesso suspenso</span></div>
+  <div class="um-kpi"><span class="um-kpi-lbl">CPF pendente</span><span class="um-kpi-val" style="color:#C8102E">{{ total_cpf_pendente }}</span><span class="um-kpi-nota">Cadastro incompleto</span></div>
+</div>
+
+<form method="get" class="um-filtros">
+  <div style="flex:none; display:flex; flex-direction:column; gap:6px">
+    <label>Situação</label>
+    <div class="seg">
+      {% for chave, rotulo in [('ativos','Ativos'), ('inativos','Inativos'), ('todos','Todos')] %}
+      <a href="{{ url_for(request.endpoint, situacao=chave, q=request.args.get('q',''), papel=request.args.get('papel','')) }}"
+         class="{{ 'on' if situacao == chave else '' }}">{{ rotulo }}</a>
+      {% endfor %}
+    </div>
+  </div>
+  <input type="hidden" name="situacao" value="{{ situacao }}">
+  <div class="um-filtro" style="flex:1 1 260px"><label for="u-q">Buscar</label><input type="text" id="u-q" name="q" value="{{ request.args.get('q','') }}" placeholder="Nome, e-mail ou CPF"></div>
+  <div class="um-filtro" style="flex:0 1 170px">
+    <label for="u-p">Papel</label>
+    <select id="u-p" name="papel"><option value="">Todos</option>
+      {% for chave, rotulo in [('aluno','Aluno'), ('professor','Professor'), ('gestor_academia','Gestor'), ('responsavel','Responsável')] %}
+      <option value="{{ chave }}" {% if request.args.get('papel') == chave %}selected{% endif %}>{{ rotulo }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="um-filtro" style="flex:0 1 190px">
+    <label for="u-ac">Academia</label>
+    <select id="u-ac" name="academia_id">
+      {% for a in academias %}<option value="{{ a.id }}" {% if a.id == academia.id %}selected{% endif %}>{{ a.nome }}</option>{% endfor %}
+    </select>
+  </div>
+  <button type="submit" class="um-btn" style="flex:none">Filtrar</button>
+</form>
+
+<div class="um-card" style="overflow:hidden">
+  <div class="um-cab">
+    <span class="um-secao">Usuários</span>
+    <span class="um-kpi-nota">Mostrando {{ usuarios|length }} de {{ total }}</span>
+  </div>
+  <div class="um-rolagem"><div class="rol-usu">
+    <div class="lin-usu um-th"><span>Usuário</span><span>CPF</span><span>E-mail</span><span>Papéis</span><span>Situação</span><span style="text-align:right">Ações</span></div>
+    {% for u in usuarios %}
+    <div class="lin-usu um-td">
+      <div style="display:flex; align-items:center; gap:11px; min-width:0">
+        {% if u.foto_url %}
+        <img src="{{ u.foto_url }}" alt="" style="flex:none; width:32px; height:32px; border-radius:50%; object-fit:cover; border:1px solid #e7e5e4">
+        {% else %}
+        <span style="flex:none; width:32px; height:32px; border-radius:50%; background:#f5f5f4; border:1px solid #e7e5e4; display:flex; align-items:center; justify-content:center; font:600 11px/1 'Public Sans',sans-serif; color:#57534e">
+          {{ u.nome.split()[0][0]|upper }}{{ u.nome.split()[-1][0]|upper if u.nome.split()|length > 1 else '' }}
+        </span>
+        {% endif %}
+        <a href="{{ url_for('usuarios.editar', id=u.id) }}" style="font-weight:500; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">{{ u.nome }}</a>
+      </div>
+      <span style="color:{{ '#57534e' if u.cpf else '#C8102E' }}">{{ u.cpf or 'CPF pendente' }}</span>
+      <span style="min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#57534e">{{ u.email or '—' }}</span>
+      <span style="display:flex; gap:5px; flex-wrap:wrap">
+        {% for p in u.papeis %}<span class="um-tag">{{ p }}</span>{% endfor %}
+      </span>
+      {% set c = '#15803d' if u.ativo else '#a8a29e' %}
+      <span style="display:flex; align-items:center; gap:6px; font:500 12.5px/1 'Public Sans',sans-serif; color:{{ c }}"><span style="width:6px; height:6px; border-radius:50%; background:{{ c }}"></span>{{ 'Ativo' if u.ativo else 'Inativo' }}</span>
+      <span style="display:flex; gap:14px; justify-content:flex-end">
+        <a href="{{ url_for('usuarios.editar', id=u.id) }}" title="Editar" style="color:#78716c"><i class="bi bi-pencil" style="font-size:14px"></i></a>
+        <a href="{{ url_for('usuarios.alternar_ativo', id=u.id) }}" title="{{ 'Suspender' if u.ativo else 'Reativar' }}" style="color:#78716c"><i class="bi bi-pause-circle" style="font-size:14px"></i></a>
+      </span>
+    </div>
+    {% else %}
+    <div style="padding:32px 16px; text-align:center; color:#a8a29e; font:400 12.5px/1.5 'Public Sans',sans-serif">Nenhum usuário encontrado.</div>
+    {% endfor %}
+  </div></div>
+
+  {% if paginas > 1 %}
+  <div style="padding:13px 16px; display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap">
+    <span class="um-kpi-nota">Página {{ pagina }} de {{ paginas }}</span>
+    <div class="pag">
+      {% set args = request.args.to_dict() %}
+      <a href="{{ url_for(request.endpoint, **dict(args, pagina=[pagina - 1, 1]|max)) }}">‹</a>
+      {% for n in range(1, paginas + 1) %}
+        {% if n <= 5 or n == paginas %}
+        <a href="{{ url_for(request.endpoint, **dict(args, pagina=n)) }}" class="{{ 'on' if n == pagina else '' }}">{{ n }}</a>
+        {% elif n == 6 %}
+        <span style="padding:0 6px; color:#a8a29e">…</span>
+        {% endif %}
+      {% endfor %}
+      <a href="{{ url_for(request.endpoint, **dict(args, pagina=[pagina + 1, paginas]|min)) }}">›</a>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

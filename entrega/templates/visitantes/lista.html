@@ -1,0 +1,105 @@
+{% extends 'base_um2.html' %}
+{% set um_ativo = 'visitantes' %}
+{% block title %}Visitantes{% endblock %}
+
+{% block um_css %}
+  .lin-vis { display:grid; grid-template-columns:minmax(200px,1fr) 80px 150px 110px 120px 100px 120px; gap:0 14px; }
+  .rol-vis { min-width:1000px; }
+{% endblock %}
+
+{% block um_conteudo %}
+{% set aba = aba|default('visitantes') %}
+
+<div style="display:flex; align-items:flex-end; justify-content:space-between; gap:20px; flex-wrap:wrap">
+  <div style="display:flex; flex-direction:column; gap:7px">
+    <h1 class="um-h1" style="margin:0">Visitantes</h1>
+    <div class="um-sub">Histórico e gestão de visitantes da academia.</div>
+  </div>
+  <a href="{{ url_for('visitantes.novo') }}" class="um-btn-primario"><i class="bi bi-person-plus" style="font-size:14px"></i>Novo visitante</a>
+</div>
+
+<div style="display:flex; gap:2px; flex-wrap:wrap; border-bottom:1px solid #e7e5e4">
+  {% for chave, rotulo, qtd in [('visitantes','Visitantes', visitantes|length),
+                                 ('solicitacoes','Solicitações de aulas', solicitacoes|default([])|length),
+                                 ('diarias','Pagamentos de diária', diarias|default([])|length),
+                                 ('matriculas','Matrículas realizadas', matriculas|default([])|length)] %}
+  {% set on = aba == chave %}
+  <a href="{{ url_for(request.endpoint, aba=chave) }}"
+     style="padding:11px 15px; margin-bottom:-1px; display:flex; align-items:center; gap:8px;
+            border-bottom:2px solid {{ '#C8102E' if on else 'transparent' }};
+            font:{{ '600' if on else '400' }} 13px/1 'Public Sans',sans-serif;
+            color:{{ '#1C1917' if on else '#a8a29e' }}">{{ rotulo }}
+    <span style="padding:2px 7px; border-radius:2px; background:{{ '#fef2f2' if on else '#f5f5f4' }};
+                 font:600 11px/1.3 'Public Sans',sans-serif; color:{{ '#C8102E' if on else '#78716c' }}">{{ qtd }}</span>
+  </a>
+  {% endfor %}
+</div>
+
+<div class="um-faixa">
+  <div class="um-kpi"><span class="um-kpi-lbl">Total de visitantes</span><span class="um-kpi-val">{{ visitantes|length }}</span><span class="um-kpi-nota">Cadastrados na academia</span></div>
+  <div class="um-kpi"><span class="um-kpi-lbl">Visitantes ativos</span><span class="um-kpi-val" style="color:#15803d">{{ visitantes|selectattr('ativo')|list|length }}</span><span class="um-kpi-nota">Podem agendar aulas</span></div>
+  <div class="um-kpi"><span class="um-kpi-lbl">Com aulas agendadas</span><span class="um-kpi-val">{{ com_agenda|default(0) }}</span><span class="um-kpi-nota">Aguardando comparecimento</span></div>
+  <div class="um-kpi"><span class="um-kpi-lbl">Convertidos em aluno</span><span class="um-kpi-val">{{ convertidos|default(0) }}</span><span class="um-kpi-nota">Matrículas a partir de visita</span></div>
+</div>
+
+<form method="get" class="um-filtros">
+  <input type="hidden" name="aba" value="{{ aba }}">
+  <div class="um-filtro" style="flex:1 1 240px"><label for="v-q">Buscar</label><input type="text" id="v-q" name="q" value="{{ request.args.get('q','') }}" placeholder="Nome ou telefone"></div>
+  <div class="um-filtro" style="flex:1 1 200px">
+    <label for="v-ac">Academia</label>
+    <select id="v-ac" name="academia_id">
+      {% for ac in academias %}<option value="{{ ac.id }}" {% if ac.id == academia.id %}selected{% endif %}>{{ ac.nome }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="um-filtro" style="flex:0 1 150px">
+    <label for="v-st">Status</label>
+    <select id="v-st" name="status"><option value="">Todos</option>
+      <option value="ativos" {% if request.args.get('status') == 'ativos' %}selected{% endif %}>Ativos</option>
+      <option value="inativos" {% if request.args.get('status') == 'inativos' %}selected{% endif %}>Inativos</option>
+    </select>
+  </div>
+  <div class="um-filtro" style="flex:0 1 170px">
+    <label for="v-ul">Última aula</label>
+    <select id="v-ul" name="periodo"><option value="">Qualquer data</option>
+      <option value="30" {% if request.args.get('periodo') == '30' %}selected{% endif %}>Últimos 30 dias</option>
+      <option value="90" {% if request.args.get('periodo') == '90' %}selected{% endif %}>Últimos 90 dias</option>
+    </select>
+  </div>
+  <button type="submit" class="um-btn" style="flex:none">Filtrar</button>
+</form>
+
+<div class="um-card" style="overflow:hidden">
+  <div class="um-cab">
+    <span class="um-secao">Visitantes</span>
+    <span class="um-kpi-nota">{{ visitantes|length }} visitante{{ 's' if visitantes|length != 1 else '' }}</span>
+  </div>
+  <div class="um-rolagem"><div class="rol-vis">
+    <div class="lin-vis um-th"><span>Visitante</span><span style="text-align:right">Idade</span><span>Contato</span><span style="text-align:right">Aulas</span><span style="text-align:right">Última aula</span><span>Status</span><span style="text-align:right">Ações</span></div>
+    {% for v in visitantes %}
+    <div class="lin-vis um-td">
+      <div style="display:flex; align-items:center; gap:11px; min-width:0">
+        {% if v.foto_url %}
+        <img src="{{ v.foto_url }}" alt="" style="flex:none; width:32px; height:32px; border-radius:50%; object-fit:cover; border:1px solid #e7e5e4">
+        {% else %}
+        <span style="flex:none; width:32px; height:32px; border-radius:50%; background:#f5f5f4; border:1px solid #e7e5e4; display:flex; align-items:center; justify-content:center; font:600 11px/1 'Public Sans',sans-serif; color:#57534e">{{ v.nome[0]|upper }}</span>
+        {% endif %}
+        <a href="{{ url_for('visitantes.detalhe', id=v.id) }}" style="font-weight:500; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">{{ v.nome }}</a>
+      </div>
+      <span style="text-align:right; color:#57534e">{{ v.idade ~ ' anos' if v.idade else '—' }}</span>
+      <span style="color:#57534e">{{ v.telefone or '—' }}</span>
+      <span style="text-align:right; color:#57534e">{{ v.aulas|default(0) }}</span>
+      <span style="text-align:right; color:#78716c">{{ v.ultima_aula.strftime('%d/%m/%Y') if v.ultima_aula else '—' }}</span>
+      {% set c = '#15803d' if v.ativo else '#a8a29e' %}
+      <span style="display:flex; align-items:center; gap:6px; font:500 12.5px/1 'Public Sans',sans-serif; color:{{ c }}"><span style="width:6px; height:6px; border-radius:50%; background:{{ c }}"></span>{{ 'Ativo' if v.ativo else 'Inativo' }}</span>
+      <span style="display:flex; gap:14px; justify-content:flex-end">
+        <a href="{{ url_for('visitantes.detalhe', id=v.id) }}" title="Ver" style="color:#78716c"><i class="bi bi-eye" style="font-size:14px"></i></a>
+        <a href="{{ url_for('academia.whatsapp', visitante_id=v.id) }}" title="WhatsApp" style="color:#78716c"><i class="bi bi-whatsapp" style="font-size:14px"></i></a>
+        <a href="{{ url_for('visitantes.promover', id=v.id) }}" title="Converter em aluno" style="color:#78716c"><i class="bi bi-person-check" style="font-size:14px"></i></a>
+      </span>
+    </div>
+    {% else %}
+    <div style="padding:32px 16px; text-align:center; color:#a8a29e; font:400 12.5px/1.5 'Public Sans',sans-serif">Nenhum visitante cadastrado.</div>
+    {% endfor %}
+  </div></div>
+</div>
+{% endblock %}

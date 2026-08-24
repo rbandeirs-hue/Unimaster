@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Escolher academia{% endblock %}
+
+{% block content %}
+<style>
+  /* Tela de entrada: sem menu lateral, porque a academia ainda não foi
+     definida e o restante do sistema depende dela. */
+  .esc-wrap { max-width: 720px; margin: 3rem auto; padding: 0 1rem; }
+  .esc-titulo { font-size: 1.75rem; font-weight: 700; margin: 0 0 .35rem; }
+  .esc-sub { color: #6b6862; margin-bottom: 1.75rem; }
+
+  .esc-lista { display: grid; gap: .75rem; }
+  .esc-item {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    width: 100%;
+    padding: 1.1rem 1.25rem;
+    background: #fff;
+    border: 1px solid #e6e4e0;
+    border-radius: 12px;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color .15s, box-shadow .15s, transform .15s;
+  }
+  .esc-item:hover {
+    border-color: #1c1c1c;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, .07);
+    transform: translateY(-1px);
+  }
+  .esc-item:focus-visible { outline: 3px solid rgba(28, 28, 28, .15); }
+
+  .esc-ic {
+    width: 44px; height: 44px; flex: none;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: #f4f2ee; border-radius: 10px; font-size: 1.2rem; color: #1c1c1c;
+  }
+  .esc-nome { display: block; font-weight: 600; font-size: 1.05rem; }
+  .esc-meta { display: block; color: #6b6862; font-size: .86rem; }
+  .esc-seta { margin-left: auto; color: #a9a6a1; }
+
+  .esc-aviso {
+    margin-top: 1.5rem; padding: .85rem 1rem;
+    background: #fdf3e3; border: 1px solid #f2e2c2; border-radius: 10px;
+    color: #7a5b18; font-size: .88rem;
+  }
+</style>
+
+<div class="esc-wrap">
+  <h1 class="esc-titulo">Em qual academia você vai trabalhar?</h1>
+  <p class="esc-sub">
+    Você administra {{ academias|length }} academias. Tudo o que fizer nesta sessão —
+    alunos, presenças, mensalidades — fica registrado na que escolher aqui.
+  </p>
+
+  <div class="esc-lista">
+    {% for a in academias %}
+    <form method="POST" action="{{ url_for('academia.escolher_academia') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="next" value="{{ proximo }}">
+      <input type="hidden" name="academia_id" value="{{ a.id }}">
+      <button type="submit" class="esc-item">
+        <span class="esc-ic"><i class="bi bi-shield"></i></span>
+        <span style="min-width:0">
+          <span class="esc-nome">{{ a.nome }}</span>
+          <span class="esc-meta">
+            {{ a.alunos }} aluno{{ 's' if a.alunos != 1 }} ativo{{ 's' if a.alunos != 1 }}
+            {%- if a.cidade %} · {{ a.cidade }}{% if a.uf %}/{{ a.uf }}{% endif %}{% endif %}
+          </span>
+        </span>
+        <i class="bi bi-arrow-right esc-seta"></i>
+      </button>
+    </form>
+    {% endfor %}
+  </div>
+
+  <p class="esc-aviso">
+    <i class="bi bi-info-circle"></i>
+    A academia não muda por dentro do sistema. Para trabalhar em outra, saia e entre de novo.
+  </p>
+</div>
+{% endblock %}

@@ -1,0 +1,134 @@
+{% extends 'base_um.html' %}
+{% set um_ativo = 'turmas' %}
+{% block title %}Turmas{% endblock %}
+
+{% block um_css %}
+  .cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:14px; }
+  @media (max-width: 900px) { .cards { grid-template-columns:1fr; } }
+{% endblock %}
+
+{% block um_conteudo %}
+<div style="display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap">
+  <div style="display:flex; flex-direction:column; gap:6px">
+    <div class="um-h1">Turmas <span style="font-weight:400; color:#a1a1aa">— {{ academia.nome }}</span></div>
+    <div class="um-sub">Horários, professores e alunos matriculados.</div>
+  </div>
+  <div style="display:flex; align-items:center; gap:8px">
+    <a class="um-btn" href="{{ url_for('painel.index') }}"><i class="bi bi-arrow-left" style="font-size:12px"></i> Voltar</a>
+    <a class="um-btn-primario" href="{{ url_for('turmas.nova') }}"><i class="bi bi-plus-lg" style="font-size:13px"></i> Nova turma</a>
+  </div>
+</div>
+
+<div class="um-stats">
+  <div class="um-stat"><div class="um-stat-lbl">Turmas</div><div class="um-stat-val">{{ turmas|length }}</div></div>
+  <div class="um-div"></div>
+  <div class="um-stat"><div class="um-stat-lbl">Ativas</div><div class="um-stat-val">{{ turmas|selectattr('ativa')|list|length }}</div></div>
+  <div class="um-div"></div>
+  <div class="um-stat"><div class="um-stat-lbl">Matrículas</div><div class="um-stat-val">{{ turmas|sum(attribute='qtd_alunos') }}</div></div>
+</div>
+
+<div class="um-card" style="padding:14px 16px; display:flex; gap:10px; flex-wrap:wrap">
+  <form method="GET" style="display:flex; gap:10px; flex-wrap:wrap; width:100%">
+    <input type="text" name="q" value="{{ q or '' }}" placeholder="Buscar turma, professor ou modalidade…" style="flex:1 1 220px; min-width:140px">
+    <select name="status" onchange="this.form.submit()" style="flex:0 1 auto; width:auto">
+      <option value="ativas" {% if status == 'ativas' %}selected{% endif %}>Ativas</option>
+      <option value="inativas" {% if status == 'inativas' %}selected{% endif %}>Inativas</option>
+      <option value="todas" {% if status == 'todas' %}selected{% endif %}>Todas</option>
+    </select>
+  </form>
+</div>
+
+<div class="cards">
+  {% for t in turmas %}
+  <div class="um-card" style="padding:16px 18px; display:flex; flex-direction:column; gap:12px; {% if not t.ativa %}opacity:.72{% endif %}">
+    <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:10px">
+      <div style="display:flex; flex-direction:column; gap:5px; min-width:0">
+        <div style="font:600 15px/1.3 'Inter',sans-serif; color:#18181b; letter-spacing:-.01em">{{ t.nome }}</div>
+        <div style="display:flex; flex-wrap:wrap; gap:5px">
+          {% for m in t.modalidades %}<span class="um-pill">{{ m }}</span>{% endfor %}
+          {% if t.categoria %}<span class="um-pill">{{ t.categoria }}</span>{% endif %}
+        </div>
+      </div>
+      <span class="um-pill" style="flex-shrink:0; background:{% if t.ativa %}#f0fdf4{% else %}#fafafa{% endif %};
+            color:{% if t.ativa %}#15803d{% else %}#a1a1aa{% endif %}">{{ 'Ativa' if t.ativa else 'Inativa' }}</span>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:7px">
+      <div style="display:flex; align-items:center; gap:9px; font:400 12.5px/1.3 'Inter',sans-serif; color:#52525b">
+        <i class="bi bi-calendar-week" style="font-size:12px; color:#a1a1aa; width:14px"></i>{{ t.dias }} · {{ t.horario }}
+      </div>
+      <div style="display:flex; align-items:center; gap:9px; font:400 12.5px/1.3 'Inter',sans-serif; color:#52525b">
+        <i class="bi bi-person-badge" style="font-size:12px; color:#a1a1aa; width:14px"></i>{{ t.professor or 'Sem professor responsável' }}
+      </div>
+      {% if t.local %}
+      <div style="display:flex; align-items:center; gap:9px; font:400 12.5px/1.3 'Inter',sans-serif; color:#52525b">
+        <i class="bi bi-geo-alt" style="font-size:12px; color:#a1a1aa; width:14px"></i>{{ t.local }}
+      </div>
+      {% endif %}
+    </div>
+
+    {# Ocupação: só quando a turma tem vagas definidas #}
+    {% if t.vagas %}
+    {% set pct = (100 * t.qtd_alunos / t.vagas)|round|int %}
+    <div style="display:flex; flex-direction:column; gap:6px">
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; font:400 12px/1 'Inter',sans-serif; color:#71717a">
+        <span>Ocupação</span><span style="font-weight:600; color:#18181b">{{ t.qtd_alunos }}/{{ t.vagas }}</span>
+      </div>
+      <div style="height:5px; border-radius:999px; background:#f4f4f5; overflow:hidden">
+        <div style="height:100%; width:{{ pct if pct < 100 else 100 }}%; background:{% if pct >= 100 %}#C8102E{% else %}#18181b{% endif %}"></div>
+      </div>
+    </div>
+    {% else %}
+    <div style="font:400 12px/1.3 'Inter',sans-serif; color:#71717a">{{ t.qtd_alunos }} alunos matriculados</div>
+    {% endif %}
+
+    <div style="display:flex; gap:6px; padding-top:12px; border-top:1px solid #f4f4f5">
+      <a href="{{ url_for('turmas.alunos', id=t.id) }}" style="flex:1; display:flex; align-items:center; justify-content:center; gap:7px; padding:9px; border-radius:8px; background:#18181b; font:600 12.5px/1 'Inter',sans-serif; color:#fff"><i class="bi bi-people" style="font-size:12px"></i>Alunos</a>
+      <a href="{{ url_for('turmas.matricular', id=t.id) }}" style="flex:1; display:flex; align-items:center; justify-content:center; gap:7px; padding:9px; border:1px solid #e4e4e7; border-radius:8px; font:500 12.5px/1 'Inter',sans-serif; color:#3f3f46"><i class="bi bi-person-plus" style="font-size:12px"></i>Matricular</a>
+      <a class="um-ico" style="width:36px; height:auto" title="Editar" href="{{ url_for('turmas.editar', id=t.id) }}"><i class="bi bi-pencil" style="font-size:12px"></i></a>
+      <button class="um-ico" style="width:36px; height:auto; background:#fff; color:#a1a1aa" title="Excluir turma"
+              onclick="umExcluirTurma({{ t.id }}, '{{ t.nome|e }}', {{ t.qtd_alunos }})"><i class="bi bi-trash" style="font-size:12px"></i></button>
+    </div>
+  </div>
+  {% else %}
+  <div class="um-card" style="padding:40px 24px; text-align:center; color:#a1a1aa; grid-column:1/-1">
+    <i class="bi bi-collection" style="font-size:28px; display:block; margin-bottom:10px; opacity:.5"></i>
+    <div style="font:500 13.5px/1.5 'Inter',sans-serif">Nenhuma turma cadastrada.</div>
+  </div>
+  {% endfor %}
+</div>
+
+{# Modal de exclusão #}
+<div class="um-modal" id="mExcluir" onclick="umFechar(event,'mExcluir')">
+  <form class="um-modal-cx" onclick="event.stopPropagation()" method="POST" id="umFormExcluir" style="width:440px">
+    <div style="padding:22px 22px 18px; display:flex; gap:14px">
+      <div style="width:38px; height:38px; border-radius:9px; background:#fef2f2; display:flex; align-items:center; justify-content:center; flex-shrink:0"><i class="bi bi-exclamation-triangle-fill" style="font-size:16px; color:#991b1b"></i></div>
+      <div style="flex:1; display:flex; flex-direction:column; gap:8px">
+        <div style="font:600 15.5px/1.3 'Inter',sans-serif; color:#18181b">Excluir a turma <span id="umTurmaNome"></span>?</div>
+        <div style="font:400 13px/1.55 'Inter',sans-serif; color:#71717a" id="umTurmaAviso"></div>
+      </div>
+    </div>
+    <div class="um-modal-f" style="justify-content:flex-end">
+      <button class="um-btn" type="button" onclick="umFecharId('mExcluir')">Cancelar</button>
+      <button type="submit" style="padding:10px 18px; background:#991b1b; border:0; border-radius:8px; font:600 13px/1 'Inter',sans-serif; color:#fff; cursor:pointer">Excluir turma</button>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block um_js %}
+<script>
+function umAbrir(id){document.getElementById(id).classList.add('aberto');}
+function umFecharId(id){document.getElementById(id).classList.remove('aberto');}
+function umFechar(e,id){if(e.target.id===id)umFecharId(id);}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')document.querySelectorAll('.um-modal.aberto').forEach(m=>m.classList.remove('aberto'));});
+function umExcluirTurma(id, nome, qtd) {
+  document.getElementById('umTurmaNome').textContent = nome;
+  document.getElementById('umTurmaAviso').textContent = qtd > 0
+    ? qtd + ' aluno(s) perdem a matrícula nesta turma. O histórico de presença é mantido.'
+    : 'A turma não tem alunos matriculados. O histórico de presença é mantido.';
+  document.getElementById('umFormExcluir').action = '{{ url_for("turmas.excluir", id=0) }}'.replace('/0', '/' + id);
+  umAbrir('mExcluir');
+}
+</script>
+{% endblock %}

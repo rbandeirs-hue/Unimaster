@@ -1,0 +1,442 @@
+{% extends "base_academia.html" %}
+{% set menu_ativo = 'presencas' %}
+{% block title %}Histórico de presença{% endblock %}
+
+{% block pagina_titulo %}Histórico de presença{% endblock %}
+{% block pagina_subtitulo %}
+  Frequência por aluno em {{ periodo_label }}.
+  {{ resumo.com_registro }} de {{ alunos|length }} aluno{{ 's' if alunos|length != 1 }} com chamada no período.
+{% endblock %}
+
+{% block pagina_acoes %}
+  {% set back_url = back_url or get_back_url_default() %}
+  <a href="{{ back_url }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Voltar</a>
+  <form method="GET" class="hp-periodo" id="hpFormPeriodo">
+    {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
+    <select name="mes" onchange="this.form.submit()" aria-label="Mês">
+      {% for i in range(0, 13) %}
+      <option value="{{ i }}" {% if i == mes %}selected{% endif %}>{{ meses[i]|capitalize }}</option>
+      {% endfor %}
+    </select>
+    <input type="number" name="ano" value="{{ ano }}" min="2000" max="2100" aria-label="Ano"
+           onchange="this.form.submit()">
+  </form>
+  <button type="button" class="sh__btn" id="hpExportar" {% if not alunos %}disabled{% endif %}>
+    <i class="bi bi-download"></i> Exportar
+  </button>
+{% endblock %}
+
+{% block content %}
+<style>
+  /* Período no cabeçalho: os dois campos formam um bloco só com os botões. */
+  .hp-periodo { display: flex; gap: .6rem; }
+  .hp-periodo select, .hp-periodo input {
+    height: 42px;
+    padding: 0 .8rem;
+    border: 1px solid var(--sh-line);
+    border-radius: var(--u-radius-sm);
+    background: #fff;
+    color: var(--sh-ink);
+    font-size: .92rem;
+  }
+  .hp-periodo input { width: 92px; }
+  .hp-periodo select:focus, .hp-periodo input:focus {
+    outline: none; border-color: #cfcbc4;
+    box-shadow: 0 0 0 3px rgba(28, 28, 28, .06);
+  }
+
+  /* Lista à esquerda, detalhe do aluno à direita. */
+  .hp-colunas {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 420px;
+    gap: var(--u-space-3);
+    align-items: start;
+    margin-top: var(--u-space-3);
+  }
+  @media (max-width: 1199.98px) { .hp-colunas { grid-template-columns: 1fr; } }
+
+  .hp-caixa {
+    background: #fff;
+    border: 1px solid var(--sh-line);
+    border-radius: var(--u-radius);
+    overflow: hidden;
+  }
+
+  /* ------------------------------------------------------------- lista */
+  .hp-busca {
+    display: flex; align-items: center; gap: .6rem;
+    padding: .85rem 1.1rem;
+    border-bottom: 1px solid var(--sh-line);
+  }
+  .hp-busca i { color: var(--sh-ink-soft); }
+  .hp-busca input {
+    flex: 1; min-width: 0;   /* sem isto o campo empurra a contagem para fora */
+    border: 0; outline: none;
+    font-size: .95rem; color: var(--sh-ink);
+    background: transparent;
+  }
+  .hp-contagem { color: var(--sh-ink-soft); font-size: .84rem; white-space: nowrap; }
+
+  /* Largura fixa por coluna: sem isso o nome do aluno estica a tabela além da
+     coluna da grade e as colunas da direita saem cortadas. */
+  .hp-rolagem { overflow-x: auto; }
+  .hp-tabela { width: 100%; min-width: 420px; border-collapse: collapse; table-layout: fixed; }
+  .hp-tabela col.hp-c-presencas { width: 104px; }
+  .hp-tabela col.hp-c-faltas    { width: 88px; }
+  .hp-tabela col.hp-c-freq      { width: 150px; }
+  .hp-tabela th {
+    padding: .7rem 1.1rem;
+    border-bottom: 1px solid var(--sh-line);
+    color: var(--sh-ink-soft);
+    font-size: .68rem;
+    font-weight: 600;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    text-align: right;
+  }
+  .hp-tabela th:first-child { text-align: left; }
+  .hp-tabela td {
+    padding: .7rem 1.1rem;
+    border-bottom: 1px solid var(--sh-line);
+    font-size: .92rem;
+    text-align: right;
+    vertical-align: middle;
+  }
+  .hp-tabela tr:last-child td { border-bottom: 0; }
+  .hp-tabela tbody tr { cursor: pointer; transition: background var(--u-transition); }
+  .hp-tabela tbody tr:hover { background: var(--sh-page-bg); }
+  .hp-tabela tbody tr.is-ativo { background: #f4f2ee; }
+
+  .hp-aluno { display: flex; align-items: center; gap: .7rem; text-align: left; min-width: 0; }
+  .hp-avatar {
+    width: 30px; height: 30px; flex: 0 0 30px;
+    display: grid; place-items: center;
+    border-radius: 50%;
+    background: #f1efeb;
+    color: var(--sh-ink-soft);
+    font-size: .66rem;
+    font-weight: 700;
+    letter-spacing: .02em;
+  }
+  .hp-nome { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hp-faltas--zero { color: var(--sh-ink-soft); }
+  .hp-faltas--alerta { color: var(--sh-red); font-weight: 600; }
+  .hp-sem { color: var(--sh-text-faint, #a5a29c); font-size: .86rem; }
+
+  /* Frequência: barra curta e o número, com a mesma escala de cor em toda a
+     tela — alta (>=70), atenção (60-69) e crítica (<60). */
+  .hp-freq { display: flex; align-items: center; justify-content: flex-end; gap: .6rem; }
+  .hp-freq-barra {
+    width: 56px; height: 4px; flex: 0 0 56px;
+    border-radius: var(--u-radius-pill);
+    background: #eceae6;
+    overflow: hidden;
+  }
+  .hp-freq-barra span { display: block; height: 100%; background: currentColor; }
+  .hp-freq-num { min-width: 3.2rem; font-variant-numeric: tabular-nums; font-weight: 600; }
+  .hp-alta   { color: #17803d; }
+  .hp-media  { color: #b45309; }
+  .hp-baixa  { color: var(--sh-red); }
+
+  /* ------------------------------------------------------------ painel */
+  .hp-painel { position: sticky; top: var(--u-space-3); }
+  .hp-painel-topo { padding: 1.1rem 1.25rem; border-bottom: 1px solid var(--sh-line); }
+  .hp-painel-nome { font-size: 1.1rem; font-weight: 600; margin: 0; }
+  .hp-painel-sub { color: var(--sh-ink-soft); font-size: .88rem; margin: .2rem 0 0; }
+
+  .hp-mini { display: grid; grid-template-columns: repeat(3, 1fr); border-bottom: 1px solid var(--sh-line); }
+  .hp-mini-item { padding: .85rem 1.25rem; border-left: 1px solid var(--sh-line); }
+  .hp-mini-item:first-child { border-left: 0; }
+  .hp-mini-rotulo {
+    display: block;
+    color: var(--sh-ink-soft);
+    font-size: .66rem; font-weight: 600;
+    letter-spacing: .14em; text-transform: uppercase;
+  }
+  .hp-mini-valor { display: block; margin-top: .1rem; font-size: 1.4rem; font-weight: 600; line-height: 1.2; }
+
+  .hp-aulas { padding: 1.1rem 1.25rem; }
+  .hp-aulas-titulo {
+    color: var(--sh-ink-soft);
+    font-size: .66rem; font-weight: 600;
+    letter-spacing: .14em; text-transform: uppercase;
+    margin-bottom: .7rem;
+  }
+  .hp-dias { display: flex; flex-wrap: wrap; gap: .4rem; }
+  .hp-dia {
+    width: 38px; height: 34px;
+    display: grid; place-items: center;
+    border-radius: var(--u-radius-sm);
+    font-size: .84rem; font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .hp-dia--presente { background: #17803d; color: #fff; }
+  .hp-dia--falta { background: #fdeef0; color: var(--sh-red); border: 1px solid #f6c9d0; }
+  .hp-legenda {
+    display: flex; gap: 1.1rem;
+    margin-top: .9rem;
+    color: var(--sh-ink-soft);
+    font-size: .84rem;
+  }
+  .hp-legenda span { display: inline-flex; align-items: center; gap: .4rem; }
+  .hp-legenda i { width: 11px; height: 11px; border-radius: 3px; display: inline-block; }
+  .hp-legenda .hp-i-presente { background: #17803d; }
+  .hp-legenda .hp-i-falta { background: #fdeef0; border: 1px solid #f6c9d0; }
+
+  .hp-painel-acoes { display: flex; gap: .5rem; padding: 0 1.25rem 1.25rem; }
+  .hp-painel-acoes .sh__btn { flex: 1; justify-content: center; }
+
+  .hp-vazio { padding: 2.5rem 1.25rem; text-align: center; color: var(--sh-ink-soft); }
+  .hp-vazio i { font-size: 2rem; display: block; margin-bottom: .6rem; color: #cfcbc4; }
+
+  @media (max-width: 767.98px) {
+    .hp-periodo { width: 100%; flex-wrap: wrap; }
+    .hp-periodo select { flex: 1 1 100%; }
+    .hp-periodo input { flex: 1 1 100%; width: auto; }
+    .hp-painel { position: static; }
+  }
+  @media (max-width: 575.98px) {
+    /* Presenças e faltas saem de cena; as colunas delas precisam zerar também,
+       senão a largura fica reservada e sobra quase nada para o nome. */
+    .hp-tabela th:nth-child(2), .hp-tabela td:nth-child(2),
+    .hp-tabela th:nth-child(3), .hp-tabela td:nth-child(3) { display: none; }
+    .hp-tabela { min-width: 0; }
+    .hp-tabela col.hp-c-presencas, .hp-tabela col.hp-c-faltas { width: 0; }
+    .hp-tabela col.hp-c-freq { width: 96px; }
+    .hp-tabela th, .hp-tabela td { padding-left: .9rem; padding-right: .9rem; }
+    .hp-freq-barra { display: none; }
+    .hp-freq-num { min-width: 0; }
+  }
+</style>
+
+{% macro cor_freq(v) %}{% if v >= 70 %}hp-alta{% elif v >= 60 %}hp-media{% else %}hp-baixa{% endif %}{% endmacro %}
+
+<div class="sh__faixa">
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Aulas no período</span>
+    <span class="sh__faixa-valor">{{ resumo.aulas_periodo }}</span>
+  </div>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Frequência média</span>
+    <span class="sh__faixa-valor">{{ resumo.frequencia_media }}%</span>
+  </div>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Presenças registradas</span>
+    <span class="sh__faixa-valor">{{ resumo.presencas }}</span>
+  </div>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Abaixo de 60%</span>
+    <span class="sh__faixa-valor {% if resumo.abaixo_60 %}sh__faixa-valor--alerta{% endif %}">{{ resumo.abaixo_60 }}</span>
+  </div>
+</div>
+
+{% if alunos %}
+<div class="hp-colunas">
+  <section class="hp-caixa">
+    <div class="hp-busca">
+      <i class="bi bi-search"></i>
+      <input type="text" id="hpBusca" placeholder="Buscar aluno" autocomplete="off">
+      <span class="hp-contagem" id="hpContagem">{{ alunos|length }} de {{ alunos|length }}</span>
+    </div>
+
+    <div class="hp-rolagem">
+    <table class="hp-tabela">
+      <colgroup>
+        <col>
+        <col class="hp-c-presencas">
+        <col class="hp-c-faltas">
+        <col class="hp-c-freq">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Aluno</th>
+          <th>Presenças</th>
+          <th>Faltas</th>
+          <th>Frequência</th>
+        </tr>
+      </thead>
+      <tbody id="hpCorpo">
+        {% for aluno in alunos %}
+        {% set partes = (aluno.nome or '?').split() %}
+        <tr data-aluno-id="{{ aluno.id }}" data-nome="{{ aluno.nome }}"
+            data-presencas="{{ aluno.presencas }}" data-faltas="{{ aluno.faltas }}"
+            data-frequencia="{{ aluno.frequencia if aluno.frequencia is not none else '' }}">
+          <td>
+            <div class="hp-aluno">
+              <span class="hp-avatar">{{ partes[0][0] }}{{ partes[-1][0] if partes|length > 1 }}</span>
+              <span class="hp-nome">{{ aluno.nome }}</span>
+            </div>
+          </td>
+          {% if aluno.frequencia is none %}
+          <td class="hp-sem">—</td>
+          <td class="hp-sem">—</td>
+          <td class="hp-sem">sem chamada</td>
+          {% else %}
+          <td>{{ aluno.presencas }}</td>
+          <td class="{{ 'hp-faltas--alerta' if aluno.frequencia < 60 else 'hp-faltas--zero' }}">{{ aluno.faltas }}</td>
+          <td>
+            <div class="hp-freq {{ cor_freq(aluno.frequencia) }}">
+              <span class="hp-freq-barra"><span style="width: {{ aluno.frequencia }}%"></span></span>
+              <span class="hp-freq-num">{{ aluno.frequencia }}%</span>
+            </div>
+          </td>
+          {% endif %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </section>
+
+  <aside class="hp-painel">
+    <div class="hp-caixa" id="hpPainel">
+      <div class="hp-vazio"><i class="bi bi-person-lines-fill"></i>Selecione um aluno na lista.</div>
+    </div>
+  </aside>
+</div>
+{% else %}
+<div class="hp-caixa" style="margin-top: var(--u-space-3);">
+  <div class="hp-vazio">
+    <i class="bi bi-calendar-x"></i>
+    Nenhuma chamada registrada em {{ periodo_label }}.
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  var corpo = document.getElementById('hpCorpo');
+  if (!corpo) return;
+
+  var painel = document.getElementById('hpPainel');
+  var busca = document.getElementById('hpBusca');
+  var contagem = document.getElementById('hpContagem');
+  var linhas = Array.prototype.slice.call(corpo.querySelectorAll('tr'));
+  var total = linhas.length;
+  var mes = {{ mes }};
+  var ano = {{ ano }};
+  var periodoLabel = {{ periodo_label|tojson }};
+  var urlDetalhe = "{{ url_for('presencas.historico_presenca_ajax', aluno_id=999) }}";
+  var urlFicha = "{{ url_for('alunos.ficha_aluno', aluno_id=999) }}";
+  var urlRelatorio = "{{ url_for('presencas.relatorio_presenca_aluno', aluno_id=999, mes=mes, ano=ano, voltar=request.full_path) }}";
+
+  function escapar(txt) {
+    var d = document.createElement('div');
+    d.textContent = txt == null ? '' : txt;
+    return d.innerHTML;
+  }
+
+  function classeFreq(v) {
+    return v >= 70 ? 'hp-alta' : (v >= 60 ? 'hp-media' : 'hp-baixa');
+  }
+
+  function desenharPainel(d) {
+    // Muitas turmas já trazem o horário no nome ("Judô 18:30 às 19:30"); nesse
+    // caso repetir DiasHorario ao lado só alonga a linha.
+    var sub = [];
+    if (d.turma_nome) sub.push(d.turma_nome);
+    if (d.turma_horario && (d.turma_nome || '').indexOf(d.turma_horario) === -1) {
+      var horaNome = (d.turma_nome || '').replace(/[^0-9]/g, '');
+      var horaTurma = d.turma_horario.replace(/[^0-9]/g, '');
+      if (!horaNome || horaNome.indexOf(horaTurma) === -1) sub.push(d.turma_horario);
+    }
+    sub.push(periodoLabel);
+
+    var dias = d.dias.map(function (dia) {
+      return '<span class="hp-dia ' + (dia.presente ? 'hp-dia--presente' : 'hp-dia--falta') + '"' +
+             ' title="' + escapar(dia.data) + ' — ' + (dia.presente ? 'presente' : 'falta') + '">' +
+             dia.dia + '</span>';
+    }).join('');
+
+    painel.innerHTML =
+      '<div class="hp-painel-topo">' +
+        '<h2 class="hp-painel-nome">' + escapar(d.nome) + '</h2>' +
+        '<p class="hp-painel-sub">' + escapar(sub.join(' · ')) + '</p>' +
+      '</div>' +
+      '<div class="hp-mini">' +
+        '<div class="hp-mini-item"><span class="hp-mini-rotulo">Aulas</span><span class="hp-mini-valor">' + d.aulas + '</span></div>' +
+        '<div class="hp-mini-item"><span class="hp-mini-rotulo">Faltas</span><span class="hp-mini-valor">' + d.faltas + '</span></div>' +
+        '<div class="hp-mini-item"><span class="hp-mini-rotulo">Freq.</span><span class="hp-mini-valor ' + classeFreq(d.frequencia) + '">' + d.frequencia + '%</span></div>' +
+      '</div>' +
+      '<div class="hp-aulas">' +
+        '<div class="hp-aulas-titulo">Aulas do período</div>' +
+        '<div class="hp-dias">' + (dias || '<span class="hp-contagem">Sem chamada no período.</span>') + '</div>' +
+        '<div class="hp-legenda">' +
+          '<span><i class="hp-i-presente"></i>Presente</span>' +
+          '<span><i class="hp-i-falta"></i>Falta</span>' +
+        '</div>' +
+      '</div>' +
+      '<div class="hp-painel-acoes">' +
+        '<a class="sh__btn" href="' + urlFicha.replace('999', d.aluno_id) + '">Ver ficha</a>' +
+        '<a class="sh__btn sh__btn--forte" target="_blank" rel="noopener" href="' + urlRelatorio.replace('999', d.aluno_id) + '">Imprimir relatório</a>' +
+      '</div>';
+  }
+
+  function selecionar(tr) {
+    linhas.forEach(function (l) { l.classList.remove('is-ativo'); });
+    tr.classList.add('is-ativo');
+    painel.innerHTML = '<div class="hp-vazio"><div class="spinner-border spinner-border-sm"></div></div>';
+    var id = tr.dataset.alunoId;
+    fetch(urlDetalhe.replace('999', id) + '?mes=' + mes + '&ano=' + ano)
+      .then(function (r) { return r.json().then(function (d) { if (!r.ok) throw new Error(d.erro || 'Erro'); return d; }); })
+      .then(desenharPainel)
+      .catch(function (err) {
+        painel.innerHTML = '<div class="hp-vazio"><i class="bi bi-exclamation-triangle"></i>' +
+                           escapar(err.message || 'Não foi possível carregar o histórico.') + '</div>';
+      });
+  }
+
+  linhas.forEach(function (tr) {
+    tr.addEventListener('click', function () { selecionar(tr); });
+  });
+  // Vindo da ficha (?aluno_id=), abre já no aluno pedido em vez do primeiro.
+  var alvo = new URLSearchParams(location.search).get('aluno_id');
+  var linhaAlvo = alvo && linhas.filter(function (l) { return l.dataset.alunoId === alvo; })[0];
+  if (linhaAlvo) {
+    selecionar(linhaAlvo);
+    linhaAlvo.scrollIntoView({block: 'center'});
+  } else if (linhas.length) {
+    selecionar(linhas[0]);
+  }
+
+  // Busca: filtra a lista já carregada, sem ida ao servidor.
+  if (busca) {
+    busca.addEventListener('input', function () {
+      var termo = busca.value.trim().toLowerCase();
+      var visiveis = 0;
+      linhas.forEach(function (tr) {
+        var bate = !termo || (tr.dataset.nome || '').toLowerCase().indexOf(termo) !== -1;
+        tr.style.display = bate ? '' : 'none';
+        if (bate) visiveis++;
+      });
+      contagem.textContent = visiveis + ' de ' + total;
+    });
+  }
+
+  // Exporta o que está na tela, respeitando o filtro da busca.
+  var btnExportar = document.getElementById('hpExportar');
+  if (btnExportar) {
+    btnExportar.addEventListener('click', function () {
+      var linhasCsv = [['Aluno', 'Presencas', 'Faltas', 'Frequencia (%)']];
+      linhas.forEach(function (tr) {
+        if (tr.style.display === 'none') return;
+        linhasCsv.push([tr.dataset.nome, tr.dataset.presencas, tr.dataset.faltas, tr.dataset.frequencia]);
+      });
+      var csv = linhasCsv.map(function (l) {
+        return l.map(function (c) { return '"' + String(c).replace(/"/g, '""') + '"'; }).join(';');
+      }).join('\n');
+      var url = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' }));
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = 'historico-presenca-' + ano + (mes ? '-' + String(mes).padStart(2, '0') : '') + '.csv';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    });
+  }
+});
+</script>
+{% endblock %}

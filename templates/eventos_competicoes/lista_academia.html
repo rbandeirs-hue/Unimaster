@@ -1,131 +1,207 @@
-{% extends "base.html" %}
-{% block title %}
-{% if tipo_filtro == 'evento' %}Eventos{% elif tipo_filtro == 'competicao' %}Competições{% else %}Eventos e competições{% endif %}
+{% extends "base_academia.html" %}
+{% set menu_ativo = 'competicoes' if aba == 'competicoes' else 'eventos' %}
+{% set ehEventos = aba != 'competicoes' %}
+{% block title %}{{ 'Competições' if not ehEventos else 'Eventos' }}{% endblock %}
+
+{% block pagina_titulo %}Eventos e competições{% endblock %}
+{% block pagina_subtitulo %}
+  {{ 'Aderir e gerenciar inscrições em eventos da academia.' if ehEventos else 'Aderir e inscrever atletas em competições de judô.' }}
 {% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/base/listas.css') }}">
+<style>
+  /* Seis colunas; cada uma some junto com a sua célula para os títulos não
+     se encavalarem. Os limites medem a JANELA — o conteúdo é ~300px menor
+     por causa da barra lateral. */
+  .lin-ev { grid-template-columns: minmax(0,2fr) 116px 132px 128px 92px 112px; }
+
+  @media (max-width: 1300px) {                      /* conteúdo ~1000px */
+    .lin-ev { grid-template-columns: minmax(0,2fr) 132px 128px 92px 112px; }
+    .col-tipo { display: none !important; }
+  }
+  @media (max-width: 1120px) {                      /* conteúdo ~820px */
+    .lin-ev { grid-template-columns: minmax(0,2fr) 128px 92px 112px; }
+    .col-prazo { display: none !important; }
+  }
+  @media (max-width: 1024px) {                      /* barra lateral recolhe */
+    .lin-ev { grid-template-columns: minmax(0,2fr) 116px 132px 128px 92px 112px; }
+    .col-tipo, .col-prazo { display: block !important; }
+  }
+  @media (max-width: 900px) {
+    .lin-ev { grid-template-columns: minmax(0,2fr) 128px 92px 112px; }
+    .col-tipo, .col-prazo { display: none !important; }
+  }
+  @media (max-width: 620px) {
+    .lin-ev { grid-template-columns: minmax(0,1fr) 92px 112px; }
+    .col-adesao { display: none !important; }
+  }
+</style>
+{% endblock %}
+
+{% block pagina_acoes %}
+  <a href="{{ url_for('calendario.visualizar') }}" class="sh__btn"><i class="bi bi-calendar3"></i> Ver calendário</a>
+  {% set back_url = back_url or get_back_url_default() %}
+  <a href="{{ back_url }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Voltar</a>
+{% endblock %}
+
 {% block content %}
-{% set eh_competicao = tipo_filtro == 'competicao' %}
-<div class="container-fluid px-3 px-md-4 py-3 py-md-4 eventos-lista" style="max-width:1180px;">
-    <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
-        <div>
-            {% set back_url = back_url or get_back_url_default() %}
-            {% include 'components/botao_voltar.html' %}
-            <h1 class="h4 fw-bold mb-1 mt-2">
-                {% if eh_competicao %}
-                    <i class="bi bi-trophy-fill text-danger me-2"></i>Competições
-                {% else %}
-                    <i class="bi bi-calendar-event text-primary me-2"></i>Eventos
-                {% endif %}
-            </h1>
-            <p class="text-muted small mb-0">
-                {% if eh_competicao %}Aderir e inscrever atletas em competições de judô.
-                {% else %}Aderir e gerenciar inscrições em eventos.{% endif %}
-            </p>
-        </div>
-        {% if academias|length > 1 %}
-        <form method="GET">
-            <select name="academia_id" class="form-select form-select-sm" style="min-width:200px;" onchange="this.form.submit()">
-                {% for ac in academias %}
-                <option value="{{ ac.id }}" {% if ac.id == academia_id %}selected{% endif %}>{{ ac.nome }}</option>
-                {% endfor %}
-            </select>
-        </form>
-        {% endif %}
-    </div>
+{% set base = competicoes if not ehEventos else eventos %}
 
-    {% if eventos %}
-    <div class="row g-3">
-        {% for ev in eventos %}
-        {% set cor = 'danger' if eh_competicao else 'primary' %}
-        <div class="col-12 col-sm-6 col-lg-4">
-            <div class="card h-100 evento-card {% if ev.encerrado %}is-encerrado{% endif %}">
-                <div class="evento-faixa bg-{{ 'secondary' if ev.encerrado else cor }}"></div>
-                <div class="card-body d-flex flex-column p-3">
-                    <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
-                        <h2 class="h6 fw-bold mb-0" style="line-height:1.3;">{{ ev.nome }}</h2>
-                        {% if ev.encerrado %}
-                        <span class="badge bg-secondary flex-shrink-0">Encerrado</span>
-                        {% elif ev.aderiu %}
-                        <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle flex-shrink-0">
-                            <i class="bi bi-check-lg"></i> Aderido
-                        </span>
-                        {% endif %}
-                    </div>
+{# Eventos e competições são páginas distintas no menu lateral, então as abas
+   apontam para as duas rotas em vez de um parâmetro na mesma URL. #}
+<nav class="lst-abas">
+  {% for rotulo, href, qtd, ativa in [
+      ('Eventos', url_for('eventos_competicoes.lista_eventos', academia_id=academia_id), eventos|length, ehEventos),
+      ('Competições', url_for('eventos_competicoes.lista_competicoes', academia_id=academia_id), competicoes|length, not ehEventos)] %}
+  <a href="{{ href }}" class="lst-aba {% if ativa %}is-ativa{% endif %}">
+    {{ rotulo }}<span class="lst-aba__n">{{ qtd }}</span>
+  </a>
+  {% endfor %}
+</nav>
 
-                    <ul class="list-unstyled small text-muted mb-3 mt-1 evento-meta">
-                        {% if ev.data_fim %}
-                        <li><i class="bi bi-calendar-check me-2"></i>Encerra {{ ev.data_fim|data_br }}</li>
-                        {% endif %}
-                        <li><i class="bi bi-ui-checks-grid me-2"></i>{{ ev.formulario_nome or 'Sem formulário' }}</li>
-                        {% if ev.anexos and ev.anexos|length %}
-                        <li>
-                            <i class="bi bi-paperclip me-2"></i>
-                            {% for anexo in ev.anexos %}
-                            <a href="{{ url_for('eventos_competicoes.download_anexo', anexo_id=anexo.id) }}"
-                               class="text-decoration-none" title="{{ anexo.nome_arquivo }}">
-                                {{ anexo.nome_arquivo[:24] }}{% if anexo.nome_arquivo|length > 24 %}…{% endif %}</a>{% if not loop.last %}, {% endif %}
-                            {% endfor %}
-                        </li>
-                        {% endif %}
-                    </ul>
-
-                    {% if not ev.encerrado %}
-                    <div class="mt-auto d-flex gap-2">
-                        {% if ev.aderiu %}
-                        <a href="{{ url_for('eventos_competicoes.inscritos', evento_id=ev.id, academia_id=academia_id) }}"
-                           class="btn btn-{{ cor }} btn-sm flex-grow-1">
-                            <i class="bi bi-people me-1"></i>Inscritos
-                        </a>
-                        <form method="POST" action="{{ url_for('eventos_competicoes.desaderir', evento_id=ev.id) }}"
-                              onsubmit="return confirm('Remover a adesão a este {{ 'evento' if not eh_competicao else 'evento' }}?');">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <input type="hidden" name="academia_id" value="{{ academia_id }}">
-                            <button type="submit" class="btn btn-outline-secondary btn-sm" title="Desaderir">
-                                <i class="bi bi-x-lg"></i>
-                            </button>
-                        </form>
-                        {% else %}
-                        <form method="POST" action="{{ url_for('eventos_competicoes.aderir', evento_id=ev.id) }}" class="w-100">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <input type="hidden" name="academia_id" value="{{ academia_id }}">
-                            <button type="submit" class="btn btn-success btn-sm w-100">
-                                <i class="bi bi-plus-circle me-1"></i>Aderir
-                            </button>
-                        </form>
-                        {% endif %}
-                    </div>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
-        {% endfor %}
-    </div>
-    {% else %}
-    <div class="card shadow-sm border-0">
-        <div class="card-body text-center py-5">
-            <i class="bi bi-calendar-x text-body-tertiary" style="font-size:2.5rem;"></i>
-            <h2 class="h6 text-muted mt-3 mb-1">
-                Nenhum{{ 'a competição' if eh_competicao else ' evento' }} disponível
-            </h2>
-            <p class="text-muted small mb-0">A associação ainda não abriu {{ 'competições' if eh_competicao else 'eventos' }} para sua academia.</p>
-        </div>
-    </div>
-    {% endif %}
+<div class="sh__faixa">
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">{{ 'Eventos' if ehEventos else 'Competições' }}</span>
+    <span class="sh__faixa-valor">{{ base|length }}</span>
+    <span class="lst-sub">Disponíveis para adesão</span>
+  </div>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">{{ 'Aderidos' if ehEventos else 'Aderidas' }}</span>
+    <span class="sh__faixa-valor">{{ base|selectattr('aderido')|list|length }}</span>
+    <span class="lst-sub">Academia participando</span>
+  </div>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Inscrições abertas</span>
+    <span class="sh__faixa-valor">{{ base|selectattr('inscricoes_abertas')|list|length }}</span>
+    <span class="lst-sub">Dentro do prazo</span>
+  </div>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">{{ 'Alunos inscritos' if ehEventos else 'Atletas inscritos' }}</span>
+    <span class="sh__faixa-valor">{{ base|sum(attribute='inscritos') }}</span>
+    <span class="lst-sub">Somando todos os registros</span>
+  </div>
 </div>
 
-<style>
-  .eventos-lista .evento-card {
-    border: 1px solid var(--bs-border-color);
-    border-radius: .7rem;
-    overflow: hidden;
-    transition: box-shadow .15s ease, transform .15s ease;
-  }
-  .eventos-lista .evento-card:hover {
-    box-shadow: 0 .5rem 1.25rem rgba(0,0,0,.08);
-    transform: translateY(-2px);
-  }
-  .eventos-lista .evento-card.is-encerrado { opacity: .72; }
-  .eventos-lista .evento-faixa { height: 4px; width: 100%; }
-  .eventos-lista .evento-meta li { margin-bottom: .3rem; display: flex; align-items: flex-start; }
-  .eventos-lista .evento-meta li i { color: var(--bs-secondary-color); }
-</style>
+<form method="GET" class="lst-filtros">
+  {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
+  <label class="lst-campo lst-campo--largo">
+    <span class="lst-campo__rotulo">Buscar</span>
+    <input type="text" name="q" value="{{ request.args.get('q', '') }}" autocomplete="off"
+           placeholder="{{ 'Nome do evento' if ehEventos else 'Nome da competição' }}">
+  </label>
+  <label class="lst-campo lst-campo--curto">
+    <span class="lst-campo__rotulo">Adesão</span>
+    <select name="adesao">
+      <option value="">Todos</option>
+      <option value="sim" {% if request.args.get('adesao') == 'sim' %}selected{% endif %}>{{ 'Aderidos' if ehEventos else 'Aderidas' }}</option>
+      <option value="nao" {% if request.args.get('adesao') == 'nao' %}selected{% endif %}>Sem adesão</option>
+    </select>
+  </label>
+  <label class="lst-campo lst-campo--curto">
+    <span class="lst-campo__rotulo">Inscrições</span>
+    <select name="inscricoes">
+      <option value="">Todas</option>
+      <option value="abertas" {% if request.args.get('inscricoes') == 'abertas' %}selected{% endif %}>Abertas</option>
+      <option value="encerradas" {% if request.args.get('inscricoes') == 'encerradas' %}selected{% endif %}>Encerradas</option>
+    </select>
+  </label>
+  <div class="lst-filtros__acoes">
+    <button type="submit" class="sh__btn sh__btn--forte">Filtrar</button>
+    {% if filtrado %}
+    <a href="{{ url_for(request.endpoint, academia_id=academia_id) }}" class="sh__btn">Limpar</a>
+    {% endif %}
+  </div>
+</form>
+
+<section class="lst-quadro">
+  <header class="lst-quadro__topo">
+    <h2 class="lst-quadro__titulo">{{ 'Eventos disponíveis' if ehEventos else 'Competições disponíveis' }}</h2>
+    <span class="lst-quadro__meta">
+      {{ itens|length }} registro{{ 's' if itens|length != 1 }}{% if filtrado %} de {{ base|length }}{% endif %}
+    </span>
+  </header>
+
+  <div class="lst-rolagem">
+    <div class="lst-largura" style="--lst-min:520px">
+      <div class="lst-linha lin-ev lst-cab">
+        <div>{{ 'Evento' if ehEventos else 'Competição' }}</div>
+        <div class="col-tipo">Tipo</div>
+        <div class="col-prazo">Inscrições até</div>
+        <div class="col-adesao">Adesão</div>
+        <div class="lst-num">Inscritos</div>
+        <div class="lst-fim">Ações</div>
+      </div>
+
+      {% for e in itens %}
+      <div class="lst-linha lin-ev lst-item {% if not e.inscricoes_abertas %}is-inativo{% endif %}">
+        <div style="min-width:0">
+          {% if e.aderido %}
+          <a class="lst-nome" href="{{ url_for('eventos_competicoes.inscritos', evento_id=e.id, academia_id=academia_id) }}">{{ e.nome }}</a>
+          {% else %}
+          <span class="lst-nome">{{ e.nome }}</span>
+          {% endif %}
+          <span class="lst-sub lst-corta">
+            {{ e.formulario or 'Sem formulário' }}
+            {%- for anexo in e.anexos %} ·
+            <a href="{{ url_for('eventos_competicoes.download_anexo', anexo_id=anexo.id) }}" title="{{ anexo.nome_arquivo }}">
+              <i class="bi bi-paperclip"></i>{{ anexo.nome_arquivo[:20] }}{% if anexo.nome_arquivo|length > 20 %}…{% endif %}</a>
+            {%- endfor %}
+          </span>
+        </div>
+
+        <div class="col-tipo"><span class="lst-tag">{{ e.tipo_label }}</span></div>
+
+        <div class="col-prazo">{{ e.encerra|data_br if e.encerra else '—' }}</div>
+
+        <div class="col-adesao">
+          {% if not e.inscricoes_abertas %}
+          <span class="lst-tag">Encerrado</span>
+          {% else %}
+          <span class="lst-situacao {% if e.aderido %}is-ativo{% endif %}"><i></i>{{ 'Aderido' if e.aderido else 'Sem adesão' }}</span>
+          {% endif %}
+        </div>
+
+        <div class="lst-num">{{ e.inscritos if e.aderido else '—' }}</div>
+
+        <div class="lst-acoes">
+          {% if e.aderido %}
+          <a class="lst-acao" title="Inscritos em {{ e.nome }}" aria-label="Inscritos em {{ e.nome }}"
+             href="{{ url_for('eventos_competicoes.inscritos', evento_id=e.id, academia_id=academia_id) }}">
+            <i class="bi bi-people"></i>
+          </a>
+          {% endif %}
+          {% if e.inscricoes_abertas %}
+          {# Adesão altera dados: segue em POST com CSRF, como nas telas antigas. #}
+          <form method="POST" style="display:contents"
+                action="{{ url_for('eventos_competicoes.desaderir' if e.aderido else 'eventos_competicoes.aderir', evento_id=e.id) }}"
+                {% if e.aderido %}onsubmit="return confirm('Remover a adesão a {{ 'esta competição' if not ehEventos else 'este evento' }}?');"{% endif %}>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="academia_id" value="{{ academia_id }}">
+            {% if e.aderido %}
+            <button type="submit" class="lst-acao lst-acao--perigo" title="Remover adesão" aria-label="Remover adesão a {{ e.nome }}">
+              <i class="bi bi-x-lg"></i>
+            </button>
+            {% else %}
+            <button type="submit" class="lst-acao" title="Aderir" aria-label="Aderir a {{ e.nome }}">
+              <i class="bi bi-plus-lg"></i>
+            </button>
+            {% endif %}
+          </form>
+          {% endif %}
+        </div>
+      </div>
+      {% else %}
+      <p class="lst-vazio">
+        {% if filtrado %}Nenhum registro encontrado com esses filtros.
+        {% else %}A associação ainda não abriu {{ 'eventos' if ehEventos else 'competições' }} para sua academia.{% endif %}
+      </p>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<footer class="lst-rodape">
+  © {{ current_year }} {{ academia.nome if academia else 'Unimaster' }}. Todos os direitos reservados.
+</footer>
 {% endblock %}

@@ -523,6 +523,248 @@ def meu_perfil(aluno):
     )
 
 
+# Colunas que a tela de completar cadastro pode gravar. Lista fechada de
+# propósito: o formulário é do próprio aluno, então nada além disto entra no
+# UPDATE, mesmo que apareça no POST.
+_COLUNAS_COMPLETAR = {
+    "nome", "data_nascimento", "sexo", "cpf", "nacionalidade", "nome_mae",
+    "nome_pai", "email", "tel_celular", "cep", "rua", "numero", "complemento",
+    "bairro", "cidade", "estado", "peso",
+    "responsavel_financeiro_nome", "responsavel_financeiro_cpf",
+    "responsavel_financeiro_telefone",
+}
+
+
+def _so_digitos(valor):
+    return "".join(c for c in str(valor or "") if c.isdigit())
+
+
+def alunos_com_cadastro_pendente(usuario_id):
+    """Alunos ligados a este login que ainda têm dado obrigatório em falta.
+
+    Cobre os dois vínculos: o aluno que entra com o próprio CPF
+    (`alunos.usuario_id`) e o responsável, cujo login responde por um ou mais
+    alunos (`responsavel_alunos`). É pelo segundo que passa o pré-cadastro
+    promovido com o CPF do responsável financeiro — o caso mais comum em
+    criança, e justamente o que ficaria de fora se olhássemos só o primeiro.
+    """
+    from blueprints.aluno.alunos import campos_pendentes_autopreenchiveis
+
+    if not usuario_id:
+        return []
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute(
+            """SELECT * FROM alunos
+               WHERE usuario_id = %s
+                  OR id IN (SELECT aluno_id FROM responsavel_alunos WHERE usuario_id = %s)
+               ORDER BY nome""",
+            (usuario_id, usuario_id),
+        )
+        alunos = cur.fetchall() or []
+    except Exception:
+        alunos = []
+    finally:
+        cur.close()
+        conn.close()
+    return [a for a in alunos if campos_pendentes_autopreenchiveis(a)]
+
+
+def anexar_pix_academia(registros, id_academia):
+    """Põe em cada cobrança em aberto o PIX da academia, com o valor embutido.
+
+    O gateway da academia pode não devolver PIX nenhum — a InfinitePay, por
+    exemplo, só entrega o link de checkout. Sem isto o aluno fica só com o
+    botão, e quem quer pagar por PIX não tem por onde. Cada cobrança precisa do
+    seu próprio código porque o valor entra no payload.
+    """
+    if not registros or not id_academia:
+        return registros
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute(
+            "SELECT nome, cidade, pix_chave, pix_tipo, pix_beneficiario, pix_cidade FROM academias WHERE id=%s",
+            (id_academia,),
+        )
+        ac = cur.fetchone() or {}
+    except Exception:
+        ac = {}
+    finally:
+        cur.close()
+        conn.close()
+
+    if not (ac.get("pix_chave") or "").strip():
+        return registros
+
+    from utils.pix_brcode import montar_brcode, qrcode_base64
+
+    for r in registros:
+        r["pix_academia"] = None
+        efetivo = (r.get("status_efetivo") or r.get("status") or "").lower()
+        if efetivo not in ("pendente", "atrasado"):
+            continue
+        try:
+            valor = float(r.get("valor_final") or r.get("valor_display") or r.get("valor") or 0)
+            codigo = montar_brcode(
+                ac.get("pix_chave"),
+                ac.get("pix_beneficiario") or ac.get("nome"),
+                ac.get("pix_cidade") or ac.get("cidade") or "",
+                valor,
+                tipo=ac.get("pix_tipo"),
+            )
+            if codigo:
+                r["pix_academia"] = {
+                    "codigo": codigo,
+                    "qrcode": qrcode_base64(codigo),
+                    "beneficiario": ac.get("pix_beneficiario") or ac.get("nome"),
+                }
+        except Exception:
+            r["pix_academia"] = None
+    return registros
+
+
+def _destino_pos_completar():
+    """Painel de volta, conforme o modo em que a pessoa entrou."""
+    if session.get("modo_painel") == "responsavel":
+        return url_for("painel_responsavel.painel")
+    return url_for("painel_aluno.meu_perfil")
+
+
+@bp_painel_aluno.route("/mensalidades/<int:registro_id>/pagar")
+@login_required
+@_aluno_required
+def pagar_mensalidade(aluno, registro_id):
+    """Leva o aluno à página de pagamento, emitindo a cobrança se faltar.
+
+    Sem isto, mensalidade recém-gerada não mostrava botão de pagar nenhum no
+    painel: os botões dependem dos dados do gateway, que só existiam se alguém
+    tivesse emitido a cobrança antes. Aqui o token do link curto é criado na
+    hora e a página pública cuida da emissão sob demanda.
+    """
+    from utils.links_curtos import encurtar
+
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute(
+            """SELECT ma.id, a.id_academia
+               FROM mensalidade_aluno ma JOIN alunos a ON a.id = ma.aluno_id
+               WHERE ma.id = %s AND ma.aluno_id = %s
+                 AND ma.status IN ('pendente', 'atrasado')""",
+            (registro_id, aluno["id"]),
+        )
+        row = cur.fetchone()
+    finally:
+        cur.close()
+        conn.close()
+
+    if not row:
+        flash("Mensalidade não encontrada ou não está em aberto.", "warning")
+        return redirect(url_for("painel_aluno.minhas_mensalidades"))
+
+    url = encurtar("mensalidade", registro_id, row.get("id_academia"))
+    if not url:
+        flash("Não foi possível abrir o pagamento agora. Tente novamente em instantes.", "danger")
+        return redirect(url_for("painel_aluno.minhas_mensalidades"))
+    return redirect(url)
+
+
+@bp_painel_aluno.route("/completar-cadastro", methods=["GET", "POST"])
+@login_required
+def completar_cadastro():
+    """Completa o cadastro no primeiro acesso do aluno ou do responsável.
+
+    A promoção do pré-cadastro deixava o gestor na ficha para preencher o que
+    faltava — trabalho de digitação que a própria família faz melhor, porque os
+    dados são dela. Aqui isso acontece no primeiro login; a academia continua
+    dona de turma, graduação e vínculo.
+    """
+    from blueprints.aluno.alunos import campos_pendentes_autopreenchiveis
+
+    faltantes = alunos_com_cadastro_pendente(current_user.id)
+    if not faltantes:
+        # Sem nada pendente (ou quem abriu a URL sem ter aluno ligado): o hub
+        # de modos resolve para onde essa pessoa deve ir.
+        return redirect(url_for("painel.home"))
+
+    # Todos os alunos pendentes na mesma tela. Antes era um por vez: o
+    # responsável salvava um filho e caía de novo no formulário para o
+    # seguinte, sem nunca ver quanto ainda faltava.
+    blocos = [{"aluno": a, "pendentes": campos_pendentes_autopreenchiveis(a)}
+              for a in faltantes]
+
+    def _campo(aluno_id, coluna):
+        """Nome do campo no formulário — prefixado, senão dois alunos colidem."""
+        return f"a{aluno_id}_{coluna}"
+
+    if request.method == "POST":
+        por_aluno = {}
+        vazios = []
+        for bloco in blocos:
+            aluno = bloco["aluno"]
+            valores = {}
+            for _campo_nome, rotulo, coluna in bloco["pendentes"]:
+                if coluna not in _COLUNAS_COMPLETAR:
+                    continue
+                bruto = (request.form.get(_campo(aluno["id"], coluna)) or "").strip()
+                if coluna in ("cpf", "responsavel_financeiro_cpf"):
+                    bruto = _so_digitos(bruto)
+                if coluna == "peso":
+                    bruto = bruto.replace(",", ".")
+                    try:
+                        bruto = str(round(float(bruto), 2)) if bruto else ""
+                    except ValueError:
+                        bruto = ""
+                if coluna == "estado":
+                    bruto = bruto.upper()[:2]
+                if not bruto:
+                    vazios.append(f"{aluno.get('nome')}: {rotulo}"
+                                  if len(blocos) > 1 else rotulo)
+                    continue
+                valores[coluna] = bruto
+            if valores:
+                por_aluno[aluno["id"]] = valores
+
+        if vazios:
+            flash("Ainda falta preencher: " + ", ".join(vazios) + ".", "danger")
+            return render_template(
+                "painel_aluno/completar_cadastro.html",
+                blocos=blocos, form=request.form, campo=_campo,
+            )
+
+        conn = get_db_connection()
+        cur = conn.cursor()
+        try:
+            # Uma transação para todos: metade salva seria pior do que nada,
+            # porque a tela voltaria pedindo campos que a pessoa já digitou.
+            for aluno_id, valores in por_aluno.items():
+                sets = ", ".join(f"{c}=%s" for c in valores)
+                cur.execute(
+                    f"UPDATE alunos SET {sets} WHERE id=%s",
+                    tuple(valores.values()) + (aluno_id,),
+                )
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            current_app.logger.error(
+                f"Completar cadastro (usuário {current_user.id}): {e}", exc_info=True)
+            flash("Não foi possível salvar agora. Tente novamente.", "danger")
+            return redirect(url_for("painel_aluno.completar_cadastro"))
+        finally:
+            cur.close()
+            conn.close()
+
+        flash("Cadastro completo, obrigado! Bom treino.", "success")
+        return redirect(_destino_pos_completar())
+
+    return render_template(
+        "painel_aluno/completar_cadastro.html",
+        blocos=blocos, form={}, campo=_campo,
+    )
+
+
 @bp_painel_aluno.route("/simular-graduacao-prevista", methods=["GET", "POST"])
 @login_required
 @_aluno_required
@@ -924,6 +1166,16 @@ def minhas_mensalidades(aluno):
             ma["valor_desconto"] = 0
             ma["valor_final"] = valor_display
             ma["tem_desconto"] = False
+        # Já paga: mostra o que entrou de fato. O cálculo de encargos para de
+        # rodar quando a mensalidade vira 'pago', então recalcular agora
+        # devolveria a mensalidade sem os juros que o aluno realmente pagou.
+        _pago = float(ma.get("valor_pago") or 0)
+        if _pago > 0 and (ma.get("status") == "pago" or ma.get("status_pagamento") == "pago"):
+            ma["acrescimo_pago"] = round(max(_pago - float(ma.get("valor_final") or 0), 0), 2)
+            ma["valor_final"] = _pago
+            ma["valor_display"] = _pago
+        else:
+            ma["acrescimo_pago"] = 0.0
         mensalidades.append(ma)
 
     avulsas = []
@@ -952,6 +1204,11 @@ def minhas_mensalidades(aluno):
 
     cur.close()
     conn.close()
+
+    # PIX da academia por cobrança — alternativa ao gateway, com o valor já
+    # embutido em cada código.
+    anexar_pix_academia(mensalidades, id_academia)
+    anexar_pix_academia(avulsas, id_academia)
 
     return render_template(
         "painel_aluno/minhas_mensalidades.html",

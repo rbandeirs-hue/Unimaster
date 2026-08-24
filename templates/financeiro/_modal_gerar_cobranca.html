@@ -1,0 +1,271 @@
+{# =====================================================================
+   Modal de gerar cobrança — usado na tela de mensalidades filtrada por
+   um aluno. Envia para a MESMA rota (financeiro.gerar_cobranca) com o
+   aluno fixo e retorno via `next`. Ids com prefixo `nc` (nova cobrança).
+   ===================================================================== #}
+{% macro modal_gerar_cobranca(aluno_id, aluno_nome, academia_id, planos, voltar,
+                              mes_padrao=None, ano_padrao=None, descontos=None) %}
+{% set mes_padrao = mes_padrao or 1 %}
+{% set ano_padrao = ano_padrao or 2026 %}
+<div class="modal fade" id="modalNovaCobranca" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:620px;">
+    <form class="modal-content ncm" method="POST" action="{{ url_for('financeiro.gerar_cobranca') }}"
+          data-checar-url="{{ url_for('financeiro.checar_disponibilidade_mensalidade') }}"
+          data-academia="{{ academia_id }}" data-aluno="{{ aluno_id }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="aluno_id" value="{{ aluno_id }}">
+      <input type="hidden" name="id_academia" value="{{ academia_id }}">
+      <input type="hidden" name="next" value="{{ voltar }}">
+
+      <style>
+        .ncm{ --fg:#1c1a19; --muted:#8a8681; --muted2:#6f6b66; --line:#ededea; --border:#e7e6e3; --primary:#c1121f; --green:#15803d; --amber:#b45309; border:0; border-radius:16px; overflow:hidden; }
+        .ncm .ncm-head{ padding:22px 24px 14px; }
+        .ncm .ncm-eyebrow{ font-size:.68rem; letter-spacing:.13em; text-transform:uppercase; font-weight:600; color:var(--muted); }
+        .ncm .ncm-title{ font-size:1.3rem; font-weight:700; margin:.2rem 0 .25rem; color:var(--fg); }
+        .ncm .ncm-x{ position:absolute; top:18px; right:20px; background:none; border:0; color:var(--muted); font-size:1.1rem; cursor:pointer; }
+        .ncm .ncm-body{ padding:4px 24px 20px; }
+        .ncm .flbl{ font-size:.68rem; letter-spacing:.06em; text-transform:uppercase; font-weight:600; color:var(--muted); margin-bottom:.32rem; display:block; }
+        .ncm .fld{ width:100%; box-sizing:border-box; background:#fff; border:1px solid #d8d7d3; border-radius:8px; padding:.55rem .7rem; font-size:.92rem; color:var(--fg); }
+        .ncm .fld:focus{ outline:none; border-color:var(--primary); box-shadow:0 0 0 3px rgba(193,18,31,.12); }
+        .ncm .pills{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+        .ncm .pill{ text-align:center; padding:.55rem .6rem; border:1px solid #d8d7d3; border-radius:9px; background:#fff; font-size:.9rem; font-weight:600; color:#2a2724; cursor:pointer; }
+        .ncm .pill input{ position:absolute; opacity:0; width:0; height:0; }
+        .ncm .pill.on{ background:#1c1a19; border-color:#1c1a19; color:#fff; }
+        .ncm .warn{ background:#fdf6e3; border:1px solid #f0e0b0; border-left:4px solid var(--amber); border-radius:8px; padding:11px 14px; font-size:.85rem; color:#7a5a12; }
+        .ncm .prev{ border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+        .ncm .prev-h{ padding:9px 16px; border-bottom:1px solid var(--line); }
+        .ncm .prev-g{ display:grid; grid-template-columns:1fr 1fr 1fr; }
+        .ncm .prev-c{ padding:14px 16px; border-right:1px solid var(--line); }
+        .ncm .prev-c:last-child{ border-right:0; }
+        .ncm .prev-c .n{ font-size:1.25rem; font-weight:700; }
+        .ncm .ncm-foot{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:14px 24px; border-top:1px solid var(--line); background:#faf9f7; }
+        .ncm .btn-red{ background:var(--primary); color:#fff; border:0; border-radius:8px; padding:.6rem 1.1rem; font-weight:700; font-size:.92rem; display:inline-flex; align-items:center; gap:7px; cursor:pointer; }
+        .ncm .btn-red:disabled{ opacity:.45; cursor:not-allowed; }
+        .ncm .btn-link{ background:none; border:0; color:var(--muted2); font-weight:600; font-size:.9rem; cursor:pointer; }
+        .ncm .ig{ display:flex; align-items:stretch; border:1px solid #d8d7d3; border-radius:8px; overflow:hidden; }
+        .ncm .ig span{ background:#f4f4f2; padding:.55rem .6rem; font-size:.9rem; color:var(--muted); border-right:1px solid #e7e6e3; }
+        .ncm .ig .fld{ border:0; border-radius:0; }
+      </style>
+
+      <div class="ncm-head" style="position:relative;">
+        <div class="ncm-eyebrow">Gerar cobrança</div>
+        <div class="ncm-title">{{ aluno_nome }}</div>
+        <button type="button" class="ncm-x" data-bs-dismiss="modal" aria-label="Fechar"><i class="bi bi-x-lg"></i></button>
+      </div>
+
+      <div class="ncm-body">
+        <div style="margin-bottom:16px;">
+          <label class="flbl">Tipo</label>
+          <div class="pills" id="ncPills">
+            <label class="pill on"><input type="radio" name="tipo" value="mensal" id="ncTipoMensal" checked> Um mês</label>
+            <label class="pill"><input type="radio" name="tipo" value="ano" id="ncTipoAno"> Ano inteiro</label>
+            <label class="pill"><input type="radio" name="tipo" value="avulso" id="ncTipoAvulso"> Cobrança avulsa</label>
+          </div>
+        </div>
+
+        {# ---------------------------------------------- mensalidade (mês/ano) #}
+        <div id="ncBlocoMensal">
+          <div class="row g-3 mb-3">
+            <div class="col-7">
+              <label class="flbl" for="ncPlano">Plano</label>
+              <select class="fld" id="ncPlano" name="mensalidade_id">
+                {% for p in planos %}
+                <option value="{{ p.id }}" data-valor="{{ '%.2f'|format(p.valor or 0) }}">{{ p.nome }} — R$ {{ '%.2f'|format(p.valor or 0)|replace('.', ',') }}</option>
+                {% else %}
+                <option value="">Nenhum plano ativo nesta academia</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-5">
+              <label class="flbl" for="ncValorMes">Valor por mês</label>
+              <div class="ig"><span>R$</span><input type="text" class="fld" id="ncValorMes" name="valor" inputmode="decimal"></div>
+            </div>
+          </div>
+          <div class="row g-3 mb-3">
+            <div class="col-5">
+              <label class="flbl" for="ncMes" id="ncMesLabel">Mês</label>
+              <select class="fld" id="ncMes" name="mes_inicial">
+                {% for i in range(1, 13) %}
+                <option value="{{ i }}" {% if i == mes_padrao %}selected{% endif %}>{{ ['','Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'][i] }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-4">
+              <label class="flbl" for="ncAno">Ano</label>
+              <select class="fld" id="ncAno" name="ano_ref">
+                {% for a in range(ano_padrao - 1, ano_padrao + 3) %}
+                <option value="{{ a }}" {% if a == ano_padrao %}selected{% endif %}>{{ a }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-3">
+              <label class="flbl" for="ncDia">Dia venc.</label>
+              <select class="fld" id="ncDia" name="dia_vencimento">
+                {% for d in [5,10,15,20,25,28] %}<option value="{{ d }}" {% if d==10 %}selected{% endif %}>{{ d }}</option>{% endfor %}
+              </select>
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label class="flbl" for="ncDescSel">Desconto <span style="text-transform:none; letter-spacing:0; font-weight:400; color:var(--muted);">— se o aluno tiver direito</span></label>
+            <select class="fld" id="ncDescSel" name="desconto_id">
+              <option value="">Sem desconto</option>
+              {% for d in descontos or [] %}
+              <option value="{{ d.id }}" data-tipo="{{ d.tipo }}" data-valor="{{ '%.2f'|format(d.valor or 0) }}">{{ d.nome }} — {% if d.tipo == 'percentual' %}{{ '%.0f'|format(d.valor|float) }}%{% else %}R$ {{ '%.2f'|format(d.valor|float) }}{% endif %}</option>
+              {% endfor %}
+              <option value="avulso" data-tipo="avulso">Desconto avulso…</option>
+            </select>
+            <div class="row g-2 mt-2" id="ncDescAvulso" style="display:none;">
+              <div class="col-5">
+                <select class="fld" id="ncDescTipo" name="desconto_manual_tipo">
+                  <option value="percentual">Percentual (%)</option>
+                  <option value="valor_fixo">Valor (R$)</option>
+                </select>
+              </div>
+              <div class="col-7">
+                <input type="text" class="fld" id="ncDescValor" name="desconto_manual_valor" placeholder="Ex.: 20" inputmode="decimal">
+              </div>
+            </div>
+          </div>
+
+          <div class="warn mb-3" id="ncWarn" style="display:none;"></div>
+
+          <div class="prev mb-2" id="ncPrev">
+            <div class="prev-h"><span class="flbl" style="margin:0;">Prévia</span></div>
+            <div class="prev-g">
+              <div class="prev-c"><div class="flbl">Cobranças</div><div class="n" id="ncPrevQtd">—</div></div>
+              <div class="prev-c"><div class="flbl">Período</div><div class="n" id="ncPrevPeriodo" style="font-size:1rem;">—</div></div>
+              <div class="prev-c"><div class="flbl">Total</div><div class="n" id="ncPrevTotal">—</div></div>
+            </div>
+          </div>
+          <p class="form-text mb-0" id="ncHelp">Gera a mensalidade do mês escolhido, com vencimento no dia selecionado.</p>
+        </div>
+
+        {# ------------------------------------------------- cobrança avulsa #}
+        <div id="ncBlocoAvulso" hidden>
+          <div class="mb-3">
+            <label class="flbl" for="ncDescricao">Descrição</label>
+            <input type="text" class="fld" id="ncDescricao" name="descricao" placeholder="Ex.: uniforme, exame de faixa, inscrição">
+          </div>
+          <div class="row g-3">
+            <div class="col-6">
+              <label class="flbl" for="ncValor">Valor</label>
+              <div class="ig"><span>R$</span><input type="text" class="fld" id="ncValor" name="valor" inputmode="decimal"></div>
+            </div>
+            <div class="col-6">
+              <label class="flbl" for="ncVenc">Vencimento</label>
+              <input type="date" class="fld" id="ncVenc" name="data_vencimento">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="ncm-foot">
+        <button type="button" class="btn-link" data-bs-dismiss="modal">Fechar</button>
+        <div style="display:flex; align-items:center; gap:14px;">
+          <span class="text-muted" id="ncFootTotal" style="font-size:.85rem;"></span>
+          <button type="submit" class="btn-red" id="ncSubmit"><i class="bi bi-check-lg"></i> <span id="ncSubmitLbl">Gerar cobrança</span></button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  var form = document.querySelector('#modalNovaCobranca form.ncm');
+  if (!form) return;
+  var MESES = ['','Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  var ABREV = ['','jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+  var mensal = form.querySelector('#ncTipoMensal'), ano = form.querySelector('#ncTipoAno'), avulso = form.querySelector('#ncTipoAvulso');
+  var blocoMensal = form.querySelector('#ncBlocoMensal'), blocoAvulso = form.querySelector('#ncBlocoAvulso');
+  var plano = form.querySelector('#ncPlano'), valorMes = form.querySelector('#ncValorMes');
+  var mes = form.querySelector('#ncMes'), anoRef = form.querySelector('#ncAno'), dia = form.querySelector('#ncDia');
+  var descricao = form.querySelector('#ncDescricao'), valorAv = form.querySelector('#ncValor'), venc = form.querySelector('#ncVenc');
+  var descSel = form.querySelector('#ncDescSel'), descAvulso = form.querySelector('#ncDescAvulso'), descTipo = form.querySelector('#ncDescTipo'), descValor = form.querySelector('#ncDescValor');
+  var warn = form.querySelector('#ncWarn'), prev = form.querySelector('#ncPrev');
+  var mesLabel = form.querySelector('#ncMesLabel'), help = form.querySelector('#ncHelp');
+  var qtdEl = form.querySelector('#ncPrevQtd'), perEl = form.querySelector('#ncPrevPeriodo'), totEl = form.querySelector('#ncPrevTotal');
+  var footTot = form.querySelector('#ncFootTotal'), submit = form.querySelector('#ncSubmit'), submitLbl = form.querySelector('#ncSubmitLbl');
+  var checarUrl = form.getAttribute('data-checar-url'), acadId = form.getAttribute('data-academia'), alunoId = form.getAttribute('data-aluno');
+
+  function fmt(v){ return 'R$ ' + Number(v || 0).toFixed(2).replace('.', ','); }
+  function valorPlano(){ var o = plano.options[plano.selectedIndex]; return o ? parseFloat(o.getAttribute('data-valor') || '0') : 0; }
+  function valorMesNum(){ var v = (valorMes.value || '').replace(/\./g,'').replace(',', '.'); var n = parseFloat(v); return isNaN(n) ? valorPlano() : n; }
+  function descInfo(){
+    if (!descSel) return null;
+    var v = descSel.value; if (!v) return null;
+    if (v === 'avulso'){ var dv = parseFloat((descValor.value||'').replace(/\./g,'').replace(',', '.')); if (isNaN(dv) || dv <= 0) return null; return { tipo: descTipo.value, valor: dv }; }
+    var o = descSel.options[descSel.selectedIndex];
+    return { tipo: o.getAttribute('data-tipo'), valor: parseFloat(o.getAttribute('data-valor') || '0') };
+  }
+  function valorComDesc(vpm){
+    var d = descInfo(); if (!d) return vpm;
+    var desc = d.tipo === 'percentual' ? vpm * (d.valor / 100) : Math.min(d.valor, vpm);
+    return Math.max(0, vpm - desc);
+  }
+
+  function marcarPills(){
+    form.querySelectorAll('#ncPills .pill').forEach(function(p){ var i = p.querySelector('input'); p.classList.toggle('on', i && i.checked); });
+  }
+
+  function alternar(){
+    var ehAvulso = avulso.checked, ehAno = ano.checked, ehPlano = !ehAvulso;
+    blocoMensal.hidden = !ehPlano; blocoAvulso.hidden = ehPlano;
+    // Só o bloco visível envia (evita conflito do name="valor").
+    [plano, valorMes, mes, anoRef, dia, descSel, descTipo, descValor].forEach(function(el){ if (el) el.disabled = !ehPlano; });
+    [descricao, valorAv, venc].forEach(function(el){ el.disabled = ehPlano; });
+    if (mesLabel) mesLabel.textContent = ehAno ? 'A partir do mês' : 'Mês';
+    marcarPills();
+    atualizarPrevia();
+  }
+
+  function setSubmit(qtd, isAvulso){
+    if (isAvulso){ submitLbl.textContent = 'Gerar cobrança'; submit.disabled = false; footTot.textContent = valorAv.value ? (fmt(valorMesNum()) + ' no total') : ''; return; }
+    submit.disabled = qtd <= 0;
+    submitLbl.textContent = qtd <= 0 ? 'Nada a gerar' : ('Gerar ' + qtd + (qtd === 1 ? ' cobrança' : ' cobranças'));
+  }
+
+  function atualizarPrevia(){
+    if (avulso.checked){ warn.style.display = 'none'; prev.style.display = 'none'; help.textContent = 'Cobrança única para este aluno.'; setSubmit(0, true); return; }
+    prev.style.display = '';
+    var vpm = valorMesNum();
+    help.textContent = ano.checked
+      ? ('Gera as mensalidades do mês escolhido até dezembro, todas com vencimento no dia ' + dia.value + '.')
+      : ('Gera a mensalidade do mês escolhido, com vencimento no dia ' + dia.value + '.');
+    if (!plano.value){ qtdEl.textContent = '—'; perEl.textContent = '—'; totEl.textContent = '—'; warn.style.display='none'; setSubmit(0); return; }
+    var tipo = ano.checked ? 'anual' : 'mensal';
+    var mesIni = parseInt(mes.value, 10) || 1;
+    var qs = '?aluno_id=' + alunoId + '&plano_id=' + plano.value + '&tipo=' + tipo + '&ano=' + anoRef.value + '&mes=' + mesIni + '&mes_inicial=' + mesIni + '&academia_id=' + acadId;
+    fetch(checarUrl + qs).then(function(r){ return r.json(); }).then(function(j){
+      var ocup = (j && j.meses_ocupados) || [];
+      var periodo = ano.checked ? [] : [mesIni];
+      if (ano.checked){ for (var m = mesIni; m <= 12; m++) periodo.push(m); }
+      var novos = periodo.filter(function(m){ return ocup.indexOf(m) === -1; });
+      var qtd = novos.length, total = qtd * valorComDesc(vpm);
+      qtdEl.textContent = qtd;
+      perEl.textContent = qtd ? (ABREV[novos[0]] + '–' + ABREV[novos[novos.length-1]] + '/' + anoRef.value) : '—';
+      totEl.textContent = fmt(total);
+      footTot.textContent = qtd ? (fmt(total) + ' no total') : '';
+      var ignor = periodo.filter(function(m){ return ocup.indexOf(m) !== -1; });
+      if (ignor.length){
+        warn.style.display = '';
+        warn.innerHTML = '<strong><i class="bi bi-exclamation-triangle"></i> ' + ignor.length + ' ' + (ignor.length===1?'mês já possui':'meses já possuem') + ' cobrança e ' + (ignor.length===1?'será ignorado':'serão ignorados') + '</strong><br><span style="color:#96702a">' + ignor.map(function(m){return MESES[m];}).join(', ') + ' já ' + (ignor.length===1?'consta':'constam') + ' no financeiro deste aluno.</span>';
+      } else { warn.style.display = 'none'; }
+      setSubmit(qtd);
+    }).catch(function(){ warn.style.display='none'; setSubmit(periodo ? periodo.length : 1); });
+  }
+
+  plano.addEventListener('change', function(){ valorMes.value = valorPlano().toFixed(2).replace('.', ','); atualizarPrevia(); });
+  [mes, anoRef, dia, valorMes].forEach(function(el){ el.addEventListener('change', atualizarPrevia); });
+  valorMes.addEventListener('input', function(){ clearTimeout(window._ncT); window._ncT = setTimeout(atualizarPrevia, 350); });
+  if (descSel) descSel.addEventListener('change', function(){ if (descAvulso) descAvulso.style.display = (descSel.value === 'avulso') ? '' : 'none'; atualizarPrevia(); });
+  if (descTipo) descTipo.addEventListener('change', atualizarPrevia);
+  if (descValor) descValor.addEventListener('input', function(){ clearTimeout(window._ncD); window._ncD = setTimeout(atualizarPrevia, 300); });
+  [mensal, ano, avulso].forEach(function(r){ r.addEventListener('change', alternar); });
+  // valor por mês inicia com o valor do plano
+  if (plano.value) valorMes.value = valorPlano().toFixed(2).replace('.', ',');
+  alternar();
+});
+</script>
+{% endmacro %}

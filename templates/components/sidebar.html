@@ -1,0 +1,110 @@
+{# =====================================================================
+   Barra lateral Unimaster — v1
+   Uso: incluir logo depois de <body ...> em templates/base.html:
+        {% if current_user.is_authenticated and not layout_embed %}
+          {% include 'components/sidebar.html' %}
+        {% endif %}
+   Requer: static/css/unimaster.css carregado no <head>.
+   Só usa endpoints que existem hoje no projeto.
+   ===================================================================== #}
+
+{% set modo = session.get('modo_painel') %}
+{% set aca = academia_id if academia_id is defined else current_user.id_academia %}
+{% set ep = request.endpoint or '' %}
+
+<div class="um-side-overlay" onclick="umFecharSide()"></div>
+
+<aside class="um-side">
+  <div class="um-side-marca">
+    <img src="{{ url_for('static', filename='img/login/judo-icon.png') }}" alt="">
+    <span>{{ contexto_nome or 'Unimaster Judô' }}</span>
+  </div>
+
+  <div class="um-side-modo">
+    <div class="rot">Modo de acesso</div>
+    {% if tem_multiplos_modos() %}
+    <a class="sel" href="{{ url_for('painel.home', trocar=1) }}" title="Trocar modo de acesso">
+      <i class="bi bi-arrow-left-right"></i>
+      <span class="nome">{{ modo_atual_nome() }}</span>
+      <i class="bi bi-chevron-expand" style="opacity:.45"></i>
+    </a>
+    {% else %}
+    <div class="sel">
+      <i class="bi bi-shield-lock"></i>
+      <span class="nome">{{ modo_atual_nome() }}</span>
+    </div>
+    {% endif %}
+  </div>
+
+  <nav class="um-side-nav">
+
+    {% if modo == 'academia' %}
+      <a href="{{ url_for('academia.dash', academia_id=aca) }}" class="{{ 'ativo' if ep.startswith('academia.dash') }}"><i class="bi bi-speedometer2"></i>Painel / Indicadores</a>
+
+      <div class="grupo">Dia a dia</div>
+      <a href="{{ url_for('presencas.painel_presenca', academia_id=aca) }}" class="{{ 'ativo' if ep.startswith('presencas.') and 'ranking' not in ep }}"><i class="bi bi-clipboard-check-fill"></i>Presença</a>
+      <a href="{{ url_for('turmas.lista_turmas', academia_id=aca) }}" class="{{ 'ativo' if ep.startswith('turmas.') }}"><i class="bi bi-collection-fill"></i>Turmas</a>
+      <a href="{{ url_for('presencas.ranking_frequencia_pagina') }}" class="{{ 'ativo' if 'ranking' in ep }}"><i class="bi bi-trophy-fill"></i>Ranking de frequência</a>
+      <a href="{{ url_for('solicitacoes.lista', academia_id=aca) }}" class="{{ 'ativo' if ep.startswith('solicitacoes.') }}"><i class="bi bi-clipboard-check"></i>Aprovar Solicitações</a>
+
+      <div class="grupo">Pessoas</div>
+      <a href="{{ url_for('alunos.lista_alunos', academia_id=aca) }}" class="{{ 'ativo' if ep.startswith('alunos.') }}"><i class="bi bi-people-fill"></i>Alunos</a>
+      <a href="{{ url_for('professores.lista', academia_id=aca) }}" class="{{ 'ativo' if ep.startswith('professores.') }}"><i class="bi bi-person-badge-fill"></i>Professores</a>
+      <a href="{{ url_for('academia.lista_visitantes', academia_id=aca) }}" class="{{ 'ativo' if ep == 'academia.lista_visitantes' }}"><i class="bi bi-person-check"></i>Visitantes</a>
+      <a href="{{ url_for('precadastro.lista', academia_id=aca) }}" class="{{ 'ativo' if ep.startswith('precadastro.') }}"><i class="bi bi-person-plus"></i>Pré-cadastro</a>
+
+      <div class="grupo">Financeiro</div>
+      <a href="{{ url_for('financeiro.dashboard', academia_id=aca) }}" class="{{ 'ativo' if ep.startswith('financeiro.') }}"><i class="bi bi-cash-coin"></i>Financeiro</a>
+
+      <div class="grupo">Eventos</div>
+      <a href="{{ url_for('eventos_competicoes.lista_eventos', academia_id=aca) }}" class="{{ 'ativo' if ep == 'eventos_competicoes.lista_eventos' }}"><i class="bi bi-calendar-event"></i>Eventos</a>
+      <a href="{{ url_for('eventos_competicoes.lista_competicoes', academia_id=aca) }}" class="{{ 'ativo' if ep == 'eventos_competicoes.lista_competicoes' }}"><i class="bi bi-trophy"></i>Competições</a>
+      <a href="{{ url_for('calendario.index') }}" class="{{ 'ativo' if ep.startswith('calendario.') }}"><i class="bi bi-calendar3"></i>Calendário</a>
+
+      <div class="grupo">Administração</div>
+      <a href="{{ url_for('academia.locais_treino', academia_id=aca) }}" class="{{ 'ativo' if ep == 'academia.locais_treino' }}"><i class="bi bi-geo-alt-fill"></i>Locais de treino</a>
+      <a href="{{ url_for('configuracoes.modalidades_lista', academia_id=aca) }}" class="{{ 'ativo' if ep == 'configuracoes.modalidades_lista' }}"><i class="bi bi-collection-fill"></i>Modalidades</a>
+      <a href="{{ url_for('academia.whatsapp_config', academia_id=aca) }}" class="{{ 'ativo' if ep == 'academia.whatsapp_config' }}"><i class="bi bi-whatsapp"></i>WhatsApp</a>
+      <a href="{{ url_for('academia.lista_usuarios', academia_id=aca) }}" class="{{ 'ativo' if ep == 'academia.lista_usuarios' }}"><i class="bi bi-person-lines-fill"></i>Usuários</a>
+      <a href="{{ url_for('academia.configuracoes_academia', academia_id=aca) }}" class="{{ 'ativo' if ep == 'academia.configuracoes_academia' }}"><i class="bi bi-sliders"></i>Configurações</a>
+
+    {% elif modo == 'admin' %}
+      <a href="{{ url_for('painel.home') }}" class="{{ 'ativo' if ep == 'painel.home' or ep == 'painel._redirect_admin' }}"><i class="bi bi-grid-1x2"></i>Painel</a>
+      <a href="{{ url_for('federacao.gerenciamento_federacao') }}"><i class="bi bi-diagram-3"></i>Associações</a>
+      <a href="{{ url_for('associacao.painel_associacao') }}"><i class="bi bi-building"></i>Academias</a>
+      <a href="{{ url_for('alunos.lista_alunos') }}" class="{{ 'ativo' if ep.startswith('alunos.') }}"><i class="bi bi-people-fill"></i>Alunos</a>
+      <a href="{{ url_for('cadastros.hub') }}" class="{{ 'ativo' if ep.startswith('cadastros.') }}"><i class="bi bi-person-lines-fill"></i>Cadastros</a>
+      <a href="{{ url_for('academia.painel_academia') }}"><i class="bi bi-gear"></i>Gerenciamento Academia</a>
+      <a href="{{ url_for('configuracoes.hub') }}" class="{{ 'ativo' if ep.startswith('configuracoes.') }}"><i class="bi bi-sliders"></i>Configurações</a>
+
+    {% elif modo == 'professor' %}
+      <a href="{{ url_for('professor.painel_professor') }}" class="{{ 'ativo' if ep.startswith('professor.') }}"><i class="bi bi-people-fill"></i>Minha Turma</a>
+      <a href="{{ url_for('presencas.registro_presenca') }}"><i class="bi bi-clipboard-check-fill"></i>Registrar Presença</a>
+      <a href="{{ url_for('presencas.ata_presenca') }}"><i class="bi bi-file-text"></i>Relatório de Frequência</a>
+      <a href="{{ url_for('presencas.historico_presenca_lista') }}"><i class="bi bi-clock-history"></i>Histórico de Frequência</a>
+      <a href="{{ url_for('presencas.ranking_frequencia_pagina') }}"><i class="bi bi-trophy-fill"></i>Ranking de frequência</a>
+      <a href="{{ url_for('calendario.index') }}"><i class="bi bi-calendar-event"></i>Calendário</a>
+
+    {% else %}
+      {# Federação, associação, aluno, responsável e visitante seguem pelo hub
+         até que seus menus sejam mapeados. #}
+      <a href="{{ url_for('painel.home') }}" class="ativo"><i class="bi bi-grid-1x2"></i>Painel</a>
+    {% endif %}
+
+  </nav>
+
+  <div class="um-side-rodape">
+    <a href="{{ url_for('usuarios.meu_perfil', next=request.url) }}">
+      <i class="bi bi-person-circle"></i>
+      <span style="flex:1">{{ current_user.nome }}</span>
+    </a>
+    <a href="{{ url_for('auth.logout') }}"><i class="bi bi-box-arrow-right"></i>Sair</a>
+  </div>
+</aside>
+
+<script>
+  function umAbrirSide() { document.body.classList.add('um-side-aberta'); }
+  function umFecharSide() { document.body.classList.remove('um-side-aberta'); }
+  function umToggleSide() { document.body.classList.toggle('um-side-aberta'); }
+  document.body.classList.add('um-com-side');
+</script>

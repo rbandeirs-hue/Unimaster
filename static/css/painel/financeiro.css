@@ -1,0 +1,231 @@
+/* =======================================================================
+   Financeiro — componentes das telas do módulo
+   =======================================================================
+   Complementa base/listas.css e base/shell.css: aqui ficam só as peças que
+   são do financeiro — seletor de competência, barra de arrecadação, ponto
+   da faixa do aluno e os valores monetários.
+   ======================================================================= */
+
+/* São oito abas: em tela estreita viram uma tira que rola, em vez de
+   quebrar em três linhas e empurrar o conteúdo para baixo. */
+.fin-abas { flex-wrap: nowrap; overflow-x: auto; gap: 1.1rem; }
+.fin-abas .lst-aba { white-space: nowrap; }
+
+/* ------------------------------------------------------- competência */
+/* Os meses ficam como botões porque a escolha é sempre entre poucos e
+   recentes — um select esconderia a informação atrás de um clique. */
+.fin-meses {
+  display: inline-flex;
+  flex-wrap: wrap;
+  border: 1px solid var(--sh-line);
+  border-radius: var(--u-radius-sm);
+  overflow: hidden;
+}
+
+.fin-mes {
+  padding: .5rem .85rem;
+  border: 0;
+  border-right: 1px solid var(--sh-line);
+  background: #fff;
+  color: var(--sh-ink-soft);
+  font: inherit;
+  font-size: .9rem;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.fin-mes:last-child { border-right: 0; }
+.fin-mes:hover { background: #f4f2ee; color: var(--sh-ink); }
+.fin-mes.is-atual { background: var(--sh-ink); color: #fff; font-weight: 600; }
+
+/* --------------------------------------------------- valores em dinheiro */
+.fin-valor { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.fin-valor--entrada { color: #1a7f43; }
+/* Saída de caixa nas telas de despesa. */
+.fin-valor--saida { color: var(--u-danger); }
+.fin-valor--atraso  { color: var(--sh-red); }
+
+/* ------------------------------------------------------------- barra */
+.fin-barra-bloco {
+  background: #fff;
+  border: 1px solid var(--sh-line);
+  border-radius: var(--u-radius);
+  padding: 1.1rem 1.25rem;
+  margin-bottom: var(--u-space-3);
+}
+
+.fin-barra-topo {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--u-space-2);
+  flex-wrap: wrap;
+  margin-bottom: .6rem;
+}
+.fin-barra-titulo { font-weight: 600; }
+
+.fin-barra-trilho {
+  height: 9px;
+  background: #f0eeea;
+  border-radius: var(--u-radius-pill);
+  overflow: hidden;
+}
+.fin-barra-preenche {
+  height: 100%;
+  background: #1a7f43;
+  border-radius: var(--u-radius-pill);
+}
+
+.fin-barra-nota { margin: .55rem 0 0; color: var(--sh-ink-soft); font-size: .85rem; }
+
+/* -------------------------------------------------------- faixa do aluno */
+/* O retângulo colorido repete a faixa que o aluno usa no tatame: identifica
+   a linha mais rápido do que ler a graduação escrita. */
+.fin-faixa {
+  display: inline-block;
+  flex: none;
+  width: 26px;
+  height: 10px;
+  border-radius: 2px;
+  border: 1px solid rgba(0, 0, 0, .18);
+  background: var(--fin-faixa-cor, #6b7a99);
+}
+
+.fin-grad {
+  display: block;
+  color: var(--sh-ink-soft);
+  font-size: .7rem;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+/* --------------------------------------------------------------- formas */
+.fin-quadro-vazio {
+  padding: 2rem 1.25rem;
+  text-align: center;
+  color: var(--sh-ink-soft);
+}
+
+/* Cartões de configuração (planos, formas, descontos). */
+.fin-cartoes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--u-space-3);
+}
+
+.fin-cartao {
+  background: #fff;
+  border: 1px solid var(--sh-line);
+  border-radius: var(--u-radius);
+  padding: 1rem 1.15rem;
+  display: flex;
+  flex-direction: column;
+  gap: .5rem;
+}
+.fin-cartao.is-inativo { opacity: .6; }
+.fin-cartao__topo { display: flex; align-items: flex-start; justify-content: space-between; gap: .6rem; }
+.fin-cartao__nome { font-weight: 600; }
+.fin-cartao__valor { font-size: 1.35rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.fin-cartao__acoes { display: flex; gap: .4rem; margin-top: auto; padding-top: .5rem; }
+
+/* Formulário lado a lado com a lista, quando a tela é de cadastro. */
+.fin-duas {
+  display: grid;
+  grid-template-columns: minmax(0, 320px) minmax(0, 1fr);
+  gap: var(--u-space-3);
+  align-items: start;
+}
+
+@media (max-width: 1100px) {
+  .fin-duas { grid-template-columns: 1fr; }
+}
+
+/* Barra de arrecadação com os totais ao lado, como na referência: a leitura
+   é "quanto entrou / quanto falta" junto do percentual, não em blocos soltos. */
+.fin-barra-conteudo {
+  display: flex;
+  align-items: center;
+  gap: var(--u-space-4);
+  flex-wrap: wrap;
+}
+
+.fin-resumo { display: flex; gap: var(--u-space-4); flex: none; }
+.fin-resumo__valor { font-size: 1.35rem; font-weight: 600; margin-top: .1rem; }
+
+/* Cobrança em massa é ação de risco: fica marcada, não igual às demais. */
+.fin-btn-cobrar { border-color: #f0b8b8; color: #a4131f; }
+.fin-btn-cobrar:hover:not(:disabled) { background: #fef4f4; border-color: var(--sh-red); color: #a4131f; }
+.fin-btn-cobrar:disabled { opacity: .5; cursor: default; }
+
+/* Planos em linhas: o nome e a descrição pedem largura, e a lista costuma
+   ter poucos itens — a grade de cartões deixava tudo espremido. */
+.fin-lista-planos { display: flex; flex-direction: column; }
+
+.fin-plano {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--u-space-3);
+  flex-wrap: wrap;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid #f2f0ec;
+}
+.fin-plano:last-child { border-bottom: 0; }
+.fin-plano.is-inativo { opacity: .65; }
+.fin-plano__info { flex: 1 1 320px; min-width: 0; }
+.fin-plano__nome { font-weight: 600; }
+.fin-plano__desc { margin: .25rem 0 0; color: var(--sh-ink-soft); font-size: .88rem; }
+.fin-plano__dir { display: flex; align-items: center; gap: var(--u-space-3); flex: none; }
+.fin-plano__valor { font-size: 1.35rem; font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; }
+
+/* Navegação mês a mês no cabeçalho da página. */
+.fin-navmes {
+  display: inline-flex;
+  align-items: center;
+  gap: .2rem;
+  border: 1px solid var(--sh-line);
+  border-radius: var(--u-radius-sm);
+  background: #fff;
+  padding: .15rem;
+}
+.fin-navmes__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--u-radius-sm);
+  color: var(--sh-ink-soft);
+  text-decoration: none;
+}
+.fin-navmes__btn:hover { background: #f4f2ee; color: var(--sh-ink); }
+.fin-navmes__label { min-width: 96px; text-align: center; font-size: .9rem; font-weight: 600; }
+
+/* Pendências e distribuição por faixa lado a lado. */
+.fin-duas--pendencias { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); }
+
+.fin-faixas { padding: 1rem 1.25rem; display: flex; flex-direction: column; gap: .8rem; }
+.fin-faixa-linha { display: flex; flex-direction: column; gap: .3rem; }
+.fin-faixa-topo { display: flex; align-items: center; justify-content: space-between; gap: .6rem; font-size: .9rem; }
+.fin-faixa-nome { display: inline-flex; align-items: center; gap: .5rem; color: var(--sh-ink-soft); min-width: 0; }
+.fin-faixa-qtd { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+.fin-barra-trilho--fina { height: 5px; }
+.fin-barra-preenche--escura { background: var(--sh-ink); }
+
+/* ------------------------------------------------------------ baixa
+   Modal de registrar pagamento. Vive aqui, e não no template, porque
+   além do painel financeiro a ficha do aluno também dá baixa. O shell
+   não carrega o JS do Bootstrap, então o modal é próprio. */
+.fin-modal { position: fixed; inset: 0; background: rgba(28,28,28,.45); display: none;
+  align-items: center; justify-content: center; padding: 1rem; z-index: 80; }
+.fin-modal.is-aberto { display: flex; }
+.fin-modal__caixa { background: #fff; border-radius: var(--u-radius); width: 100%; max-width: 440px; overflow: hidden; }
+.fin-modal__topo { padding: .9rem 1.25rem; border-bottom: 1px solid var(--sh-line); font-weight: 600; }
+.fin-modal__corpo { padding: 1.25rem; display: flex; flex-direction: column; gap: .9rem; }
+.fin-modal__valor { font-size: 1.6rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.fin-modal__rodape { padding: .85rem 1.25rem; border-top: 1px solid var(--sh-line); background: #fdfcfa;
+  display: flex; justify-content: flex-end; gap: .5rem; }
+.fin-formas { display: flex; flex-wrap: wrap; gap: .4rem; }
+.fin-forma { padding: .45rem .8rem; border: 1px solid var(--sh-line); border-radius: var(--u-radius-sm);
+  background: #fff; font: inherit; font-size: .9rem; cursor: pointer; }
+.fin-forma.is-ativa { background: var(--sh-ink); border-color: var(--sh-ink); color: #fff; font-weight: 600; }

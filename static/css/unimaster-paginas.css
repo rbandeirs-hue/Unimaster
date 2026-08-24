@@ -1,0 +1,188 @@
+/* =======================================================================
+   Unimaster Judô — camada de páginas (v2)
+   Carregue DEPOIS de unimaster.css.
+   Componentes usados nas telas redesenhadas + alinhamento do módulo
+   Financeiro (que tinha shell próprio escuro) ao resto do sistema.
+   ======================================================================= */
+
+/* ── Cabeçalho de página ────────────────────────────────────────────── */
+.um-page-head {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 1rem; flex-wrap: wrap; margin-bottom: 1.1rem;
+}
+.um-page-head h1, .um-page-head .um-title {
+  font-size: 1.25rem; font-weight: 600; letter-spacing: -0.02em; margin: 0 0 0.35rem; color: var(--um-tinta);
+}
+.um-page-head .um-sub { font-size: 0.85rem; color: var(--um-suave); margin: 0; }
+.um-page-actions { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+
+/* ── Faixa de indicadores ───────────────────────────────────────────── */
+.um-kpis {
+  display: flex; align-items: center; background: #fff;
+  border: 1px solid var(--um-linha); border-radius: var(--um-raio); padding: 0.9rem 0;
+}
+.um-kpi { flex: 1; min-width: 8rem; padding: 0 1.25rem; display: flex; flex-direction: column; gap: 0.35rem; }
+.um-kpi__label {
+  font-size: 0.7rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.07em; color: var(--um-fraco);
+}
+.um-kpi__value { font-size: 1.25rem; font-weight: 600; letter-spacing: -0.02em; color: var(--um-tinta); }
+.um-kpi__value--alerta { color: var(--um-vermelho); }
+.um-kpi__sep { width: 1px; height: 2rem; background: var(--um-linha-2); }
+.um-kpi--click { cursor: pointer; }
+@media (max-width: 767.98px) {
+  .um-kpis { flex-direction: column; align-items: stretch; gap: 0.6rem; }
+  .um-kpi__sep { display: none; }
+}
+
+/* ── Barra de filtros ───────────────────────────────────────────────── */
+.um-filtros {
+  background: #fff; border: 1px solid var(--um-linha); border-radius: var(--um-raio);
+  padding: 0.85rem 1rem; display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
+}
+.um-filtros .um-busca { flex: 1 1 14rem; min-width: 8rem; }
+.um-chip {
+  display: inline-flex; align-items: center; gap: 0.45rem; padding: 0.55rem 0.7rem;
+  border: 1px solid var(--um-linha); border-radius: 8px; background: #fff;
+  font-size: 0.78rem; font-weight: 500; color: var(--um-tinta-2); white-space: nowrap; cursor: pointer;
+}
+.um-chip:hover { border-color: #d4d4d8; }
+.um-chip.is-active { border-color: var(--um-tinta); font-weight: 600; color: var(--um-tinta); }
+.um-chip--dashed { border-style: dashed; color: var(--um-suave); }
+
+/* ── Abas de seção ──────────────────────────────────────────────────── */
+.um-abas { display: flex; gap: 0.1rem; flex-wrap: wrap; border-bottom: 1px solid var(--um-linha); margin-bottom: 1.1rem; }
+.um-aba {
+  padding: 0.65rem 0.85rem; margin-bottom: -1px; border: 0; background: none;
+  border-bottom: 2px solid transparent; font-size: 0.82rem; font-weight: 500;
+  color: var(--um-fraco); cursor: pointer; text-decoration: none; white-space: nowrap;
+}
+.um-aba:hover { color: var(--um-tinta-2); }
+.um-aba.is-active { border-bottom-color: var(--um-vermelho); color: var(--um-tinta); font-weight: 600; }
+
+/* ── Tabela em cartão ───────────────────────────────────────────────── */
+.um-tabela { background: #fff; border: 1px solid var(--um-linha); border-radius: var(--um-raio); overflow: hidden; }
+.um-tabela table { width: 100%; margin: 0; font-size: 0.83rem; }
+.um-tabela thead th {
+  background: var(--um-fundo); border-bottom: 1px solid var(--um-linha);
+  font-size: 0.68rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em;
+  color: var(--um-suave); padding: 0.7rem 1.1rem; white-space: nowrap;
+}
+.um-tabela tbody td { padding: 0.7rem 1.1rem; border-bottom: 1px solid var(--um-linha-2); vertical-align: middle; }
+.um-tabela tbody tr:nth-child(even) td { background: var(--um-fundo); }
+.um-tabela tbody tr:last-child td { border-bottom: 0; }
+.um-tabela__pe {
+  padding: 0.7rem 1.1rem; font-size: 0.78rem; color: var(--um-fraco);
+  display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;
+}
+.um-nome { font-weight: 600; color: var(--um-tinta); }
+.um-meta { font-size: 0.72rem; color: var(--um-fraco); }
+
+/* Faixinha de graduação */
+.um-faixa {
+  display: inline-block; width: 16px; height: 7px; border-radius: 2px;
+  border: 1px solid rgba(0, 0, 0, 0.18); flex-shrink: 0; vertical-align: middle;
+}
+
+/* Ponto de status */
+.um-status { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.75rem; font-weight: 500; }
+.um-status::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.um-status--ativo { color: var(--um-ok); }
+.um-status--inativo { color: var(--um-fraco); }
+
+/* Etiquetas de situação */
+.um-selo {
+  display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.25rem 0.55rem;
+  border-radius: 999px; font-size: 0.7rem; font-weight: 600; white-space: nowrap;
+}
+.um-selo--neutro { background: var(--um-linha-2); color: var(--um-tinta-2); }
+.um-selo--erro { background: #fef2f2; color: var(--um-erro); }
+.um-selo--alerta { background: #fefce8; color: var(--um-alerta); }
+.um-selo--ok { background: #f0fdf4; color: var(--um-ok); }
+.um-selo--fraco { background: #fafafa; color: var(--um-fraco); }
+
+/* Botões de ação em linha */
+.um-acoes { display: flex; align-items: center; justify-content: flex-end; gap: 0.3rem; }
+.um-icon-btn {
+  width: 30px; height: 30px; border: 1px solid var(--um-linha); border-radius: 7px; background: #fff;
+  display: inline-flex; align-items: center; justify-content: center; color: var(--um-texto);
+  font-size: 0.78rem; cursor: pointer; text-decoration: none;
+}
+.um-icon-btn:hover { border-color: #d4d4d8; background: var(--um-fundo); color: var(--um-tinta); }
+.um-icon-btn--perigo { color: var(--um-fraco); }
+.um-icon-btn--perigo:hover { border-color: #fecaca; background: #fef2f2; color: var(--um-erro); }
+
+/* ── Barra de progresso / ocupação ──────────────────────────────────── */
+.um-barra { height: 5px; border-radius: 999px; background: var(--um-linha-2); overflow: hidden; }
+.um-barra__fill { height: 100%; background: var(--um-tinta); }
+.um-barra__fill--ok { background: var(--um-ok); }
+.um-barra__fill--erro { background: var(--um-vermelho); }
+
+/* ── Rodapé fixo de formulário ──────────────────────────────────────── */
+.um-form-bar {
+  position: sticky; bottom: 0; z-index: 30; background: #fff; border-top: 1px solid var(--um-linha);
+  padding: 0.75rem 2rem; display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;
+  margin: 1.5rem -1rem 0;
+}
+@media (max-width: 767.98px) { .um-form-bar { padding: 0.75rem 1rem; } }
+
+/* Índice de seções do formulário */
+.um-form-rail { position: sticky; top: 1rem; display: flex; flex-direction: column; gap: 1px;
+  background: #fff; border: 1px solid var(--um-linha); border-radius: var(--um-raio); padding: 0.75rem 0.5rem; }
+.um-form-rail__label {
+  padding: 0.25rem 0.6rem 0.5rem; font-size: 0.66rem; font-weight: 500;
+  text-transform: uppercase; letter-spacing: 0.08em; color: var(--um-fraco);
+}
+.um-form-rail a { padding: 0.45rem 0.6rem; border-radius: 7px; font-size: 0.78rem; font-weight: 500; color: var(--um-tinta-2); }
+.um-form-rail a:hover { background: var(--um-linha-2); color: var(--um-tinta); }
+@media (max-width: 1180px) { .um-form-rail { display: none; } }
+
+/* Foto quadrada no topo do cadastro */
+.um-foto-box {
+  width: 132px; height: 132px; border-radius: var(--um-raio); background: var(--um-linha-2);
+  border: 1px solid var(--um-linha); object-fit: cover;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 0.35rem; color: var(--um-fraco); flex-shrink: 0;
+}
+.um-foto-box--vazia { border-style: dashed; }
+
+/* ── Financeiro: alinhar o shell próprio ao resto do sistema ────────── */
+/* O módulo tem layout separado (fp-*). Estas regras o trazem para o
+   claro e para a mesma linguagem, sem mexer no HTML dele.              */
+.fp-body { background: var(--um-fundo) !important; color: var(--um-tinta-2) !important;
+  font-family: 'Inter', system-ui, sans-serif !important; }
+.fp-side { background: var(--um-tinta) !important; border-right: 0 !important; }
+.fp-side__name { color: #fff !important; font-size: 0.9rem !important; }
+.fp-side__sub { color: rgba(255, 255, 255, 0.42) !important; }
+.fp-side__mark { background: var(--um-vermelho) !important; color: #fff !important; }
+.fp-nav__label { color: rgba(255, 255, 255, 0.32) !important; font-size: 0.61rem !important;
+  letter-spacing: 0.1em !important; }
+.fp-nav__item { color: rgba(255, 255, 255, 0.62) !important; border-radius: 8px !important;
+  font-size: 0.78rem !important; font-weight: 500 !important; }
+.fp-nav__item:hover { background: rgba(255, 255, 255, 0.07) !important; color: #fff !important; }
+.fp-nav__item.is-active { background: var(--um-vermelho) !important; color: #fff !important; font-weight: 600 !important; }
+.fp-main { background: var(--um-fundo) !important; }
+.fp-h1 { font-size: 1.25rem !important; font-weight: 600 !important; color: var(--um-tinta) !important; }
+.fp-h2 { font-size: 0.9rem !important; font-weight: 600 !important; color: var(--um-tinta) !important; }
+.fp-sub { color: var(--um-suave) !important; font-size: 0.85rem !important; }
+.fp-card, .fp-kpi {
+  background: #fff !important; border: 1px solid var(--um-linha) !important;
+  border-radius: var(--um-raio) !important; box-shadow: none !important;
+}
+.fp-kpi__label { color: var(--um-fraco) !important; font-size: 0.7rem !important;
+  text-transform: uppercase !important; letter-spacing: 0.07em !important; }
+.fp-kpi__value { color: var(--um-tinta) !important; font-family: 'Inter', sans-serif !important;
+  font-size: 1.4rem !important; font-weight: 600 !important; }
+.fp-kpi__value--accent { color: var(--um-vermelho) !important; }
+.fp-kpi__sub { color: var(--um-fraco) !important; }
+.fp-progress__bar { background: var(--um-ok) !important; }
+.fp-progress__track { background: var(--um-linha-2) !important; }
+.fp-pill { border: 1px solid var(--um-linha) !important; background: #fff !important;
+  color: var(--um-tinta-2) !important; border-radius: 8px !important; }
+.fp-pill.is-active { background: var(--um-tinta) !important; color: #fff !important; border-color: var(--um-tinta) !important; }
+.fp-badge { border-radius: 999px !important; font-weight: 600 !important; }
+.fp-badge--pago { background: var(--um-linha-2) !important; color: var(--um-tinta-2) !important; }
+.fp-badge--pendente { background: #fefce8 !important; color: var(--um-alerta) !important; }
+.fp-badge--atrasado { background: #fef2f2 !important; color: var(--um-erro) !important; }
+.fp-lista-linha { border-bottom: 1px solid var(--um-linha-2) !important; }
+.fp-lista-nome { color: var(--um-tinta) !important; font-weight: 500 !important; }
+.fp-lista-sub, .fp-lista-valor { color: var(--um-suave) !important; }

@@ -1,91 +1,295 @@
-{% extends "base.html" %}
-{% block title %}WhatsApp da Academia{% endblock %}
+{% extends "base_academia.html" %}
+{% set menu_ativo = 'whatsapp' %}
+{% block title %}WhatsApp da academia{% endblock %}
+{% block pagina_titulo %}WhatsApp da academia{% endblock %}
+{% block pagina_subtitulo %}Lembretes de mensalidade, avisos e parabéns enviados pelo número da academia.{% endblock %}
+{% block pagina_acoes %}
+  <a href="{{ url_for('academia.whatsapp_mensagens', academia_id=academia_id) }}" class="wa-btn wa-btn--ghost">
+    <i class="bi bi-chat-square-text"></i> Modelos de mensagem
+  </a>
+  <a href="{{ url_for('academia.whatsapp_avisos', academia_id=academia_id) }}" class="wa-btn wa-btn--dark">
+    <i class="bi bi-megaphone"></i> Enviar aviso
+  </a>
+{% endblock %}
 {% block content %}
-<div class="container my-4" style="max-width: 720px;">
-  <div class="d-flex align-items-center gap-2 mb-1">
-    <i class="bi bi-whatsapp text-success fs-3"></i>
-    <h4 class="fw-bold mb-0">WhatsApp da Academia</h4>
-  </div>
-  <p class="text-muted">Conecte o WhatsApp da academia para enviar lembretes e avisos automáticos aos alunos.</p>
+<style>
+  .wa{ --fg:#1c1a19; --muted:#8a8681; --muted2:#6f6b66; --line:#ededea; --border:#e7e6e3;
+       --primary:#c1121f; --green:#15803d; --green2:#16a34a; --red:#dc2626; color:var(--fg); }
+  .wa a{ text-decoration:none; }
+  .wa .lbl{ font-size:.7rem; letter-spacing:.1em; text-transform:uppercase; font-weight:600; color:var(--muted); }
+  .wa .card2{ background:#fff; border:1px solid var(--border); border-radius:14px; }
+  .wa-btn{ display:inline-flex; align-items:center; gap:7px; border-radius:8px; padding:.5rem .95rem;
+           font-weight:600; font-size:.85rem; cursor:pointer; border:1px solid transparent; }
+  .wa-btn--dark{ background:#1c1a19; color:#fff; }
+  .wa-btn--dark:hover{ color:#fff; filter:brightness(1.15); }
+  .wa-btn--ghost{ background:#fff; border-color:#d8d7d3; color:#2a2724; }
+  .wa-btn--ghost:hover{ background:#f7f6f4; color:#2a2724; }
+  .wa-btn--red{ background:var(--primary); color:#fff; }
+  .wa-btn--red:hover{ color:#fff; filter:brightness(1.08); }
+  .wa-btn--outred{ background:#fff; border-color:#e6b4b9; color:var(--primary); }
+  .wa-btn--outred:hover{ background:#fdf2f3; color:var(--primary); }
+  .wa-btn:disabled{ opacity:.55; cursor:default; }
 
-  <div class="mb-3 d-flex flex-wrap gap-2">
-    <a href="{{ url_for('academia.whatsapp_avisos', academia_id=academia_id) }}" class="btn btn-success"><i class="bi bi-megaphone me-1"></i> Enviar avisos aos alunos</a>
-    <a href="{{ url_for('academia.whatsapp_mensagens', academia_id=academia_id) }}" class="btn btn-outline-success"><i class="bi bi-chat-left-text me-1"></i> Personalizar mensagens</a>
-  </div>
+  /* Stats */
+  .wa .stats{ display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); }
+  .wa .stat{ padding:20px 24px; border-right:1px solid var(--line); }
+  .wa .stat:last-child{ border-right:0; }
+  .wa .stat .n{ font-size:2rem; font-weight:700; line-height:1.05; margin:.35rem 0 .3rem; }
+  .wa .stat .n.green{ color:var(--green); } .wa .stat .n.red{ color:var(--primary); }
+  .wa .stat .sub{ font-size:.78rem; color:var(--muted); }
 
-  {% with messages = get_flashed_messages(with_categories=true) %}
-    {% for cat, msg in messages %}<div class="alert alert-{{ cat }} py-2">{{ msg }}</div>{% endfor %}
-  {% endwith %}
+  /* Conexão */
+  .wa .conn{ display:flex; align-items:center; gap:16px; padding:18px 22px; flex-wrap:wrap; }
+  .wa .conn-ic{ width:46px; height:46px; border-radius:12px; background:#e7f7ec; color:var(--green2);
+                display:flex; align-items:center; justify-content:center; font-size:1.4rem; flex:none; }
+  .wa .conn-ic.off{ background:#f3f2f0; color:var(--muted); }
+  .wa .dot{ display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; vertical-align:middle; }
+  .wa .dot.on{ background:var(--green2); } .wa .dot.off{ background:#c4c1bc; }
+  .wa .conn-main{ font-weight:600; }
+  .wa .conn-sub{ font-size:.8rem; color:var(--muted); margin-top:2px; }
+  .wa .conn-acoes{ margin-left:auto; display:flex; gap:10px; flex-wrap:wrap; }
+
+  /* Automações */
+  .wa .sec-topo{ display:flex; align-items:center; justify-content:space-between; padding:16px 22px; border-bottom:1px solid var(--line); }
+  .wa .auto{ display:flex; align-items:flex-start; gap:14px; padding:18px 22px; border-bottom:1px solid var(--line); }
+  .wa .auto:last-of-type{ border-bottom:0; }
+  .wa .auto-corpo{ flex:1; min-width:0; }
+  .wa .auto-nome{ font-weight:600; }
+  .wa .auto-desc{ font-size:.86rem; color:var(--muted2); margin:.2rem 0 .5rem; }
+  .wa .auto-meta{ font-size:.78rem; color:var(--muted); display:flex; gap:14px; flex-wrap:wrap; align-items:center; }
+  .wa .auto-edit{ font-size:.82rem; color:var(--muted2); white-space:nowrap; }
+  .wa .auto-edit:hover{ color:var(--fg); }
+  .wa .rodape-auto{ display:flex; align-items:center; justify-content:space-between; padding:14px 22px; gap:12px; flex-wrap:wrap; }
+
+  /* Switch */
+  .wa .sw{ width:42px; height:23px; border-radius:999px; background:#d8d7d3; position:relative; flex:none;
+           transition:background .15s; cursor:pointer; display:inline-block; margin-top:1px; }
+  .wa .sw::after{ content:""; position:absolute; top:3px; left:3px; width:17px; height:17px; border-radius:50%;
+                  background:#fff; box-shadow:0 1px 2px rgba(0,0,0,.2); transition:left .15s; }
+  .wa input:checked + .sw{ background:var(--green); } .wa input:checked + .sw::after{ left:22px; }
+  .wa .sw-inp{ position:absolute; opacity:0; width:0; height:0; }
+
+  /* Teste + últimos */
+  .wa .fld{ width:100%; box-sizing:border-box; background:#fff; border:1px solid #d8d7d3; border-radius:8px;
+            padding:.6rem .75rem; font-size:.92rem; color:var(--fg); }
+  .wa .fld:focus{ outline:none; border-color:var(--primary); box-shadow:0 0 0 3px rgba(193,18,31,.14); }
+  .wa .env{ display:flex; align-items:flex-start; justify-content:space-between; gap:12px; padding:14px 22px; border-bottom:1px solid var(--line); }
+  .wa .env:last-child{ border-bottom:0; }
+  .wa .env-nome{ font-weight:600; font-size:.9rem; }
+  .wa .env-sub{ font-size:.78rem; color:var(--muted); margin-top:2px; }
+  .wa .env-st{ font-size:.82rem; white-space:nowrap; }
+  .wa .env-st.ok{ color:var(--green); } .wa .env-st.bad{ color:var(--primary); }
+  .wa .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:18px; align-items:start; }
+  .wa .qr-img{ width:260px; height:260px; border:1px solid #e9ecef; border-radius:12px; padding:8px; background:#fff; }
+
+  @media (max-width:900px){ .wa .grid2{ grid-template-columns:1fr; } }
+  @media (max-width:820px){ .wa .stats{ grid-template-columns:repeat(2,1fr); }
+    .wa .stat:nth-child(2){ border-right:0; } .wa .stat:nth-child(-n+2){ border-bottom:1px solid var(--line); } }
+  @media (max-width:560px){ .wa .conn-acoes{ margin-left:0; width:100%; } .wa .conn-acoes .wa-btn{ flex:1; justify-content:center; } }
+</style>
+
+<div class="wa">
 
   {% if not servico_online %}
-  <div class="alert alert-danger"><i class="bi bi-exclamation-triangle me-1"></i> O serviço de WhatsApp está fora do ar. Tente novamente em instantes ou contate o suporte.</div>
+  <div class="card2" style="border-color:#f0c9cd; background:#fdf2f3; color:#8f1d27; padding:14px 18px; margin-bottom:18px;">
+    <i class="bi bi-exclamation-triangle me-1"></i> O serviço de WhatsApp está fora do ar. Tente novamente em instantes ou contate o suporte.
+  </div>
   {% endif %}
 
-  <!-- Conexão -->
-  <div class="card border-0 shadow-sm mb-3">
-    <div class="card-body">
-      <h6 class="fw-bold mb-3"><i class="bi bi-link-45deg me-1"></i> Conexão</h6>
+  {# ------------------------------------------------------------ stats #}
+  <div class="card2 stats" style="margin-bottom:18px;">
+    <div class="stat">
+      <div class="lbl">Mensagens no mês</div>
+      <div class="n">{{ stats.total }}</div>
+      <div class="sub">{{ mes_label if mes_label else '' }}{% if not mes_label %}mês atual{% endif %}</div>
+    </div>
+    <div class="stat">
+      <div class="lbl">Entregues</div>
+      <div class="n green">{{ stats.pct_entregue }}%</div>
+      <div class="sub">{{ stats.entregues }} de {{ stats.total }}</div>
+    </div>
+    <div class="stat">
+      <div class="lbl">Falhas</div>
+      <div class="n red">{{ stats.falhas }}</div>
+      <div class="sub">número inválido ou sem WhatsApp</div>
+    </div>
+    <div class="stat">
+      <div class="lbl">Automações ativas</div>
+      <div class="n">{{ automacoes_ativas }} de 3</div>
+      <div class="sub">{{ 'em execução' if automacoes_ativas else 'nenhuma ligada' }}</div>
+    </div>
+  </div>
 
-      <div id="estadoConectado" class="{{ '' if wpp_status == 'open' else 'd-none' }}">
-        <div class="d-flex align-items-center gap-2 mb-2">
-          <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i> Conectado</span>
-          <span class="text-muted">Número: <strong id="numConectado">{{ wpp_numero or acad.whatsapp_numero or '—' }}</strong></span>
+  {# --------------------------------------------------------- conexão #}
+  <div class="card2 conn" style="margin-bottom:18px;">
+    {# Conectado #}
+    <div id="estadoConectado" class="conn {{ '' if wpp_status == 'open' else 'd-none' }}" style="padding:0; width:100%;">
+      <div class="conn-ic"><i class="bi bi-whatsapp"></i></div>
+      <div>
+        <div class="conn-main"><span class="dot on"></span>Conectado &nbsp; <span id="numConectado">{{ wpp_numero or acad.whatsapp_numero or '—' }}</span></div>
+        <div class="conn-sub">
+          {% if conectado_em %}Sessão ativa desde {{ conectado_em.strftime('%d/%m/%Y') }}{% else %}Número conectado à academia{% endif %}
         </div>
-        <button class="btn btn-outline-danger btn-sm" id="btnDesconectar"><i class="bi bi-box-arrow-right me-1"></i> Desconectar</button>
       </div>
+      <div class="conn-acoes">
+        <button class="wa-btn wa-btn--ghost" id="btnTestarConexao" type="button"><i class="bi bi-arrow-repeat"></i> Testar conexão</button>
+        <button class="wa-btn wa-btn--outred" id="btnDesconectar" type="button"><i class="bi bi-box-arrow-right"></i> Desconectar</button>
+      </div>
+    </div>
 
-      <div id="estadoDesconectado" class="{{ 'd-none' if wpp_status == 'open' else '' }}">
-        <p class="text-muted small mb-2">A academia ainda não tem um número conectado. Clique em conectar e escaneie o QR Code com o WhatsApp do número da academia (<em>Aparelhos conectados → Conectar um aparelho</em>).</p>
-        <button class="btn btn-success" id="btnConectar"><i class="bi bi-qr-code me-1"></i> Conectar WhatsApp</button>
-
-        <div id="boxQr" class="text-center mt-3 d-none">
-          <div class="mb-2"><img id="imgQr" src="" alt="QR Code" style="width:280px;height:280px;border:1px solid #e9ecef;border-radius:12px;padding:8px;background:#fff;"></div>
-          <p class="text-muted small mb-0" id="qrMsg">Aguardando leitura do QR Code…</p>
+    {# Desconectado #}
+    <div id="estadoDesconectado" class="{{ 'd-none' if wpp_status == 'open' else '' }}" style="width:100%;">
+      <div class="conn" style="padding:0;">
+        <div class="conn-ic off"><i class="bi bi-whatsapp"></i></div>
+        <div>
+          <div class="conn-main"><span class="dot off"></span>Desconectado</div>
+          <div class="conn-sub">Escaneie o QR Code com o WhatsApp do número da academia (Aparelhos conectados → Conectar um aparelho).</div>
         </div>
+        <div class="conn-acoes">
+          <button class="wa-btn wa-btn--dark" id="btnConectar" type="button"><i class="bi bi-qr-code"></i> Conectar WhatsApp</button>
+        </div>
+      </div>
+      <div id="boxQr" class="text-center mt-3 d-none">
+        <img id="imgQr" src="" alt="QR Code" class="qr-img">
+        <p class="conn-sub mt-2" id="qrMsg">Aguardando leitura do QR Code…</p>
       </div>
     </div>
   </div>
 
-  <!-- Preferências -->
-  <div class="card border-0 shadow-sm mb-3">
-    <div class="card-body">
-      <h6 class="fw-bold mb-3"><i class="bi bi-sliders me-1"></i> Automações</h6>
-      <form method="POST" action="{{ url_for('academia.whatsapp_configurar', academia_id=academia_id) }}">
+  {# ---------------------------------------------- automações + lateral #}
+  <div class="grid2">
+
+    {# esquerda: automações #}
+    <div class="card2">
+      <div class="sec-topo">
+        <span class="lbl">Automações</span>
+        <span class="lbl" style="color:var(--muted2);">{{ automacoes_ativas }} de 3 ativas</span>
+      </div>
+      <form method="POST" action="{{ url_for('academia.whatsapp_configurar', academia_id=academia_id) }}" id="formAutomacoes">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <div class="form-check form-switch mb-2">
-          <input class="form-check-input" type="checkbox" role="switch" id="sw1" name="whatsapp_lembrete_mensalidade" value="1" {{ 'checked' if acad.whatsapp_lembrete_mensalidade }}>
-          <label class="form-check-label" for="sw1">Lembrete de mensalidade (vencimento + link de pagamento)</label>
+
+        {% set _ult_lemb = ultimo_por_tipo.get('lembrete_vencimento') %}
+        <div class="auto">
+          <label style="display:inline-flex;">
+            <input class="sw-inp" type="checkbox" name="whatsapp_lembrete_mensalidade" value="1" {{ 'checked' if acad.whatsapp_lembrete_mensalidade }}>
+            <span class="sw"></span>
+          </label>
+          <div class="auto-corpo">
+            <div class="auto-nome">Lembrete de mensalidade</div>
+            <div class="auto-desc">Enviado 3 dias antes do vencimento, com valor e link de pagamento.</div>
+            <div class="auto-meta">
+              <span><i class="bi bi-clock"></i> Diário</span>
+              <span>·</span>
+              <span>{% if _ult_lemb %}Último envio: {{ _ult_lemb.criado_em.strftime('%d/%m, %Hh%M') }} · {{ _ult_lemb.total }} aluno{{ 's' if _ult_lemb.total != 1 }}{% else %}Nenhum envio ainda{% endif %}</span>
+            </div>
+          </div>
+          <a class="auto-edit" href="{{ url_for('academia.whatsapp_mensagens', academia_id=academia_id) }}">Editar mensagem</a>
         </div>
-        <div class="form-check form-switch mb-2">
-          <input class="form-check-input" type="checkbox" role="switch" id="sw2" name="whatsapp_avisos" value="1" {{ 'checked' if acad.whatsapp_avisos }}>
-          <label class="form-check-label" for="sw2">Avisos gerais aos alunos</label>
+
+        {% set _ult_av = ultimo_por_tipo.get('aviso') %}
+        <div class="auto">
+          <label style="display:inline-flex;">
+            <input class="sw-inp" type="checkbox" name="whatsapp_avisos" value="1" {{ 'checked' if acad.whatsapp_avisos }}>
+            <span class="sw"></span>
+          </label>
+          <div class="auto-corpo">
+            <div class="auto-nome">Avisos gerais</div>
+            <div class="auto-desc">Recados da secretaria disparados manualmente para turmas escolhidas.</div>
+            <div class="auto-meta">
+              <span><i class="bi bi-clock"></i> Sob demanda</span>
+              <span>·</span>
+              <span>{% if _ult_av %}Último envio: {{ _ult_av.criado_em.strftime('%d/%m, %Hh%M') }} · {{ _ult_av.total }} aluno{{ 's' if _ult_av.total != 1 }}{% else %}Nenhum envio ainda{% endif %}</span>
+            </div>
+          </div>
+          <a class="auto-edit" href="{{ url_for('academia.whatsapp_avisos', academia_id=academia_id) }}">Enviar aviso</a>
         </div>
-        <div class="form-check form-switch mb-3">
-          <input class="form-check-input" type="checkbox" role="switch" id="sw3" name="whatsapp_aniversario" value="1" {{ 'checked' if acad.whatsapp_aniversario }}>
-          <label class="form-check-label" for="sw3">Parabéns de aniversário (envio diário automático)</label>
+
+        {% set _ult_an = ultimo_por_tipo.get('aniversario') %}
+        <div class="auto">
+          <label style="display:inline-flex;">
+            <input class="sw-inp" type="checkbox" name="whatsapp_aniversario" value="1" {{ 'checked' if acad.whatsapp_aniversario }}>
+            <span class="sw"></span>
+          </label>
+          <div class="auto-corpo">
+            <div class="auto-nome">Parabéns de aniversário</div>
+            <div class="auto-desc">Mensagem automática no dia do aniversário do aluno.</div>
+            <div class="auto-meta">
+              <span><i class="bi bi-clock"></i> Diário</span>
+              <span>·</span>
+              <span>{% if _ult_an %}Último envio: {{ _ult_an.criado_em.strftime('%d/%m, %Hh%M') }} · {{ _ult_an.total }} aluno{{ 's' if _ult_an.total != 1 }}{% else %}Nenhum envio ainda{% endif %}</span>
+            </div>
+          </div>
+          <a class="auto-edit" href="{{ url_for('academia.whatsapp_mensagens', academia_id=academia_id) }}">Editar mensagem</a>
         </div>
-        <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-check-lg me-1"></i> Salvar preferências</button>
+
+        <div class="rodape-auto" style="border-top:1px solid var(--line);">
+          <span class="auto-desc" id="prefMsg" style="margin:0;">Ligue ou desligue e salve as preferências.</span>
+          <button type="submit" class="wa-btn wa-btn--dark"><i class="bi bi-check-lg"></i> Salvar preferências</button>
+        </div>
       </form>
     </div>
-  </div>
 
-  <!-- Teste -->
-  <div class="card border-0 shadow-sm">
-    <div class="card-body">
-      <h6 class="fw-bold mb-3"><i class="bi bi-send me-1"></i> Enviar mensagem de teste</h6>
-      <div class="input-group" style="max-width:420px;">
-        <input type="text" class="form-control" id="telTeste" placeholder="(81) 99999-9999">
-        <button class="btn btn-outline-success" id="btnTeste" type="button"><i class="bi bi-send me-1"></i> Enviar teste</button>
+    {# direita: teste + últimos envios #}
+    <div>
+      <div class="card2" style="margin-bottom:18px;">
+        <div class="sec-topo"><span class="lbl">Mensagem de teste</span></div>
+        <div style="padding:18px 22px;">
+          <p class="auto-desc" style="margin-top:0;">Envia o modelo escolhido para um número, sem registrar no histórico do aluno.</p>
+          <div class="lbl" style="margin-bottom:6px;">Número</div>
+          <input type="text" class="fld" id="telTeste" placeholder="(81) 99999-9999" style="margin-bottom:14px;">
+          <div class="lbl" style="margin-bottom:6px;">Modelo</div>
+          <select class="fld" id="modeloTeste" style="margin-bottom:16px;">
+            <option value="">Mensagem de teste padrão</option>
+            {% for m in modelos or [] %}
+            <option value="{{ m.tipo }}">{{ m.label }}{{ '' if m.ativo else ' (desativado)' }}</option>
+            {% endfor %}
+          </select>
+          <button class="wa-btn wa-btn--red" id="btnTeste" type="button" style="width:100%; justify-content:center;">
+            <i class="bi bi-send"></i> Enviar teste
+          </button>
+          <div class="auto-desc mt-2" id="testeMsg" style="margin-bottom:0;"></div>
+        </div>
       </div>
-      <div class="small mt-2" id="testeMsg"></div>
+
+      <div class="card2">
+        <div class="sec-topo">
+          <span class="lbl">Últimos envios</span>
+          <span class="lbl" style="color:var(--muted2);">recentes</span>
+        </div>
+        {% if ultimos_envios %}
+          {% for e in ultimos_envios %}
+          <div class="env">
+            <div>
+              <div class="env-nome">{{ e.label }}</div>
+              <div class="env-sub">{{ e.criado_em.strftime('%d/%m, %Hh%M') }} · {{ e.total }} {{ 'aluno' if e.total == 1 else 'alunos' }}</div>
+            </div>
+            {% if e.falhas and e.entregues %}
+              <span class="env-st bad">{{ e.falhas }} falha{{ 's' if e.falhas != 1 }}</span>
+            {% elif e.falhas %}
+              <span class="env-st bad"><span class="dot off" style="background:var(--primary);"></span>{{ e.falhas }} falha{{ 's' if e.falhas != 1 }}</span>
+            {% else %}
+              <span class="env-st ok"><span class="dot on"></span>Entregue</span>
+            {% endif %}
+          </div>
+          {% endfor %}
+        {% else %}
+          <div style="padding:22px; color:var(--muted); font-size:.88rem; text-align:center;">
+            Nenhum envio registrado ainda. Assim que os lembretes, avisos ou parabéns forem disparados, eles aparecem aqui.
+          </div>
+        {% endif %}
+      </div>
     </div>
+
   </div>
 </div>
+{% endblock %}
 
+{% block extra_js %}
 <script>
 (function(){
-  var CSRF = "{{ csrf_token() }}";
-  function post(url, body){ return fetch(url, {method:'POST', headers:{'X-CSRFToken':CSRF}, body: body}); }
+  var meta = document.querySelector('meta[name="csrf-token"]');
+  var CSRF = meta ? meta.getAttribute('content') : '';
+  function post(url, body){ return fetch(url, {method:'POST', headers:{'X-CSRFToken':CSRF}, body: body, credentials:'same-origin'}); }
 
   var btnConectar = document.getElementById('btnConectar');
   var boxQr = document.getElementById('boxQr');
@@ -96,11 +300,11 @@
   function mostrarConectado(num){
     document.getElementById('estadoConectado').classList.remove('d-none');
     document.getElementById('estadoDesconectado').classList.add('d-none');
-    if(num) document.getElementById('numConectado').textContent = num;
+    if(num){ var el = document.getElementById('numConectado'); if(el) el.textContent = num; }
   }
 
   function pollQr(){
-    fetch("{{ url_for('academia.whatsapp_qr', academia_id=academia_id) }}")
+    fetch("{{ url_for('academia.whatsapp_qr', academia_id=academia_id) }}", {credentials:'same-origin'})
       .then(function(r){return r.json();})
       .then(function(d){
         if(d.status === 'open'){ if(pollTimer) clearInterval(pollTimer); mostrarConectado(d.number); qrMsg.textContent='Conectado!'; setTimeout(function(){location.reload();}, 800); return; }
@@ -116,15 +320,18 @@
     post("{{ url_for('academia.whatsapp_conectar', academia_id=academia_id) }}")
       .then(function(r){return r.json();})
       .then(function(d){
-        if(d.status==='open'){ mostrarConectado(d.number); return; }
+        if(d.status==='open'){ mostrarConectado(d.number); location.reload(); return; }
         if(d.qr){ imgQr.src=d.qr; qrMsg.textContent='Escaneie o QR Code com o WhatsApp da academia.'; }
         if(pollTimer) clearInterval(pollTimer);
         pollTimer = setInterval(pollQr, 2500);
         setTimeout(pollQr, 1200);
       })
       .catch(function(){ qrMsg.textContent='Erro ao conectar.'; })
-      .finally(function(){ btnConectar.disabled=false; btnConectar.innerHTML='<i class="bi bi-qr-code me-1"></i> Conectar WhatsApp'; });
+      .finally(function(){ btnConectar.disabled=false; btnConectar.innerHTML='<i class="bi bi-qr-code"></i> Conectar WhatsApp'; });
   });
+
+  var btnTestarConexao = document.getElementById('btnTestarConexao');
+  if(btnTestarConexao) btnTestarConexao.addEventListener('click', function(){ location.reload(); });
 
   var btnDesc = document.getElementById('btnDesconectar');
   if(btnDesc) btnDesc.addEventListener('click', function(){
@@ -136,16 +343,17 @@
   var btnTeste = document.getElementById('btnTeste');
   if(btnTeste) btnTeste.addEventListener('click', function(){
     var tel = document.getElementById('telTeste').value.trim();
+    var modelo = document.getElementById('modeloTeste').value;
     var msg = document.getElementById('testeMsg');
-    if(!tel){ msg.innerHTML='<span class="text-danger">Informe um telefone.</span>'; return; }
-    msg.innerHTML='<span class="text-muted">Enviando…</span>';
-    var fd = new FormData(); fd.append('telefone', tel);
+    if(!tel){ msg.innerHTML='<span style="color:#c1121f;">Informe um telefone.</span>'; return; }
+    msg.innerHTML='<span style="color:#8a8681;">Enviando…</span>';
+    var fd = new FormData(); fd.append('telefone', tel); if(modelo) fd.append('modelo', modelo);
     post("{{ url_for('academia.whatsapp_teste', academia_id=academia_id) }}", fd)
       .then(function(r){return r.json();})
       .then(function(d){
-        if(d.ok) msg.innerHTML='<span class="text-success"><i class="bi bi-check-circle"></i> Mensagem enfileirada! Confira o WhatsApp de destino.</span>';
-        else msg.innerHTML='<span class="text-danger"><i class="bi bi-x-circle"></i> '+((d.info&&d.info.erro)||d.erro||'Falha. A academia está conectada?')+'</span>';
-      }).catch(function(){ msg.innerHTML='<span class="text-danger">Erro de rede.</span>'; });
+        if(d.ok) msg.innerHTML='<span style="color:#15803d;"><i class="bi bi-check-circle"></i> Mensagem enfileirada! Confira o WhatsApp de destino.</span>';
+        else msg.innerHTML='<span style="color:#c1121f;"><i class="bi bi-x-circle"></i> '+((d.info&&d.info.erro)||d.erro||'Falha. A academia está conectada?')+'</span>';
+      }).catch(function(){ msg.innerHTML='<span style="color:#c1121f;">Erro de rede.</span>'; });
   });
 })();
 </script>

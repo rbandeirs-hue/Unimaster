@@ -14,6 +14,13 @@ bp_turmas = Blueprint("turmas", __name__)
 # 🔹 Academias disponíveis conforme o perfil
 # ======================================================
 def carregar_academias_do_usuario(cursor):
+    """Academias para o seletor da tela — só a da sessão quando há escolha."""
+    from blueprints.academia.routes import filtrar_academias_da_sessao
+
+    return filtrar_academias_da_sessao(_carregar_academias_do_usuario(cursor))
+
+
+def _carregar_academias_do_usuario(cursor):
     if current_user.has_role("admin"):
         cursor.execute("SELECT id, nome FROM academias ORDER BY nome")
     elif current_user.has_role("gestor_federacao"):
@@ -240,8 +247,23 @@ def lista_turmas():
                 "SELECT id, nome FROM academias WHERE id IN (%s) ORDER BY nome" % ",".join(["%s"] * len(ids_acessiveis)),
                 tuple(ids_acessiveis),
             )
-            academias = cursor.fetchall()
+            from blueprints.academia.routes import filtrar_academias_da_sessao
+
+            academias = filtrar_academias_da_sessao(cursor.fetchall())
             academia_id_sel = academia_filtro or ids_acessiveis[0]
+        except Exception:
+            pass
+
+    # A tela usa o shell da academia (base_academia.html), que precisa saber em
+    # qual academia o usuário está para montar a lateral. Quando há uma só
+    # academia acessível, `academia_id_sel` fica vazio — aqui ele é resolvido
+    # sem mexer na regra do seletor acima.
+    academia_ctx_id = academia_id_sel or (ids_acessiveis[0] if len(ids_acessiveis) == 1 else None)
+    academia = None
+    if academia_ctx_id:
+        try:
+            cursor.execute("SELECT id, nome FROM academias WHERE id = %s", (academia_ctx_id,))
+            academia = cursor.fetchone()
         except Exception:
             pass
 
@@ -253,7 +275,8 @@ def lista_turmas():
                            busca=busca,
                            perfil=perfil_usuario,
                            academias=academias or [],
-                           academia_id=academia_id_sel)
+                           academia=academia,
+                           academia_id=academia_ctx_id)
 
 
 # ======================================================

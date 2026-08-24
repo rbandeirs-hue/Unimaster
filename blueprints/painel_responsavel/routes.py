@@ -13,7 +13,7 @@ from functools import wraps
 from blueprints.aluno.painel import (
     _turmas_do_aluno, _buscar_alunos_turma, _calcular_meses_filtro,
     _status_efetivo_painel, _calcular_valor_com_juros_multas,
-    _calcular_graduacao_prevista,
+    _calcular_graduacao_prevista, anexar_pix_academia,
 )
 
 bp_painel_responsavel = Blueprint(
@@ -382,6 +382,16 @@ def minhas_mensalidades(aluno):
             ma["valor_desconto"] = 0
             ma["valor_final"] = valor_display
             ma["tem_desconto"] = False
+        # Já paga: mostra o que entrou de fato. O cálculo de encargos para de
+        # rodar quando a mensalidade vira 'pago', então recalcular agora
+        # devolveria a mensalidade sem os juros que o aluno realmente pagou.
+        _pago = float(ma.get("valor_pago") or 0)
+        if _pago > 0 and (ma.get("status") == "pago" or ma.get("status_pagamento") == "pago"):
+            ma["acrescimo_pago"] = round(max(_pago - float(ma.get("valor_final") or 0), 0), 2)
+            ma["valor_final"] = _pago
+            ma["valor_display"] = _pago
+        else:
+            ma["acrescimo_pago"] = 0.0
         mensalidades.append(ma)
 
     avulsas = []
@@ -410,6 +420,11 @@ def minhas_mensalidades(aluno):
 
     cur.close()
     conn.close()
+
+    # PIX da academia por cobrança — alternativa ao gateway, com o valor já
+    # embutido em cada código.
+    anexar_pix_academia(mensalidades, id_academia)
+    anexar_pix_academia(avulsas, id_academia)
 
     return render_template(
         "painel_aluno/minhas_mensalidades.html",

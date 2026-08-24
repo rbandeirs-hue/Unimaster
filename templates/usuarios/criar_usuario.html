@@ -1,52 +1,35 @@
-{% extends "base.html" %}
-{% block title %}Cadastrar Novo Usuário{% endblock %}
+{% extends "base_academia.html" %}
+{% set menu_ativo = 'usuarios' %}
+{% block title %}Cadastrar novo usuário{% endblock %}
+
+{% block pagina_titulo %}Novo usuário{% endblock %}
+{% block pagina_subtitulo %}Cadastre um usuário e defina o acesso dele ao sistema.{% endblock %}
+
+{% block pagina_acoes %}
+  {% set back_url = back_url or get_back_url_default() %}
+  <a href="{{ back_url }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Voltar</a>
+{% endblock %}
 
 {% block content %}
 <style>
+  /* A tela tinha paleta própria (azul Bootstrap, raio 16px). Os tokens agora
+     vêm do design system; abaixo fica só o que é específico deste formulário. */
   :root {
-    --c-bg: #f5f7fb;
-    --c-surface: #ffffff;
-    --c-border: #e5e9f2;
-    --c-text: #1f2937;
-    --c-muted: #6b7280;
-    --c-primary: #0d6efd;
-    --c-primary-soft: #e8f1ff;
+    --c-surface: #fff;
+    --c-border: var(--sh-line);
+    --c-text: var(--sh-ink);
+    --c-muted: var(--sh-ink-soft);
+    --c-primary: var(--sh-ink);
+    --c-primary-soft: #f4f2ee;
   }
-  .form-page { max-width: 920px; margin: 0 auto; }
-
-  .form-page-header {
-    background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
-    border: 1px solid var(--c-border);
-    border-radius: 16px;
-    padding: 1.4rem 1.6rem;
-    margin-bottom: 1.25rem;
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    box-shadow: 0 1px 3px rgba(15,23,42,.04);
-  }
-  .form-page-header .ic {
-    width: 52px; height: 52px;
-    background: var(--c-primary-soft); color: var(--c-primary);
-    border-radius: 12px;
-    display: inline-flex; align-items: center; justify-content: center;
-    font-size: 1.4rem;
-    flex-shrink: 0;
-  }
-  .form-page-header h1 {
-    font-size: 1.4rem; font-weight: 700; margin: 0; color: var(--c-text);
-  }
-  .form-page-header .subtitle {
-    font-size: .9rem; color: var(--c-muted); margin: .15rem 0 0 0;
-  }
+  .form-page { max-width: 920px; }
 
   .section-card {
     background: var(--c-surface);
     border: 1px solid var(--c-border);
-    border-radius: 16px;
+    border-radius: var(--u-radius);
     padding: 1.35rem 1.5rem;
     margin-bottom: 1.1rem;
-    box-shadow: 0 1px 3px rgba(15,23,42,.04);
   }
   .section-title {
     display: flex; align-items: center; gap: .55rem;
@@ -66,7 +49,7 @@
 
   .form-label { color: #374151; font-weight: 600; font-size: .88rem; }
   .form-control, .form-select {
-    border-radius: 10px;
+    border-radius: var(--u-radius-sm);
     border: 1px solid var(--c-border);
     padding: .6rem .85rem;
     background: #f9fafb;
@@ -181,17 +164,7 @@
   }
 </style>
 
-<div class="container my-4 my-md-5 form-page">
-
-  <div class="form-page-header">
-    <div class="ic"><i class="bi bi-person-plus-fill"></i></div>
-    <div class="flex-grow-1">
-      <h1>Novo Usuário</h1>
-      <p class="subtitle">Cadastre um novo usuário e defina o acesso ao sistema.</p>
-    </div>
-    {% set back_url = back_url or get_back_url_default() %}
-    {% include 'components/botao_voltar.html' %}
-  </div>
+<div class="form-page">
 
   <form method="POST" action="{{ url_for('usuarios.cadastro_usuario') }}" class="needs-validation" novalidate>
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -286,9 +259,9 @@
 
     <div class="form-actions">
       {% set back_url = back_url or get_back_url_default() %}
-      {% include 'components/botao_voltar.html' %}
-      <button type="submit" class="btn btn-primary">
-        <i class="bi bi-save me-1"></i> Cadastrar usuário
+      <a href="{{ back_url }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Voltar</a>
+      <button type="submit" class="sh__btn sh__btn--forte">
+        <i class="bi bi-save"></i> Cadastrar usuário
       </button>
     </div>
   </form>

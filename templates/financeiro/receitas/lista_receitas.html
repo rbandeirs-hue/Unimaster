@@ -1,96 +1,138 @@
-{% extends "base.html" %}
+{% extends "financeiro/painel/_base.html" %}
+{% set fin_aba = 'receitas' %}
 {% block title %}Receitas{% endblock %}
-{% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/financeiro/responsive.css') }}?v=2">
+
+{% block pagina_titulo %}Receitas{% endblock %}
+{% block pagina_subtitulo %}
+  Tudo que entrou no caixa — mensalidades, matrículas, cobranças avulsas e lançamentos manuais.
 {% endblock %}
-{% block content %}
-<div class="container mt-4">
-    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
-        <div>
-            {% set back_url = url_for('financeiro.dashboard', academia_id=academia_id) if academia_id else url_for('financeiro.dashboard') %}
-            {% include 'components/botao_voltar.html' %}
-        </div>
-        <a href="{{ url_for('financeiro.cadastrar_receita', academia_id=academia_id) if academia_id else url_for('financeiro.cadastrar_receita') }}" class="btn btn-success">
-            <i class="bi bi-plus-circle me-1"></i> Nova Receita
-        </a>
-    </div>
 
-    <div class="card border-0 shadow-sm mb-3">
-        <div class="card-body py-3">
-            <form method="GET" class="row g-2 align-items-end">
-                {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
-                <div class="col-auto">
-                    <label class="form-label small mb-0">Mês</label>
-                    <select name="mes" class="form-select form-select-sm" style="width: auto;">
-                        {% for m in range(1, 13) %}
-                        <option value="{{ m }}" {% if mes == m %}selected{% endif %}>{{ "%02d"|format(m) }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-auto">
-                    <label class="form-label small mb-0">Ano</label>
-                    <select name="ano" class="form-select form-select-sm" style="width: auto;">
-                        {% for a in range(ano_atual, ano_atual - 5, -1) %}
-                        <option value="{{ a }}" {% if ano == a %}selected{% endif %}>{{ a }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-auto">
-                    <button type="submit" class="btn btn-outline-primary btn-sm">Filtrar</button>
-                </div>
-            </form>
-        </div>
-    </div>
+{% block pagina_acoes %}
+  <a class="sh__btn sh__btn--forte"
+     href="{{ url_for('financeiro.cadastrar_receita', academia_id=academia_id) if academia_id else url_for('financeiro.cadastrar_receita') }}">
+    <i class="bi bi-plus-lg"></i> Nova receita
+  </a>
+{% endblock %}
 
-    <h2 class="h4 fw-bold mb-2">Receitas — {{ "%02d/%s"|format(mes, ano) }}</h2>
-    <p class="text-muted small mb-3">Total do mês: <strong class="text-success">R$ {{ "%.2f"|format(total_mes or 0) }}</strong></p>
+{% block fin_css %}
+<style>
+  .lin-rec { grid-template-columns: 110px minmax(0, 2fr) minmax(0, 1fr) 130px 190px; }
+  @media (max-width: 900px) {
+    .lin-rec { grid-template-columns: 110px minmax(0, 2fr) 130px 190px; }
+    .col-cat { display: none; }
+  }
+  @media (max-width: 620px) {
+    .lin-rec { grid-template-columns: minmax(0, 1fr) 130px; }
+    .col-data, .col-acoes { display: none; }
+  }
+</style>
+{% endblock %}
 
-    <div class="card border-0 shadow-sm">
-        <div class="card-body">
-            {% if receitas %}
-            <div class="table-responsive">
-                <table class="table table-hover">
-                    <thead>
-                        <tr>
-                            <th>Data</th>
-                            <th>Descrição</th>
-                            <th class="d-none d-md-table-cell">Categoria</th>
-                            <th class="text-end">Valor</th>
-                            <th class="text-end">Ações</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for r in receitas %}
-                        <tr>
-                            <td>{{ r.data|data_br }}</td>
-                            <td>{{ r.descricao }}</td>
-                            <td class="d-none d-md-table-cell text-muted small">{{ r.categoria or '-' }}</td>
-                            <td class="text-end text-success fw-semibold">R$ {{ "%.2f"|format(r.valor or 0) }}</td>
-                            <td class="text-end">
-                                {% if (r.id_mensalidade_aluno and r.id_mensalidade_aluno != 0 and r.id_mensalidade_aluno != '0') or (r.id_cobranca_avulsa and r.id_cobranca_avulsa != 0 and r.id_cobranca_avulsa != '0') %}
-                                <span class="badge bg-info text-white" title="Receita gerada automaticamente a partir de pagamento confirmado — não pode ser editada ou excluída">
-                                    <i class="bi bi-lock-fill"></i> Gerada automaticamente
-                                </span>
-                                {% else %}
-                                <a href="{{ url_for('financeiro.editar_receita', receita_id=r.id) }}{% if academia_id %}?academia_id={{ academia_id }}{% endif %}" class="btn btn-sm btn-outline-primary">Editar</a>
-                                <form method="POST" action="{{ url_for('financeiro.excluir_receita', receita_id=r.id) }}" class="d-inline" onsubmit="return confirm('Excluir esta receita?');">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                    {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
-                                    <input type="hidden" name="mes" value="{{ mes }}">
-                                    <input type="hidden" name="ano" value="{{ ano }}">
-                                    <button type="submit" class="btn btn-sm btn-outline-danger">Excluir</button>
-                                </form>
-                                {% endif %}
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-            {% else %}
-            <p class="text-muted mb-0">Nenhuma receita neste período. <a href="{{ url_for('financeiro.cadastrar_receita') }}">Cadastrar receita</a></p>
-            {% endif %}
-        </div>
-    </div>
+{% block fin_conteudo %}
+<div class="sh__faixa">
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Total do mês</span>
+    <span class="sh__faixa-valor fin-valor fin-valor--entrada">
+      R$ {{ '%.2f'|format(total_mes or 0)|replace('.', ',') }}
+    </span>
+    <span class="lst-sub">{{ '%02d'|format(mes) }}/{{ ano }}</span>
+  </div>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Lançamentos</span>
+    <span class="sh__faixa-valor">{{ receitas|length }}</span>
+    <span class="lst-sub">No período escolhido</span>
+  </div>
 </div>
+
+<form method="GET" class="lst-filtros">
+  {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
+  <label class="lst-campo lst-campo--curto">
+    <span class="lst-campo__rotulo">Mês</span>
+    <select name="mes">
+      {% for m in range(1, 13) %}
+      <option value="{{ m }}" {% if mes == m %}selected{% endif %}>
+        {{ ['','Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho',
+            'Agosto','Setembro','Outubro','Novembro','Dezembro'][m] }}
+      </option>
+      {% endfor %}
+    </select>
+  </label>
+  <label class="lst-campo lst-campo--curto">
+    <span class="lst-campo__rotulo">Ano</span>
+    <select name="ano">
+      {% for a in range(ano_atual, ano_atual - 5, -1) %}
+      <option value="{{ a }}" {% if ano == a %}selected{% endif %}>{{ a }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <div class="lst-filtros__acoes">
+    <button type="submit" class="sh__btn sh__btn--forte">Filtrar</button>
+  </div>
+</form>
+
+<section class="lst-quadro">
+  <header class="lst-quadro__topo">
+    <h2 class="lst-quadro__titulo">Receitas de {{ '%02d'|format(mes) }}/{{ ano }}</h2>
+    <span class="lst-quadro__meta">{{ receitas|length }} lançamento{{ 's' if receitas|length != 1 }}</span>
+  </header>
+
+  <div class="lst-rolagem">
+    <div class="lst-largura" style="--lst-min:560px">
+      <div class="lst-linha lin-rec lst-cab">
+        <div class="col-data">Data</div>
+        <div>Descrição</div>
+        <div class="col-cat">Categoria</div>
+        <div class="lst-num">Valor</div>
+        <div class="lst-fim col-acoes">Ações</div>
+      </div>
+
+      {% for r in receitas %}
+      {# Receita vinda de pagamento confirmado é histórico: não se edita nem
+         se exclui por aqui, senão o caixa deixa de bater com as cobranças. #}
+      {% set automatica = (r.id_mensalidade_aluno and r.id_mensalidade_aluno not in (0, '0'))
+                       or (r.id_cobranca_avulsa and r.id_cobranca_avulsa not in (0, '0')) %}
+      <div class="lst-linha lin-rec lst-item">
+        <div class="col-data">{{ r.data|data_br }}</div>
+        <div class="lst-corta">
+          <span class="lst-nome">{{ r.descricao }}</span>
+          <span class="lst-sub">{{ r.categoria or 'Sem categoria' }}</span>
+        </div>
+        <div class="col-cat lst-corta">{{ r.categoria or '—' }}</div>
+        <div class="lst-num fin-valor fin-valor--entrada">
+          R$ {{ '%.2f'|format(r.valor or 0)|replace('.', ',') }}
+        </div>
+        <div class="lst-fim col-acoes">
+          {% if automatica %}
+          <span class="lst-tag" title="Gerada a partir de um pagamento confirmado">
+            <i class="bi bi-lock"></i> Automática
+          </span>
+          {% else %}
+          <div class="lst-acoes">
+            <a class="lst-acao" title="Editar" aria-label="Editar receita"
+               href="{{ url_for('financeiro.editar_receita', receita_id=r.id) }}{% if academia_id %}?academia_id={{ academia_id }}{% endif %}">
+              <i class="bi bi-pencil"></i>
+            </a>
+            <form method="POST" action="{{ url_for('financeiro.excluir_receita', receita_id=r.id) }}"
+                  onsubmit="return confirm('Excluir esta receita?');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
+              <input type="hidden" name="mes" value="{{ mes }}">
+              <input type="hidden" name="ano" value="{{ ano }}">
+              <button type="submit" class="lst-acao lst-acao--perigo" title="Excluir" aria-label="Excluir receita">
+                <i class="bi bi-trash"></i>
+              </button>
+            </form>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+      {% else %}
+      <p class="lst-vazio">
+        Nenhuma receita neste período.
+        <a href="{{ url_for('financeiro.cadastrar_receita', academia_id=academia_id) if academia_id else url_for('financeiro.cadastrar_receita') }}">Cadastrar uma</a>.
+      </p>
+      {% endfor %}
+    </div>
+  </div>
+</section>
 {% endblock %}

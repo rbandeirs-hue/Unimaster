@@ -1,0 +1,150 @@
+{# Modal "trocar pacote": muda o plano de mensalidade do aluno. O pacote novo
+   sempre vira o padrão (é o que a geração mensal usa); o que se escolhe é
+   quanto do que já foi lançado acompanha. A prévia vem do servidor
+   (financeiro.previa_trocar_pacote) para a tela e a gravação não divergirem.
+   Usado na ficha do aluno e na lista de mensalidades filtrada por aluno. #}
+{% macro modal_trocar_pacote(aluno_id, aluno_nome, planos, pacote_atual_id, pacote_atual_nome, voltar=None) %}
+<div class="modal fade" id="modalTrocarPacote{{ aluno_id }}" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <form class="modal-content" method="POST" id="formTrocarPacote{{ aluno_id }}"
+          action="{{ url_for('financeiro.trocar_pacote_aluno', aluno_id=aluno_id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="voltar" value="{{ voltar or request.full_path }}">
+      <div class="modal-header">
+        <h5 class="modal-title">Trocar pacote</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-3 text-muted" style="font-size:.9rem">
+          {% if pacote_atual_nome %}
+            <strong>{{ aluno_nome }}</strong> está hoje no pacote
+            <strong>{{ pacote_atual_nome }}</strong>.
+          {% else %}
+            <strong>{{ aluno_nome }}</strong> ainda não tem pacote definido.
+          {% endif %}
+        </p>
+        <div class="mb-3">
+          <label class="form-label fw-semibold" for="tpPlano{{ aluno_id }}">Novo pacote</label>
+          <select class="form-select" id="tpPlano{{ aluno_id }}" name="plano_id" required>
+            {% for pl in planos %}
+            <option value="{{ pl.id }}" {% if pl.id == pacote_atual_id %}selected{% endif %}>
+              {{ pl.nome }} — R$ {{ '%.2f'|format(pl.valor|float)|replace('.', ',') }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="mb-3">
+          <span class="form-label fw-semibold d-block mb-1">Aplicar a troca em:</span>
+          <div class="form-check">
+            <input class="form-check-input js-tp-escopo" type="radio" name="escopo" value="avencer"
+                   id="tpEscAvencer{{ aluno_id }}" checked>
+            <label class="form-check-label" for="tpEscAvencer{{ aluno_id }}">
+              Cobranças a vencer e nas próximas
+              <span class="d-block text-muted" style="font-size:.85rem">
+                Reprecifica o que está em aberto e ainda não venceu. As atrasadas ficam
+                no pacote antigo — são meses já treinados no plano anterior.
+              </span>
+            </label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input js-tp-escopo" type="radio" name="escopo" value="proximos"
+                   id="tpEscProx{{ aluno_id }}">
+            <label class="form-check-label" for="tpEscProx{{ aluno_id }}">
+              Só nas próximas
+              <span class="d-block text-muted" style="font-size:.85rem">
+                Nada do que já foi lançado muda; o pacote novo entra na geração do mês seguinte.
+              </span>
+            </label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input js-tp-escopo" type="radio" name="escopo" value="todas"
+                   id="tpEscTodas{{ aluno_id }}">
+            <label class="form-check-label" for="tpEscTodas{{ aluno_id }}">
+              Em todas as cobranças em aberto
+              <span class="d-block text-muted" style="font-size:.85rem">
+                Inclui as atrasadas: reescreve o preço de meses já consumidos. Use só
+                quando a troca foi combinada retroativamente.
+              </span>
+            </label>
+          </div>
+        </div>
+        <div class="alert alert-light border mb-0 py-2" id="tpPrevia{{ aluno_id }}" style="font-size:.88rem">
+          Escolha o pacote para ver o resumo.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Fechar</button>
+        <button type="submit" class="btn btn-dark">Trocar pacote</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  var modal = document.getElementById('modalTrocarPacote{{ aluno_id }}');
+  if (!modal) return;
+  var plano = document.getElementById('tpPlano{{ aluno_id }}');
+  var caixa = document.getElementById('tpPrevia{{ aluno_id }}');
+  var urlPrevia = {{ url_for('financeiro.previa_trocar_pacote', aluno_id=aluno_id)|tojson }};
+  var pedido = 0;
+
+  function reais(v) { return 'R$ ' + (Number(v) || 0).toFixed(2).replace('.', ','); }
+  function escapar(t) {
+    var d = document.createElement('div');
+    d.textContent = t == null ? '' : String(t);
+    return d.innerHTML;
+  }
+  function escopoAtual() {
+    var e = modal.querySelector('.js-tp-escopo:checked');
+    return (e && e.value) || 'avencer';
+  }
+
+  function desenhar(d) {
+    var l = [];
+    if (d.mesmo_pacote) {
+      l.push('<div>Este já é o pacote do aluno. Salvar só confirma o padrão para as próximas.</div>');
+    } else {
+      l.push('<div>Pacote: <strong>' + escapar(d.pacote_atual.nome || '—') +
+             '</strong> → <strong>' + escapar(d.pacote_novo.nome) + '</strong> (' + reais(d.pacote_novo.valor) + ')</div>');
+    }
+    (d.cobrancas || []).forEach(function (c) {
+      l.push('<div class="text-muted">Venc. ' + c.vencimento + (c.vencida ? ' (atrasada)' : '') + ': ' +
+             reais(c.valor_antigo) + ' → <strong>' + reais(c.valor_novo) + '</strong>' +
+             (c.ajuste ? ' · inclui ' + reais(c.ajuste) + ' de ' + c.ajuste_dias + ' dia(s) proporcionais' : '') +
+             '</div>');
+    });
+    if (!d.cobrancas || !d.cobrancas.length) {
+      l.push('<div class="text-muted">Nenhuma cobrança já lançada será alterada.</div>');
+    }
+    if (d.atrasadas_fora) {
+      l.push('<div class="mt-1 text-muted">' + d.atrasadas_fora +
+             ' cobrança(s) atrasada(s) ficam no pacote antigo.</div>');
+    }
+    l.push('<div class="mt-1">As próximas mensalidades já nascem em ' + escapar(d.pacote_novo.nome) + '.</div>');
+    caixa.innerHTML = l.join('');
+  }
+
+  function atualizar() {
+    if (!plano.value) { caixa.textContent = 'Escolha o pacote.'; return; }
+    var meu = ++pedido;
+    caixa.textContent = 'Calculando…';
+    fetch(urlPrevia + '?plano_id=' + encodeURIComponent(plano.value) + '&escopo=' + escopoAtual(),
+          { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (meu !== pedido) return;          // resposta atrasada de uma escolha já trocada
+        if (!d.ok) { caixa.textContent = d.msg || 'Não foi possível calcular.'; return; }
+        desenhar(d);
+      })
+      .catch(function () {
+        if (meu === pedido) caixa.textContent = 'Não foi possível calcular a prévia.';
+      });
+  }
+
+  plano.addEventListener('change', atualizar);
+  modal.querySelectorAll('.js-tp-escopo').forEach(function (r) { r.addEventListener('change', atualizar); });
+  modal.addEventListener('shown.bs.modal', atualizar);
+});
+</script>
+{% endmacro %}

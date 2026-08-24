@@ -216,8 +216,9 @@ def _merge_extras_sessao_registro_chamada(
             continue
         params = [aid, turma_selecionada, turma_selecionada]
         q = """
-            SELECT a.id, a.nome, a.foto, t_origem.Nome AS turma_origem_nome
+            SELECT a.id, a.nome, a.foto, g.faixa AS faixa_aluno, t_origem.Nome AS turma_origem_nome
             FROM alunos a
+                       LEFT JOIN graduacao g ON g.id = a.graduacao_id
             LEFT JOIN turmas t_origem ON t_origem.TurmaID = a.TurmaID
             WHERE a.id = %s
               AND (a.ativo IS NULL OR a.ativo = 1)
@@ -518,10 +519,14 @@ def painel_presenca():
         back_url = url_for("academia.painel_academia", academia_id=academia_id) if academia_id else url_for("academia.painel_academia")
     else:
         back_url = url_for("painel.home")
+    # O shell da academia (base_academia.html) monta a lateral a partir da
+    # academia atual; ela já veio na lista acima, sem consulta extra.
+    academia = next((a for a in academias if a.get("id") == academia_id), None)
     return render_template(
         "presencas/painel_presenca.html",
         academias=academias,
         academia_id=academia_id,
+        academia=academia,
         back_url=back_url,
     )
 
@@ -547,6 +552,14 @@ def _parse_ranking_frequencia_args():
     if tipo_filtro not in ("mes", "ano", "periodo"):
         tipo_filtro = "mes"
     return mes, ano, turma_id, page, per_page, tipo_filtro
+
+
+def _ordem_ranking_pedida(tipo_filtro):
+    """Critério da classificação: o da URL, ou o padrão do tipo de período."""
+    from utils.ranking_frequencia import ORDENS_RANKING, ordem_ranking_padrao
+
+    pedido = (request.args.get("ordenar") or "").strip()
+    return pedido if pedido in ORDENS_RANKING else ordem_ranking_padrao(tipo_filtro)
 
 
 def _parse_intervalo_datas_ranking():
@@ -631,7 +644,12 @@ def _ranking_frequencia_detalhe_query_url(**updates):
 @bp_presencas.route("/presencas/ranking-frequencia", methods=["GET"])
 @login_required
 def ranking_frequencia_pagina():
-    """Pódio por turma com filtros (mês, ano, turma) e paginação entre turmas."""
+    """Ranking de frequência do período (mês, ano ou intervalo), filtrável por turma.
+
+    Academia e professor veem o ranking único, por frequência, no shell novo
+    (`ranking_frequencia.html`). O aluno continua no pódio por turma da tela
+    antiga (`ranking_frequencia_aluno.html`), que roda no layout dele.
+    """
     from urllib.parse import urlencode
 
     from utils.ranking_frequencia import ranking_frequencia_por_turmas
@@ -641,6 +659,7 @@ def ranking_frequencia_pagina():
     modo = session.get("modo_painel") or ""
     destaque_aluno_id = None
     academia_id = None
+    academia = None
     academias = []
     back_url = url_for("painel.home")
 
@@ -649,6 +668,54 @@ def ranking_frequencia_pagina():
         all_ids = [t["TurmaID"] for t in turmas_info if t.get("TurmaID")]
         ids_com_presenca = _turmas_com_presenca_ids(cursor, all_ids, mes_sel, ano_sel, tipo_filtro, di, df)
         return [t for t in turmas_info if t.get("TurmaID") in ids_com_presenca]
+
+    def _opcoes_periodo():
+        """Anos e meses dos seletores, mais o que veio na URL em modo período."""
+        from utils.ranking_frequencia import MES_COMPLETO
+
+        hoje = date.today()
+        return {
+            "ano_min": hoje.year - 8,
+            "ano_max": hoje.year + 1,
+            "anos_opts": list(range(hoje.year - 8, hoje.year + 2)),
+            "meses_opts": [(i, MES_COMPLETO[i].capitalize()) for i in range(1, 13)],
+            "data_inicio_val": (request.args.get("data_inicio") or "").strip()[:10],
+            "data_fim_val": (request.args.get("data_fim") or "").strip()[:10],
+            "mes_atual": hoje.month,
+            "ano_atual": hoje.year,
+        }
+
+    def _render_geral(cur, turmas_query, turmas_info_full, turma_sel_val):
+        """Tela da academia/professor: ranking único do período, por frequência."""
+        from utils.ranking_frequencia import ranking_frequencia_geral
+
+        ordenar = _ordem_ranking_pedida(tipo_filtro)
+        ranking = ranking_frequencia_geral(
+            cur,
+            turmas_query,
+            tipo=tipo_filtro,
+            mes=mes_sel,
+            ano=ano_sel,
+            data_inicio=di,
+            data_fim=df,
+            ordenar=ordenar,
+        )
+        return render_template(
+            "presencas/ranking_frequencia.html",
+            ranking=ranking,
+            ordenar=ordenar,
+            turmas_opcoes=_filtrar_turmas_dd(cur, turmas_info_full),
+            turma_sel=turma_sel_val,
+            tipo_filtro=tipo_filtro,
+            mes_sel=mes_sel,
+            ano_sel=ano_sel,
+            destaque_aluno_id=destaque_aluno_id,
+            academia=academia,
+            academia_id=academia_id,
+            academias=academias or [],
+            back_url=back_url,
+            **_opcoes_periodo(),
+        )
 
     def _render(ranking_slice, total_pages, total_turmas, turmas_dd, turma_sel_val, completo_slice=None):
         from utils.ranking_frequencia import MES_COMPLETO
@@ -692,7 +759,7 @@ def ranking_frequencia_pagina():
             })
 
         return render_template(
-            "presencas/ranking_frequencia.html",
+            "presencas/ranking_frequencia_aluno.html",
             turmas_ranking=turmas_unificadas,
             destaque_aluno_id=destaque_aluno_id,
             academia_id=academia_id,
@@ -792,6 +859,11 @@ def ranking_frequencia_pagina():
         turmas_info_full = _get_turmas_professor(ids_prof, None)
         allowed_turma_ids = {t["TurmaID"] for t in turmas_info_full}
         back_url = url_for("professor.painel_professor")
+        # O ranking é o das turmas do professor; a academia aqui serve só para o
+        # shell montar a lateral e o topo.
+        academia_id, academias = _get_academias_presenca()
+        academias = academias or []
+        academia = next((a for a in academias if a.get("id") == academia_id), None)
 
         turmas_query = list(turmas_info_full)
         turma_sel_val = turma_filtro
@@ -803,20 +875,7 @@ def ranking_frequencia_pagina():
         db = get_db_connection()
         cur = db.cursor(dictionary=True)
         try:
-            from utils.ranking_frequencia import ranking_completo_por_turmas as _rcp
-            full = ranking_frequencia_por_turmas(
-                cur,
-                turmas_query,
-                mes=mes_sel,
-                ano=ano_sel,
-                data_inicio=di,
-                data_fim=df,
-            )
-            completo = _rcp(cur, turmas_query, mes=mes_sel, ano=ano_sel, data_inicio=di, data_fim=df)
-            turmas_dd = _filtrar_turmas_dd(cur, turmas_info_full)
-            slice_, total_pages, total = _paginar_ranking_turmas(full, page, per_page)
-            completo_slice, _, _ = _paginar_ranking_turmas(completo, page, per_page)
-            return _render(slice_, total_pages, total, turmas_dd, turma_sel_val, completo_slice)
+            return _render_geral(cur, turmas_query, turmas_info_full, turma_sel_val)
         finally:
             cur.close()
             db.close()
@@ -837,12 +896,9 @@ def ranking_frequencia_pagina():
     if not academia_id:
         flash("Nenhuma academia disponível para exibir o ranking.", "warning")
         return redirect(url_for("painel.home"))
+    academia = next((a for a in academias if a.get("id") == academia_id), None)
 
-    back_url = (
-        url_for("academia.painel_academia", academia_id=academia_id)
-        if academia_id
-        else url_for("painel.home")
-    )
+    back_url = url_for("presencas.painel_presenca", academia_id=academia_id)
 
     db = get_db_connection()
     cur = db.cursor(dictionary=True)
@@ -861,20 +917,7 @@ def ranking_frequencia_pagina():
         else:
             turma_sel_val = None
 
-        from utils.ranking_frequencia import ranking_completo_por_turmas as _rcp
-        full = ranking_frequencia_por_turmas(
-            cur,
-            turmas_query,
-            mes=mes_sel,
-            ano=ano_sel,
-            data_inicio=di,
-            data_fim=df,
-        )
-        completo = _rcp(cur, turmas_query, mes=mes_sel, ano=ano_sel, data_inicio=di, data_fim=df)
-        turmas_dd = _filtrar_turmas_dd(cur, turmas_info_full)
-        slice_, total_pages, total = _paginar_ranking_turmas(full, page, per_page)
-        completo_slice, _, _ = _paginar_ranking_turmas(completo, page, per_page)
-        return _render(slice_, total_pages, total, turmas_dd, turma_sel_val, completo_slice)
+        return _render_geral(cur, turmas_query, turmas_info_full, turma_sel_val)
     finally:
         cur.close()
         db.close()
@@ -1224,7 +1267,7 @@ def registro_presenca():
                 try:
                     if academia_id:
                         cursor.execute(
-                            """SELECT a.id FROM alunos a
+                            """SELECT a.id FROM alunos a LEFT JOIN graduacao g ON g.id = a.graduacao_id
                                LEFT JOIN aluno_turmas at ON at.aluno_id = a.id AND at.TurmaID = %s
                                WHERE (at.TurmaID IS NOT NULL OR a.TurmaID = %s) AND {_filtro}""".format(
                                    _filtro=filtro_alunos_da_academia(academia_id)[0]),
@@ -1776,8 +1819,9 @@ def registro_presenca():
                 ph_snapshot = ",".join(["%s"] * len(alunos_snapshot_ids))
                 cursor.execute(
                     f"""
-                    SELECT a.id, a.nome, a.foto, a.TurmaID AS turma_origem_id, t_origem.Nome AS turma_origem_nome
+                    SELECT a.id, a.nome, a.foto, g.faixa AS faixa_aluno, a.TurmaID AS turma_origem_id, t_origem.Nome AS turma_origem_nome
                     FROM alunos a
+                       LEFT JOIN graduacao g ON g.id = a.graduacao_id
                     LEFT JOIN turmas t_origem ON t_origem.TurmaID = a.TurmaID
                     WHERE a.id IN ({ph_snapshot})
                     ORDER BY a.nome
@@ -1793,7 +1837,8 @@ def registro_presenca():
                 ids_alunos_turma = set()
             elif academia_id:
                 cursor.execute(
-                    """SELECT a.id, a.nome, a.foto FROM alunos a
+                    """SELECT a.id, a.nome, a.foto, g.faixa AS faixa_aluno FROM alunos a
+                       LEFT JOIN graduacao g ON g.id = a.graduacao_id
                        LEFT JOIN aluno_turmas at ON at.aluno_id = a.id AND at.TurmaID = %s
                        WHERE (at.TurmaID IS NOT NULL OR a.TurmaID = %s) AND a.id_academia = %s
                        ORDER BY a.nome""",
@@ -1810,9 +1855,10 @@ def registro_presenca():
                 try:
                     placeholders = ",".join(["%s"] * len(ids_alunos_turma))
                     cursor.execute(f"""
-                        SELECT a.id, a.nome, a.foto, s.id AS solicitacao_id, ac_dest.nome AS academia_destino_nome, 
+                        SELECT a.id, a.nome, a.foto, g.faixa AS faixa_aluno, s.id AS solicitacao_id, ac_dest.nome AS academia_destino_nome, 
                                s.turma_id AS turma_destino_id, s.academia_destino_id
                         FROM alunos a
+                       LEFT JOIN graduacao g ON g.id = a.graduacao_id
                         INNER JOIN solicitacoes_aprovacao s ON s.aluno_id = a.id
                         INNER JOIN academias ac_dest ON ac_dest.id = s.academia_destino_id
                         WHERE a.id IN ({placeholders}) AND s.data_visita = %s AND s.status = 'aprovado_destino' 
@@ -1851,8 +1897,9 @@ def registro_presenca():
                     # Se há alunos da turma, excluir da busca de alunos em visita
                     placeholders = ",".join(["%s"] * len(ids_alunos_turma))
                     cursor.execute(f"""
-                        SELECT a.id, a.nome, a.foto, s.id AS solicitacao_id, ac_orig.nome AS academia_origem_nome
+                        SELECT a.id, a.nome, a.foto, g.faixa AS faixa_aluno, s.id AS solicitacao_id, ac_orig.nome AS academia_origem_nome
                         FROM alunos a
+                       LEFT JOIN graduacao g ON g.id = a.graduacao_id
                         INNER JOIN solicitacoes_aprovacao s ON s.aluno_id = a.id
                         INNER JOIN academias ac_orig ON ac_orig.id = s.academia_origem_id
                         WHERE s.turma_id = %s AND s.data_visita = %s AND s.academia_destino_id = %s
@@ -1863,8 +1910,9 @@ def registro_presenca():
                 else:
                     # Se não há alunos da turma, buscar todos os alunos em visita
                     cursor.execute("""
-                        SELECT a.id, a.nome, a.foto, s.id AS solicitacao_id, ac_orig.nome AS academia_origem_nome
+                        SELECT a.id, a.nome, a.foto, g.faixa AS faixa_aluno, s.id AS solicitacao_id, ac_orig.nome AS academia_origem_nome
                         FROM alunos a
+                       LEFT JOIN graduacao g ON g.id = a.graduacao_id
                         INNER JOIN solicitacoes_aprovacao s ON s.aluno_id = a.id
                         INNER JOIN academias ac_orig ON ac_orig.id = s.academia_origem_id
                         WHERE s.turma_id = %s AND s.data_visita = %s AND s.academia_destino_id = %s
@@ -1948,8 +1996,9 @@ def registro_presenca():
             if busca_aluno_nome:
                 params_busca = [f"%{busca_aluno_nome}%", turma_selecionada, turma_selecionada]
                 query_busca = """
-                    SELECT a.id, a.nome, a.foto, t_origem.Nome AS turma_origem_nome
+                    SELECT a.id, a.nome, a.foto, g.faixa AS faixa_aluno, t_origem.Nome AS turma_origem_nome
                     FROM alunos a
+                       LEFT JOIN graduacao g ON g.id = a.graduacao_id
                     LEFT JOIN turmas t_origem ON t_origem.TurmaID = a.TurmaID
                     WHERE a.nome LIKE %s
                       AND (a.ativo IS NULL OR a.ativo = 1)
@@ -2654,10 +2703,42 @@ def ata_presenca():
     except (ValueError, TypeError, IndexError):
         pass
 
+    # Números do período e rótulo do dia da semana, usados no topo da tela e nas
+    # réguas que separam um dia do outro.
+    resumo = {"aulas": 0, "presencas": 0, "faltas": 0, "frequencia": 0}
+    dias_semana = {}
+    for mes_ano, aulas_do_mes in presencas_por_mes.items():
+        for data_str, turmas_dict in aulas_do_mes.items():
+            resumo["aulas"] += len(turmas_dict)
+            try:
+                d = datetime.strptime(data_str, "%d/%m/%Y").date()
+                dias_semana[data_str] = DIAS_SEMANA_PT[d.weekday()] + ("-feira" if d.weekday() < 5 else "")
+            except Exception:
+                dias_semana[data_str] = ""
+            for reg in turmas_dict.values():
+                total = len(reg.get("alunos") or [])
+                presentes = len(reg.get("presentes") or [])
+                resumo["presencas"] += presentes
+                resumo["faltas"] += max(total - presentes, 0)
+    total_reg = resumo["presencas"] + resumo["faltas"]
+    resumo["frequencia"] = round(resumo["presencas"] * 100 / total_reg) if total_reg else 0
+
     if modo_professor:
         back_url = url_for("professor.painel_professor")
     else:
         back_url = url_for("presencas.painel_presenca", academia_id=academia_id) if academia_id else url_for("presencas.painel_presenca")
+
+    academia = None
+    if academia_id:
+        try:
+            db2 = get_db_connection()
+            cur2 = db2.cursor(dictionary=True)
+            cur2.execute("SELECT id, nome, cidade, uf FROM academias WHERE id = %s", (academia_id,))
+            academia = cur2.fetchone()
+            db2.close()
+        except Exception:
+            academia = None
+
     return render_template('ata_presenca.html',
                             presencas_por_mes=presencas_por_mes,
                             turmas=turmas,
@@ -2665,12 +2746,28 @@ def ata_presenca():
                             ano=ano_selecionado,
                             turma_id=turma_selecionada,
                             hoje=hoje,
+                            resumo=resumo,
+                            dias_semana=dias_semana,
+                            meses=MESES_PT,
+                            periodo_label=(f"{MESES_PT[mes_selecionado]} de {ano_selecionado}" if mes_selecionado else str(ano_selecionado)),
                             back_url=back_url,
+                            academia=academia,
                             academia_id=academia_id)
 
 # ======================================================
-# 🔹 Histórico de Presença (Lista de Cards)
+# 🔹 Histórico de Presença (frequência por aluno no período)
 # ======================================================
+MESES_PT = ["Todos os meses", "janeiro", "fevereiro", "março", "abril", "maio", "junho",
+            "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"]
+
+
+def _filtro_periodo_presencas(mes, ano):
+    """Trecho de WHERE e parâmetros do período. mes=0 significa o ano inteiro."""
+    if mes:
+        return "YEAR(p.data_presenca) = %s AND MONTH(p.data_presenca) = %s", [ano, mes]
+    return "YEAR(p.data_presenca) = %s", [ano]
+
+
 @bp_presencas.route('/historico_presenca_lista')
 @login_required
 def historico_presenca_lista():
@@ -2681,13 +2778,20 @@ def historico_presenca_lista():
         ids_prof = _get_todos_professor_ids()
         ids_turmas_professor = _get_ids_turmas_professor(ids_prof)
 
+    hoje = datetime.today()
+    mes = request.args.get("mes", type=int)
+    mes = hoje.month if mes is None else max(0, min(12, mes))
+    ano = max(2000, min(2100, request.args.get("ano", type=int) or hoje.year))
+
     db = get_db_connection()
     cursor = db.cursor(dictionary=True)
+    alunos = []
+    aulas_periodo = 0
     try:
         if academia_id:
-            cursor.execute("SELECT id, nome FROM alunos WHERE id_academia = %s ORDER BY nome", (academia_id,))
+            cursor.execute("SELECT id, nome, foto FROM alunos WHERE id_academia = %s ORDER BY nome", (academia_id,))
         else:
-            cursor.execute("SELECT id, nome FROM alunos ORDER BY nome")
+            cursor.execute("SELECT id, nome, foto FROM alunos ORDER BY nome")
         alunos = cursor.fetchall()
         if modo_professor and ids_turmas_professor:
             ph = ",".join(["%s"] * len(ids_turmas_professor))
@@ -2699,16 +2803,344 @@ def historico_presenca_lista():
             )
             ids_ok = {r["id"] for r in cursor.fetchall()}
             alunos = [a for a in alunos if a["id"] in ids_ok]
+
+        ids = [a["id"] for a in alunos]
+        if ids:
+            ph = ",".join(["%s"] * len(ids))
+            periodo_sql, periodo_params = _filtro_periodo_presencas(mes, ano)
+
+            # Uma consulta agregada para toda a lista, em vez de uma por aluno.
+            cursor.execute(
+                f"""SELECT p.aluno_id,
+                           COUNT(*) AS aulas,
+                           SUM(p.presente = 1) AS presencas
+                    FROM presencas p
+                    WHERE p.aluno_id IN ({ph}) AND {periodo_sql}
+                    GROUP BY p.aluno_id""",
+                tuple(ids) + tuple(periodo_params),
+            )
+            por_aluno = {r["aluno_id"]: r for r in cursor.fetchall()}
+
+            # Aulas do período: dias distintos com chamada registrada.
+            cursor.execute(
+                f"""SELECT COUNT(DISTINCT p.data_presenca) AS dias
+                    FROM presencas p
+                    WHERE p.aluno_id IN ({ph}) AND {periodo_sql}""",
+                tuple(ids) + tuple(periodo_params),
+            )
+            aulas_periodo = (cursor.fetchone() or {}).get("dias") or 0
+
+            # Turma predominante no período — a que aparece em mais chamadas.
+            cursor.execute(
+                f"""SELECT p.aluno_id, t.Nome AS turma_nome, t.DiasHorario AS turma_horario,
+                           COUNT(*) AS c
+                    FROM presencas p
+                    LEFT JOIN turmas t ON t.TurmaID = p.turma_id
+                    WHERE p.aluno_id IN ({ph}) AND {periodo_sql}
+                    GROUP BY p.aluno_id, t.Nome, t.DiasHorario
+                    ORDER BY c DESC""",
+                tuple(ids) + tuple(periodo_params),
+            )
+            turma_por_aluno = {}
+            for r in cursor.fetchall():
+                turma_por_aluno.setdefault(r["aluno_id"], r)
+
+            for a in alunos:
+                dados = por_aluno.get(a["id"]) or {}
+                total = int(dados.get("aulas") or 0)
+                presencas = int(dados.get("presencas") or 0)
+                a["aulas"] = total
+                a["presencas"] = presencas
+                a["faltas"] = total - presencas
+                # Sem chamada no período a frequência não é 0%, é indefinida —
+                # a tela mostra "—" e o aluno fica fora das médias.
+                a["frequencia"] = round(presencas * 100 / total) if total else None
+                turma = turma_por_aluno.get(a["id"]) or {}
+                a["turma_nome"] = turma.get("turma_nome") or ""
+                a["turma_horario"] = turma.get("turma_horario") or ""
+
+            # Quem teve chamada aparece primeiro; o resto segue na lista para a
+            # tela não ficar vazia quando o período ainda não tem registro.
+            alunos.sort(key=lambda a: (0 if a["aulas"] else 1, a["nome"] or ""))
+        else:
+            for a in alunos:
+                a.update({"aulas": 0, "presencas": 0, "faltas": 0, "frequencia": None,
+                          "turma_nome": "", "turma_horario": ""})
     except Exception:
         alunos = []
     db.close()
 
-    hoje = datetime.today()
+    com_registro = [a for a in alunos if a["aulas"]]
+    total_aulas = sum(a["aulas"] for a in com_registro)
+    total_presencas = sum(a["presencas"] for a in com_registro)
+    resumo = {
+        "aulas_periodo": aulas_periodo,
+        "frequencia_media": round(total_presencas * 100 / total_aulas) if total_aulas else 0,
+        "presencas": total_presencas,
+        "abaixo_60": sum(1 for a in com_registro if a["frequencia"] < 60),
+        "com_registro": len(com_registro),
+    }
+
     if modo_professor:
         back_url = url_for("professor.painel_professor")
     else:
         back_url = url_for("presencas.painel_presenca", academia_id=academia_id) if academia_id else url_for("presencas.painel_presenca")
-    return render_template('historico_presenca_lista.html', alunos=alunos, hoje=hoje, back_url=back_url, academia_id=academia_id)
+
+    academia = None
+    if academia_id:
+        try:
+            db = get_db_connection()
+            cur = db.cursor(dictionary=True)
+            cur.execute("SELECT id, nome FROM academias WHERE id = %s", (academia_id,))
+            academia = cur.fetchone()
+            db.close()
+        except Exception:
+            academia = None
+
+    return render_template('presencas/historico_presenca_lista.html',
+                           alunos=alunos,
+                           resumo=resumo,
+                           mes=mes,
+                           ano=ano,
+                           meses=MESES_PT,
+                           periodo_label=(f"{MESES_PT[mes]} de {ano}" if mes else str(ano)),
+                           hoje=hoje,
+                           back_url=back_url,
+                           academia=academia,
+                           academia_id=academia_id)
+
+# ======================================================
+# 🔹 Ata de presença — documento para impressão (uma folha por turma)
+# ======================================================
+@bp_presencas.route('/ata_presenca/impressao')
+@login_required
+def ata_presenca_impressao():
+    """Matriz aluno × dia de aula do período, uma tabela por turma. É a folha que
+    o professor assina — por isso sai por turma, e não por dia."""
+    academia_id = _get_academia_filtro_presencas()
+    modo_professor = session.get("modo_painel") == "professor"
+    ids_turmas_professor = set()
+    if modo_professor:
+        ids_prof = _get_todos_professor_ids()
+        ids_turmas_professor = _get_ids_turmas_professor(ids_prof)
+
+    hoje = date.today()
+    mes = request.args.get("mes", type=int)
+    mes = hoje.month if mes is None else max(0, min(12, mes))
+    ano = max(2000, min(2100, request.args.get("ano", type=int) or hoje.year))
+    turma_filtro = request.args.get("turma", type=int) or 0
+
+    db = get_db_connection()
+    cursor = db.cursor(dictionary=True)
+
+    periodo_sql, periodo_params = _filtro_periodo_presencas(mes, ano)
+    query = f"""
+        SELECT p.data_presenca, p.horario_aula, p.presente,
+               p.aluno_id, a.nome AS aluno_nome,
+               COALESCE(p.turma_id, a.TurmaID) AS turma_id,
+               t.Nome AS turma_nome, t.Professor AS professor
+        FROM presencas p
+        JOIN alunos a ON a.id = p.aluno_id
+        LEFT JOIN turmas t ON t.TurmaID = COALESCE(p.turma_id, a.TurmaID)
+        WHERE {periodo_sql}
+    """
+    params = list(periodo_params)
+    if turma_filtro:
+        query += " AND COALESCE(p.turma_id, a.TurmaID) = %s"
+        params.append(turma_filtro)
+    if academia_id:
+        query += " AND a.id_academia = %s"
+        params.append(academia_id)
+    if modo_professor and ids_turmas_professor:
+        ph = ",".join(["%s"] * len(ids_turmas_professor))
+        query += f" AND COALESCE(p.turma_id, a.TurmaID) IN ({ph})"
+        params.extend(list(ids_turmas_professor))
+    query += " ORDER BY turma_nome, p.data_presenca, a.nome"
+
+    try:
+        cursor.execute(query, tuple(params))
+        registros = cursor.fetchall() or []
+    except Exception:
+        registros = []
+
+    academia = None
+    if academia_id:
+        try:
+            cursor.execute("SELECT id, nome, cidade, uf FROM academias WHERE id = %s", (academia_id,))
+            academia = cursor.fetchone()
+        except Exception:
+            academia = None
+    db.close()
+
+    # turma -> {nome, professor, horario, datas ordenadas, alunos, marcas}
+    turmas_doc = {}
+    for r in registros:
+        tid = r.get("turma_id")
+        t = turmas_doc.setdefault(tid, {
+            "id": tid,
+            "nome": r.get("turma_nome") or f"Turma {tid}",
+            "professor": r.get("professor") or "",
+            "horarios": set(),
+            "datas": set(),
+            "alunos": {},
+            "marcas": {},
+        })
+        # O MySQL devolve TIME como timedelta; str() nele vira "0:00:00", que
+        # cortado dava "0:00:". Hora zerada não diz nada e fica fora do topo.
+        h = r.get("horario_aula")
+        if h is not None:
+            if hasattr(h, "strftime"):
+                hh = h.strftime("%H:%M")
+            elif hasattr(h, "total_seconds"):
+                seg = int(h.total_seconds())
+                hh = f"{seg // 3600:02d}:{(seg % 3600) // 60:02d}"
+            else:
+                hh = str(h)[:5]
+            if hh not in ("00:00", ""):
+                t["horarios"].add(hh)
+        d = r.get("data_presenca")
+        if not d:
+            continue
+        t["datas"].add(d)
+        t["alunos"][r["aluno_id"]] = r.get("aluno_nome") or ""
+        t["marcas"][(r["aluno_id"], d)] = "P" if r.get("presente") == 1 else "F"
+
+    DIAS_CURTOS = ["seg", "ter", "qua", "qui", "sex", "sáb", "dom"]
+    documentos = []
+    for t in turmas_doc.values():
+        datas = sorted(t["datas"])
+        alunos = sorted(t["alunos"].items(), key=lambda x: (x[1] or "").lower())
+        linhas = []
+        total_p = 0
+        for aluno_id, nome in alunos:
+            celulas = [t["marcas"].get((aluno_id, d)) for d in datas]
+            p = sum(1 for c in celulas if c == "P")
+            f = sum(1 for c in celulas if c == "F")
+            total_p += p
+            linhas.append({
+                "nome": nome,
+                "celulas": celulas,
+                "presencas": p,
+                "faltas": f,
+                "frequencia": round(p * 100 / (p + f)) if (p + f) else 0,
+            })
+        marcados = sum(1 for c in t["marcas"].values() if c in ("P", "F"))
+        documentos.append({
+            "turma": t["nome"],
+            "professor": t["professor"],
+            "horario": " / ".join(sorted(t["horarios"])),
+            "colunas": [{"dia": d.strftime("%d"), "semana": DIAS_CURTOS[d.weekday()]} for d in datas],
+            "linhas": linhas,
+            "alunos": len(linhas),
+            "aulas": len(datas),
+            "presencas": total_p,
+            "frequencia": round(total_p * 100 / marcados) if marcados else 0,
+        })
+    documentos.sort(key=lambda d: d["turma"].lower())
+
+    return render_template(
+        "presencas/ata_presenca_impressao.html",
+        documentos=documentos,
+        academia=academia,
+        mes=mes, ano=ano, meses=MESES_PT, turma_filtro=turma_filtro,
+        periodo_label=(f"{MESES_PT[mes]} de {ano}" if mes else str(ano)),
+        emitido_em=hoje.strftime("%d/%m/%Y"),
+        academia_id=academia_id,
+    )
+
+
+# ======================================================
+# 🔹 Relatório de presença do aluno (documento para impressão)
+# ======================================================
+DIAS_SEMANA_PT = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
+
+
+@bp_presencas.route('/presencas/relatorio/<int:aluno_id>')
+@login_required
+def relatorio_presenca_aluno(aluno_id):
+    """Folha de presença do aluno no período, no formato de documento — é o que
+    sai ao imprimir a ficha e ao gerar o PDF pelo navegador."""
+    academia_id = _get_academia_filtro_presencas()
+    modo_professor = session.get("modo_painel") == "professor"
+
+    hoje = date.today()
+    mes = request.args.get("mes", type=int)
+    mes = hoje.month if mes is None else max(0, min(12, mes))
+    ano = max(2000, min(2100, request.args.get("ano", type=int) or hoje.year))
+
+    db = get_db_connection()
+    cursor = db.cursor(dictionary=True)
+    cursor.execute(
+        """SELECT a.id, a.nome, a.id_academia, a.data_matricula,
+                  g.faixa AS faixa, g.graduacao AS graduacao,
+                  ac.nome AS academia_nome, ac.cidade AS academia_cidade, ac.uf AS academia_uf
+           FROM alunos a
+           LEFT JOIN graduacao g ON g.id = a.graduacao_id
+           LEFT JOIN academias ac ON ac.id = a.id_academia
+           WHERE a.id = %s""",
+        (aluno_id,),
+    )
+    aluno = cursor.fetchone()
+    if not aluno:
+        db.close()
+        flash("Aluno não encontrado.", "danger")
+        return redirect(url_for("presencas.painel_presenca"))
+    if academia_id and aluno.get("id_academia") != academia_id and not current_user.has_role("admin"):
+        db.close()
+        flash("Você não tem permissão para ver este aluno.", "danger")
+        return redirect(url_for("presencas.painel_presenca"))
+
+    periodo_sql, periodo_params = _filtro_periodo_presencas(mes, ano)
+    cursor.execute(
+        f"""SELECT p.data_presenca, p.presente, p.horario_aula,
+                   t.Nome AS turma_nome, t.DiasHorario AS turma_horario, t.Professor AS professor
+            FROM presencas p
+            LEFT JOIN turmas t ON t.TurmaID = p.turma_id
+            WHERE p.aluno_id = %s AND {periodo_sql}
+            ORDER BY p.data_presenca""",
+        tuple([aluno_id] + periodo_params),
+    )
+    registros = cursor.fetchall()
+    db.close()
+
+    aulas = []
+    for r in registros:
+        d = r.get("data_presenca")
+        aulas.append({
+            "data": d.strftime("%d/%m/%Y") if d else "",
+            "dia": DIAS_SEMANA_PT[d.weekday()] if d else "",
+            "turma": r.get("turma_nome") or "—",
+            "horario": r.get("turma_horario") or "",
+            "presente": r.get("presente") == 1,
+        })
+
+    total = len(aulas)
+    presencas_total = sum(1 for a in aulas if a["presente"])
+    resumo = {
+        "aulas": total,
+        "presencas": presencas_total,
+        "faltas": total - presencas_total,
+        "frequencia": round(presencas_total * 100 / total) if total else 0,
+    }
+
+    # Turma e professor predominantes no período, para o cabeçalho do documento.
+    contagem = {}
+    for r in registros:
+        chave = (r.get("turma_nome") or "", r.get("turma_horario") or "", r.get("professor") or "")
+        contagem[chave] = contagem.get(chave, 0) + 1
+    turma_nome, turma_horario, professor = max(contagem, key=contagem.get) if contagem else ("", "", "")
+
+    return render_template(
+        "presencas/relatorio_presenca_aluno.html",
+        aluno=aluno, aulas=aulas, resumo=resumo,
+        turma_nome=turma_nome, turma_horario=turma_horario, professor=professor,
+        mes=mes, ano=ano, meses=MESES_PT,
+        periodo_label=(f"{MESES_PT[mes]} de {ano}" if mes else str(ano)),
+        emitido_em=hoje.strftime("%d/%m/%Y"),
+        academia_id=academia_id,
+        modo_professor=modo_professor,
+    )
+
 
 # ======================================================
 # 🔹 Histórico de Presença (Endpoint AJAX)
@@ -2726,14 +3158,14 @@ def historico_presenca_ajax(aluno_id):
     db = get_db_connection()
     cursor = db.cursor(dictionary=True)
 
-    cursor.execute("SELECT id, id_academia, TurmaID FROM alunos WHERE id = %s", (aluno_id,))
+    cursor.execute("SELECT id, nome, id_academia, TurmaID FROM alunos WHERE id = %s", (aluno_id,))
     aluno = cursor.fetchone()
     if not aluno:
         db.close()
-        return "<p class='alert alert-warning p-2 small'>Aluno não encontrado.</p>"
+        return jsonify({"erro": "Aluno não encontrado."}), 404
     if academia_id and aluno.get("id_academia") != academia_id:
         db.close()
-        return "<p class='alert alert-warning p-2 small'>Acesso negado.</p>"
+        return jsonify({"erro": "Acesso negado."}), 403
     if modo_professor and ids_turmas_professor:
         aluno_turma_ok = aluno.get("TurmaID") in ids_turmas_professor
         if not aluno_turma_ok:
@@ -2744,48 +3176,54 @@ def historico_presenca_ajax(aluno_id):
             aluno_turma_ok = cursor.fetchone() is not None
         if not aluno_turma_ok:
             db.close()
-            return "<p class='alert alert-warning p-2 small'>Acesso negado.</p>"
+            return jsonify({"erro": "Acesso negado."}), 403
 
     mes = int(request.args.get('mes', 0))
     ano = int(request.args.get('ano', datetime.today().year))
 
-    # Seleciona presenças do aluno filtrando mês/ano
-    if mes == 0:
-        cursor.execute("""
-            SELECT data_presenca, presente
-            FROM presencas
-            WHERE aluno_id=%s AND YEAR(data_presenca)=%s
-            ORDER BY data_presenca
-        """, (aluno_id, ano))
-    else:
-        cursor.execute("""
-            SELECT data_presenca, presente
-            FROM presencas
-            WHERE aluno_id=%s AND MONTH(data_presenca)=%s AND YEAR(data_presenca)=%s
-            ORDER BY data_presenca
-        """, (aluno_id, mes, ano))
-
+    # Aula a aula do período, com a turma de cada chamada — é o que o painel
+    # lateral do histórico desenha (um quadradinho por dia).
+    periodo_sql, periodo_params = _filtro_periodo_presencas(mes, ano)
+    cursor.execute(
+        f"""SELECT p.data_presenca, p.presente, p.horario_aula,
+                   t.Nome AS turma_nome, t.DiasHorario AS turma_horario
+            FROM presencas p
+            LEFT JOIN turmas t ON t.TurmaID = p.turma_id
+            WHERE p.aluno_id = %s AND {periodo_sql}
+            ORDER BY p.data_presenca""",
+        tuple([aluno_id] + periodo_params),
+    )
     registros = cursor.fetchall()
     db.close()
 
     total = len(registros)
     total_presenca = sum(1 for r in registros if r.get('presente') == 1)
-    total_falta = total - total_presenca
-    percentual_presenca = round((total_presenca / total * 100), 1) if total > 0 else 0
 
-    # Monta HTML do resumo (será inserido no card)
-    html = f"""
-    <div class="historico-aluno p-3 border rounded bg-light">
-      <ul class="list-group list-group-flush">
-        <li class="list-group-item"><strong>Total de Aulas:</strong> {total}</li>
-        <li class="list-group-item"><strong>Total de Presenças:</strong> {total_presenca}</li>
-        <li class="list-group-item"><strong>Total de Faltas:</strong> {total_falta}</li>
-        <li class="list-group-item"><strong>Porcentagem de Presença:</strong> {percentual_presenca}%</li>
-      </ul>
-    </div>
-    """
+    # Turma predominante: a que aparece em mais chamadas do período.
+    contagem = {}
+    for r in registros:
+        chave = (r.get("turma_nome") or "", r.get("turma_horario") or "")
+        contagem[chave] = contagem.get(chave, 0) + 1
+    turma_nome, turma_horario = max(contagem, key=contagem.get) if contagem else ("", "")
 
-    return html
+    return jsonify({
+        "aluno_id": aluno_id,
+        "nome": aluno.get("nome") or "",
+        "turma_nome": turma_nome,
+        "turma_horario": turma_horario,
+        "aulas": total,
+        "presencas": total_presenca,
+        "faltas": total - total_presenca,
+        "frequencia": round(total_presenca * 100 / total) if total else 0,
+        "dias": [
+            {
+                "dia": r["data_presenca"].day,
+                "data": r["data_presenca"].strftime("%d/%m/%Y"),
+                "presente": r.get("presente") == 1,
+            }
+            for r in registros if r.get("data_presenca")
+        ],
+    })
 
 
 @bp_presencas.route('/buscar_alunos_outra_turma_ajax', methods=['GET'])
@@ -2855,10 +3293,11 @@ def buscar_alunos_outra_academia_ajax():
         # ativo: mesmo critério da lista de alunos (NULL = ativo).
         params = [f"%{termo}%", turma_id, turma_id]
         query = """
-            SELECT a.id, a.nome, a.foto,
+            SELECT a.id, a.nome, a.foto, g.faixa AS faixa_aluno,
                    ac.nome AS academia_nome,
                    t.Nome  AS turma_nome
             FROM alunos a
+                       LEFT JOIN graduacao g ON g.id = a.graduacao_id
             LEFT JOIN academias ac ON ac.id = a.id_academia
             LEFT JOIN turmas t     ON t.TurmaID = a.TurmaID
             WHERE a.nome LIKE %s

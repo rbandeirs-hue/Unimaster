@@ -42,6 +42,12 @@ TIPOS = {
                     "💰 Valor: {valor}\n🔗 Pague pelo link:\n{link}\n\n"
                     "Seja bem-vindo(a)! _{academia}_"),
     },
+    "confirmacao_matricula": {
+        "label": "Confirmação de pagamento da matrícula",
+        "default": ("Olá {nome}! ✅ Recebemos o pagamento da matrícula de "
+                    "*{aluno}* ({valor}). Está tudo certo!\n\n"
+                    "Seja bem-vindo(a)! _{academia}_"),
+    },
     "boas_vindas": {
         "label": "Boas-vindas ao novo aluno",
         "default": ("Olá {nome}! 🥋 Seja bem-vindo(a) à {academia}! "
@@ -57,7 +63,7 @@ TIPOS = {
 }
 
 ORDEM = ["lembrete_vencimento", "lembrete_atraso", "confirmacao_pagamento",
-         "matricula", "boas_vindas", "aniversario"]
+         "matricula", "confirmacao_matricula", "boas_vindas", "aniversario"]
 
 
 def padrao(tipo):

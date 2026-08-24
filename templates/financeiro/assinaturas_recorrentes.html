@@ -1,106 +1,161 @@
-{% extends "base.html" %}
+{% extends "base_academia.html" %}
+{% set menu_ativo = 'financeiro' %}
 {% block title %}Assinaturas recorrentes{% endblock %}
+
+{% block pagina_titulo %}Assinaturas recorrentes{% endblock %}
+{% block pagina_subtitulo %}Forma de pagamento recorrente de cada aluno — cartão ou PIX.{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/base/listas.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/painel/financeiro.css') }}">
+<style>
+  .lin-ass { grid-template-columns: minmax(0,1.6fr) 170px 140px 120px 150px 110px; }
+  @media (max-width: 1240px) {
+    .lin-ass { grid-template-columns: minmax(0,1.6fr) 170px 120px 150px 110px; }
+    .col-gateway { display: none !important; }
+  }
+  @media (max-width: 1024px) {
+    .lin-ass { grid-template-columns: minmax(0,1.6fr) 170px 140px 120px 150px 110px; }
+    .col-gateway { display: block !important; }
+  }
+  @media (max-width: 900px) {
+    .lin-ass { grid-template-columns: minmax(0,1.6fr) 120px 150px 110px; }
+    .col-gateway, .col-forma { display: none !important; }
+  }
+  @media (max-width: 620px) {
+    .lin-ass { grid-template-columns: minmax(0,1fr) 120px 110px; }
+    .col-situacao { display: none !important; }
+  }
+
+  /* Cartão e PIX têm cor própria — é o que distingue as duas na varredura. */
+  .ass-forma { display: inline-flex; align-items: center; gap: .4rem; padding: .12rem .5rem;
+    border-radius: var(--u-radius-pill); font-size: .78rem; white-space: nowrap; }
+  .ass-forma--cartao { background: #ede9fe; color: #5b21b6; }
+  .ass-forma--pix { background: #ccfbf1; color: #0f766e; }
+</style>
+{% endblock %}
+
+{% block pagina_acoes %}
+  {% set _a = {'academia_id': academia_id} if academia_id else {} %}
+  <a href="{{ url_for('financeiro.mensalidades_alunos', **_a) }}" class="sh__btn">
+    <i class="bi bi-arrow-left"></i> Voltar
+  </a>
+{% endblock %}
+
 {% block content %}
-<div class="container my-4" style="max-width: 1100px;">
-
-  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-    <div>
-      <a href="{{ request.referrer or url_for('financeiro.mensalidades_alunos', academia_id=academia_id) }}" class="btn btn-outline-secondary btn-sm mb-2"><i class="bi bi-arrow-left"></i> Voltar</a>
-      <h4 class="fw-bold mb-0"><i class="bi bi-arrow-repeat text-primary me-1"></i> Assinaturas recorrentes</h4>
-      <div class="text-muted small">Forma de pagamento recorrente de cada aluno.</div>
-    </div>
+<div class="sh__faixa">
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Cartão recorrente</span>
+    <span class="sh__faixa-valor">{{ resumo.cartao }}</span>
+    <span class="lst-sub">Cobrança automática no cartão</span>
   </div>
-
-  <!-- Resumo -->
-  <div class="row g-2 mb-3">
-    <div class="col-6 col-md-3">
-      <div class="card border-0 shadow-sm h-100"><div class="card-body py-2 text-center">
-        <div class="h5 fw-bold mb-0" style="color:#5b21b6">{{ resumo.cartao }}</div>
-        <div class="small text-muted"><i class="bi bi-credit-card"></i> Cartão recorrente</div>
-      </div></div>
-    </div>
-    <div class="col-6 col-md-3">
-      <div class="card border-0 shadow-sm h-100"><div class="card-body py-2 text-center">
-        <div class="h5 fw-bold mb-0" style="color:#0f766e">{{ resumo.pix }}</div>
-        <div class="small text-muted"><i class="bi bi-qr-code"></i> PIX recorrente</div>
-      </div></div>
-    </div>
-    <div class="col-6 col-md-3">
-      <div class="card border-0 shadow-sm h-100"><div class="card-body py-2 text-center">
-        <div class="h5 fw-bold mb-0 text-success">{{ resumo.ativas }}</div>
-        <div class="small text-muted">Ativas</div>
-      </div></div>
-    </div>
-    <div class="col-6 col-md-3">
-      <div class="card border-0 shadow-sm h-100"><div class="card-body py-2 text-center">
-        <div class="h5 fw-bold mb-0 text-warning">{{ resumo.pendentes }}</div>
-        <div class="small text-muted">Aguardando cadastro</div>
-      </div></div>
-    </div>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">PIX recorrente</span>
+    <span class="sh__faixa-valor">{{ resumo.pix }}</span>
+    <span class="lst-sub">Débito automático via PIX</span>
   </div>
-
-  <!-- Filtro -->
-  <div class="btn-group btn-group-sm mb-3" role="group">
-    <a href="{{ url_for('financeiro.assinaturas_recorrentes', academia_id=academia_id) }}" class="btn {{ 'btn-primary' if not filtro else 'btn-outline-primary' }}">Todas</a>
-    <a href="{{ url_for('financeiro.assinaturas_recorrentes', academia_id=academia_id, forma='cartao') }}" class="btn {{ 'btn-primary' if filtro == 'cartao' else 'btn-outline-primary' }}"><i class="bi bi-credit-card"></i> Cartão</a>
-    <a href="{{ url_for('financeiro.assinaturas_recorrentes', academia_id=academia_id, forma='pix') }}" class="btn {{ 'btn-primary' if filtro == 'pix' else 'btn-outline-primary' }}"><i class="bi bi-qr-code"></i> PIX</a>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Ativas</span>
+    <span class="sh__faixa-valor">{{ resumo.ativas }}</span>
+    <span class="lst-sub">Primeiro pagamento confirmado</span>
   </div>
-
-  <div class="card border-0 shadow-sm">
-    <div class="table-responsive">
-      <table class="table table-hover align-middle mb-0">
-        <thead class="table-light">
-          <tr>
-            <th>Aluno</th>
-            <th>Forma</th>
-            <th>Gateway</th>
-            <th class="text-end">Valor/mês</th>
-            <th>Status</th>
-            <th class="text-end">Ações</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for s in assinaturas %}
-          {% set _pix = s.metodo == 'pix' %}
-          {% set _ativo = s.status == 'ativa' %}
-          <tr>
-            <td><strong>{{ s.aluno_nome }}</strong></td>
-            <td>
-              <span class="badge rounded-pill" style="{% if _pix %}background:#ccfbf1;color:#0f766e{% else %}background:#ede9fe;color:#5b21b6{% endif %}">
-                <i class="bi {{ 'bi-qr-code' if _pix else 'bi-credit-card' }}"></i> {{ 'PIX recorrente' if _pix else 'Cartão recorrente' }}
-              </span>
-            </td>
-            <td class="text-capitalize">{{ 'Mercado Pago' if s.gateway == 'mercadopago' else (s.gateway or '-') }}</td>
-            <td class="text-end">{% if s.valor %}R$ {{ "%.2f"|format(s.valor|float) }}{% else %}-{% endif %}</td>
-            <td>
-              {% if _ativo %}<span class="badge bg-success">Ativa</span>
-              {% elif s.status == 'cancelada' %}<span class="badge bg-secondary">Cancelada</span>
-              {% else %}<span class="badge bg-warning text-dark">Aguardando cadastro</span>{% endif %}
-            </td>
-            <td class="text-end">
-              {% if s.status != 'cancelada' %}
-              <a href="{{ url_for('financeiro.assinatura_recorrente_link', assinatura_id=s.id) }}" class="btn btn-sm btn-outline-primary" title="Ver/enviar link de cadastro">
-                <i class="bi bi-link-45deg"></i> Link
-              </a>
-              <form method="POST" action="{{ url_for('financeiro.cancelar_assinatura_recorrente', assinatura_id=s.id) }}" class="d-inline"
-                    onsubmit="return confirm('Cancelar a assinatura recorrente de {{ s.aluno_nome }}? As próximas cobranças automáticas serão interrompidas.');">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <button type="submit" class="btn btn-sm btn-outline-danger" title="Cancelar"><i class="bi bi-x-circle"></i></button>
-              </form>
-              {% else %}<span class="text-muted small">—</span>{% endif %}
-            </td>
-          </tr>
-          {% else %}
-          <tr><td colspan="6" class="text-center text-muted py-4">Nenhuma assinatura recorrente ainda.</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Aguardando cadastro</span>
+    <span class="sh__faixa-valor {% if resumo.pendentes %}sh__faixa-valor--alerta{% endif %}">{{ resumo.pendentes }}</span>
+    <span class="lst-sub">Link gerado, aluno ainda não cadastrou</span>
   </div>
-
-  <p class="text-muted small mt-2">
-    <i class="bi bi-info-circle"></i> <strong>Aguardando cadastro</strong> = o link foi gerado, mas o aluno ainda não cadastrou o cartão/PIX.
-    Clique em <strong>Link</strong> para reabrir e reenviar. Vira <strong>Ativa</strong> quando o primeiro pagamento é confirmado.
-  </p>
 </div>
+
+<nav class="lst-abas">
+  {% for chave, rotulo in [('', 'Todas'), ('cartao', 'Cartão'), ('pix', 'PIX')] %}
+  <a href="{{ url_for('financeiro.assinaturas_recorrentes', academia_id=academia_id, forma=chave or None) }}"
+     class="lst-aba {% if filtro == chave %}is-ativa{% endif %}">
+    {{ rotulo }}<span class="lst-aba__n">{{ resumo.cartao + resumo.pix if not chave else (resumo.cartao if chave == 'cartao' else resumo.pix) }}</span>
+  </a>
+  {% endfor %}
+</nav>
+
+<section class="lst-quadro">
+  <header class="lst-quadro__topo">
+    <h2 class="lst-quadro__titulo">Assinaturas</h2>
+    <span class="lst-quadro__meta">{{ assinaturas|length }} assinatura{{ 's' if assinaturas|length != 1 }}</span>
+  </header>
+
+  <div class="lst-rolagem">
+    <div class="lst-largura" style="--lst-min:520px">
+      <div class="lst-linha lin-ass lst-cab">
+        <div>Aluno</div>
+        <div class="col-forma">Forma</div>
+        <div class="col-gateway">Gateway</div>
+        <div class="lst-num">Valor/mês</div>
+        <div class="col-situacao">Situação</div>
+        <div class="lst-fim">Ações</div>
+      </div>
+
+      {% for s in assinaturas %}
+      {% set _pix = s.metodo == 'pix' %}
+      {% set _ativo = s.status == 'ativa' %}
+      <div class="lst-linha lin-ass lst-item {% if s.status == 'cancelada' %}is-inativo{% endif %}">
+        <div style="min-width:0">
+          <span class="lst-nome">{{ s.aluno_nome }}</span>
+          <span class="lst-sub">
+            {{ 'PIX recorrente' if _pix else 'Cartão recorrente' }}
+            {%- if s.criado_em %} · desde {{ s.criado_em|data_br }}{% endif %}
+          </span>
+        </div>
+
+        <div class="col-forma">
+          <span class="ass-forma {{ 'ass-forma--pix' if _pix else 'ass-forma--cartao' }}">
+            <i class="bi {{ 'bi-qr-code' if _pix else 'bi-credit-card' }}"></i>{{ 'PIX' if _pix else 'Cartão' }}
+          </span>
+        </div>
+
+        <div class="col-gateway lst-corta">{{ 'Mercado Pago' if s.gateway == 'mercadopago' else (s.gateway|capitalize if s.gateway else '—') }}</div>
+
+        <div class="lst-num">{% if s.valor %}R$ {{ "%.2f"|format(s.valor|float) }}{% else %}—{% endif %}</div>
+
+        <div class="col-situacao">
+          {% if _ativo %}<span class="lst-situacao is-ativo"><i></i>Ativa</span>
+          {% elif s.status == 'cancelada' %}<span class="lst-situacao"><i></i>Cancelada</span>
+          {% else %}<span class="lst-tag lst-tag--alerta">Aguardando cadastro</span>{% endif %}
+        </div>
+
+        <div class="lst-acoes">
+          {% if s.status != 'cancelada' %}
+          <a class="lst-acao" title="Ver e reenviar o link de cadastro"
+             aria-label="Link de cadastro de {{ s.aluno_nome }}"
+             href="{{ url_for('financeiro.assinatura_recorrente_link', assinatura_id=s.id) }}">
+            <i class="bi bi-link-45deg"></i>
+          </a>
+          <form method="POST" action="{{ url_for('financeiro.cancelar_assinatura_recorrente', assinatura_id=s.id) }}"
+                onsubmit="return confirm('Cancelar a assinatura recorrente de {{ s.aluno_nome }}? As próximas cobranças automáticas serão interrompidas.');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="lst-acao lst-acao--perigo" title="Cancelar assinatura"
+                    aria-label="Cancelar assinatura de {{ s.aluno_nome }}">
+              <i class="bi bi-x-circle"></i>
+            </button>
+          </form>
+          {% endif %}
+        </div>
+      </div>
+      {% else %}
+      <p class="lst-vazio">
+        {% if filtro %}Nenhuma assinatura {{ 'no cartão' if filtro == 'cartao' else 'por PIX' }}.
+        {% else %}Nenhuma assinatura recorrente ainda.{% endif %}
+      </p>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<p class="lst-sub mt-3">
+  <strong>Aguardando cadastro</strong> quer dizer que o link foi gerado, mas o aluno ainda não cadastrou
+  o cartão ou o PIX. Use o botão de link para reabrir e reenviar — vira <strong>Ativa</strong> quando o
+  primeiro pagamento é confirmado.
+</p>
+
+{% set _ac_atual = (academias | selectattr('id', 'equalto', academia_id) | first) if academias else None %}
+<footer class="lst-rodape">
+  © {{ current_year }} {{ (_ac_atual.nome if _ac_atual else None) or 'Unimaster' }}. Todos os direitos reservados.
+</footer>
 {% endblock %}

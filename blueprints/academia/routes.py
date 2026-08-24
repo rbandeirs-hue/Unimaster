@@ -1,5 +1,5 @@
 # blueprints/academia/routes.py
-from datetime import date
+from datetime import date, timedelta
 from flask import Blueprint, render_template, redirect, url_for, flash, session, request, jsonify, current_app
 from flask_login import login_required, current_user
 from config import get_db_connection
@@ -34,6 +34,59 @@ def _calcular_idade_visitante(data_nascimento):
 # ======================================================
 # 🔹 Lista de Visitantes (Histórico)
 # ======================================================
+@academia_bp.route("/escolher", methods=["GET", "POST"])
+@login_required
+def escolher_academia():
+    """Escolha da academia na entrada, para quem administra mais de uma.
+
+    Vale para a sessão inteira: dentro do sistema não há troca de academia, o
+    que evitava o risco de lançar mensalidade, presença ou aluno na academia
+    errada sem perceber. Para trocar, sai e entra de novo.
+    """
+    ids = _academias_ids_brutas() or []
+    destino = (request.args.get("next") or request.form.get("next") or "").strip()
+    if not (destino.startswith("/") and not destino.startswith("//")):
+        destino = url_for("painel.home")
+
+    # Uma só academia (ou nenhuma): não há o que escolher.
+    if len(ids) <= 1:
+        if ids:
+            session["academia_gerenciamento_id"] = ids[0]
+            session["finance_academia_id"] = ids[0]
+        return redirect(destino)
+
+    if request.method == "POST":
+        escolhida = request.form.get("academia_id", type=int)
+        if escolhida in ids:
+            session["academia_gerenciamento_id"] = escolhida
+            session["finance_academia_id"] = escolhida
+            session["modo_painel"] = "academia"
+            return redirect(destino)
+        flash("Escolha uma das academias da lista.", "warning")
+
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        ph = ",".join(["%s"] * len(ids))
+        cur.execute(
+            f"""SELECT a.id, a.nome, a.cidade, a.uf,
+                       (SELECT COUNT(*) FROM alunos al
+                         WHERE al.id_academia = a.id AND COALESCE(al.ativo,1) = 1) AS alunos
+                FROM academias a WHERE a.id IN ({ph}) ORDER BY a.nome""",
+            tuple(ids),
+        )
+        academias = cur.fetchall() or []
+    finally:
+        cur.close()
+        conn.close()
+
+    return render_template(
+        "academia/escolher_academia.html",
+        academias=academias,
+        proximo=destino,
+    )
+
+
 @academia_bp.route("/visitantes")
 @login_required
 def lista_visitantes():
@@ -85,7 +138,7 @@ def lista_visitantes():
         
         # Estatísticas
         cur.execute("""
-            SELECT 
+            SELECT
                 COUNT(*) AS total_visitantes,
                 COUNT(CASE WHEN ativo = 1 THEN 1 END) AS visitantes_ativos,
                 COUNT(DISTINCT ae.visitante_id) AS visitantes_com_aulas
@@ -94,21 +147,99 @@ def lista_visitantes():
             WHERE v.id_academia = %s
         """, (academia_id,))
         stats = cur.fetchone()
-        
+
+        # Quantos viraram aluno — é o desfecho que a tela quer medir.
+        # O vínculo é pelo CPF (o cadastro de visitante não guarda aluno_id).
+        try:
+            cur.execute("""
+                SELECT COUNT(*) AS c
+                FROM visitantes v
+                WHERE v.id_academia = %s AND v.cpf IS NOT NULL AND v.cpf <> ''
+                  AND EXISTS (
+                      SELECT 1 FROM alunos a
+                      WHERE a.id_academia = v.id_academia
+                        AND REGEXP_REPLACE(a.cpf, '[^0-9]', '') = REGEXP_REPLACE(v.cpf, '[^0-9]', '')
+                  )
+            """, (academia_id,))
+            stats["convertidos"] = cur.fetchone().get("c", 0) or 0
+        except Exception:
+            stats["convertidos"] = 0
+
     except Exception as e:
         flash(f"Erro ao carregar visitantes: {e}", "danger")
         visitantes = []
-        stats = {"total_visitantes": 0, "visitantes_ativos": 0, "visitantes_com_aulas": 0}
-    finally:
+        stats = {"total_visitantes": 0, "visitantes_ativos": 0,
+                 "visitantes_com_aulas": 0, "convertidos": 0}
+
+    # Contadores das abas (as outras três telas de visitantes).
+    abas = {"solicitacoes": 0, "diarias": 0, "matriculas": 0}
+    try:
+        cur.execute("""SELECT COUNT(*) c FROM aulas_experimentais ae
+                       JOIN visitantes v ON v.id = ae.visitante_id
+                       WHERE v.id_academia = %s AND ae.status = 'pendente'""", (academia_id,))
+        abas["solicitacoes"] = cur.fetchone().get("c", 0) or 0
+    except Exception:
+        pass
+    try:
+        cur.execute("""SELECT COUNT(*) c FROM pagamentos_diaria p
+                       JOIN visitantes v ON v.id = p.visitante_id
+                       WHERE v.id_academia = %s AND p.status = 'pendente'""", (academia_id,))
+        abas["diarias"] = cur.fetchone().get("c", 0) or 0
+    except Exception:
+        pass
+    try:
+        cur.execute("""SELECT COUNT(*) c FROM solicitacoes_mensalidade s
+                       JOIN visitantes v ON v.id = s.visitante_id
+                       WHERE v.id_academia = %s AND s.status = 'pendente'""", (academia_id,))
+        abas["matriculas"] = cur.fetchone().get("c", 0) or 0
+    except Exception:
+        pass
+
+    try:
         cur.close()
         conn.close()
-    
+    except Exception:
+        pass
+
+    # Filtros da tela (aplicados em memória: a lista de visitantes é curta).
+    busca = (request.args.get("busca") or "").strip()
+    status_f = (request.args.get("status") or "").strip().lower()
+    ultima_f = (request.args.get("ultima_aula") or "").strip().lower()
+    total_sem_filtro = len(visitantes)
+    if busca:
+        alvo = busca.lower()
+        so_digitos = "".join(filter(str.isdigit, busca))
+        visitantes = [
+            v for v in visitantes
+            if alvo in (v.get("nome") or "").lower()
+            or (so_digitos and so_digitos in "".join(filter(str.isdigit, str(v.get("telefone") or ""))))
+        ]
+    if status_f == "ativo":
+        visitantes = [v for v in visitantes if v.get("ativo")]
+    elif status_f == "inativo":
+        visitantes = [v for v in visitantes if not v.get("ativo")]
+    if ultima_f in ("30", "90"):
+        limite = date.today() - timedelta(days=int(ultima_f))
+        def _dt(v):
+            d = v.get("ultima_aula")
+            return d.date() if hasattr(d, "date") else d
+        visitantes = [v for v in visitantes if _dt(v) and _dt(v) >= limite]
+    elif ultima_f == "sem":
+        visitantes = [v for v in visitantes if not v.get("ultima_aula")]
+
     return render_template(
         "academia/visitantes/lista.html",
         visitantes=visitantes,
         stats=stats,
+        abas=abas,
         academias=academias,
         academia_id=academia_id,
+        academia=next((a for a in academias if a.get("id") == academia_id), None),
+        busca=busca,
+        status_f=status_f,
+        ultima_f=ultima_f,
+        total_sem_filtro=total_sem_filtro,
+        filtrado=bool(busca or status_f or ultima_f),
     )
 
 
@@ -770,8 +901,12 @@ def aprovar_solicitacao_mensalidade(solicitacao_id):
         return jsonify({"ok": False, "msg": "Erro interno no servidor. Tente novamente."}), 500
 
 
-def _get_academias_ids():
-    """Retorna IDs de academias acessíveis (prioridade: usuarios_academias, igual ao financeiro)."""
+def _academias_ids_brutas():
+    """Todas as academias a que o usuário tem direito, sem considerar a trava.
+
+    Usada pela tela de escolha e por quem precisa do conjunto inteiro. No dia a
+    dia use `_get_academias_ids()`, que devolve só a academia da sessão.
+    """
     conn = get_db_connection()
     cur = conn.cursor(dictionary=True)
     ids = []
@@ -846,6 +981,67 @@ def _get_academia_filtro():
     return aid, academias
 
 
+def academia_travada():
+    """Academia escolhida na entrada, quando o usuário administra mais de uma.
+
+    A escolha é feita uma vez por sessão e não muda por dentro do sistema: sem
+    isso, um `?academia_id=` numa URL trocava o contexto sem ninguém perceber e
+    o gestor acabava lançando dados na academia errada.
+    """
+    aid = session.get("academia_gerenciamento_id")
+    if not aid:
+        return None
+    ids = _academias_ids_brutas() or []
+    return aid if aid in ids else None
+
+
+def precisa_escolher_academia():
+    """True quando o usuário administra mais de uma academia e ainda não escolheu."""
+    if session.get("modo_painel") not in (None, "", "academia"):
+        return False
+    ids = _academias_ids_brutas() or []
+    if len(ids) <= 1:
+        return False
+    return academia_travada() is None
+
+
+def filtrar_academias_da_sessao(academias):
+    """Reduz uma lista de academias à escolhida na sessão.
+
+    Várias telas montam a própria lista com SQL próprio para alimentar um
+    seletor. Passando por aqui, todas respeitam a escolha feita na entrada sem
+    precisar repetir a regra.
+    """
+    if not academias:
+        return academias
+    travada = academia_travada()
+    if not travada or session.get("modo_painel") != "academia":
+        return academias
+    def _id(a):
+        return a.get("id") if isinstance(a, dict) else getattr(a, "id", None)
+    filtradas = [a for a in academias if _id(a) == travada]
+    return filtradas or academias
+
+
+def _get_academias_ids():
+    """Academias válidas para esta sessão.
+
+    No modo academia, depois da escolha na entrada, é só a academia escolhida:
+    é isso que impede navegar (e gravar) em outra sem passar pela escolha. Nos
+    modos associação/federação continua o conjunto inteiro, que é o próprio
+    sentido daqueles painéis.
+    """
+    ids = _academias_ids_brutas()
+    if len(ids) <= 1:
+        return ids
+    if session.get("modo_painel") != "academia":
+        return ids
+    escolhida = session.get("academia_gerenciamento_id")
+    if escolhida and escolhida in ids:
+        return [escolhida]
+    return ids
+
+
 def _get_academia_gerenciamento():
     """Retorna academia_id ativa para gerenciamento e lista de academias para seleção."""
     ids = _get_academias_ids()
@@ -858,16 +1054,85 @@ def _get_academia_gerenciamento():
     cur.close()
     conn.close()
     if len(ids) == 1:
+        session["academia_gerenciamento_id"] = ids[0]
+        session["finance_academia_id"] = ids[0]
         return ids[0], academias
-    aid = request.args.get("academia_id", type=int) or session.get("academia_gerenciamento_id")
-    if aid and aid in ids:
-        session["academia_gerenciamento_id"] = aid
-        session["finance_academia_id"] = aid
-    else:
-        aid = ids[0]
-        session["academia_gerenciamento_id"] = aid
-        session["finance_academia_id"] = aid
+
+    # Mais de uma academia: vale a escolhida na entrada. O `academia_id` da URL
+    # é aceito apenas quando é a mesma — links internos o carregam o tempo
+    # todo —, nunca para trocar de academia por dentro.
+    aid = academia_travada()
+    if not aid:
+        pedido = request.args.get("academia_id", type=int)
+        aid = pedido if (pedido and pedido in ids) else ids[0]
+    session["academia_gerenciamento_id"] = aid
+    session["finance_academia_id"] = aid
+    # Só a academia da sessão vai para as telas: cada uma monta o próprio
+    # seletor a partir desta lista, e a lista completa fazia reaparecer a troca
+    # de academia por dentro do sistema.
+    academias = [a for a in academias if a.get("id") == aid] or academias
     return aid, academias
+
+
+def _painel_academia_resumo(academia_id):
+    """Números do topo do painel: o resumo da academia e o que pede atenção.
+
+    Só leitura — nenhuma escrita, nenhuma regra de negócio. Cada consulta é
+    isolada em try/except porque o painel não pode deixar de abrir por causa de
+    um contador: na falha, aquele número vem zerado e o resto da tela continua.
+    """
+    r = {
+        "alunos_ativos": 0, "turmas": 0, "modalidades": 0,
+        "solicitacoes_pendentes": 0, "mensalidades_atraso": 0,
+        "precadastros": 0, "aniversariantes": 0,
+    }
+    if not academia_id:
+        return r
+
+    consultas = {
+        "alunos_ativos": (
+            "SELECT COUNT(*) c FROM alunos WHERE id_academia=%s AND status='ativo'", (academia_id,)),
+        "turmas": (
+            "SELECT COUNT(*) c FROM turmas WHERE id_academia=%s", (academia_id,)),
+        "modalidades": (
+            "SELECT COUNT(*) c FROM academia_modalidades WHERE academia_id=%s", (academia_id,)),
+        # Pendente em qualquer ponta: a academia pode ser origem ou destino.
+        "solicitacoes_pendentes": (
+            """SELECT COUNT(*) c FROM solicitacoes_aprovacao
+               WHERE (academia_destino_id=%s OR academia_origem_id=%s) AND status LIKE 'pendente%%'""",
+            (academia_id, academia_id)),
+        # Mesmo critério do dashboard: atrasada ou pendente já vencida.
+        # O recorte é pela academia que emitiu a cobrança (`mensalidades`), não
+        # pela academia atual do aluno: quem transfere de unidade levava a dívida
+        # antiga junto para a academia de destino.
+        "mensalidades_atraso": (
+            """SELECT COUNT(*) c FROM mensalidade_aluno ma
+               JOIN mensalidades mp ON mp.id = ma.mensalidade_id
+               WHERE mp.id_academia=%s
+                 AND (ma.status='atrasado' OR (ma.status='pendente' AND ma.data_vencimento < CURDATE()))""",
+            (academia_id,)),
+        # Ao promover, o pré-cadastro é apagado: o que resta é o que falta converter.
+        "precadastros": (
+            "SELECT COUNT(*) c FROM pre_cadastro WHERE academia_id=%s", (academia_id,)),
+        "aniversariantes": (
+            """SELECT COUNT(*) c FROM alunos
+               WHERE id_academia=%s AND status='ativo' AND MONTH(data_nascimento)=MONTH(CURDATE())""",
+            (academia_id,)),
+    }
+
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        for chave, (sql, params) in consultas.items():
+            try:
+                cur.execute(sql, params)
+                r[chave] = (cur.fetchone() or {}).get("c") or 0
+            except Exception as e:
+                current_app.logger.info("Painel da academia: contador %s falhou (%s)", chave, e)
+    finally:
+        cur.close()
+        conn.close()
+    return r
 
 
 def _get_academia_stats(academia_id=None):
@@ -1043,12 +1308,28 @@ def _get_academia_dashboard(academia_id, ano, mes, turma_id=None, modalidade_id=
         d["posicao_historica"] = not mes_corrente
         d["posicao_data"] = fim_ref
 
-        # Inadimplência (snapshot atual): atrasado OU pendente vencido
-        cond_atraso = "(ma.status='atrasado' OR (ma.status='pendente' AND ma.data_vencimento < CURDATE()))"
+        # Inadimplência (snapshot atual): atrasado OU pendente vencido.
+        #
+        # Duas restrições que o número precisa respeitar para ser lido junto com
+        # "N de M alunos ativos":
+        #  • cobrança de valor zero não é dívida — é o caso de quem teve a
+        #    mensalidade coberta por desconto integral e ficou com a linha em
+        #    aberto; sem isto o aluno aparecia na lista devendo R$ 0,00;
+        #  • aluno inativo não entra, senão o numerador podia superar o total de
+        #    ativos e o percentual passar de 100%;
+        #  • a cobrança conta para a academia que a emitiu (`mensalidades`), não
+        #    para a academia atual do aluno — sem isto, uma parcela vencida
+        #    deixada para trás numa transferência de unidade era exibida como
+        #    inadimplência da academia de destino.
+        cond_atraso = (
+            "(ma.status='atrasado' OR (ma.status='pendente' AND ma.data_vencimento < CURDATE()))"
+            " AND ma.valor > 0 AND a.status = 'ativo'"
+        )
         cur.execute(
             f"""SELECT COALESCE(SUM(ma.valor),0) v, COUNT(DISTINCT ma.aluno_id) a
                 FROM mensalidade_aluno ma JOIN alunos a ON a.id = ma.aluno_id
-                WHERE a.id_academia=%s AND {cond_atraso}{fcond}""",
+                JOIN mensalidades mp ON mp.id = ma.mensalidade_id
+                WHERE mp.id_academia=%s AND {cond_atraso}{fcond}""",
             (academia_id,) + fp,
         )
         row = cur.fetchone()
@@ -1060,13 +1341,41 @@ def _get_academia_dashboard(academia_id, ano, mes, turma_id=None, modalidade_id=
         base_churn = ativos + atual["baixas"]
         d["churn_pct"] = round((atual["baixas"] / base_churn * 100), 1) if base_churn else 0.0
 
+        # Percentual do previsto que já entrou, limitado a 100 para a barra.
+        d["mens_pct"] = (
+            round(atual["mens_recebido"] / atual["mens_previsto"] * 100, 1)
+            if atual["mens_previsto"] else 0.0
+        )
+
+        # Conciliação: "Receitas" soma a tabela `receitas` (tudo que entrou no
+        # caixa, de qualquer origem) e "Mensalidades recebidas" soma as baixas em
+        # mensalidade_aluno. São bases diferentes e podem divergir quando uma
+        # baixa não gerou lançamento de receita. A tela precisa dizer isso em vez
+        # de exibir os dois números lado a lado como se fossem o mesmo.
+        cur.execute(
+            """SELECT COALESCE(SUM(valor),0) v FROM receitas
+               WHERE id_academia=%s AND data BETWEEN %s AND %s AND categoria='Mensalidades'""",
+            (academia_id, date(ano, mes, 1),
+             date(ano, mes, __import__("calendar").monthrange(ano, mes)[1])),
+        )
+        d["receitas_mensalidades"] = float(cur.fetchone()["v"] or 0)
+        d["conciliacao_dif"] = round(atual["mens_recebido"] - d["receitas_mensalidades"], 2)
+        d["conciliacao_ok"] = abs(d["conciliacao_dif"]) < 0.01
+
+        # Nome do mês anterior, para o comparativo dos indicadores ("vs julho").
+        _meses_nome = ["janeiro", "fevereiro", "março", "abril", "maio", "junho",
+                       "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"]
+        d["mes_nome"] = _meses_nome[mes - 1]
+        d["mes_anterior_nome"] = _meses_nome[pmes - 1]
+
         # Lista de inadimplentes (top 10 por valor)
         cur.execute(
             f"""SELECT a.id, a.nome, COUNT(*) qtd, COALESCE(SUM(ma.valor),0) total,
                        MIN(ma.data_vencimento) venc
                 FROM mensalidade_aluno ma JOIN alunos a ON a.id = ma.aluno_id
-                WHERE a.id_academia=%s AND {cond_atraso}{fcond}
-                GROUP BY a.id, a.nome ORDER BY total DESC LIMIT 10""",
+                JOIN mensalidades mp ON mp.id = ma.mensalidade_id
+                WHERE mp.id_academia=%s AND {cond_atraso}{fcond}
+                GROUP BY a.id, a.nome ORDER BY total DESC, venc ASC LIMIT 10""",
             (academia_id,) + fp,
         )
         d["inadimplentes"] = cur.fetchall()
@@ -1207,10 +1516,14 @@ def dash():
 
     stats = _get_academia_stats(academia_id)
     dash_data = _get_academia_dashboard(academia_id, ano, mes, turma_id, modalidade_id)
+    # O shell (base_academia.html) usa `academia` para montar o menu lateral e o
+    # rodapé; sem ele o item "Professores" some da navegação.
+    academia = next((a for a in academias if a.get("id") == academia_id), None)
     return render_template(
         "painel/academia_dash.html",
         stats=stats,
         academias=academias,
+        academia=academia,
         academia_id=academia_id,
         dash=dash_data,
         mes=mes,
@@ -1319,6 +1632,7 @@ def painel_academia():
         academia=academia,
         academias=academias,
         academia_id=academia_id,
+        resumo=_painel_academia_resumo(academia_id),
         zempo_prontos=zempo_prontos,
         aniversariantes=anivs,
         aniversariantes_hoje=anivs_hoje,
@@ -1377,10 +1691,32 @@ def lista_usuarios():
         sql_status = "AND COALESCE(u.ativo, 1) = 0"
     else:
         sql_status = ""
+
+    # Recorte por papel. Entra como id inteiro, validado adiante contra os papéis
+    # existentes, para poder ser embutido no SQL sem mexer nas tuplas de
+    # parâmetros das consultas (que são posicionais e montadas em vários ramos).
+    papel_id = request.args.get("papel", type=int)
+    sql_papel = ""
     
     conn = get_db_connection()
     cur = conn.cursor(dictionary=True, buffered=True)
-    
+
+    # Papéis disponíveis para o filtro (e validação do id recebido).
+    try:
+        cur.execute(
+            "SELECT id, nome, COALESCE(chave, LOWER(REPLACE(nome,' ','_'))) AS chave FROM roles ORDER BY nome"
+        )
+        papeis_opts = cur.fetchall()
+    except Exception:
+        papeis_opts = []
+    if papel_id and papel_id in {p["id"] for p in papeis_opts}:
+        sql_papel = (
+            " AND EXISTS (SELECT 1 FROM roles_usuario ru2"
+            f" WHERE ru2.usuario_id = u.id AND ru2.role_id = {int(papel_id)})"
+        )
+    else:
+        papel_id = None
+
     try:
         if modo_associacao and current_user.has_role("gestor_associacao"):
             # Modo associação: buscar usuários de todas as academias da associação
@@ -1426,7 +1762,7 @@ def lista_usuarios():
                     FROM usuarios u
                     INNER JOIN usuarios_academias ua ON ua.usuario_id = u.id
                     WHERE {filtro_academia}
-                    {sql_status}
+                    {sql_status}{sql_papel}
                     AND (u.nome LIKE %s OR u.email LIKE %s)
                 """, params_count)
             else:
@@ -1435,7 +1771,7 @@ def lista_usuarios():
                     FROM usuarios u
                     INNER JOIN usuarios_academias ua ON ua.usuario_id = u.id
                     WHERE {filtro_academia}
-                    {sql_status}
+                    {sql_status}{sql_papel}
                 """, tuple(params_base))
             
             result_total = cur.fetchone()
@@ -1453,7 +1789,7 @@ def lista_usuarios():
                     INNER JOIN usuarios_academias ua ON ua.usuario_id = u.id
                     INNER JOIN academias ac ON ac.id = ua.academia_id
                     WHERE {filtro_academia}
-                    {sql_status}
+                    {sql_status}{sql_papel}
                     AND (u.nome LIKE %s OR u.email LIKE %s)
                     GROUP BY u.id, u.nome, u.email, u.cpf, u.foto, u.criado_em, u.ativo
                     ORDER BY u.nome
@@ -1469,7 +1805,7 @@ def lista_usuarios():
                     INNER JOIN usuarios_academias ua ON ua.usuario_id = u.id
                     INNER JOIN academias ac ON ac.id = ua.academia_id
                     WHERE {filtro_academia}
-                    {sql_status}
+                    {sql_status}{sql_papel}
                     GROUP BY u.id, u.nome, u.email, u.cpf, u.foto, u.criado_em, u.ativo
                     ORDER BY u.nome
                     LIMIT %s OFFSET %s
@@ -1507,7 +1843,7 @@ def lista_usuarios():
                     FROM usuarios u
                     INNER JOIN usuarios_academias ua ON ua.usuario_id = u.id
                     WHERE ua.academia_id = %s
-                    {sql_status}
+                    {sql_status}{sql_papel}
                     AND (u.nome LIKE %s OR u.email LIKE %s)
                 """, (academia_id, f"%{busca}%", f"%{busca}%"))
             else:
@@ -1516,7 +1852,7 @@ def lista_usuarios():
                     FROM usuarios u
                     INNER JOIN usuarios_academias ua ON ua.usuario_id = u.id
                     WHERE ua.academia_id = %s
-                    {sql_status}
+                    {sql_status}{sql_papel}
                 """, (academia_id,))
             
             result_total = cur.fetchone()
@@ -1532,7 +1868,7 @@ def lista_usuarios():
                     FROM usuarios u
                     INNER JOIN usuarios_academias ua ON ua.usuario_id = u.id
                     WHERE ua.academia_id = %s
-                    {sql_status}
+                    {sql_status}{sql_papel}
                     AND (u.nome LIKE %s OR u.email LIKE %s)
                     ORDER BY u.nome
                     LIMIT %s OFFSET %s
@@ -1545,12 +1881,37 @@ def lista_usuarios():
                     FROM usuarios u
                     INNER JOIN usuarios_academias ua ON ua.usuario_id = u.id
                     WHERE ua.academia_id = %s
-                    {sql_status}
+                    {sql_status}{sql_papel}
                     ORDER BY u.nome
                     LIMIT %s OFFSET %s
                 """, (academia_id, por_pagina, offset))
 
             usuarios = cur.fetchall()
+
+        # Indicadores do topo: retratam a academia/associação inteira, sem os
+        # filtros da tela — se encolhessem junto com a busca deixariam de ser
+        # referência para o que a listagem está mostrando.
+        try:
+            if modo_associacao and academia_id is None:
+                _ids_stats = [ac["id"] for ac in academias] or [0]
+                _ph_stats = ",".join(["%s"] * len(_ids_stats))
+                _where_stats = f"ua.academia_id IN ({_ph_stats})"
+                _params_stats = tuple(_ids_stats)
+            else:
+                _where_stats = "ua.academia_id = %s"
+                _params_stats = (academia_id,)
+            cur.execute(f"""
+                SELECT COUNT(DISTINCT u.id) AS total,
+                       COUNT(DISTINCT CASE WHEN COALESCE(u.ativo, 1) = 1 THEN u.id END) AS ativos,
+                       COUNT(DISTINCT CASE WHEN COALESCE(u.ativo, 1) = 0 THEN u.id END) AS inativos,
+                       COUNT(DISTINCT CASE WHEN u.cpf IS NULL OR u.cpf = '' THEN u.id END) AS cpf_pendente
+                FROM usuarios u
+                INNER JOIN usuarios_academias ua ON ua.usuario_id = u.id
+                WHERE {_where_stats}
+            """, _params_stats)
+            stats_usuarios = cur.fetchone() or {}
+        except Exception:
+            stats_usuarios = {}
 
         # Anexar roles de cada usuário (uma única consulta)
         if usuarios:
@@ -1587,6 +1948,8 @@ def lista_usuarios():
         academias = []
         academia_id = None
         modo_associacao = False
+        stats_usuarios = {}
+        papeis_opts = []
     finally:
         cur.close()
         conn.close()
@@ -1594,6 +1957,10 @@ def lista_usuarios():
     return render_template(
         "academia/lista_usuarios.html",
         usuarios=usuarios,
+        stats_usuarios=stats_usuarios,
+        papeis_opts=papeis_opts,
+        papel_id=papel_id,
+        por_pagina=por_pagina,
         academias=academias if modo_associacao else academias,
         academia_id=academia_id if not modo_associacao else (academia_id if academia_id else None),
         academia_nome=academia_nome,
@@ -1610,6 +1977,20 @@ def lista_usuarios():
 # =====================================================
 # 🔹 Configurações da Academia
 # =====================================================
+def _chave_pix_normalizada(academia):
+    """Como a chave da academia sai no BR Code, para conferência na tela."""
+    try:
+        from utils.pix_brcode import limpar_chave
+
+        if not academia or not (academia.get("pix_chave") or "").strip():
+            return None
+        if not (academia.get("pix_tipo") or "").strip():
+            return None
+        return limpar_chave(academia.get("pix_chave"), academia.get("pix_tipo"))
+    except Exception:
+        return None
+
+
 @academia_bp.route("/configuracoes", methods=["GET", "POST"])
 @login_required
 def configuracoes_academia():
@@ -1693,6 +2074,23 @@ def configuracoes_academia():
                 if efi_ambiente not in ("homologacao", "producao"):
                     efi_ambiente = "homologacao"
 
+                # Chave PIX da própria academia — independente do gateway. É a
+                # segunda opção que o aluno vê na página de pagamento, e a única
+                # que continua funcionando com o gateway fora do ar.
+                pix_chave = (request.form.get("pix_chave") or "").strip() or None
+                pix_tipo = (request.form.get("pix_tipo") or "").strip().lower() or None
+                pix_beneficiario = (request.form.get("pix_beneficiario") or "").strip()[:25] or None
+                pix_cidade = (request.form.get("pix_cidade") or "").strip()[:15] or None
+                if pix_chave:
+                    # Chave com tipo errado gera um código que o banco recusa
+                    # dizendo que "não existe" — barrar aqui evita o aluno
+                    # descobrir isso na hora de pagar.
+                    from utils.pix_brcode import validar_chave
+                    _erro_pix = validar_chave(pix_chave, pix_tipo)
+                    if _erro_pix:
+                        flash(f"Chave PIX: {_erro_pix}", "danger")
+                        pix_chave = pix_tipo = pix_beneficiario = pix_cidade = None
+
                 # SumUp
                 sumup_merchant_code = (request.form.get("sumup_merchant_code") or "").strip() or None
                 sumup_ambiente = (request.form.get("sumup_ambiente") or "producao").strip().lower()
@@ -1763,12 +2161,14 @@ def configuracoes_academia():
                            asaas_webhook_token=%s, infinitepay_handle=%s,
                            cora_client_id=%s, cora_client_id_prod=%s, cora_ambiente=%s,
                            efi_client_id=%s, efi_pix_key=%s, efi_ambiente=%s,
-                           sumup_merchant_code=%s, sumup_ambiente=%s, sumup_habilitado=%s
+                           sumup_merchant_code=%s, sumup_ambiente=%s, sumup_habilitado=%s,
+                           pix_chave=%s, pix_tipo=%s, pix_beneficiario=%s, pix_cidade=%s
                        WHERE id=%s""",
                     (gateway, asaas_habilitado, ambiente, webhook_token, infinitepay_handle,
                      cora_client_id, cora_client_id_prod, cora_ambiente,
                      efi_client_id, efi_pix_key, efi_ambiente,
-                     sumup_merchant_code, sumup_ambiente, sumup_habilitado, academia_id),
+                     sumup_merchant_code, sumup_ambiente, sumup_habilitado,
+                     pix_chave, pix_tipo, pix_beneficiario, pix_cidade, academia_id),
                 )
                 if nova_chave_sumup:
                     # Digitar a chave manual coloca a academia no modo 'key' (sai do OAuth).
@@ -1881,6 +2281,9 @@ def configuracoes_academia():
         academia=academia,
         academias=academias,
         academia_id=academia_id,
+        # Mostra na tela exatamente a chave que vai dentro do código PIX: é a
+        # única forma de o gestor conferir sem precisar tentar pagar.
+        chave_pix_normalizada=_chave_pix_normalizada(academia),
         asaas_chave_definida=asaas_chave_definida,
         mp_token_definido=mp_token_definido,
         cora_cert_definido=cora_cert_definido,
@@ -2234,8 +2637,8 @@ def whatsapp_config():
     conn = get_db_connection()
     cur = conn.cursor(dictionary=True)
     cur.execute(
-        "SELECT nome, whatsapp_numero, whatsapp_lembrete_mensalidade, whatsapp_avisos, "
-        "COALESCE(whatsapp_aniversario, 0) AS whatsapp_aniversario "
+        "SELECT id, nome, whatsapp_numero, whatsapp_lembrete_mensalidade, whatsapp_avisos, "
+        "COALESCE(whatsapp_aniversario, 0) AS whatsapp_aniversario, whatsapp_conectado_em "
         "FROM academias WHERE id = %s",
         (academia_id,),
     )
@@ -2243,12 +2646,41 @@ def whatsapp_config():
     cur.close(); conn.close()
 
     from utils import whatsapp as wpp
+    from utils import whatsapp_log as wlog
     st = wpp.status(academia_id)
+
+    # Estatísticas reais (log de envios) + estado das automações.
+    from datetime import date as _date
+    _meses_pt = ["", "janeiro", "fevereiro", "março", "abril", "maio", "junho",
+                 "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"]
+    _hoje = _date.today()
+    mes_label = f"{_meses_pt[_hoje.month]} de {_hoje.year}"
+    stats = wlog.resumo_mes(academia_id)
+    automacoes_ativas = sum(1 for k in (
+        "whatsapp_lembrete_mensalidade", "whatsapp_avisos", "whatsapp_aniversario"
+    ) if acad.get(k))
+    ultimos = wlog.ultimos_lotes(academia_id, limite=6)
+    ultimo_tipo = wlog.ultimo_por_tipo(academia_id)
+
+    # Modelos ativos — alimentam o seletor da mensagem de teste.
+    from utils import whatsapp_templates as tpl
+    try:
+        _dados = tpl.carregar(academia_id)
+        modelos = [{"tipo": t, "label": tpl.TIPOS[t]["label"], "ativo": _dados[t]["ativo"]}
+                   for t in tpl.ORDEM]
+    except Exception:
+        modelos = []
+
     return render_template(
         "academia/whatsapp.html",
+        modelos=modelos,
         academia_id=academia_id, academias=academias, acad=acad,
+        academia={"id": academia_id, "nome": acad.get("nome")},
         wpp_status=st.get("status", "offline"), wpp_numero=st.get("number"),
         servico_online=wpp.disponivel(),
+        stats=stats, automacoes_ativas=automacoes_ativas,
+        ultimos_envios=ultimos, ultimo_por_tipo=ultimo_tipo,
+        conectado_em=acad.get("whatsapp_conectado_em"), mes_label=mes_label,
     )
 
 
@@ -2274,7 +2706,13 @@ def whatsapp_qr():
     if info.get("status") == "open" and info.get("number"):
         try:
             conn = get_db_connection(); cur = conn.cursor()
-            cur.execute("UPDATE academias SET whatsapp_numero=%s WHERE id=%s", (info["number"], academia_id))
+            # Marca o início da sessão só na transição desconectado→conectado,
+            # para "Sessão ativa desde" não reiniciar a cada poll do QR.
+            cur.execute(
+                "UPDATE academias SET whatsapp_numero=%s, "
+                "whatsapp_conectado_em=COALESCE(whatsapp_conectado_em, NOW()) WHERE id=%s",
+                (info["number"], academia_id),
+            )
             conn.commit(); cur.close(); conn.close()
         except Exception:
             pass
@@ -2291,7 +2729,7 @@ def whatsapp_desconectar():
     r = wpp.logout(academia_id)
     try:
         conn = get_db_connection(); cur = conn.cursor()
-        cur.execute("UPDATE academias SET whatsapp_numero=NULL WHERE id=%s", (academia_id,))
+        cur.execute("UPDATE academias SET whatsapp_numero=NULL, whatsapp_conectado_em=NULL WHERE id=%s", (academia_id,))
         conn.commit(); cur.close(); conn.close()
     except Exception:
         pass
@@ -2329,10 +2767,28 @@ def whatsapp_teste():
     if not telefone:
         return jsonify({"ok": False, "erro": "informe um telefone"}), 400
     from utils import whatsapp as wpp
-    ok, info = wpp.enviar(
-        academia_id, telefone,
-        "✅ Teste do Unimaster: seu WhatsApp está conectado e pronto para enviar mensagens automáticas.",
-    )
+    from utils import whatsapp_log as wlog
+    # Modelo escolhido no seletor: envia o texto real do modelo com dados de
+    # exemplo. Sem modelo, manda a mensagem de teste padrão.
+    modelo = (request.form.get("modelo") or "").strip()
+    mensagem = "✅ Teste do Unimaster: seu WhatsApp está conectado e pronto para enviar mensagens automáticas."
+    if modelo:
+        try:
+            from utils import whatsapp_templates as tpl
+            if modelo in tpl.TIPOS:
+                texto, _ativo = tpl.obter(academia_id, modelo)
+                ctx = {
+                    "nome": "Ana", "aluno": "Ana Beatriz Sousa",
+                    "valor": "R$ 70,00", "vencimento": "10/09/2026",
+                    "link": "pesv.org.br/pag/8f2c", "pix": "",
+                    "academia": "", "mes": "09/2026",
+                }
+                mensagem = "🧪 (teste) " + tpl.render(texto, ctx)
+        except Exception:
+            pass
+    ok, info = wpp.enviar(academia_id, telefone, mensagem)
+    wlog.registrar(academia_id, "teste", "entregue" if ok else "falha", telefone=telefone,
+                   erro=(info or {}).get("erro") if isinstance(info, dict) else None)
     return jsonify({"ok": ok, "info": info})
 
 
@@ -2356,17 +2812,47 @@ def whatsapp_avisos():
            FROM alunos WHERE id_academia = %s AND ativo = 1 ORDER BY nome""",
         (academia_id,),
     )
-    alunos = cur.fetchall()
+    alunos_raw = cur.fetchall()
+
+    def _tem_tel(a):
+        return bool((a.get("responsavel_financeiro_telefone") or a.get("tel_celular") or a.get("telefone") or "").strip())
+
+    # Lista enxuta para o seletor "Selecionar alunos" e para o cálculo de resumo.
+    alunos = [{"id": a["id"], "nome": a["nome"], "tem_tel": _tem_tel(a)} for a in alunos_raw]
+    total_alunos = len(alunos)
+    total_sem_tel = sum(0 if a["tem_tel"] else 1 for a in alunos)
+
+    # Turmas com contagem de alunos e quantos sem telefone (para o resumo por turma).
     cur.execute("SELECT TurmaID AS id, Nome AS nome FROM turmas WHERE id_academia = %s ORDER BY Nome", (academia_id,))
-    turmas = cur.fetchall()
+    turmas_raw = cur.fetchall()
+    # Mapa aluno_id -> tem_tel para contar por turma sem nova consulta pesada.
+    tem_tel_por_aluno = {a["id"]: a["tem_tel"] for a in alunos}
+    turmas = []
+    for t in turmas_raw:
+        cur.execute("SELECT aluno_id FROM aluno_turmas WHERE TurmaID = %s", (t["id"],))
+        ids_t = [r["aluno_id"] for r in cur.fetchall() if r["aluno_id"] in tem_tel_por_aluno]
+        turmas.append({
+            "id": t["id"], "nome": t["nome"],
+            "total": len(ids_t),
+            "sem_tel": sum(0 if tem_tel_por_aluno.get(i) else 1 for i in ids_t),
+        })
     cur.close(); conn.close()
 
     from utils import whatsapp as wpp
+    from utils import whatsapp_templates as tpl
     st = wpp.status(academia_id)
+    try:
+        _dm = tpl.carregar(academia_id)
+        modelos = [{"tipo": t, "label": tpl.TIPOS[t]["label"], "texto": _dm[t]["texto"]} for t in tpl.ORDEM]
+    except Exception:
+        modelos = []
+    nome_acad = next((a.get("nome") for a in (academias or []) if a.get("id") == academia_id), None)
     return render_template(
         "academia/whatsapp_avisos.html",
         academia_id=academia_id, academias=academias,
-        alunos=alunos, turmas=turmas,
+        academia={"id": academia_id, "nome": nome_acad},
+        alunos=alunos, turmas=turmas, modelos=modelos,
+        total_alunos=total_alunos, total_sem_tel=total_sem_tel,
         conectado=(st.get("status") == "open"),
     )
 
@@ -2384,6 +2870,7 @@ def whatsapp_avisos_enviar():
 
     conn = get_db_connection()
     cur = conn.cursor(dictionary=True)
+    turma_nome = ""
     base = ("SELECT a.id, a.nome, a.tel_celular, a.telefone, a.responsavel_financeiro_telefone "
             "FROM alunos a WHERE a.id_academia = %s AND a.ativo = 1")
     params = [academia_id]
@@ -2394,6 +2881,11 @@ def whatsapp_avisos_enviar():
             return jsonify({"ok": False, "erro": "Selecione a turma."}), 400
         base += " AND a.id IN (SELECT aluno_id FROM aluno_turmas WHERE TurmaID = %s)"
         params.append(turma_id)
+        try:
+            cur.execute("SELECT Nome FROM turmas WHERE TurmaID = %s", (turma_id,))
+            turma_nome = ((cur.fetchone() or {}).get("Nome") or "").strip()
+        except Exception:
+            turma_nome = ""
     elif destino == "selecionados":
         ids = request.form.getlist("aluno_ids")
         ids = [int(i) for i in ids if str(i).isdigit()]
@@ -2404,23 +2896,37 @@ def whatsapp_avisos_enviar():
         params.extend(ids)
     cur.execute(base + " ORDER BY a.nome", tuple(params))
     alunos = cur.fetchall()
+    # Nome da academia para o placeholder {academia}.
+    cur.execute("SELECT nome FROM academias WHERE id = %s", (academia_id,))
+    nome_acad = ((cur.fetchone() or {}).get("nome") or "").strip()
     cur.close(); conn.close()
 
     from utils import whatsapp as wpp
+    from utils import whatsapp_log as wlog
+    import uuid
+    lote_id = "aviso-" + uuid.uuid4().hex[:12]
     enviados = falhas = sem_tel = 0
     for a in alunos:
         tel = (a.get("responsavel_financeiro_telefone") or a.get("tel_celular") or a.get("telefone") or "").strip()
         if not tel:
             sem_tel += 1
+            wlog.registrar(academia_id, "aviso", "sem_numero", aluno_id=a.get("id"), lote_id=lote_id)
             continue
-        # personaliza com o primeiro nome
+        # Substitui as variáveis suportadas nos avisos.
         primeiro = (a.get("nome") or "").split(" ")[0]
-        texto = mensagem.replace("{nome}", primeiro)
-        ok, _ = wpp.enviar(academia_id, tel, texto)
+        texto = (mensagem
+                 .replace("{nome}", primeiro)
+                 .replace("{aluno}", a.get("nome") or "")
+                 .replace("{turma}", turma_nome)
+                 .replace("{academia}", nome_acad))
+        ok, info = wpp.enviar(academia_id, tel, texto)
         if ok:
             enviados += 1
+            wlog.registrar(academia_id, "aviso", "entregue", aluno_id=a.get("id"), telefone=tel, lote_id=lote_id)
         else:
             falhas += 1
+            wlog.registrar(academia_id, "aviso", "falha", aluno_id=a.get("id"), telefone=tel,
+                           erro=(info or {}).get("erro") if isinstance(info, dict) else None, lote_id=lote_id)
     return jsonify({"ok": True, "resumo": {"enviados": enviados, "falhas": falhas, "sem_telefone": sem_tel, "total": len(alunos)}})
 
 
@@ -2452,9 +2958,15 @@ def whatsapp_mensagens():
     itens = [{"tipo": t, "label": tpl.TIPOS[t]["label"],
               "texto": dados[t]["texto"], "ativo": dados[t]["ativo"],
               "padrao": tpl.TIPOS[t]["default"]} for t in tpl.ORDEM]
+    nome_acad = next((a.get("nome") for a in (academias or []) if a.get("id") == academia_id), None)
+    from datetime import date as _date
+    _meses_pt = ["", "janeiro", "fevereiro", "março", "abril", "maio", "junho",
+                 "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"]
     return render_template(
         "academia/whatsapp_mensagens.html",
-        academia_id=academia_id, academias=academias, itens=itens,
+        academia_id=academia_id, academias=academias,
+        academia={"id": academia_id, "nome": nome_acad}, itens=itens,
+        mes_exemplo=_meses_pt[_date.today().month],
     )
 
 

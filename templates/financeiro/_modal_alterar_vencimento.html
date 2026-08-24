@@ -1,0 +1,144 @@
+{# Modal "alterar vencimento": muda o dia de vencimento do aluno e, ao adiar,
+   cobra os dias extras a preço de dia (valor ÷ 30). A prévia vem do servidor
+   (financeiro.previa_alterar_vencimento) para a tela e a gravação nunca
+   mostrarem contas diferentes. Usado na ficha do aluno e na lista de
+   mensalidades filtrada por aluno. #}
+{% macro modal_alterar_vencimento(aluno_id, aluno_nome, dia_atual, voltar=None) %}
+<div class="modal fade" id="modalAlterarVencimento{{ aluno_id }}" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <form class="modal-content" method="POST" id="formAlterarVencimento{{ aluno_id }}"
+          action="{{ url_for('financeiro.alterar_vencimento_aluno', aluno_id=aluno_id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="voltar" value="{{ voltar or request.full_path }}">
+      <div class="modal-header">
+        <h5 class="modal-title">Alterar vencimento</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-3 text-muted" style="font-size:.9rem">
+          {% if dia_atual %}
+            Hoje as mensalidades de <strong>{{ aluno_nome }}</strong> vencem no
+            <strong>dia {{ dia_atual }}</strong>.
+          {% else %}
+            <strong>{{ aluno_nome }}</strong> ainda não tem mensalidade lançada — o dia
+            escolhido vale a partir da próxima geração.
+          {% endif %}
+        </p>
+        <div class="mb-3">
+          <label class="form-label fw-semibold" for="avDia{{ aluno_id }}">Novo dia de vencimento</label>
+          <input type="number" class="form-control" id="avDia{{ aluno_id }}" name="dia_vencimento"
+                 min="1" max="31" style="max-width:120px"
+                 value="{{ dia_atual or 10 }}" required>
+          <div class="form-text">Em meses mais curtos, cai no último dia do mês.</div>
+        </div>
+        <div class="form-check mb-3">
+          <input class="form-check-input" type="checkbox" value="1" id="avProporcional{{ aluno_id }}"
+                 name="cobrar_proporcional" checked>
+          <label class="form-check-label" for="avProporcional{{ aluno_id }}">
+            Cobrar o período proporcional
+            <span class="d-block text-muted" style="font-size:.85rem">
+              Só vale quando o vencimento é adiado: os dias a mais entram na própria
+              mensalidade a preço de dia (valor ÷ 30). Antecipar não muda o valor.
+            </span>
+          </label>
+        </div>
+        <div class="alert alert-light border mb-0 py-2" id="avPrevia{{ aluno_id }}" style="font-size:.88rem">
+          Escolha o novo dia para ver o resumo.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Fechar</button>
+        <button type="submit" class="btn btn-dark" id="avSalvar{{ aluno_id }}">Alterar vencimento</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  var modal = document.getElementById('modalAlterarVencimento{{ aluno_id }}');
+  if (!modal) return;
+  var dia = document.getElementById('avDia{{ aluno_id }}');
+  var prop = document.getElementById('avProporcional{{ aluno_id }}');
+  var caixa = document.getElementById('avPrevia{{ aluno_id }}');
+  var urlPrevia = {{ url_for('financeiro.previa_alterar_vencimento', aluno_id=aluno_id)|tojson }};
+  var pedido = 0;
+  var timer = null;
+
+  function reais(v) {
+    return 'R$ ' + (Number(v) || 0).toFixed(2).replace('.', ',');
+  }
+
+  function escapar(t) {
+    var d = document.createElement('div');
+    d.textContent = t == null ? '' : String(t);
+    return d.innerHTML;
+  }
+
+  function desenhar(d) {
+    var linhas = [];
+    if (d.dia_atual && d.dia_atual === d.novo_dia) {
+      caixa.innerHTML = 'O vencimento já é no dia ' + d.novo_dia + '.';
+      return;
+    }
+    if (d.dia_atual) {
+      linhas.push('<div>Vencimento: <strong>dia ' + d.dia_atual + '</strong> → <strong>dia ' + d.novo_dia + '</strong>' +
+                  (d.adiando ? ' (adiado em ' + d.dias_extras + ' dia(s))' : ' (antecipado)') + '</div>');
+    }
+    (d.cobrancas || []).forEach(function (c) {
+      linhas.push('<div class="text-muted">' + escapar(c.plano || 'Mensalidade') + ': ' +
+                  c.de + ' → <strong>' + c.para + '</strong>' +
+                  (c.proporcional ? ' · ' + reais(c.valor_antigo) + ' → <strong>' + reais(c.valor_novo) + '</strong>' : '') +
+                  '</div>');
+    });
+    if (d.criar) {
+      linhas.push('<div class="text-muted">Nenhuma cobrança em aberto: será lançada a mensalidade de ' +
+                  escapar(d.criar.plano || '') + ' com vencimento <strong>' + d.criar.vencimento +
+                  '</strong> no valor de <strong>' + reais(d.criar.valor) + '</strong> (' +
+                  reais(d.criar.valor_mensal) + ' + ' + reais(d.criar.proporcional) + ').</div>');
+    }
+    if (d.proporcional > 0) {
+      linhas.push('<div class="mt-1">Proporcional de ' + d.dias_extras + ' dia(s): <strong>' +
+                  reais(d.proporcional) + '</strong> (' + reais(d.valor_mensal) + ' ÷ 30 × ' + d.dias_extras + ').</div>');
+    } else if (d.adiando && d.dias_extras > 0) {
+      linhas.push('<div class="mt-1">Sem cobrança proporcional — marque a opção acima para cobrar os ' +
+                  d.dias_extras + ' dia(s).</div>');
+    } else if (d.dia_atual && !d.adiando) {
+      linhas.push('<div class="mt-1">Vencimento antecipado: o valor das cobranças segue o mesmo.</div>');
+    }
+    if (d.aviso) linhas.push('<div class="mt-1 text-muted">' + escapar(d.aviso) + '</div>');
+    caixa.innerHTML = linhas.join('') || 'Nada a alterar.';
+  }
+
+  function atualizar() {
+    var v = parseInt(dia.value, 10);
+    if (!v || v < 1 || v > 31) {
+      caixa.textContent = 'Informe um dia entre 1 e 31.';
+      return;
+    }
+    var meu = ++pedido;
+    caixa.textContent = 'Calculando…';
+    fetch(urlPrevia + '?dia_vencimento=' + v + '&cobrar_proporcional=' + (prop.checked ? '1' : '0'),
+          { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (meu !== pedido) return;           // resposta atrasada de um dia já trocado
+        if (!d.ok) { caixa.textContent = d.msg || 'Não foi possível calcular.'; return; }
+        desenhar(d);
+      })
+      .catch(function () {
+        if (meu === pedido) caixa.textContent = 'Não foi possível calcular a prévia.';
+      });
+  }
+
+  function agendar() {
+    clearTimeout(timer);
+    timer = setTimeout(atualizar, 250);
+  }
+
+  dia.addEventListener('input', agendar);
+  prop.addEventListener('change', atualizar);
+  modal.addEventListener('shown.bs.modal', atualizar);
+});
+</script>
+{% endmacro %}

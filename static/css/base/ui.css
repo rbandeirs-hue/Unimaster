@@ -1,0 +1,293 @@
+/* =======================================================================
+   Design System — componentes e utilitários
+   =======================================================================
+   Camada que consome os tokens de tokens.css. Complementa o Bootstrap em vez
+   de substituí-lo: as classes `u-` convivem com `card`, `btn`, `row`, etc.
+
+   Existe para dois fins:
+     1. dar forma aos componentes das macros de templates/components/ui.html;
+     2. absorver o `style="..."` decorativo que hoje se repete nos templates.
+   ======================================================================= */
+
+/* ---------------------------------------------------------------- seção */
+/* Cabeçalho de bloco ("ALUNOS", "FINANCEIRO"): mesma hierarquia em todas as
+   telas, sem cada uma inventar tamanho e cor. */
+.u-secao {
+  display: flex;
+  align-items: center;
+  gap: var(--u-space-2);
+  font-size: var(--u-fs-sm);
+  font-weight: var(--u-fw-bold);
+  text-transform: uppercase;
+  letter-spacing: .02em;
+  color: var(--u-text-muted);
+  margin-bottom: var(--u-space-2);
+}
+
+/* ------------------------------------------------------------------ KPI */
+/* Cartão de indicador: número grande, rótulo abaixo, rodapé opcional.
+   A cor é dada por --u-kpi-cor, definida pela variante. */
+.u-kpi {
+  height: 100%;
+  background: var(--u-surface);
+  border: 1px solid var(--u-border);
+  border-top: 3px solid var(--u-kpi-cor, var(--u-primary));
+  border-radius: var(--u-radius);
+  box-shadow: var(--u-shadow-sm);
+  padding: var(--u-space-3) var(--u-space-2);
+  text-align: center;
+}
+.u-kpi__valor {
+  font-size: 2rem;
+  line-height: 1.1;
+  font-weight: var(--u-fw-bold);
+  color: var(--u-kpi-cor, var(--u-text));
+  overflow-wrap: anywhere;   /* valores em R$ não estouram no celular */
+}
+.u-kpi__valor--moeda { font-size: 1.3rem; }
+.u-kpi__rotulo {
+  font-size: var(--u-fs-sm);
+  color: var(--u-text-muted);
+  margin-top: var(--u-space-1);
+}
+.u-kpi__rodape {
+  font-size: var(--u-fs-xs);
+  color: var(--u-text-muted);
+  margin-top: var(--u-space-1);
+}
+.u-kpi--primary { --u-kpi-cor: var(--u-primary); }
+.u-kpi--success { --u-kpi-cor: var(--u-success); }
+.u-kpi--danger  { --u-kpi-cor: var(--u-danger); }
+.u-kpi--warning { --u-kpi-cor: var(--u-warning); }
+.u-kpi--info    { --u-kpi-cor: var(--u-info); }
+.u-kpi--muted   { --u-kpi-cor: var(--u-text-muted); }
+
+/* -------------------------------------------------------- card de módulo */
+/* O bloco clicável dos menus de painel (21 repetições só no painel da
+   academia). O <a> não recebe sublinhado nem cor de link. */
+.u-modulo {
+  display: block;
+  height: 100%;
+  text-decoration: none;
+  color: inherit;
+}
+/* Borda colorida em todo o contorno — mesmo desenho do card de
+   aniversariantes, que serve de referência visual do painel. */
+.u-modulo__card {
+  height: 100%;
+  background: var(--u-surface);
+  border: 2px solid var(--u-modulo-cor, var(--u-border));
+  border-radius: var(--u-radius);
+  box-shadow: var(--u-shadow-sm);
+  padding: var(--u-space-4) var(--u-space-3);
+  text-align: center;
+  transition: transform var(--u-transition), box-shadow var(--u-transition);
+}
+.u-modulo:hover .u-modulo__card,
+.u-modulo:focus-visible .u-modulo__card {
+  transform: translateY(-3px);
+  box-shadow: var(--u-shadow);
+}
+.u-modulo:focus-visible .u-modulo__card {
+  outline: 2px solid var(--u-primary);
+  outline-offset: 2px;
+}
+.u-modulo__icone {
+  font-size: 2.2rem;
+  line-height: 1;
+  color: var(--u-text-muted);
+  margin-bottom: var(--u-space-2);
+  display: block;
+}
+.u-modulo__titulo {
+  font-size: var(--u-fs-base);
+  font-weight: var(--u-fw-semibold);
+  color: var(--u-text);
+  margin-bottom: var(--u-space-1);
+}
+.u-modulo__desc {
+  font-size: var(--u-fs-sm);
+  color: var(--u-text-muted);
+  margin: 0;
+}
+.u-modulo--primary   { --u-modulo-cor: var(--u-primary); }
+.u-modulo--success   { --u-modulo-cor: var(--u-success); }
+.u-modulo--danger    { --u-modulo-cor: var(--u-danger); }
+.u-modulo--warning   { --u-modulo-cor: var(--u-warning); }
+.u-modulo--info      { --u-modulo-cor: var(--u-info); }
+.u-modulo--secondary { --u-modulo-cor: var(--u-text-muted); }
+/* Acentos, para o painel não repetir a mesma cor a cada quatro cards. */
+.u-modulo--purple    { --u-modulo-cor: var(--u-accent-purple); }
+.u-modulo--orange    { --u-modulo-cor: var(--u-accent-orange); }
+.u-modulo--teal      { --u-modulo-cor: var(--u-accent-teal); }
+.u-modulo--pink      { --u-modulo-cor: var(--u-accent-pink); }
+.u-modulo--indigo    { --u-modulo-cor: var(--u-accent-indigo); }
+.u-modulo--lime      { --u-modulo-cor: var(--u-accent-lime); }
+.u-modulo--cyan      { --u-modulo-cor: var(--u-accent-cyan); }
+.u-modulo--amber     { --u-modulo-cor: var(--u-accent-amber); }
+
+/* Em telas pequenas o card fica horizontal: ícone ao lado do texto, para o
+   menu não virar uma pilha de blocos altos. */
+@media (max-width: 575.98px) {
+  .u-modulo__card {
+    display: flex;
+    align-items: center;
+    gap: var(--u-space-3);
+    text-align: left;
+    padding: var(--u-space-3);
+  }
+  .u-modulo__icone { font-size: 1.6rem; margin-bottom: 0; }
+}
+
+/* ------------------------------------------------- card de conteúdo cor */
+/* Mesmo contorno colorido dos cards de módulo, para cards que exibem dados
+   (eventos, competições, listas). Aqui a cor costuma ter significado — estado
+   do registro —, então quem usa escolhe a variante conscientemente. */
+.u-card-cor {
+  height: 100%;
+  background: var(--u-surface);
+  border: 2px solid var(--u-card-cor, var(--u-border));
+  border-radius: var(--u-radius);
+  box-shadow: var(--u-shadow-sm);
+  overflow: hidden;
+  transition: transform var(--u-transition), box-shadow var(--u-transition);
+}
+.u-card-cor:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--u-shadow);
+}
+.u-card-cor--primary   { --u-card-cor: var(--u-primary); }
+.u-card-cor--success   { --u-card-cor: var(--u-success); }
+.u-card-cor--danger    { --u-card-cor: var(--u-danger); }
+.u-card-cor--warning   { --u-card-cor: var(--u-warning); }
+.u-card-cor--info      { --u-card-cor: var(--u-info); }
+.u-card-cor--secondary { --u-card-cor: var(--u-border); }
+.u-card-cor--purple    { --u-card-cor: var(--u-accent-purple); }
+.u-card-cor--teal      { --u-card-cor: var(--u-accent-teal); }
+.u-card-cor--indigo    { --u-card-cor: var(--u-accent-indigo); }
+.u-card-cor--orange    { --u-card-cor: var(--u-accent-orange); }
+/* Registro encerrado/inativo: perde saturação sem sumir da lista. */
+.u-card-cor.is-inativo { opacity: .72; }
+
+/* ------------------------------------------------ menus de card legados */
+/* As telas de menu antigas usam `card-action-link` + `card border-<cor>`.
+   Marcando o container com `u-menu-cards`, elas recebem o mesmo contorno de
+   2px, o raio e o hover dos cards novos — e a cor passa a variar por posição,
+   sem precisar editar card a card. O !important é necessário porque as
+   classes utilitárias do Bootstrap (border-primary, text-info) vêm depois na
+   cascata; aqui a cor é decorativa, então sobrescrever é seguro. */
+.u-menu-cards > [class*="col-"] .card {
+  border-width: 2px !important;
+  border-radius: var(--u-radius);
+  transition: transform var(--u-transition), box-shadow var(--u-transition);
+}
+.u-menu-cards > [class*="col-"] .card-action-link:hover .card,
+.u-menu-cards > [class*="col-"] .card-action-link:focus-visible .card {
+  transform: translateY(-3px);
+  box-shadow: var(--u-shadow) !important;
+}
+
+/* Monocromático: a borda dos cards de menu é neutra. A cor volta a ser
+   exclusividade dos elementos que informam estado (badges, alertas). */
+.u-menu-cards > [class*="col-"] .card { border-color: var(--u-border) !important; }
+.u-menu-cards > [class*="col-"] .card i { color: var(--u-text-muted) !important; }
+.u-menu-cards > [class*="col-"] .card .badge i { color: inherit !important; }
+
+/* ------------------------------------------- ciclo de cores numa grade */
+/* Para listas de cartões que não têm cor própria (usuários, por exemplo):
+   marque o container e cada filho direto recebe um tom do ciclo, com o
+   mesmo contorno de 2px dos demais cards do sistema.
+   Serve para qualquer grade — CSS grid, flex ou row do Bootstrap. */
+.u-cores-ciclo > * {
+  border-width: 2px !important;
+  border-style: solid !important;
+  border-color: var(--u-ciclo-cor, var(--u-border)) !important;
+  border-radius: var(--u-radius);
+}
+/* Ciclo neutralizado: mesma espessura de borda, cor única. Mantido como
+   ponto de extensão caso alguma grade volte a precisar de cor por posição. */
+.u-cores-ciclo > * { --u-ciclo-cor: var(--u-border); }
+
+/* --------------------------------------------------------------- pílula */
+/* Contagens por estado (Ativos, Inativos, ...) com o mesmo desenho em toda
+   parte, em vez de cada tela escolher sua combinação de badge. */
+.u-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--u-space-1);
+  padding: .2rem .6rem;
+  border-radius: var(--u-radius-pill);
+  font-size: var(--u-fs-sm);
+  font-weight: var(--u-fw-medium);
+  background: var(--u-surface-alt);
+  color: var(--u-text-muted);
+  border: 1px solid var(--u-border-soft);
+}
+.u-pill--primary { background: rgba(13, 110, 253, .10); color: #0a58ca; border-color: rgba(13, 110, 253, .20); }
+.u-pill--success { background: rgba(25, 135, 84, .10);  color: #146c43; border-color: rgba(25, 135, 84, .20); }
+.u-pill--danger  { background: rgba(220, 53, 69, .10);  color: #b02a37; border-color: rgba(220, 53, 69, .20); }
+.u-pill--warning { background: rgba(255, 193, 7, .16);  color: #997404; border-color: rgba(255, 193, 7, .30); }
+.u-pill--info    { background: rgba(13, 202, 240, .12); color: #087990; border-color: rgba(13, 202, 240, .25); }
+
+/* ------------------------------------------------------------ barra/meta */
+.u-barra { height: 22px; border-radius: var(--u-radius-pill); }
+.u-barra--fina { height: 8px; }
+
+/* --------------------------------------------------------- utilitários */
+.u-fs-xs   { font-size: var(--u-fs-xs); }
+.u-fs-sm   { font-size: var(--u-fs-sm); }
+.u-muted   { color: var(--u-text-muted); }
+/* Dinheiro em coluna: dígitos de mesma largura param de "dançar" na tabela. */
+.u-mono    { font-family: var(--u-font-mono); font-variant-numeric: tabular-nums; }
+.u-num     { font-variant-numeric: tabular-nums; }
+.u-w-100px { width: 100px; }
+.u-w-160   { max-width: 160px; }
+.u-w-200   { max-width: 200px; }
+.u-w-220   { max-width: 220px; }
+
+/* Filtro em barra: empilha no celular e vira linha a partir do tablet. */
+.u-filtros {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--u-space-2);
+  align-items: flex-end;
+}
+@media (max-width: 575.98px) {
+  .u-filtros > * { flex: 1 1 100%; }
+  .u-filtros .u-w-100px,
+  .u-filtros .u-w-160,
+  .u-filtros .u-w-200,
+  .u-filtros .u-w-220 { max-width: none; width: 100%; }
+}
+
+/* ------------------------------------------------- tabela vira cartões */
+/* Uma marcação só para celular e desktop: abaixo de 768px cada linha vira um
+   cartão, usando data-label de cada <td> como rótulo. Dispensa duplicar o
+   conteúdo em blocos d-md-none / d-none d-md-block. */
+@media (max-width: 767.98px) {
+  .u-tabela-cards thead { display: none; }
+  .u-tabela-cards tbody tr {
+    display: block;
+    margin-bottom: var(--u-space-3);
+    border: 1px solid var(--u-border);
+    border-radius: var(--u-radius);
+    padding: var(--u-space-2);
+    background: var(--u-surface);
+  }
+  .u-tabela-cards tbody td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--u-space-3);
+    border: 0 !important;
+    padding: .35rem .25rem;
+  }
+  .u-tabela-cards tbody td::before {
+    content: attr(data-label);
+    font-size: var(--u-fs-xs);
+    font-weight: var(--u-fw-semibold);
+    text-transform: uppercase;
+    color: var(--u-text-muted);
+  }
+  .u-tabela-cards tbody td:empty { display: none; }
+}

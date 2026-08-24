@@ -1075,7 +1075,7 @@ def editar_academia(academia_id):
     cur.execute(
         """
         SELECT ac.id, ac.nome, ac.responsavel, ac.cidade, ac.uf, ac.email, ac.telefone,
-               ac.cep, ac.rua, ac.numero, ac.complemento, ac.bairro,
+               ac.cep, ac.rua, ac.numero, ac.complemento, ac.bairro, ac.site_url,
                ac.id_associacao, ass.id_federacao
         FROM academias ac
         LEFT JOIN associacoes ass ON ass.id = ac.id_associacao
@@ -1226,6 +1226,9 @@ def editar_academia(academia_id):
         numero = request.form.get("numero", "").strip()
         complemento = request.form.get("complemento", "").strip()
         bairro = request.form.get("bairro", "").strip()
+        site_url = request.form.get("site_url", "").strip()
+        if site_url and not site_url.lower().startswith(("http://", "https://")):
+            site_url = "https://" + site_url
         logo_file = request.files.get("logo")
         logo_base64 = request.form.get("logo_base64")
         modalidade_ids = [int(x) for x in request.form.getlist("modalidade_ids") if str(x).strip().isdigit()]
@@ -1254,7 +1257,7 @@ def editar_academia(academia_id):
                 """
                 UPDATE academias
                 SET nome=%s, responsavel=%s, cidade=%s, uf=%s, email=%s, telefone=%s,
-                    cep=%s, rua=%s, numero=%s, complemento=%s, bairro=%s, id_associacao=%s
+                    cep=%s, rua=%s, numero=%s, complemento=%s, bairro=%s, site_url=%s, id_associacao=%s
                 WHERE id=%s
                 """,
                 (
@@ -1269,10 +1272,29 @@ def editar_academia(academia_id):
                     numero or None,
                     complemento or None,
                     bairro or None,
+                    site_url or None,
                     id_associacao,
                     academia_id,
                 ),
             )
+            # Renomeou a academia -> regenera o slug para os links de pré-cadastro/
+            # matrícula refletirem o novo nome. (Links antigos com o slug anterior
+            # deixam de funcionar; o slug novo é único.)
+            if nome and nome != (academia.get("nome") or ""):
+                try:
+                    from blueprints.precadastro.routes import _slugify
+                    _base = _slugify(nome) or "academia"
+                    _novo = _base
+                    _n = 1
+                    while True:
+                        cur.execute("SELECT id FROM academias WHERE slug=%s AND id<>%s", (_novo, academia_id))
+                        if cur.fetchone() is None:
+                            break
+                        _novo = f"{_base}-{_n}"
+                        _n += 1
+                    cur.execute("UPDATE academias SET slug=%s WHERE id=%s", (_novo, academia_id))
+                except Exception as _e:
+                    current_app.logger.error(f"Falha ao regenerar slug da academia {academia_id}: {_e}")
             # Troca do gestor responsável (substitui o atual pelo selecionado).
             novo_gestor_id = request.form.get("gestor_usuario_id", type=int)
             if novo_gestor_id:
@@ -1325,6 +1347,10 @@ def editar_academia(academia_id):
     return render_template(
         "academias/editar_academia.html",
         academia=academia,
+        # A lateral do shell precisa da academia em foco; o seletor do topo fica
+        # de fora de propósito — a tela edita uma academia específica.
+        academia_id=academia_id,
+        academias=[],
         associacoes=associacoes,
         logo_url=logo_url,
         back_url=back_url,

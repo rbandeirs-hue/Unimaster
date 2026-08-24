@@ -1,236 +1,337 @@
-{% extends "financeiro/painel/_layout.html" %}
-{% block title %}Gerar Cobranças{% endblock %}
+{% extends "financeiro/painel/_base.html" %}
+{% set fin_aba = 'cobrancas' %}
+{% block title %}Gerar cobranças — Financeiro{% endblock %}
 
-{% block conteudo %}
-<div class="fp-page fp-page--wide">
+{% block pagina_titulo %}Financeiro{% endblock %}
+{% block pagina_subtitulo %}Gere e acompanhe as cobranças do mês{% endblock %}
 
-  <div class="fp-head">
-    <h1 class="fp-h1">Gerar Cobranças</h1>
-    <p class="fp-sub">Gere e gerencie cobranças mensais dos alunos</p>
-  </div>
+{% block fin_css %}
+<style>
+  .lin-cob { grid-template-columns: minmax(0,2fr) 120px 120px 120px 130px 150px; }
 
-  <div class="fp-barra-mes">
-    <span style="font-size:12px;color:var(--fp-text-muted);margin-right:4px">Mês:</span>
-    {% for m in meses %}
-    <a class="fp-mes-btn fp-mes-btn--sm {% if m.chave == mes_chave %}is-active{% endif %}"
-       href="{{ url_for('financeiro_painel.cobrancas', academia_id=academia_id, mes=m.chave) }}">{{ m.label }}</a>
-    {% endfor %}
-    <div class="fp-resumo-dir">
-      <div class="fp-resumo">
-        <div class="fp-resumo__label fp-resumo__label--mini">Cobranças</div>
-        <div class="fp-resumo__valor fp-resumo__valor--sm">{{ n_cobrancas }}</div>
-      </div>
-      <div class="fp-resumo">
-        <div class="fp-resumo__label fp-resumo__label--mini">Em aberto</div>
-        <div class="fp-resumo__valor fp-resumo__valor--sm" style="color:var(--fp-yellow-text)">{{ n_geradas }}</div>
-      </div>
-      <div class="fp-resumo">
-        <div class="fp-resumo__label fp-resumo__label--mini">Pagas</div>
-        <div class="fp-resumo__valor fp-resumo__valor--sm fp-resumo__valor--verde">{{ n_pagas }}</div>
-      </div>
-    </div>
-  </div>
+  @media (max-width: 1360px) {
+    .lin-cob { grid-template-columns: minmax(0,2fr) 120px 120px 130px 150px; }
+    .col-original { display: none !important; }
+  }
+  @media (max-width: 1120px) {
+    .lin-cob { grid-template-columns: minmax(0,2fr) 120px 130px 150px; }
+    .col-desconto { display: none !important; }
+  }
+  @media (max-width: 1024px) {
+    .lin-cob { grid-template-columns: minmax(0,2fr) 120px 120px 130px 150px; }
+    .col-desconto { display: block !important; }
+  }
+  @media (max-width: 900px) {
+    .lin-cob { grid-template-columns: minmax(0,2fr) 120px 130px 150px; }
+    .col-desconto { display: none !important; }
+  }
+  @media (max-width: 680px) {
+    .lin-cob { grid-template-columns: minmax(0,1.6fr) 120px 130px; }
+    .col-acao { display: none !important; }
+  }
 
-  <div class="fp-grid-gerar">
+  /* A lista de alunos rola dentro do cartão: com 40 alunos sem cobrança, o
+     formulário inteiro sairia da tela antes de chegar ao botão. */
+  .fin-alunos {
+    max-height: 260px;
+    overflow-y: auto;
+    border: 1px solid var(--sh-line);
+    border-radius: var(--u-radius-sm);
+  }
+  .fin-aluno-item {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    padding: .5rem .75rem;
+    border-bottom: 1px solid #f2f0ec;
+    cursor: pointer;
+  }
+  .fin-aluno-item:last-child { border-bottom: 0; }
+  .fin-aluno-item:hover { background: #fdfcfa; }
+  .fin-aluno-item.is-sel { background: #f4f2ee; }
+  .fin-aluno-item input { width: auto; margin: 0; }
 
-    <form class="fp-card fp-card--pad" style="align-self:start" method="POST"
-          action="{{ url_for('financeiro_painel.cobrancas_gerar') }}" id="fp-form-gerar">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
-      <input type="hidden" name="mes" value="{{ mes_chave }}">
+  .fin-gerar-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--u-space-3); padding: 1.25rem; }
+  .fin-gerar-form .lst-campo { flex: none; }
+  .fin-gerar-larga { grid-column: 1 / -1; }
 
-      <h2 class="fp-h2" style="margin-bottom:16px">Nova Cobrança — {{ mes_label }}</h2>
-
-      {% if not planos %}
-      <div class="fp-gerar__aviso-ok" style="background:rgba(245,197,24,.07);border-color:rgba(245,197,24,.2);color:var(--fp-yellow-text)">
-        Nenhum plano ativo. Cadastre um em <a href="{{ url_for('financeiro_painel.planos', academia_id=academia_id) }}" style="color:inherit;text-decoration:underline">Planos</a>.
-      </div>
-      {% elif not sem_cobranca %}
-      <div class="fp-gerar__aviso-ok">Todos os alunos ativos já têm cobrança em {{ mes_label }}.</div>
-      {% else %}
-
-      <div style="margin-bottom:14px">
-        <div class="fp-sel-topo">
-          <label class="fp-label" style="margin:0">Alunos ({{ sem_cobranca|length }} sem cobrança)</label>
-          <button type="button" class="fp-link-acao" id="fp-sel-todos">Selecionar todos</button>
-        </div>
-        <div class="fp-alunos-lista">
-          {% for a in sem_cobranca %}
-          <label class="fp-aluno-item">
-            <input type="checkbox" name="aluno_id" value="{{ a.id }}">
-            <span class="fp-dot fp-dot--sm" style="background: {{ cor_faixa(a.faixa) }}"></span>
-            <span class="fp-aluno-item__nome">{{ a.nome }}</span>
-          </label>
-          {% endfor %}
-        </div>
-      </div>
-
-      <div style="margin-bottom:12px">
-        <label class="fp-label" for="gr-plano">Plano *</label>
-        <select class="fp-input" id="gr-plano" name="plano_id" required>
-          {% for p in planos %}
-          <option value="{{ p.id }}" data-valor="{{ '%.2f'|format(p.valor) }}">{{ p.nome }} — {{ fmt_moeda(p.valor) }}</option>
-          {% endfor %}
-        </select>
-      </div>
-
-      <div style="margin-bottom:12px">
-        <label class="fp-label" for="gr-desconto">Desconto (opcional)</label>
-        <select class="fp-input" id="gr-desconto" name="desconto_id">
-          <option value="" data-tipo="" data-valor="0">Sem desconto</option>
-          {% for d in descontos_lista %}
-          <option value="{{ d.id }}" data-tipo="{{ d.tipo }}" data-valor="{{ '%.2f'|format(d.valor) }}">
-            {{ d.nome }} ({% if d.tipo == 'percentual' %}{{ '%g'|format(d.valor|float) }}%{% else %}{{ fmt_moeda(d.valor) }}{% endif %})
-          </option>
-          {% endfor %}
-        </select>
-      </div>
-
-      <div style="margin-bottom:12px">
-        <label class="fp-label" for="gr-dia">Dia do vencimento</label>
-        <input class="fp-input" id="gr-dia" name="dia_vencimento" type="number" min="1" max="28" value="10">
-      </div>
-
-      <div style="margin-bottom:16px">
-        <label class="fp-label" for="gr-obs">Observação</label>
-        <input class="fp-input" id="gr-obs" name="observacao" maxlength="255" placeholder="Opcional...">
-      </div>
-
-      <div class="fp-resumo-sel" id="fp-resumo-sel" hidden>
-        <div class="fp-resumo-sel__n" id="fp-resumo-n">0 aluno(s) selecionado(s)</div>
-        <div class="fp-resumo-sel__valor" id="fp-resumo-total">R$ 0,00</div>
-        <div class="fp-resumo-sel__sub">total a cobrar</div>
-      </div>
-
-      <button class="fp-btn fp-btn--block" type="submit" id="fp-btn-gerar" disabled>Gerar Cobranças</button>
-      {% endif %}
-    </form>
-
-    <div>
-      <div class="fp-filtro-linha">
-        <span style="font-size:11px;color:var(--fp-text-muted)">Filtro:</span>
-        {% for s in ['Todos', 'Gerada', 'Atrasado', 'Paga', 'Cancelada'] %}
-        <a class="fp-pill fp-pill--{{ s|lower }} {% if filtro == s %}is-active{% endif %}"
-           href="{{ url_for('financeiro_painel.cobrancas', academia_id=academia_id, mes=mes_chave, filtro=s) }}">{{ s }}</a>
-        {% endfor %}
-        {% if lista %}<span class="fp-filtro-linha__total">{{ fmt_moeda(total) }}</span>{% endif %}
-      </div>
-
-      <div class="fp-card fp-card--table">
-        <div class="fp-table-wrap">
-          <table class="fp-table">
-            <thead>
-              <tr><th>Aluno</th><th>Original</th><th>Desconto</th><th>Final</th><th>Status</th><th>Vencimento</th><th>Ação</th></tr>
-            </thead>
-            <tbody>
-              {% for c in lista %}
-              <tr>
-                <td>
-                  <div class="fp-td-nome">{{ c.aluno_nome }}
-                    {% if c.tipo == 'avulsa' %}
-                    <span class="fp-badge" style="font-size:9px;vertical-align:middle;margin-left:4px">Avulsa</span>
-                    {% endif %}
-                  </div>
-                  <div class="fp-td-mini" style="display:flex;align-items:center;gap:4px;margin-top:2px">
-                    <span class="fp-dot fp-dot--sm" style="background: {{ cor_faixa(c.faixa) }}"></span>
-                    {% if c.tipo == 'avulsa' %}{{ c.descricao or 'Cobrança avulsa' }}{% else %}{{ c.faixa or 'Sem graduação' }}{% endif %}
-                  </div>
-                </td>
-                <td class="fp-td-mono">{{ fmt_moeda(c.valor_original or c.valor) }}</td>
-                <td style="font-size:11px;color:{% if c.desconto_nome %}var(--fp-accent){% else %}var(--fp-text-faint){% endif %}">
-                  {% if c.desconto_nome %}
-                    {% if c.desconto_tipo == 'percentual' %}−{{ '%g'|format(c.desconto_valor|float) }}%{% else %}−{{ fmt_moeda(c.desconto_valor) }}{% endif %}
-                  {% else %}—{% endif %}
-                </td>
-                <td class="fp-td-valor fp-td-valor--forte">{{ fmt_moeda(c.valor) }}</td>
-                <td><span class="fp-badge fp-badge--{{ c.rotulo|lower }}">{{ c.rotulo }}</span></td>
-                <td class="fp-td-mono">{{ c.data_vencimento.strftime('%d/%m/%Y') if c.data_vencimento else '—' }}</td>
-                <td>
-                  {% if c.rotulo not in ('Paga', 'Cancelada') %}
-                  <div class="fp-acoes">
-                    {% if c.tipo == 'avulsa' %}
-                    {# Avulsa se recebe (e emite cobrança online) na tela de mensalidades dos alunos #}
-                    <a class="fp-btn-mini fp-btn-mini--ok"
-                       href="{{ url_for('financeiro.mensalidades_alunos', academia_id=academia_id, mes=mes, ano=ano) }}">Receber</a>
-                    {% else %}
-                    <a class="fp-btn-mini fp-btn-mini--ok"
-                       href="{{ url_for('financeiro_painel.mensalidades', academia_id=academia_id, mes=mes_chave) }}">Receber</a>
-                    {% endif %}
-                    <form method="POST" action="{{ url_for('financeiro_painel.cobrancas_cancelar', registro_id=c.id) }}"
-                          style="display:inline" onsubmit="return confirm('Cancelar esta cobrança?')">
-                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                      {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
-                      <input type="hidden" name="mes" value="{{ mes_chave }}">
-                      <input type="hidden" name="tipo" value="{{ c.tipo or 'mensalidade' }}">
-                      <button class="fp-btn-mini" type="submit">Cancelar</button>
-                    </form>
-                  </div>
-                  {% endif %}
-                </td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-        {% if not lista %}
-        <div class="fp-empty fp-empty--tall">
-          Nenhuma cobrança em {{ mes_label }}.
-          <br><span style="font-size:12px">Use o painel ao lado para gerar.</span>
-        </div>
-        {% endif %}
-      </div>
-    </div>
-
-  </div>
-</div>
+  .fin-selecao {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--u-space-2);
+    padding: .75rem 1rem;
+    background: #fdfcfa;
+    border: 1px solid var(--sh-line);
+    border-radius: var(--u-radius-sm);
+  }
+  .fin-selecao__valor { font-size: 1.25rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+</style>
 {% endblock %}
 
-{% block scripts %}
-<script>
-  // Resumo vivo da seleção: conta alunos e soma o valor já com desconto.
-  (function () {
-    var form = document.getElementById('fp-form-gerar');
-    if (!form) return;
-    var plano = document.getElementById('gr-plano');
-    var desconto = document.getElementById('gr-desconto');
-    var btn = document.getElementById('fp-btn-gerar');
-    var box = document.getElementById('fp-resumo-sel');
-    var elN = document.getElementById('fp-resumo-n');
-    var elTotal = document.getElementById('fp-resumo-total');
-    if (!plano) return;
+{% block pagina_acoes %}
+  <a href="{{ url_for('financeiro_painel.mensalidades', academia_id=academia_id, mes=mes_chave) }}" class="sh__btn">
+    Ver mensalidades
+  </a>
+{% endblock %}
 
-    function moeda(n) {
-      return 'R$ ' + n.toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-    }
-    function valorUnitario() {
-      var base = parseFloat(plano.selectedOptions[0].dataset.valor) || 0;
-      var op = desconto.selectedOptions[0];
-      var tipo = op.dataset.tipo, v = parseFloat(op.dataset.valor) || 0;
-      if (!tipo || !v) return base;
-      return Math.max(0, tipo === 'percentual' ? base - (base * v / 100) : base - v);
-    }
-    function marcados() {
-      return form.querySelectorAll('input[name="aluno_id"]:checked');
-    }
-    function atualizar() {
-      var n = marcados().length;
-      btn.disabled = n === 0;
-      btn.textContent = n > 0 ? 'Gerar ' + n + ' Cobrança(s)' : 'Gerar Cobranças';
-      box.hidden = n === 0;
-      elN.textContent = n + ' aluno(s) selecionado(s)';
-      elTotal.textContent = moeda(n * valorUnitario());
-      form.querySelectorAll('.fp-aluno-item').forEach(function (item) {
-        item.classList.toggle('is-sel', item.querySelector('input').checked);
-      });
-    }
-    form.addEventListener('change', atualizar);
-    document.getElementById('fp-sel-todos').addEventListener('click', function () {
+{% block fin_conteudo %}
+<form method="GET" class="lst-filtros">
+  <div class="lst-campo" style="flex:0 1 auto">
+    <span class="lst-campo__rotulo">Competência</span>
+    <div class="fin-meses">
+      {% for m in meses %}
+      <a class="fin-mes {% if m.chave == mes_chave %}is-atual{% endif %}"
+         href="{{ url_for('financeiro_painel.cobrancas', academia_id=academia_id, mes=m.chave) }}">{{ m.label }}</a>
+      {% endfor %}
+    </div>
+  </div>
+</form>
+
+<section class="lst-quadro">
+  <header class="lst-quadro__topo">
+    <h2 class="lst-quadro__titulo">Nova cobrança · {{ mes_label }}</h2>
+    {% if sem_cobranca and planos %}
+    <button type="button" class="sh__btn" id="finSelTodos" style="padding:.35rem .7rem">Selecionar todos</button>
+    {% endif %}
+  </header>
+
+  {% if not planos %}
+  <p class="lst-vazio">
+    Nenhum plano ativo. Cadastre um em
+    <a href="{{ url_for('financeiro_painel.planos', academia_id=academia_id) }}">Planos</a>.
+  </p>
+  {% elif not sem_cobranca %}
+  <p class="lst-vazio">Todos os alunos ativos já têm cobrança em {{ mes_label }}.</p>
+  {% else %}
+  <form method="POST" action="{{ url_for('financeiro_painel.cobrancas_gerar') }}" id="finFormGerar" class="fin-gerar-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
+    <input type="hidden" name="mes" value="{{ mes_chave }}">
+
+    <div class="fin-gerar-larga">
+      <span class="lst-campo__rotulo">Alunos sem cobrança ({{ sem_cobranca|length }})</span>
+      <div class="fin-alunos">
+        {% for a in sem_cobranca %}
+        <label class="fin-aluno-item">
+          <input type="checkbox" name="aluno_id" value="{{ a.id }}">
+          <span class="fin-faixa" style="--fin-faixa-cor: {{ cor_faixa(a.faixa) }}"></span>
+          <span class="lst-corta">{{ a.nome }}</span>
+        </label>
+        {% endfor %}
+      </div>
+    </div>
+
+    <label class="lst-campo">
+      <span class="lst-campo__rotulo">Plano *</span>
+      <select name="plano_id" id="finPlano" required>
+        {% for p in planos %}
+        <option value="{{ p.id }}" data-valor="{{ '%.2f'|format(p.valor) }}">{{ p.nome }} · {{ fmt_moeda(p.valor) }}</option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label class="lst-campo">
+      <span class="lst-campo__rotulo">Desconto</span>
+      <select name="desconto_id" id="finDesconto">
+        <option value="" data-tipo="" data-valor="0">Sem desconto</option>
+        {% for d in descontos_lista %}
+        <option value="{{ d.id }}" data-tipo="{{ d.tipo }}" data-valor="{{ '%.2f'|format(d.valor) }}">
+          {{ d.nome }} ({% if d.tipo == 'percentual' %}{{ '%g'|format(d.valor|float) }}%{% else %}{{ fmt_moeda(d.valor) }}{% endif %})
+        </option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label class="lst-campo">
+      <span class="lst-campo__rotulo">Vencimento</span>
+      <input name="dia_vencimento" type="number" min="1" max="28" value="10">
+    </label>
+
+    <label class="lst-campo fin-gerar-larga">
+      <span class="lst-campo__rotulo">Observação</span>
+      <input name="observacao" maxlength="255" placeholder="Opcional">
+    </label>
+
+    <div class="fin-gerar-larga">
+      <div class="fin-selecao" id="finSelecao" hidden>
+        <span id="finSelecaoN">0 aluno selecionado</span>
+        <span class="fin-selecao__valor fin-valor" id="finSelecaoTotal">R$ 0,00</span>
+      </div>
+    </div>
+
+    <div class="fin-gerar-larga">
+      <button type="submit" class="sh__btn sh__btn--forte" id="finBtnGerar" disabled style="width:100%; justify-content:center">
+        <i class="bi bi-lightning-charge"></i> Gerar cobranças
+      </button>
+    </div>
+  </form>
+  {% endif %}
+</section>
+
+<div class="sh__faixa">
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Cobranças</span>
+    <span class="sh__faixa-valor">{{ n_cobrancas }}</span>
+    <span class="lst-sub">Lançadas em {{ mes_label }}</span>
+  </div>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Em aberto</span>
+    <span class="sh__faixa-valor {% if n_geradas %}sh__faixa-valor--alerta{% endif %}">{{ n_geradas }}</span>
+    <span class="lst-sub">Aguardando pagamento</span>
+  </div>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Pagas</span>
+    <span class="sh__faixa-valor fin-valor--entrada">{{ n_pagas }}</span>
+    <span class="lst-sub">Baixa registrada</span>
+  </div>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Total</span>
+    <span class="sh__faixa-valor fin-valor">{{ fmt_moeda(total_valor) }}</span>
+    <span class="lst-sub">Somando as cobranças do mês</span>
+  </div>
+</div>
+
+<nav class="lst-abas">
+  {% for s in ['Todos', 'Gerada', 'Atrasado', 'Paga', 'Cancelada'] %}
+  <a class="lst-aba {% if filtro == s %}is-ativa{% endif %}"
+     href="{{ url_for('financeiro_painel.cobrancas', academia_id=academia_id, mes=mes_chave, filtro=s) }}">{{ s }}</a>
+  {% endfor %}
+</nav>
+
+<section class="lst-quadro">
+  <header class="lst-quadro__topo">
+    <h2 class="lst-quadro__titulo">Cobranças de {{ mes_label }}</h2>
+    <span class="lst-quadro__meta">{{ lista|length }} registro{{ 's' if lista|length != 1 }}</span>
+  </header>
+
+  <div class="lst-rolagem">
+    <div class="lst-largura" style="--lst-min:560px">
+      <div class="lst-linha lin-cob lst-cab">
+        <div>Aluno</div>
+        <div class="col-original lst-num">Original</div>
+        <div class="col-desconto lst-num">Desconto</div>
+        <div class="lst-num">Final</div>
+        <div>Situação</div>
+        <div class="col-acao lst-fim">Ações</div>
+      </div>
+
+      {% for c in lista %}
+      <div class="lst-linha lin-cob lst-item">
+        <div class="lst-pessoa">
+          <span class="fin-faixa" style="--fin-faixa-cor: {{ cor_faixa(c.faixa) }}"></span>
+          <span style="min-width:0">
+            <span class="lst-nome">{{ c.aluno_nome }}{% if c.tipo == 'avulsa' %} <span class="lst-tag">Avulsa</span>{% endif %}</span>
+            <span class="fin-grad">
+              {% if c.tipo == 'avulsa' %}{{ c.descricao or 'Cobrança avulsa' }}{% else %}{{ c.faixa or 'Sem graduação' }}{% endif %}
+            </span>
+          </span>
+        </div>
+
+        <div class="col-original lst-num fin-valor">{{ fmt_moeda(c.valor_original or c.valor) }}</div>
+
+        <div class="col-desconto lst-num">
+          {% if c.desconto_nome %}
+            <span class="fin-valor">
+              {% if c.desconto_tipo == 'percentual' %}−{{ '%g'|format(c.desconto_valor|float) }}%{% else %}−{{ fmt_moeda(c.desconto_valor) }}{% endif %}
+            </span>
+          {% else %}<span class="lst-vazio-celula">—</span>{% endif %}
+        </div>
+
+        <div class="lst-num fin-valor" style="font-weight:600">{{ fmt_moeda(c.valor) }}</div>
+
+        <div>
+          {% if c.rotulo == 'Paga' %}<span class="lst-tag lst-tag--ok">{{ c.rotulo }}</span>
+          {% elif c.rotulo == 'Atrasado' %}<span class="lst-tag lst-tag--alerta">{{ c.rotulo }}</span>
+          {% else %}<span class="lst-tag">{{ c.rotulo }}</span>{% endif %}
+        </div>
+
+        <div class="col-acao lst-acoes">
+          {% if c.rotulo not in ('Paga', 'Cancelada') %}
+            {% if c.tipo == 'avulsa' %}
+            {# Avulsa se recebe (e emite cobrança online) na tela de mensalidades dos alunos. #}
+            <a class="sh__btn" style="padding:.3rem .6rem"
+               href="{{ url_for('financeiro.mensalidades_alunos', academia_id=academia_id, mes=mes, ano=ano) }}">Receber</a>
+            {% else %}
+            <a class="sh__btn" style="padding:.3rem .6rem"
+               href="{{ url_for('financeiro_painel.mensalidades', academia_id=academia_id, mes=mes_chave) }}">Receber</a>
+            {% endif %}
+            <form method="POST" action="{{ url_for('financeiro_painel.cobrancas_cancelar', registro_id=c.id) }}"
+                  style="display:inline" onsubmit="return confirm('Cancelar esta cobrança de {{ c.aluno_nome|e }}?')">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
+              <input type="hidden" name="mes" value="{{ mes_chave }}">
+              <input type="hidden" name="tipo" value="{{ c.tipo or 'mensalidade' }}">
+              <button type="submit" class="lst-acao lst-acao--perigo"
+                      title="Cancelar cobrança de {{ c.aluno_nome }}" aria-label="Cancelar cobrança">
+                <i class="bi bi-x-circle"></i>
+              </button>
+            </form>
+          {% else %}
+            <span class="lst-vazio-celula">—</span>
+          {% endif %}
+        </div>
+      </div>
+      {% else %}
+      <p class="lst-vazio">Nenhuma cobrança em {{ mes_label }} com esse filtro.</p>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  var form = document.getElementById('finFormGerar');
+  if (!form) return;
+  var plano = document.getElementById('finPlano');
+  var desconto = document.getElementById('finDesconto');
+  var btn = document.getElementById('finBtnGerar');
+  var caixa = document.getElementById('finSelecao');
+  var elN = document.getElementById('finSelecaoN');
+  var elTotal = document.getElementById('finSelecaoTotal');
+
+  function moeda(n) {
+    return 'R$ ' + n.toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  }
+
+  // O total mostrado já considera o desconto escolhido — é o que será cobrado.
+  function valorUnitario() {
+    var base = parseFloat(plano.selectedOptions[0].dataset.valor) || 0;
+    var op = desconto.selectedOptions[0];
+    var tipo = op.dataset.tipo;
+    var v = parseFloat(op.dataset.valor) || 0;
+    if (!tipo || !v) return base;
+    return Math.max(0, tipo === 'percentual' ? base - (base * v / 100) : base - v);
+  }
+
+  function marcados() { return form.querySelectorAll('input[name="aluno_id"]:checked'); }
+
+  function atualizar() {
+    var n = marcados().length;
+    btn.disabled = n === 0;
+    caixa.hidden = n === 0;
+    elN.textContent = n + (n === 1 ? ' aluno selecionado' : ' alunos selecionados');
+    elTotal.textContent = moeda(n * valorUnitario());
+    form.querySelectorAll('.fin-aluno-item').forEach(function (item) {
+      item.classList.toggle('is-sel', item.querySelector('input').checked);
+    });
+  }
+
+  form.addEventListener('change', atualizar);
+
+  var selTodos = document.getElementById('finSelTodos');
+  if (selTodos) {
+    selTodos.addEventListener('click', function () {
       var todos = form.querySelectorAll('input[name="aluno_id"]');
       var faltam = marcados().length < todos.length;
       todos.forEach(function (c) { c.checked = faltam; });
       atualizar();
     });
-    atualizar();
-  })();
+  }
+
+  atualizar();
+})();
 </script>
 {% endblock %}

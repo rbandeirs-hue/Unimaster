@@ -1,0 +1,117 @@
+{# =====================================================================
+   base_um2.html — shell do visual novo (Public Sans / stone / raio 3px).
+   Telas convertidas fazem:  {% extends 'base_um2.html' %}
+   e preenchem  {% block um_conteudo %} ... {% endblock %}
+   Reaproveita components/_shell.html (mesmos endpoints da barra lateral),
+   apenas com os tokens visuais novos aplicados por cima.
+   ===================================================================== #}
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Unimaster Judô{% endblock %}</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { margin:0; min-height:100%; font-family:'Public Sans',system-ui,sans-serif; background:#F5F5F4; color:#1C1917; }
+    a { color:#1C1917; text-decoration:none; }
+    a:hover { color:#C8102E; }
+    input, select, textarea { font-family:inherit; width:100%; padding:9px 11px; font-size:13.5px; line-height:1.4;
+      border:1px solid #d6d3d1; border-radius:3px; background:#fff; color:#1C1917; }
+    input:focus, select:focus, textarea:focus { outline:none; border-color:#1C1917; box-shadow:0 0 0 3px rgba(28,25,23,.08); }
+    input::placeholder, textarea::placeholder { color:#a8a29e; }
+    label { font:600 10px/1 'Public Sans',sans-serif; color:#a8a29e; text-transform:uppercase; letter-spacing:.12em; }
+
+    .um-shell { min-height:100vh; display:grid; grid-template-columns:232px minmax(0,1fr); background:#F5F5F4; }
+    .um-content { flex:1; min-width:0; max-width:1240px; padding:28px 34px 48px; display:flex; flex-direction:column; gap:18px; }
+    .um-mobbar { display:none; }
+
+    /* --- tokens novos --- */
+    .um-card { background:#fff; border:1px solid #e7e5e4; border-radius:3px; }
+    .um-h1 { font:600 24px/1.2 'Public Sans',sans-serif; letter-spacing:-.02em; color:#1C1917; }
+    .um-sub { font:400 13.5px/1.5 'Public Sans',sans-serif; color:#78716c; }
+    .um-secao { font:600 11px/1 'Public Sans',sans-serif; letter-spacing:.12em; text-transform:uppercase; color:#78716c; }
+    .um-cab { padding:13px 16px; border-bottom:1px solid #e7e5e4; display:flex; align-items:center;
+      justify-content:space-between; gap:12px; flex-wrap:wrap; }
+    .um-btn { display:inline-flex; align-items:center; gap:7px; padding:10px 15px; border:1px solid #d6d3d1;
+      border-radius:3px; background:#fff; font:500 13px/1 'Public Sans',sans-serif; color:#1C1917; cursor:pointer; }
+    .um-btn:hover { border-color:#1C1917; color:#1C1917; }
+    .um-btn-primario { display:inline-flex; align-items:center; gap:8px; padding:11px 17px; border:1px solid #1C1917;
+      border-radius:3px; background:#1C1917; font:600 13px/1 'Public Sans',sans-serif; color:#FAFAF9; cursor:pointer; }
+    .um-btn-primario:hover { background:#292524; color:#FAFAF9; }
+
+    /* faixa de indicadores: flex com wrap, células sempre preenchem a linha */
+    .um-faixa { display:flex; flex-wrap:wrap; background:#fff; border:1px solid #e7e5e4; border-radius:3px; overflow:hidden; }
+    .um-kpi { flex:1 1 190px; min-width:0; padding:16px 18px; background:#fff; display:flex; flex-direction:column; gap:7px;
+      box-shadow:1px 0 0 #e7e5e4, 0 -1px 0 #e7e5e4; }
+    .um-kpi-lbl { font:600 10px/1 'Public Sans',sans-serif; letter-spacing:.12em; text-transform:uppercase; color:#a8a29e; }
+    .um-kpi-val { font:600 24px/1 'Public Sans',sans-serif; letter-spacing:-.02em; color:#1C1917; }
+    .um-kpi-nota { font:400 11.5px/1.3 'Public Sans',sans-serif; color:#a8a29e; }
+
+    /* barra de filtros */
+    .um-filtros { background:#fff; border:1px solid #e7e5e4; border-radius:3px; padding:14px 18px;
+      display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap; }
+    .um-filtro { display:flex; flex-direction:column; gap:6px; min-width:0; flex:1 1 180px; }
+    .um-filtro-pq { flex:0 1 120px; }
+
+    /* tabelas */
+    .um-th { padding:10px 16px; background:#FAFAF9; border-bottom:1px solid #e7e5e4;
+      font:600 10px/1 'Public Sans',sans-serif; letter-spacing:.1em; text-transform:uppercase; color:#78716c; }
+    .um-td { padding:12px 16px; border-bottom:1px solid #f5f5f4; align-items:center;
+      font:400 13px/1.3 'Public Sans',sans-serif; color:#1C1917; }
+    .um-td:hover { background:#FAFAF9; }
+    .um-tag { display:inline-block; padding:4px 9px; border:1px solid #e7e5e4; border-radius:2px; background:#FAFAF9;
+      font:500 11.5px/1.2 'Public Sans',sans-serif; color:#57534e; }
+    .um-rolagem { overflow-x:auto; }
+
+    /* barra lateral e topo herdadas do _shell.html, repintadas com os tokens novos */
+    .um-side { background:#1C1917 !important; }
+    .um-side, .um-side * { font-family:'Public Sans',system-ui,sans-serif !important; }
+    .um-topbar { background:#fff; border-bottom:1px solid #e7e5e4 !important; height:62px !important; padding:0 34px !important; }
+    .um-topbar * { font-family:'Public Sans',system-ui,sans-serif !important; }
+
+    @media (max-width: 900px) {
+      .um-shell { grid-template-columns:1fr; }
+      .um-side { display:none; }
+      .um-side.aberta { display:flex !important; position:fixed; inset:0 auto 0 0; width:232px; z-index:70; height:100vh; }
+      .um-mobbar { display:flex; }
+      .um-topbar { display:none; }
+      .um-content { padding:16px 16px 40px; }
+      input, select, textarea { font-size:16px; padding:11px 12px; }
+    }
+    {% block um_css %}{% endblock %}
+  </style>
+</head>
+<body>
+{% from 'components/_shell.html' import sidebar, topbar, mobbar %}
+<div class="um-shell">
+  {{ sidebar(um_ativo|default('')) }}
+  <div style="display:flex; flex-direction:column; min-width:0">
+    {{ mobbar() }}
+    {{ topbar() }}
+    <div class="um-content">
+      {% with mensagens = get_flashed_messages(with_categories=true) %}
+        {% for categoria, msg in mensagens %}
+          <div style="padding:12px 16px; border-radius:3px; border:1px solid {% if categoria == 'danger' %}#fecaca{% else %}#e7e5e4{% endif %};
+                      background:{% if categoria == 'danger' %}#fef2f2{% else %}#fff{% endif %};
+                      color:{% if categoria == 'danger' %}#991b1b{% else %}#57534e{% endif %};
+                      font:500 13px/1.5 'Public Sans',sans-serif">{{ msg }}</div>
+        {% endfor %}
+      {% endwith %}
+      {% block um_conteudo %}{% endblock %}
+    </div>
+  </div>
+</div>
+<script>
+function umToggleSide() { document.querySelector('.um-side').classList.toggle('aberta'); }
+document.addEventListener('click', function (e) {
+  var s = document.querySelector('.um-side');
+  if (!s || !s.classList.contains('aberta')) return;
+  if (!s.contains(e.target) && !e.target.closest('.um-mobbar')) s.classList.remove('aberta');
+});
+</script>
+{% block um_js %}{% endblock %}
+</body>
+</html>

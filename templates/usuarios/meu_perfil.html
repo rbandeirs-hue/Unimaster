@@ -39,7 +39,10 @@
 
     <div class="card-body p-4">
       {% include 'components/push_teste_notificacao.html' %}
-      <form method="POST" enctype="multipart/form-data">
+      {# autocomplete="off": e-mail e senha no mesmo formulário fazem o Chrome
+         tratar a tela como login, preencher o e-mail salvo por cima do valor
+         real e gravar isso ao salvar o perfil. Mesmo ajuste de promover.html. #}
+      <form method="POST" enctype="multipart/form-data" autocomplete="off">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <input type="hidden" name="next" value="{{ back_url }}">
 
@@ -85,7 +88,8 @@
 
         <div class="mb-3">
           <label class="form-label fw-semibold">E-mail</label>
-          <input type="email" name="email" class="form-control" value="{{ usuario.email or '' }}" required placeholder="seu@email.com">
+          <input type="email" name="email" class="form-control" value="{{ usuario.email or '' }}"
+                 required autocomplete="off" placeholder="seu@email.com">
         </div>
 
         <div class="mb-3">
@@ -106,7 +110,10 @@
 
         <div class="mb-4" id="campo-senha">
           <label class="form-label fw-semibold">Nova senha <span class="text-muted fw-normal">(opcional)</span></label>
-          <input type="password" name="senha" id="senha" class="form-control" placeholder="Deixe em branco para manter a atual">
+          {# "new-password": impede o Chrome de injetar uma senha salva aqui e
+             trocar a senha de quem só queria corrigir o telefone. #}
+          <input type="password" name="senha" id="senha" class="form-control"
+                 autocomplete="new-password" placeholder="Deixe em branco para manter a atual">
         </div>
 
         <div class="d-flex justify-content-between gap-2">

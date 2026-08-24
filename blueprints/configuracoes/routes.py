@@ -68,6 +68,13 @@ def _academias_do_usuario():
     return academias
 
 
+def _academias_visiveis(academias):
+    """Só a academia da sessão quando há escolha travada na entrada."""
+    from blueprints.academia.routes import filtrar_academias_da_sessao
+
+    return filtrar_academias_da_sessao(academias)
+
+
 def _contexto_modalidades():
     academias = _academias_do_usuario()
     modo = session.get("modo_painel")
@@ -81,7 +88,7 @@ def _contexto_modalidades():
             id_assoc = academias[0].get("id_associacao")
         return {
             "is_admin": False,
-            "academias_permitidas": academias,
+            "academias_permitidas": _academias_visiveis(academias),
             "academia_contexto": None,
             "academia_contexto_id": None,
             "id_associacao_contexto": id_assoc,
@@ -103,7 +110,7 @@ def _contexto_modalidades():
         ac = next((a for a in academias if a["id"] == academia_id), academias[0])
         return {
             "is_admin": False,
-            "academias_permitidas": academias,
+            "academias_permitidas": _academias_visiveis(academias),
             "academia_contexto": ac,
             "academia_contexto_id": ac["id"],
             "id_associacao_contexto": ac.get("id_associacao"),
@@ -113,7 +120,7 @@ def _contexto_modalidades():
     if current_user.has_role("admin"):
         return {
             "is_admin": True,
-            "academias_permitidas": academias,
+            "academias_permitidas": _academias_visiveis(academias),
             "academia_contexto": None,
             "academia_contexto_id": None,
             "id_associacao_contexto": None,
@@ -136,7 +143,7 @@ def _contexto_modalidades():
     academia_contexto = next((a for a in academias if a["id"] == academia_id), academias[0])
     return {
         "is_admin": False,
-        "academias_permitidas": academias,
+        "academias_permitidas": _academias_visiveis(academias),
         "academia_contexto": academia_contexto,
         "academia_contexto_id": academia_contexto["id"],
         "id_associacao_contexto": academia_contexto.get("id_associacao"),
@@ -214,6 +221,11 @@ def modalidades_lista():
         academias_contexto=contexto["academias_permitidas"],
         academia_contexto_id=contexto["academia_contexto_id"],
         is_admin=contexto["is_admin"],
+        # A lateral e o seletor do topo do shell leem estes três.
+        academia_id=contexto["academia_contexto_id"],
+        academias=contexto["academias_permitidas"],
+        academia=next((a for a in (contexto["academias_permitidas"] or [])
+                       if a.get("id") == contexto["academia_contexto_id"]), None),
     )
 
 

@@ -9,12 +9,12 @@ As funções reaproveitam o que já existe no blueprint financeiro — sobretudo
 `_registrar_pagamento_e_receita`, que cuida de juros, desconto e lançamento da
 receita ao dar baixa numa mensalidade.
 """
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
 
 from flask import (Blueprint, render_template, request, redirect, url_for,
                    flash, current_app)
-from flask_login import login_required
+from flask_login import login_required, current_user
 
 from config import get_db_connection
 from utils.contexto_logo import buscar_logo_url
@@ -31,23 +31,194 @@ bp_financeiro_painel = Blueprint(
 bp_link_pagamento = Blueprint("link_pagamento", __name__)
 
 
+def _wa_link(numero, texto):
+    """Link wa.me da academia com a mensagem já escrita."""
+    from urllib.parse import quote
+
+    digitos = "".join(c for c in str(numero or "") if c.isdigit())
+    if not digitos:
+        return None
+    if not digitos.startswith("55"):
+        digitos = "55" + digitos
+    return f"https://wa.me/{digitos}?text={quote(texto)}"
+
+
+def _dados_pagamento_publico(origem, registro_id):
+    """Tudo que a página pública de pagamento precisa mostrar.
+
+    Gera a cobrança no gateway **na hora do clique** quando ela ainda não
+    existe. Antes o link só funcionava se alguém tivesse emitido a cobrança
+    antes; quem clicava numa mensalidade recém-criada caía em "pagamento
+    indisponível" e ficava sem como pagar.
+    """
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        if origem == "mensalidade":
+            cur.execute(
+                """SELECT ma.id, ma.aluno_id, ma.valor, ma.valor_pago, ma.status,
+                          ma.status_pagamento, ma.data_vencimento, ma.data_pagamento,
+                          ma.valor_original, ma.desconto_aplicado, ma.id_desconto,
+                          COALESCE(ma.remover_juros, 0) AS remover_juros,
+                          ma.asaas_tipo, ma.asaas_boleto_url, ma.asaas_pix_qrcode,
+                          ma.asaas_pix_copia_cola,
+                          m.nome AS plano_nome,
+                          COALESCE(m.aplicar_juros_multas, 0) AS aplicar_juros_multas,
+                          COALESCE(m.percentual_multa_mes, 2) AS percentual_multa_mes,
+                          COALESCE(m.percentual_juros_dia, 0.033) AS percentual_juros_dia,
+                          a.nome AS aluno_nome, a.id_academia,
+                          ac.nome AS academia_nome, ac.whatsapp_numero, ac.telefone,
+                          ac.cidade AS academia_cidade,
+                          ac.pix_chave, ac.pix_tipo, ac.pix_beneficiario, ac.pix_cidade
+                   FROM mensalidade_aluno ma
+                   JOIN mensalidades m ON m.id = ma.mensalidade_id
+                   JOIN alunos a ON a.id = ma.aluno_id
+                   LEFT JOIN academias ac ON ac.id = a.id_academia
+                   WHERE ma.id = %s""",
+                (registro_id,),
+            )
+        else:
+            cur.execute(
+                """SELECT ca.id, ca.aluno_id, ca.valor, ca.valor_pago, ca.status,
+                          ca.data_vencimento, ca.data_pagamento, ca.descricao,
+                          ca.asaas_tipo, ca.asaas_boleto_url, ca.asaas_pix_qrcode,
+                          ca.asaas_pix_copia_cola,
+                          a.nome AS aluno_nome, a.id_academia,
+                          ac.nome AS academia_nome, ac.whatsapp_numero, ac.telefone,
+                          ac.cidade AS academia_cidade,
+                          ac.pix_chave, ac.pix_tipo, ac.pix_beneficiario, ac.pix_cidade
+                   FROM cobranca_avulsa ca
+                   JOIN alunos a ON a.id = ca.aluno_id
+                   LEFT JOIN academias ac ON ac.id = a.id_academia
+                   WHERE ca.id = %s""",
+                (registro_id,),
+            )
+        reg = cur.fetchone()
+    except Exception as e:
+        current_app.logger.error(f"Pagamento público {origem}/{registro_id}: {e}")
+        reg = None
+    finally:
+        cur.close()
+        conn.close()
+
+    if not reg:
+        return None
+
+    status = (reg.get("status") or "").lower()
+    pago = status == "pago" or (reg.get("status_pagamento") or "").lower() == "pago"
+    cancelado = status == "cancelado"
+
+    if origem == "mensalidade":
+        try:
+            _ma_enriquecer_exibicao(reg, reg.get("aluno_id"), reg.get("id_academia"))
+        except Exception:
+            reg.setdefault("valor_final", float(reg.get("valor") or 0))
+    else:
+        reg.setdefault("valor_final", float(reg.get("valor") or 0))
+
+    # Emissão sob demanda: só para o que ainda dá para pagar, e só quando falta.
+    if origem == "mensalidade" and not pago and not cancelado and not (reg.get("asaas_boleto_url") or "").strip():
+        try:
+            from utils.whatsapp_lembretes import garantir_cobranca_online
+
+            garantir_cobranca_online(reg, reg.get("id_academia"))
+            # A rotina só devolve link e copia-e-cola no dicionário; o QR e o
+            # tipo ficam apenas no banco. Sem reler, a primeira visita — a que
+            # acabou de emitir — mostraria a página sem o QR Code.
+            c2 = get_db_connection()
+            k2 = c2.cursor(dictionary=True)
+            try:
+                k2.execute(
+                    """SELECT asaas_tipo, asaas_boleto_url, asaas_pix_qrcode,
+                              asaas_pix_copia_cola
+                       FROM mensalidade_aluno WHERE id = %s""",
+                    (registro_id,),
+                )
+                reg.update(k2.fetchone() or {})
+            finally:
+                k2.close()
+                c2.close()
+        except Exception as e:
+            current_app.logger.warning(
+                f"Pagamento público: falha ao emitir cobrança da mensalidade {registro_id}: {e}")
+
+    venc = reg.get("data_vencimento")
+    dias_atraso = 0
+    if venc and not pago:
+        try:
+            dias_atraso = max(0, (date.today() - venc).days)
+        except TypeError:
+            dias_atraso = 0
+
+    rotulo = reg.get("plano_nome") or reg.get("descricao") or "Cobrança"
+    texto_wa = (
+        f"Olá! Segue o comprovante do PIX de {reg.get('aluno_nome') or ''} "
+        f"referente a {rotulo}"
+        + (f" com vencimento em {venc.strftime('%d/%m/%Y')}" if venc else "")
+        + "."
+    )
+
+    # PIX da própria academia: montado na hora, com o valor já embutido, e
+    # independente do gateway — é o que continua funcionando quando ele falha.
+    pix_academia = None
+    if not pago and not cancelado and (reg.get("pix_chave") or "").strip():
+        try:
+            from utils.pix_brcode import montar_brcode, qrcode_base64
+
+            codigo = montar_brcode(
+                reg.get("pix_chave"),
+                reg.get("pix_beneficiario") or reg.get("academia_nome"),
+                reg.get("pix_cidade") or reg.get("academia_cidade") or "",
+                float(reg.get("valor_final") or reg.get("valor") or 0),
+                tipo=reg.get("pix_tipo"),
+            )
+            if codigo:
+                pix_academia = {
+                    "codigo": codigo,
+                    "qrcode": qrcode_base64(codigo),
+                    "beneficiario": reg.get("pix_beneficiario") or reg.get("academia_nome"),
+                }
+        except Exception as e:
+            current_app.logger.warning(
+                f"Pagamento público: falha ao montar o PIX da academia: {e}")
+
+    return {
+        "reg": reg,
+        "pix_academia": pix_academia,
+        "pago": pago,
+        "cancelado": cancelado,
+        "dias_atraso": dias_atraso,
+        "rotulo": rotulo,
+        "valor": float(reg.get("valor_final") or reg.get("valor") or 0),
+        "link_gateway": (reg.get("asaas_boleto_url") or "").strip() or None,
+        "pix_copia_cola": (reg.get("asaas_pix_copia_cola") or "").strip() or None,
+        "pix_qrcode": (reg.get("asaas_pix_qrcode") or "").strip() or None,
+        "academia_nome": reg.get("academia_nome") or "",
+        "wa_url": _wa_link(reg.get("whatsapp_numero") or reg.get("telefone"), texto_wa),
+    }
+
+
 @bp_link_pagamento.route("/p/<token>")
 def abrir_pagamento(token):
-    """Redireciona o link curto para a cobrança no gateway.
+    """Página pública de pagamento do link curto.
 
-    Público de propósito — quem recebe o WhatsApp não tem login. O token é
-    aleatório e só expõe a página de pagamento que o gateway já publica.
+    Público de propósito — quem recebe o WhatsApp não tem login. Antes isto
+    redirecionava direto para o gateway; virou tela nossa porque é o único
+    lugar onde cabe oferecer o PIX como alternativa e avisar que, pagando por
+    PIX, é preciso mandar o comprovante para a academia dar baixa.
     """
     from utils.links_curtos import resolver
 
-    url, origem, registro_id = resolver(token)
-    if url:
-        return redirect(url)
-    if origem:
-        # Token válido, cobrança sem link ainda (ou já cancelada).
+    _url, origem, registro_id = resolver(token)
+    if not origem:
+        return render_template("financeiro/painel/link_indisponivel.html",
+                               nao_encontrado=True), 404
+
+    dados = _dados_pagamento_publico(origem, registro_id)
+    if not dados or dados["cancelado"]:
         return render_template("financeiro/painel/link_indisponivel.html"), 404
-    return render_template("financeiro/painel/link_indisponivel.html",
-                           nao_encontrado=True), 404
+
+    return render_template("financeiro/painel/pagamento_publico.html", **dados)
 
 MESES_CURTOS = ["", "Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
                 "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
@@ -189,16 +360,24 @@ def dashboard():
     ano, mes = _mes_ref()
     ant_ano, ant_mes = (ano - 1, 12) if mes == 1 else (ano, mes - 1)
 
+    # Recortes da tela de pendências (não afetam os indicadores do mês).
+    busca = (request.args.get("busca") or "").strip()
+    situacao = (request.args.get("situacao") or "").strip().lower()
+    if situacao not in ("pendente", "atrasado"):
+        situacao = ""
+
     conn = get_db_connection()
     cur = conn.cursor(dictionary=True)
     try:
         cur.execute(
             """SELECT ma.id, ma.valor, ma.status, ma.status_pagamento, ma.data_vencimento,
-                      a.id AS aluno_id, a.nome AS aluno_nome, g.faixa AS faixa
+                      a.id AS aluno_id, a.nome AS aluno_nome, a.telefone AS aluno_telefone,
+                      g.faixa AS faixa, g.graduacao AS graduacao
                FROM mensalidade_aluno ma
                JOIN alunos a ON a.id = ma.aluno_id
+               JOIN mensalidades mp ON mp.id = ma.mensalidade_id
                LEFT JOIN graduacao g ON g.id = a.graduacao_id
-               WHERE a.id_academia = %s AND ma.status <> 'cancelado'
+               WHERE mp.id_academia = %s AND ma.status <> 'cancelado'
                  AND YEAR(ma.data_vencimento) = %s AND MONTH(ma.data_vencimento) = %s""",
             (academia_id, ano, mes),
         )
@@ -237,14 +416,50 @@ def dashboard():
             pagos += 1
         else:
             pendencias.append({
+                "id": r.get("id"),
+                "aluno_id": r.get("aluno_id"),
                 "nome": r.get("aluno_nome"),
+                "telefone": r.get("aluno_telefone"),
                 "faixa": r.get("faixa"),
+                "graduacao": r.get("graduacao"),
                 "valor": valor,
+                "vencimento": r.get("data_vencimento"),
                 "status": "Atrasado" if efetivo == "atrasado" else "Pendente",
             })
 
     total_cobrado = len(do_mes)
     taxa = round((pagos / total_cobrado) * 100) if total_cobrado else 0
+
+    # Receita que não vem de mensalidade — matrícula, cobrança avulsa, lançamento
+    # manual. O painel somava só mensalidades e chamava o resultado de "receita
+    # do mês": uma matrícula paga não aparecia em lugar nenhum.
+    receita_outras = 0.0
+    outras_por_categoria = []
+    try:
+        conn2 = get_db_connection()
+        cur2 = conn2.cursor(dictionary=True)
+        try:
+            cur2.execute(
+                """SELECT COALESCE(NULLIF(categoria, ''), 'Outras') AS cat,
+                          COALESCE(SUM(valor), 0) AS total
+                   FROM receitas
+                   WHERE id_academia = %s AND YEAR(data) = %s AND MONTH(data) = %s
+                     AND COALESCE(cancelada, 0) = 0
+                     AND id_mensalidade_aluno IS NULL
+                   GROUP BY cat ORDER BY total DESC""",
+                (academia_id, ano, mes),
+            )
+            for linha in cur2.fetchall() or []:
+                valor_cat = float(linha["total"] or 0)
+                if valor_cat:
+                    receita_outras += valor_cat
+                    outras_por_categoria.append({"cat": linha["cat"], "total": valor_cat})
+        finally:
+            cur2.close()
+            conn2.close()
+    except Exception:
+        receita_outras = 0.0
+        outras_por_categoria = []
 
     # Receita potencial: soma do que foi cobrado no mês (pago + em aberto).
     receita_potencial = sum(float(r.get("valor") or 0) for r in do_mes)
@@ -262,14 +477,33 @@ def dashboard():
         key=lambda x: -x["valor"],
     )[:12]
 
+    # Filtros aplicados só à lista de pendências: os números do topo continuam
+    # retratando o mês inteiro.
+    pendencias_total = len(pendencias)
+    if situacao:
+        pendencias = [p for p in pendencias if p["status"].lower() == situacao]
+    if busca:
+        alvo = busca.lower()
+        pendencias = [p for p in pendencias if alvo in (p["nome"] or "").lower()]
+
     ctx = _ctx_base(academia_id)
     ctx.update(
         ativo="dashboard",
+        busca=busca,
+        situacao=situacao,
+        pendencias_total=pendencias_total,
+        adimplencia=taxa,
         ano=ano, mes=mes,
         mes_label=fmt_mes(ano, mes),
         mes_chave=f"{ano:04d}-{mes:02d}",
         meses=_meses_disponiveis(date.today().year, date.today().month, 6),
+        # Passo a passo pelos meses, sem depender da lista de competências.
+        mes_anterior_chave=f"{ant_ano:04d}-{ant_mes:02d}",
+        mes_proximo_chave=(f"{ano + 1:04d}-01" if mes == 12 else f"{ano:04d}-{mes + 1:02d}"),
         receita_mes=receita_mes,
+        receita_outras=receita_outras,
+        outras_por_categoria=outras_por_categoria,
+        receita_total=receita_mes + receita_outras,
         receita_anterior=receita_anterior,
         receita_potencial=receita_potencial,
         inadimplentes=len(pendencias),
@@ -368,7 +602,10 @@ def planos():
     cur = conn.cursor(dictionary=True)
     try:
         cur.execute(
-            """SELECT id, nome, descricao, valor, COALESCE(ativo, 0) AS ativo, criado_em
+            """SELECT id, nome, descricao, valor, COALESCE(ativo, 0) AS ativo, criado_em,
+                      COALESCE(aplicar_juros_multas, 0) AS aplicar_juros_multas,
+                      COALESCE(percentual_multa_mes, 2) AS percentual_multa_mes,
+                      COALESCE(percentual_juros_dia, 0.0333) AS percentual_juros_dia
                FROM mensalidades WHERE id_academia = %s ORDER BY ativo DESC, nome""",
             (academia_id,),
         )
@@ -399,7 +636,11 @@ def planos_salvar():
     nome = (request.form.get("nome") or "").strip()
     descricao = (request.form.get("descricao") or "").strip()
     valor = _dec(request.form.get("valor"))
-    ativo = 1 if (request.form.get("ativo") or "ativo") == "ativo" else 0
+    # O select manda "1"/"0"; "ativo" fica como padrão de quem vier sem o campo.
+    ativo = 0 if str(request.form.get("ativo") or "ativo") in ("0", "inativo") else 1
+    aplicar_juros = 1 if str(request.form.get("aplicar_juros_multas") or "0") == "1" else 0
+    pct_multa = _dec(request.form.get("percentual_multa_mes"), "2") if aplicar_juros else Decimal("2")
+    pct_juros_dia = _dec(request.form.get("percentual_juros_dia"), "0.0333") if aplicar_juros else Decimal("0.0333")
 
     if not nome or valor <= 0:
         flash("Informe o nome do plano e um valor maior que zero.", "danger")
@@ -410,16 +651,20 @@ def planos_salvar():
     try:
         if plano_id:
             cur.execute(
-                """UPDATE mensalidades SET nome=%s, descricao=%s, valor=%s, ativo=%s
+                """UPDATE mensalidades SET nome=%s, descricao=%s, valor=%s, ativo=%s,
+                          aplicar_juros_multas=%s, percentual_multa_mes=%s, percentual_juros_dia=%s
                    WHERE id=%s AND id_academia=%s""",
-                (nome, descricao, valor, ativo, plano_id, academia_id),
+                (nome, descricao, valor, ativo, aplicar_juros, pct_multa, pct_juros_dia,
+                 plano_id, academia_id),
             )
             flash("Plano atualizado.", "success")
         else:
             cur.execute(
-                """INSERT INTO mensalidades (nome, descricao, valor, id_academia, ativo)
-                   VALUES (%s, %s, %s, %s, %s)""",
-                (nome, descricao, valor, academia_id, ativo),
+                """INSERT INTO mensalidades (nome, descricao, valor, id_academia, ativo,
+                                            aplicar_juros_multas, percentual_multa_mes, percentual_juros_dia)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
+                (nome, descricao, valor, academia_id, ativo,
+                 aplicar_juros, pct_multa, pct_juros_dia),
             )
             flash("Plano cadastrado.", "success")
         conn.commit()
@@ -992,6 +1237,8 @@ def cobrancas():
         n_cobrancas=len(do_mes),
         n_pagas=sum(1 for r in do_mes if r["rotulo"] == "Paga"),
         n_geradas=sum(1 for r in do_mes if r["rotulo"] in ("Gerada", "Atrasado")),
+        # Soma o que foi cobrado no mês (canceladas de fora: não são a receber).
+        total_valor=sum(float(r.get("valor") or 0) for r in do_mes if r["rotulo"] != "Cancelada"),
         sem_cobranca=sem_cobranca,
         planos=planos_ativos, descontos_lista=descontos_ativos,
     )
@@ -1139,8 +1386,9 @@ def mensalidades():
     cur = conn.cursor(dictionary=True)
     try:
         cur.execute(
-            """SELECT ma.id, ma.aluno_id, ma.valor, ma.status, ma.status_pagamento,
+            """SELECT ma.id, ma.aluno_id, ma.valor, ma.valor_pago, ma.status, ma.status_pagamento,
                       ma.data_vencimento, ma.data_pagamento, ma.id_desconto,
+                      ma.valor_original, ma.desconto_aplicado,
                       COALESCE(ma.remover_juros, 0) AS remover_juros,
                       a.nome AS aluno_nome, g.faixa, fp.nome AS forma_nome,
                       COALESCE(m.aplicar_juros_multas, 0) AS aplicar_juros_multas,
@@ -1185,7 +1433,12 @@ def mensalidades():
                                       r.get("status_pagamento")) or "").lower()
         r["efetivo"] = efetivo
         r["rotulo"] = {"pago": "Pago", "atrasado": "Atrasado"}.get(efetivo, "Pendente")
-        r["acrescimo"] = float(r.get("multa_val") or 0) + float(r.get("juros_val") or 0)
+        # Em aberto: o encargo projetado para hoje. Já paga: o que foi cobrado
+        # de fato na baixa — senão a coluna zera e some o juros que entrou.
+        if efetivo == "pago":
+            r["acrescimo"] = float(r.get("acrescimo_pago") or 0)
+        else:
+            r["acrescimo"] = float(r.get("multa_val") or 0) + float(r.get("juros_val") or 0)
         # Juros só é acionável enquanto a mensalidade não foi paga.
         r["pode_juros"] = efetivo != "pago" and bool(r.get("aplicar_juros_multas"))
 
@@ -1233,29 +1486,80 @@ def mensalidades():
     return render_template("financeiro/painel/mensalidades.html", **ctx)
 
 
+def _voltar_da_baixa(academia_id, mes_chave):
+    """Destino depois da baixa — o mesmo no sucesso e no erro.
+
+    A baixa é feita da lista de pendências do dashboard e da ficha do aluno;
+    em cada caso a volta é para lá, senão o gestor perde a tela em que estava.
+    Antes o caminho de erro devolvia sempre para o painel, o que fazia a falha
+    parecer "sumiço" da tela em vez de um aviso.
+    """
+    voltar = request.form.get("voltar")
+    if voltar == "ficha":
+        aluno_id = request.form.get("aluno_id", type=int)
+        if aluno_id:
+            return redirect(url_for("alunos.ficha_aluno", aluno_id=aluno_id))
+    if voltar and voltar.startswith("/") and "//" not in voltar:
+        return redirect(voltar)
+    destino = ("financeiro_painel.dashboard"
+               if voltar == "dashboard"
+               else "financeiro_painel.mensalidades")
+    return _volta(destino, academia_id, mes=mes_chave)
+
+
 @bp_financeiro_painel.route("/mensalidades/<int:registro_id>/pagar", methods=["POST"])
 @login_required
 def mensalidades_pagar(registro_id):
     """Dá baixa reaproveitando a rotina oficial (juros, desconto e receita)."""
-    academia_id = _get_academia_id()
+    # A baixa é feita de três lugares (painel, dashboard e ficha do aluno) e a
+    # ficha pode ser de um aluno de outra academia da mesma gestão. Validar
+    # contra a academia ATIVA na sessão fazia a baixa falhar em silêncio: o
+    # registro existia, mas não "nesta academia". O que vale é a academia do
+    # próprio registro, desde que esteja entre as que o usuário administra.
+    from blueprints.financeiro.routes import _get_academias_ids
+
+    academia_id = request.form.get("academia_id", type=int) or _get_academia_id()
+    ids_permitidos = _get_academias_ids() or []
+    if academia_id and ids_permitidos and academia_id not in ids_permitidos:
+        academia_id = _get_academia_id()
     mes_chave = (request.form.get("mes") or "").strip()
     id_forma = request.form.get("id_forma_pagamento", type=int)
+    # Opções do modal: data efetiva, cancelar juros/multa, desconto (cadastrado/avulso).
+    _data_pag = (request.form.get("data_pagamento") or "").strip() or None
+    _rem_juros = str(request.form.get("remover_juros_manual") or "").strip().lower() in ("1", "on", "true")
+    _desc_id = request.form.get("desconto_id_pagamento", type=int)
+    _desc_tipo = (request.form.get("desconto_manual_tipo") or "").strip() or None
+    _desc_valor = (request.form.get("desconto_manual_valor") or "").strip() or None
 
     conn = get_db_connection()
     cur = conn.cursor(dictionary=True)
     try:
-        cur.execute(
-            """SELECT ma.id FROM mensalidade_aluno ma
-               JOIN alunos a ON a.id = ma.aluno_id
-               WHERE ma.id=%s AND a.id_academia=%s""",
-            (registro_id, academia_id),
-        )
-        if not cur.fetchone():
-            flash("Mensalidade não encontrada nesta academia.", "danger")
-            return _volta("financeiro_painel.mensalidades", academia_id, mes=mes_chave)
+        if ids_permitidos:
+            ph = ",".join(["%s"] * len(ids_permitidos))
+            cur.execute(
+                f"""SELECT ma.id, a.id_academia FROM mensalidade_aluno ma
+                    JOIN alunos a ON a.id = ma.aluno_id
+                    WHERE ma.id = %s AND a.id_academia IN ({ph})""",
+                (registro_id,) + tuple(ids_permitidos),
+            )
+        else:
+            cur.execute(
+                """SELECT ma.id, a.id_academia FROM mensalidade_aluno ma
+                   JOIN alunos a ON a.id = ma.aluno_id
+                   WHERE ma.id = %s AND a.id_academia = %s""",
+                (registro_id, academia_id),
+            )
+        _reg = cur.fetchone()
+        if not _reg:
+            flash("Mensalidade não encontrada ou fora das suas academias.", "danger")
+            return _voltar_da_baixa(academia_id, mes_chave)
+        # A receita tem de ser lançada na academia do aluno, não na da sessão.
+        academia_id = _reg.get("id_academia") or academia_id
 
         ok = _registrar_pagamento_e_receita(
-            conn, cur, "mensalidade_aluno", registro_id, academia_id, id_forma
+            conn, cur, "mensalidade_aluno", registro_id, academia_id, id_forma,
+            data_pagamento=_data_pag, remover_juros=_rem_juros,
+            desconto_id=_desc_id, desconto_tipo=_desc_tipo, desconto_valor=_desc_valor,
         )
         if ok:
             conn.commit()
@@ -1280,7 +1584,10 @@ def mensalidades_pagar(registro_id):
         flash(f"Erro ao registrar o pagamento: {e}", "danger")
     finally:
         conn.close()
-    return _volta("financeiro_painel.mensalidades", academia_id, mes=mes_chave)
+    # A baixa também é feita da lista de pendências do dashboard e da ficha do
+    # aluno; em cada caso a volta é para lá, senão o gestor perde a tela em que
+    # estava.
+    return _voltar_da_baixa(academia_id, mes_chave)
 
 
 @bp_financeiro_painel.route("/mensalidades/notificar-atrasados", methods=["POST"])
@@ -1393,23 +1700,40 @@ def mensalidades_juros(registro_id):
     O clássico só sabia remover; aqui o gestor também consegue reaplicar, caso
     tenha isentado por engano.
     """
-    academia_id = _get_academia_id()
+    # Mesma correção da baixa: vale qualquer academia sob gestão do usuário, não
+    # só a ativa na sessão — a ficha do aluno pode ser de outra.
+    from blueprints.financeiro.routes import _get_academias_ids
+
+    academia_id = request.form.get("academia_id", type=int) or _get_academia_id()
+    ids_permitidos = _get_academias_ids() or []
+    if academia_id and ids_permitidos and academia_id not in ids_permitidos:
+        academia_id = _get_academia_id()
     mes_chave = (request.form.get("mes") or "").strip()
     remover = (request.form.get("acao") or "remover") == "remover"
 
     conn = get_db_connection()
     cur = conn.cursor(dictionary=True)
     try:
-        cur.execute(
-            """SELECT ma.id FROM mensalidade_aluno ma
-               JOIN alunos a ON a.id = ma.aluno_id
-               WHERE ma.id=%s AND a.id_academia=%s
-                 AND ma.status IN ('pendente','atrasado','aguardando_confirmacao')""",
-            (registro_id, academia_id),
-        )
+        if ids_permitidos:
+            ph = ",".join(["%s"] * len(ids_permitidos))
+            cur.execute(
+                f"""SELECT ma.id FROM mensalidade_aluno ma
+                    JOIN alunos a ON a.id = ma.aluno_id
+                    WHERE ma.id = %s AND a.id_academia IN ({ph})
+                      AND ma.status IN ('pendente','atrasado','aguardando_confirmacao')""",
+                (registro_id,) + tuple(ids_permitidos),
+            )
+        else:
+            cur.execute(
+                """SELECT ma.id FROM mensalidade_aluno ma
+                   JOIN alunos a ON a.id = ma.aluno_id
+                   WHERE ma.id=%s AND a.id_academia=%s
+                     AND ma.status IN ('pendente','atrasado','aguardando_confirmacao')""",
+                (registro_id, academia_id),
+            )
         if not cur.fetchone():
-            flash("Mensalidade não encontrada nesta academia, ou já está paga.", "warning")
-            return _volta("financeiro_painel.mensalidades", academia_id, mes=mes_chave)
+            flash("Mensalidade não encontrada, fora das suas academias, ou já paga.", "warning")
+            return _voltar_da_baixa(academia_id, mes_chave)
 
         cur.execute("UPDATE mensalidade_aluno SET remover_juros=%s WHERE id=%s",
                     (1 if remover else 0, registro_id))
@@ -1426,7 +1750,8 @@ def mensalidades_juros(registro_id):
             flash(f"Erro ao alterar os juros: {e}", "danger")
     finally:
         conn.close()
-    return _volta("financeiro_painel.mensalidades", academia_id, mes=mes_chave)
+    # Chamada também da lista por aluno: sem isto a volta descartava o filtro.
+    return _voltar_da_baixa(academia_id, mes_chave)
 
 
 # =====================================================================
@@ -1474,13 +1799,22 @@ def historico():
 
     formas_usadas = sorted({r["forma_nome"] for r in registros if r.get("forma_nome")})
 
-    lista = registros
+    # Forma e competência recortam o conjunto; a situação vira aba, e o número
+    # de cada aba conta esse recorte — senão o contador da aba muda quando ela
+    # é clicada e deixa de valer.
+    recorte = registros
+    if f_forma != "Todos":
+        recorte = [r for r in recorte if (r.get("forma_nome") or "") == f_forma]
+    if f_mes != "Todos":
+        recorte = [r for r in recorte if r["mes_chave"] == f_mes]
+
+    contagens = {"Todos": len(recorte), "Pago": 0, "Pendente": 0, "Atrasado": 0}
+    for r in recorte:
+        contagens[r["rotulo"]] = contagens.get(r["rotulo"], 0) + 1
+
+    lista = recorte
     if f_status != "Todos":
         lista = [r for r in lista if r["rotulo"] == f_status]
-    if f_forma != "Todos":
-        lista = [r for r in lista if (r.get("forma_nome") or "") == f_forma]
-    if f_mes != "Todos":
-        lista = [r for r in lista if r["mes_chave"] == f_mes]
 
     total_pago = sum(float(r["valor"] or 0) for r in lista if r["rotulo"] == "Pago")
     por_forma = []
@@ -1496,6 +1830,287 @@ def historico():
         f_status=f_status, f_forma=f_forma, f_mes=f_mes,
         meses=[{"chave": m, "label": fmt_mes(int(m[:4]), int(m[5:]))} for m in meses],
         formas_usadas=formas_usadas,
-        total_pago=total_pago, por_forma=por_forma,
+        total_pago=total_pago, por_forma=por_forma, contagens=contagens,
     )
     return render_template("financeiro/painel/historico.html", **ctx)
+
+
+# =====================================================================
+# Contas financeiras, extrato e configuração do controle
+# =====================================================================
+# Estas três telas são a parte visível do razão criado em
+# utils/financeiro_core.py: onde o dinheiro está, o que entrou e saiu de cada
+# conta, e em que nível o controle está ligado.
+from utils import financeiro_core as fin
+from utils.financeiro_diagnostico import diagnosticar
+from utils.financeiro_migracao import migrar_academia
+
+
+def _pode_gerir_financeiro():
+    return (current_user.has_role("gestor_academia") or current_user.has_role("admin")
+            or current_user.has_role("gestor_associacao"))
+
+
+@bp_financeiro_painel.route("/contas")
+@login_required
+def contas():
+    academia_id = _get_academia_id()
+    if not academia_id:
+        return _sem_academia()
+
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        lista = fin.saldos_por_conta(cur, academia_id, so_ativas=False)
+        total = sum((c["saldo"] for c in lista if c["ativo"]), Decimal("0"))
+        cur.execute(
+            """SELECT f.id, f.nome, f.id_conta_padrao, c.nome AS conta_nome
+               FROM formas_pagamento f
+               LEFT JOIN fin_contas c ON c.id = f.id_conta_padrao
+               WHERE f.id_academia = %s AND COALESCE(f.ativo,1) = 1
+               ORDER BY f.ordem, f.nome""",
+            (academia_id,))
+        formas = cur.fetchall()
+        modo = fin.modo_controle(cur, academia_id)
+    finally:
+        conn.close()
+
+    ctx = _ctx_base(academia_id)
+    ctx.update(fin_aba="contas", contas=lista, total=total, formas=formas, modo=modo,
+               pode_gerir=_pode_gerir_financeiro())
+    return render_template("financeiro/painel/contas.html", **ctx)
+
+
+@bp_financeiro_painel.route("/contas/nova", methods=["POST"])
+@login_required
+def contas_nova():
+    academia_id = _get_academia_id()
+    if not academia_id or not _pode_gerir_financeiro():
+        flash("Você não tem permissão para criar contas financeiras.", "danger")
+        return _volta("financeiro_painel.contas", academia_id)
+
+    nome = (request.form.get("nome") or "").strip()
+    tipo = (request.form.get("tipo") or "outra").strip()
+    if not nome:
+        flash("Informe o nome da conta.", "warning")
+        return _volta("financeiro_painel.contas", academia_id)
+    try:
+        saldo_inicial = Decimal((request.form.get("saldo_inicial") or "0").replace(",", "."))
+    except InvalidOperation:
+        saldo_inicial = Decimal("0")
+
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        fin.criar_conta(conn, cur, id_academia=academia_id, nome=nome, tipo=tipo,
+                        saldo_inicial=saldo_inicial, data_saldo_inicial=date.today(),
+                        usuario_id=current_user.id)
+        conn.commit()
+        flash(f"Conta {nome} criada.", "success")
+    except Exception as e:
+        conn.rollback()
+        flash(f"Não foi possível criar a conta: {e}", "danger")
+    finally:
+        conn.close()
+    return _volta("financeiro_painel.contas", academia_id)
+
+
+@bp_financeiro_painel.route("/contas/vincular-forma", methods=["POST"])
+@login_required
+def contas_vincular_forma():
+    """Define em qual conta o dinheiro de cada forma de pagamento cai."""
+    academia_id = _get_academia_id()
+    if not academia_id or not _pode_gerir_financeiro():
+        flash("Você não tem permissão para alterar isso.", "danger")
+        return _volta("financeiro_painel.contas", academia_id)
+
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        for chave, valor in request.form.items():
+            if not chave.startswith("forma_"):
+                continue
+            forma_id = int(chave.split("_", 1)[1])
+            cur.execute(
+                """UPDATE formas_pagamento SET id_conta_padrao = %s
+                   WHERE id = %s AND id_academia = %s""",
+                (int(valor) if valor else None, forma_id, academia_id))
+        conn.commit()
+        flash("Contas de destino atualizadas.", "success")
+    except Exception as e:
+        conn.rollback()
+        flash(f"Não foi possível salvar: {e}", "danger")
+    finally:
+        conn.close()
+    return _volta("financeiro_painel.contas", academia_id)
+
+
+@bp_financeiro_painel.route("/contas/transferir", methods=["POST"])
+@login_required
+def contas_transferir():
+    academia_id = _get_academia_id()
+    if not academia_id or not _pode_gerir_financeiro():
+        flash("Você não tem permissão para transferir entre contas.", "danger")
+        return _volta("financeiro_painel.contas", academia_id)
+
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        valor = Decimal((request.form.get("valor") or "0").replace(".", "").replace(",", "."))
+        fin.transferir(conn, cur, id_academia=academia_id,
+                       id_conta_origem=request.form.get("origem", type=int),
+                       id_conta_destino=request.form.get("destino", type=int),
+                       valor=valor, data=date.today(),
+                       descricao=(request.form.get("descricao") or "").strip() or None,
+                       usuario_id=current_user.id)
+        conn.commit()
+        flash("Transferência registrada.", "success")
+    except fin.ErroFinanceiro as e:
+        conn.rollback()
+        flash(str(e), "danger")
+    except Exception as e:
+        conn.rollback()
+        flash(f"Não foi possível transferir: {e}", "danger")
+    finally:
+        conn.close()
+    return _volta("financeiro_painel.contas", academia_id)
+
+
+@bp_financeiro_painel.route("/extrato")
+@login_required
+def extrato():
+    academia_id = _get_academia_id()
+    if not academia_id:
+        return _sem_academia()
+
+    id_conta = request.args.get("conta", type=int)
+    ano, mes = _mes_ref()
+    inicio = date(ano, mes, 1)
+    fim = date(ano + (mes == 12), (mes % 12) + 1, 1) - timedelta(days=1)
+
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        lista_contas = fin.saldos_por_conta(cur, academia_id)
+        if not id_conta and lista_contas:
+            id_conta = lista_contas[0]["id"]
+        dados = (fin.extrato(cur, academia_id, id_conta=id_conta, inicio=inicio, fim=fim)
+                 if id_conta else
+                 {"linhas": [], "saldo_inicial": Decimal("0"), "entradas": Decimal("0"),
+                  "saidas": Decimal("0"), "saldo_final": Decimal("0")})
+    finally:
+        conn.close()
+
+    ctx = _ctx_base(academia_id)
+    ctx.update(fin_aba="extrato", contas=lista_contas, id_conta=id_conta,
+               mes=mes, ano=ano, mes_chave=f"{ano:04d}-{mes:02d}",
+               mes_label=fmt_mes(ano, mes), pode_gerir=_pode_gerir_financeiro(), **dados)
+    return render_template("financeiro/painel/extrato.html", **ctx)
+
+
+@bp_financeiro_painel.route("/controle", methods=["GET", "POST"])
+@login_required
+def controle():
+    """Configuração do nível do controle financeiro, com o diagnóstico do legado."""
+    academia_id = _get_academia_id()
+    if not academia_id:
+        return _sem_academia()
+
+    if request.method == "POST":
+        if not _pode_gerir_financeiro():
+            flash("Você não tem permissão para alterar o controle financeiro.", "danger")
+            return _volta("financeiro_painel.controle", academia_id)
+
+        acao = request.form.get("acao")
+        conn = get_db_connection()
+        cur = conn.cursor(dictionary=True)
+        try:
+            if acao == "preparar_contas":
+                r = fin.preparar_contas(conn, cur, academia_id, usuario_id=current_user.id)
+                conn.commit()
+                flash(f"{len(r['criadas'])} conta(s) criada(s) e "
+                      f"{len(r['vinculadas'])} forma(s) de pagamento vinculada(s).", "success")
+            elif acao == "importar_legado":
+                conn.close()
+                r = migrar_academia(academia_id, usuario_id=current_user.id, simular=False)
+                flash(f"{r['receitas']} receita(s) e {r['despesas']} despesa(s) "
+                      "espelhadas no razão.", "success")
+                return _volta("financeiro_painel.controle", academia_id)
+            elif acao == "modo":
+                novo = request.form.get("modo")
+                if novo == fin.MODO_TOTAL:
+                    conn.close()
+                    diag = diagnosticar(academia_id)
+                    if not diag["pode_ativar_total"]:
+                        flash("Resolva as pendências abaixo antes de ativar o Controle Total.",
+                              "warning")
+                        return _volta("financeiro_painel.controle", academia_id)
+                    conn = get_db_connection()
+                    cur = conn.cursor(dictionary=True)
+                fin.definir_modo(conn, cur, academia_id, novo, usuario_id=current_user.id)
+                conn.commit()
+                flash(f"Controle financeiro agora está em modo {novo}.", "success")
+        except Exception as e:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            flash(f"Não foi possível concluir: {e}", "danger")
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
+        return _volta("financeiro_painel.controle", academia_id)
+
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        modo = fin.modo_controle(cur, academia_id)
+        total = fin.saldo_total(cur, academia_id)
+    finally:
+        conn.close()
+
+    diag = diagnosticar(academia_id)
+    previa = migrar_academia(academia_id, simular=True) if diag["contas_cadastradas"] else None
+
+    ctx = _ctx_base(academia_id)
+    ctx.update(fin_aba="controle", modo=modo, diagnostico=diag, previa=previa,
+               saldo_total=total, pode_gerir=_pode_gerir_financeiro())
+    return render_template("financeiro/painel/controle.html", **ctx)
+
+
+@bp_financeiro_painel.route("/extrato/<int:lanc_id>/conta", methods=["POST"])
+@login_required
+def extrato_reatribuir(lanc_id):
+    """Corrige a conta de um lançamento — o vínculo que o histórico não tinha."""
+    academia_id = _get_academia_id()
+    if not academia_id or not _pode_gerir_financeiro():
+        flash("Você não tem permissão para alterar lançamentos.", "danger")
+        return _volta("financeiro_painel.extrato", academia_id)
+
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        # O lançamento tem de ser da academia em contexto.
+        cur.execute("SELECT id_academia FROM fin_lancamentos WHERE id = %s", (lanc_id,))
+        dono = cur.fetchone()
+        if not dono or int(dono["id_academia"]) != int(academia_id):
+            flash("Lançamento não encontrado nesta academia.", "danger")
+            return _volta("financeiro_painel.extrato", academia_id)
+
+        fin.reatribuir_conta(conn, cur, lanc_id, request.form.get("conta", type=int),
+                             motivo=(request.form.get("motivo") or "").strip() or None,
+                             usuario_id=current_user.id)
+        conn.commit()
+        flash("Conta do lançamento corrigida.", "success")
+    except fin.ErroFinanceiro as e:
+        conn.rollback()
+        flash(str(e), "danger")
+    except Exception as e:
+        conn.rollback()
+        flash(f"Não foi possível corrigir: {e}", "danger")
+    finally:
+        conn.close()
+    return redirect(request.referrer
+                    or url_for("financeiro_painel.extrato", academia_id=academia_id))

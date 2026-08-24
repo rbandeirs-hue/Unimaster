@@ -1,0 +1,127 @@
+{% extends 'base_um2.html' %}
+{% set um_ativo = 'precadastro' %}
+{% block title %}Pré-cadastro{% endblock %}
+
+{% block um_css %}
+  .lin-pre { display:grid; grid-template-columns:minmax(200px,1fr) minmax(190px,1fr) 140px 120px 130px 150px; gap:0 14px; }
+  .rol-pre { min-width:1040px; }
+  .mono { font:400 12.5px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace; color:#57534e; overflow-wrap:anywhere; }
+{% endblock %}
+
+{% block um_conteudo %}
+{% macro brl(v) %}R$ {{ '%.2f'|format(v or 0)|replace('.', ',') }}{% endmacro %}
+
+<div style="display:flex; flex-direction:column; gap:7px">
+  <h1 class="um-h1" style="margin:0">Pré-cadastro</h1>
+  <div class="um-sub">Interessados que se cadastraram pelo formulário público de {{ academia.nome }}.</div>
+</div>
+
+{# ---------------------------- LINKS PÚBLICOS ------------------------------ #}
+<div class="um-card" style="overflow:hidden">
+  <div class="um-cab">
+    <span class="um-secao">Links públicos</span>
+    <span class="um-kpi-nota">Compartilhe por WhatsApp, bio ou anúncio</span>
+  </div>
+  {% for l in links %}
+  <div style="padding:14px 16px; border-bottom:1px solid #f5f5f4; display:flex; align-items:center; gap:16px; flex-wrap:wrap">
+    <div style="flex:1 1 300px; min-width:0; display:flex; flex-direction:column; gap:5px">
+      <div style="display:flex; align-items:baseline; gap:8px; flex-wrap:wrap">
+        <span style="font:600 13px/1.3 'Public Sans',sans-serif">{{ l.nome }}</span>
+        <span style="font:400 12px/1.3 'Public Sans',sans-serif; color:#a8a29e">{{ l.descricao }}</span>
+      </div>
+      <span class="mono" id="link-{{ loop.index }}">{{ l.url }}</span>
+    </div>
+    <div style="flex:none; display:flex; gap:8px">
+      <button type="button" class="um-btn" style="padding:8px 13px; font-size:12.5px" onclick="umCopiar('link-{{ loop.index }}')"><i class="bi bi-clipboard" style="font-size:12px"></i>Copiar</button>
+      <a href="{{ l.url }}" target="_blank" rel="noopener" class="um-btn" style="padding:8px 13px; font-size:12.5px"><i class="bi bi-box-arrow-up-right" style="font-size:12px"></i>Abrir</a>
+    </div>
+  </div>
+  {% endfor %}
+  <form method="post" action="{{ url_for('precadastro.salvar_valor_matricula') }}"
+        style="padding:14px 16px; display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap; background:#FAFAF9">
+    <div class="um-filtro" style="flex:0 1 190px">
+      <label for="p-valor">Valor da matrícula</label>
+      <div style="display:flex; align-items:center; gap:8px">
+        <span style="font:500 13px/1 'Public Sans',sans-serif; color:#78716c">R$</span>
+        <input type="text" id="p-valor" name="valor_matricula" value="{{ '%.2f'|format(valor_matricula or 0)|replace('.', ',') }}" style="width:110px">
+      </div>
+    </div>
+    <button type="submit" class="um-btn-primario" style="padding:10px 15px; font-size:12.5px"><i class="bi bi-check2" style="font-size:12px"></i>Salvar valor</button>
+    <a href="{{ url_for('precadastro.cupons') }}" class="um-btn" style="padding:10px 15px; font-size:12.5px"><i class="bi bi-ticket-perforated" style="font-size:12px"></i>Cupons de desconto</a>
+    <span style="flex:1 1 260px; min-width:0; font:400 12px/1.4 'Public Sans',sans-serif; color:#a8a29e">
+      {% if gateway_ativo %}Cobrança gerada automaticamente pelo gateway configurado.{% else %}Sem gateway configurado: o aluno recebe o valor para pagamento avulso.{% endif %}
+    </span>
+  </form>
+</div>
+
+<div class="um-faixa">
+  <div class="um-kpi"><span class="um-kpi-lbl">Pré-cadastros</span><span class="um-kpi-val">{{ pessoas|length }}</span><span class="um-kpi-nota">Aguardando contato</span></div>
+  <div class="um-kpi"><span class="um-kpi-lbl">Aulas experimentais</span><span class="um-kpi-val">{{ qtd_experimentais|default(0) }}</span><span class="um-kpi-nota">Agendadas pelo link</span></div>
+  <div class="um-kpi"><span class="um-kpi-lbl">Matrículas pelo link</span><span class="um-kpi-val">{{ qtd_matriculas|default(0) }}</span><span class="um-kpi-nota">Concluídas no formulário</span></div>
+  <div class="um-kpi"><span class="um-kpi-lbl">Promovidos a aluno</span><span class="um-kpi-val" style="color:#15803d">{{ qtd_promovidos|default(0) }}</span><span class="um-kpi-nota">Convertidos neste mês</span></div>
+</div>
+
+<form method="get" class="um-filtros">
+  <div class="um-filtro" style="flex:1 1 280px"><label for="q">Buscar</label><input type="text" id="q" name="q" value="{{ request.args.get('q','') }}" placeholder="Nome, e-mail, telefone ou CPF"></div>
+  <div class="um-filtro" style="flex:1 1 210px">
+    <label for="ac">Academia</label>
+    <select id="ac" name="academia_id">
+      {% for a in academias %}<option value="{{ a.id }}" {% if a.id == academia.id %}selected{% endif %}>{{ a.nome }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="um-filtro" style="flex:0 1 170px">
+    <label for="og">Origem</label>
+    <select id="og" name="origem"><option value="">Todas</option>
+      {% for chave, rotulo in [('precadastro','Pré-cadastro'), ('experimental','Aula experimental'), ('matricula','Matrícula')] %}
+      <option value="{{ chave }}" {% if request.args.get('origem') == chave %}selected{% endif %}>{{ rotulo }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <button type="submit" class="um-btn" style="flex:none">Filtrar</button>
+</form>
+
+<div class="um-card" style="overflow:hidden">
+  <div class="um-cab">
+    <span class="um-secao">Interessados</span>
+    <span class="um-kpi-nota">{{ pessoas|length }} pré-cadastros</span>
+  </div>
+  <div class="um-rolagem"><div class="rol-pre">
+    <div class="lin-pre um-th"><span>Interessado</span><span>E-mail</span><span>Telefone</span><span>Nascimento</span><span>Recebido em</span><span style="text-align:right">Ações</span></div>
+    {% for p in pessoas %}
+    <div class="lin-pre um-td">
+      <div style="display:flex; align-items:center; gap:11px; min-width:0">
+        {% if p.foto_url %}
+        <img src="{{ p.foto_url }}" alt="" style="flex:none; width:32px; height:32px; border-radius:50%; object-fit:cover; border:1px solid #e7e5e4">
+        {% else %}
+        <span style="flex:none; width:32px; height:32px; border-radius:50%; background:#f5f5f4; border:1px solid #e7e5e4; display:flex; align-items:center; justify-content:center; font:600 11px/1 'Public Sans',sans-serif; color:#57534e">{{ p.nome[0]|upper }}</span>
+        {% endif %}
+        <div style="min-width:0; display:flex; flex-direction:column; gap:3px">
+          <a href="{{ url_for('precadastro.detalhe', id=p.id) }}" style="font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">{{ p.nome }}</a>
+          <span style="font:400 11.5px/1 'Public Sans',sans-serif; color:#a8a29e">{{ p.origem_label|default('Pré-cadastro') }}</span>
+        </div>
+      </div>
+      <span style="min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#57534e">{{ p.email or '—' }}</span>
+      <span style="color:#57534e">{{ p.telefone or '—' }}</span>
+      <span style="color:#57534e">{{ p.nascimento.strftime('%d/%m/%Y') if p.nascimento else '—' }}</span>
+      <span style="color:#78716c">{{ p.criado_em.strftime('%d/%m %H:%M') if p.criado_em else '—' }}</span>
+      <span style="display:flex; gap:9px; justify-content:flex-end; align-items:center">
+        <a href="{{ url_for('precadastro.promover', id=p.id) }}" class="um-btn-primario" style="padding:7px 11px; font-size:12px">Promover</a>
+        <a href="{{ url_for('precadastro.editar', id=p.id) }}" style="color:#78716c"><i class="bi bi-pencil" style="font-size:14px"></i></a>
+        <a href="{{ url_for('precadastro.excluir', id=p.id) }}" style="color:#78716c"><i class="bi bi-trash" style="font-size:14px"></i></a>
+      </span>
+    </div>
+    {% else %}
+    <div style="padding:32px 16px; text-align:center; color:#a8a29e; font:400 12.5px/1.5 'Public Sans',sans-serif">Nenhum pré-cadastro recebido.</div>
+    {% endfor %}
+  </div></div>
+</div>
+{% endblock %}
+
+{% block um_js %}
+<script>
+function umCopiar(id) {
+  var t = document.getElementById(id);
+  if (t) navigator.clipboard.writeText(t.textContent.trim());
+}
+</script>
+{% endblock %}

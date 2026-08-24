@@ -1,21 +1,27 @@
-{% extends "base.html" %}
-{% block title %}Editar Academia{% endblock %}
+{% extends "base_academia.html" %}
+{% set menu_ativo = 'configuracoes' %}
+{% block title %}Editar academia — {{ academia.nome }}{% endblock %}
+
+{% block pagina_titulo %}Editar academia{% endblock %}
+{% block pagina_subtitulo %}Dados, logo, modalidades e gestores de {{ academia.nome }}.{% endblock %}
+
+{% block pagina_acoes %}
+  {% set back_url = back_url or get_back_url_default() %}
+  <a href="{{ back_url }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Voltar</a>
+{% endblock %}
+
 {% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/base/listas.css') }}">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/photo-cropper.css') }}">
 {% endblock %}
 {% block content %}
-<div class="container mt-5">
-    <div class="mb-4 text-center">
-        <h2 class="display-6 fw-bold text-primary">Editar Academia</h2>
-        <p class="lead text-muted">Atualize os dados da academia selecionada.</p>
-    </div>
-
-    <div class="card shadow-lg mx-auto" style="max-width: 850px; border-radius: 1rem;">
-        <div class="card-header bg-info text-white" style="border-radius: 1rem 1rem 0 0;">
-            <h5 class="mb-0"><i class="bi bi-house-fill me-2"></i> Dados da Academia</h5>
-        </div>
-        <div class="card-body p-4">
+<div style="max-width: 850px;">
+    <section class="lst-quadro">
+        <header class="lst-quadro__topo">
+            <h2 class="lst-quadro__titulo">Dados da academia</h2>
+        </header>
+        <div style="padding: 1.5rem;">
             <form method="POST" enctype="multipart/form-data">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="next" value="{{ back_url }}">
@@ -25,7 +31,7 @@
                         <div class="position-relative" style="width:80px;height:80px;flex-shrink:0;">
                             <img id="logoPreview" src="{{ logo_url or '' }}" alt="Logo {{ academia.nome }}"
                                  class="position-absolute top-0 start-0 rounded-circle {% if not logo_url %}d-none{% endif %}"
-                                 style="width:80px;height:80px;object-fit:cover;border:3px solid #0dcaf0;">
+                                 style="width:80px;height:80px;object-fit:cover;border:3px solid var(--sh-line);">
                             <div id="logoPlaceholder" class="position-absolute top-0 start-0 rounded-circle bg-light d-flex align-items-center justify-content-center text-muted {% if logo_url %}d-none{% endif %}" style="width:80px;height:80px;">
                                 <i class="bi bi-building fs-2"></i>
                             </div>
@@ -64,6 +70,11 @@
                     <div class="col-md-6 mb-3">
                         <label for="email" class="form-label fw-semibold">Email</label>
                         <input type="email" id="email" name="email" class="form-control" value="{{ academia.email or '' }}">
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="site_url" class="form-label fw-semibold">Site da academia</label>
+                        <input type="url" id="site_url" name="site_url" class="form-control" value="{{ academia.site_url or '' }}" placeholder="https://www.suaacademia.com.br">
+                        <div class="form-text">Endereço do site oficial da academia (com https://).</div>
                     </div>
                 </div>
 
@@ -264,16 +275,16 @@
                 })();
                 </script>
 
-                <div class="d-flex justify-content-between pt-2">
+                <div class="d-flex justify-content-between gap-2 pt-2">
                     {% set back_url = back_url or get_back_url_default() %}
-{% include 'components/botao_voltar.html' %}
-                    <button type="submit" class="btn btn-success btn-lg">
-                        <i class="bi bi-save-fill me-2"></i> Salvar Alterações
+                    <a href="{{ back_url }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Voltar</a>
+                    <button type="submit" class="sh__btn sh__btn--forte">
+                        <i class="bi bi-save"></i> Salvar alterações
                     </button>
                 </div>
             </form>
         </div>
-    </div>
+    </section>
 </div>
 
 {# Ações por gestor (definir responsável / remover): fora do <form> principal

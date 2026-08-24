@@ -4,218 +4,299 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Matrícula — {{ academia_nome }}</title>
-  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
   <style>
-    :root{ --bg:#13100e; --card:#221c17; --fg:#f4f1e9; --primary:#c5252b; --accent:#d2a648; --muted:#ada593; --border:#3a322a; --input:#1c1813; }
-    body{ background:var(--bg); color:var(--fg); font-family:'Inter',sans-serif; -webkit-font-smoothing:antialiased; }
-    .mat-wrap{ max-width:560px; margin:0 auto; padding:1.4rem 1rem 3rem; }
-    .topbar{ display:flex; justify-content:center; margin-bottom:1rem; }
-    .topbar a{ color:var(--muted); text-decoration:none; font-size:.85rem; } .topbar a:hover{ color:var(--fg); }
-    .mat-card{ background:var(--card); border:1px solid var(--border); border-radius:18px; box-shadow:0 24px 60px -24px rgba(0,0,0,.7); overflow:hidden; }
-    .mat-head{ background:linear-gradient(135deg,#3a1518,#1b1410); border-bottom:1px solid var(--border); padding:1.7rem 1.5rem 1.4rem; text-align:center; }
-    .mat-head .mark{ width:56px;height:56px;border-radius:50%;background:var(--primary);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-family:'Cinzel';font-weight:700;font-size:1.5rem;box-shadow:0 0 30px rgba(197,37,43,.45);overflow:hidden;margin-bottom:.6rem; }
-    .mat-head .mark img{ width:100%;height:100%;object-fit:cover;border-radius:50%; }
-    .mat-head .eyebrow{ font-size:.66rem; letter-spacing:.28em; text-transform:uppercase; color:var(--accent); }
-    .mat-head h1{ font-family:'Cinzel',serif; font-size:1.5rem; font-weight:700; margin:.15rem 0 0; color:#fff; }
-    .mat-head p{ margin:.2rem 0 0; color:var(--muted); font-size:.88rem; }
-    .mat-body{ padding:1.6rem 1.5rem; }
-    .form-label{ font-weight:600; font-size:.85rem; color:#e9e4d8; margin-bottom:.35rem; }
+    :root{ --bg:#f4f4f2; --card:#ffffff; --fg:#1c1a19; --muted:#6f6b66; --muted2:#8a8681; --line:#ededea; --border:#e7e6e3; --input-border:#d8d7d3; --primary:#c1121f; --green:#15803d; }
+    body{ background:var(--bg); color:var(--fg); font-family:'Instrument Sans', system-ui, -apple-system, sans-serif; -webkit-font-smoothing:antialiased; }
+
+    .topbar{ display:flex; justify-content:space-between; align-items:center; background:#fff; border-bottom:1px solid #e7e7e4; padding:14px 26px; }
+    .topbar a.back{ display:inline-flex; align-items:center; gap:8px; color:var(--muted2); text-decoration:none; font-size:.9rem; } .topbar a.back:hover{ color:var(--fg); }
+    .brand{ display:flex; align-items:center; gap:9px; min-width:0; }
+    .brand .mk{ width:30px; height:30px; border-radius:50%; overflow:hidden; background:var(--primary); color:#fff; display:inline-flex; align-items:center; justify-content:center; font-weight:700; flex:none; }
+    .brand .mk img{ width:100%; height:100%; object-fit:cover; }
+    .brand .bn{ font-weight:600; font-size:.9rem; color:var(--fg); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:260px; }
+
+    .wrap{ max-width:940px; margin:0 auto; padding:44px 20px 60px; }
+    .eyebrow{ font-size:.72rem; letter-spacing:.13em; text-transform:uppercase; font-weight:600; margin-bottom:10px; }
+    .eyebrow.red{ color:var(--primary); } .eyebrow.green{ color:var(--green); }
+    .page-title{ font-size:2.4rem; font-weight:700; letter-spacing:-.02em; margin:0 0 12px; }
+    .subtitle{ max-width:640px; color:var(--muted); font-size:1rem; line-height:1.55; margin:0 0 30px; text-wrap:pretty; }
+
+    .card{ background:var(--card); border:1px solid var(--border); border-radius:14px; overflow:hidden; box-shadow:0 1px 2px rgba(20,18,16,.03); }
+    .sec{ display:grid; grid-template-columns:210px minmax(0,1fr); gap:34px; padding:28px 32px; }
+    .sec + .sec{ border-top:1px solid var(--line); }
+    .sec-num{ font-size:.72rem; letter-spacing:.12em; text-transform:uppercase; font-weight:600; color:#9a968f; }
+    .sec-desc{ font-size:.82rem; color:var(--muted2); margin-top:.35rem; line-height:1.35; }
+    @media (max-width:640px){ .sec{ grid-template-columns:1fr; gap:16px; padding:22px 20px; } .page-title{ font-size:1.9rem; } .wrap{ padding:28px 14px 44px; } }
+
+    .form-label{ font-weight:600; font-size:.82rem; color:#2a2724; margin-bottom:.34rem; }
+    .req{ color:var(--primary); }
     .text-danger{ color:var(--primary) !important; }
-    .form-control, .form-select{ background:var(--input); border:1px solid var(--border); color:var(--fg); border-radius:10px; padding:.6rem .85rem; }
-    .form-control::placeholder{ color:#7d7669; }
-    .form-control:focus, .form-select:focus{ background:#241e18; border-color:var(--primary); box-shadow:0 0 0 3px rgba(197,37,43,.22); color:var(--fg); }
-    .form-select option{ background:var(--card); color:var(--fg); }
-    .form-text{ color:#8a8275 !important; }
-    .form-check-input{ background-color:var(--input); border-color:var(--border); }
+    .form-control, .form-select{ background:#fff; border:1px solid var(--input-border); color:var(--fg); border-radius:8px; padding:.62rem .82rem; font-size:.92rem; }
+    .form-control::placeholder{ color:#adaaa4; }
+    .form-control:focus, .form-select:focus{ border-color:var(--primary); box-shadow:0 0 0 3px rgba(193,18,31,.14); }
+    .form-text{ color:var(--muted2) !important; font-size:.76rem; }
+    .form-check-input{ border-color:var(--input-border); }
     .form-check-input:checked{ background-color:var(--primary); border-color:var(--primary); }
-    .input-group-text{ background:#2a231c; border:1px solid var(--border); color:var(--muted); }
-    .mf-input-prefix{ position:relative; } .mf-input-prefix .mf-prefix{ position:absolute; left:.7rem; top:50%; transform:translateY(-50%); color:var(--muted); font-weight:600; }
-    .mf-input-prefix input{ padding-left:2.1rem; }
-    hr{ border-color:var(--border); opacity:1; }
+    .form-switch .form-check-input{ width:2.4em; height:1.3em; }
+    hr{ border-color:var(--line); opacity:1; margin:0; }
+
+    .btn-mat{ width:100%; border-radius:9px; font-weight:700; padding:.9rem 1rem; background:var(--primary); border:0; color:#fff; box-shadow:0 8px 20px -8px rgba(193,18,31,.5); display:inline-flex; align-items:center; justify-content:center; gap:8px; }
+    .btn-mat:hover{ filter:brightness(1.06); color:#fff; }
+    .btn-ghost{ background:#fff; border:1px solid var(--input-border); border-radius:8px; font-weight:600; color:#2a2724; }
+    .btn-ghost:hover{ background:#f7f7f5; color:#2a2724; }
+
+    .totbox{ background:#f7f7f5; border:1px solid var(--border); border-radius:10px; padding:16px 18px; }
+    .foot{ text-align:center; color:#adaaa4; font-size:.78rem; letter-spacing:.02em; margin-top:26px; }
+
+    /* Resultado / pagamento */
+    .pay-grid{ display:grid; grid-template-columns:minmax(0,1fr) 360px; gap:22px; align-items:start; }
+    @media (max-width:800px){ .pay-grid{ grid-template-columns:1fr; } }
+    .pcard{ background:#fff; border:1px solid var(--border); border-radius:14px; overflow:hidden; }
+    .pcard-h{ display:flex; justify-content:space-between; align-items:center; padding:14px 20px; border-bottom:1px solid var(--line); }
+    .kick{ font-size:.7rem; letter-spacing:.12em; text-transform:uppercase; font-weight:600; color:#2a2724; }
+    .qrbox{ width:190px; height:190px; margin:0 auto 14px; border:1px solid #e9ecef; border-radius:12px; padding:6px; background:#fff; }
+    .qrbox img{ width:100%; height:100%; object-fit:contain; }
+    .rrow{ display:flex; justify-content:space-between; font-size:.92rem; }
+    .badge.bg-success{ background:var(--green) !important; }
     .alert{ border-radius:10px; }
-    .btn-mat{ border-radius:10px; font-weight:700; padding:.85rem 1rem; background:var(--primary); border:0; color:#fff; box-shadow:0 8px 22px rgba(197,37,43,.3); }
-    .btn-mat:hover{ filter:brightness(1.08); color:#fff; }
-    .btn-outline-primary{ color:var(--accent); border-color:var(--accent); }
-    .btn-outline-primary:hover{ background:var(--accent); color:#1b1410; border-color:var(--accent); }
-    .badge.bg-success{ background:#15803d !important; }
-    .alert-success{ background:rgba(21,128,61,.15); border-color:rgba(21,128,61,.4); color:#bbf7d0; }
-    .alert-warning{ background:rgba(210,166,72,.12); border-color:rgba(210,166,72,.4); color:#f5deb0; }
-    .alert-light{ background:#2a231c; border-color:var(--border); color:var(--fg); }
-    .foot{ text-align:center; color:var(--muted); font-size:.8rem; margin-top:1rem; font-family:'Cinzel'; }
-    .text-muted{ color:var(--muted) !important; }
+    .alert-warning{ background:#fdf3e7; border:1px solid #f2d9b6; color:#7a5320; }
+    .alert-danger{ background:#fdecec; border:1px solid #f4c4c4; color:#8a2020; }
+    .step-ok{ color:var(--green); } .step-todo{ color:var(--muted2); }
+    a{ color:var(--primary); } a:hover{ color:#8f0d17; }
   </style>
 </head>
 <body>
-<div class="mat-wrap">
-  <div class="topbar"><a href="{{ url_for('precadastro.landing', academia_slug=academia_slug) }}"><i class="bi bi-arrow-left"></i> Voltar ao site</a></div>
-  <div class="mat-card">
-    <div class="mat-head">
-      <div class="mark">{% if logo_url %}<img src="{{ logo_url }}" alt="">{% else %}柔{% endif %}</div>
-      <div class="eyebrow">Matrículas Abertas</div>
-      <h1>Matrícula</h1>
-      <p>{{ academia_nome }}</p>
-    </div>
-    <div class="mat-body">
 
-      {% with messages = get_flashed_messages(with_categories=true) %}
-        {% for cat, msg in messages %}
-        <div class="alert alert-{{ 'danger' if cat == 'danger' else cat }} py-2">{{ msg }}</div>
-        {% endfor %}
-      {% endwith %}
-
-      {% if resultado %}
-      <!-- ===== Resultado: pagamento ===== -->
-      <div class="text-center">
-        <div style="width:56px;height:56px;border-radius:14px;background:#dcfce7;color:#16a34a;display:inline-flex;align-items:center;justify-content:center;font-size:1.7rem;margin-bottom:.5rem;"><i class="bi bi-check-lg"></i></div>
-        <h4 class="fw-bold mb-1">Cadastro recebido!</h4>
-        {% if resultado.cupom and resultado.desconto %}
-        <p class="mb-1"><span class="text-muted text-decoration-line-through">R$ {{ "%.2f"|format(resultado.valor_original|float) }}</span>
-           <span class="badge bg-success ms-1">cupom {{ resultado.cupom }}: -R$ {{ "%.2f"|format(resultado.desconto|float) }}</span></p>
-        {% endif %}
-        {% if resultado.valor %}<p class="text-muted mb-3">Valor da matrícula: <strong>R$ {{ "%.2f"|format(resultado.valor|float) }}</strong></p>{% endif %}
-
-        {% if not resultado.avulso %}
-          <div class="alert alert-light border small text-start"><i class="bi bi-info-circle text-primary"></i> Pague a matrícula {% if resultado.tipo == 'LINK' %}pelo link abaixo{% else %}via PIX (QR Code ou copia e cola){% endif %} para concluir.</div>
-          {% if resultado.qrcode %}
-          <img src="data:image/png;base64,{{ resultado.qrcode }}" alt="QR Code" style="width:210px;height:210px;border:1px solid #e9ecef;border-radius:12px;padding:6px;background:#fff;">
-          <p class="text-muted small mt-2">Escaneie o QR Code para pagar</p>
-          {% endif %}
-          {% if resultado.copia_cola %}
-          <label class="form-label small d-block text-start">PIX copia e cola</label>
-          <div class="input-group mb-3">
-            <input type="text" class="form-control" id="copiaCola" value="{{ resultado.copia_cola }}" readonly>
-            <button class="btn btn-outline-primary" type="button" onclick="copiar('copiaCola', this)"><i class="bi bi-clipboard"></i></button>
-          </div>
-          {% endif %}
-          {% if resultado.link %}
-          <a href="{{ resultado.link }}" target="_blank" rel="noopener" class="btn btn-success btn-mat w-100 mb-2"><i class="bi bi-box-arrow-up-right me-1"></i> Abrir página de pagamento</a>
-          {% endif %}
-        {% else %}
-          <div class="alert alert-warning text-start">
-            <i class="bi bi-cash-coin"></i> Pagamento <strong>presencial/avulso</strong>.
-            {% if resultado.valor %}Pague <strong>R$ {{ "%.2f"|format(resultado.valor|float) }}</strong> {% endif %}
-            diretamente na {{ resultado.academia_nome }} para concluir a matrícula.
-          </div>
-        {% endif %}
-        <p class="text-muted small mt-2 mb-0">A academia confirmará sua matrícula.</p>
-      </div>
-
-      {% else %}
-      <!-- ===== Formulário ===== -->
-      <p class="text-muted mb-3">Preencha os dados do aluno para realizar a matrícula.</p>
-      <form method="POST" autocomplete="off">
-        <div class="mb-3">
-          <label class="form-label">Nome completo do aluno <span class="text-danger">*</span></label>
-          <input type="text" class="form-control" name="nome" required value="{{ form.get('nome','') }}">
-        </div>
-        <div class="row g-2 mb-3">
-          <div class="col-7">
-            <label class="form-label">Data de nascimento</label>
-            <input type="date" class="form-control" name="data_nascimento" value="{{ form.get('data_nascimento','') }}">
-          </div>
-          <div class="col-5">
-            <label class="form-label">Sexo</label>
-            <select class="form-select" name="sexo">
-              <option value="">—</option>
-              <option value="M" {% if form.get('sexo')=='M' %}selected{% endif %}>Masculino</option>
-              <option value="F" {% if form.get('sexo')=='F' %}selected{% endif %}>Feminino</option>
-              <option value="O" {% if form.get('sexo')=='O' %}selected{% endif %}>Outro</option>
-            </select>
-          </div>
-        </div>
-
-        <hr>
-        <div class="form-check form-switch mb-2">
-          <input class="form-check-input" type="checkbox" id="proprio" name="responsavel_eh_proprio" value="1" {% if form.get('responsavel_eh_proprio')=='1' %}checked{% endif %} onchange="togProprio()">
-          <label class="form-check-label fw-semibold" for="proprio">Responsável financeiro é o próprio aluno</label>
-        </div>
-        <div class="mb-3" id="campoRespNome">
-          <label class="form-label">Nome do responsável financeiro</label>
-          <input type="text" class="form-control" name="responsavel_financeiro_nome" id="respNome" value="{{ form.get('responsavel_financeiro_nome','') }}">
-        </div>
-        <div class="mb-3">
-          <label class="form-label">CPF do responsável financeiro <span class="text-danger">*</span></label>
-          <input type="text" class="form-control" name="responsavel_financeiro_cpf" id="respCpf" required placeholder="000.000.000-00" maxlength="14" value="{{ form.get('responsavel_financeiro_cpf','') }}">
-        </div>
-
-        <div class="row g-2 mb-3">
-          <div class="col-6">
-            <label class="form-label">Contato (telefone)</label>
-            <input type="text" class="form-control" name="telefone" id="tel" placeholder="(00) 00000-0000" value="{{ form.get('telefone','') }}">
-          </div>
-          <div class="col-6">
-            <label class="form-label">E-mail</label>
-            <input type="email" class="form-control" name="email" placeholder="email@exemplo.com" value="{{ form.get('email','') }}">
-          </div>
-        </div>
-
-        <hr>
-        <div class="row g-2 mb-3">
-          <div class="col-7">
-            <label class="form-label">CEP</label>
-            <input type="text" class="form-control" name="cep" id="cep" placeholder="00000-000" maxlength="9" value="{{ form.get('cep','') }}">
-            <div class="form-text" id="cepStatus"></div>
-          </div>
-          <div class="col-5">
-            <label class="form-label">Número</label>
-            <input type="text" class="form-control" name="numero" id="numero" placeholder="123" value="{{ form.get('numero','') }}">
-          </div>
-          <div class="col-12">
-            <label class="form-label">Endereço</label>
-            <input type="text" class="form-control" name="rua" id="rua" placeholder="Rua / logradouro" value="{{ form.get('rua','') }}">
-          </div>
-          <div class="col-7">
-            <input type="text" class="form-control" name="bairro" id="bairro" placeholder="Bairro" value="{{ form.get('bairro','') }}">
-          </div>
-          <div class="col-5">
-            <input type="text" class="form-control" name="cidade" id="cidade" placeholder="Cidade" value="{{ form.get('cidade','') }}">
-          </div>
-        </div>
-        <p class="text-muted small mb-3"><i class="bi bi-info-circle"></i> O endereço agiliza o pagamento online (já vai preenchido no checkout).</p>
-
-        {% if valor_matricula %}
-        <hr>
-        {% if cupons_visiveis %}
-        <div class="alert alert-success py-2 small mb-2">
-          <i class="bi bi-ticket-perforated-fill"></i> Cupons disponíveis:
-          {% for c in cupons_visiveis %}
-          <button type="button" class="badge bg-success border-0 me-1 js-usar-cupom" data-codigo="{{ c.codigo }}" style="cursor:pointer">
-            {{ c.codigo }} ({% if c.tipo == 'percentual' %}{{ "%.0f"|format(c.valor|float) }}%{% else %}R$ {{ "%.2f"|format(c.valor|float) }}{% endif %} off)
-          </button>
-          {% endfor %}
-          <span class="text-muted">— clique para aplicar.</span>
-        </div>
-        {% endif %}
-        <label class="form-label">Cupom de desconto</label>
-        <div class="input-group mb-1">
-          <input type="text" class="form-control text-uppercase" name="cupom" id="cupom" placeholder="Digite o código" value="{{ form.get('cupom','') }}">
-          <button type="button" class="btn btn-outline-primary" id="btnAplicarCupom"><i class="bi bi-check2"></i> Aplicar</button>
-        </div>
-        <div class="small mb-2" id="cupomMsg"></div>
-
-        <div class="d-flex justify-content-between align-items-center mb-3 p-2" style="background:#2a231c;border:1px solid var(--border);border-radius:10px;">
-          <span class="text-muted">Total da matrícula</span>
-          <span class="fw-bold" id="totalMatricula" data-base="{{ '%.2f'|format(valor_matricula|float) }}">R$ {{ "%.2f"|format(valor_matricula|float) }}</span>
-        </div>
-        {% endif %}
-
-        <button type="submit" class="btn btn-primary btn-mat w-100" id="btnEnviar">
-          {% if valor_matricula %}<i class="bi bi-arrow-right-circle me-1"></i> <span id="lblEnviar">Continuar para pagamento (R$ {{ "%.2f"|format(valor_matricula|float) }})</span>{% else %}<i class="bi bi-check-lg me-1"></i> Enviar matrícula{% endif %}
-        </button>
-      </form>
-      {% endif %}
-
+  <div class="topbar">
+    <div class="brand">
+      <span class="mk">{% if logo_url %}<img src="{{ logo_url }}" alt="">{% else %}<i class="bi bi-shield"></i>{% endif %}</span>
+      <span class="bn">{{ academia_nome }}</span>
     </div>
   </div>
-  <p class="text-center text-muted small mt-3">Powered by Unimaster</p>
-</div>
+
+  <div class="wrap">
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for cat, msg in messages %}
+      <div class="alert alert-{{ 'danger' if cat == 'danger' else cat }} py-2 mb-3">{{ msg }}</div>
+      {% endfor %}
+    {% endwith %}
+
+    {% if resultado %}
+    <!-- ===== Resultado: pagamento ===== -->
+    <div class="eyebrow green">Cadastro recebido</div>
+    <h1 class="page-title">Pagamento da matrícula</h1>
+    <p class="subtitle">Recebemos os dados de <strong style="color:var(--fg)">{{ form.get('nome','') }}</strong>. Falta apenas o pagamento da taxa para a academia confirmar a matrícula.</p>
+
+    {% if resultado.avulso %}
+      <div class="pcard" style="padding:22px 24px; max-width:640px;">
+        <div class="alert alert-warning mb-0">
+          <i class="bi bi-cash-coin me-1"></i> Pagamento <strong>presencial/avulso</strong>.
+          {% if resultado.valor %}Pague <strong>R$ {{ "%.2f"|format(resultado.valor|float) }}</strong> {% endif %}
+          diretamente na {{ resultado.academia_nome }} para concluir a matrícula.
+        </div>
+        <p class="text-muted small mt-2 mb-0">A academia confirmará sua matrícula.</p>
+      </div>
+    {% else %}
+      <div class="pay-grid">
+
+        <!-- Pagamento (PIX / link) -->
+        <div class="pcard">
+          <div class="pcard-h">
+            <span class="kick">{% if resultado.tipo == 'LINK' %}Pagamento online{% else %}PIX{% endif %}</span>
+            <span class="text-muted" style="font-size:.8rem;">Aprovação imediata</span>
+          </div>
+          <div style="padding:24px 22px; text-align:center;">
+            {% if resultado.qrcode %}
+            <div class="qrbox"><img src="data:image/png;base64,{{ resultado.qrcode }}" alt="QR Code"></div>
+            <p class="text-muted" style="max-width:250px; margin:0 auto 16px; font-size:.86rem;">
+              {% if resultado.tipo == 'LINK' %}Escaneie o QR Code ou use o botão ao lado para pagar.{% else %}Abra o app do banco, escolha Pix e escaneie o código.{% endif %}
+            </p>
+            {% endif %}
+            {% if resultado.copia_cola %}
+            <div style="display:flex; gap:8px; align-items:stretch;">
+              <input type="text" class="form-control" id="copiaCola" value="{{ resultado.copia_cola }}" readonly style="font-size:.82rem;">
+              <button class="btn btn-ghost" type="button" onclick="copiar('copiaCola', this)" style="flex:none; white-space:nowrap;"><i class="bi bi-clipboard me-1"></i>Copiar</button>
+            </div>
+            {% elif resultado.link and not resultado.qrcode %}
+            <p class="text-muted" style="font-size:.86rem;">Use o botão ao lado para abrir a página de pagamento.</p>
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- Resumo + ações -->
+        <div style="display:flex; flex-direction:column; gap:16px;">
+          <div class="pcard">
+            <div class="pcard-h"><span class="kick">Resumo</span></div>
+            <div style="padding:18px 20px; display:flex; flex-direction:column; gap:12px;">
+              <div class="rrow"><span class="text-muted">Taxa de matrícula</span><span>R$ {{ "%.2f"|format((resultado.valor_original or resultado.valor)|float) }}</span></div>
+              {% if resultado.cupom and resultado.desconto %}
+              <div class="rrow"><span class="text-muted">Cupom {{ resultado.cupom }}</span><span style="color:var(--green); font-weight:600;">− R$ {{ "%.2f"|format(resultado.desconto|float) }}</span></div>
+              {% endif %}
+              <div style="height:1px; background:var(--line); margin:2px 0;"></div>
+              <div class="rrow" style="align-items:baseline;"><span style="font-weight:600;">Total a pagar</span><span style="font-size:1.35rem; font-weight:700;">R$ {{ "%.2f"|format(resultado.valor|float) }}</span></div>
+            </div>
+          </div>
+
+          {% if resultado.link %}
+          <a href="{{ resultado.link }}" target="_blank" rel="noopener" class="btn btn-mat"><i class="bi bi-box-arrow-up-right"></i> Abrir página de pagamento</a>
+          <p class="text-center text-muted" style="font-size:.8rem; margin:-6px 0 0;">Cartão de crédito, débito ou boleto em ambiente seguro.</p>
+          {% endif %}
+
+          <div class="pcard" style="padding:18px 20px;">
+            <div class="kick" style="margin-bottom:14px;">Próximos passos</div>
+            <div style="display:flex; flex-direction:column; gap:12px;">
+              <div style="display:flex; align-items:center; gap:11px;"><i class="bi bi-check-circle-fill step-ok"></i><span style="font-size:.9rem;">Cadastro enviado à secretaria.</span></div>
+              <div style="display:flex; align-items:center; gap:11px;"><i class="bi bi-circle step-todo"></i><span style="font-size:.9rem; color:var(--muted2);">Pagamento da taxa de matrícula.</span></div>
+              <div style="display:flex; align-items:center; gap:11px;"><i class="bi bi-circle step-todo"></i><span style="font-size:.9rem; color:var(--muted2);">Confirmação pela academia e aviso no WhatsApp.</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    {% endif %}
+
+    <div class="pcard" style="margin-top:22px; padding:14px 18px; display:flex; align-items:center; gap:11px; color:var(--muted); font-size:.86rem;">
+      <i class="bi bi-info-circle" style="color:var(--muted2);"></i> Guarde o comprovante. Se o pagamento for feito por outra pessoa, informe o nome do aluno na descrição.
+    </div>
+
+    {% else %}
+    <!-- ===== Formulário ===== -->
+    <div class="eyebrow red">Matrículas Abertas</div>
+    <h1 class="page-title">Matrícula</h1>
+    <p class="subtitle">{{ academia_nome }}. Preencha os dados do aluno para concluir a matrícula. Campos marcados com <span class="req">*</span> são obrigatórios.</p>
+
+    <form method="POST" autocomplete="off">
+      <div class="card">
+
+        <!-- 01 ALUNO -->
+        <div class="sec">
+          <div><div class="sec-num">01 · Aluno</div><div class="sec-desc">Quem vai treinar.</div></div>
+          <div style="display:flex; flex-direction:column; gap:18px;">
+            <div>
+              <label class="form-label">Nome completo <span class="req">*</span></label>
+              <input type="text" class="form-control" name="nome" required placeholder="Nome do aluno" value="{{ form.get('nome','') }}">
+            </div>
+            <div class="row g-3">
+              <div class="col-7">
+                <label class="form-label">Data de nascimento <span class="req">*</span></label>
+                <input type="date" class="form-control" name="data_nascimento" value="{{ form.get('data_nascimento','') }}">
+              </div>
+              <div class="col-5">
+                <label class="form-label">Sexo</label>
+                <select class="form-select" name="sexo">
+                  <option value="">—</option>
+                  <option value="M" {% if form.get('sexo')=='M' %}selected{% endif %}>Masculino</option>
+                  <option value="F" {% if form.get('sexo')=='F' %}selected{% endif %}>Feminino</option>
+                  <option value="O" {% if form.get('sexo')=='O' %}selected{% endif %}>Outro</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 02 RESPONSÁVEL FINANCEIRO -->
+        <div class="sec">
+          <div><div class="sec-num">02 · Responsável financeiro</div><div class="sec-desc">Quem responde pelo pagamento e recebe os avisos.</div></div>
+          <div style="display:flex; flex-direction:column; gap:18px;">
+            <div class="form-check form-switch" style="padding-left:3em;">
+              <input class="form-check-input" type="checkbox" id="proprio" name="responsavel_eh_proprio" value="1" {% if form.get('responsavel_eh_proprio')=='1' %}checked{% endif %} onchange="togProprio()">
+              <label class="form-check-label fw-semibold" for="proprio">O próprio aluno é o responsável financeiro</label>
+            </div>
+            <div id="campoRespNome">
+              <label class="form-label">Nome do responsável <span class="req">*</span></label>
+              <input type="text" class="form-control" name="responsavel_financeiro_nome" id="respNome" placeholder="Nome completo" value="{{ form.get('responsavel_financeiro_nome','') }}">
+            </div>
+            <div class="row g-3">
+              <div class="col-6">
+                <label class="form-label">CPF <span class="req">*</span></label>
+                <input type="text" class="form-control" name="responsavel_financeiro_cpf" id="respCpf" required placeholder="000.000.000-00" maxlength="14" value="{{ form.get('responsavel_financeiro_cpf','') }}">
+              </div>
+              <div class="col-6">
+                <label class="form-label">Celular</label>
+                <input type="text" class="form-control" name="telefone" id="tel" placeholder="(00) 00000-0000" value="{{ form.get('telefone','') }}">
+              </div>
+            </div>
+            <div>
+              <label class="form-label">E-mail <span class="text-danger">*</span></label>
+              <input type="email" class="form-control" name="email" required
+                     placeholder="email@exemplo.com" value="{{ form.get('email','') }}">
+              <div class="form-text mt-1">Para onde enviamos o recibo do pagamento.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 03 ENDEREÇO -->
+        <div class="sec">
+          <div><div class="sec-num">03 · Endereço</div><div class="sec-desc">Opcional. Se preenchido, já vai pronto no checkout.</div></div>
+          <div style="display:flex; flex-direction:column; gap:18px;">
+            <div class="row g-3">
+              <div class="col-7">
+                <label class="form-label">CEP</label>
+                <input type="text" class="form-control" name="cep" id="cep" placeholder="00000-000" maxlength="9" value="{{ form.get('cep','') }}">
+                <div class="form-text" id="cepStatus"></div>
+              </div>
+              <div class="col-5">
+                <label class="form-label">Número</label>
+                <input type="text" class="form-control" name="numero" id="numero" placeholder="123" value="{{ form.get('numero','') }}">
+              </div>
+            </div>
+            <div>
+              <label class="form-label">Logradouro</label>
+              <input type="text" class="form-control" name="rua" id="rua" placeholder="Rua, avenida" value="{{ form.get('rua','') }}">
+            </div>
+            <div class="row g-3">
+              <div class="col-6">
+                <label class="form-label">Bairro</label>
+                <input type="text" class="form-control" name="bairro" id="bairro" placeholder="Bairro" value="{{ form.get('bairro','') }}">
+              </div>
+              <div class="col-6">
+                <label class="form-label">Cidade</label>
+                <input type="text" class="form-control" name="cidade" id="cidade" placeholder="Cidade" value="{{ form.get('cidade','') }}">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 04 PAGAMENTO -->
+        <div class="sec">
+          <div><div class="sec-num">04 · Pagamento</div><div class="sec-desc">Taxa única de matrícula.</div></div>
+          <div style="display:flex; flex-direction:column; gap:16px;">
+            {% if valor_matricula %}
+            <div>
+              <label class="form-label">Cupom de desconto</label>
+              <div class="input-group">
+                <input type="text" class="form-control text-uppercase" name="cupom" id="cupom" placeholder="DIGITE O CÓDIGO" value="{{ form.get('cupom','') }}">
+                <button type="button" class="btn btn-ghost" id="btnAplicarCupom">Aplicar</button>
+              </div>
+              <div class="form-text mt-1" id="cupomMsg">Se você recebeu um código promocional, informe aqui.</div>
+            </div>
+            <div class="totbox">
+              <div class="rrow"><span class="text-muted">Taxa de matrícula</span><span>R$ {{ "%.2f"|format(valor_matricula|float) }}</span></div>
+              <div style="height:1px; background:#e2e1de; margin:12px 0;"></div>
+              <div class="rrow" style="font-size:1.05rem; font-weight:700;"><span>Total</span><span id="totalMatricula" data-base="{{ '%.2f'|format(valor_matricula|float) }}">R$ {{ "%.2f"|format(valor_matricula|float) }}</span></div>
+            </div>
+            {% endif %}
+            <button type="submit" class="btn btn-mat" id="btnEnviar">
+              {% if valor_matricula %}<span id="lblEnviar">Continuar para pagamento</span><i class="bi bi-arrow-right"></i>{% else %}<i class="bi bi-check-lg"></i> Enviar matrícula{% endif %}
+            </button>
+            <p class="text-center text-muted" style="font-size:.8rem; margin:0;">Pagamento processado em ambiente seguro. A matrícula é confirmada após a aprovação.</p>
+          </div>
+        </div>
+
+      </div>
+    </form>
+    {% endif %}
+
+    <p class="foot">Powered by Unimaster</p>
+  </div>
 
 <script>
   function mascaraCPF(el){var v=el.value.replace(/\D/g,'').slice(0,11);if(v.length>9)v=v.slice(0,3)+'.'+v.slice(3,6)+'.'+v.slice(6,9)+'-'+v.slice(9);else if(v.length>6)v=v.slice(0,3)+'.'+v.slice(3,6)+'.'+v.slice(6);else if(v.length>3)v=v.slice(0,3)+'.'+v.slice(3);el.value=v;}
   function mascaraTel(el){var v=el.value.replace(/\D/g,'').slice(0,11);if(v.length>10)v='('+v.slice(0,2)+') '+v.slice(2,7)+'-'+v.slice(7);else if(v.length>6)v='('+v.slice(0,2)+') '+v.slice(2,6)+'-'+v.slice(6);else if(v.length>2)v='('+v.slice(0,2)+') '+v.slice(2);el.value=v;}
-  function togProprio(){var on=document.getElementById('proprio').checked;document.getElementById('campoRespNome').style.display=on?'none':'';}
+  function togProprio(){var el=document.getElementById('proprio');if(!el)return;var on=el.checked;var c=document.getElementById('campoRespNome');if(c)c.style.display=on?'none':'';}
   function copiar(id,btn){var i=document.getElementById(id);i.select();try{document.execCommand('copy');}catch(e){}var o=btn.innerHTML;btn.innerHTML='<i class="bi bi-check2"></i>';setTimeout(function(){btn.innerHTML=o;},1500);}
   var c=document.getElementById('respCpf'); if(c) c.addEventListener('input',function(){mascaraCPF(this);});
   var t=document.getElementById('tel'); if(t) t.addEventListener('input',function(){mascaraTel(this);});

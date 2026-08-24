@@ -1,0 +1,370 @@
+{% extends 'base_um.html' %}
+{% set um_ativo = 'presenca' %}
+{% block title %}Registrar Presença{% endblock %}
+
+{% block um_css %}
+  .filtros-linha { display:flex; align-items:flex-end; gap:12px; flex-wrap:wrap; }
+  .filtros-linha > div { min-width:170px; }
+  .grade { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:10px; }
+  .um-modal { position:fixed; inset:0; z-index:60; background:rgba(24,24,27,.45);
+    display:none; align-items:center; justify-content:center; padding:24px; }
+  .um-modal.aberto { display:flex; }
+  .um-modal-cx { width:520px; max-height:100%; background:#fff; border-radius:12px;
+    box-shadow:0 24px 64px rgba(0,0,0,.28); display:flex; flex-direction:column; overflow:hidden; }
+  .um-modal-h { flex-shrink:0; padding:18px 22px; border-bottom:1px solid #e4e4e7;
+    display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+  .um-modal-t { font:600 16px/1.2 'Inter',sans-serif; color:#18181b; }
+  .um-modal-s { font:400 12.5px/1.4 'Inter',sans-serif; color:#a1a1aa; }
+  .um-modal-b { padding:18px 22px; overflow:auto; display:flex; flex-direction:column; gap:16px; }
+  .um-modal-f { flex-shrink:0; padding:12px 22px; border-top:1px solid #e4e4e7; background:#fafafa;
+    display:flex; align-items:center; justify-content:space-between; gap:12px; }
+  .um-x { width:30px; height:30px; display:flex; align-items:center; justify-content:center;
+    color:#a1a1aa; cursor:pointer; background:none; border:0; }
+  .barra-fixa { position:sticky; bottom:0; background:#fff; border-top:1px solid #e4e4e7;
+    margin:0 -32px -40px; padding:12px 32px; display:flex; align-items:center;
+    justify-content:space-between; gap:12px; flex-wrap:wrap; }
+  @media (max-width: 900px) {
+    .um-modal-cx { width:100%; }
+    .barra-fixa { margin:0 -16px -40px; padding:12px 16px; }
+  }
+{% endblock %}
+
+{% block um_conteudo %}
+<div style="display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap">
+  <div style="display:flex; flex-direction:column; gap:6px">
+    <div class="um-h1">Registrar Presença</div>
+    <div class="um-sub">Marque quem treinou. A chamada é salva no fim da página.</div>
+  </div>
+  <a class="um-btn" href="{{ url_for('presencas.hub') }}"><i class="bi bi-arrow-left" style="font-size:12px"></i> Voltar</a>
+</div>
+
+<div class="um-abas">
+  <a class="um-aba ativa" href="{{ url_for('presencas.registro') }}">Registrar Presença</a>
+  <a class="um-aba" href="{{ url_for('presencas.hub', aba='ata') }}">Relatório de Frequência</a>
+  <a class="um-aba" href="{{ url_for('presencas.hub', aba='hist') }}">Histórico de Frequência</a>
+  <a class="um-aba" href="{{ url_for('presencas.ranking_frequencia') }}">Ranking de frequência</a>
+</div>
+
+{# ------------------------------ FILTROS ------------------------------ #}
+<div class="um-card" style="padding:16px 18px">
+  <form method="GET" class="filtros-linha">
+    <div style="display:flex; flex-direction:column; gap:7px">
+      <label>Turma</label>
+      <select name="turma_id" onchange="this.form.submit()">
+        {% for t in turmas %}<option value="{{ t.id }}" {% if turma and t.id == turma.id %}selected{% endif %}>{{ t.nome }}</option>{% endfor %}
+      </select>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:7px">
+      <label>Data</label>
+      <input type="date" name="data" value="{{ data_iso }}" onchange="this.form.submit()">
+    </div>
+    <div style="display:flex; flex-direction:column; gap:7px">
+      <label>Horário</label>
+      <select name="horario">
+        {% for h in horarios %}<option value="{{ h }}" {% if h == horario %}selected{% endif %}>{{ h }}</option>{% endfor %}
+      </select>
+    </div>
+    <div style="display:flex; gap:8px; flex-wrap:wrap">
+      <button class="um-btn" type="button" onclick="umAbrir('mBusca')" style="white-space:nowrap"><i class="bi bi-search" style="font-size:12px"></i>Buscar aluno</button>
+      <button class="um-btn" type="button" onclick="umAbrir('mAvulso')" style="white-space:nowrap"><i class="bi bi-person-plus" style="font-size:12px"></i>Registro avulso</button>
+    </div>
+  </form>
+</div>
+
+{# ------------------------------ INDICADORES ------------------------------ #}
+<div class="um-stats">
+  <div class="um-stat"><div class="um-stat-lbl">Na lista</div><div class="um-stat-val">{{ alunos|length }}</div></div>
+  <div class="um-div"></div>
+  <div class="um-stat"><div class="um-stat-lbl">Presentes</div><div class="um-stat-val" id="umPresentes">0</div></div>
+  <div class="um-div"></div>
+  <div class="um-stat"><div class="um-stat-lbl">Faltas</div><div class="um-stat-val" id="umFaltas">{{ alunos|length }}</div></div>
+</div>
+
+<form method="POST" action="{{ url_for('presencas.salvar') }}" id="umChamada">
+  <input type="hidden" name="turma_id" value="{{ turma.id if turma }}">
+  <input type="hidden" name="data" value="{{ data_iso }}">
+  <input type="hidden" name="horario" value="{{ horario }}">
+  <input type="hidden" name="observacao_aula" id="umObsAulaCampo" value="{{ observacao_aula or '' }}">
+  <input type="hidden" name="plano_aula" id="umPlanoCampo" value="{{ plano_aula or '' }}">
+
+  <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin:4px 0 12px">
+    <div style="font:600 14px/1 'Inter',sans-serif; color:#18181b">{{ turma.nome if turma }} — {{ data_br }}</div>
+    <div style="display:flex; gap:8px; flex-wrap:wrap">
+      <button class="um-btn" type="button" onclick="umMarcarTodos(true)"><i class="bi bi-check-all" style="font-size:12px"></i>Marcar todos</button>
+      <button class="um-btn" type="button" onclick="umMarcarTodos(false)">Limpar</button>
+      <button class="um-btn" type="button" onclick="umAbrir('mObsAula')"><i class="bi bi-journal-text" style="font-size:12px"></i>Observação da aula</button>
+      <button class="um-btn" type="button" onclick="umAbrir('mPlano')"><i class="bi bi-clipboard2-check" style="font-size:12px"></i>Plano de aula</button>
+    </div>
+  </div>
+
+  <div class="grade">
+    {% for a in alunos %}
+    <label class="um-aluno-card" style="display:flex; flex-direction:column; gap:9px; padding:12px; border:1px solid #e4e4e7; border-radius:10px; background:#fff; cursor:pointer">
+      <div style="display:flex; align-items:center; gap:10px">
+        <input type="checkbox" name="presentes" value="{{ a.id }}" class="umChk"
+               {% if a.presente %}checked{% endif %}
+               onchange="umAtualizar(this)" style="width:16px; height:16px; padding:0; accent-color:#C8102E; flex-shrink:0">
+        <div style="width:34px; height:34px; border-radius:50%; background:#f4f4f5; display:flex; align-items:center; justify-content:center; color:#a1a1aa; flex-shrink:0; overflow:hidden">
+          {% if a.foto %}<img src="{{ a.foto }}" alt="" style="width:100%; height:100%; object-fit:cover">
+          {% else %}<i class="bi bi-person-fill" style="font-size:15px"></i>{% endif %}
+        </div>
+        <div style="flex:1; min-width:0; display:flex; flex-direction:column; gap:4px">
+          <div style="font:600 13px/1.25 'Inter',sans-serif; color:#18181b; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">{{ a.nome }}</div>
+          <div style="display:flex; align-items:center; gap:7px">
+            {% if a.cor_faixa %}<span style="width:16px; height:7px; border-radius:2px; border:1px solid rgba(0,0,0,.18); background:{{ a.cor_faixa }}; flex-shrink:0"></span>{% endif %}
+            <span style="font:400 11px/1 'Inter',sans-serif; color:#a1a1aa">{{ a.faixa or '—' }}</span>
+            {% if a.etiqueta %}<span class="um-pill" style="font-size:10px">{{ a.etiqueta }}</span>{% endif %}
+          </div>
+        </div>
+      </div>
+      <button type="button" onclick="umObsAluno({{ a.id }}, '{{ a.nome|e }}')"
+        style="width:100%; display:flex; align-items:center; justify-content:center; gap:6px; padding:7px; border:1px solid #e4e4e7; border-radius:7px; background:#fff; font:500 11.5px/1 'Inter',sans-serif; color:#71717a; cursor:pointer">
+        <i class="bi bi-chat-heart" style="font-size:11px"></i>Observação ao aluno
+        {% if a.tem_observacao %}
+        <span style="display:inline-flex; align-items:center; justify-content:center; min-width:15px; height:15px; padding:0 4px; border-radius:999px; background:#18181b; color:#fff; font:600 9.5px/1 'Inter',sans-serif">1</span>
+        {% endif %}
+      </button>
+    </label>
+    {% endfor %}
+  </div>
+
+  <div class="barra-fixa">
+    <div style="font:400 12.5px/1 'Inter',sans-serif; color:#a1a1aa"><span id="umResumo">0</span> de {{ alunos|length }} marcados</div>
+    <button class="um-btn-primario" type="submit"><i class="bi bi-check-lg" style="font-size:13px"></i>Registrar Presença</button>
+  </div>
+</form>
+
+{# =============================== MODAIS =============================== #}
+
+{# 1. Buscar aluno de outra turma / academia #}
+<div class="um-modal" id="mBusca" onclick="umFechar(event, 'mBusca')">
+  <div class="um-modal-cx" onclick="event.stopPropagation()">
+    <div class="um-modal-h">
+      <div style="display:flex; flex-direction:column; gap:5px">
+        <div class="um-modal-t">Buscar aluno</div>
+        <div class="um-modal-s">Inclui alunos de outras turmas ou academias nesta chamada.</div>
+      </div>
+      <button class="um-x" type="button" onclick="umFecharId('mBusca')"><i class="bi bi-x-lg" style="font-size:14px"></i></button>
+    </div>
+    <div class="um-modal-b">
+      <input type="text" id="umBuscaCampo" placeholder="Nome do aluno…" oninput="umBuscar(this.value)" style="flex-shrink:0">
+      <div id="umBuscaVazio" style="flex-shrink:0; padding:28px 16px; text-align:center; color:#a1a1aa">
+        <i class="bi bi-person-circle" style="font-size:30px; display:block; margin-bottom:8px; opacity:.5"></i>
+        <span style="font:400 12.5px/1.5 'Inter',sans-serif">Digite para buscar alunos de outras turmas ou academias.</span>
+      </div>
+      <div id="umBuscaLista" style="flex-shrink:0; display:none; flex-direction:column; border:1px solid #e4e4e7; border-radius:9px; overflow:hidden"></div>
+    </div>
+    <div class="um-modal-f">
+      <span style="font:400 12px/1 'Inter',sans-serif; color:#a1a1aa" id="umBuscaContador">Nenhum selecionado</span>
+      <button class="um-btn-primario" type="button" id="umBuscaAdd" disabled onclick="umAdicionarSelecionados()"
+              style="background:#f4f4f5; color:#a1a1aa; cursor:not-allowed"><i class="bi bi-plus-lg" style="font-size:12px"></i>Adicionar</button>
+    </div>
+  </div>
+</div>
+
+{# 2. Registro avulso #}
+<div class="um-modal" id="mAvulso" onclick="umFechar(event, 'mAvulso')">
+  <form class="um-modal-cx" onclick="event.stopPropagation()" method="POST"
+        action="{{ url_for('presencas.registro_avulso') }}" enctype="multipart/form-data" style="width:460px">
+    <input type="hidden" name="turma_id" value="{{ turma.id if turma }}">
+    <input type="hidden" name="data" value="{{ data_iso }}">
+    <div class="um-modal-h">
+      <div style="display:flex; flex-direction:column; gap:5px">
+        <div class="um-modal-t">Registro Avulso</div>
+        <div class="um-modal-s">Adicione um visitante ou aluno não cadastrado nesta aula</div>
+      </div>
+      <button class="um-x" type="button" onclick="umFecharId('mAvulso')"><i class="bi bi-x-lg" style="font-size:14px"></i></button>
+    </div>
+    <div class="um-modal-b">
+      <div style="flex-shrink:0; display:flex; align-items:center; gap:14px">
+        <div style="width:72px; height:72px; border-radius:10px; background:#f4f4f5; border:1px dashed #d4d4d8; display:flex; align-items:center; justify-content:center; color:#a1a1aa; flex-shrink:0"><i class="bi bi-person-fill" style="font-size:26px"></i></div>
+        <div style="flex:1; min-width:0; display:flex; flex-direction:column; gap:7px">
+          <label class="um-btn" style="width:fit-content"><i class="bi bi-camera-fill" style="font-size:12px"></i>Tirar foto ou escolher arquivo
+            <input type="file" name="foto" accept="image/*" capture="environment" style="display:none">
+          </label>
+          <div style="font:400 11.5px/1.4 'Inter',sans-serif; color:#a1a1aa">Opcional · JPG, PNG, GIF ou WebP</div>
+        </div>
+      </div>
+      <div style="flex-shrink:0; display:flex; flex-direction:column; gap:6px">
+        <label>Nome *</label>
+        <input type="text" name="nome" required placeholder="Nome completo do visitante">
+      </div>
+    </div>
+    <div class="um-modal-f">
+      <button class="um-btn" type="button" onclick="umFecharId('mAvulso')">Cancelar</button>
+      <button class="um-btn-primario" type="submit"><i class="bi bi-check-lg" style="font-size:13px"></i>Incluir na chamada</button>
+    </div>
+  </form>
+</div>
+
+{# 3. Observação da aula #}
+<div class="um-modal" id="mObsAula" onclick="umFechar(event, 'mObsAula')">
+  <div class="um-modal-cx" onclick="event.stopPropagation()" style="width:500px">
+    <div class="um-modal-h">
+      <div class="um-modal-t">Observação da aula</div>
+      <button class="um-x" type="button" onclick="umFecharId('mObsAula')"><i class="bi bi-x-lg" style="font-size:14px"></i></button>
+    </div>
+    <div style="padding:18px 22px">
+      <textarea id="umObsAulaTexto" rows="5" placeholder="Registre observações importantes desta aula..."
+        style="line-height:1.6">{{ observacao_aula or '' }}</textarea>
+    </div>
+    <div class="um-modal-f" style="justify-content:flex-end">
+      <button class="um-btn-primario" type="button" onclick="umSalvarObsAula()">Pronto</button>
+    </div>
+  </div>
+</div>
+
+{# 4. Plano de aula #}
+<div class="um-modal" id="mPlano" onclick="umFechar(event, 'mPlano')">
+  <div class="um-modal-cx" onclick="event.stopPropagation()">
+    <div class="um-modal-h">
+      <div class="um-modal-t">Plano de aula</div>
+      <button class="um-x" type="button" onclick="umFecharId('mPlano')"><i class="bi bi-x-lg" style="font-size:14px"></i></button>
+    </div>
+    <div class="um-modal-b">
+      <div style="flex-shrink:0; display:flex; flex-direction:column; gap:6px">
+        <label>Texto</label>
+        <textarea id="umPlanoTexto" rows="5" placeholder="Descreva o plano de aula, objetivos, atividades, etc..." style="line-height:1.6">{{ plano_aula or '' }}</textarea>
+      </div>
+      <div style="flex-shrink:0; display:flex; flex-direction:column; gap:6px">
+        <label>Arquivo (opcional)</label>
+        <label style="display:flex; align-items:center; gap:10px; padding:11px 12px; border:1px dashed #d4d4d8; border-radius:8px; font:400 12.5px/1 'Inter',sans-serif; color:#a1a1aa; cursor:pointer">
+          <i class="bi bi-upload" style="font-size:12px"></i>Escolher arquivo — nenhum selecionado
+          <input type="file" form="umChamada" name="plano_arquivo" style="display:none">
+        </label>
+      </div>
+    </div>
+    <div class="um-modal-f" style="justify-content:flex-end">
+      <button class="um-btn-primario" type="button" onclick="umSalvarPlano()">Pronto</button>
+    </div>
+  </div>
+</div>
+
+{# 5. Observação ao aluno #}
+<div class="um-modal" id="mObsAluno" onclick="umFechar(event, 'mObsAluno')">
+  <form class="um-modal-cx" onclick="event.stopPropagation()" method="POST"
+        action="{{ url_for('presencas.observacao_aluno') }}" style="width:500px">
+    <input type="hidden" name="aluno_id" id="umObsAlunoId">
+    <input type="hidden" name="data" value="{{ data_iso }}">
+    <div class="um-modal-h">
+      <div style="display:flex; flex-direction:column; gap:5px">
+        <div class="um-modal-t">Observação para <span id="umObsAlunoNome"></span></div>
+      </div>
+      <button class="um-x" type="button" onclick="umFecharId('mObsAluno')"><i class="bi bi-x-lg" style="font-size:14px"></i></button>
+    </div>
+    <div style="padding:18px 22px; display:flex; flex-direction:column; gap:7px">
+      <label>Texto</label>
+      <textarea name="texto" rows="6" maxlength="2000" placeholder="Feedback, orientações, elogios…" style="line-height:1.6"></textarea>
+      <div style="font:400 11.5px/1 'Inter',sans-serif; color:#a1a1aa; text-align:right">Até 2000 caracteres</div>
+    </div>
+    <div class="um-modal-f">
+      <button class="um-btn" type="button" onclick="umFecharId('mObsAluno')">Cancelar</button>
+      <button class="um-btn-primario" type="submit"><i class="bi bi-check-lg" style="font-size:13px"></i>Salvar</button>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block um_js %}
+<script>
+const UM_TOTAL = {{ alunos|length }};
+const UM_BUSCA_URL = "{{ url_for('presencas.buscar_alunos') }}";
+let umSel = new Set();
+
+function umAbrir(id)   { document.getElementById(id).classList.add('aberto'); }
+function umFecharId(id){ document.getElementById(id).classList.remove('aberto'); }
+function umFechar(e, id) { if (e.target.id === id) umFecharId(id); }
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') document.querySelectorAll('.um-modal.aberto').forEach(m => m.classList.remove('aberto'));
+});
+
+function umContar() {
+  const n = document.querySelectorAll('.umChk:checked').length;
+  document.getElementById('umPresentes').textContent = n;
+  document.getElementById('umFaltas').textContent = UM_TOTAL - n;
+  document.getElementById('umResumo').textContent = n;
+}
+function umPintar(chk) {
+  const card = chk.closest('.um-aluno-card');
+  if (chk.checked) { card.style.borderColor = '#15803d'; card.style.background = '#f6fbf7'; }
+  else { card.style.borderColor = '#e4e4e7'; card.style.background = '#fff'; }
+}
+function umAtualizar(chk) { umPintar(chk); umContar(); }
+function umMarcarTodos(v) {
+  document.querySelectorAll('.umChk').forEach(c => { c.checked = v; umPintar(c); });
+  umContar();
+}
+document.querySelectorAll('.umChk').forEach(umPintar);
+umContar();
+
+function umSalvarObsAula() {
+  document.getElementById('umObsAulaCampo').value = document.getElementById('umObsAulaTexto').value;
+  umFecharId('mObsAula');
+}
+function umSalvarPlano() {
+  document.getElementById('umPlanoCampo').value = document.getElementById('umPlanoTexto').value;
+  umFecharId('mPlano');
+}
+function umObsAluno(id, nome) {
+  document.getElementById('umObsAlunoId').value = id;
+  document.getElementById('umObsAlunoNome').textContent = nome;
+  umAbrir('mObsAluno');
+}
+
+let umTimer = null;
+function umBuscar(termo) {
+  clearTimeout(umTimer);
+  const vazio = document.getElementById('umBuscaVazio');
+  const lista = document.getElementById('umBuscaLista');
+  if (termo.trim().length < 2) {
+    vazio.style.display = 'block'; lista.style.display = 'none';
+    vazio.innerHTML = '<i class="bi bi-person-circle" style="font-size:30px; display:block; margin-bottom:8px; opacity:.5"></i>' +
+      '<span style="font:400 12.5px/1.5 \'Inter\',sans-serif">Digite para buscar alunos de outras turmas ou academias.</span>';
+    return;
+  }
+  umTimer = setTimeout(async () => {
+    const r = await fetch(UM_BUSCA_URL + '?q=' + encodeURIComponent(termo));
+    const dados = await r.json();
+    if (!dados.length) {
+      vazio.style.display = 'block'; lista.style.display = 'none';
+      vazio.innerHTML = '<i class="bi bi-person-x" style="font-size:26px; display:block; margin-bottom:8px; opacity:.5"></i>' +
+        '<span style="font:400 12.5px/1.5 \'Inter\',sans-serif">Nenhum aluno encontrado.</span>';
+      return;
+    }
+    vazio.style.display = 'none';
+    lista.style.display = 'flex';
+    lista.innerHTML = dados.map(a => `
+      <div style="display:flex; align-items:center; gap:12px; padding:11px 14px; border-bottom:1px solid #f4f4f5">
+        <div style="width:32px; height:32px; border-radius:50%; background:#f4f4f5; display:flex; align-items:center; justify-content:center; color:#a1a1aa; flex-shrink:0"><i class="bi bi-person-fill" style="font-size:14px"></i></div>
+        <div style="flex:1; min-width:0; display:flex; flex-direction:column; gap:3px">
+          <div style="font:500 13px/1.2 'Inter',sans-serif; color:#18181b">${a.nome}</div>
+          <div style="font:400 11.5px/1.2 'Inter',sans-serif; color:#a1a1aa">${a.detalhe}</div>
+        </div>
+        <span class="um-pill" style="flex-shrink:0; font-size:10.5px">${a.etiqueta}</span>
+        <input type="checkbox" value="${a.id}" ${umSel.has(String(a.id)) ? 'checked' : ''}
+               onchange="umSelecionar(this)" style="width:15px; height:15px; padding:0; accent-color:#C8102E; flex-shrink:0">
+      </div>`).join('');
+  }, 250);
+}
+function umSelecionar(chk) {
+  chk.checked ? umSel.add(chk.value) : umSel.delete(chk.value);
+  const n = umSel.size;
+  const btn = document.getElementById('umBuscaAdd');
+  document.getElementById('umBuscaContador').textContent =
+    n === 0 ? 'Nenhum selecionado' : (n === 1 ? '1 selecionado' : n + ' selecionados');
+  btn.disabled = n === 0;
+  btn.style.background = n ? '#C8102E' : '#f4f4f5';
+  btn.style.color = n ? '#fff' : '#a1a1aa';
+  btn.style.cursor = n ? 'pointer' : 'not-allowed';
+}
+function umAdicionarSelecionados() {
+  const f = document.getElementById('umChamada');
+  umSel.forEach(id => {
+    const i = document.createElement('input');
+    i.type = 'hidden'; i.name = 'incluir_alunos'; i.value = id;
+    f.appendChild(i);
+  });
+  f.submit();
+}
+</script>
+{% endblock %}

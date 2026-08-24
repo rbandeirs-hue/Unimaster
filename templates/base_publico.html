@@ -1,0 +1,97 @@
+{# =======================================================================
+   Layout público — páginas sem login
+   =======================================================================
+   Mesma linguagem visual do sistema (tokens, tipografia, botões), sem o
+   chrome: nada de barra lateral, seletor de academia ou menu. Quem abre
+   estas páginas é um atleta, um responsável ou um interessado — não um
+   gestor logado.
+
+   É a etapa 6 do docs/DESIGN_SYSTEM.md: as páginas públicas não herdam o
+   chrome, mas herdam os tokens, para as cores não divergirem sem critério.
+
+   Blocos: title, extra_css, marca, pagina_titulo, pagina_subtitulo,
+           content, extra_js
+   ======================================================================= #}
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Unimaster Judô{% endblock %}</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%23C8102E'/%3E%3Cpath d='M50 20 L60 40 L50 50 L40 40 Z' fill='white'/%3E%3Cpath d='M30 60 L50 50 L70 60 L50 80 Z' fill='white'/%3E%3C/svg%3E">
+
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
+
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/base/tokens.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/base/ui.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/base/shell.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/base/listas.css') }}">
+  {% block extra_css %}{% endblock %}
+  <style>
+    body { font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; }
+
+    .pub { min-height: 100vh; background: var(--sh-page-bg); color: var(--sh-ink);
+           display: flex; flex-direction: column; }
+    .pub__topo { border-bottom: 1px solid var(--sh-line); background: #fff; }
+    .pub__marca { max-width: 760px; margin: 0 auto; padding: .9rem 1.25rem;
+                  display: flex; align-items: center; gap: .65rem;
+                  font-weight: 600; color: var(--sh-ink); text-decoration: none; }
+    .pub__marca-icone { width: 30px; height: 30px; flex: none; border-radius: var(--u-radius-sm);
+                        background: #C8102E; color: #fff; display: grid; place-items: center; }
+    .pub__marca em { font-style: normal; color: #C8102E; }
+
+    .pub__corpo { flex: 1; width: 100%; max-width: 760px; margin: 0 auto;
+                  padding: 2rem 1.25rem 3rem; }
+    .pub__cabecalho { margin-bottom: 1.5rem; }
+    .pub__titulo { font-size: 1.7rem; font-weight: 600; letter-spacing: -.02em; margin: 0 0 .3rem; }
+    .pub__sub { color: var(--sh-ink-soft); margin: 0; }
+    .pub__quadro { background: #fff; border: 1px solid var(--sh-line);
+                   border-radius: var(--u-radius); padding: 1.5rem; }
+    .pub__rodape { max-width: 760px; margin: 0 auto; padding: 0 1.25rem 2rem;
+                   color: #a9a6a1; font-size: .78rem; }
+
+    @media (max-width: 575.98px) {
+      .pub__corpo { padding: 1.5rem 1rem 2.5rem; }
+      .pub__quadro { padding: 1.15rem; }
+      .pub__titulo { font-size: 1.4rem; }
+    }
+  </style>
+</head>
+
+<body class="pub">
+  <header class="pub__topo">
+    {% block marca %}
+    <div class="pub__marca">
+      <span class="pub__marca-icone"><i class="bi bi-shield-fill-check"></i></span>
+      <span>Unimaster <em>Judô</em></span>
+    </div>
+    {% endblock %}
+  </header>
+
+  <main class="pub__corpo">
+    {% with mensagens = get_flashed_messages(with_categories=true) %}
+      {% for categoria, msg in mensagens %}
+      <div class="alert alert-{{ 'danger' if categoria == 'danger' else ('warning' if categoria == 'warning' else 'secondary') }}">{{ msg }}</div>
+      {% endfor %}
+    {% endwith %}
+
+    {% block cabecalho %}
+    <div class="pub__cabecalho">
+      <h1 class="pub__titulo">{% block pagina_titulo %}{% endblock %}</h1>
+      <p class="pub__sub">{% block pagina_subtitulo %}{% endblock %}</p>
+    </div>
+    {% endblock %}
+
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="pub__rodape">
+    © {{ current_year }} Unimaster Judô.
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  {% block extra_js %}{% endblock %}
+</body>
+</html>

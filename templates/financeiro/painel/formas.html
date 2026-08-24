@@ -1,118 +1,138 @@
-{% extends "financeiro/painel/_layout.html" %}
-{% block title %}Formas de Pagamento{% endblock %}
+{% extends "financeiro/painel/_base.html" %}
+{% set fin_aba = 'formas' %}
+{% block title %}Formas de pagamento — Financeiro{% endblock %}
 
-{% block conteudo %}
-<div class="fp-page fp-page--form">
+{% block pagina_titulo %}Financeiro{% endblock %}
+{% block pagina_subtitulo %}Formas aceitas nos lançamentos financeiros{% endblock %}
 
-  <div class="fp-head fp-head--row">
-    <div>
-      <h1 class="fp-h1">Formas de Pagamento</h1>
-      <p class="fp-sub">{{ n_ativos }} ativas · {{ n_inativos }} inativas</p>
-    </div>
-    <a class="fp-btn" href="{{ url_for('financeiro_painel.formas', academia_id=academia_id, novo=1) }}">+ Nova Forma</a>
-  </div>
+{% block fin_css %}
+<style>
+  .lin-forma { grid-template-columns: 90px minmax(0,2fr) minmax(0,1.2fr) 120px 130px; }
+  @media (max-width: 1100px) {
+    .lin-forma { grid-template-columns: 90px minmax(0,2fr) 120px 130px; }
+    .col-usos { display: none !important; }
+  }
+  @media (max-width: 1024px) { .lin-forma { grid-template-columns: 90px minmax(0,2fr) minmax(0,1.2fr) 120px 130px; }
+    .col-usos { display: block !important; } }
+  @media (max-width: 860px) {
+    .lin-forma { grid-template-columns: minmax(0,2fr) 120px 130px; }
+    .col-usos, .col-ordem { display: none !important; }
+  }
+</style>
+{% endblock %}
 
-  {% if not lista %}
-  <div class="fp-card fp-card--pad" style="margin-bottom:20px">
-    <h2 class="fp-h2" style="margin-bottom:8px">Comece pelas mais comuns</h2>
-    <p class="fp-sub" style="margin-bottom:14px">
-      Esta academia ainda não tem nenhuma forma cadastrada, por isso o modal de
-      baixa avisa que o pagamento seria registrado sem forma. Crie as padrão em
-      um clique e ajuste depois o que não usar.
-    </p>
-    <div class="fp-chips" style="margin-bottom:16px">
-      {% for p in padroes %}<span class="fp-faixa-chip">{{ p }}</span>{% endfor %}
+{% block pagina_acoes %}
+  <a class="sh__btn sh__btn--forte" href="{{ url_for('financeiro_painel.formas', academia_id=academia_id, novo=1) }}">
+    <i class="bi bi-plus-lg"></i> Nova forma
+  </a>
+{% endblock %}
+
+{% block fin_conteudo %}
+{% if not lista %}
+{# Sem nenhuma forma cadastrada, o caminho mais curto é criar as três de sempre. #}
+<section class="lst-quadro">
+  <header class="lst-quadro__topo">
+    <h2 class="lst-quadro__titulo">Comece pelas mais comuns</h2>
+  </header>
+  <div style="padding:1.25rem">
+    <div style="display:flex; gap:.4rem; flex-wrap:wrap; margin-bottom:1rem">
+      {% for p in padroes %}<span class="lst-tag">{{ p }}</span>{% endfor %}
     </div>
     <form method="POST" action="{{ url_for('financeiro_painel.formas_padrao') }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
-      <button class="fp-btn" type="submit">Criar formas padrão</button>
+      <button type="submit" class="sh__btn sh__btn--forte">Criar formas padrão</button>
     </form>
   </div>
-  {% endif %}
+</section>
+{% endif %}
 
-  {% if mostrar_form %}
-  <form class="fp-card fp-card--form" method="POST" action="{{ url_for('financeiro_painel.formas_salvar') }}">
+{% if em_edicao or request.args.get('novo') %}
+<section class="lst-quadro">
+  <header class="lst-quadro__topo">
+    <h2 class="lst-quadro__titulo">{{ 'Editar forma' if em_edicao else 'Nova forma' }}</h2>
+  </header>
+  <form method="POST" action="{{ url_for('financeiro_painel.formas_salvar') }}" class="lst-filtros" style="border:0; margin:0">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
     {% if em_edicao %}<input type="hidden" name="id" value="{{ em_edicao.id }}">{% endif %}
 
-    <h2 class="fp-h2 fp-h2--form">{{ 'Editar Forma' if em_edicao else 'Nova Forma de Pagamento' }}</h2>
-
-    <div class="fp-form-grid">
-      <div>
-        <label class="fp-label" for="fm-nome">Nome *</label>
-        <input class="fp-input" id="fm-nome" name="nome" required maxlength="80"
-               value="{{ em_edicao.nome if em_edicao else '' }}" placeholder="Ex: PIX">
-      </div>
-      <div>
-        <label class="fp-label" for="fm-ordem">Ordem</label>
-        <input class="fp-input" id="fm-ordem" name="ordem" type="number" min="0"
-               value="{{ em_edicao.ordem if em_edicao else '' }}" placeholder="Deixe vazio para ir ao fim">
-      </div>
-      <div>
-        <label class="fp-label" for="fm-ativo">Status</label>
-        <select class="fp-input" id="fm-ativo" name="ativo">
-          <option value="ativo" {% if not em_edicao or em_edicao.ativo %}selected{% endif %}>Ativa</option>
-          <option value="inativo" {% if em_edicao and not em_edicao.ativo %}selected{% endif %}>Inativa</option>
-        </select>
-      </div>
-    </div>
-
-    <div class="fp-form-acoes">
-      <button class="fp-btn" type="submit">{{ 'Salvar' if em_edicao else 'Cadastrar' }}</button>
-      <a class="fp-btn-ghost" href="{{ url_for('financeiro_painel.formas', academia_id=academia_id) }}">Cancelar</a>
+    <label class="lst-campo lst-campo--largo">
+      <span class="lst-campo__rotulo">Nome *</span>
+      <input name="nome" required maxlength="80" value="{{ em_edicao.nome if em_edicao else '' }}" placeholder="PIX, Dinheiro, Boleto…">
+    </label>
+    <label class="lst-campo lst-campo--curto">
+      <span class="lst-campo__rotulo">Ordem</span>
+      <input name="ordem" type="number" min="0" value="{{ em_edicao.ordem if em_edicao else 0 }}">
+    </label>
+    <label class="lst-campo lst-campo--curto">
+      <span class="lst-campo__rotulo">Status</span>
+      <select name="ativo">
+        <option value="1" {% if not em_edicao or em_edicao.ativo %}selected{% endif %}>Ativa</option>
+        <option value="0" {% if em_edicao and not em_edicao.ativo %}selected{% endif %}>Inativa</option>
+      </select>
+    </label>
+    <div class="lst-filtros__acoes">
+      <button type="submit" class="sh__btn sh__btn--forte">{{ 'Salvar' if em_edicao else 'Cadastrar' }}</button>
+      <a class="sh__btn" href="{{ url_for('financeiro_painel.formas', academia_id=academia_id) }}">Cancelar</a>
     </div>
   </form>
-  {% endif %}
+</section>
+{% endif %}
 
-  {% if lista %}
-  <div class="fp-card fp-card--table">
-    <div class="fp-table-wrap">
-      <table class="fp-table">
-        <thead>
-          <tr><th>Ordem</th><th>Forma</th><th>Usos</th><th>Status</th><th></th></tr>
-        </thead>
-        <tbody>
-          {% for f in lista %}
-          <tr class="{% if not f.ativo %}is-off{% endif %}">
-            <td class="fp-td-mono">{{ f.ordem }}</td>
-            <td class="fp-td-nome">{{ f.nome }}</td>
-            <td class="fp-td-muted">
-              {% if f.usos %}{{ f.usos }} lançamento(s){% else %}—{% endif %}
-            </td>
-            <td>
-              <span class="fp-badge fp-badge--{{ 'ativo' if f.ativo else 'inativo' }}">
-                {{ 'Ativa' if f.ativo else 'Inativa' }}
-              </span>
-            </td>
-            <td>
-              <div class="fp-acoes">
-                <a class="fp-btn-mini" href="{{ url_for('financeiro_painel.formas', academia_id=academia_id, editar=f.id) }}">Editar</a>
-                <form method="POST" action="{{ url_for('financeiro_painel.formas_alternar', forma_id=f.id) }}" style="display:inline">
-                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                  {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
-                  <button class="fp-btn-mini" type="submit">{{ 'Desativar' if f.ativo else 'Ativar' }}</button>
-                </form>
-                <form method="POST" action="{{ url_for('financeiro_painel.formas_excluir', forma_id=f.id) }}" style="display:inline"
-                      onsubmit="return confirm('Excluir a forma {{ f.nome|e }}?')">
-                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                  {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
-                  <button class="fp-btn-mini fp-btn-mini--danger" type="submit">×</button>
-                </form>
-              </div>
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+{% if lista %}
+<section class="lst-quadro">
+  <header class="lst-quadro__topo">
+    <h2 class="lst-quadro__titulo">Formas cadastradas</h2>
+    <span class="lst-quadro__meta">{{ lista|length }} forma{{ 's' if lista|length != 1 }}</span>
+  </header>
+  <div class="lst-rolagem">
+    <div class="lst-largura" style="--lst-min:520px">
+      <div class="lst-linha lin-forma lst-cab">
+        <div class="col-ordem">Ordem</div>
+        <div>Forma</div>
+        <div class="col-usos">Usos</div>
+        <div>Situação</div>
+        <div class="lst-fim">Ações</div>
+      </div>
+
+      {% for f in lista %}
+      <div class="lst-linha lin-forma lst-item {% if not f.ativo %}is-inativo{% endif %}">
+        <div class="col-ordem">{{ f.ordem }}</div>
+        <div class="lst-corta"><span class="lst-nome">{{ f.nome }}</span></div>
+        <div class="col-usos">{% if f.usos %}{{ f.usos }} lançamento{{ 's' if f.usos != 1 }}{% else %}<span class="lst-vazio-celula">—</span>{% endif %}</div>
+        <div>
+          <span class="lst-situacao {% if f.ativo %}is-ativo{% endif %}"><i></i>{{ 'Ativa' if f.ativo else 'Inativa' }}</span>
+        </div>
+        <div class="lst-acoes">
+          <a class="lst-acao" title="Editar {{ f.nome }}" aria-label="Editar {{ f.nome }}"
+             href="{{ url_for('financeiro_painel.formas', academia_id=academia_id, editar=f.id) }}">
+            <i class="bi bi-pencil"></i>
+          </a>
+          <form method="POST" action="{{ url_for('financeiro_painel.formas_alternar', forma_id=f.id) }}" style="display:inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
+            <button type="submit" class="lst-acao" title="{{ 'Desativar' if f.ativo else 'Ativar' }} {{ f.nome }}"
+                    aria-label="{{ 'Desativar' if f.ativo else 'Ativar' }} {{ f.nome }}">
+              <i class="bi bi-{{ 'pause-circle' if f.ativo else 'play-circle' }}"></i>
+            </button>
+          </form>
+          <form method="POST" action="{{ url_for('financeiro_painel.formas_excluir', forma_id=f.id) }}" style="display:inline"
+                onsubmit="return confirm('Excluir a forma {{ f.nome|e }}?')">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
+            <button type="submit" class="lst-acao lst-acao--perigo" title="Excluir {{ f.nome }}" aria-label="Excluir {{ f.nome }}">
+              <i class="bi bi-trash"></i>
+            </button>
+          </form>
+        </div>
+      </div>
+      {% endfor %}
     </div>
   </div>
-  <p class="fp-sub" style="margin-top:12px;font-size:12px">
-    Formas já usadas em lançamentos não são excluídas — viram inativas, para o
-    histórico continuar íntegro.
-  </p>
-  {% endif %}
-
-</div>
+</section>
+<p class="lst-sub">
+  Formas já usadas em lançamentos não são excluídas — viram inativas, para o histórico continuar íntegro.
+</p>
+{% endif %}
 {% endblock %}

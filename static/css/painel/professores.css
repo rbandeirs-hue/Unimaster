@@ -1,0 +1,200 @@
+/* =======================================================================
+   Professores — equipe técnica da academia
+   =======================================================================
+   Complementa painel/dash.css (cartão, filtros, tabela e botões vêm de lá).
+   Aqui ficam só os elementos próprios desta tela: a faixa de indicadores,
+   a célula de pessoa com avatar e as ações por linha.
+   ======================================================================= */
+
+/* ------------------------------------------------------------ indicadores */
+.prof-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  padding: 0;
+}
+
+.prof-kpi {
+  padding: var(--u-space-3) var(--u-space-4);
+  border-right: 1px solid var(--u-border-soft);
+}
+.prof-kpi:last-child { border-right: 0; }
+
+.prof-kpi__rotulo {
+  font-size: var(--u-fs-xs);
+  font-weight: var(--u-fw-semibold);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--u-text-muted);
+  margin-bottom: var(--u-space-1);
+}
+
+.prof-kpi__valor {
+  font-size: 1.9rem;
+  font-weight: var(--u-fw-bold);
+  line-height: 1.1;
+  color: var(--u-text);
+}
+.prof-kpi__valor.is-positivo { color: var(--u-success); }
+
+.prof-kpi__legenda {
+  margin-top: var(--u-space-1);
+  font-size: var(--u-fs-xs);
+  color: var(--u-text-muted);
+}
+
+/* O campo de busca é o que mais precisa de largura na barra de filtros. */
+.prof-campo--busca { flex: 2 1 260px; }
+.prof-campo--busca .form-control {
+  border-color: var(--u-border);
+  border-radius: var(--u-radius-sm);
+  font-size: var(--u-fs-sm);
+}
+
+/* ---------------------------------------------------------------- tabela */
+.prof-tabela td { vertical-align: middle; }
+.prof-tabela tr.is-inativo td { opacity: .65; }
+
+.prof-pessoa {
+  display: flex;
+  align-items: center;
+  gap: var(--u-space-2);
+  min-width: 0;
+}
+
+.prof-avatar {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.prof-avatar--iniciais {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--u-surface-alt);
+  color: var(--u-text-muted);
+  font-size: var(--u-fs-xs);
+  font-weight: var(--u-fw-semibold);
+  letter-spacing: .02em;
+}
+
+.prof-pessoa__nome { font-weight: var(--u-fw-medium); }
+
+.prof-email { color: var(--u-primary); text-decoration: none; }
+.prof-email:hover { text-decoration: underline; }
+
+.prof-vazio { color: var(--u-text-faint); }
+
+.prof-mods { display: inline-flex; flex-wrap: wrap; gap: var(--u-space-1); }
+
+.prof-tag {
+  padding: .1rem .45rem;
+  border: 1px solid var(--u-border);
+  border-radius: var(--u-radius-sm);
+  font-size: var(--u-fs-xs);
+  color: var(--u-text-muted);
+  white-space: nowrap;
+}
+
+/* Situação: bolinha + rótulo, mesma leitura da lista de alunos. */
+.prof-situacao {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--u-space-1);
+  font-size: var(--u-fs-sm);
+  color: var(--u-text-muted);
+  white-space: nowrap;
+}
+.prof-situacao i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--u-text-faint);
+}
+.prof-situacao.is-ativo { color: var(--u-text); }
+.prof-situacao.is-ativo i { background: var(--u-success); }
+
+/* ----------------------------------------------------------------- ações */
+.prof-acoes {
+  display: inline-flex;
+  gap: var(--u-space-1);
+  justify-content: flex-end;
+}
+
+.prof-acao {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--u-radius-sm);
+  background: none;
+  color: var(--u-text-muted);
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease, border-color .15s ease;
+}
+.prof-acao:hover {
+  background: var(--u-surface-alt);
+  border-color: var(--u-border);
+  color: var(--u-text);
+}
+.prof-acao--perigo:hover {
+  background: rgba(220, 53, 69, .08);
+  border-color: rgba(220, 53, 69, .25);
+  color: var(--u-danger);
+}
+
+/* ------------------------------------------------------------ estado zero */
+.prof-zero {
+  padding: var(--u-space-4) var(--u-space-3);
+  text-align: center;
+  color: var(--u-text-muted);
+}
+.prof-zero > .bi {
+  display: block;
+  font-size: 2rem;
+  margin-bottom: var(--u-space-2);
+  color: var(--u-text-faint);
+}
+
+/* --------------------------------------------------------------- responsivo */
+@media (max-width: 992px) {
+  .prof-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .prof-kpi:nth-child(2n) { border-right: 0; }
+  .prof-kpi:nth-child(-n+2) { border-bottom: 1px solid var(--u-border-soft); }
+}
+
+@media (max-width: 576px) {
+  .prof-kpis { grid-template-columns: 1fr; }
+  .prof-kpi { border-right: 0; border-bottom: 1px solid var(--u-border-soft); }
+  .prof-kpi:last-child { border-bottom: 0; }
+  .prof-kpi__valor { font-size: 1.6rem; }
+}
+
+
+/* ------------------------------------------------------------- celular */
+/* Seis colunas (nome, e-mail, telefone, modalidades, situação, ações) não
+   cabem em 360px: a tabela deixa de ser tabela e cada professor vira um
+   bloco, com o nome em cima e as ações fechando embaixo. */
+@media (max-width: 560px) {
+  .prof-tabela, .prof-tabela tbody { display: block; }
+  .prof-tabela thead { display: none; }
+  .prof-tabela tr {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .3rem .9rem;
+    padding: .85rem .25rem;
+    border-bottom: 1px solid var(--u-border-soft);
+  }
+  .prof-tabela td { display: block; padding: 0; border: 0; min-width: 0; }
+  .prof-tabela td:first-child { flex: 1 1 100%; }
+  .prof-tabela td.is-num { flex: 1 1 100%; text-align: left; }
+  .prof-tabela .prof-acoes { justify-content: flex-start; }
+  .prof-email { overflow-wrap: anywhere; }
+}

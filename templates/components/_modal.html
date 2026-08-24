@@ -1,0 +1,37 @@
+{# Estilos e utilitários dos modais — inclua uma vez por tela que use modal:
+     {% include 'components/_modal.html' %}
+   Depois use:
+     <div class="um-modal" id="meuId" onclick="umFechar(event,'meuId')">
+       <div class="um-modal-cx" onclick="event.stopPropagation()"> ... </div>
+     </div>
+   E abra com onclick="umAbrir('meuId')". #}
+<style>
+  .um-modal { position:fixed; inset:0; z-index:60; background:rgba(24,24,27,.45);
+    display:none; align-items:center; justify-content:center; padding:24px; }
+  .um-modal.aberto { display:flex; }
+  .um-modal-cx { width:520px; max-height:100%; background:#fff; border-radius:12px;
+    box-shadow:0 24px 64px rgba(0,0,0,.28); display:flex; flex-direction:column; overflow:hidden; }
+  .um-modal-h { flex-shrink:0; padding:18px 22px; border-bottom:1px solid #e4e4e7;
+    display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+  .um-modal-t { font:600 16px/1.2 'Inter',sans-serif; color:#18181b; }
+  .um-modal-s { font:400 12.5px/1.4 'Inter',sans-serif; color:#a1a1aa; }
+  .um-modal-b { padding:18px 22px; overflow:auto; display:flex; flex-direction:column; gap:16px; }
+  .um-modal-f { flex-shrink:0; padding:12px 22px; border-top:1px solid #e4e4e7; background:#fafafa;
+    display:flex; align-items:center; justify-content:space-between; gap:12px; }
+  .um-x { width:30px; height:30px; display:flex; align-items:center; justify-content:center;
+    color:#a1a1aa; cursor:pointer; background:none; border:0; }
+  .um-radio-pill { display:inline-flex; align-items:center; gap:8px; padding:9px 13px;
+    border:1px solid #e4e4e7; border-radius:999px; font:500 12.5px/1 'Inter',sans-serif;
+    color:#71717a; cursor:pointer; }
+  .um-radio-pill input { width:14px; height:14px; padding:0; accent-color:#C8102E; }
+  .um-radio-pill:has(input:checked) { border-color:#18181b; color:#18181b; font-weight:600; }
+  @media (max-width: 900px) { .um-modal-cx { width:100% !important; } }
+</style>
+<script>
+function umAbrir(id){document.getElementById(id).classList.add('aberto');}
+function umFecharId(id){document.getElementById(id).classList.remove('aberto');}
+function umFechar(e,id){if(e.target.id===id)umFecharId(id);}
+document.addEventListener('keydown',function(e){
+  if(e.key==='Escape')document.querySelectorAll('.um-modal.aberto').forEach(function(m){m.classList.remove('aberto');});
+});
+</script>

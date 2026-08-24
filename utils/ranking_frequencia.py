@@ -173,6 +173,256 @@ def ranking_frequencia_por_turmas(
     return out
 
 
+def _periodo_ranking(tipo, mes, ano, data_inicio, data_fim):
+    """Trecho de WHERE, parâmetros e rótulo do período escolhido."""
+    usar_intervalo = (
+        tipo == "periodo"
+        and isinstance(data_inicio, date)
+        and isinstance(data_fim, date)
+        and data_inicio <= data_fim
+    )
+    if usar_intervalo:
+        if (data_fim - data_inicio).days > MAX_INTERVALO_DIAS:
+            data_fim = data_inicio + timedelta(days=MAX_INTERVALO_DIAS)
+        return (
+            "AND p.data_presenca BETWEEN %s AND %s",
+            (data_inicio, data_fim),
+            f"{data_inicio.strftime('%d/%m/%Y')} a {data_fim.strftime('%d/%m/%Y')}",
+        )
+    if tipo == "ano":
+        return "AND YEAR(p.data_presenca) = %s", (ano,), f"Ano de {ano}"
+    return (
+        "AND YEAR(p.data_presenca) = %s AND MONTH(p.data_presenca) = %s",
+        (ano, mes),
+        f"{MES_COMPLETO[mes].capitalize()} de {ano}",
+    )
+
+
+ORDENS_RANKING = ("aproveitamento", "periodo", "presencas")
+
+
+def ordem_ranking_padrao(tipo: str) -> str:
+    """No mês, aproveitamento; em recortes longos, número de presenças.
+
+    Num mês o aproveitamento é justo: quem entrou no dia 20 comparece a poucas
+    chamadas e não deve ser punido por aulas anteriores à matrícula.
+
+    Num período de vários meses qualquer percentual distorce, porque o
+    denominador muda de aluno para aluno: dois treinos em duas chamadas dão
+    100% e passam à frente de quem treina desde o começo. Trocar o denominador
+    pelas chamadas da turma ajuda, mas ainda compara turmas que tiveram 2
+    chamadas com turmas que tiveram 90. Só a contagem de presenças é
+    diretamente comparável entre todos — por isso ela é o padrão aqui.
+    """
+    return "aproveitamento" if tipo == "mes" else "presencas"
+
+
+def ranking_frequencia_geral(
+    cursor, turmas_info, tipo="mes", mes=None, ano=None, data_inicio=None,
+    data_fim=None, ordenar=None
+):
+    """Ranking único do período. `ordenar` escolhe o critério da classificação.
+
+    Diferente do pódio por turma, aqui todas as turmas do escopo entram em uma
+    lista só — é a leitura que a tela da academia usa.
+
+    Cada aluno sai com duas medidas, porque elas respondem perguntas
+    diferentes:
+
+    * `frequencia` (aproveitamento) — presenças ÷ chamadas em que o aluno
+      estava matriculado. Mede assiduidade de quem está lá: quem entrou no meio
+      do período não é penalizado por aulas anteriores à matrícula.
+    * `frequencia_periodo` — presenças ÷ todas as chamadas das turmas dele no
+      período. Mede presença sobre o período inteiro, e é o que permite
+      comparar um veterano com um recém-chegado.
+
+    `ordenar`: "aproveitamento", "periodo" ou "presencas" (contagem absoluta).
+    """
+    ref = date.today()
+    mes = int(mes) if mes is not None else ref.month
+    ano = int(ano) if ano is not None else ref.year
+    if mes < 1 or mes > 12:
+        mes = ref.month
+    if ano < 2000 or ano > 2100:
+        ano = ref.year
+
+    where_periodo, params_periodo, periodo_rotulo = _periodo_ranking(
+        tipo, mes, ano, data_inicio, data_fim
+    )
+
+    vazio = {
+        "periodo_rotulo": periodo_rotulo,
+        "ordenar": ordenar if ordenar in ORDENS_RANKING else ordem_ranking_padrao(tipo),
+        "aulas": 0,
+        "presencas": 0,
+        "faltas": 0,
+        "frequencia_media": 0,
+        "alunos": [],
+        "turmas": [],
+        "abaixo_60": [],
+        "faixas": [],
+    }
+
+    ids, nomes = _turmas_ids_nomes(turmas_info)
+    if not ids:
+        return vazio
+
+    ph = ",".join(["%s"] * len(ids))
+    base_where = f"""
+        WHERE COALESCE(p.turma_id, a.TurmaID) IN ({ph})
+          AND {SQL_MATRICULADO_NA_TURMA_DA_PRESENCA}
+          {where_periodo}
+    """
+    params = tuple(ids) + tuple(params_periodo)
+
+    # Uma linha por aluno em cada turma em que ele teve chamada no período.
+    cursor.execute(
+        f"""
+        SELECT COALESCE(p.turma_id, a.TurmaID) AS tid, p.aluno_id,
+               MAX(a.nome) AS nome, MAX(a.foto) AS foto,
+               COUNT(*) AS aulas, SUM(p.presente = 1) AS presencas
+        FROM presencas p
+        INNER JOIN alunos a ON a.id = p.aluno_id
+        {base_where}
+        GROUP BY COALESCE(p.turma_id, a.TurmaID), p.aluno_id
+        """,
+        params,
+    )
+    linhas = cursor.fetchall()
+
+    # Chamadas do período por turma: dias distintos com registro.
+    cursor.execute(
+        f"""
+        SELECT COALESCE(p.turma_id, a.TurmaID) AS tid,
+               COUNT(DISTINCT p.data_presenca) AS chamadas
+        FROM presencas p
+        INNER JOIN alunos a ON a.id = p.aluno_id
+        {base_where}
+        GROUP BY COALESCE(p.turma_id, a.TurmaID)
+        """,
+        params,
+    )
+    chamadas_por_turma = {r["tid"]: int(r["chamadas"] or 0) for r in cursor.fetchall()}
+
+    # O aluno pode treinar em mais de uma turma: os números somam, e a turma
+    # exibida é aquela em que ele mais teve chamada no período.
+    por_aluno = {}
+    por_turma = defaultdict(lambda: {"aulas": 0, "presencas": 0, "alunos": set()})
+    for r in linhas:
+        tid = r.get("tid")
+        aid = r.get("aluno_id")
+        if tid is None or aid is None:
+            continue
+        aulas = int(r.get("aulas") or 0)
+        presencas = int(r.get("presencas") or 0)
+        if aulas <= 0:
+            continue
+
+        bloco = por_turma[tid]
+        bloco["aulas"] += aulas
+        bloco["presencas"] += presencas
+        bloco["alunos"].add(aid)
+
+        item = por_aluno.get(aid)
+        if item is None:
+            item = {
+                "aluno_id": aid,
+                "nome": (r.get("nome") or "").strip() or "—",
+                "foto": (r.get("foto") or "").strip() or None,
+                "aulas": 0,
+                "presencas": 0,
+                "turma_id": tid,
+                "turma_nome": nomes.get(tid, "Turma"),
+                "_aulas_turma_principal": 0,
+                "_turmas": set(),
+            }
+            por_aluno[aid] = item
+        item["aulas"] += aulas
+        item["presencas"] += presencas
+        item["_turmas"].add(tid)
+        if aulas > item["_aulas_turma_principal"]:
+            item["_aulas_turma_principal"] = aulas
+            item["turma_id"] = tid
+            item["turma_nome"] = nomes.get(tid, "Turma")
+
+    ordenar = ordenar if ordenar in ORDENS_RANKING else ordem_ranking_padrao(tipo)
+
+    alunos = []
+    for item in por_aluno.values():
+        item.pop("_aulas_turma_principal", None)
+        turmas_do_aluno = item.pop("_turmas", set())
+        item["faltas"] = item["aulas"] - item["presencas"]
+        item["frequencia"] = round(item["presencas"] * 100 / item["aulas"])
+        # Denominador do período: todas as chamadas das turmas onde ele treina,
+        # inclusive as anteriores à matrícula dele.
+        chamadas_periodo = sum(chamadas_por_turma.get(t, 0) for t in turmas_do_aluno)
+        item["chamadas_periodo"] = chamadas_periodo
+        item["frequencia_periodo"] = (
+            round(item["presencas"] * 100 / chamadas_periodo) if chamadas_periodo else 0
+        )
+        alunos.append(item)
+
+    # Empates caem no critério seguinte mais informativo: mais presenças, e
+    # depois melhor aproveitamento.
+    ordens = {
+        "aproveitamento": lambda x: (-x["frequencia"], -x["presencas"], (x["nome"] or "").lower()),
+        "periodo": lambda x: (-x["frequencia_periodo"], -x["presencas"], (x["nome"] or "").lower()),
+        "presencas": lambda x: (-x["presencas"], -x["frequencia_periodo"], (x["nome"] or "").lower()),
+    }
+    alunos.sort(key=ordens[ordenar])
+    for pos, item in enumerate(alunos, 1):
+        item["lugar"] = pos
+
+    turmas = []
+    for tid, bloco in por_turma.items():
+        if not bloco["aulas"]:
+            continue
+        turmas.append(
+            {
+                "turma_id": tid,
+                "turma_nome": nomes.get(tid, "Turma"),
+                "chamadas": chamadas_por_turma.get(tid, 0),
+                "alunos": len(bloco["alunos"]),
+                "presencas": bloco["presencas"],
+                "frequencia_media": round(bloco["presencas"] * 100 / bloco["aulas"]),
+            }
+        )
+    turmas.sort(key=lambda t: (-t["frequencia_media"], (t["turma_nome"] or "").lower()))
+
+    total_aulas = sum(i["aulas"] for i in alunos)
+    total_presencas = sum(i["presencas"] for i in alunos)
+    # Mesmos cortes de cor usados no histórico de presença.
+    faixas = [
+        ("90% ou mais", "alta", lambda f: f >= 90),
+        ("70% a 89%", "alta", lambda f: 70 <= f < 90),
+        ("60% a 69%", "media", lambda f: 60 <= f < 70),
+        ("Abaixo de 60%", "baixa", lambda f: f < 60),
+    ]
+    return {
+        "periodo_rotulo": periodo_rotulo,
+        "ordenar": ordenar,
+        "aulas": sum(chamadas_por_turma.values()),
+        "presencas": total_presencas,
+        "faltas": total_aulas - total_presencas,
+        "frequencia_media": round(total_presencas * 100 / total_aulas) if total_aulas else 0,
+        "alunos": alunos,
+        "turmas": turmas,
+        # Lista de cobrança: quem está pior aparece primeiro.
+        "abaixo_60": sorted(
+            (i for i in alunos if i["frequencia"] < 60),
+            key=lambda i: (i["frequencia"], (i["nome"] or "").lower()),
+        ),
+        "faixas": [
+            {
+                "rotulo": rotulo,
+                "tom": tom,
+                "alunos": sum(1 for i in alunos if teste(i["frequencia"])),
+            }
+            for rotulo, tom, teste in faixas
+        ],
+    }
+
+
 def ranking_completo_por_turmas(
     cursor, turmas_info, ref_date=None, mes=None, ano=None, data_inicio=None, data_fim=None
 ):

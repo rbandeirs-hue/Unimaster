@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Login - Unimaster Judô</title>
+    <link rel="icon" href="{{ url_for('static', filename='img/login/judo-icon.png') }}" type="image/png" sizes="any">
+
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
+
+    <style>
+      *, *::before, *::after { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; font-family: 'Inter', system-ui, sans-serif; background: #fff; color: #18181b; }
+      a { color: #7f1d1d; text-decoration: none; }
+      a:hover { color: #991b1b; }
+
+      .lg-wrap { min-height: 100vh; display: grid; grid-template-columns: 1.05fr 1fr; }
+
+      .lg-hero { position: relative; background: #18181b; overflow: hidden;
+                 display: flex; flex-direction: column; justify-content: space-between; padding: 56px 52px; }
+      .lg-hero img.bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: .32; filter: grayscale(.5); }
+      .lg-hero .veu { position: absolute; inset: 0;
+                      background: linear-gradient(180deg, rgba(24,24,27,.72) 0%, rgba(24,24,27,.86) 55%, rgba(127,29,29,.72) 100%); }
+      .lg-hero > * { position: relative; }
+      .lg-marca { display: flex; align-items: center; gap: 14px; }
+      .lg-marca img { width: 40px; height: 40px; border-radius: 8px; object-fit: contain; background: #C8102E; }
+      .lg-marca span { font-size: 1rem; font-weight: 600; color: #fff; }
+      .lg-titulo { font-size: 2.4rem; line-height: 1.15; font-weight: 700; color: #fff; letter-spacing: -.025em; max-width: 440px; text-wrap: pretty; }
+      .lg-risco { height: 2px; width: 56px; background: #C8102E; margin: 20px 0; }
+      .lg-sub { font-size: .95rem; line-height: 1.7; color: rgba(255,255,255,.72); max-width: 420px; }
+      .lg-copy { font-size: .75rem; color: rgba(255,255,255,.5); }
+
+      .lg-form-col { display: flex; align-items: center; justify-content: center; padding: 56px 64px; }
+      .lg-form { width: 100%; max-width: 380px; display: flex; flex-direction: column; gap: 32px; }
+      .lg-form h1 { font-size: 1.5rem; font-weight: 600; letter-spacing: -.02em; margin: 0 0 8px; }
+      .lg-form .intro { font-size: .875rem; line-height: 1.6; color: #71717a; margin: 0; }
+
+      .lg-campos { display: flex; flex-direction: column; gap: 20px; }
+      .lg-campo { display: flex; flex-direction: column; gap: 7px; }
+      .lg-campo label { font-size: .8rem; font-weight: 500; color: #3f3f46; }
+      .lg-campo .ajuda { font-size: .75rem; line-height: 1.55; color: #a1a1aa; }
+      .lg-campo input {
+        width: 100%; padding: 12px 14px; font-family: inherit; font-size: .94rem; line-height: 1.4;
+        border: 1px solid #d4d4d8; border-radius: 8px; background: #fff; color: #18181b;
+        transition: border-color .15s, box-shadow .15s;
+      }
+      .lg-campo input:focus { outline: none; border-color: #C8102E; box-shadow: 0 0 0 3px rgba(200,16,46,.12); }
+      .lg-campo input::placeholder { color: #a1a1aa; }
+      .lg-senha { position: relative; display: flex; align-items: center; }
+      .lg-senha input { padding-right: 42px; }
+      .lg-olho { position: absolute; right: 6px; width: 32px; height: 32px; display: flex; align-items: center;
+                 justify-content: center; border: none; background: transparent; color: #a1a1aa; cursor: pointer; border-radius: 6px; }
+      .lg-linha { display: flex; align-items: baseline; justify-content: space-between; }
+      .lg-linha a { font-size: .75rem; font-weight: 500; }
+
+      .lg-btn { width: 100%; padding: 13px; background: #C8102E; color: #fff; border: none; border-radius: 8px;
+                font-family: inherit; font-size: .94rem; font-weight: 600; cursor: pointer; transition: background .15s; margin-top: 4px; }
+      .lg-btn:hover { background: #A00D25; }
+      .lg-btn:disabled { opacity: .7; cursor: default; }
+
+      .lg-rodape { display: flex; align-items: center; gap: 8px; padding-top: 24px;
+                   border-top: 1px solid #e4e4e7; font-size: .75rem; color: #a1a1aa; }
+
+      .lg-alerta { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border-radius: 8px;
+                   font-size: .82rem; line-height: 1.5; border: 1px solid #fecaca; background: #fef2f2; color: #991b1b; }
+      .lg-alerta.success { border-color: #bbf7d0; background: #f0fdf4; color: #15803d; }
+      .lg-alerta.warning { border-color: #fde68a; background: #fefce8; color: #854d0e; }
+      .lg-alerta.info { border-color: #e4e4e7; background: #f4f4f5; color: #3f3f46; }
+
+      @media (max-width: 900px) {
+        .lg-wrap { grid-template-columns: 1fr; }
+        .lg-hero { padding: 32px 24px; gap: 28px; min-height: 240px; }
+        .lg-titulo { font-size: 1.6rem; }
+        .lg-hero .lg-sub, .lg-hero .lg-copy { display: none; }
+        .lg-form-col { padding: 32px 24px 48px; }
+        .lg-campo input { font-size: 16px; }
+      }
+    </style>
+</head>
+
+<body>
+<div class="lg-wrap">
+
+  <div class="lg-hero">
+    <img class="bg" src="{{ url_for('static', filename='img/landing-hero-judo.jpg') }}" alt="">
+    <div class="veu"></div>
+
+    <div class="lg-marca">
+      <img src="{{ url_for('static', filename='img/login/judo-icon.png') }}" alt="">
+      <span>Unimaster Judô</span>
+    </div>
+
+    <div>
+      <div class="lg-titulo">Sistema de Gestão para Academias de Judô</div>
+      <div class="lg-risco"></div>
+      <div class="lg-sub">Matrículas, turmas, presenças, financeiro e competições em um só lugar.</div>
+    </div>
+
+    <div class="lg-copy">&copy; {{ current_year }} Unimaster Judô. Todos os direitos reservados.</div>
+  </div>
+
+  <div class="lg-form-col">
+    <form method="POST" class="lg-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+      <div>
+        <h1>Entrar no Sistema</h1>
+        <p class="intro">Acesse com seu CPF e senha cadastrados.</p>
+      </div>
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+        <div class="lg-alerta {{ category }}">
+          <i class="bi bi-exclamation-triangle-fill" style="margin-top:1px"></i>
+          <span>{{ message }}</span>
+        </div>
+        {% endfor %}
+      {% endif %}
+      {% endwith %}
+
+      <div class="lg-campos">
+        <div class="lg-campo">
+          <label for="cpf">CPF</label>
+          <input type="text" inputmode="numeric" id="cpf" name="cpf" required maxlength="14"
+                 placeholder="000.000.000-00" autocomplete="username">
+          <div class="ajuda">Primeiro acesso sem CPF? Informe seu e-mail neste campo para cadastrar o CPF.</div>
+        </div>
+
+        <div class="lg-campo">
+          <div class="lg-linha">
+            <label for="senha">Senha</label>
+            <a href="{{ url_for('auth.esqueci_senha') }}">Esqueci minha senha</a>
+          </div>
+          <div class="lg-senha">
+            <input type="password" id="senha" name="senha" required placeholder="Digite sua senha" autocomplete="current-password">
+            <button type="button" class="lg-olho" id="btnOlho" aria-label="Mostrar senha"><i class="bi bi-eye"></i></button>
+          </div>
+        </div>
+
+        <button type="submit" class="lg-btn" id="btnEntrar">Entrar no Sistema</button>
+      </div>
+
+      <div class="lg-rodape">
+        <i class="bi bi-shield-check"></i><span>Sistema seguro e confiável</span>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  // Foco no primeiro campo
+  document.addEventListener('DOMContentLoaded', function () {
+    var cpf = document.getElementById('cpf');
+    if (cpf && !cpf.value) cpf.focus();
+
+    // Máscara dinâmica: só formata se for número; e-mail passa direto.
+    if (cpf) {
+      cpf.addEventListener('input', function (e) {
+        var v = e.target.value;
+        if (v.includes('@')) return;
+        var d = v.replace(/\D/g, '').slice(0, 11);
+        var out = d;
+        if (d.length > 9) out = d.replace(/(\d{3})(\d{3})(\d{3})(\d{1,2})/, '$1.$2.$3-$4');
+        else if (d.length > 6) out = d.replace(/(\d{3})(\d{3})(\d{1,3})/, '$1.$2.$3');
+        else if (d.length > 3) out = d.replace(/(\d{3})(\d{1,3})/, '$1.$2');
+        e.target.value = out;
+      });
+    }
+
+    // Mostrar / ocultar senha
+    var olho = document.getElementById('btnOlho');
+    var senha = document.getElementById('senha');
+    if (olho && senha) {
+      olho.addEventListener('click', function () {
+        var mostrar = senha.type === 'password';
+        senha.type = mostrar ? 'text' : 'password';
+        olho.innerHTML = mostrar ? '<i class="bi bi-eye-slash"></i>' : '<i class="bi bi-eye"></i>';
+      });
+    }
+
+    // Estado de envio
+    var form = document.querySelector('.lg-form');
+    if (form) {
+      form.addEventListener('submit', function () {
+        var btn = document.getElementById('btnEntrar');
+        if (btn) { btn.disabled = true; btn.textContent = 'Entrando...'; }
+      });
+    }
+  });
+</script>
+</body>
+</html>

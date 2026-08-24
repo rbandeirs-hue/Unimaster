@@ -1,0 +1,137 @@
+{# =====================================================================
+   Modal de baixa de mensalidade
+   =====================================================================
+   Usado pelo painel financeiro e pela ficha do aluno — as duas telas dão
+   baixa no mesmo registro, pela mesma rota, e antes duplicavam markup.
+
+   Gatilho: qualquer elemento com a classe `js-fin-registrar` e os atributos
+   `data-id` (id do registro em mensalidade_aluno), `data-nome` e `data-valor`.
+   O clique é capturado por delegação, então serve também para linhas
+   injetadas depois do carregamento.
+
+   Estilos em static/css/painel/financeiro.css (.fin-modal*).
+   ===================================================================== #}
+{% macro modal_baixa(formas, academia_id=None, mes='', voltar=None, aluno_id=None, descontos=None) %}
+<div class="fin-modal" id="finModalPagar">
+  <form class="fin-modal__caixa" method="POST" id="finFormPagar">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
+    <input type="hidden" name="mes" value="{{ mes }}">
+    {% if voltar %}<input type="hidden" name="voltar" value="{{ voltar }}">{% endif %}
+    {% if aluno_id %}<input type="hidden" name="aluno_id" value="{{ aluno_id }}">{% endif %}
+
+    <div class="fin-modal__topo">Registrar pagamento</div>
+    <div class="fin-modal__corpo">
+      <div>
+        <span class="lst-campo__rotulo">Aluno</span>
+        <div id="finPagarNome"></div>
+      </div>
+      <div>
+        <span class="lst-campo__rotulo">Valor</span>
+        <div class="fin-modal__valor" id="finPagarValor"></div>
+      </div>
+      <div>
+        <span class="lst-campo__rotulo">Forma de pagamento</span>
+        {% if formas %}
+        <div class="fin-formas" id="finFormas">
+          {% for f in formas %}
+          <button type="button" class="fin-forma {% if loop.first %}is-ativa{% endif %}" data-id="{{ f.id }}">{{ f.nome }}</button>
+          {% endfor %}
+        </div>
+        <input type="hidden" name="id_forma_pagamento" id="finFormaId" value="{{ formas[0].id }}">
+        {% else %}
+        <p class="lst-sub">
+          Nenhuma forma cadastrada — o pagamento será registrado sem forma.
+          <a href="{{ url_for('financeiro_painel.formas', academia_id=academia_id) }}">Cadastrar agora</a>.
+        </p>
+        {% endif %}
+      </div>
+      <div>
+        <span class="lst-campo__rotulo">Data do pagamento</span>
+        <input type="date" name="data_pagamento" id="finDataPag"
+               style="width:100%; padding:.5rem .7rem; border:1px solid #d8d7d3; border-radius:8px; font:inherit;">
+      </div>
+      <div>
+        <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+          <input type="checkbox" name="remover_juros_manual" value="1" id="finSemJuros">
+          <span class="lst-sub" style="margin:0;">Cancelar juros e multa (pagou em dia / cortesia)</span>
+        </label>
+      </div>
+      <div>
+        <span class="lst-campo__rotulo">Desconto — se o aluno tiver direito</span>
+        <select name="desconto_id_pagamento" id="finDescSel"
+                style="width:100%; padding:.5rem .7rem; border:1px solid #d8d7d3; border-radius:8px; font:inherit;">
+          <option value="">Sem desconto</option>
+          {% for d in descontos or [] %}
+          <option value="{{ d.id }}">{{ d.nome }} — {% if d.tipo == 'percentual' %}{{ '%.0f'|format(d.valor|float) }}%{% else %}R$ {{ '%.2f'|format(d.valor|float) }}{% endif %}</option>
+          {% endfor %}
+          <option value="avulso">Desconto avulso…</option>
+        </select>
+        <div id="finDescAvulso" style="display:none; gap:6px; margin-top:6px;">
+          <select name="desconto_manual_tipo" style="max-width:90px; padding:.5rem; border:1px solid #d8d7d3; border-radius:8px; font:inherit;">
+            <option value="percentual">%</option>
+            <option value="valor_fixo">R$</option>
+          </select>
+          <input type="text" name="desconto_manual_valor" placeholder="Valor do desconto" inputmode="decimal"
+                 style="flex:1; padding:.5rem .7rem; border:1px solid #d8d7d3; border-radius:8px; font:inherit;">
+        </div>
+      </div>
+    </div>
+    <div class="fin-modal__rodape">
+      <button type="button" class="sh__btn" id="finPagarCancelar">Cancelar</button>
+      <button type="submit" class="sh__btn sh__btn--forte">Confirmar pagamento</button>
+    </div>
+  </form>
+</div>
+
+<script>
+(function () {
+  var modal = document.getElementById('finModalPagar');
+  var form = document.getElementById('finFormPagar');
+  var elNome = document.getElementById('finPagarNome');
+  var elValor = document.getElementById('finPagarValor');
+  var formaId = document.getElementById('finFormaId');
+  // A action é montada por id: a rota é /mensalidades/<id>/pagar.
+  var BASE = "{{ url_for('financeiro_painel.mensalidades_pagar', registro_id=0) }}";
+
+  function fechar() { modal.classList.remove('is-aberto'); }
+
+  document.addEventListener('click', function (ev) {
+    var botao = ev.target.closest && ev.target.closest('.js-fin-registrar');
+    if (!botao) return;
+    ev.preventDefault();
+    form.action = BASE.replace(/0\/pagar$/, botao.dataset.id + '/pagar');
+    elNome.textContent = botao.dataset.nome || '';
+    elValor.textContent = botao.dataset.valor || '';
+    // Reseta as opções (modal é reutilizado entre alunos) e põe a data de hoje.
+    var dp = document.getElementById('finDataPag'); if (dp) dp.value = new Date().toISOString().slice(0, 10);
+    var sj = document.getElementById('finSemJuros'); if (sj) sj.checked = false;
+    var ds = document.getElementById('finDescSel'); if (ds) ds.value = '';
+    var da = document.getElementById('finDescAvulso'); if (da) da.style.display = 'none';
+    var dvv = form.querySelector('[name="desconto_manual_valor"]'); if (dvv) dvv.value = '';
+    modal.classList.add('is-aberto');
+  });
+
+  var descSel = document.getElementById('finDescSel');
+  if (descSel) descSel.addEventListener('change', function () {
+    var da = document.getElementById('finDescAvulso');
+    if (da) da.style.display = (descSel.value === 'avulso') ? 'flex' : 'none';
+  });
+
+  document.getElementById('finPagarCancelar').addEventListener('click', fechar);
+  modal.addEventListener('click', function (e) { if (e.target === modal) fechar(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') fechar(); });
+
+  var formas = document.getElementById('finFormas');
+  if (formas) {
+    formas.addEventListener('click', function (e) {
+      var b = e.target.closest('.fin-forma');
+      if (!b) return;
+      formas.querySelectorAll('.fin-forma').forEach(function (x) { x.classList.remove('is-ativa'); });
+      b.classList.add('is-ativa');
+      formaId.value = b.dataset.id;
+    });
+  }
+})();
+</script>
+{% endmacro %}

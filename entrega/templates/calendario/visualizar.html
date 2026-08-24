@@ -1,0 +1,124 @@
+{% extends 'base_um2.html' %}
+{% set um_ativo = 'calendario' %}
+{% block title %}Calendário{% endblock %}
+
+{% block um_css %}
+  .cal-cab { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); background:#FAFAF9; border-bottom:1px solid #e7e5e4; }
+  .cal-grade { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); }
+  .cal-cel { min-height:118px; padding:8px 9px; display:flex; flex-direction:column; gap:5px;
+    box-shadow:1px 0 0 #f5f5f4, 0 1px 0 #f5f5f4; }
+  .lin-cal { display:grid; grid-template-columns:110px minmax(260px,1fr) 150px 160px 120px; gap:0 14px; }
+  .rol-cal { min-width:900px; }
+  .seg { display:flex; padding:3px; border:1px solid #d6d3d1; border-radius:3px; background:#fff; }
+  .seg a { padding:7px 13px; border-radius:2px; font:400 12.5px/1 'Public Sans',sans-serif; color:#78716c; }
+  .seg a.on { background:#1C1917; font-weight:600; color:#FAFAF9; }
+  @media (max-width: 760px) { .cal-cel { min-height:90px; } }
+{% endblock %}
+
+{% block um_conteudo %}
+{% set visao = visao|default('mes') %}
+{% set cores = {'aula': '#2563eb', 'evento': '#0891b2', 'competicao': '#C8102E', 'feriado': '#eab308'} %}
+
+<div style="display:flex; align-items:flex-end; justify-content:space-between; gap:20px; flex-wrap:wrap">
+  <div style="display:flex; flex-direction:column; gap:7px">
+    <h1 class="um-h1" style="margin:0">Calendário</h1>
+    <div class="um-sub">Aulas, eventos, competições e feriados de {{ academia.nome }}.</div>
+  </div>
+  <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center">
+    <a href="{{ url_for(request.endpoint, sincronizar=1, mes=mes, ano=ano) }}" class="um-btn"><i class="bi bi-arrow-repeat" style="font-size:13px"></i>Sincronizar</a>
+    <a href="{{ url_for('calendario.novo') }}" class="um-btn-primario"><i class="bi bi-plus-lg" style="font-size:13px"></i>Novo lançamento</a>
+  </div>
+</div>
+
+<div class="um-card" style="padding:14px 18px; display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap">
+  <div style="display:flex; align-items:center; gap:12px">
+    <a href="{{ url_for(request.endpoint, mes=mes_ant, ano=ano_ant, visao=visao) }}" style="width:32px; height:32px; display:flex; align-items:center; justify-content:center; border:1px solid #d6d3d1; border-radius:3px; color:#57534e"><i class="bi bi-chevron-left" style="font-size:11px"></i></a>
+    <span style="min-width:170px; text-align:center; font:600 15px/1 'Public Sans',sans-serif">{{ mes_label }}</span>
+    <a href="{{ url_for(request.endpoint, mes=mes_prox, ano=ano_prox, visao=visao) }}" style="width:32px; height:32px; display:flex; align-items:center; justify-content:center; border:1px solid #d6d3d1; border-radius:3px; color:#57534e"><i class="bi bi-chevron-right" style="font-size:11px"></i></a>
+  </div>
+  <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap">
+    <div class="seg">
+      <a href="{{ url_for(request.endpoint, mes=mes, ano=ano, visao='mes') }}" class="{{ 'on' if visao == 'mes' else '' }}">Mês</a>
+      <a href="{{ url_for(request.endpoint, mes=mes, ano=ano, visao='lista') }}" class="{{ 'on' if visao == 'lista' else '' }}">Lista</a>
+    </div>
+    <form method="get">
+      <input type="hidden" name="mes" value="{{ mes }}"><input type="hidden" name="ano" value="{{ ano }}">
+      <input type="hidden" name="visao" value="{{ visao }}">
+      <select name="tipo" onchange="this.form.submit()" style="min-width:160px">
+        <option value="">Todos os tipos</option>
+        {% for chave, rotulo in [('aula','Aulas'), ('evento','Eventos'), ('competicao','Competições'), ('feriado','Feriados')] %}
+        <option value="{{ chave }}" {% if request.args.get('tipo') == chave %}selected{% endif %}>{{ rotulo }}</option>
+        {% endfor %}
+      </select>
+    </form>
+  </div>
+</div>
+
+{% if visao == 'mes' %}
+<div class="um-card" style="overflow:hidden">
+  <div class="cal-cab">
+    {% for d in ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'] %}
+    <div style="padding:10px 12px; text-align:center" class="um-th" >{{ d }}</div>
+    {% endfor %}
+  </div>
+  <div class="cal-grade">
+    {% for c in celulas %}
+    <div class="cal-cel" style="background:{{ '#FAFAF9' if (not c.dia or c.hoje) else '#fff' }}">
+      {% if c.dia %}
+      <span style="font:{{ '700' if c.hoje else '500' }} 12px/1 'Public Sans',sans-serif; color:{{ '#C8102E' if c.hoje else '#57534e' }}">{{ c.dia }}</span>
+      {% for i in c.itens[:2] %}
+      <a href="{{ url_for('calendario.visualizar', detalhe=i.id) }}" style="display:flex; gap:6px; padding:3px 0; min-width:0">
+        <span style="flex:none; width:3px; border-radius:2px; background:{{ cores.get(i.tipo, '#d6d3d1') }}"></span>
+        <span style="min-width:0; display:flex; flex-direction:column; gap:2px">
+          <span style="font:600 10px/1.2 'Public Sans',sans-serif; color:#a8a29e">{{ i.horario }}</span>
+          <span style="font:400 11px/1.3 'Public Sans',sans-serif; color:#1C1917; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">{{ i.nome }}</span>
+        </span>
+      </a>
+      {% endfor %}
+      {% if c.itens|length > 2 %}
+      <a href="{{ url_for(request.endpoint, mes=mes, ano=ano, visao='lista', dia=c.dia) }}" style="font:500 10.5px/1 'Public Sans',sans-serif; color:#78716c">+{{ c.itens|length - 2 }} lançamentos</a>
+      {% endif %}
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+{% else %}
+<div class="um-card" style="overflow:hidden">
+  <div class="um-cab">
+    <span class="um-secao">Lançamentos de {{ mes_label }}</span>
+    <span class="um-kpi-nota">{{ lancamentos|length }} lançamentos</span>
+  </div>
+  <div class="um-rolagem"><div class="rol-cal">
+    <div class="lin-cal um-th"><span>Data</span><span>Lançamento</span><span>Tipo</span><span>Horário</span><span style="text-align:right">Ações</span></div>
+    {% for l in lancamentos %}
+    <div class="lin-cal um-td">
+      <span style="color:#57534e">{{ l.data.strftime('%d/%m/%Y') if l.data else '—' }}</span>
+      <div style="display:flex; align-items:center; gap:10px; min-width:0">
+        <span style="flex:none; width:3px; height:16px; border-radius:2px; background:{{ cores.get(l.tipo, '#d6d3d1') }}"></span>
+        <a href="{{ url_for('calendario.visualizar', detalhe=l.id) }}" style="font-weight:500; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">{{ l.nome }}</a>
+      </div>
+      <span><span class="um-tag">{{ l.tipo|capitalize }}</span></span>
+      <span style="color:#78716c">{{ l.horario }}</span>
+      <span style="display:flex; gap:14px; justify-content:flex-end">
+        <a href="{{ url_for('calendario.editar', id=l.id) }}" style="color:#78716c"><i class="bi bi-pencil" style="font-size:14px"></i></a>
+        <a href="{{ url_for('calendario.excluir', id=l.id) }}" style="color:#78716c"><i class="bi bi-trash" style="font-size:14px"></i></a>
+      </span>
+    </div>
+    {% else %}
+    <div style="padding:32px 16px; text-align:center; color:#a8a29e; font:400 12.5px/1.5 'Public Sans',sans-serif">Nenhum lançamento no mês.</div>
+    {% endfor %}
+  </div></div>
+</div>
+{% endif %}
+
+<div class="um-card" style="padding:14px 18px; display:flex; align-items:center; gap:20px; flex-wrap:wrap">
+  <span class="um-kpi-lbl">Legenda</span>
+  {% for chave, rotulo in [('feriado','Feriado'), ('aula','Aula'), ('evento','Evento'), ('competicao','Competição')] %}
+  <span style="display:flex; align-items:center; gap:8px; font:400 12.5px/1 'Public Sans',sans-serif; color:#57534e">
+    <span style="width:3px; height:14px; border-radius:2px; background:{{ cores[chave] }}"></span>{{ rotulo }}
+  </span>
+  {% endfor %}
+</div>
+{% endblock %}

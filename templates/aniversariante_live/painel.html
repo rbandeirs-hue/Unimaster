@@ -1,0 +1,468 @@
+{% extends "base_academia.html" %}
+{% set menu_ativo = 'aniversariantes' %}
+{% block title %}Aniversariantes{% endblock %}
+
+{% block pagina_titulo %}Aniversariantes{% endblock %}
+{% block pagina_subtitulo %}
+  Alunos com aniversário em {{ mes_nome|lower }}. Mande os parabéns pelo WhatsApp.
+{% endblock %}
+
+{% block pagina_acoes %}
+  <form method="GET" class="lst-campo lst-campo--curto" style="margin:0">
+    <span class="lst-campo__rotulo">Mês</span>
+    <select name="mes" onchange="this.form.submit()" aria-label="Mês">
+      {% for m in range(1, 13) %}
+      <option value="{{ m }}" {% if m == mes %}selected{% endif %}>{{ meses_nomes[m] }}</option>
+      {% endfor %}
+    </select>
+  </form>
+  <button type="button" class="sh__btn sh__btn--forte" id="btnParabenizarHoje"
+          data-alunos="{{ aniv_hoje | map(attribute='id') | join(',') }}"
+          {% if not aniv_hoje %}disabled title="Ninguém faz aniversário hoje"{% endif %}>
+    <i class="bi bi-whatsapp"></i> Parabenizar os de hoje
+  </button>
+{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/base/listas.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/painel/aniversariantes.css') }}">
+{% endblock %}
+
+{% block content %}
+
+{# ------------------------------------------------------------------- abas #}
+<nav class="lst-abas">
+  <button type="button" class="lst-aba is-ativa" data-aniv-aba="secretaria">Visão da secretaria</button>
+  <button type="button" class="lst-aba" data-aniv-aba="aniversariante">Página do aniversariante</button>
+</nav>
+
+{# =========================================================== 1) SECRETARIA #}
+<section data-aniv-painel="secretaria">
+
+  <div class="sh__faixa">
+    <div class="sh__faixa-item">
+      <span class="sh__faixa-rotulo">No mês</span>
+      <span class="sh__faixa-valor">{{ kpis.no_mes }}</span>
+      <span class="lst-sub">Alunos ativos aniversariando</span>
+    </div>
+    <div class="sh__faixa-item">
+      <span class="sh__faixa-rotulo">Hoje</span>
+      <span class="sh__faixa-valor {% if kpis.hoje %}sh__faixa-valor--alerta{% endif %}">{{ kpis.hoje }}</span>
+      <span class="lst-sub">{{ 'Mande os parabéns agora' if kpis.hoje else 'Ninguém faz aniversário hoje' }}</span>
+    </div>
+    <div class="sh__faixa-item">
+      <span class="sh__faixa-rotulo">Ainda neste mês</span>
+      <span class="sh__faixa-valor">{{ kpis.proximos }}</span>
+      <span class="lst-sub">Aniversários que ainda vêm</span>
+    </div>
+    <div class="sh__faixa-item">
+      <span class="sh__faixa-rotulo">Parabenizados</span>
+      <span class="sh__faixa-valor">{{ kpis.parabenizados }} de {{ kpis.elegiveis }}</span>
+      <span class="lst-sub">Já receberam mensagem</span>
+    </div>
+  </div>
+
+  <div class="aniv-colunas">
+    <div>
+      {# Três grupos, na ordem em que a secretaria age: hoje, o que vem, o que passou. #}
+      {% for grupo in [
+          {'chave': 'hoje',     'titulo': 'Hoje, ' ~ hoje_label, 'itens': aniv_hoje,
+           'acao': 'Parabenizar', 'ponto': 'aniv-ponto--hoje'},
+          {'chave': 'proximos', 'titulo': 'Ainda neste mês', 'itens': aniv_proximos,
+           'acao': 'Agendar', 'ponto': 'aniv-ponto--proximo'},
+          {'chave': 'passados', 'titulo': 'Já passaram', 'itens': aniv_passados,
+           'acao': 'Enviar mesmo assim', 'ponto': ''}
+        ] %}
+      {% if grupo.itens %}
+      <div class="lst-quadro aniv-grupo">
+        <div class="aniv-grupo__topo">
+          <span class="aniv-ponto {{ grupo.ponto }}"></span>
+          <h2 class="aniv-grupo__titulo">{{ grupo.titulo }}</h2>
+          <span class="aniv-grupo__meta">
+            {{ grupo.itens|length }} aniversariante{{ 's' if grupo.itens|length != 1 }}
+          </span>
+        </div>
+
+        {% for a in grupo.itens %}
+        <div class="lst-linha lin-aniv lst-item {% if selecionado and a.id == selecionado.id %}is-selecionada{% endif %}"
+             data-aniv-linha data-aluno-id="{{ a.id }}">
+          <div class="lst-pessoa">
+            {% if a.foto_url %}
+            <img src="{{ a.foto_url }}" alt="" class="lst-avatar"
+                 onerror="this.outerHTML='<span class=&quot;lst-avatar lst-avatar--iniciais&quot;>{{ a.iniciais }}</span>'">
+            {% else %}
+            <span class="lst-avatar lst-avatar--iniciais">{{ a.iniciais }}</span>
+            {% endif %}
+            <span style="min-width:0">
+              <a class="lst-nome" href="{{ url_for('aniversariante_live.pagina', mes=mes, aluno_id=a.id) }}">{{ a.nome }}</a>
+              <span class="lst-sub">{{ a.turmas or 'Sem turma' }}</span>
+              {# No celular a coluna de data sai da grade; a informação desce para cá. #}
+              <span class="lst-sub aniv-sub-data">{{ a.data_label }} · {{ a.idade_label }}</span>
+            </span>
+          </div>
+
+          <div class="col-data">
+            <span class="aniv-data">{{ a.data_label }}</span>
+            <span class="aniv-idade">{{ a.idade_label }}</span>
+          </div>
+
+          <div class="lst-fim">
+            {% if a.parabenizado %}
+            <span class="lst-tag lst-tag--ok">Parabenizado</span>
+            {% else %}
+            <button type="button" class="sh__btn {% if grupo.chave == 'hoje' %}sh__btn--forte{% endif %}"
+                    data-aniv-whatsapp data-aluno-id="{{ a.id }}"
+                    {% if grupo.chave != 'hoje' %}data-forcar="1"{% endif %}
+                    title="Enviar o parabéns de {{ a.nome }} pelo WhatsApp">
+              <i class="bi bi-whatsapp"></i> {{ grupo.acao }}
+            </button>
+            {% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+      {% endfor %}
+
+      {% if not kpis.no_mes %}
+      <div class="lst-quadro">
+        <p class="lst-vazio">Nenhum aluno ativo faz aniversário em {{ mes_nome|lower }}.</p>
+      </div>
+      {% endif %}
+    </div>
+
+    {# --------------------------------------------------------- ficha lateral #}
+    {% if selecionado %}
+    <aside class="lst-quadro">
+      <div class="lst-quadro__topo">
+        <h2 class="lst-quadro__titulo">Aniversariante selecionado</h2>
+      </div>
+
+      <div class="aniv-ficha__topo">
+        {% if selecionado.foto_url %}
+        <img src="{{ selecionado.foto_url }}" alt="" class="lst-avatar"
+             onerror="this.outerHTML='<span class=&quot;lst-avatar lst-avatar--iniciais&quot;>{{ selecionado.iniciais }}</span>'">
+        {% else %}
+        <span class="lst-avatar lst-avatar--iniciais">{{ selecionado.iniciais }}</span>
+        {% endif %}
+        <span style="min-width:0">
+          <span class="aniv-ficha__nome">{{ selecionado.nome }}</span>
+          <span class="aniv-ficha__sub">{{ selecionado.data_label }} · {{ selecionado.idade_label }}</span>
+        </span>
+      </div>
+
+      <div class="aniv-dados">
+        <div class="aniv-dado">
+          <span class="aniv-dado__rotulo">Turma</span>
+          <span class="aniv-dado__valor">{{ selecionado.turmas or '—' }}</span>
+        </div>
+        <div class="aniv-dado">
+          <span class="aniv-dado__rotulo">Responsável</span>
+          <span class="aniv-dado__valor">{{ selecionado.responsavel or '—' }}</span>
+        </div>
+        <div class="aniv-dado">
+          <span class="aniv-dado__rotulo">WhatsApp</span>
+          <span class="aniv-dado__valor">
+            {% if selecionado.telefone %}
+            <a href="https://wa.me/55{{ selecionado.telefone | replace('(','') | replace(')','') | replace('-','') | replace(' ','') }}"
+               target="_blank" rel="noopener">{{ selecionado.telefone }}</a>
+            {% else %}—{% endif %}
+          </span>
+        </div>
+        <div class="aniv-dado">
+          <span class="aniv-dado__rotulo">Parabéns enviados</span>
+          <span class="aniv-dado__valor">
+            {% if selecionado.ultimo_whatsapp %}
+              {{ selecionado.ultimo_whatsapp.strftime('%d/%m/%Y') }}
+            {% else %}Nenhum ainda{% endif %}
+          </span>
+        </div>
+      </div>
+
+      <div class="lst-quadro__topo" style="border-top:1px solid var(--sh-line)">
+        <h2 class="lst-quadro__titulo">Mensagem</h2>
+      </div>
+      <div class="aniv-mensagem">{{ mensagem_modelo or 'Modelo de aniversário não configurado.' }}</div>
+
+      <div class="aniv-ficha__acoes">
+        <button type="button" class="sh__btn sh__btn--forte"
+                data-aniv-whatsapp data-aluno-id="{{ selecionado.id }}" data-forcar="1"
+                {% if not selecionado.telefone %}disabled title="Sem telefone cadastrado"{% endif %}>
+          <i class="bi bi-whatsapp"></i> Enviar parabéns
+        </button>
+        <a class="sh__btn" href="{{ url_for('academia.whatsapp_config', academia_id=academia_id) }}#modelos">
+          Editar mensagem
+        </a>
+      </div>
+      {% if not modelo_ativo %}
+      <p class="lst-quadro__meta" style="padding:0 1rem 1rem">
+        O modelo de aniversário está desativado nas configurações de WhatsApp — o envio não sai.
+      </p>
+      {% endif %}
+    </aside>
+    {% endif %}
+  </div>
+</section>
+
+{# ================================================== 2) PÁGINA DO ANIVERSARIANTE #}
+<section data-aniv-painel="aniversariante" hidden>
+  {% if selecionado %}
+  <div class="aniv-colunas">
+    <div>
+      <div class="lst-quadro">
+        <div class="aniv-hero">
+          {% if selecionado.foto_url %}
+          <img src="{{ selecionado.foto_url }}" alt="" class="aniv-hero__foto">
+          {% else %}
+          <span class="aniv-hero__foto">{{ selecionado.iniciais }}</span>
+          {% endif %}
+          <div style="min-width:0">
+            {% if selecionado.hoje %}
+            <span class="aniv-hero__hoje"><span class="aniv-ponto aniv-ponto--hoje"></span> Aniversário hoje</span>
+            {% endif %}
+            <h2 class="aniv-hero__nome">{{ selecionado.nome }}</h2>
+            <p class="aniv-hero__sub">
+              {{ selecionado.turmas or 'Sem turma' }} · {{ selecionado.data_label }} · {{ selecionado.idade }} anos
+            </p>
+          </div>
+        </div>
+
+        <div class="lst-quadro__topo" style="border-top:1px solid var(--sh-line)">
+          <h3 class="lst-quadro__titulo">Deixe seus parabéns</h3>
+          <span class="lst-quadro__meta" id="anivTotalParabens">
+            {{ selecionado.total_parabens }} já enviaram
+          </span>
+        </div>
+
+        <div class="aniv-recado">
+          <textarea id="anivRecado" rows="3" maxlength="2000"
+                    {% if selecionado.futuro %}disabled{% endif %}
+                    placeholder="{% if selecionado.futuro %}Aguarde o dia do aniversário{% else %}Escreva uma mensagem para {{ selecionado.nome.split()[0] }}...{% endif %}"></textarea>
+          <div class="aniv-recado__rodape">
+            {% for r in selecionado.reacoes %}
+            <button type="button" class="aniv-reagir" data-aniv-reacao="{{ r.chave }}"
+                    title="{{ r.rotulo }}" aria-label="{{ r.rotulo }}"
+                    {% if selecionado.futuro %}disabled{% endif %}>
+              <i class="bi {{ r.icone }}"></i>
+              <span data-reacao-total="{{ r.chave }}">{{ r.total }}</span>
+            </button>
+            {% endfor %}
+            <button type="button" class="sh__btn sh__btn--forte" id="btnPublicarParabens"
+                    {% if selecionado.futuro %}disabled{% endif %}>
+              <i class="bi bi-send"></i> Publicar parabéns
+            </button>
+          </div>
+          {% if selecionado.futuro %}
+          {# Mesma regra do backend: parabéns só a partir do dia. #}
+          <p class="lst-quadro__meta" style="margin:.6rem 0 0">
+            Os parabéns abrem no dia {{ selecionado.data_label }}.
+          </p>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="lst-quadro">
+        <div class="lst-quadro__topo">
+          <h3 class="lst-quadro__titulo">Mural de mensagens</h3>
+          <span class="lst-quadro__meta" id="anivTotalMural">
+            {{ selecionado.mural|length }} mensagem{{ 'ns' if selecionado.mural|length != 1 }}
+          </span>
+        </div>
+        <div id="anivMural">
+          {% for m in selecionado.mural %}
+          <div class="aniv-msg">
+            <span class="lst-avatar lst-avatar--iniciais">
+              {{ (m.autor_nome or '?').split()[0][0]|upper }}{{ (m.autor_nome or ' ').split()[-1][0]|upper if (m.autor_nome or '').split()|length > 1 else '' }}
+            </span>
+            <div class="aniv-msg__corpo">
+              <span class="aniv-msg__autor">
+                {{ m.autor_nome or 'Alguém' }}
+                <span class="aniv-msg__meta">
+                  {{ m.autor_perfil|capitalize if m.autor_perfil else ('Aluno' if m.remetente == 'aluno' else 'Equipe') }}
+                  {% if m.criado_em %} · {{ m.criado_em.strftime('%d/%m %H:%M') }}{% endif %}
+                </span>
+              </span>
+              <p class="aniv-msg__texto">{{ m.corpo }}</p>
+            </div>
+          </div>
+          {% else %}
+          <p class="lst-vazio">Nenhuma mensagem ainda. Seja o primeiro a dar os parabéns.</p>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="lst-quadro">
+        <div class="lst-quadro__topo">
+          <h3 class="lst-quadro__titulo">Quem reagiu</h3>
+        </div>
+        {% for r in selecionado.reacoes %}
+        <div class="aniv-reacao">
+          <i class="bi {{ r.icone }}"></i>
+          <span>{{ r.rotulo }}</span>
+          <span class="aniv-reacao__n" data-reacao-total="{{ r.chave }}">{{ r.total }}</span>
+        </div>
+        {% endfor %}
+      </div>
+
+      {% if selecionado.proximos_turma %}
+      <div class="lst-quadro">
+        <div class="lst-quadro__topo">
+          <h3 class="lst-quadro__titulo">Próximos da turma</h3>
+        </div>
+        {% for a in selecionado.proximos_turma %}
+        <a class="aniv-msg" style="text-decoration:none;color:inherit"
+           href="{{ url_for('aniversariante_live.pagina', mes=mes, aluno_id=a.id) }}">
+          <span class="lst-avatar lst-avatar--iniciais">{{ a.iniciais }}</span>
+          <span class="aniv-msg__corpo" style="flex:1">
+            <span class="aniv-msg__autor">{{ a.nome }}</span>
+            <span class="lst-sub">{{ a.turmas or 'Sem turma' }}</span>
+          </span>
+          <span class="aniv-msg__meta" style="align-self:center">{{ a.data_label }}</span>
+        </a>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+  {% else %}
+  <div class="lst-quadro">
+    <p class="lst-vazio">Escolha um aniversariante na visão da secretaria para abrir a página dele.</p>
+  </div>
+  {% endif %}
+</section>
+
+<footer class="lst-rodape">
+  © {{ current_year }} {{ academia.nome if academia else 'Unimaster' }}. Todos os direitos reservados.
+</footer>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  const CSRF = document.querySelector('meta[name="csrf-token"]')?.content || '';
+  const ALUNO = {{ (selecionado.id if selecionado else 0)|tojson }};
+  const REF = {{ ref_mes_ano|tojson }};
+
+  function toast(msg, erro) {
+    // O shell já mostra flash como toast; aqui basta um aviso simples e curto.
+    alert(msg);
+    if (!erro) location.reload();
+  }
+
+  async function postJSON(url, corpo) {
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF},
+      body: JSON.stringify(corpo)
+    });
+    let dados = {};
+    try { dados = await resp.json(); } catch (e) { dados = {}; }
+    return {resp, dados};
+  }
+
+  /* ------------------------------------------------------------- abas */
+  document.querySelectorAll('[data-aniv-aba]').forEach(function (botao) {
+    botao.addEventListener('click', function () {
+      const alvo = botao.dataset.anivAba;
+      document.querySelectorAll('[data-aniv-aba]').forEach(function (b) {
+        b.classList.toggle('is-ativa', b === botao);
+      });
+      document.querySelectorAll('[data-aniv-painel]').forEach(function (p) {
+        p.hidden = p.dataset.anivPainel !== alvo;
+      });
+    });
+  });
+
+  /* ------------------------------- selecionar aniversariante pela linha */
+  document.querySelectorAll('[data-aniv-linha]').forEach(function (linha) {
+    linha.addEventListener('click', function (ev) {
+      if (ev.target.closest('button, a')) return;
+      const url = new URL(location.href);
+      url.searchParams.set('aluno_id', linha.dataset.alunoId);
+      location.href = url.toString();
+    });
+  });
+
+  /* --------------------------------------------- parabéns pelo WhatsApp */
+  const MOTIVOS = {
+    sem_telefone: 'Sem telefone cadastrado.',
+    ja_enviado_hoje: 'O parabéns de hoje já foi enviado.',
+    modelo_desativado: 'O modelo de aniversário está desativado nas configurações de WhatsApp.',
+    falha_envio: 'O WhatsApp da academia não conseguiu enviar. Verifique a conexão do número.',
+    sem_academia: 'Aluno sem academia vinculada.'
+  };
+
+  async function enviarWhatsapp(botao, alunos, forcar) {
+    const original = botao.innerHTML;
+    botao.disabled = true;
+    botao.innerHTML = '<i class="bi bi-hourglass-split"></i> Enviando…';
+    try {
+      const {dados} = await postJSON({{ url_for('aniversariante_live.api_whatsapp_parabens')|tojson }},
+                                     {alunos: alunos, forcar: forcar});
+      if (dados.ok) {
+        toast(dados.total > 1
+          ? dados.enviados + ' de ' + dados.total + ' parabéns enviados.'
+          : 'Parabéns enviado.');
+        return;
+      }
+      const motivo = (dados.motivos || [])[0];
+      toast(MOTIVOS[motivo] || dados.msg || 'Não foi possível enviar.', true);
+    } catch (e) {
+      toast('Falha de rede ao enviar.', true);
+    } finally {
+      botao.disabled = false;
+      botao.innerHTML = original;
+    }
+  }
+
+  document.querySelectorAll('[data-aniv-whatsapp]').forEach(function (botao) {
+    botao.addEventListener('click', function () {
+      enviarWhatsapp(botao, [parseInt(botao.dataset.alunoId, 10)], botao.dataset.forcar === '1');
+    });
+  });
+
+  const btnHoje = document.getElementById('btnParabenizarHoje');
+  if (btnHoje && !btnHoje.disabled) {
+    btnHoje.addEventListener('click', function () {
+      const ids = (btnHoje.dataset.alunos || '').split(',').filter(Boolean).map(Number);
+      if (!ids.length) return;
+      if (!confirm('Enviar o parabéns por WhatsApp para ' + ids.length + ' aniversariante(s) de hoje?')) return;
+      enviarWhatsapp(btnHoje, ids, false);
+    });
+  }
+
+  /* ------------------------------------- reações e recado no mural */
+  document.querySelectorAll('[data-aniv-reacao]').forEach(function (botao) {
+    botao.addEventListener('click', async function () {
+      botao.disabled = true;
+      const {dados} = await postJSON({{ url_for('aniversariante_live.api_parabens')|tojson }},
+                                     {aluno_id: ALUNO, acao: botao.dataset.anivReacao, ref_mes_ano: REF});
+      botao.disabled = false;
+      if (!dados.ok) { toast(dados.msg || 'Não foi possível reagir.', true); return; }
+      document.querySelectorAll('[data-reacao-total="' + botao.dataset.anivReacao + '"]')
+        .forEach(function (el) { el.textContent = (parseInt(el.textContent, 10) || 0) + 1; });
+    });
+  });
+
+  const btnPublicar = document.getElementById('btnPublicarParabens');
+  if (btnPublicar) {
+    btnPublicar.addEventListener('click', async function () {
+      const campo = document.getElementById('anivRecado');
+      const corpo = (campo.value || '').trim();
+      if (!corpo) { campo.focus(); return; }
+      btnPublicar.disabled = true;
+      const {dados} = await postJSON({{ url_for('aniversario_mensagens.criar')|tojson }},
+                                     {aluno_id: ALUNO, ref_mes_ano: REF, corpo: corpo});
+      btnPublicar.disabled = false;
+      if (!dados.ok) { toast(dados.msg || 'Não foi possível publicar.', true); return; }
+      // Registra também o "parabéns" da live, para o contador bater com o mural.
+      await postJSON({{ url_for('aniversariante_live.api_parabens')|tojson }},
+                     {aluno_id: ALUNO, acao: 'parabens', ref_mes_ano: REF});
+      location.reload();
+    });
+  }
+})();
+</script>
+{% endblock %}

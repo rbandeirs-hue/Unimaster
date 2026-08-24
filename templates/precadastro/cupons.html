@@ -1,105 +1,198 @@
-{% extends "base.html" %}
+{% extends "base_academia.html" %}
 {% block title %}Cupons de matrícula{% endblock %}
+{% block pagina_titulo %}Cupons de matrícula{% endblock %}
+{% block pagina_subtitulo %}Descontos aplicáveis no link público de matrícula.{% endblock %}
+{% block pagina_acoes %}
+  <button type="button" id="btnToggleForm" style="background:#1c1a19;color:#fff;border:0;border-radius:8px;padding:.5rem .95rem;font-weight:600;font-size:.85rem;display:inline-flex;align-items:center;gap:7px;cursor:pointer;">
+    <i class="bi bi-x-lg"></i> <span>Fechar formulário</span>
+  </button>
+{% endblock %}
 {% block content %}
-<div class="container my-4" style="max-width: 900px;">
-  <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
-    <div>
-      <a href="{{ url_for('precadastro.lista', academia_id=academia_id) }}" class="btn btn-outline-secondary btn-sm mb-2"><i class="bi bi-arrow-left"></i> Voltar</a>
-      <h4 class="fw-bold mb-0"><i class="bi bi-ticket-perforated-fill text-primary me-1"></i> Cupons de matrícula</h4>
-      <div class="text-muted small">Descontos aplicáveis no link de matrícula.</div>
+<style>
+  .cpn{ --fg:#1c1a19; --muted:#8a8681; --muted2:#6f6b66; --line:#ededea; --border:#e7e6e3; --primary:#c1121f; --green:#15803d; }
+  .cpn{ color:var(--fg); }
+  .cpn .lbl{ font-size:.7rem; letter-spacing:.1em; text-transform:uppercase; font-weight:600; color:var(--muted); }
+  .cpn .card2{ background:#fff; border:1px solid var(--border); border-radius:14px; }
+  .cpn .fld{ width:100%; box-sizing:border-box; background:#fff; border:1px solid #d8d7d3; border-radius:8px; padding:.55rem .75rem; font-size:.92rem; color:var(--fg); }
+  .cpn .fld:focus{ outline:none; border-color:var(--primary); box-shadow:0 0 0 3px rgba(193,18,31,.14); }
+  .cpn .flbl{ font-size:.72rem; letter-spacing:.06em; text-transform:uppercase; font-weight:600; color:var(--muted); margin-bottom:.3rem; display:block; }
+  .cpn .btn-red{ background:var(--primary); color:#fff; border:0; border-radius:8px; padding:.55rem 1rem; font-weight:700; font-size:.9rem; display:inline-flex; align-items:center; gap:6px; cursor:pointer; }
+  .cpn .btn-red:hover{ filter:brightness(1.06); color:#fff; }
+  .cpn .btn-ghost{ background:#fff; border:1px solid #d8d7d3; border-radius:8px; padding:.55rem 1rem; font-weight:600; font-size:.9rem; color:#2a2724; cursor:pointer; }
+  .cpn .btn-dark{ background:#1c1a19; color:#fff; border:0; border-radius:8px; padding:.5rem .95rem; font-weight:600; font-size:.85rem; display:inline-flex; align-items:center; gap:7px; cursor:pointer; }
+  .cpn .stats{ display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); }
+  .cpn .stat{ padding:20px 22px; border-right:1px solid var(--line); }
+  .cpn .stat:last-child{ border-right:0; }
+  .cpn .stat .n{ font-size:1.9rem; font-weight:700; line-height:1.1; margin:.35rem 0 .25rem; }
+  .cpn .stat .sub{ font-size:.78rem; color:var(--muted); }
+  .cpn .sw{ width:40px; height:22px; border-radius:999px; background:#d8d7d3; position:relative; flex:none; transition:background .15s; cursor:pointer; }
+  .cpn .sw::after{ content:""; position:absolute; top:3px; left:3px; width:16px; height:16px; border-radius:50%; background:#fff; box-shadow:0 1px 2px rgba(0,0,0,.2); transition:left .15s; }
+  .cpn input:checked + .sw{ background:var(--green); } .cpn input:checked + .sw::after{ left:21px; }
+  .cpn table{ width:100%; border-collapse:collapse; }
+  .cpn thead th{ font-size:.7rem; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); font-weight:600; text-align:left; padding:12px 20px; border-bottom:1px solid var(--line); }
+  .cpn tbody td{ padding:14px 20px; border-bottom:1px solid var(--line); font-size:.9rem; }
+  .cpn tbody tr:last-child td{ border-bottom:0; }
+  .cpn .dot{ display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:6px; vertical-align:middle; }
+  .cpn .act{ background:none; border:0; color:var(--muted); cursor:pointer; padding:4px; border-radius:6px; }
+  .cpn .act:hover{ color:var(--fg); background:#f4f4f2; }
+  .cpn .act.del:hover{ color:var(--primary); }
+  @media (max-width:820px){ .cpn .stats{ grid-template-columns:repeat(2,1fr); } .cpn .stat:nth-child(2){ border-right:0; } .cpn .stat{ border-bottom:1px solid var(--line); } }
+  @media (max-width:640px){ .cpn .row-fields{ grid-template-columns:1fr !important; } .cpn table{ font-size:.82rem; } }
+</style>
+
+<div class="cpn" style="max-width:1180px;">
+
+  <!-- Estatísticas -->
+  <div class="card2 mb-3">
+    <div class="stats">
+      <div class="stat">
+        <div class="lbl">Cupons ativos</div>
+        <div class="n">{{ cupons_ativos }}</div>
+        <div class="sub">disponíveis no link público</div>
+      </div>
+      <div class="stat">
+        <div class="lbl">Usados no mês</div>
+        <div class="n">{{ usados_mes }}</div>
+        <div class="sub">matrículas com desconto</div>
+      </div>
+      <div class="stat">
+        <div class="lbl">Desconto concedido</div>
+        <div class="n" style="color:var(--primary);">R$ {{ "%.0f"|format(desconto_mes) }}</div>
+        <div class="sub">{{ mes_label }}</div>
+      </div>
+      <div class="stat">
+        <div class="lbl">Visíveis no formulário</div>
+        <div class="n">{{ visiveis }}</div>
+        <div class="sub">aparecem para o aluno</div>
+      </div>
     </div>
   </div>
 
-  {% with messages = get_flashed_messages(with_categories=true) %}
-    {% for cat, msg in messages %}<div class="alert alert-{{ cat }} py-2">{{ msg }}</div>{% endfor %}
-  {% endwith %}
-
-  <!-- Criar cupom -->
-  <div class="card border-0 shadow-sm mb-4">
-    <div class="card-body">
-      <h6 class="fw-bold mb-3"><i class="bi bi-plus-circle me-1"></i> Novo cupom</h6>
-      <form method="POST" class="row g-2 align-items-end">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <div class="col-6 col-md-3">
-          <label class="form-label small fw-semibold">Código</label>
-          <input type="text" name="codigo" class="form-control text-uppercase" placeholder="EX: BEMVINDO" required>
+  <!-- Novo cupom -->
+  <div class="card2 mb-3" id="cardNovoCupom">
+    <div style="padding:14px 22px; border-bottom:1px solid var(--line);"><span class="lbl">Novo cupom</span></div>
+    <form method="POST" style="padding:20px 22px;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="row-fields" style="display:grid; grid-template-columns:1.4fr 1fr 1fr 1fr 1.6fr; gap:14px; align-items:end;">
+        <div>
+          <label class="flbl">Código</label>
+          <input type="text" name="codigo" class="fld text-uppercase" placeholder="PESV50" required>
         </div>
-        <div class="col-6 col-md-2">
-          <label class="form-label small fw-semibold">Tipo</label>
-          <select name="tipo" class="form-select" id="tipoSel">
-            <option value="percentual">Percentual (%)</option>
+        <div>
+          <label class="flbl">Tipo</label>
+          <select name="tipo" class="fld" id="tipoSel">
             <option value="valor">Valor (R$)</option>
+            <option value="percentual">Percentual (%)</option>
           </select>
         </div>
-        <div class="col-6 col-md-2">
-          <label class="form-label small fw-semibold">Desconto</label>
-          <input type="text" name="valor" class="form-control" placeholder="10" required>
+        <div>
+          <label class="flbl">Desconto</label>
+          <div style="display:flex; align-items:stretch; border:1px solid #d8d7d3; border-radius:8px; overflow:hidden;">
+            <span id="prefixoDesc" style="background:#f4f4f2; padding:.55rem .6rem; font-size:.9rem; color:var(--muted); border-right:1px solid #e7e6e3;">R$</span>
+            <input type="text" name="valor" class="fld" style="border:0; border-radius:0;" placeholder="40" required>
+          </div>
         </div>
-        <div class="col-6 col-md-2">
-          <label class="form-label small fw-semibold">Uso</label>
-          <select name="uso" class="form-select">
-            <option value="todos">Vários (todos)</option>
+        <div>
+          <label class="flbl">Uso</label>
+          <select name="uso" class="fld">
             <option value="unico">Único</option>
+            <option value="todos">Ilimitado</option>
           </select>
         </div>
-        <div class="col-6 col-md-3">
-          <label class="form-label small fw-semibold">Vigência (início → fim)</label>
-          <div class="d-flex gap-1">
-            <input type="date" name="validade_inicio" class="form-control form-control-sm">
-            <input type="date" name="validade_fim" class="form-control form-control-sm">
+        <div>
+          <label class="flbl">Vigência</label>
+          <div style="display:flex; align-items:center; gap:6px;">
+            <input type="date" name="validade_inicio" class="fld">
+            <i class="bi bi-arrow-right" style="color:var(--muted);"></i>
+            <input type="date" name="validade_fim" class="fld">
           </div>
         </div>
-        <div class="col-12 col-md-6">
-          <div class="form-check">
-            <input class="form-check-input" type="checkbox" name="mostrar_form" value="1" id="mostrarForm">
-            <label class="form-check-label small" for="mostrarForm">Mostrar este cupom para o aluno no formulário de matrícula</label>
-          </div>
+      </div>
+
+      <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mt-3">
+        <label style="display:inline-flex; align-items:center; gap:10px; cursor:pointer; margin:0;">
+          <input type="checkbox" name="mostrar_form" value="1" id="mostrarForm" style="display:none;">
+          <span class="sw"></span>
+          <span style="font-size:.9rem; font-weight:500;">Mostrar este cupom no formulário de matrícula</span>
+        </label>
+        <div style="display:flex; gap:10px;">
+          <button type="button" class="btn-ghost" id="btnCancelar">Cancelar</button>
+          <button type="submit" class="btn-red"><i class="bi bi-check-lg"></i> Criar cupom</button>
         </div>
-        <div class="col-12 col-md-6 text-md-end">
-          <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i> Criar cupom</button>
-        </div>
-      </form>
-      <p class="text-muted small mt-2 mb-0">Percentual = % sobre o valor da matrícula. Valor = desconto fixo em R$. "Único" só pode ser usado uma vez.</p>
-    </div>
+      </div>
+      <p style="color:var(--muted); font-size:.78rem; margin:.8rem 0 0;">Percentual incide sobre o valor da matrícula. Valor é desconto fixo em reais. “Único” só pode ser usado uma vez.</p>
+    </form>
   </div>
 
   <!-- Lista -->
-  <div class="card border-0 shadow-sm">
-    <div class="table-responsive">
-      <table class="table table-hover align-middle mb-0">
-        <thead class="table-light">
-          <tr><th>Código</th><th>Desconto</th><th>Uso</th><th>Vigência</th><th>Mostrar</th><th>Status</th><th class="text-end">Ações</th></tr>
+  <div class="card2">
+    <div class="d-flex justify-content-between align-items-center" style="padding:14px 20px; border-bottom:1px solid var(--line);">
+      <span class="lbl">Cupons</span>
+      <span style="color:var(--muted); font-size:.82rem;">{% if cupons|length == 1 %}1 cupom{% else %}{{ cupons|length }} cupons{% endif %}</span>
+    </div>
+    <div style="overflow-x:auto;">
+      <table>
+        <thead>
+          <tr><th>Código</th><th>Desconto</th><th>Uso</th><th>Vigência</th><th>Mostrar</th><th>Status</th><th style="text-align:right;">Ações</th></tr>
         </thead>
         <tbody>
           {% for c in cupons %}
+          {% set expirado = c.validade_fim and c.validade_fim < hoje %}
           <tr>
             <td><strong>{{ c.codigo }}</strong></td>
             <td>{% if c.tipo == 'percentual' %}{{ "%.0f"|format(c.valor|float) }}%{% else %}R$ {{ "%.2f"|format(c.valor|float) }}{% endif %}</td>
-            <td>{% if c.uso == 'unico' %}<span class="badge bg-warning text-dark">Único{% if c.usos %} (usado){% endif %}</span>{% else %}<span class="badge bg-info text-dark">Vários</span>{% if c.usos %} <span class="text-muted small">{{ c.usos }} uso(s)</span>{% endif %}{% endif %}</td>
-            <td class="small">
+            <td>{% if c.uso == 'unico' %}Único{% else %}Ilimitado{% endif %}</td>
+            <td style="color:var(--muted2);">
               {% if c.validade_inicio or c.validade_fim %}
-                {{ c.validade_inicio.strftime('%d/%m/%y') if c.validade_inicio else '—' }} → {{ c.validade_fim.strftime('%d/%m/%y') if c.validade_fim else '—' }}
-              {% else %}<span class="text-muted">sem prazo</span>{% endif %}
+                {{ c.validade_inicio.strftime('%d/%m') if c.validade_inicio else '—' }} → {{ c.validade_fim.strftime('%d/%m/%Y') if c.validade_fim else '—' }}
+              {% else %}<span class="text-muted">Sem prazo</span>{% endif %}
             </td>
-            <td>{% if c.mostrar_form %}<i class="bi bi-eye text-success" title="Visível no formulário"></i>{% else %}<i class="bi bi-eye-slash text-muted"></i>{% endif %}</td>
-            <td>{% if c.ativo %}<span class="badge bg-success">Ativo</span>{% else %}<span class="badge bg-secondary">Inativo</span>{% endif %}</td>
-            <td class="text-end">
+            <td>
+              {% if c.mostrar_form %}<span style="color:var(--green);"><i class="bi bi-eye"></i> Sim</span>
+              {% else %}<span style="color:var(--muted);"><i class="bi bi-eye-slash"></i> Não</span>{% endif %}
+            </td>
+            <td>
+              {% if expirado %}<span style="color:var(--muted);"><span class="dot" style="background:#b3afa9;"></span>Expirado</span>
+              {% elif c.ativo %}<span style="color:var(--green);"><span class="dot" style="background:var(--green);"></span>Ativo</span>
+              {% else %}<span style="color:var(--muted);"><span class="dot" style="background:#b3afa9;"></span>Inativo</span>{% endif %}
+            </td>
+            <td style="text-align:right; white-space:nowrap;">
               <form method="POST" action="{{ url_for('precadastro.cupom_toggle', cupom_id=c.id) }}" class="d-inline">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <button type="submit" class="btn btn-sm btn-outline-secondary" title="{{ 'Desativar' if c.ativo else 'Ativar' }}"><i class="bi {{ 'bi-pause' if c.ativo else 'bi-play' }}"></i></button>
+                <button type="submit" class="act" title="{{ 'Desativar' if c.ativo else 'Ativar' }}"><i class="bi {{ 'bi-toggle-on' if c.ativo else 'bi-toggle-off' }}"></i></button>
               </form>
               <form method="POST" action="{{ url_for('precadastro.cupom_excluir', cupom_id=c.id) }}" class="d-inline" onsubmit="return confirm('Excluir o cupom {{ c.codigo }}?');">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <button type="submit" class="btn btn-sm btn-outline-danger" title="Excluir"><i class="bi bi-trash"></i></button>
+                <button type="submit" class="act del" title="Excluir"><i class="bi bi-trash"></i></button>
               </form>
             </td>
           </tr>
           {% else %}
-          <tr><td colspan="7" class="text-center text-muted py-4">Nenhum cupom criado ainda.</td></tr>
+          <tr><td colspan="7" style="text-align:center; color:var(--muted); padding:32px;">Nenhum cupom criado ainda.</td></tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
   </div>
 </div>
+
+<script>
+  (function(){
+    var card = document.getElementById('cardNovoCupom');
+    var btn = document.getElementById('btnToggleForm');
+    function set(open){
+      card.style.display = open ? '' : 'none';
+      btn.innerHTML = open ? '<i class="bi bi-x-lg"></i> <span>Fechar formulário</span>' : '<i class="bi bi-plus-lg"></i> <span>Novo cupom</span>';
+    }
+    if (btn && card){
+      btn.addEventListener('click', function(){ set(card.style.display === 'none'); });
+    }
+    var cancelar = document.getElementById('btnCancelar');
+    if (cancelar) cancelar.addEventListener('click', function(){ set(false); });
+    // Prefixo do campo desconto conforme o tipo
+    var tipo = document.getElementById('tipoSel'), pref = document.getElementById('prefixoDesc');
+    function syncPref(){ if(pref && tipo) pref.textContent = tipo.value === 'percentual' ? '%' : 'R$'; }
+    if (tipo){ tipo.addEventListener('change', syncPref); syncPref(); }
+  })();
+</script>
 {% endblock %}

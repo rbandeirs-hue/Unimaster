@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="pt-br" class="fp-html">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pagamento — {{ academia_nome or 'Unimaster' }}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@400;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/financeiro_painel.css') }}?v=2">
+  <script>
+    (function () {
+      document.documentElement.setAttribute('data-fp-theme',
+        localStorage.getItem('fp-theme') || 'dark');
+    })();
+  </script>
+  <style>
+    .pg-bloco { margin-top: 18px; padding-top: 18px; border-top: 1px solid rgba(128,128,128,.22); }
+    .pg-btn {
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      width: 100%; padding: 14px 16px; border-radius: 10px;
+      font: 600 15px/1 'Inter', sans-serif; text-decoration: none; border: 0; cursor: pointer;
+    }
+    .pg-btn--principal { background: #16a34a; color: #fff; }
+    .pg-btn--wa { background: #25d366; color: #0b3d22; }
+    .pg-btn--linha { background: transparent; color: inherit; border: 1px solid rgba(128,128,128,.35); }
+    .pg-valor { font: 700 34px/1 'Roboto Slab', serif; margin: 6px 0 2px; }
+    .pg-pix { display: block; width: 100%; box-sizing: border-box; margin-top: 10px;
+              padding: 10px; border-radius: 8px; border: 1px solid rgba(128,128,128,.35);
+              background: transparent; color: inherit; font: 400 12px/1.4 monospace;
+              word-break: break-all; resize: none; }
+    .pg-qr { width: 190px; height: 190px; border-radius: 10px; background: #fff; padding: 8px; }
+    .pg-aviso { margin-top: 10px; padding: 12px 14px; border-radius: 10px;
+                background: rgba(245, 197, 24, .12); border: 1px solid rgba(245, 197, 24, .35);
+                font-size: 13px; line-height: 1.5; }
+  </style>
+</head>
+<body class="fp-body">
+  <div class="fp-root" style="display:block;height:auto">
+    <div class="fp-page" style="max-width:520px;margin:0 auto;padding:48px 16px">
+      <div class="fp-card fp-card--pad">
+
+        <div style="text-align:center">
+          <div class="fp-sub" style="text-transform:uppercase;letter-spacing:.12em;font-size:11px">
+            {{ academia_nome }}
+          </div>
+
+          {% if pago %}
+          {# Já quitada: nada de botão de pagar, senão alguém paga duas vezes. #}
+          <div style="font-size:40px;margin:14px 0 4px">✅</div>
+          <h1 class="fp-h1" style="font-size:20px">Esta cobrança já está paga</h1>
+          <p class="fp-sub" style="margin-top:8px">
+            {{ rotulo }}{% if reg.data_pagamento %} · pago em {{ reg.data_pagamento.strftime('%d/%m/%Y') }}{% endif %}
+          </p>
+          <p class="fp-sub" style="margin-top:16px;font-size:12px">
+            Se você acabou de pagar e ainda aparece em aberto, fale com a academia.
+          </p>
+          {% else %}
+
+          <h1 class="fp-h1" style="font-size:19px;margin-top:10px">{{ rotulo }}</h1>
+          <p class="fp-sub" style="margin-top:4px">{{ reg.aluno_nome }}</p>
+
+          <div class="pg-valor">R$ {{ '%.2f'|format(valor)|replace('.', ',') }}</div>
+          <p class="fp-sub" style="font-size:13px">
+            {% if reg.data_vencimento %}
+              {% if dias_atraso > 0 %}
+              Venceu em {{ reg.data_vencimento.strftime('%d/%m/%Y') }} ·
+              <strong>{{ dias_atraso }} dia{{ 's' if dias_atraso != 1 }} em atraso</strong>
+              {% else %}
+              Vence em {{ reg.data_vencimento.strftime('%d/%m/%Y') }}
+              {% endif %}
+            {% endif %}
+          </p>
+          {% if reg.tem_juros %}
+          <p class="fp-sub" style="font-size:12px;margin-top:2px">
+            Já inclui multa e juros pelo atraso.
+          </p>
+          {% endif %}
+          {% endif %}
+        </div>
+
+        {% if not pago %}
+        {% if link_gateway %}
+        <div class="pg-bloco">
+          <a class="pg-btn pg-btn--principal" href="{{ link_gateway }}" target="_blank" rel="noopener">
+            Pagar agora
+          </a>
+          <p class="fp-sub" style="text-align:center;margin-top:8px;font-size:12px">
+            Abre a página segura do banco. Cartão, boleto ou PIX.
+          </p>
+        </div>
+        {% endif %}
+
+        {% if pix_copia_cola or pix_qrcode %}
+        {# O PIX fica visível junto com o botão, e não escondido: é o plano B de
+           quem não consegue concluir pela página do banco. #}
+        <div class="pg-bloco">
+          <div class="fp-sub" style="text-transform:uppercase;letter-spacing:.12em;font-size:11px;margin-bottom:10px">
+            {% if link_gateway %}Ou pague por PIX{% else %}Pague por PIX{% endif %}
+          </div>
+          {% if pix_qrcode %}
+          <div style="text-align:center;margin-bottom:12px">
+            <img class="pg-qr" alt="QR Code do PIX"
+                 src="{% if pix_qrcode.startswith('data:') %}{{ pix_qrcode }}{% else %}data:image/png;base64,{{ pix_qrcode }}{% endif %}">
+          </div>
+          {% endif %}
+          {% if pix_copia_cola %}
+          <textarea class="pg-pix" id="pixCodigo" rows="3" readonly>{{ pix_copia_cola }}</textarea>
+          <button type="button" class="pg-btn pg-btn--linha" style="margin-top:10px" onclick="copiarPix(this)">
+            Copiar código PIX
+          </button>
+          {% endif %}
+        </div>
+        {% endif %}
+
+        {% if pix_academia %}
+        {# PIX direto na conta da academia. Independe do gateway, então é o que
+           sobra de pé quando ele falha — mas cai fora dele, e por isso a baixa
+           depende do comprovante logo abaixo. #}
+        <div class="pg-bloco">
+          <div class="fp-sub" style="text-transform:uppercase;letter-spacing:.12em;font-size:11px;margin-bottom:10px">
+            PIX direto para a academia
+          </div>
+          {% if pix_academia.qrcode %}
+          <div style="text-align:center;margin-bottom:12px">
+            <img class="pg-qr" alt="QR Code do PIX da academia"
+                 src="data:image/png;base64,{{ pix_academia.qrcode }}">
+          </div>
+          {% endif %}
+          <textarea class="pg-pix" id="pixAcademia" rows="3" readonly>{{ pix_academia.codigo }}</textarea>
+          <button type="button" class="pg-btn pg-btn--linha" style="margin-top:10px"
+                  onclick="copiarCampo('pixAcademia', this)">
+            Copiar código PIX da academia
+          </button>
+          <p class="fp-sub" style="text-align:center;margin-top:8px;font-size:12px">
+            Recebedor: {{ pix_academia.beneficiario }} · valor já incluso
+          </p>
+        </div>
+        {% endif %}
+
+        {% if not link_gateway and not pix_copia_cola and not pix_qrcode and not pix_academia %}
+        <div class="pg-bloco">
+          <div class="pg-aviso">
+            Não foi possível gerar o pagamento online desta cobrança agora.
+            Fale com a academia para combinar o pagamento.
+          </div>
+        </div>
+        {% endif %}
+
+        {# O comprovante é o que fecha o ciclo: sem ele a baixa não sai, porque
+           um PIX pago fora do gateway não avisa o sistema. #}
+        <div class="pg-bloco">
+          <div class="pg-aviso">
+            <strong>Pagou por PIX?</strong> Envie o comprovante para a academia
+            para que a mensalidade seja baixada. Sem o comprovante ela continua
+            aparecendo como em aberto.
+          </div>
+          {% if wa_url %}
+          <a class="pg-btn pg-btn--wa" style="margin-top:10px" href="{{ wa_url }}" target="_blank" rel="noopener">
+            Enviar comprovante no WhatsApp
+          </a>
+          {% endif %}
+        </div>
+        {% endif %}
+
+      </div>
+      <p class="fp-sub" style="text-align:center;margin-top:14px;font-size:11px">
+        Unimaster Judô
+      </p>
+    </div>
+  </div>
+
+  <script>
+    function copiarPix(botao) { copiarCampo('pixCodigo', botao); }
+
+    function copiarCampo(id, botao) {
+      var campo = document.getElementById(id);
+      if (!campo) return;
+      var original = botao.textContent;
+      function avisar() {
+        botao.textContent = 'Código copiado!';
+        setTimeout(function () { botao.textContent = original; }, 2000);
+      }
+      campo.select();
+      campo.setSelectionRange(0, 99999);          // iOS ignora select() sozinho
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(campo.value).then(avisar).catch(function () {
+          try { document.execCommand('copy'); } catch (e) {}
+          avisar();
+        });
+      } else {
+        try { document.execCommand('copy'); } catch (e) {}
+        avisar();
+      }
+    }
+  </script>
+</body>
+</html>

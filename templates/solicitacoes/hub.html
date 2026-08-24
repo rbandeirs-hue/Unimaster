@@ -1,45 +1,108 @@
-{% extends "base.html" %}
+{% extends 'base_um2.html' %}
+{% set um_ativo = 'solicitacoes' %}
 {% block title %}Aprovar Solicitações{% endblock %}
-{% block content %}
-<div class="container mt-5">
-    <div class="mb-4">
-        {% if academias|length > 1 %}
-        <form method="GET" class="mb-3">
-            <label class="form-label small fw-semibold">Academia:</label>
-            <select name="academia_id" class="form-select form-select-sm d-inline-block w-auto" onchange="this.form.submit()">
-                {% for ac in academias %}
-                <option value="{{ ac.id }}" {% if ac.id == academia_id %}selected{% endif %}>{{ ac.nome }}</option>
-                {% endfor %}
-            </select>
-        </form>
-        {% endif %}
-        {% set back_url = back_url or get_back_url_default() %}
-{% include 'components/botao_voltar.html' %}
-        <h2 class="h4 fw-bold text-primary">Aprovar Solicitações</h2>
-        <p class="text-muted mb-0">Tipos de aprovações agrupadas. Selecione o tipo para ver as solicitações.</p>
-    </div>
 
-    <div class="row g-4">
-        <!-- Visita em Academia -->
-        <div class="col-xl-4 col-lg-4 col-md-6">
-            <a href="{{ url_for('solicitacoes.visita_lista', academia_id=academia_id) }}" class="card-action-link text-decoration-none">
-                <div class="card h-100 shadow-sm border-info">
-                    <div class="card-body text-center p-4">
-                        <i class="bi bi-geo-alt-fill display-5 mb-3 text-info"></i>
-                        <h5 class="card-title fw-bold">Visita em Academia</h5>
-                        <p class="card-text small text-muted mb-2">Alunos solicitando visita em academias da associação.</p>
-                        <div class="d-flex justify-content-center gap-3 small">
-                            <span class="badge bg-warning text-dark">Origem: {{ visita_origem }}</span>
-                            <span class="badge bg-primary">Destino: {{ visita_destino }}</span>
-                        </div>
-                    </div>
-                </div>
-            </a>
-        </div>
-    </div>
+{% block um_css %}
+  .lin-sol { display:grid; grid-template-columns:minmax(0,2fr) 150px 150px 120px; gap:14px; }
+  @media (max-width: 900px) {
+    .lin-sol { grid-template-columns:1fr 96px; gap:10px; }
+    .col-esconde { display:none !important; }
+  }
+{% endblock %}
+
+{% block um_conteudo %}
+{# O hub lista os TIPOS de solicitação. Hoje só existe "visita em academia";
+   quando entrarem outros tipos, cada um vira uma linha desta tabela. #}
+{% set total_pendente = (visita_origem or 0) + (visita_destino or 0) %}
+
+<div style="display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap">
+  <div style="display:flex; flex-direction:column; gap:6px">
+    <div class="um-h1">Aprovar Solicitações</div>
+    <div class="um-sub">Pedidos que dependem de uma decisão da academia.</div>
+  </div>
+  {% set back_url = back_url or get_back_url_default() %}
+  <a class="um-btn" href="{{ back_url }}"><i class="bi bi-arrow-left" style="font-size:12px"></i> Voltar</a>
 </div>
-<style>
-.card-action-link .card { transition: transform 0.2s, box-shadow 0.2s; }
-.card-action-link:hover .card { transform: translateY(-4px); box-shadow: 0 0.5rem 1rem rgba(0,0,0,0.1) !important; }
-</style>
+
+<div class="um-faixa">
+  <div class="um-kpi">
+    <span class="um-kpi-lbl">Aguardando decisão</span>
+    <span class="um-kpi-val" {% if total_pendente %}style="color:#C8102E"{% endif %}>{{ total_pendente }}</span>
+    <span class="um-kpi-nota">Somando os dois lados</span>
+  </div>
+  <div class="um-kpi">
+    <span class="um-kpi-lbl">Como origem</span>
+    <span class="um-kpi-val">{{ visita_origem }}</span>
+    <span class="um-kpi-nota">Seus alunos pedindo para visitar outra academia</span>
+  </div>
+  <div class="um-kpi">
+    <span class="um-kpi-lbl">Como destino</span>
+    <span class="um-kpi-val">{{ visita_destino }}</span>
+    <span class="um-kpi-nota">Alunos de fora pedindo para treinar aqui</span>
+  </div>
+</div>
+
+{% if academias|length > 1 %}
+<form method="GET" class="um-filtros">
+  <div class="um-filtro" style="flex:0 1 280px">
+    <label for="f-academia">Academia</label>
+    <select id="f-academia" name="academia_id" onchange="this.form.submit()">
+      {% for ac in academias %}
+      <option value="{{ ac.id }}" {% if ac.id == academia_id %}selected{% endif %}>{{ ac.nome }}</option>
+      {% endfor %}
+    </select>
+  </div>
+</form>
+{% endif %}
+
+<div class="um-card" style="overflow:hidden">
+  <div class="um-cab">
+    <span class="um-secao">Tipos de solicitação</span>
+    <span class="um-kpi-nota">1 tipo ativo</span>
+  </div>
+  <div class="um-rolagem">
+    <div class="lst-largura" style="--lst-min:640px">
+      <div class="lin-sol um-th">
+        <div>Tipo</div>
+        <div class="col-esconde" style="text-align:center">Como origem</div>
+        <div class="col-esconde" style="text-align:center">Como destino</div>
+        <div style="text-align:right">Ação</div>
+      </div>
+
+      <div class="lin-sol um-td">
+        <div style="display:flex; align-items:center; gap:11px; min-width:0">
+          <span style="flex:none; width:32px; height:32px; border-radius:3px; background:#FAFAF9; border:1px solid #e7e5e4;
+                       display:flex; align-items:center; justify-content:center; color:#57534e">
+            <i class="bi bi-geo-alt" style="font-size:14px"></i>
+          </span>
+          <div style="min-width:0">
+            <div style="font-weight:500">Visita em academia</div>
+            <div class="um-kpi-nota">Aluno treina em outra academia da associação</div>
+          </div>
+        </div>
+        <div class="col-esconde" style="text-align:center">
+          {% if visita_origem %}
+          <span class="um-tag" style="border-color:#fecaca; background:#fef2f2; color:#991b1b">{{ visita_origem }} pendente{{ 's' if visita_origem != 1 }}</span>
+          {% else %}<span style="color:#a8a29e">—</span>{% endif %}
+        </div>
+        <div class="col-esconde" style="text-align:center">
+          {% if visita_destino %}
+          <span class="um-tag" style="border-color:#fecaca; background:#fef2f2; color:#991b1b">{{ visita_destino }} pendente{{ 's' if visita_destino != 1 }}</span>
+          {% else %}<span style="color:#a8a29e">—</span>{% endif %}
+        </div>
+        <div style="text-align:right">
+          <a class="um-btn" href="{{ url_for('solicitacoes.visita_lista', academia_id=academia_id) }}">Abrir</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if not total_pendente %}
+<div class="um-card" style="padding:26px 16px; text-align:center">
+  <div style="font:400 13px/1.5 'Public Sans',sans-serif; color:#a8a29e">
+    Nenhuma solicitação aguardando decisão nesta academia.
+  </div>
+</div>
+{% endif %}
 {% endblock %}

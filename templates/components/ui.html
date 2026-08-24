@@ -1,0 +1,87 @@
+{# =======================================================================
+   Design System — macros reutilizáveis
+   =======================================================================
+   Uso:  {% from 'components/ui.html' import kpi, modulo, secao, pill %}
+
+   Regras que estas macros seguem:
+     • nenhuma delas emite `style="..."` decorativo — a forma vem de ui.css;
+     • todas aceitam `extra` (classes) e, quando faz sentido, `attrs` (string
+       crua de atributos), para que id, name, data-* e handlers de JS possam
+       ser preservados exatamente como estavam;
+     • nada aqui consulta banco, monta rota ou decide regra: recebem pronto.
+   ======================================================================= */ #}
+
+{# Cabeçalho de bloco. Ex.: {{ secao('Alunos', 'bi-people-fill') }} #}
+{% macro secao(titulo, icone=None, extra='') %}
+<h6 class="u-secao {{ extra }}">
+  {% if icone %}<i class="bi {{ icone }}"></i>{% endif %}{{ titulo }}
+</h6>
+{% endmacro %}
+
+
+{# Indicador numérico.
+   tom: primary | success | danger | warning | info | muted
+   moeda=True apenas reduz o corpo do número (valores em R$ são mais longos).
+   rodape aceita HTML já formatado (ex.: o comparativo com o mês anterior). #}
+{% macro kpi(valor, rotulo, tom='primary', rodape=None, moeda=False, attrs='') %}
+<div class="u-kpi u-kpi--{{ tom }}" {{ attrs|safe }}>
+  <div class="u-kpi__valor {% if moeda %}u-kpi__valor--moeda{% endif %}">{{ valor }}</div>
+  <div class="u-kpi__rotulo">{{ rotulo }}</div>
+  {% if rodape %}<div class="u-kpi__rodape">{{ rodape|safe }}</div>{% endif %}
+</div>
+{% endmacro %}
+
+
+{# Card de módulo dos menus de painel. `href` já vem resolvido por url_for. #}
+{% macro modulo(href, icone, titulo, descricao='', tom='primary', attrs='') %}
+<a href="{{ href }}" class="u-modulo" {{ attrs|safe }}>
+  <div class="u-modulo__card u-modulo--{{ tom }}">
+    <i class="bi {{ icone }} u-modulo__icone"></i>
+    <div>
+      <div class="u-modulo__titulo">{{ titulo }}</div>
+      {% if descricao %}<p class="u-modulo__desc">{{ descricao }}</p>{% endif %}
+    </div>
+  </div>
+</a>
+{% endmacro %}
+
+
+{# Célula da grade de módulos do shell (base_academia.html): mesma estrutura
+   para todos os hubs — Gerenciamento, Presença e os próximos. #}
+{% macro celula(href, icone, titulo, descricao, contador=None) %}
+<a href="{{ href }}" class="sh__celula">
+  <div class="sh__celula-topo">
+    <i class="bi {{ icone }}"></i>
+    <span class="sh__celula-titulo">{{ titulo }}</span>
+    {% if contador %}<span class="sh__celula-badge">{{ contador }}</span>{% endif %}
+  </div>
+  <p class="sh__celula-desc">{{ descricao }}</p>
+</a>
+{% endmacro %}
+
+
+{# Contagem por estado. tom: primary | success | danger | warning | info #}
+{% macro pill(texto, tom='', icone=None) %}
+<span class="u-pill {% if tom %}u-pill--{{ tom }}{% endif %}">
+  {% if icone %}<i class="bi {{ icone }}"></i>{% endif %}{{ texto }}
+</span>
+{% endmacro %}
+
+
+{# Estado financeiro com cor única em todo o sistema.
+   Aceita as grafias que já circulam no banco e nas telas. #}
+{% macro badge_status(status, extra='') %}
+  {% set s = (status or '')|lower %}
+  {% if s in ('pago', 'paga') %}
+    {% set tom, texto = 'success', 'Paga' %}
+  {% elif s in ('atrasado', 'atrasada', 'vencido') %}
+    {% set tom, texto = 'danger', 'Atrasada' %}
+  {% elif s in ('cancelado', 'cancelada') %}
+    {% set tom, texto = '', 'Cancelada' %}
+  {% elif s in ('aguardando_confirmacao', 'pendente_aprovacao') %}
+    {% set tom, texto = 'info', 'Aguardando' %}
+  {% else %}
+    {% set tom, texto = 'warning', 'Pendente' %}
+  {% endif %}
+  <span class="u-pill {% if tom %}u-pill--{{ tom }}{% endif %} {{ extra }}">{{ texto }}</span>
+{% endmacro %}

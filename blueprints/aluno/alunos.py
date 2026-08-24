@@ -12,6 +12,7 @@ from flask import (
     current_app,
     session,
     jsonify,
+    abort,
 )
 from flask_login import login_required, current_user
 from config import get_db_connection
@@ -521,6 +522,31 @@ def pagamento_detalhes_mensalidade(ma_id):
 @bp_alunos.route("/lista_alunos", methods=["GET"])
 @login_required
 def lista_alunos():
+    return render_template("alunos/lista_alunos.html", **_montar_contexto_lista())
+
+
+@bp_alunos.route("/aluno/<int:aluno_id>/modais", methods=["GET"])
+@login_required
+def modais_aluno(aluno_id):
+    """Modais de um aluno da listagem, carregados sob demanda.
+
+    A lista emitia os ~11 modais de CADA aluno junto com a página: com 178
+    alunos isso dava 9,7 MB de HTML e centenas de milhares de nós no DOM. Agora
+    a página manda só as linhas da tabela e busca este trecho quando o gestor
+    abre as ações de um aluno.
+
+    O contexto vem da mesma função da listagem, recortado num aluno só, para
+    que os modais recebam exatamente os mesmos dados de antes.
+    """
+    ctx = _montar_contexto_lista(so_aluno_id=aluno_id)
+    if not ctx.get("alunos"):
+        abort(404)
+    return render_template("alunos/_modais_aluno.html", aluno=ctx["alunos"][0], **ctx)
+
+
+def _montar_contexto_lista(so_aluno_id=None):
+    """Dados da listagem de alunos. Com `so_aluno_id`, recorta num único aluno
+    (usado por `modais_aluno`), mantendo todo o resto do contexto igual."""
     db = get_db_connection()
     cursor = db.cursor(dictionary=True)
     busca = request.args.get("busca", "").strip()
@@ -540,6 +566,17 @@ def lista_alunos():
     # Filtro por modalidade: id da modalidade, ou -1 para "Sem modalidade"
     modalidade_filtro = request.args.get("modalidade_id", type=int)
     hoje = date.today()
+
+    # Ao buscar os modais de um aluno específico, os filtros da tela não valem:
+    # o aluno pedido tem de ser encontrado mesmo que esteja inativo ou fora do
+    # recorte de turma/modalidade da listagem. O RBAC continua valendo.
+    if so_aluno_id is not None:
+        busca = ""
+        graduacao_id = peso_min = peso_max = None
+        filtro_ativo = "todos"
+        ano_nasc_min = ano_nasc_max = turma_filtro = None
+        sexo_filtro = ""
+        modalidade_filtro = None
 
     # Base
     query = """
@@ -694,6 +731,12 @@ def lista_alunos():
         query += " AND COALESCE(a.ativo, 1) = 1"
     elif filtro_ativo == "inativo":
         query += " AND COALESCE(a.ativo, 1) = 0"
+
+    # Recorte de um aluno só (endpoint dos modais). Fica DEPOIS de todo o RBAC e
+    # dos filtros: quem não pode ver o aluno na lista também não vê os modais.
+    if so_aluno_id is not None:
+        query += " AND a.id = %s"
+        params.append(so_aluno_id)
 
     query += " ORDER BY a.nome"
 
@@ -912,6 +955,15 @@ def lista_alunos():
                     ma_rows = []
                     _ma_fin_cols = "none"
 
+            # Descontos de todos os alunos numa consulta só. Sem isso,
+            # _valor_com_desconto abriria uma conexão MySQL por mensalidade.
+            try:
+                from blueprints.financeiro.routes import carregar_descontos_cache
+
+                _desc_cache = carregar_descontos_cache(cursor, aluno_ids) if ma_rows else None
+            except Exception:
+                _desc_cache = None
+
             for row in ma_rows:
                 aluno_id = row.get("aluno_id")
                 if not aluno_id:
@@ -962,7 +1014,8 @@ def lista_alunos():
                         )
 
                         _ma_enriquecer_exibicao(
-                            ma_sim, aluno_id, ma_sim.get("id_academia"), hoje
+                            ma_sim, aluno_id, ma_sim.get("id_academia"), hoje,
+                            cache=_desc_cache,
                         )
                     except Exception:
                         ma_sim["valor_final"] = ma_sim["valor"]
@@ -1105,7 +1158,8 @@ def lista_alunos():
                                 )
 
                                 _ma_enriquecer_exibicao(
-                                    ma_pago, aluno_id, ma_pago.get("id_academia"), hoje
+                                    ma_pago, aluno_id, ma_pago.get("id_academia"), hoje,
+                                    cache=_desc_cache,
                                 )
                                 if _mensalidade_quitada_por_desconto_integral(
                                     ma_pago, row.get("status_pagamento")
@@ -1700,7 +1754,9 @@ def lista_alunos():
                 "SELECT id, nome FROM academias WHERE id IN (%s) ORDER BY nome" % ",".join(["%s"] * len(ids_acessiveis)),
                 tuple(ids_acessiveis),
             )
-            academias = cursor.fetchall()
+            from blueprints.academia.routes import filtrar_academias_da_sessao
+
+            academias = filtrar_academias_da_sessao(cursor.fetchall())
             academia_id_sel = academia_filtro if (academia_filtro and academia_filtro in ids_acessiveis) else None
         except Exception:
             pass
@@ -1752,6 +1808,14 @@ def lista_alunos():
             lista = mod_nome_to_alunos[nome_mod]
             alunos_agrupados.append((nome_mod, sorted(lista, key=lambda a: (a.get("nome") or ""))))
 
+    # Idade para a linha da listagem. Cálculo em memória, sem consulta extra.
+    for _, grupo in alunos_agrupados:
+        for a in grupo:
+            nasc = a.get("data_nascimento")
+            if isinstance(nasc, datetime):
+                nasc = nasc.date()
+            a["idade"] = relativedelta(hoje, nasc).years if nasc else None
+
     # Estatísticas: total = alunos que realmente aparecem na página (após filtro de modalidade, etc.)
     ids_na_pagina = set()
     for _, grupo in alunos_agrupados:
@@ -1763,6 +1827,10 @@ def lista_alunos():
         "total": len(alunos_exibidos),
         "ativos": 0,
         "inativos": 0,
+        # Números da faixa de indicadores: quem está sem turma e quem está com
+        # mensalidade em atraso são os dois casos que pedem ação na lista.
+        "sem_turma": 0,
+        "atrasados": 0,
         "por_academia": {},
         "por_graduacao": {},
         "por_turma": {},
@@ -1791,6 +1859,28 @@ def lista_alunos():
         turma_nome_st = aluno.get("turma_nome")
         if turma_nome_st:
             stats["por_turma"][turma_nome_st] = stats["por_turma"].get(turma_nome_st, 0) + 1
+        else:
+            stats["sem_turma"] += 1
+        if aluno.get("mensalidade_atrasada"):
+            stats["atrasados"] += 1
+
+    # Card clicado na faixa de indicadores. O recorte é aplicado depois de
+    # contar, para os números continuarem mostrando o total de cada situação
+    # mesmo com um deles ativo — senão o card ativo viraria sempre "todos".
+    recorte = (request.args.get("recorte") or "").strip().lower()
+    if recorte not in ("sem_turma", "atrasados"):
+        recorte = ""
+    if recorte:
+        def _no_recorte(a):
+            if recorte == "sem_turma":
+                return not a.get("turma_nome")
+            return bool(a.get("mensalidade_atrasada"))
+
+        alunos_agrupados = [
+            (nome, [a for a in grupo if _no_recorte(a)]) for nome, grupo in alunos_agrupados
+        ]
+        alunos_agrupados = [(nome, grupo) for nome, grupo in alunos_agrupados if grupo]
+        alunos_exibidos = [a for a in alunos_exibidos if _no_recorte(a)]
 
     # Mostrar filtros avançados em modo associação/federação ou quando há múltiplas academias
     mostrar_filtros_avancados = modo in ("associacao", "federacao") or len(ids_acessiveis) > 1
@@ -1798,12 +1888,21 @@ def lista_alunos():
     # Enriquecer alunos para o modal (adicionar categorias, frequência, etc.)
     # IMPORTANTE: fazer antes de fechar a conexão do banco.
     # No modo ASSOCIAÇÃO o modal não é renderizado (os detalhes carregam na ficha do
-    # aluno sob demanda), então pulamos esse enriquecimento — que era o maior custo
-    # da página (N+1: ~5 queries por aluno).
+    # aluno sob demanda), então pulamos esse enriquecimento.
+    # O contexto é carregado UMA vez para a lista inteira e reaproveita o que a rota
+    # já leu (modalidades e presenças); sem isso eram ~10 queries e uma conexão nova
+    # por aluno — o maior custo da página.
     if carregar_detalhes:
+        _ctx_modal = _carregar_ctx_modal(
+            cursor,
+            aluno_ids,
+            modalidades_por_aluno=modalidades_por_aluno,
+            turmas_judo_ids=turmas_judo_ids,
+            freq_por_aluno=freq_dados,
+        )
         for _, grupo_alunos in alunos_agrupados:
             for aluno in grupo_alunos:
-                enriquecer_aluno_para_modal(aluno)
+                enriquecer_aluno_para_modal(aluno, _ctx_modal)
 
     # Planos de mensalidade da academia (para modal financeiro no modo academia)
     planos_mensalidades = []
@@ -2085,18 +2184,20 @@ def lista_alunos():
             _a["forma_recorrencia"] = None
 
     # Modo associação: filtros sempre vazios (só placeholders)
-    return render_template(
-        "alunos/lista_alunos.html",
+    return dict(
         alunos=alunos,
         asaas_academias=asaas_academias,
         gateway_por_academia=gateway_por_academia,
         recorrencia_por_academia=recorrencia_por_academia,
         recorrencia_opcoes_por_academia=recorrencia_opcoes_por_academia,
         alunos_agrupados=alunos_agrupados,
+        recorte=recorte,
         busca=busca,
         back_url=back_url,
         academias=academias,
         academia_id=academia_id_sel,
+        # O shell mostra a academia atual ao lado do usuário no topo.
+        academia=next((a for a in academias if a.get("id") == academia_id_sel), None),
         faixas=faixas,
         graduacao_id=graduacao_id,
         peso_min=peso_min,
@@ -2125,8 +2226,185 @@ def lista_alunos():
     )
 
 
-def enriquecer_aluno_para_modal(aluno):
-    """Enriquece um único aluno com classes_e_pesos, aptidão, frequência etc. para o modal 'Ver dados'."""
+def _carregar_ctx_modal(
+    cursor,
+    aluno_ids,
+    faixas=None,
+    categorias=None,
+    turmas_judo_ids=None,
+    modalidades_por_aluno=None,
+    freq_por_aluno=None,
+):
+    """Pré-carrega em LOTE tudo que o enriquecimento do modal consultava por aluno.
+
+    Antes, `enriquecer_aluno_para_modal` abria uma conexão nova e rodava ~10 queries
+    para CADA aluno da lista (3 delas em `presencas`). Com 178 alunos isso custava
+    ~6 s e 178 conexões. Aqui são 6 queries no total, reaproveitando o que a rota
+    já carregou (passe os parâmetros opcionais para pular a consulta correspondente).
+    """
+    ctx = {}
+
+    if faixas is None:
+        # ORDER BY id de propósito: é a ordem que define a "próxima faixa" hoje.
+        # A lista `faixas` da página usa ORDER BY ordem (para o filtro) e as duas
+        # divergem, porque há mais de uma escala de graduação cadastrada.
+        cursor.execute("SELECT * FROM graduacao ORDER BY id")
+        faixas = cursor.fetchall()
+    ctx["faixas"] = faixas
+
+    if categorias is None:
+        cursor.execute(
+            """
+            SELECT id, genero, id_classe, categoria, nome_categoria,
+                   peso_min, peso_max, idade_min, idade_max, descricao, ativo
+            FROM categorias
+            ORDER BY nome_categoria
+            """
+        )
+        categorias = cursor.fetchall()
+    ctx["categorias"] = categorias
+
+    if turmas_judo_ids is None:
+        try:
+            cursor.execute("SELECT turma_id FROM turma_modalidades WHERE modalidade_id = 1")
+            turmas_judo_ids = [r["turma_id"] for r in cursor.fetchall()]
+        except Exception:
+            turmas_judo_ids = []
+    ctx["turmas_judo_ids"] = turmas_judo_ids
+
+    ids = [i for i in (aluno_ids or []) if i]
+    ph = ", ".join(["%s"] * len(ids)) if ids else ""
+
+    if modalidades_por_aluno is None:
+        modalidades_por_aluno = {}
+        if ids:
+            cursor.execute(
+                f"""
+                SELECT am.aluno_id, m.id, m.nome
+                FROM modalidade m
+                INNER JOIN aluno_modalidades am ON am.modalidade_id = m.id
+                WHERE am.aluno_id IN ({ph})
+                ORDER BY m.nome
+                """,
+                tuple(ids),
+            )
+            for r in cursor.fetchall():
+                modalidades_por_aluno.setdefault(r["aluno_id"], []).append(
+                    {"id": r["id"], "nome": r["nome"]}
+                )
+    ctx["modalidades_por_aluno"] = modalidades_por_aluno
+
+    if freq_por_aluno is None:
+        freq_por_aluno = {}
+        if ids and turmas_judo_ids:
+            _pht = ", ".join(["%s"] * len(turmas_judo_ids))
+            cursor.execute(
+                f"""SELECT aluno_id, data_presenca, presente FROM presencas
+                    WHERE aluno_id IN ({ph}) AND turma_id IN ({_pht})""",
+                tuple(ids) + tuple(turmas_judo_ids),
+            )
+            for r in cursor.fetchall():
+                freq_por_aluno.setdefault(r["aluno_id"], []).append(
+                    (r["data_presenca"], r["presente"])
+                )
+    ctx["freq_por_aluno"] = freq_por_aluno
+
+    # Fallback de turma: primeira turma do vínculo N:N (usado quando o aluno não
+    # tem TurmaID preenchido).
+    turma_nn = {}
+    if ids:
+        try:
+            cursor.execute(
+                f"""SELECT at.aluno_id, t.Nome AS nome
+                    FROM aluno_turmas at
+                    INNER JOIN turmas t ON t.TurmaID = at.TurmaID
+                    WHERE at.aluno_id IN ({ph})
+                    ORDER BY at.aluno_id, at.TurmaID""",
+                tuple(ids),
+            )
+            for r in cursor.fetchall():
+                turma_nn.setdefault(r["aluno_id"], r.get("nome"))
+        except Exception:
+            turma_nn = {}
+    ctx["turma_nome_por_aluno"] = turma_nn
+
+    return ctx
+
+
+def _categorias_do_aluno(categorias, sexo, peso, idade_ano_civil):
+    """Categorias que servem ao aluno — mesma regra do SELECT que rodava por aluno."""
+    if sexo not in ("M", "F") or peso is None or idade_ano_civil is None:
+        return []
+    try:
+        peso = float(peso)
+    except (TypeError, ValueError):
+        return []
+    if peso <= 0:
+        return []
+    genero_db = "MASCULINO" if sexo == "M" else "FEMININO"
+
+    def _num(v):
+        if v is None:
+            return None
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return None
+
+    achados = []
+    for cat in categorias or []:
+        if not cat.get("ativo"):
+            continue
+        if (cat.get("genero") or "").upper() != genero_db:
+            continue
+        idade_min, idade_max = _num(cat.get("idade_min")), _num(cat.get("idade_max"))
+        if idade_min is not None and idade_ano_civil < idade_min:
+            continue
+        if idade_max is not None and idade_ano_civil > idade_max:
+            continue
+        peso_min, peso_max = _num(cat.get("peso_min")), _num(cat.get("peso_max"))
+        if peso_min is not None and peso < peso_min:
+            continue
+        if peso_max is not None and peso > peso_max:
+            continue
+        achados.append(cat)
+
+    def _ordem(cat):
+        # Sem acento e em minúsculas para casar com a collation do MySQL, que
+        # ordenava 'SÊNIOR' antes de 'SUB-23' (o ORDER BY nome_categoria original).
+        nome = cat.get("nome_categoria") or ""
+        return unicodedata.normalize("NFKD", nome).encode("ascii", "ignore").decode().lower()
+
+    return sorted(achados, key=_ordem)
+
+
+def _freq_judo(registros, hoje, data_inicio):
+    """(freq_ano, freq_mes, freq_desde, total_desde, presentes_desde) a partir das
+    presenças já carregadas — substitui os 3 COUNTs por aluno."""
+    def _pct(filtro):
+        tot = pres = 0
+        for d, p in registros:
+            if d and filtro(d):
+                tot += 1
+                if p == 1:
+                    pres += 1
+            
+        if tot > 0:
+            return round(pres / tot * 100, 1), tot, pres
+        return None, 0, 0
+
+    freq_ano = _pct(lambda d: d.year == hoje.year)[0]
+    freq_mes = _pct(lambda d: d.year == hoje.year and d.month == hoje.month)[0]
+    freq_desde, total_desde, presentes_desde = _pct(lambda d: data_inicio <= d <= hoje)
+    return freq_ano, freq_mes, freq_desde, total_desde, presentes_desde
+
+
+def enriquecer_aluno_para_modal(aluno, ctx=None):
+    """Enriquece um único aluno com classes_e_pesos, aptidão, frequência etc. para o modal 'Ver dados'.
+
+    `ctx` é o retorno de `_carregar_ctx_modal` — quando informado, a função não
+    toca no banco. Sem ele (chamadas de um aluno só) o contexto é carregado aqui.
+    """
     if not aluno or not aluno.get("id"):
         return
     # Inicializar valores padrão para aptidão
@@ -2141,73 +2419,39 @@ def enriquecer_aluno_para_modal(aluno):
     aluno.setdefault("presentes_desde", 0)
     aluno.setdefault("turma_nome", None)
     aluno.setdefault("academia_nome", None)
-    
-    conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
-    hoje = date.today()
-    try:
-        # Buscar turma e academia se não estiverem definidas
-        if not aluno.get("turma_nome") or not aluno.get("academia_nome"):
-            cursor.execute(
-                """SELECT ac.nome AS academia_nome, t.Nome AS turma_nome
-                   FROM alunos a
-                   LEFT JOIN academias ac ON ac.id = a.id_academia
-                   LEFT JOIN turmas t ON t.TurmaID = a.TurmaID
-                   WHERE a.id = %s""",
-                (aluno["id"],),
-            )
-            row = cursor.fetchone()
-            if row:
-                if not aluno.get("academia_nome"):
-                    aluno["academia_nome"] = row.get("academia_nome")
-                if not aluno.get("turma_nome"):
-                    aluno["turma_nome"] = row.get("turma_nome")
-        
-        # Se ainda não encontrou turma, tentar buscar diretamente pelo TurmaID
-        if not aluno.get("turma_nome") and aluno.get("TurmaID"):
-            cursor.execute("SELECT Nome FROM turmas WHERE TurmaID = %s", (aluno.get("TurmaID"),))
-            turma_row = cursor.fetchone()
-            if turma_row:
-                aluno["turma_nome"] = turma_row.get("Nome")
-        
-        # Se ainda não encontrou, tentar buscar via aluno_turmas
-        if not aluno.get("turma_nome"):
-            cursor.execute(
-                """SELECT t.Nome FROM aluno_turmas at
-                   INNER JOIN turmas t ON t.TurmaID = at.TurmaID
-                   WHERE at.aluno_id = %s
-                   ORDER BY at.TurmaID LIMIT 1""",
-                (aluno["id"],),
-            )
-            turma_row = cursor.fetchone()
-            if turma_row:
-                aluno["turma_nome"] = turma_row.get("Nome")
-        cursor.execute("SELECT * FROM graduacao ORDER BY id")
-        faixas = cursor.fetchall()
-        # Carrega categorias da tabela categorias
-        cursor.execute(
-            """
-            SELECT id, genero, id_classe, categoria, nome_categoria, peso_min, peso_max, idade_min, idade_max
-            FROM categorias
-            ORDER BY id
-            """
-        )
-        categorias = cursor.fetchall()
-        cursor.execute("SELECT aluno_id, faixa_aprovada, aprovado_por, data_aprovacao FROM aprovacoes_faixa_professor")
-        aprovacoes = {a["aluno_id"]: a for a in cursor.fetchall()}
-        try:
-            cursor.execute("SELECT turma_id FROM turma_modalidades WHERE modalidade_id = 1")
-            turmas_judo_ids = [r["turma_id"] for r in cursor.fetchall()]
-        except Exception:
-            turmas_judo_ids = []
 
-        cursor.execute(
-            """SELECT m.id, m.nome FROM modalidade m
-               INNER JOIN aluno_modalidades am ON am.modalidade_id = m.id
-               WHERE am.aluno_id = %s ORDER BY m.nome""",
-            (aluno["id"],),
-        )
-        mods = cursor.fetchall()
+    hoje = date.today()
+    conn = cursor = None
+    try:
+        if ctx is None:
+            conn = get_db_connection()
+            cursor = conn.cursor(dictionary=True)
+            # Turma e academia do próprio aluno (a lista já traz pelos JOINs).
+            if not aluno.get("turma_nome") or not aluno.get("academia_nome"):
+                cursor.execute(
+                    """SELECT ac.nome AS academia_nome, t.Nome AS turma_nome
+                       FROM alunos a
+                       LEFT JOIN academias ac ON ac.id = a.id_academia
+                       LEFT JOIN turmas t ON t.TurmaID = a.TurmaID
+                       WHERE a.id = %s""",
+                    (aluno["id"],),
+                )
+                row = cursor.fetchone()
+                if row:
+                    if not aluno.get("academia_nome"):
+                        aluno["academia_nome"] = row.get("academia_nome")
+                    if not aluno.get("turma_nome"):
+                        aluno["turma_nome"] = row.get("turma_nome")
+            ctx = _carregar_ctx_modal(cursor, [aluno["id"]])
+
+        if not aluno.get("turma_nome"):
+            aluno["turma_nome"] = (ctx.get("turma_nome_por_aluno") or {}).get(aluno["id"])
+
+        faixas = ctx.get("faixas") or []
+        categorias = ctx.get("categorias") or []
+        turmas_judo_ids = ctx.get("turmas_judo_ids") or []
+
+        mods = (ctx.get("modalidades_por_aluno") or {}).get(aluno["id"], [])
         aluno["modalidades"] = mods
         aluno["modalidades_nomes"] = ", ".join(m["nome"] for m in mods) if mods else "-"
 
@@ -2218,28 +2462,17 @@ def enriquecer_aluno_para_modal(aluno):
         total_desde, presentes_desde = 0, 0
         data_inicio_freq = exame or parse_date(aluno.get("data_matricula")) or hoje
         if turmas_judo_ids:
-            ph = ",".join(["%s"] * len(turmas_judo_ids))
-            for label, extra_sql, extra_params in [
-                ("ano", "AND YEAR(data_presenca)=%s", [hoje.year]),
-                ("mes", "AND YEAR(data_presenca)=%s AND MONTH(data_presenca)=%s", [hoje.year, hoje.month]),
-                ("desde", "AND data_presenca >= %s AND data_presenca <= %s", [data_inicio_freq, hoje]),
-            ]:
-                cursor.execute(
-                    f"""SELECT COUNT(*) AS tot, SUM(CASE WHEN presente=1 THEN 1 ELSE 0 END) AS pres
-                        FROM presencas WHERE aluno_id=%s AND turma_id IN ({ph}) {extra_sql}""",
-                    [aluno["id"]] + turmas_judo_ids + extra_params,
-                )
-                r = cursor.fetchone()
-                if r and r.get("tot", 0) and r["tot"] > 0:
-                    pct = round((r["pres"] or 0) / r["tot"] * 100, 1)
-                    if label == "ano":
-                        freq_ano = pct
-                    elif label == "mes":
-                        freq_mes = pct
-                    else:
-                        freq_desde_exame = pct
-                        total_desde = r["tot"]
-                        presentes_desde = r["pres"] or 0
+            (
+                freq_ano,
+                freq_mes,
+                freq_desde_exame,
+                total_desde,
+                presentes_desde,
+            ) = _freq_judo(
+                (ctx.get("freq_por_aluno") or {}).get(aluno["id"], []),
+                hoje,
+                data_inicio_freq,
+            )
         aluno["frequencia_ano"] = freq_ano
         aluno["frequencia_mes"] = freq_mes
         aluno["frequencia_desde_exame"] = freq_desde_exame
@@ -2250,8 +2483,6 @@ def enriquecer_aluno_para_modal(aluno):
             hoje.year - nasc.year - ((hoje.month, hoje.day) < (nasc.month, nasc.day))
         ) if nasc else None
         aluno["idade_ano_civil"] = hoje.year - nasc.year if nasc else None
-        idade_civil = aluno["idade_ano_civil"] or 0
-        faixa_atual = (aluno.get("faixa") or aluno.get("faixa_nome") or "").lower()
 
         aluno["data_nascimento_formatada"] = nasc.strftime("%d/%m/%Y") if nasc else "-"
         aluno["ultimo_exame_faixa_formatada"] = exame.strftime("%d/%m/%Y") if exame else "-"
@@ -2328,60 +2559,35 @@ def enriquecer_aluno_para_modal(aluno):
                 aluno["aptidao_status"] = "Inapto"
                 aluno["motivo"] = "; ".join(motivos)
 
-        # Busca categoria na tabela categorias usando a mesma lógica de simular_categorias
-        categorias_match = []
-        sexo = (aluno.get("sexo") or "").upper()
-        peso = aluno.get("peso")
-        idade_ano_civil = aluno.get("idade_ano_civil")
-        
-        if sexo in ("M", "F") and peso is not None and peso > 0 and idade_ano_civil is not None:
-            # Mapear M/F para MASCULINO/FEMININO
-            genero_db = "MASCULINO" if sexo == "M" else "FEMININO" if sexo == "F" else sexo
-            
-            cursor.execute("""
-                SELECT id, genero, id_classe, categoria, nome_categoria, peso_min, peso_max, idade_min, idade_max, descricao
-                FROM categorias
-                WHERE UPPER(genero) = UPPER(%s)
-                AND ativo = 1
-                AND (
-                    (idade_min IS NULL OR %s >= idade_min)
-                    AND (idade_max IS NULL OR %s <= idade_max)
-                )
-                AND (
-                    (peso_min IS NULL OR %s >= peso_min)
-                    AND (peso_max IS NULL OR %s <= peso_max)
-                )
-                ORDER BY nome_categoria
-            """, (genero_db, idade_ano_civil, idade_ano_civil, peso, peso))
-            categorias_match = cursor.fetchall()
+        # Categorias que servem ao aluno (peso/idade/sexo), calculadas em memória
+        categorias_match = _categorias_do_aluno(
+            categorias,
+            (aluno.get("sexo") or "").upper(),
+            aluno.get("peso"),
+            aluno.get("idade_ano_civil"),
+        )
 
-        # Preparar lista de categorias para exibição
         categorias_lista = []
-        if categorias_match:
-            for cat in categorias_match:
-                nome_cat = cat.get("nome_categoria") or cat.get("categoria") or "-"
-                id_classe = cat.get("id_classe")
-                if id_classe:
-                    categorias_lista.append(f"{id_classe} - {nome_cat}")
-                else:
-                    categorias_lista.append(nome_cat)
-        
-        # Garantir que categorias_disponiveis seja sempre uma lista
-        aluno["categorias_disponiveis"] = categorias_match if categorias_match else []
-        
-        # Mensagem de erro se não encontrou categorias
+        for cat in categorias_match:
+            nome_cat = cat.get("nome_categoria") or cat.get("categoria") or "-"
+            id_classe = cat.get("id_classe")
+            categorias_lista.append(f"{id_classe} - {nome_cat}" if id_classe else nome_cat)
+
+        aluno["categorias_disponiveis"] = categorias_match
         if not categorias_match:
-            if peso is None or peso == 0:
+            peso = aluno.get("peso")
+            sexo = (aluno.get("sexo") or "").upper()
+            if peso is None or float(peso or 0) == 0:
                 aluno["categorias_texto"] = "Informe o peso"
             elif sexo not in ("M", "F"):
                 aluno["categorias_texto"] = "Informe o sexo"
-            elif idade_ano_civil is None:
+            elif aluno.get("idade_ano_civil") is None:
                 aluno["categorias_texto"] = "Informe data de nascimento"
             else:
                 aluno["categorias_texto"] = "Nenhuma categoria encontrada"
         else:
-            aluno["categorias_texto"] = ", ".join(categorias_lista) if categorias_lista else "Nenhuma categoria encontrada"
-        
+            aluno["categorias_texto"] = ", ".join(categorias_lista)
+
         aluno["classes_e_pesos"] = aluno.get("categorias_texto") or "-"
 
         if not aluno.get("responsavel") and aluno.get("responsavel_nome"):
@@ -2396,8 +2602,10 @@ def enriquecer_aluno_para_modal(aluno):
         aluno.setdefault("data_elegivel", "-")
         aluno.setdefault("proxima_faixa", "-")
     finally:
-        cursor.close()
-        conn.close()
+        if cursor is not None:
+            cursor.close()
+        if conn is not None:
+            conn.close()
 
 
 # ======================================================
@@ -2441,6 +2649,124 @@ def _carregar_modalidades_form(cursor, id_acad, id_assoc):
         extra_params,
     )
     return cursor.fetchall()
+
+
+# Campos exigidos no cadastro de um aluno novo. O RG fica de fora porque nem
+# todo aluno tem documento próprio; também ficam de fora o que é
+# genuinamente opcional: complemento do endereço, telefones extras,
+# observações, foto e os campos da integração Zempo.
+#
+# Na EDIÇÃO esta lista não bloqueia o salvamento — a ficha só marca o que
+# está pendente, senão ninguém conseguiria corrigir um telefone de um
+# cadastro antigo sem antes completar o resto.
+def _planos_mensalidade_da_academia(academia_id):
+    """Planos ativos para o modal de cobrança rápida da ficha."""
+    if not academia_id:
+        return []
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute(
+            "SELECT id, nome, valor FROM mensalidades WHERE id_academia = %s AND ativo = 1 ORDER BY nome",
+            (academia_id,),
+        )
+        return cur.fetchall() or []
+    except Exception:
+        return []
+    finally:
+        cur.close()
+        conn.close()
+
+
+CAMPOS_OBRIGATORIOS_ALUNO = (
+    ("nome", "Nome completo"),
+    ("data_nascimento", "Data de nascimento"),
+    ("sexo", "Sexo"),
+    ("cpf", "CPF"),
+    ("nacionalidade", "Nacionalidade"),
+    ("nome_mae", "Nome da mãe"),
+    ("nome_pai", "Nome do pai"),
+    ("email", "E-mail"),
+    ("telefone_celular", "Telefone celular"),
+    ("cep", "CEP"),
+    ("endereco", "Endereço"),
+    ("numero", "Número"),
+    ("bairro", "Bairro"),
+    ("cidade", "Cidade"),
+    ("estado", "Estado"),
+    ("id_academia", "Academia"),
+    ("TurmaID", "Turma"),
+    ("graduacao_id", "Graduação"),
+    ("peso", "Peso"),
+    ("responsavel_financeiro_nome", "Nome do responsável financeiro"),
+    ("responsavel_financeiro_cpf", "CPF do responsável financeiro"),
+    ("responsavel_financeiro_telefone", "Telefone do responsável financeiro"),
+)
+
+# Como cada campo obrigatório se chama na tabela `alunos`, para a ficha saber
+# o que ainda falta num cadastro antigo. Quem não aparece aqui tem o mesmo
+# nome nos dois lados.
+COLUNA_DO_CAMPO_ALUNO = {
+    "endereco": "rua",
+    "telefone_celular": "tel_celular",
+    "id_academia": "id_academia",
+    "TurmaID": "TurmaID",
+}
+
+
+def _campos_obrigatorios_faltando(form):
+    """Rótulos dos campos obrigatórios que vieram vazios no formulário."""
+    faltando = [
+        rotulo
+        for campo, rotulo in CAMPOS_OBRIGATORIOS_ALUNO
+        if not (form.get(campo) or "").strip()
+    ]
+    if not form.getlist("aluno_modalidade_ids"):
+        faltando.append("Modalidade")
+    return faltando
+
+
+def campos_pendentes_do_aluno(aluno):
+    """Rótulos do que falta num aluno já cadastrado (usado só para avisar)."""
+    if not aluno:
+        return []
+    pendentes = []
+    for campo, rotulo in CAMPOS_OBRIGATORIOS_ALUNO:
+        coluna = COLUNA_DO_CAMPO_ALUNO.get(campo, campo)
+        valor = aluno.get(coluna) if isinstance(aluno, dict) else getattr(aluno, coluna, None)
+        if valor is None or str(valor).strip() == "":
+            pendentes.append(rotulo)
+    return pendentes
+
+
+# O que o próprio aluno consegue completar no primeiro acesso. Academia, turma
+# e graduação ficam de fora de propósito: quem decide é a secretaria, e o aluno
+# não teria como saber a própria turma nem a faixa que a academia registrou.
+CAMPOS_AUTOPREENCHIVEIS_ALUNO = tuple(
+    (campo, rotulo)
+    for campo, rotulo in CAMPOS_OBRIGATORIOS_ALUNO
+    if campo not in ("id_academia", "TurmaID", "graduacao_id")
+)
+
+
+def campos_pendentes_autopreenchiveis(aluno):
+    """(campo, rótulo, coluna) do que o aluno ainda precisa preencher sozinho.
+
+    É o que decide se a tela de completar cadastro aparece no primeiro acesso.
+    Separado de `campos_pendentes_do_aluno` porque aquele conta também o que só
+    a secretaria resolve — e travar o aluno por falta de turma seria trancá-lo
+    fora do sistema por algo que não está na mão dele.
+    """
+    if not aluno:
+        return []
+    faltando = []
+    for campo, rotulo in CAMPOS_AUTOPREENCHIVEIS_ALUNO:
+        coluna = COLUNA_DO_CAMPO_ALUNO.get(campo, campo)
+        valor = aluno.get(coluna) if isinstance(aluno, dict) else getattr(aluno, coluna, None)
+        if valor is None or str(valor).strip() == "":
+            faltando.append((campo, rotulo, coluna))
+    return faltando
+
 
 
 @bp_alunos.route("/cadastrar_aluno", methods=["GET", "POST"])
@@ -2581,7 +2907,9 @@ def cadastrar_aluno():
                 """,
                 (getattr(current_user, "id_academia", 0),),
             )
-        academias = cursor.fetchall()
+        from blueprints.academia.routes import filtrar_academias_da_sessao
+
+        academias = filtrar_academias_da_sessao(cursor.fetchall())
     except Exception:
         academias = []
 
@@ -2721,6 +3049,29 @@ def cadastrar_aluno():
 
         cursor.execute("SHOW COLUMNS FROM alunos")
         colunas_alunos = {row["Field"] for row in cursor.fetchall()}
+
+        # Cadastro novo exige a ficha completa. A checagem é aqui, e não só no
+        # `required` do HTML, porque o navegador é contornável.
+        faltando = _campos_obrigatorios_faltando(form)
+        if faltando:
+            flash(
+                "Complete o cadastro antes de salvar. Falta preencher: "
+                + ", ".join(faltando)
+                + ".",
+                "danger",
+            )
+            db.close()
+            return render_template(
+                "alunos/cadastro_aluno.html",
+                graduacoes=graduacoes,
+                turmas=turmas,
+                modalidades=modalidades,
+                academias=academias,
+                back_url=back_url,
+                form_data=form,
+                academia_selecionada=form.get("id_academia") or request.args.get("academia_id"),
+                aluno=None,
+            )
 
         # Regra: CPF obrigatório (aluno ou responsável financeiro)
         cpf_aluno_valido = validar_cpf(cpf)
@@ -3011,12 +3362,49 @@ def cadastrar_aluno():
 # ======================================================
 # 🔹 FICHA DO ALUNO (somente leitura) — usada no modo Associação
 # ======================================================
+MESES_FICHA = ["", "janeiro", "fevereiro", "março", "abril", "maio", "junho",
+               "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"]
+
+# Telas que não servem como destino de "voltar": levam de volta à própria
+# ficha, são o documento de impressão aberto a partir dela, ou são rotas de
+# ação (POST) que só existem para gravar e redirecionar. Sem essa lista, gerar
+# uma cobrança pela ficha fazia o referrer virar a rota da ação e o botão
+# Voltar passava a apontar para ela.
+_ROTAS_SEM_VOLTA = (
+    "/alunos/ficha/",
+    "/presencas/relatorio/",
+    "/financeiro/mensalidades/gerar-cobranca",
+    "/financeiro/mensalidades/registrar-pagamento",
+    "/financeiro/mensalidades/cancelar-cobranca",
+    "/financeiro/aluno/",
+)
+
+
+def _voltar_da_ficha():
+    """Destino do botão Voltar. `next` manda; o referrer só entra se for interno
+    e não devolver o usuário à ficha ou ao relatório — senão o botão fica preso
+    num vaivém entre as duas telas."""
+    destino = request.args.get("next")
+    if not destino:
+        ref = request.referrer or ""
+        if ref:
+            partes = urlparse(ref)
+            mesmo_host = not partes.netloc or partes.netloc == urlparse(request.url).netloc
+            caminho = partes.path or ""
+            if mesmo_host and not caminho.startswith(_ROTAS_SEM_VOLTA):
+                destino = caminho + (("?" + partes.query) if partes.query else "")
+    # Só caminho relativo: evita virar redirecionamento para fora do sistema.
+    if not destino or not destino.startswith("/") or destino.startswith("//"):
+        return url_for("alunos.lista_alunos")
+    return destino
+
+
 @bp_alunos.route("/ficha/<int:aluno_id>", methods=["GET"])
 @login_required
 def ficha_aluno(aluno_id):
     """Ficha read-only do aluno — carrega ao acessar (modo associação não pré-renderiza
     os detalhes na lista; abre aqui sob demanda)."""
-    back_url = request.args.get("next") or request.referrer or url_for("alunos.lista_alunos")
+    back_url = _voltar_da_ficha()
     db = get_db_connection()
     cur = db.cursor(dictionary=True)
     cur.execute(
@@ -3058,10 +3446,283 @@ def ficha_aluno(aluno_id):
         (aluno_id,),
     )
     modalidades_aluno = [r["nome"] for r in cur.fetchall()]
+
+    hoje = date.today()
+    mes_ref = request.args.get("mes", type=int) or hoje.month
+    ano_ref = request.args.get("ano", type=int) or hoje.year
+
+    # Os blocos abaixo alimentam as abas da ficha. Cada um falha por conta
+    # própria: um módulo sem dado não pode derrubar a ficha inteira.
+    def _consulta(sql, params, um_so=False):
+        try:
+            cur.execute(sql, params)
+            return cur.fetchone() if um_so else cur.fetchall()
+        except Exception:
+            return None if um_so else []
+
+    # --- frequência do mês de referência -------------------------------
+    registros_mes = _consulta(
+        """SELECT p.data_presenca, p.presente, t.Nome AS turma_nome
+           FROM presencas p
+           LEFT JOIN turmas t ON t.TurmaID = p.turma_id
+           WHERE p.aluno_id = %s AND YEAR(p.data_presenca) = %s AND MONTH(p.data_presenca) = %s
+           ORDER BY p.data_presenca""",
+        (aluno_id, ano_ref, mes_ref),
+    )
+    aulas_mes = len(registros_mes)
+    presencas_mes = sum(1 for r in registros_mes if r.get("presente") == 1)
+    frequencia = {
+        "aulas": aulas_mes,
+        "presencas": presencas_mes,
+        "faltas": aulas_mes - presencas_mes,
+        "percentual": round(presencas_mes * 100 / aulas_mes) if aulas_mes else None,
+        "dias": [
+            {"dia": r["data_presenca"].day,
+             "data": r["data_presenca"].strftime("%d/%m/%Y"),
+             "presente": r.get("presente") == 1}
+            for r in registros_mes if r.get("data_presenca")
+        ],
+    }
+
+    # --- últimas chamadas, para a aba Presença --------------------------
+    presencas_recentes = _consulta(
+        """SELECT p.data_presenca, p.presente, p.horario_aula, t.Nome AS turma_nome
+           FROM presencas p
+           LEFT JOIN turmas t ON t.TurmaID = p.turma_id
+           WHERE p.aluno_id = %s
+           ORDER BY p.data_presenca DESC LIMIT 30""",
+        (aluno_id,),
+    )
+
+    # --- graduações -----------------------------------------------------
+    # O histórico vem dos exames de faixa; a matrícula fecha a lista como a
+    # primeira faixa. Enquanto não houver exame lançado, a ficha mostra a
+    # graduação atual do cadastro.
+    graduacoes = []
+    for e in _consulta(
+        """SELECT Data_Exame, Graduacao_Pretendida, Resultado, Instrutor_Avaliador
+           FROM examefaixa_judo WHERE ID_Aluno = %s ORDER BY Data_Exame DESC""",
+        (aluno_id,),
+    ):
+        graduacoes.append({
+            "faixa": e.get("Graduacao_Pretendida") or "",
+            "data": e.get("Data_Exame"),
+            "origem": e.get("Resultado") or "Exame de faixa",
+        })
+    if not graduacoes and aluno.get("faixa"):
+        graduacoes.append({
+            "faixa": aluno.get("faixa"),
+            "data": aluno.get("ultimo_exame_faixa"),
+            "origem": "Graduação atual",
+        })
+    if aluno.get("data_matricula"):
+        graduacoes.append({
+            "faixa": "Branca",
+            "data": aluno.get("data_matricula"),
+            "origem": "Matrícula",
+        })
+
+    # --- mensalidades ---------------------------------------------------
+    mensalidades = _consulta(
+        """SELECT ma.id, ma.mensalidade_id, ma.data_vencimento, ma.data_pagamento, ma.valor, ma.valor_pago, ma.status,
+                  ma.status_pagamento, COALESCE(ma.pago_auto, 0) AS pago_auto,
+                  ma.valor_original, ma.desconto_aplicado, ma.id_desconto,
+                  COALESCE(ma.remover_juros, 0) AS remover_juros,
+                  COALESCE(ma.ajuste_proporcional, 0) AS ajuste_proporcional,
+                  COALESCE(m.aplicar_juros_multas, 0) AS aplicar_juros_multas,
+                  COALESCE(m.percentual_multa_mes, 2) AS percentual_multa_mes,
+                  COALESCE(m.percentual_juros_dia, 0.033) AS percentual_juros_dia
+           FROM mensalidade_aluno ma
+           LEFT JOIN mensalidades m ON m.id = ma.mensalidade_id
+           WHERE ma.aluno_id = %s AND (ma.status IS NULL OR ma.status <> 'cancelado')
+           ORDER BY (ma.data_vencimento > LAST_DAY(CURDATE())), ma.data_vencimento DESC
+           LIMIT 6""",
+        (aluno_id,),
+    )
+    # Status EFETIVO (determinístico), não o cru: uma pendente vencida vira
+    # 'atrasado' aqui mesmo, sem depender de um job ter rodado antes. Sem isso a
+    # ficha mostrava 'pendente' enquanto outras telas já mostravam 'atrasado'
+    # (e o mobile chegava a exibir uma versão em cache com o status antigo).
+    from blueprints.aluno.painel import _calcular_valor_com_juros_multas
+    from blueprints.financeiro.routes import _aplicar_perda_desconto_atraso
+    _hoje_status = date.today()
+    for _m in (mensalidades or []):
+        _sp = _m.get("status_pagamento")
+        _st = _m.get("status")
+        _venc = _m.get("data_vencimento")
+        if _sp == "pendente_aprovacao":
+            _m["status"] = "aguardando_confirmacao"
+        elif _sp == "pago":
+            _m["status"] = "pago"
+        elif _st and _st != "pendente":
+            _m["status"] = _st
+        else:
+            try:
+                _vd = _venc if isinstance(_venc, date) else (date.fromisoformat(str(_venc)[:10]) if _venc else None)
+            except (ValueError, TypeError):
+                _vd = None
+            _m["status"] = "atrasado" if (_vd and _vd < _hoje_status) else (_st or "pendente")
+        # Desconto 'apenas em dia' + atrasada → perde o desconto (valor volta ao cheio).
+        _aplicar_perda_desconto_atraso(_m, _hoje_status)
+        # Valor com multa (2%) + juros (0,033%/dia ≈ 1% ao mês) quando em atraso e
+        # o plano aplica encargos. O valor base fica em `valor` (o modal recalcula
+        # pela data do pagamento); a exibição usa `valor_com_juros`.
+        # O proporcional de mudança de vencimento paga dias À FRENTE; encargos de
+        # atraso não incidem sobre ele. Sai da base e volta no total — a ficha
+        # tem que mostrar o mesmo número que a baixa vai cobrar.
+        _prop = float(_m.get("ajuste_proporcional") or 0)
+        _m_juros = dict(_m, valor=round(float(_m.get("valor") or 0) - _prop, 2)) if _prop > 0 else _m
+        _total, _vo, _multa, _juros = _calcular_valor_com_juros_multas(_m_juros, _hoje_status)
+        if _prop > 0 and _total is not None:
+            _total = round(float(_total) + _prop, 2)
+        _m["valor_com_juros"] = _total
+        _m["multa_val"] = _multa
+        _m["juros_val"] = _juros
+        _m["tem_juros"] = bool((_multa or 0) + (_juros or 0) > 0)
+    # Formas ativas da academia: alimentam o modal de baixa da ficha, o mesmo
+    # do painel financeiro (financeiro_painel.mensalidades_pagar).
+    formas = _consulta(
+        """SELECT id, nome FROM formas_pagamento
+           WHERE id_academia = %s AND COALESCE(ativo, 1) = 1
+           ORDER BY ordem, nome""",
+        (aluno.get("id_academia"),),
+    ) if aluno.get("id_academia") else []
+    # Descontos ativos da academia — alimentam o desconto no modal de baixa.
+    descontos_ficha = _consulta(
+        """SELECT id, nome, tipo, valor FROM descontos
+           WHERE id_academia = %s AND COALESCE(ativo, 1) = 1
+           ORDER BY nome""",
+        (aluno.get("id_academia"),),
+    ) if aluno.get("id_academia") else []
+    # A baixa é uma ação de gestão da academia: professor, associação e federação
+    # veem a ficha, mas não registram pagamento. A rota valida de novo.
+    pode_baixar = (
+        session.get("modo_painel") == "academia"
+        and (current_user.has_role("gestor_academia") or current_user.has_role("admin"))
+    )
+    em_aberto = _consulta(
+        """SELECT MIN(data_vencimento) AS proximo,
+                  SUM(status = 'atrasado' OR (status = 'pendente' AND data_vencimento < CURDATE())) AS atrasadas
+           FROM mensalidade_aluno
+           WHERE aluno_id = %s AND status IN ('pendente', 'atrasado')""",
+        (aluno_id,), um_so=True,
+    ) or {}
+    # Saldo da carteira (crédito): gerado quando um pagamento com confirmação
+    # automática é cancelado. Pode quitar outras mensalidades.
+    _cart = _consulta(
+        """SELECT COALESCE(SUM(CASE WHEN tipo='credito' THEN valor ELSE -valor END), 0) AS saldo
+           FROM carteira_movimentos WHERE aluno_id = %s""",
+        (aluno_id,), um_so=True,
+    ) or {}
+    try:
+        saldo_carteira = round(float(_cart.get("saldo") or 0), 2)
+    except (TypeError, ValueError):
+        saldo_carteira = 0.0
+    financeiro = {
+        "atrasadas": int(em_aberto.get("atrasadas") or 0),
+        "proximo_vencimento": em_aberto.get("proximo"),
+        "saldo_carteira": saldo_carteira,
+    }
+
+    # Dia de vencimento vigente: o das cobranças em aberto, que é por onde o
+    # aluno paga hoje. Com tudo pago, vale o da última lançada. Prefill do
+    # modal "alterar vencimento".
+    _dia_venc = _consulta(
+        """SELECT DAY(data_vencimento) AS dia FROM mensalidade_aluno
+           WHERE aluno_id = %s AND status IN ('pendente', 'atrasado')
+           ORDER BY data_vencimento ASC LIMIT 1""",
+        (aluno_id,), um_so=True,
+    ) or _consulta(
+        """SELECT DAY(data_vencimento) AS dia FROM mensalidade_aluno
+           WHERE aluno_id = %s AND status <> 'cancelado'
+           ORDER BY data_vencimento DESC LIMIT 1""",
+        (aluno_id,), um_so=True,
+    ) or {}
+    dia_vencimento_atual = _dia_venc.get("dia")
+
+    # Pacote vigente: o padrão gravado numa troca e, sem ele, o da última
+    # cobrança lançada. Prefill do modal "trocar pacote".
+    _pac = _consulta(
+        """SELECT m.id, m.nome FROM alunos a
+           JOIN mensalidades m ON m.id = a.plano_mensalidade_id
+           WHERE a.id = %s""",
+        (aluno_id,), um_so=True,
+    ) or _consulta(
+        """SELECT m.id, m.nome FROM mensalidade_aluno ma
+           JOIN mensalidades m ON m.id = ma.mensalidade_id
+           WHERE ma.aluno_id = %s AND ma.status <> 'cancelado'
+           ORDER BY ma.data_vencimento DESC, ma.id DESC LIMIT 1""",
+        (aluno_id,), um_so=True,
+    ) or {}
+
+    # --- observações ----------------------------------------------------
+    observacoes = []
+    if (aluno.get("observacoes") or "").strip():
+        observacoes.append({"texto": aluno["observacoes"], "autor": "Cadastro", "data": None})
+    for o in _consulta(
+        """SELECT observacao, responsavel_nome, atualizado_em, data_aula
+           FROM presencas_observacao_aluno
+           WHERE aluno_id = %s AND observacao <> '' ORDER BY data_aula DESC LIMIT 8""",
+        (aluno_id,),
+    ):
+        observacoes.append({
+            "texto": o.get("observacao"),
+            "autor": o.get("responsavel_nome") or "Chamada",
+            "data": o.get("data_aula") or o.get("atualizado_em"),
+        })
+
+    # --- eventos --------------------------------------------------------
+    eventos = _consulta(
+        """SELECT evento, atividade, ambito, local_texto, data_evento
+           FROM aluno_eventos WHERE aluno_id = %s ORDER BY data_evento DESC, ordem""",
+        (aluno_id,),
+    )
+
     cur.close(); db.close()
+
+    def _intervalo(desde):
+        """Tempo decorrido no formato curto usado no topo da ficha (2a 4m)."""
+        if not desde:
+            return None
+        if isinstance(desde, datetime):
+            desde = desde.date()
+        d = relativedelta(hoje, desde)
+        if d.years and d.months:
+            return f"{d.years}a {d.months}m"
+        if d.years:
+            return f"{d.years}a"
+        return f"{d.months}m"
+
+    idade = None
+    if aluno.get("data_nascimento"):
+        nasc = aluno["data_nascimento"]
+        if isinstance(nasc, datetime):
+            nasc = nasc.date()
+        idade = relativedelta(hoje, nasc).years
+
     return render_template(
         "alunos/ficha_aluno.html",
         aluno=aluno, turmas_aluno=turmas_aluno, modalidades_aluno=modalidades_aluno,
+        frequencia=frequencia, presencas_recentes=presencas_recentes,
+        graduacoes=graduacoes, mensalidades=mensalidades, financeiro=financeiro,
+        formas=formas, pode_baixar=pode_baixar, descontos=descontos_ficha,
+        # Planos ativos da academia: alimentam o modal que gera a cobrança sem
+        # sair da ficha.
+        planos_cobranca=_planos_mensalidade_da_academia(aluno.get("id_academia")),
+        # Quantas cobranças ainda estão em aberto: é o que o botão "cancelar
+        # pacote" precisa saber para aparecer e para dizer o que vai cancelar.
+        mensalidades_abertas=sum(
+            1 for m in (mensalidades or [])
+            if (m.get("status") or "") in ("pendente", "atrasado")
+        ),
+        observacoes=observacoes, eventos=eventos,
+        dia_vencimento_atual=dia_vencimento_atual,
+        pacote_atual_id=_pac.get("id"), pacote_atual_nome=_pac.get("nome"),
+        idade=idade, tempo_casa=_intervalo(aluno.get("data_matricula")),
+        mes_ref=mes_ref, ano_ref=ano_ref,
+        mes_label=MESES_FICHA[mes_ref],
+        academia_id=aluno.get("id_academia"),
+        academia={"id": aluno.get("id_academia"), "nome": aluno.get("academia_nome")} if aluno.get("id_academia") else None,
         back_url=back_url,
     )
 
@@ -3367,9 +4028,16 @@ def editar_aluno(aluno_id):
         elif foto_arquivo:
             foto_filename = salvar_arquivo_upload(foto_arquivo, f"aluno_{aluno_id}")
 
-        # Telefone do responsável financeiro é obrigatório (usado nas cobranças online)
+        # Telefone do responsável financeiro é obrigatório também na edição: é o
+        # número usado na cobrança online e no lembrete de WhatsApp. A tela
+        # oferece copiar o telefone do próprio aluno quando houver, para que a
+        # exigência não emperre a correção de cadastros antigos.
         if not responsavel_financeiro_telefone:
-            flash("Informe o telefone do responsável financeiro (usado nas cobranças online).", "danger")
+            flash(
+                "Informe o telefone do responsável financeiro — é o número usado "
+                "na cobrança online e no lembrete de WhatsApp.",
+                "danger",
+            )
             db.close()
             return redirect(
                 url_for("alunos.editar_aluno", aluno_id=aluno_id,
@@ -3575,6 +4243,9 @@ def editar_aluno(aluno_id):
         academias_vinculadas=academias_vinculadas,
         academias_para_vincular=academias_para_vincular,
         pode_vincular_academia=pode_vincular_academia,
+        # Avisa o que falta no cadastro antigo — sem travar o salvamento, senão
+        # nem uma correção de telefone passaria antes de completar tudo.
+        campos_pendentes=campos_pendentes_do_aluno(aluno),
         back_url=back_url,
     )
 

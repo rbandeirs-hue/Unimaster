@@ -395,6 +395,68 @@ def enviar_confirmacao_pagamento(registro_id, tipo="mensalidade_aluno"):
             "mes": venc.strftime("%m/%Y") if venc else "",
         }
         ok, _ = wpp.enviar(academia_id, tel, tpl.render(texto, ctx))
+        try:
+            from utils import whatsapp_log as wlog
+            wlog.registrar(academia_id, "confirmacao_pagamento", "entregue" if ok else "falha",
+                           aluno_id=row.get("aluno_id"), telefone=tel)
+        except Exception:
+            pass
+        return ok
+    except Exception:
+        return False
+
+
+def enviar_confirmacao_matricula(precad_id, valor=None):
+    """Confirma no WhatsApp o pagamento da matrícula de um pré-cadastro.
+
+    Chamada pela baixa da matrícula — vale tanto para o webhook do gateway
+    quanto para a baixa manual da secretaria. Tolerante a falha: o pagamento já
+    está registrado, e não pode ser desfeito porque o WhatsApp não respondeu.
+    """
+    try:
+        from utils import whatsapp_templates as tpl
+        conn = get_db_connection(); cur = conn.cursor(dictionary=True)
+        cur.execute(
+            """SELECT p.id, p.nome, p.telefone, p.tel_celular, p.matricula_valor,
+                      p.responsavel_financeiro_nome, p.academia_id,
+                      ac.nome AS academia_nome
+               FROM pre_cadastro p
+               LEFT JOIN academias ac ON ac.id = p.academia_id
+               WHERE p.id = %s""",
+            (precad_id,),
+        )
+        row = cur.fetchone()
+        cur.close(); conn.close()
+        if not row:
+            return False
+        academia_id = row.get("academia_id")
+        if not academia_id:
+            return False
+        texto, ativo = tpl.obter(academia_id, "confirmacao_matricula")
+        if not ativo:
+            return False
+        # O pré-cadastro não tem telefone do responsável financeiro em coluna
+        # própria; o celular do cadastro é o contato que a secretaria usa.
+        tel = (row.get("tel_celular") or row.get("telefone") or "").strip()
+        if not tel:
+            return False
+        val = valor if valor is not None else row.get("matricula_valor")
+        ctx = {
+            "nome": _PRIMEIRO_NOME(row.get("responsavel_financeiro_nome") or row.get("nome")),
+            "aluno": row.get("nome") or "",
+            "valor": (f"R$ {float(val):.2f}".replace(".", ",")) if val else "",
+            "vencimento": "",
+            "link": "",
+            "academia": row.get("academia_nome") or "",
+            "mes": "",
+        }
+        ok, _ = wpp.enviar(academia_id, tel, tpl.render(texto, ctx))
+        try:
+            from utils import whatsapp_log as wlog
+            wlog.registrar(academia_id, "confirmacao_matricula",
+                           "entregue" if ok else "falha", telefone=tel)
+        except Exception:
+            pass
         return ok
     except Exception:
         return False
@@ -490,11 +552,89 @@ def enviar_aniversariantes(academia_id, somente_ativadas=True, dia=None):
                 _marcar_enviado(conn, cur, academia_id, "aniversario", al["id"], dia)
             else:
                 resumo["falhas"] += 1
+            try:
+                from utils import whatsapp_log as wlog
+                wlog.registrar(academia_id, "aniversario", "entregue" if ok else "falha",
+                               aluno_id=al.get("id"), telefone=tel)
+            except Exception:
+                pass
     except Exception:
         pass
     finally:
         cur.close(); conn.close()
     return resumo
+
+
+def mensagem_aniversario(academia_id, aluno_row=None):
+    """Texto do parabéns como ele sairá — usado na prévia da tela e no envio.
+
+    Sem `aluno_row` devolve o modelo com os placeholders já resolvidos pelos
+    dados da academia, que é o que a tela mostra antes de escolher alguém.
+    """
+    from utils import whatsapp_templates as tpl
+    texto, ativo = tpl.obter(academia_id, "aniversario")
+    conn = get_db_connection(); cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute("SELECT nome FROM academias WHERE id=%s", (academia_id,))
+        nome_acad = (cur.fetchone() or {}).get("nome") or ""
+    finally:
+        cur.close(); conn.close()
+    row = aluno_row or {}
+    ctx = {
+        "nome": _PRIMEIRO_NOME(_destinatario(row)) or "{nome}",
+        "aluno": row.get("nome") or "{aluno}",
+        "academia": nome_acad,
+        "valor": "", "vencimento": "", "link": "", "pix": "",
+        "mes": date.today().strftime("%m/%Y"),
+    }
+    return _limpar_placeholders_vazios(tpl.render(texto, ctx)), ativo
+
+
+def enviar_aniversario_aluno(aluno_id, dia=None, forcar=False):
+    """Parabeniza um aluno pelo WhatsApp — o envio manual feito pela secretaria.
+
+    Diferente de `enviar_aniversariantes` (cron), não exige a automação ligada:
+    quem clicou no botão já decidiu enviar. A trava de duplicidade do dia
+    continua valendo, e `forcar` é o "enviar mesmo assim" de quem já passou.
+
+    Retorna {ok, motivo, telefone} — nunca levanta exceção.
+    """
+    dia = dia or date.today()
+    conn = get_db_connection(); cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute(
+            """SELECT id, id_academia, nome, data_nascimento, telefone, tel_celular,
+                      responsavel_financeiro_nome, responsavel_financeiro_telefone
+               FROM alunos WHERE id=%s AND COALESCE(ativo,1)=1""",
+            (aluno_id,),
+        )
+        al = cur.fetchone()
+        if not al:
+            return {"ok": False, "motivo": "aluno_nao_encontrado"}
+        academia_id = al.get("id_academia")
+        if not academia_id:
+            return {"ok": False, "motivo": "sem_academia"}
+
+        if not forcar and _ja_enviado(cur, academia_id, "aniversario", al["id"], dia):
+            return {"ok": False, "motivo": "ja_enviado_hoje"}
+
+        tel = _telefone(al)
+        if not tel:
+            return {"ok": False, "motivo": "sem_telefone"}
+
+        texto, ativo = mensagem_aniversario(academia_id, al)
+        if not ativo:
+            return {"ok": False, "motivo": "modelo_desativado"}
+
+        ok, detalhe = wpp.enviar(academia_id, tel, texto)
+        if ok:
+            _marcar_enviado(conn, cur, academia_id, "aniversario", al["id"], dia)
+            return {"ok": True, "telefone": tel}
+        return {"ok": False, "motivo": "falha_envio", "detalhe": str(detalhe or "")}
+    except Exception as exc:
+        return {"ok": False, "motivo": "erro", "detalhe": str(exc)}
+    finally:
+        cur.close(); conn.close()
 
 
 def enviar_boas_vindas_aluno(aluno_id):
@@ -538,6 +678,13 @@ def enviar_lote(academia_id, dias_antes=3, somente_ativadas=True, somente_atrasa
     conn = get_db_connection(); cur = conn.cursor(dictionary=True)
     resumo = {"enviados": 0, "falhas": 0, "sem_telefone": 0, "total": 0}
     try:
+        from utils import whatsapp_log as wlog
+    except Exception:
+        wlog = None
+    import uuid
+    lote_id = "lembrete-" + uuid.uuid4().hex[:12]
+    tipo_log = "lembrete_atraso" if somente_atrasadas else "lembrete_vencimento"
+    try:
         acad = _nome_academia(cur, academia_id)
         if somente_ativadas and not acad.get("whatsapp_lembrete_mensalidade"):
             resumo["motivo"] = "automacao_desligada"
@@ -549,6 +696,8 @@ def enviar_lote(academia_id, dias_antes=3, somente_ativadas=True, somente_atrasa
             tel = _telefone(row)
             if not tel:
                 resumo["sem_telefone"] += 1
+                if wlog:
+                    wlog.registrar(academia_id, tipo_log, "sem_numero", aluno_id=row.get("aluno_id"), lote_id=lote_id)
                 continue
             texto = montar_mensagem(row, nome_acad, academia_id)
             if texto is None:
@@ -556,6 +705,9 @@ def enviar_lote(academia_id, dias_antes=3, somente_ativadas=True, somente_atrasa
                 continue
             ok, _ = wpp.enviar(academia_id, tel, texto)
             resumo["enviados" if ok else "falhas"] += 1
+            if wlog:
+                wlog.registrar(academia_id, tipo_log, "entregue" if ok else "falha",
+                               aluno_id=row.get("aluno_id"), telefone=tel, lote_id=lote_id)
     finally:
         cur.close(); conn.close()
     return resumo

@@ -1,69 +1,749 @@
-{% extends "base.html" %}
+{% extends "base_academia.html" %}
+{% from 'components/_modal_baixa.html' import modal_baixa with context %}
+{% set menu_ativo = 'alunos' %}
 {% block title %}Ficha de {{ aluno.nome }}{% endblock %}
+
+{% block cabecalho %}{% endblock %}
+
+{% block extra_css %}
+{# listas.css e financeiro.css entram pelo modal de baixa (.fin-modal, .lst-*). #}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/base/listas.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/painel/financeiro.css') }}">
+{% endblock %}
+
 {% block content %}
-<div class="container my-4" style="max-width: 820px;">
-  <div class="mb-3">
-    <a href="{{ back_url }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Voltar</a>
+<style>
+  /* ------------------------------------------------------------- topo */
+  .fa-voltar { margin-bottom: 1.5rem; }
+
+  .fa-topo {
+    display: flex; align-items: flex-start; gap: 1.25rem;
+    flex-wrap: wrap;
+    margin-bottom: var(--u-space-3);
+  }
+  .fa-avatar {
+    width: 72px; height: 72px; flex: 0 0 72px;
+    display: grid; place-items: center;
+    border-radius: var(--u-radius-sm);
+    background: var(--sh-ink);
+    color: #fff;
+    font-size: 1.35rem; font-weight: 700; letter-spacing: .03em;
+    object-fit: cover;
+  }
+  .fa-identidade { flex: 1 1 260px; min-width: 0; }
+  .fa-nome { font-size: 1.9rem; font-weight: 600; letter-spacing: -.02em; margin: 0 0 .45rem; }
+  .fa-linha { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem; color: var(--sh-ink-soft); font-size: .92rem; }
+  .fa-linha .fa-sep { color: #cfcbc4; }
+  .fa-selo {
+    display: inline-flex; align-items: center; gap: .4rem;
+    padding: .2rem .6rem;
+    border-radius: var(--u-radius-pill);
+    border: 1px solid var(--sh-line);
+    background: #fff;
+    color: var(--sh-ink);
+    font-size: .82rem; font-weight: 600;
+  }
+  .fa-selo i { width: 8px; height: 8px; border-radius: 2px; background: #17803d; display: inline-block; }
+  .fa-selo--inativo i { background: var(--sh-ink-soft); }
+
+  /* ---------------------------------------------------------- indicadores */
+  .fa-nota { display: block; margin-top: .3rem; color: var(--sh-ink-soft); font-size: .82rem; }
+  .fa-verde { color: #17803d; }
+  .fa-vermelho { color: var(--sh-red); }
+
+  /* ---------------------------------------------------------------- abas */
+  .fa-abas { display: flex; gap: 1.6rem; border-bottom: 1px solid var(--sh-line); margin: 2rem 0 var(--u-space-3); }
+  .fa-aba {
+    padding: .7rem 0 .8rem;
+    border: 0; background: none;
+    border-bottom: 2px solid transparent;
+    color: var(--sh-ink-soft);
+    font-size: .98rem;
+    cursor: pointer;
+  }
+  .fa-aba:hover { color: var(--sh-ink); }
+  .fa-aba.is-ativa { color: var(--sh-ink); border-bottom-color: var(--sh-red); font-weight: 600; }
+  .fa-painel[hidden] { display: none; }
+
+  /* -------------------------------------------------------------- blocos */
+  .fa-colunas { display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: var(--u-space-3); align-items: start; }
+  @media (max-width: 1199.98px) { .fa-colunas { grid-template-columns: 1fr; } }
+
+  .fa-bloco {
+    background: #fff;
+    border: 1px solid var(--sh-line);
+    border-radius: var(--u-radius);
+    margin-bottom: var(--u-space-3);
+    overflow: hidden;
+  }
+  .fa-bloco-topo {
+    display: flex; align-items: center; justify-content: space-between; gap: .6rem;
+    padding: .9rem 1.25rem;
+    border-bottom: 1px solid var(--sh-line);
+  }
+  .fa-bloco-titulo {
+    color: var(--sh-ink-soft);
+    font-size: .68rem; font-weight: 600;
+    letter-spacing: .14em; text-transform: uppercase;
+  }
+  .fa-bloco-link { color: var(--sh-red); font-size: .88rem; text-decoration: none; }
+  .fa-bloco-link:hover { color: #c40018; text-decoration: underline; }
+  .fa-bloco-corpo { padding: .35rem 1.25rem 1.1rem; }
+
+  /* O histórico financeiro cresce um mês por vez e empurrava a coluna lateral
+     muito abaixo do resto da ficha. Com altura máxima ele rola dentro do
+     próprio bloco e o "Ver todas" continua visível logo abaixo. */
+  .fa-rolagem {
+    max-height: 21rem;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: #cfcdc8 transparent;
+  }
+  .fa-rolagem::-webkit-scrollbar { width: 8px; }
+  .fa-rolagem::-webkit-scrollbar-track { background: transparent; }
+  .fa-rolagem::-webkit-scrollbar-thumb {
+    background: #cfcdc8;
+    border-radius: 99px;
+    border: 2px solid #fff;
+  }
+  .fa-rolagem::-webkit-scrollbar-thumb:hover { background: #b4b1ab; }
+
+  /* Impressão e telas estreitas: sem altura fixa, a lista sai inteira. */
+  @media (max-width: 991.98px) { .fa-rolagem { max-height: none; } }
+
+  /* Pares rótulo/valor em duas colunas, com régua entre as linhas. */
+  .fa-dados { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 2rem; }
+  @media (max-width: 575.98px) { .fa-dados { grid-template-columns: 1fr; } }
+  .fa-dado { padding: .75rem 0; border-bottom: 1px solid var(--sh-line); min-width: 0; }
+  .fa-dado-rotulo { display: block; color: var(--sh-ink-soft); font-size: .84rem; }
+  .fa-dado-valor { display: block; margin-top: .15rem; font-size: .98rem; overflow-wrap: anywhere; }
+
+  /* -------------------------------------------------------- graduações */
+  .fa-grad { display: flex; align-items: center; gap: .9rem; padding: .75rem 0; border-bottom: 1px solid var(--sh-line); }
+  .fa-grad:last-child { border-bottom: 0; }
+  .fa-faixa {
+    width: 46px; height: 12px; flex: 0 0 46px;
+    border-radius: 3px;
+    border: 1px solid rgba(0, 0, 0, .12);
+    background: var(--fa-cor, #e6e4e0);
+  }
+  .fa-grad-nome { flex: 1; min-width: 0; }
+  .fa-grad-data { color: var(--sh-ink-soft); font-size: .9rem; white-space: nowrap; }
+  .fa-grad-origem { color: var(--sh-text-faint, #a5a29c); font-size: .88rem; white-space: nowrap; }
+
+  /* ------------------------------------------------------- frequência */
+  .fa-freq-num { display: flex; align-items: baseline; gap: .6rem; margin: .3rem 0 1rem; }
+  .fa-freq-valor { font-size: 2.4rem; font-weight: 600; line-height: 1; }
+  .fa-freq-det { color: var(--sh-ink-soft); font-size: .95rem; }
+  .fa-dias { display: flex; flex-wrap: wrap; gap: .4rem; }
+  .fa-dia {
+    width: 38px; height: 34px;
+    display: grid; place-items: center;
+    border-radius: var(--u-radius-sm);
+    font-size: .84rem; font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .fa-dia--presente { background: #17803d; color: #fff; }
+  .fa-dia--falta { background: #fdeef0; color: var(--sh-red); border: 1px solid #f6c9d0; }
+
+  /* -------------------------------------------------------- financeiro */
+  .fa-linha-item {
+    display: flex; align-items: center; justify-content: space-between; gap: .8rem;
+    padding: .8rem 0;
+    border-bottom: 1px solid var(--sh-line);
+  }
+  .fa-linha-item:last-child { border-bottom: 0; }
+  .fa-item-titulo { font-size: .98rem; }
+  .fa-item-sub { display: block; color: var(--sh-ink-soft); font-size: .86rem; margin-top: .1rem; }
+  .fa-valor { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .fa-tag {
+    padding: .15rem .55rem;
+    border-radius: var(--u-radius-sm);
+    font-size: .72rem; font-weight: 700;
+    letter-spacing: .04em; text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .fa-tag--pago { background: #e8f6ed; color: #17803d; }
+  .fa-tag--atraso { background: #fdeef0; color: var(--sh-red); }
+  .fa-tag--pendente { background: #fdf3e3; color: #b45309; }
+
+  /* ------------------------------------------------------- observações */
+  .fa-obs { padding: .85rem 0; border-bottom: 1px solid var(--sh-line); }
+  .fa-obs:last-child { border-bottom: 0; }
+  .fa-obs-meta { display: block; margin-top: .25rem; color: var(--sh-ink-soft); font-size: .86rem; }
+
+  .fa-vazio { padding: 1.4rem 0; color: var(--sh-ink-soft); font-size: .92rem; }
+
+  @media (max-width: 767.98px) {
+    .fa-nome { font-size: 1.45rem; }
+    .fa-avatar { width: 56px; height: 56px; flex-basis: 56px; font-size: 1.1rem; }
+    .fa-acoes { width: 100%; }
+    .fa-acoes .sh__btn { flex: 1; justify-content: center; }
+    /* As quatro abas correm na horizontal em vez de quebrar linha. */
+    .fa-abas { gap: 1.2rem; overflow-x: auto; scrollbar-width: none; }
+    .fa-abas::-webkit-scrollbar { display: none; }
+    .fa-aba { white-space: nowrap; }
+    .fa-bloco-corpo { padding: .35rem 1rem 1rem; }
+    .fa-bloco-topo { padding: .9rem 1rem; }
+    .fa-painel-acoes { padding: 0 1rem 1rem; }
+  }
+
+  /* Impressão: sai só a ficha, sem lateral, topo nem botões. */
+  @media print {
+    .sh__side, .sh__top, .fa-voltar, .fa-acoes, .fa-abas, .fa-bloco-link { display: none !important; }
+    .sh__main { margin-left: 0; }
+    .sh__conteudo { padding: 0; }
+    .fa-painel[hidden] { display: block !important; }
+    .fa-colunas { grid-template-columns: 1fr; }
+    .fa-bloco { break-inside: avoid; }
+    .fa-rolagem { max-height: none; overflow: visible; }
+  }
+</style>
+
+{% set partes = (aluno.nome or '?').split() %}
+{% set iniciais = partes[0][0] ~ (partes[-1][0] if partes|length > 1 else '') %}
+
+{% macro rotulo(texto, valor) %}
+  {% if valor %}
+  <div class="fa-dado">
+    <span class="fa-dado-rotulo">{{ texto }}</span>
+    <span class="fa-dado-valor">{{ valor }}</span>
+  </div>
+  {% endif %}
+{% endmacro %}
+
+{# Cor da faixa para a barrinha do histórico de graduações. #}
+{% set cores_faixa = {
+  'branca': '#ffffff', 'cinza': '#9ca3af', 'azul': '#2563eb', 'amarela': '#facc15',
+  'laranja': '#ea580c', 'verde': '#16a34a', 'roxa': '#7c3aed', 'marrom': '#78350f',
+  'preta': '#111111', 'vermelha': '#b91c1c'
+} %}
+{% macro cor_da_faixa(nome) %}
+  {%- set n = (nome or '')|lower -%}
+  {%- set ns = namespace(cor='#e6e4e0') -%}
+  {%- for chave, cor in cores_faixa.items() -%}
+    {%- if chave in n and ns.cor == '#e6e4e0' -%}{% set ns.cor = cor %}{%- endif -%}
+  {%- endfor -%}
+  {{- ns.cor -}}
+{% endmacro %}
+
+<div class="fa-voltar">
+  {# O rótulo acompanha o destino: quem chegou pelo histórico não volta "para Alunos". #}
+  <a href="{{ back_url }}" class="sh__btn">
+    <i class="bi bi-arrow-left"></i>
+    {{ 'Voltar para Alunos' if 'lista_alunos' in back_url else 'Voltar' }}
+  </a>
+</div>
+
+<div class="fa-topo">
+  {% if aluno.foto %}
+  <img src="{{ url_for('static', filename='uploads/' ~ aluno.foto) }}" alt="" class="fa-avatar">
+  {% else %}
+  <span class="fa-avatar">{{ iniciais }}</span>
+  {% endif %}
+
+  <div class="fa-identidade">
+    <h1 class="fa-nome">{{ aluno.nome }}</h1>
+    <div class="fa-linha">
+      {% if aluno.ativo %}
+      <span class="fa-selo"><i></i>{{ 'Ativa' if aluno.sexo == 'F' else 'Ativo' }}</span>
+      {% else %}
+      <span class="fa-selo fa-selo--inativo"><i></i>{{ 'Inativa' if aluno.sexo == 'F' else 'Inativo' }}</span>
+      {% endif %}
+      <span class="fa-sep">·</span>
+      <span>Matrícula {{ '%04d'|format(aluno.id) }}</span>
+      {% if idade is not none %}<span class="fa-sep">·</span><span>{{ idade }} anos</span>{% endif %}
+      {# Separador junto do texto: solto, ele sobrava sozinho numa linha quando
+         a turma quebrava no celular. #}
+      {% for t in turmas_aluno %}
+      <span class="fa-turma-item"><span class="fa-sep">·</span> {{ t.nome }}{% if t.DiasHorario %} · {{ t.DiasHorario }}{% endif %}</span>
+      {% endfor %}
+    </div>
   </div>
 
-  <div class="card border-0 shadow-sm">
-    <div class="card-body p-4">
-      <div class="d-flex align-items-center gap-3 flex-wrap mb-3">
-        {% if aluno.foto %}
-        <img src="{{ url_for('static', filename='uploads/' + aluno.foto) }}" alt="" style="width:84px;height:84px;border-radius:50%;object-fit:cover;border:3px solid #e9ecef;">
-        {% else %}
-        <div style="width:84px;height:84px;border-radius:50%;background:#eef2f9;color:#9aa6b8;display:flex;align-items:center;justify-content:center;"><i class="bi bi-person-fill" style="font-size:2.2rem;"></i></div>
-        {% endif %}
-        <div>
-          <h4 class="fw-bold mb-1">{{ aluno.nome }}</h4>
-          <div class="d-flex flex-wrap gap-1">
-            {% if aluno.faixa %}<span class="badge bg-dark">{{ aluno.faixa }}{% if aluno.graduacao %} · {{ aluno.graduacao }}{% endif %}</span>{% endif %}
-            {% if aluno.ativo %}<span class="badge bg-success">Ativo</span>{% else %}<span class="badge bg-secondary">Inativo</span>{% endif %}
-            {% if aluno.academia_nome %}<span class="badge bg-primary-subtle text-primary">{{ aluno.academia_nome }}</span>{% endif %}
+  <div class="sh__acoes fa-acoes">
+    {# O documento impresso da ficha é a folha de presença do mês. #}
+    <a class="sh__btn" target="_blank" rel="noopener"
+       href="{{ url_for('presencas.relatorio_presenca_aluno', aluno_id=aluno.id, mes=mes_ref, ano=ano_ref, voltar=request.full_path) }}">
+      <i class="bi bi-printer"></i> Imprimir ficha
+    </a>
+    <a href="{{ url_for('alunos.editar_aluno', aluno_id=aluno.id, next=request.full_path) }}" class="sh__btn sh__btn--forte">
+      <i class="bi bi-pencil"></i> Editar cadastro
+    </a>
+  </div>
+</div>
+
+{# ------------------------------------------------------------- números #}
+<div class="sh__faixa">
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Frequência ({{ mes_label }})</span>
+    {% if frequencia.percentual is not none %}
+    <span class="sh__faixa-valor {% if frequencia.percentual >= 70 %}fa-verde{% elif frequencia.percentual < 60 %}fa-vermelho{% endif %}">{{ frequencia.percentual }}%</span>
+    <span class="fa-nota">{{ frequencia.presencas }} de {{ frequencia.aulas }} aulas</span>
+    {% else %}
+    <span class="sh__faixa-valor">—</span>
+    <span class="fa-nota">sem chamada no mês</span>
+    {% endif %}
+  </div>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Graduação</span>
+    <span class="sh__faixa-valor" style="font-size: 1.4rem;">{{ (aluno.faixa or '—')|capitalize }}</span>
+    <span class="fa-nota">
+      {%- if aluno.ultimo_exame_faixa %}desde {{ aluno.ultimo_exame_faixa.strftime('%d/%m/%Y') }}
+      {%- elif aluno.graduacao %}{{ aluno.graduacao }}{% else %}sem exame registrado{% endif -%}
+    </span>
+  </div>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Mensalidade</span>
+    {% if financeiro.atrasadas %}
+    <span class="sh__faixa-valor fa-vermelho" style="font-size: 1.4rem;">{{ financeiro.atrasadas }} em atraso</span>
+    {% else %}
+    <span class="sh__faixa-valor fa-verde" style="font-size: 1.4rem;">Em dia</span>
+    {% endif %}
+    <span class="fa-nota">
+      {%- if financeiro.proximo_vencimento %}próx. vencimento {{ financeiro.proximo_vencimento.strftime('%d/%m') }}
+      {%- else %}nenhuma em aberto{% endif -%}
+    </span>
+  </div>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Tempo de casa</span>
+    <span class="sh__faixa-valor" style="font-size: 1.4rem;">{{ tempo_casa or '—' }}</span>
+    <span class="fa-nota">
+      {%- if aluno.data_matricula %}matriculad{{ 'a' if aluno.sexo == 'F' else 'o' }} em {{ aluno.data_matricula.strftime('%d/%m/%Y') }}
+      {%- else %}sem data de matrícula{% endif -%}
+    </span>
+  </div>
+</div>
+
+{# ---------------------------------------------------------------- abas #}
+<div class="fa-abas" role="tablist">
+  <button type="button" class="fa-aba is-ativa" data-painel="dados">Dados</button>
+  <button type="button" class="fa-aba" data-painel="presenca">Presença</button>
+  <button type="button" class="fa-aba" data-painel="financeiro">Financeiro</button>
+  <button type="button" class="fa-aba" data-painel="eventos">Eventos</button>
+</div>
+
+{# ------------------------------------------------------------ 1. dados #}
+<div class="fa-painel" id="painel-dados">
+  <div class="fa-colunas">
+    <div>
+      <section class="fa-bloco">
+        <div class="fa-bloco-topo"><span class="fa-bloco-titulo">Dados pessoais</span></div>
+        <div class="fa-bloco-corpo">
+          <div class="fa-dados">
+            {{ rotulo('Nome completo', aluno.nome) }}
+            {{ rotulo('Data de nascimento', (aluno.data_nascimento.strftime('%d/%m/%Y') ~ (' (' ~ idade ~ ' anos)' if idade is not none else '')) if aluno.data_nascimento else None) }}
+            {{ rotulo('CPF', aluno.cpf) }}
+            {{ rotulo('Sexo', {'M': 'Masculino', 'F': 'Feminino', 'O': 'Outro'}.get(aluno.sexo)) }}
+            {{ rotulo('Academia', aluno.academia_nome) }}
+            {{ rotulo('Modalidade', modalidades_aluno|join(' · ') if modalidades_aluno else None) }}
+            {{ rotulo('Turma', turmas_aluno|map(attribute='nome')|join(' · ') if turmas_aluno else None) }}
+            {{ rotulo('Matrícula', '%04d'|format(aluno.id) ~ (' · desde ' ~ aluno.data_matricula.strftime('%d/%m/%Y') if aluno.data_matricula else '')) }}
+            {{ rotulo('Associação', aluno.associacao_nome) }}
+            {{ rotulo('Federação', aluno.federacao_nome) }}
           </div>
         </div>
-      </div>
+      </section>
 
-      <hr>
-      <div class="row g-3">
-        {% macro item(label, valor) %}
-          {% if valor %}<div class="col-sm-6"><div class="text-muted small text-uppercase" style="letter-spacing:.03em;">{{ label }}</div><div class="fw-semibold">{{ valor }}</div></div>{% endif %}
-        {% endmacro %}
+      <section class="fa-bloco">
+        <div class="fa-bloco-topo"><span class="fa-bloco-titulo">Responsável e contato</span></div>
+        <div class="fa-bloco-corpo">
+          <div class="fa-dados">
+            {{ rotulo('Responsável', (aluno.responsavel_nome ~ (' (' ~ aluno.responsavel_parentesco ~ ')' if aluno.responsavel_parentesco else '')) if aluno.responsavel_nome else None) }}
+            {{ rotulo('Telefone', aluno.tel_celular or aluno.telefone or aluno.tel_residencial) }}
+            {{ rotulo('E-mail', aluno.email) }}
+            {{ rotulo('Endereço', ((aluno.rua ~ (', ' ~ aluno.numero if aluno.numero else '') ~ (' — ' ~ aluno.bairro if aluno.bairro else '')) if aluno.rua else None)) }}
+            {{ rotulo('Cidade / UF', (aluno.cidade ~ (' / ' ~ aluno.estado if aluno.estado else '')) if aluno.cidade else None) }}
+            {{ rotulo('CEP', aluno.cep) }}
+            {{ rotulo('Responsável financeiro', aluno.responsavel_financeiro_nome) }}
+            {{ rotulo('Telefone do financeiro', aluno.responsavel_financeiro_telefone) }}
+          </div>
+        </div>
+      </section>
 
-        {{ item('CPF', aluno.cpf) }}
-        {{ item('Data de nascimento', aluno.data_nascimento|data_br if aluno.data_nascimento and aluno.data_nascimento|data_br else aluno.data_nascimento) }}
-        {{ item('Sexo', {'M':'Masculino','F':'Feminino','O':'Outro'}.get(aluno.sexo, aluno.sexo)) }}
-        {{ item('Telefone', aluno.tel_celular or aluno.telefone) }}
-        {{ item('E-mail', aluno.email) }}
-        {{ item('Data de matrícula', aluno.data_matricula|data_br if aluno.data_matricula and aluno.data_matricula|data_br else aluno.data_matricula) }}
-        {{ item('Associação', aluno.associacao_nome) }}
-        {{ item('Federação', aluno.federacao_nome) }}
-        {{ item('Responsável financeiro', aluno.responsavel_financeiro_nome) }}
-        {{ item('Endereço', (aluno.rua ~ (', ' ~ aluno.numero if aluno.numero else '')) if aluno.rua else None) }}
-        {{ item('Bairro', aluno.bairro) }}
-        {{ item('Cidade', (aluno.cidade ~ (' - ' ~ aluno.estado if aluno.estado else '')) if aluno.cidade else None) }}
-      </div>
+      <section class="fa-bloco">
+        <div class="fa-bloco-topo">
+          <span class="fa-bloco-titulo">Graduações</span>
+          <a class="fa-bloco-link" href="{{ url_for('alunos.editar_aluno', aluno_id=aluno.id, next=request.full_path) }}">Registrar graduação</a>
+        </div>
+        <div class="fa-bloco-corpo">
+          {% if graduacoes %}
+            {% for g in graduacoes %}
+            <div class="fa-grad">
+              <span class="fa-faixa" style="--fa-cor: {{ cor_da_faixa(g.faixa)|trim }};"></span>
+              <span class="fa-grad-nome">Faixa {{ (g.faixa or '—')|lower }}</span>
+              <span class="fa-grad-data">{{ g.data.strftime('%d/%m/%Y') if g.data else '—' }}</span>
+              <span class="fa-grad-origem">{{ g.origem }}</span>
+            </div>
+            {% endfor %}
+          {% else %}
+          <div class="fa-vazio">Nenhuma graduação registrada.</div>
+          {% endif %}
+        </div>
+      </section>
+    </div>
 
-      {% if modalidades_aluno %}
-      <hr>
-      <div class="text-muted small text-uppercase mb-1">Modalidades</div>
-      <div class="d-flex flex-wrap gap-1">{% for m in modalidades_aluno %}<span class="badge bg-info-subtle text-info-emphasis">{{ m }}</span>{% endfor %}</div>
-      {% endif %}
+    <div>
+      <section class="fa-bloco">
+        <div class="fa-bloco-topo"><span class="fa-bloco-titulo">Frequência · {{ mes_label }}</span></div>
+        <div class="fa-bloco-corpo">
+          {% if frequencia.aulas %}
+          <div class="fa-freq-num">
+            <span class="fa-freq-valor {% if frequencia.percentual >= 70 %}fa-verde{% elif frequencia.percentual < 60 %}fa-vermelho{% endif %}">{{ frequencia.percentual }}%</span>
+            <span class="fa-freq-det">{{ frequencia.presencas }} de {{ frequencia.aulas }} aulas</span>
+          </div>
+          <div class="fa-dias">
+            {% for d in frequencia.dias %}
+            <span class="fa-dia {{ 'fa-dia--presente' if d.presente else 'fa-dia--falta' }}" title="{{ d.data }} — {{ 'presente' if d.presente else 'falta' }}">{{ d.dia }}</span>
+            {% endfor %}
+          </div>
+          {% else %}
+          <div class="fa-vazio">Nenhuma chamada registrada em {{ mes_label }}.</div>
+          {% endif %}
+        </div>
+        <div class="fa-bloco-topo" style="border-bottom: 0; border-top: 1px solid var(--sh-line);">
+          <a class="fa-bloco-link" href="{{ url_for('presencas.relatorio_presenca_aluno', aluno_id=aluno.id, mes=0, ano=ano_ref, voltar=request.full_path) }}">Ver histórico completo →</a>
+        </div>
+      </section>
 
-      {% if turmas_aluno %}
-      <hr>
-      <div class="text-muted small text-uppercase mb-1">Turmas</div>
-      <ul class="mb-0">
-        {% for t in turmas_aluno %}<li>{{ t.nome }}{% if t.DiasHorario %} <span class="text-muted">— {{ t.DiasHorario }}</span>{% endif %}</li>{% endfor %}
-      </ul>
-      {% endif %}
+      <section class="fa-bloco">
+        <div class="fa-bloco-topo"><span class="fa-bloco-titulo">Financeiro</span></div>
+        {% if financeiro.saldo_carteira and financeiro.saldo_carteira > 0 %}
+        <div style="display:flex; flex-wrap:wrap; align-items:center; gap:.35rem .55rem; margin:.6rem .9rem 0; padding:.55rem .8rem;
+                    background:#ecfdf5; border:1px solid #a7f3d0; border-radius:10px; color:#047857; font-size:.86rem;">
+          <span style="font-size:1.05rem;">💳</span>
+          <span>Crédito em carteira:
+            <strong>R$ {{ '%.2f'|format(financeiro.saldo_carteira)|replace('.', ',') }}</strong>
+          </span>
+          <span style="color:#059669; opacity:.8;">— pode ser usado para quitar mensalidades</span>
+        </div>
+        {% endif %}
+        <div class="fa-bloco-corpo fa-rolagem">
+          {% if mensalidades %}
+            {% for m in mensalidades %}
+            <div class="fa-linha-item">
+              <div>
+                <span class="fa-item-titulo">{{ m.data_vencimento.strftime('%m/%Y') if m.data_vencimento else '—' }}</span>
+                <span class="fa-item-sub">
+                  {%- if m.data_pagamento %}pago em {{ m.data_pagamento.strftime('%d/%m') }}
+                  {%- elif m.data_vencimento %}vence em {{ m.data_vencimento.strftime('%d/%m') }}{% endif -%}
+                  {%- if m.status != 'pago' and m.tem_juros %} · +R$ {{ '%.2f'|format((m.multa_val or 0) + (m.juros_val or 0))|replace('.', ',') }} juros/multa{% endif -%}
+                </span>
+              </div>
+              <span class="fa-valor">R$ {{ '%.2f'|format(m.valor_pago or (m.valor_com_juros if m.status != 'pago' else m.valor) or m.valor or 0)|replace('.', ',') }}</span>
+              {% if m.status == 'pago' %}<span class="fa-tag fa-tag--pago">Pago</span>
+              {% elif m.status == 'atrasado' %}<span class="fa-tag fa-tag--atraso">Atraso</span>
+              {% else %}<span class="fa-tag fa-tag--pendente">Pendente</span>{% endif %}
+              {% if m.status == 'pago' and pode_baixar %}
+              {# Desfazer a baixa aqui também: este é o bloco que aparece na aba
+                 Dados, e era o único lugar do sistema que mostrava a mensalidade
+                 paga sem oferecer como corrigir. #}
+              <form method="POST" action="{{ url_for('financeiro.cancelar_pagamento') }}" style="display:inline"
+                    onsubmit="return confirm({% if m.pago_auto %}'Cancelar o pagamento desta mensalidade? Como foi confirmado automaticamente pelo gateway, o valor vira crédito na carteira do aluno para quitar outras mensalidades.'{% else %}'Cancelar o pagamento desta mensalidade? Ela volta para pendente e a receita é cancelada. Depois você pode registrar de novo com os dados corretos.'{% endif %});">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="tipo" value="mensalidade_aluno">
+                <input type="hidden" name="registro_id" value="{{ m.id }}">
+                <input type="hidden" name="next" value="{{ request.full_path }}">
+                <button type="submit" class="sh__btn" style="padding:.3rem .65rem; font-size:.82rem"
+                        title="Cancelar pagamento de {{ m.data_vencimento.strftime('%m/%Y') if m.data_vencimento else 'mensalidade' }}"
+                        aria-label="Cancelar pagamento">
+                  <i class="bi bi-arrow-counterclockwise"></i>
+                </button>
+              </form>
+              {% endif %}
+              {% if m.status != 'pago' and pode_baixar %}
+              <button type="button" class="sh__btn js-fin-open-modal-pagamento-financeiro" style="padding:.3rem .65rem; font-size:.82rem"
+                      data-post-url="{{ url_for('financeiro.registrar_pagamento') }}" data-fluxo="registrar"
+                      data-registro-id="{{ m.id }}"
+                      data-competencia="{% if m.data_vencimento %}{{ '%02d/%04d'|format(m.data_vencimento.month, m.data_vencimento.year) }}{% endif %}"
+                      data-saldo-carteira="{{ '%.2f'|format(financeiro.saldo_carteira or 0) }}"
+                      data-vencimento="{{ m.data_vencimento.strftime('%Y-%m-%d') if m.data_vencimento else '' }}"
+                      data-plano-id="{{ m.mensalidade_id or '' }}"
+                      data-valor-total="{{ '%.2f'|format(m.valor or 0) }}">Registrar</button>
+              {% endif %}
+            </div>
+            {% endfor %}
+          {% else %}
+          <div class="fa-vazio">Nenhuma mensalidade lançada.</div>
+          {% endif %}
+        </div>
+        <div class="fa-bloco-topo" style="border-bottom: 0; border-top: 1px solid var(--sh-line);">
+          <a class="fa-bloco-link" href="{{ url_for('financeiro.mensalidades_alunos', academia_id=academia_id, aluno_id=aluno.id) }}">Ver todas as mensalidades →</a>
+        </div>
+      </section>
 
-      {% if aluno.observacoes %}
-      <hr>
-      <div class="text-muted small text-uppercase mb-1">Observações</div>
-      <div>{{ aluno.observacoes }}</div>
-      {% endif %}
+      <section class="fa-bloco">
+        <div class="fa-bloco-topo">
+          <span class="fa-bloco-titulo">Observações</span>
+          <a class="fa-bloco-link" href="{{ url_for('alunos.editar_aluno', aluno_id=aluno.id, next=request.full_path) }}">Adicionar</a>
+        </div>
+        <div class="fa-bloco-corpo">
+          {% if observacoes %}
+            {% for o in observacoes %}
+            <div class="fa-obs">
+              {{ o.texto }}
+              <span class="fa-obs-meta">{{ o.autor }}{% if o.data %} · {{ o.data.strftime('%d/%m/%Y') }}{% endif %}</span>
+            </div>
+            {% endfor %}
+          {% else %}
+          <div class="fa-vazio">Nenhuma observação registrada.</div>
+          {% endif %}
+        </div>
+      </section>
     </div>
   </div>
 </div>
+
+{# --------------------------------------------------------- 2. presença #}
+<div class="fa-painel" id="painel-presenca" hidden>
+  <section class="fa-bloco">
+    <div class="fa-bloco-topo">
+      <span class="fa-bloco-titulo">Últimas chamadas</span>
+      <a class="fa-bloco-link" href="{{ url_for('presencas.relatorio_presenca_aluno', aluno_id=aluno.id, mes=0, ano=ano_ref, voltar=request.full_path) }}">Ver histórico completo →</a>
+    </div>
+    <div class="fa-bloco-corpo">
+      {% if presencas_recentes %}
+        {% for p in presencas_recentes %}
+        <div class="fa-linha-item">
+          <div>
+            <span class="fa-item-titulo">{{ p.data_presenca.strftime('%d/%m/%Y') if p.data_presenca else '—' }}</span>
+            <span class="fa-item-sub">{{ p.turma_nome or 'Turma não informada' }}</span>
+          </div>
+          {% if p.presente == 1 %}<span class="fa-tag fa-tag--pago">Presente</span>
+          {% else %}<span class="fa-tag fa-tag--atraso">Falta</span>{% endif %}
+        </div>
+        {% endfor %}
+      {% else %}
+      <div class="fa-vazio">Nenhuma chamada registrada para este aluno.</div>
+      {% endif %}
+    </div>
+  </section>
+</div>
+
+{# ------------------------------------------------------- 3. financeiro #}
+<div class="fa-painel" id="painel-financeiro" hidden>
+  <section class="fa-bloco">
+    <div class="fa-bloco-topo">
+      <span class="fa-bloco-titulo">Mensalidades</span>
+      <span style="display:flex; gap:.5rem; align-items:center; margin-left:auto">
+        {% if pode_baixar %}
+        {# Mesma tela de sempre, já apontando para este aluno e voltando para cá. #}
+        <button type="button" class="sh__btn sh__btn--forte" style="padding:.3rem .7rem; font-size:.82rem"
+                data-bs-toggle="modal" data-bs-target="#modalNovaCobranca">
+          <i class="bi bi-plus-lg"></i> Gerar cobrança
+        </button>
+        {% if mensalidades_abertas %}
+        <button type="button" class="sh__btn" style="padding:.3rem .7rem; font-size:.82rem"
+                onclick="document.getElementById('formCancelarPacote').requestSubmit()">
+          <i class="bi bi-x-circle"></i> Cancelar pacote
+        </button>
+        {% endif %}
+        <button type="button" class="sh__btn" style="padding:.3rem .7rem; font-size:.82rem"
+                data-bs-toggle="modal" data-bs-target="#modalAlterarVencimento{{ aluno.id }}"
+                title="Mudar o dia de vencimento das mensalidades deste aluno">
+          <i class="bi bi-calendar-event"></i> Alterar vencimento
+        </button>
+        {% if planos_cobranca and planos_cobranca|length > 1 %}
+        <button type="button" class="sh__btn" style="padding:.3rem .7rem; font-size:.82rem"
+                data-bs-toggle="modal" data-bs-target="#modalTrocarPacote{{ aluno.id }}"
+                title="Trocar o plano de mensalidade deste aluno">
+          <i class="bi bi-arrow-left-right"></i> Trocar pacote
+        </button>
+        {% endif %}
+        {% endif %}
+        <a class="fa-bloco-link"
+           href="{{ url_for('financeiro.mensalidades_alunos', academia_id=academia_id, aluno_id=aluno.id) }}">Ver todas →</a>
+      </span>
+    </div>
+    {% if pode_baixar and mensalidades_abertas %}
+    {# Libera o aluno para outro pacote: cancela só o que está em aberto. #}
+    <form method="POST" id="formCancelarPacote" style="display:none"
+          action="{{ url_for('financeiro.cancelar_pacote_aluno', aluno_id=aluno.id) }}"
+          onsubmit="return confirm('Cancelar as {{ mensalidades_abertas }} cobranças em aberto deste aluno? As já pagas não são afetadas.')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="voltar" value="{{ request.full_path }}">
+    </form>
+    {% endif %}
+    <div class="fa-bloco-corpo">
+      {% if mensalidades %}
+        {% for m in mensalidades %}
+        <div class="fa-linha-item">
+          <div>
+            <span class="fa-item-titulo">Vencimento {{ m.data_vencimento.strftime('%d/%m/%Y') if m.data_vencimento else '—' }}</span>
+            <span class="fa-item-sub">
+              {%- if m.data_pagamento %}pago em {{ m.data_pagamento.strftime('%d/%m/%Y') }}{% else %}sem pagamento registrado{% endif -%}
+              {%- if m.status != 'pago' and m.tem_juros %} · +R$ {{ '%.2f'|format((m.multa_val or 0) + (m.juros_val or 0))|replace('.', ',') }} juros/multa{% endif -%}
+            </span>
+          </div>
+          <span class="fa-valor">R$ {{ '%.2f'|format(m.valor_pago or (m.valor_com_juros if m.status != 'pago' else m.valor) or m.valor or 0)|replace('.', ',') }}</span>
+          {% if m.status == 'pago' %}<span class="fa-tag fa-tag--pago">Pago</span>
+          {% elif m.status == 'atrasado' %}<span class="fa-tag fa-tag--atraso">Atraso</span>
+          {% else %}<span class="fa-tag fa-tag--pendente">Pendente</span>{% endif %}
+          {% if m.status == 'pago' and pode_baixar %}
+          <form method="POST" action="{{ url_for('financeiro.cancelar_pagamento') }}" style="display:inline"
+                onsubmit="return confirm({% if m.pago_auto %}'Cancelar o pagamento desta mensalidade? Como foi confirmado automaticamente pelo gateway, o valor vira crédito na carteira do aluno para quitar outras mensalidades.'{% else %}'Cancelar o pagamento desta mensalidade? Ela volta para pendente e a receita é cancelada. Depois você pode registrar de novo com os dados corretos.'{% endif %});">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="tipo" value="mensalidade_aluno">
+            <input type="hidden" name="registro_id" value="{{ m.id }}">
+            <input type="hidden" name="next" value="{{ request.full_path }}">
+            <button type="submit" class="sh__btn" style="padding:.3rem .65rem; font-size:.82rem"
+                    title="Cancelar pagamento (corrigir erro)"><i class="bi bi-arrow-counterclockwise"></i> Cancelar pagamento</button>
+          </form>
+          {% endif %}
+          {% if m.status != 'pago' and pode_baixar %}
+          <button type="button" class="sh__btn js-fin-open-modal-pagamento-financeiro" style="padding:.3rem .65rem; font-size:.82rem"
+                  data-post-url="{{ url_for('financeiro.registrar_pagamento') }}" data-fluxo="registrar"
+                  data-registro-id="{{ m.id }}"
+                  data-competencia="{% if m.data_vencimento %}{{ '%02d/%04d'|format(m.data_vencimento.month, m.data_vencimento.year) }}{% endif %}"
+                  data-saldo-carteira="{{ '%.2f'|format(financeiro.saldo_carteira or 0) }}"
+                      data-vencimento="{{ m.data_vencimento.strftime('%Y-%m-%d') if m.data_vencimento else '' }}"
+                      data-plano-id="{{ m.mensalidade_id or '' }}"
+                  data-valor-total="{{ '%.2f'|format(m.valor or 0) }}">Registrar pagamento</button>
+          <button type="button" class="sh__btn js-fin-editar" style="padding:.3rem .65rem; font-size:.82rem"
+                  title="Editar valor, desconto e vencimento"
+                  data-id="{{ m.id }}"
+                  data-valor="{{ '%.2f'|format(m.valor_original or m.valor or 0) }}"
+                  data-desconto="{{ '%.2f'|format(m.desconto_aplicado or 0) }}"
+                  data-vencimento="{{ m.data_vencimento.strftime('%Y-%m-%d') if m.data_vencimento else '' }}">
+            <i class="bi bi-pencil"></i>
+          </button>
+          {% endif %}
+        </div>
+        {% endfor %}
+      {% else %}
+      <div class="fa-vazio">Nenhuma mensalidade lançada para este aluno.</div>
+      {% endif %}
+    </div>
+  </section>
+</div>
+
+{# ---------------------------------------------------------- 4. eventos #}
+<div class="fa-painel" id="painel-eventos" hidden>
+  <section class="fa-bloco">
+    <div class="fa-bloco-topo"><span class="fa-bloco-titulo">Eventos e competições</span></div>
+    <div class="fa-bloco-corpo">
+      {% if eventos %}
+        {% for e in eventos %}
+        <div class="fa-linha-item">
+          <div>
+            <span class="fa-item-titulo">{{ e.evento }}</span>
+            <span class="fa-item-sub">
+              {{- [e.atividade, e.ambito, e.local_texto]|select|join(' · ') -}}
+            </span>
+          </div>
+          <span class="fa-grad-data">{{ e.data_evento.strftime('%d/%m/%Y') if e.data_evento else '' }}</span>
+        </div>
+        {% endfor %}
+      {% else %}
+      <div class="fa-vazio">Nenhum evento registrado para este aluno.</div>
+      {% endif %}
+    </div>
+  </section>
+</div>
+{% endblock %}
+
+{% from "financeiro/_modal_gerar_cobranca.html" import modal_gerar_cobranca %}
+{% from "financeiro/_modal_alterar_vencimento.html" import modal_alterar_vencimento with context %}
+{% from "financeiro/_modal_trocar_pacote.html" import modal_trocar_pacote with context %}
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  var abas = document.querySelectorAll('.fa-aba');
+  abas.forEach(function (aba) {
+    aba.addEventListener('click', function () {
+      abas.forEach(function (o) { o.classList.remove('is-ativa'); });
+      aba.classList.add('is-ativa');
+      document.querySelectorAll('.fa-painel').forEach(function (p) {
+        p.hidden = p.id !== 'painel-' + aba.dataset.painel;
+      });
+    });
+  });
+});
+</script>
+
+{# Baixa da mensalidade sem sair da ficha; volta para cá pelo campo `voltar`. #}
+{% if pode_baixar %}
+  {% set formas_lista = formas %}
+  {% include "financeiro/_modal_pagamento_mensalidade.html" %}
+{% endif %}
+
+{% if pode_baixar %}
+{{ modal_gerar_cobranca(aluno.id, aluno.nome, academia_id, planos_cobranca,
+                        request.full_path, mes_ref, ano_ref, descontos) }}
+
+{# Editar a cobrança: valor combinado, desconto e vencimento, sem sair da ficha. #}
+<div class="modal fade" id="modalEditarCobranca" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <form class="modal-content" method="POST" id="formEditarCobranca">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="voltar" value="{{ request.full_path }}">
+      <div class="modal-header">
+        <h5 class="modal-title">Editar cobrança</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label fw-semibold" for="edcValor">Valor da mensalidade</label>
+          <input type="number" step="0.01" min="0.01" class="form-control" id="edcValor" name="valor_original" required>
+          <div class="form-text">Valor cheio, antes do desconto.</div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold" for="edcDesconto">Desconto</label>
+          <input type="number" step="0.01" min="0" class="form-control" id="edcDesconto" name="desconto_aplicado" value="0">
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold" for="edcVencimento">Data de vencimento</label>
+          <input type="date" class="form-control" id="edcVencimento" name="data_vencimento" required>
+        </div>
+        <div class="alert alert-light border mb-0 py-2">
+          Valor a cobrar: <strong id="edcLiquido">—</strong>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Fechar</button>
+        <button type="submit" class="btn btn-dark">Salvar alterações</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  var form = document.getElementById('formEditarCobranca');
+  var valor = document.getElementById('edcValor');
+  var desconto = document.getElementById('edcDesconto');
+  var liquido = document.getElementById('edcLiquido');
+  var acao = {{ url_for('financeiro.editar_cobranca_aluno', ma_id=0)|tojson }};
+
+  function recalcular() {
+    var v = parseFloat(valor.value || '0');
+    var d = parseFloat(desconto.value || '0');
+    if (isNaN(v)) v = 0;
+    if (isNaN(d) || d < 0) d = 0;
+    if (d > v) d = v;
+    liquido.textContent = 'R$ ' + (v - d).toFixed(2).replace('.', ',');
+  }
+  [valor, desconto].forEach(function (c) { c.addEventListener('input', recalcular); });
+
+  document.querySelectorAll('.js-fin-editar').forEach(function (botao) {
+    botao.addEventListener('click', function () {
+      // A rota é montada com id 0 e o número real entra na hora do clique.
+      form.action = acao.replace('/0/', '/' + botao.dataset.id + '/');
+      valor.value = botao.dataset.valor;
+      desconto.value = botao.dataset.desconto;
+      document.getElementById('edcVencimento').value = botao.dataset.vencimento;
+      recalcular();
+      new bootstrap.Modal(document.getElementById('modalEditarCobranca')).show();
+    });
+  });
+});
+</script>
+{{ modal_alterar_vencimento(aluno.id, aluno.nome, dia_vencimento_atual, request.full_path) }}
+
+{% if planos_cobranca and planos_cobranca|length > 1 %}
+{{ modal_trocar_pacote(aluno.id, aluno.nome, planos_cobranca, pacote_atual_id,
+                       pacote_atual_nome, request.full_path) }}
+{% endif %}
+{% endif %}
 {% endblock %}

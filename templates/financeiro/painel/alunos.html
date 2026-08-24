@@ -1,103 +1,144 @@
-{% extends "financeiro/painel/_layout.html" %}
-{% block title %}Alunos{% endblock %}
+{% extends "financeiro/painel/_base.html" %}
+{% set fin_aba = 'alunos' %}
+{% block title %}Alunos — Financeiro{% endblock %}
 
-{% block conteudo %}
-<div class="fp-page fp-page--narrow">
+{% block pagina_titulo %}Financeiro{% endblock %}
+{% block pagina_subtitulo %}Alunos e o valor da mensalidade de cada um{% endblock %}
 
-  <div class="fp-head">
-    <h1 class="fp-h1">Alunos</h1>
-    <p class="fp-sub">{{ n_ativos }} ativos · {{ n_inativos }} inativos</p>
-  </div>
+{% block fin_css %}
+<style>
+  .lin-fal { grid-template-columns: minmax(0,2fr) minmax(0,1.2fr) 140px 130px 120px 110px; }
 
-  <form class="fp-barra-busca" method="GET">
-    {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
-    <input class="fp-input fp-input--busca" type="search" name="q" value="{{ busca }}"
-           placeholder="Buscar aluno ou faixa..." autocomplete="off">
-    <select class="fp-select-sm" name="ordem" onchange="this.form.submit()">
-      <option value="nome" {% if ordem == 'nome' %}selected{% endif %}>Nome</option>
-      <option value="faixa" {% if ordem == 'faixa' %}selected{% endif %}>Faixa</option>
-      <option value="mensalidade" {% if ordem == 'mensalidade' %}selected{% endif %}>Mensalidade</option>
-      <option value="ingresso" {% if ordem == 'ingresso' %}selected{% endif %}>Ingresso</option>
+  @media (max-width: 1360px) {
+    .lin-fal { grid-template-columns: minmax(0,2fr) minmax(0,1.2fr) 140px 120px 110px; }
+    .col-ingresso { display: none !important; }
+  }
+  @media (max-width: 1140px) {
+    .lin-fal { grid-template-columns: minmax(0,2fr) 140px 120px 110px; }
+    .col-faixa { display: none !important; }
+  }
+  @media (max-width: 1024px) {
+    .lin-fal { grid-template-columns: minmax(0,2fr) minmax(0,1.2fr) 140px 120px 110px; }
+    .col-faixa { display: block !important; }
+  }
+  @media (max-width: 900px) {
+    .lin-fal { grid-template-columns: minmax(0,2fr) 140px 120px 110px; }
+    .col-faixa { display: none !important; }
+  }
+  @media (max-width: 680px) {
+    .lin-fal { grid-template-columns: minmax(0,1.8fr) 120px 110px; }
+    .col-tel { display: none !important; }
+  }
+
+  .fin-detalhe {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: var(--u-space-3);
+    background: #fff;
+    border: 1px solid var(--sh-line);
+    border-radius: var(--u-radius);
+    padding: 1.1rem 1.25rem;
+    margin-bottom: var(--u-space-3);
+    position: relative;
+  }
+  .fin-detalhe__fechar { position: absolute; top: .6rem; right: .8rem; color: var(--sh-ink-soft); text-decoration: none; }
+</style>
+{% endblock %}
+
+{% block fin_conteudo %}
+<form method="GET" class="lst-filtros">
+  {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
+  {% if ordem %}<input type="hidden" name="ordem" value="{{ ordem }}">{% endif %}
+  <label class="lst-campo lst-campo--largo">
+    <span class="lst-campo__rotulo">Buscar</span>
+    <input type="search" name="q" value="{{ busca }}" placeholder="Nome, e-mail ou telefone" autocomplete="off">
+  </label>
+  <label class="lst-campo lst-campo--curto">
+    <span class="lst-campo__rotulo">Situação</span>
+    <select name="inativos" onchange="this.form.submit()">
+      <option value="">Somente ativos</option>
+      <option value="1" {% if ver_inativos %}selected{% endif %}>Incluir inativos</option>
     </select>
-    <label class="fp-check">
-      <input type="checkbox" name="inativos" value="1" {% if ver_inativos %}checked{% endif %}
-             onchange="this.form.submit()">
-      Ver inativos
-    </label>
-  </form>
-
-  <div class="fp-card fp-card--table">
-    <div class="fp-table-wrap">
-      <table class="fp-table">
-        <thead>
-          <tr>
-            <th>Aluno</th><th>Faixa</th><th>Telefone</th>
-            <th>Mensalidade</th><th>Ingresso</th><th>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for a in lista %}
-          {% set url_sel = url_for('financeiro_painel.alunos', academia_id=academia_id, q=busca,
-                                   ordem=ordem, inativos='1' if ver_inativos else None,
-                                   sel=None if (selecionado and selecionado.id == a.id) else a.id) %}
-          <tr onclick="location.href='{{ url_sel }}'"
-              style="cursor:pointer{% if selecionado and selecionado.id == a.id %};background:var(--fp-nav-active){% endif %}">
-            <td>
-              <div class="fp-td-nome">{{ a.nome }}</div>
-              <div class="fp-td-mini">{{ a.email or '—' }}</div>
-            </td>
-            <td>
-              <span class="fp-faixa">
-                <span class="fp-dot {% if not a.faixa %}fp-dot--claro{% endif %}" style="background: {{ cor_faixa(a.faixa) }}"></span>
-                {{ a.faixa or 'Sem graduação' }}
-              </span>
-            </td>
-            <td class="fp-td-mono">{{ a.tel_celular or a.telefone or '—' }}</td>
-            <td class="fp-td-valor">{{ fmt_moeda(a.mensalidade) if a.mensalidade else '—' }}</td>
-            <td class="fp-td-muted">{{ a.data_matricula.strftime('%d/%m/%Y') if a.data_matricula else '—' }}</td>
-            <td>
-              <span class="fp-badge fp-badge--{{ 'ativo' if a.ativo else 'inativo' }}">
-                {{ 'Ativo' if a.ativo else 'Inativo' }}
-              </span>
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-    {% if not lista %}
-    <div class="fp-empty">Nenhum aluno encontrado.</div>
+  </label>
+  <div class="lst-filtros__acoes">
+    <button type="submit" class="sh__btn sh__btn--forte">Filtrar</button>
+    {% if busca or ver_inativos %}
+    <a class="sh__btn" href="{{ url_for('financeiro_painel.alunos', academia_id=academia_id) }}">Limpar</a>
     {% endif %}
   </div>
+</form>
 
-  {% if selecionado %}
-  <div class="fp-detalhe">
-    <div>
-      <div class="fp-detalhe__label">Aluno</div>
-      <div class="fp-detalhe__nome">{{ selecionado.nome }}</div>
-      <div class="fp-detalhe__mini">
-        {{ selecionado.email or 'sem e-mail' }} · {{ selecionado.tel_celular or selecionado.telefone or 'sem telefone' }}
-      </div>
-    </div>
-    <div>
-      <div class="fp-detalhe__label">Graduação</div>
-      <span class="fp-faixa" style="font-size:14px;color:var(--fp-text);font-weight:500">
-        <span class="fp-dot" style="width:10px;height:10px;background: {{ cor_faixa(selecionado.faixa) }}"></span>
-        {{ ('Faixa ' ~ selecionado.faixa) if selecionado.faixa else 'Sem graduação' }}
-      </span>
-      <div class="fp-detalhe__mini">
-        {% if selecionado.data_matricula %}Desde {{ selecionado.data_matricula.strftime('%d/%m/%Y') }}{% else %}Matrícula não informada{% endif %}
-      </div>
-    </div>
-    <div>
-      <div class="fp-detalhe__label">Mensalidade</div>
-      <div class="fp-detalhe__valor">{{ fmt_moeda(selecionado.mensalidade) if selecionado.mensalidade else '—' }}</div>
-      <div class="fp-detalhe__mini">Última cobrança lançada</div>
-    </div>
-    <a class="fp-detalhe__fechar"
-       href="{{ url_for('financeiro_painel.alunos', academia_id=academia_id, q=busca, ordem=ordem, inativos='1' if ver_inativos else None) }}">Fechar ×</a>
+{% if selecionado %}
+<div class="fin-detalhe">
+  <a class="fin-detalhe__fechar" title="Fechar detalhe" aria-label="Fechar detalhe"
+     href="{{ url_for('financeiro_painel.alunos', academia_id=academia_id, q=busca, ordem=ordem, inativos='1' if ver_inativos else None) }}">
+    <i class="bi bi-x-lg"></i>
+  </a>
+  <div>
+    <span class="lst-campo__rotulo">Aluno</span>
+    <div class="lst-nome">{{ selecionado.nome }}</div>
+    <span class="lst-sub">{{ selecionado.email or 'sem e-mail' }} · {{ selecionado.tel_celular or selecionado.telefone or 'sem telefone' }}</span>
   </div>
-  {% endif %}
-
+  <div>
+    <span class="lst-campo__rotulo">Graduação</span>
+    <div style="display:flex; align-items:center; gap:.5rem; margin-top:.15rem">
+      <span class="fin-faixa" style="--fin-faixa-cor: {{ cor_faixa(selecionado.faixa) }}"></span>
+      {{ ('Faixa ' ~ selecionado.faixa) if selecionado.faixa else 'Sem graduação' }}
+    </div>
+    <span class="lst-sub">
+      {% if selecionado.data_matricula %}Desde {{ selecionado.data_matricula.strftime('%d/%m/%Y') }}{% else %}Matrícula não informada{% endif %}
+    </span>
+  </div>
+  <div>
+    <span class="lst-campo__rotulo">Mensalidade</span>
+    <div class="fin-cartao__valor fin-valor">{{ fmt_moeda(selecionado.mensalidade) if selecionado.mensalidade else '—' }}</div>
+    <span class="lst-sub">Última cobrança lançada</span>
+  </div>
 </div>
+{% endif %}
+
+<section class="lst-quadro">
+  <header class="lst-quadro__topo">
+    <h2 class="lst-quadro__titulo">Alunos</h2>
+    <span class="lst-quadro__meta">{{ lista|length }} aluno{{ 's' if lista|length != 1 }}</span>
+  </header>
+
+  <div class="lst-rolagem">
+    <div class="lst-largura" style="--lst-min:560px">
+      <div class="lst-linha lin-fal lst-cab">
+        <div>Aluno</div>
+        <div class="col-faixa">Faixa</div>
+        <div class="col-tel">Telefone</div>
+        <div class="lst-num">Mensalidade</div>
+        <div class="col-ingresso">Ingresso</div>
+        <div>Situação</div>
+      </div>
+
+      {% for a in lista %}
+      {% set url_sel = url_for('financeiro_painel.alunos', academia_id=academia_id, q=busca,
+                               ordem=ordem, inativos='1' if ver_inativos else None,
+                               sel=None if (selecionado and selecionado.id == a.id) else a.id) %}
+      <a href="{{ url_sel }}" class="lst-linha lin-fal lst-item {% if not a.ativo %}is-inativo{% endif %}"
+         style="color:inherit; text-decoration:none">
+        <div style="min-width:0">
+          <span class="lst-nome">{{ a.nome }}</span>
+          <span class="lst-sub">{{ a.email or '—' }}</span>
+        </div>
+        <div class="col-faixa" style="display:flex; align-items:center; gap:.5rem; min-width:0">
+          <span class="fin-faixa" style="--fin-faixa-cor: {{ cor_faixa(a.faixa) }}"></span>
+          <span class="lst-corta">{{ a.faixa or 'Sem graduação' }}</span>
+        </div>
+        <div class="col-tel">{{ a.tel_celular or a.telefone or '—' }}</div>
+        <div class="lst-num fin-valor">{{ fmt_moeda(a.mensalidade) if a.mensalidade else '—' }}</div>
+        <div class="col-ingresso">{{ a.data_matricula.strftime('%d/%m/%Y') if a.data_matricula else '—' }}</div>
+        <div>
+          <span class="lst-situacao {% if a.ativo %}is-ativo{% endif %}"><i></i>{{ 'Ativo' if a.ativo else 'Inativo' }}</span>
+        </div>
+      </a>
+      {% else %}
+      <p class="lst-vazio">Nenhum aluno encontrado.</p>
+      {% endfor %}
+    </div>
+  </div>
+</section>
 {% endblock %}

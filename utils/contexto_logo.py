@@ -15,8 +15,15 @@ def buscar_logo_url(prefixo, entidade_id):
     pasta = os.path.join(current_app.root_path, "static", "uploads", "logos")
     for ext in LOGO_EXTENSOES:
         filename = f"{prefixo}_{entidade_id}{ext}"
-        if os.path.isfile(os.path.join(pasta, filename)):
-            return url_for("static", filename=f"uploads/logos/{filename}")
+        caminho = os.path.join(pasta, filename)
+        if os.path.isfile(caminho):
+            # ?v=<mtime>: troca de logo (mesmo nome de arquivo) reflete na hora,
+            # sem ficar preso ao cache do navegador/CDN.
+            try:
+                v = int(os.path.getmtime(caminho))
+            except Exception:
+                v = 0
+            return url_for("static", filename=f"uploads/logos/{filename}", v=v)
     return None
 
 

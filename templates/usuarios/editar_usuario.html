@@ -1,29 +1,40 @@
-{% extends "base.html" %}
-{% block title %}Editar Usuário — {{ usuario.nome }}{% endblock %}
+{% extends "base_academia.html" %}
+{% set menu_ativo = 'usuarios' %}
+{% block title %}Editar usuário — {{ usuario.nome }}{% endblock %}
+
+{% block pagina_titulo %}Editar usuário{% endblock %}
+{% block pagina_subtitulo %}Dados de acesso, papéis e vínculos de {{ usuario.nome }}.{% endblock %}
+
+{% block pagina_acoes %}
+  {% set back_url = back_url or get_back_url_default() %}
+  <a href="{{ back_url }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Voltar</a>
+{% endblock %}
+
 {% block extra_css %}
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/photo-cropper.css') }}">
 {% endblock %}
 {% block content %}
 <style>
+  /* A tela tinha paleta própria (azul Bootstrap, raio 16px). Os tokens agora
+     vêm do design system; abaixo fica só o que é específico deste formulário. */
   :root {
-    --c-bg: #f5f7fb;
-    --c-surface: #ffffff;
-    --c-border: #e5e9f2;
-    --c-text: #1f2937;
-    --c-muted: #6b7280;
-    --c-primary: #0d6efd;
-    --c-primary-soft: #e8f1ff;
-    --c-warn: #f59e0b;
-    --c-warn-soft: #fef3c7;
+    --c-surface: #fff;
+    --c-border: var(--sh-line);
+    --c-text: var(--sh-ink);
+    --c-muted: var(--sh-ink-soft);
+    --c-primary: var(--sh-ink);
+    --c-primary-soft: #f4f2ee;
+    --c-warn: #9a6700;
+    --c-warn-soft: #fdf6e3;
   }
-  .form-page { max-width: 1080px; margin: 0 auto; }
+  .form-page { max-width: 1080px; }
 
-  /* Header com avatar */
+  /* Cartão de identidade do usuário */
   .user-header {
-    background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+    background: #fff;
     border: 1px solid var(--c-border);
-    border-radius: 16px;
+    border-radius: var(--u-radius);
     padding: 1.4rem 1.6rem;
     margin-bottom: 1.25rem;
     display: flex;
@@ -308,7 +319,7 @@
   }
 </style>
 
-<div class="container my-4 my-md-5 form-page">
+<div class="form-page">
 
   {% set palette = ['#6366f1','#0ea5e9','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#14b8a6','#f97316'] %}
   {% set cor = palette[(usuario.id or 0) % palette|length] %}
@@ -334,8 +345,6 @@
         {% endif %}
       </div>
     </div>
-    {% set back_url = back_url or get_back_url_default() %}
-    {% include 'components/botao_voltar.html' %}
   </div>
 
   <form method="POST" enctype="multipart/form-data">
@@ -462,9 +471,13 @@
 
               <!-- Checkboxes ocultos: o backend continua recebendo aluno_ids[] -->
               <div class="d-none">
+                {# Com mais de uma academia na lista, o nome sozinho não basta:
+                   há homônimo entre academias e o gestor não saberia qual marcou. #}
+                {% set varias = alunos_para_responsavel | map(attribute='id_academia') | unique | list | length > 1 %}
                 {% for a in alunos_para_responsavel %}
                 <input type="checkbox" name="aluno_ids" value="{{ a.id }}" id="aluno_resp_{{ a.id }}"
-                       data-aluno-resp data-nome="{{ a.nome }}"
+                       data-aluno-resp
+                       data-nome="{{ a.nome }}{% if varias and a.academia_nome %} · {{ a.academia_nome }}{% endif %}"
                        {% if a.id in responsavel_aluno_ids %}checked{% endif %}>
                 {% endfor %}
               </div>
@@ -523,9 +536,9 @@
 
         <div class="form-actions">
           {% set back_url = back_url or get_back_url_default() %}
-          {% include 'components/botao_voltar.html' %}
-          <button type="submit" class="btn btn-primary">
-            <i class="bi bi-save me-1"></i> Salvar alterações
+          <a href="{{ back_url }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Voltar</a>
+          <button type="submit" class="sh__btn sh__btn--forte">
+            <i class="bi bi-save"></i> Salvar alterações
           </button>
         </div>
       </div>

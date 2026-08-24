@@ -1,0 +1,208 @@
+/* =======================================================================
+   Aniversariantes — tela da academia (secretaria + página do aniversariante)
+   =======================================================================
+   Só o que as duas abas precisam além de shell.css e listas.css: o layout de
+   duas colunas, as linhas de aniversariante e o mural. Cores e espaçamentos
+   saem dos tokens; nada aqui inventa paleta própria.
+   ======================================================================= */
+
+/* O seletor de mês tem rótulo em cima e fica mais alto que o botão ao lado:
+   alinhar pela base deixa os dois na mesma linha. */
+.sh__cabecalho .sh__acoes { align-items: flex-end; }
+
+/* --------------------------------------------------------- duas colunas */
+.aniv-colunas {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 380px;
+  gap: 1.25rem;
+  align-items: start;
+}
+@media (max-width: 1180px) {
+  .aniv-colunas { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ------------------------------------------------------ grupo de pessoas */
+.aniv-grupo { margin-bottom: 1.25rem; }
+
+.aniv-grupo__topo {
+  display: flex;
+  align-items: center;
+  gap: .55rem;
+  padding: .8rem 1rem;
+  border-bottom: 1px solid var(--sh-line);
+}
+.aniv-grupo__titulo {
+  margin: 0;
+  font-size: .74rem;
+  font-weight: var(--u-fw-bold);
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--sh-ink);
+}
+.aniv-grupo__meta { margin-left: auto; font-size: .8rem; color: var(--sh-ink-soft); }
+
+/* Bolinha de estado do grupo: hoje é o que pede ação. */
+.aniv-ponto {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--sh-ink-soft); flex: none;
+}
+.aniv-ponto--hoje { background: var(--sh-red); }
+.aniv-ponto--proximo { background: var(--u-success); }
+
+/* ------------------------------------------------------------- a linha */
+.lin-aniv {
+  grid-template-columns: minmax(0, 1fr) 150px 170px;
+  align-items: center;
+}
+/* A data só aparece quando a coluna dela sai da grade. */
+.aniv-sub-data { display: none; }
+
+@media (max-width: 620px) {
+  .lin-aniv { grid-template-columns: minmax(0, 1fr) 150px; }
+  .lin-aniv .col-data { display: none; }
+  .aniv-sub-data { display: block; }
+}
+
+/* Celular: o nome não cabe ao lado do botão sem virar reticências. A ação
+   desce para a linha de baixo, ocupando a largura toda. */
+@media (max-width: 560px) {
+  .lin-aniv { grid-template-columns: minmax(0, 1fr); gap: .6rem; }
+  .lin-aniv .lst-fim { text-align: left; }
+  .lin-aniv .lst-fim .sh__btn { width: 100%; justify-content: center; }
+}
+
+.aniv-data { display: block; font-weight: var(--u-fw-semibold); }
+.aniv-idade { display: block; font-size: .82rem; color: var(--sh-ink-soft); }
+
+/* A linha inteira seleciona o aniversariante; o botão de WhatsApp fica por
+   cima e não dispara a seleção. */
+.lin-aniv.is-selecionada { background: var(--u-surface-alt); }
+.aniv-selecionar {
+  all: unset;
+  cursor: pointer;
+  display: contents;
+}
+
+/* ---------------------------------------------------------- ficha lateral */
+.aniv-ficha__topo {
+  display: flex;
+  align-items: center;
+  gap: .9rem;
+  padding: 1rem;
+  border-bottom: 1px solid var(--sh-line);
+}
+.aniv-ficha__nome { font-size: 1.05rem; font-weight: var(--u-fw-semibold); }
+.aniv-ficha__sub { font-size: .84rem; color: var(--sh-ink-soft); }
+
+.aniv-dados { padding: .25rem 1rem; }
+.aniv-dado {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: .6rem 0;
+  border-bottom: 1px solid var(--sh-line);
+  font-size: .9rem;
+}
+.aniv-dado:last-child { border-bottom: 0; }
+.aniv-dado__rotulo { color: var(--sh-ink-soft); }
+.aniv-dado__valor { font-weight: var(--u-fw-semibold); text-align: right; min-width: 0; }
+
+.aniv-mensagem {
+  margin: 0 1rem 1rem;
+  padding: .8rem .9rem;
+  background: var(--u-surface-alt);
+  border: 1px solid var(--sh-line);
+  border-radius: var(--u-radius-sm);
+  font-size: .88rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  color: var(--sh-ink);
+}
+.aniv-ficha__acoes { display: flex; flex-direction: column; gap: .5rem; padding: 0 1rem 1rem; }
+.aniv-ficha__acoes .sh__btn { justify-content: center; }
+
+/* --------------------------------------------------- avatar grande do hero */
+.aniv-hero {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  padding: 1.5rem;
+}
+.aniv-hero__foto {
+  width: 96px; height: 96px; border-radius: 50%;
+  object-fit: cover; flex: none;
+  background: var(--u-surface-alt);
+  border: 1px solid var(--sh-line);
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 1.6rem; font-weight: var(--u-fw-semibold); color: var(--sh-ink-soft);
+}
+.aniv-hero__hoje {
+  display: inline-flex; align-items: center; gap: .4rem;
+  font-size: .72rem; font-weight: var(--u-fw-bold);
+  letter-spacing: .14em; text-transform: uppercase;
+  color: var(--sh-red);
+}
+.aniv-hero__nome { margin: .2rem 0 .3rem; font-size: 1.65rem; font-weight: var(--u-fw-bold); }
+.aniv-hero__sub { color: var(--sh-ink-soft); font-size: .92rem; }
+
+/* -------------------------------------------------------- caixa de recado */
+.aniv-recado { padding: 0 1.5rem 1.5rem; }
+.aniv-recado textarea {
+  width: 100%;
+  min-height: 96px;
+  padding: .7rem .8rem;
+  border: 1px solid var(--sh-line);
+  border-radius: var(--u-radius-sm);
+  font: inherit;
+  color: var(--sh-ink);
+  background: var(--u-surface);
+  resize: vertical;
+}
+.aniv-recado textarea:focus {
+  outline: none;
+  border-color: var(--u-primary);
+  box-shadow: 0 0 0 3px var(--u-primary-ring);
+}
+.aniv-recado__rodape {
+  display: flex; align-items: center; gap: .5rem;
+  flex-wrap: wrap; margin-top: .75rem;
+}
+.aniv-reagir {
+  display: inline-flex; align-items: center; gap: .35rem;
+  padding: .4rem .7rem;
+  border: 1px solid var(--sh-line);
+  border-radius: var(--u-radius-pill);
+  background: var(--u-surface);
+  color: var(--sh-ink);
+  font-size: .85rem;
+  cursor: pointer;
+  transition: border-color var(--u-transition), background var(--u-transition);
+}
+.aniv-reagir:hover { border-color: var(--u-primary); background: var(--u-surface-alt); }
+.aniv-reagir[disabled] { opacity: .55; cursor: not-allowed; }
+.aniv-recado__rodape .sh__btn { margin-left: auto; }
+
+/* -------------------------------------------------------------- o mural */
+.aniv-msg {
+  display: flex;
+  gap: .75rem;
+  padding: .9rem 1rem;
+  border-bottom: 1px solid var(--sh-line);
+}
+.aniv-msg:last-child { border-bottom: 0; }
+.aniv-msg__corpo { min-width: 0; }
+.aniv-msg__autor { font-weight: var(--u-fw-semibold); font-size: .92rem; }
+.aniv-msg__meta { color: var(--sh-ink-soft); font-size: .8rem; font-weight: 400; }
+.aniv-msg__texto { margin: .2rem 0 0; font-size: .92rem; line-height: 1.5; overflow-wrap: anywhere; }
+
+/* ------------------------------------------------------ contagem de reações */
+.aniv-reacao {
+  display: flex; align-items: center; gap: .6rem;
+  padding: .7rem 1rem;
+  border-bottom: 1px solid var(--sh-line);
+  font-size: .92rem;
+}
+.aniv-reacao:last-child { border-bottom: 0; }
+.aniv-reacao__n { margin-left: auto; font-weight: var(--u-fw-semibold); }
+.aniv-reacao i { color: var(--sh-ink-soft); }

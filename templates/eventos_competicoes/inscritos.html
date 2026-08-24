@@ -1,298 +1,284 @@
-{% extends "base.html" %}
+{% extends "base_academia.html" %}
+{% set eh_competicao = evento.tipo is defined and evento.tipo == 'competicao' %}
+{% set menu_ativo = 'competicoes' if eh_competicao else 'eventos' %}
 {% block title %}Inscritos — {{ evento.nome }}{% endblock %}
-{% block content %}
+
+{% block pagina_titulo %}{{ evento.nome }}{% endblock %}
+{% block pagina_subtitulo %}
+  {% if encerrado %}Evento encerrado — as inscrições não podem mais ser alteradas.
+  {% else %}Inclua avulsos, edite ou cancele antes de enviar à associação.{% endif %}
+{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/base/listas.css') }}">
 <style>
-  .inscritos-page .tabela-inscritos { font-size: .9rem; }
-  .inscritos-page .tabela-inscritos thead th {
-    background: var(--bs-tertiary-bg);
-    font-size: .78rem;
-    text-transform: uppercase;
-    letter-spacing: .02em;
-    color: var(--bs-secondary-color);
-    font-weight: 600;
-    white-space: nowrap;
-    border-bottom: 2px solid var(--bs-border-color);
+  .lin-insc { grid-template-columns: minmax(0,1.8fr) 150px 100px 140px 130px 130px; }
+  @media (max-width: 1340px) {
+    .lin-insc { grid-template-columns: minmax(0,1.8fr) 150px 100px 140px 130px; }
+    .col-inscrito-em { display: none !important; }
   }
-  .inscritos-page .tabela-inscritos td { white-space: nowrap; }
-
-  /* Com muitas colunas a rolagem horizontal é inevitável; manter o nome do aluno
-     sempre visível é o que evita perder a referência de qual linha se está lendo. */
-  .inscritos-page .col-aluno {
-    position: sticky;
-    left: 0;
-    z-index: 2;
-    background: var(--bs-body-bg);
-    box-shadow: 1px 0 0 var(--bs-border-color);
+  @media (max-width: 1140px) {
+    .lin-insc { grid-template-columns: minmax(0,1.8fr) 150px 140px 130px; }
+    .col-peso { display: none !important; }
   }
-  .inscritos-page thead .col-aluno { z-index: 3; background: var(--bs-tertiary-bg); }
-  .inscritos-page tbody tr:hover .col-aluno { background: var(--bs-tertiary-bg); }
-  .inscritos-page .col-acoes { width: 1%; }
-  .inscritos-page .table-responsive { border-radius: .5rem; }
+  @media (max-width: 1024px) {
+    .lin-insc { grid-template-columns: minmax(0,1.8fr) 150px 100px 140px 130px; }
+    .col-peso { display: block !important; }
+  }
+  @media (max-width: 880px) {
+    .lin-insc { grid-template-columns: minmax(0,1.8fr) 140px 130px; }
+    .col-peso, .col-categoria { display: none !important; }
+  }
 
-  /* Inicial do nome: dá um ponto de ancoragem visual em listas longas,
-     sem depender de foto (que a maioria dos inscritos não tem). */
-  .inscritos-page .avatar-inicial {
-    width: 34px; height: 34px; flex: 0 0 34px;
+  /* Inicial do nome: âncora visual em listas longas, sem depender de foto —
+     a maioria dos inscritos avulsos não tem. */
+  .insc-inicial {
+    width: 32px; height: 32px; flex: 0 0 32px;
     border-radius: 50%;
-    background: var(--bs-primary-bg-subtle);
-    color: var(--bs-primary-text-emphasis);
+    background: #f1efeb; color: var(--sh-ink-soft);
     display: flex; align-items: center; justify-content: center;
-    font-weight: 700; font-size: .85rem;
+    font-weight: 700; font-size: .8rem;
+  }
+  .insc-pessoa { display: flex; align-items: center; gap: .65rem; min-width: 0; }
+
+  .insc-locais { padding: 1rem 1.25rem; }
+  .insc-local {
+    display: flex; align-items: flex-start; gap: .6rem;
+    border: 1px solid var(--sh-line); border-radius: var(--u-radius-sm);
+    padding: .6rem .8rem; cursor: pointer;
   }
 </style>
+{% endblock %}
 
-{# Largura total: a tabela tem muitas colunas dinâmicas e sufocava no container. #}
-<div class="container-fluid px-3 px-md-4 py-3 py-md-4 inscritos-page">
+{% block pagina_acoes %}
+  {% set total = inscricoes | length %}
+  {% set enviadas = inscricoes | selectattr('status', 'equalto', 'enviada') | list | length %}
+  {% set pendentes = total - enviadas %}
+  {% if not encerrado %}
+  <a href="{{ url_for('eventos_competicoes.incluir_avulso', evento_id=evento.id, academia_id=academia_id) }}"
+     class="sh__btn" title="Escolher um aluno já cadastrado no sistema">
+    <i class="bi bi-person-plus"></i> Aluno do sistema
+  </a>
+  {# Mesma tela (tem as duas abas); #aba-novo abre direto a de atleta sem cadastro. #}
+  <a href="{{ url_for('eventos_competicoes.incluir_avulso', evento_id=evento.id, academia_id=academia_id) }}#aba-novo"
+     class="sh__btn" title="Digitar os dados de um atleta que não tem cadastro">
+    <i class="bi bi-pencil-square"></i> Atleta não cadastrado
+  </a>
+  {% if link_inscricao %}
+  <button type="button" class="sh__btn" onclick="copiarLinkInscricao()"
+          title="Link para atletas de fora se inscreverem neste evento">
+    <i class="bi bi-link-45deg"></i> Copiar link
+  </button>
+  <a href="{{ link_inscricao }}" target="_blank" rel="noopener" class="sh__btn" title="Abrir o formulário público">
+    <i class="bi bi-box-arrow-up-right"></i>
+  </a>
+  {% else %}
+  <form method="POST" action="{{ url_for('eventos_competicoes.gerar_link_inscricao', evento_id=evento.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="academia_id" value="{{ academia_id }}">
+    <button type="submit" class="sh__btn" title="Gera um link para atletas de fora se inscreverem neste evento">
+      <i class="bi bi-link-45deg"></i> Gerar link
+    </button>
+  </form>
+  {% endif %}
+  <form method="POST" action="{{ url_for('eventos_competicoes.enviar_inscricoes', evento_id=evento.id) }}"
+        onsubmit="return confirm('Enviar {{ pendentes }} inscrição(ões) à associação? Depois disso elas não podem mais ser editadas pela academia.');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="academia_id" value="{{ academia_id }}">
+    <button type="submit" class="sh__btn sh__btn--forte" {% if not pendentes %}disabled{% endif %}>
+      <i class="bi bi-send"></i> Enviar {{ pendentes }}
+    </button>
+  </form>
+  {% endif %}
+  {% set back_url = back_url or get_back_url_default() %}
+  <a href="{{ back_url }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Voltar</a>
+{% endblock %}
 
-    {% set total = inscricoes | length %}
-    {% set enviadas = inscricoes | selectattr('status', 'equalto', 'enviada') | list | length %}
-    {% set pendentes = total - enviadas %}
+{% block content %}
+{% set total = inscricoes | length %}
+{% set enviadas = inscricoes | selectattr('status', 'equalto', 'enviada') | list | length %}
+{% set pendentes = total - enviadas %}
+{% set avulsos = inscricoes | selectattr('inclusao_avulsa') | list | length %}
 
-    {# Cabeçalho: identidade, números e ações na mesma faixa. #}
-    <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
-        <div class="min-w-0">
-            {% set back_url = back_url or get_back_url_default() %}
-            {% include 'components/botao_voltar.html' %}
-            {% set eh_competicao = evento.tipo is defined and evento.tipo == 'competicao' %}
-            <div class="mb-1">
-                {% if eh_competicao %}
-                <span class="badge bg-danger-subtle text-danger-emphasis border border-danger-subtle">
-                    <i class="bi bi-trophy me-1"></i>Competição
-                </span>
-                {% else %}
-                <span class="badge bg-primary-subtle text-primary-emphasis border border-primary-subtle">
-                    <i class="bi bi-calendar-event me-1"></i>Evento
-                </span>
-                {% endif %}
-            </div>
-            <h1 class="h4 fw-bold mb-1">
-                <i class="bi bi-people-fill {{ 'text-danger' if eh_competicao else 'text-primary' }} me-2"></i>{{ evento.nome }}
-            </h1>
-            <p class="text-muted small mb-0">
-                {% if encerrado %}
-                    <span class="badge bg-secondary">Encerrado</span>
-                {% else %}
-                    Inclua avulsos, edite ou cancele antes de enviar à associação.
-                {% endif %}
-            </p>
-        </div>
-
-        {% if not encerrado %}
-        <div class="d-flex flex-wrap gap-2">
-            <a href="{{ url_for('eventos_competicoes.incluir_avulso', evento_id=evento.id, academia_id=academia_id) }}"
-               class="btn btn-outline-success" title="Escolher um aluno já cadastrado no sistema">
-                <i class="bi bi-person-plus me-1"></i>Aluno do sistema
-            </a>
-            {# Mesma tela (tem as duas abas); #aba-novo abre direto a de atleta sem cadastro.
-               A rota gestor-incluir é exclusiva de competição e desviava o evento para a lista errada. #}
-            <a href="{{ url_for('eventos_competicoes.incluir_avulso', evento_id=evento.id, academia_id=academia_id) }}#aba-novo"
-               class="btn btn-outline-dark" title="Digitar os dados de um atleta que não tem cadastro">
-                <i class="bi bi-pencil-square me-1"></i>Atleta não cadastrado
-            </a>
-            {% if link_inscricao %}
-            <button type="button" class="btn btn-outline-primary" onclick="copiarLinkInscricao()"
-                    title="Link para atletas de fora se inscreverem neste evento">
-                <i class="bi bi-link-45deg me-1"></i>Copiar link de inscrição
-            </button>
-            <a href="{{ link_inscricao }}" target="_blank" rel="noopener"
-               class="btn btn-outline-secondary" title="Abrir o formulário público">
-                <i class="bi bi-box-arrow-up-right"></i>
-            </a>
-            {% else %}
-            <form method="POST" action="{{ url_for('eventos_competicoes.gerar_link_inscricao', evento_id=evento.id) }}">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <input type="hidden" name="academia_id" value="{{ academia_id }}">
-                <button type="submit" class="btn btn-outline-primary"
-                        title="Gera um link para atletas de fora se inscreverem neste evento">
-                    <i class="bi bi-link-45deg me-1"></i>Gerar link de inscrição
-                </button>
-            </form>
-            {% endif %}
-            <form method="POST" action="{{ url_for('eventos_competicoes.enviar_inscricoes', evento_id=evento.id) }}"
-                  onsubmit="return confirm('Enviar {{ pendentes }} inscrição(ões) à associação? Depois disso elas não podem mais ser editadas pela academia.');">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <input type="hidden" name="academia_id" value="{{ academia_id }}">
-                <button type="submit" class="btn btn-primary" {% if not pendentes %}disabled{% endif %}>
-                    <i class="bi bi-send me-1"></i>Enviar {{ pendentes }} inscrição(ões)
-                </button>
-            </form>
-        </div>
-        {% endif %}
-    </div>
-
-    {# Locais de treino que valem para a inscrição deste evento. #}
-    {% if not encerrado %}
-    <div class="card shadow-sm mb-3">
-        <div class="card-body py-3">
-            <div class="d-flex justify-content-between align-items-center">
-                <div>
-                    <span class="fw-semibold"><i class="bi bi-geo-alt-fill text-primary me-1"></i>Locais de treino desta inscrição</span>
-                    <div class="text-muted small">
-                        Marque quais locais aparecem no formulário de inscrição deste evento.
-                    </div>
-                </div>
-                <button class="btn btn-sm btn-outline-secondary" type="button"
-                        data-bs-toggle="collapse" data-bs-target="#boxLocais">
-                    {% set n_vinc = locais_evento | selectattr('vinculado') | list | length %}
-                    {{ n_vinc }} vinculado(s)
-                </button>
-            </div>
-
-            <div class="collapse mt-3" id="boxLocais">
-                {% if locais_evento %}
-                <form method="POST" action="{{ url_for('eventos_competicoes.salvar_locais_inscricao', evento_id=evento.id) }}">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <input type="hidden" name="academia_id" value="{{ academia_id }}">
-                    <div class="row g-2">
-                        {% for l in locais_evento %}
-                        <div class="col-12 col-md-6">
-                            <div class="form-check border rounded px-3 py-2">
-                                <input class="form-check-input" type="checkbox" name="local_id"
-                                       value="{{ l.id }}" id="lc_{{ l.id }}" {% if l.vinculado %}checked{% endif %}>
-                                <label class="form-check-label" for="lc_{{ l.id }}">
-                                    {{ l.nome }}
-                                    {% if l.professor_nome %}<span class="text-muted small d-block">Prof. {{ l.professor_nome }}</span>{% endif %}
-                                </label>
-                            </div>
-                        </div>
-                        {% endfor %}
-                    </div>
-                    <div class="mt-3">
-                        <button type="submit" class="btn btn-sm btn-primary">
-                            <i class="bi bi-check-lg me-1"></i>Salvar locais
-                        </button>
-                        <a href="{{ url_for('academia.locais_treino', academia_id=academia_id) }}"
-                           class="btn btn-sm btn-link">Cadastrar novo local</a>
-                    </div>
-                </form>
-                {% else %}
-                <p class="text-muted small mb-2">
-                    Nenhum local de treino cadastrado nesta academia.
-                </p>
-                <a href="{{ url_for('academia.locais_treino', academia_id=academia_id) }}"
-                   class="btn btn-sm btn-outline-primary">Cadastrar locais de treino</a>
-                {% endif %}
-            </div>
-        </div>
-    </div>
-    {% endif %}
-
-
-    {% if inscricoes %}
-    <div class="card shadow-sm">
-      <div class="table-responsive">
-        <table class="table table-hover align-middle mb-0 tabela-inscritos">
-          <thead>
-            <tr>
-              <th>Atleta</th>
-              <th class="d-none d-lg-table-cell">Categoria</th>
-              <th class="d-none d-md-table-cell">Peso</th>
-              <th>Situação</th>
-              <th class="d-none d-lg-table-cell">Inscrito em</th>
-              <th class="text-end col-acoes">Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for i in inscricoes %}
-            {% set d = i.dados_form or {} %}
-            <tr>
-              <td>
-                <div class="d-flex align-items-center gap-2">
-                  <div class="avatar-inicial">{{ (i.aluno_nome or d.get('nome') or '?')[:1] | upper }}</div>
-                  <div class="min-w-0">
-                    <div class="fw-semibold text-truncate" style="max-width:260px;">
-                      {{ i.aluno_nome or d.get('nome') or 'Sem nome' }}
-                    </div>
-                    <div class="small text-muted">
-                      {% if i.inclusao_avulsa %}
-                        <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle">Avulso</span>
-                      {% endif %}
-                      {% if d.get('graduacao_id') %}{{ d.graduacao_id }}{% endif %}
-                    </div>
-                  </div>
-                </div>
-              </td>
-              <td class="d-none d-lg-table-cell">
-                {% if d.get('categoria') %}{{ d.categoria }}
-                {% else %}<span class="text-body-tertiary">—</span>{% endif %}
-              </td>
-              <td class="d-none d-md-table-cell">
-                {% if d.get('peso') %}{{ d.peso }} kg
-                {% else %}<span class="text-body-tertiary">—</span>{% endif %}
-              </td>
-              <td>
-                {% if i.status == 'enviada' %}
-                  <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle">
-                    <i class="bi bi-check-circle me-1"></i>Enviada
-                  </span>
-                {% else %}
-                  <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle">Confirmada</span>
-                {% endif %}
-              </td>
-              <td class="d-none d-lg-table-cell small text-muted">
-                {% if i.created_at %}{{ i.created_at|data_br }}{% else %}—{% endif %}
-              </td>
-              <td class="text-end text-nowrap">
-                <button type="button" class="btn btn-sm btn-outline-primary"
-                        onclick="verDetalhes({{ i.id }})" title="Ver todos os dados">
-                  <i class="bi bi-eye"></i>
-                </button>
-                {% if i.status != 'enviada' and not encerrado %}
-                <a href="{{ url_for('eventos_competicoes.editar_inscricao', evento_id=evento.id, inscricao_id=i.id, academia_id=academia_id) }}"
-                   class="btn btn-sm btn-outline-secondary" title="Editar">
-                  <i class="bi bi-pencil"></i>
-                </a>
-                <form method="POST" class="d-inline"
-                      action="{{ url_for('eventos_competicoes.cancelar_inscricao', evento_id=evento.id, inscricao_id=i.id) }}"
-                      onsubmit="return confirm('Cancelar a inscrição de {{ i.aluno_nome or d.get('nome') or 'este atleta' }}?')">
-                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                  <input type="hidden" name="academia_id" value="{{ academia_id }}">
-                  <button type="submit" class="btn btn-sm btn-outline-danger" title="Cancelar">
-                    <i class="bi bi-x-lg"></i>
-                  </button>
-                </form>
-                {% endif %}
-              </td>
-            </tr>
-
-            {# Dados completos ficam aqui, ocultos, e o modal os copia ao abrir:
-               evita uma requisição por inscrição só para exibir o que já temos. #}
-            <template id="detalhes_{{ i.id }}">
-              <div class="row g-2">
-                {% for c in campos_form %}
-                  {% set v = d.get(c.campo_chave) %}
-                  <div class="col-12 col-sm-6">
-                    <div class="border rounded p-2 h-100">
-                      <div class="text-muted" style="font-size:.75rem;">{{ c.label }}</div>
-                      <div class="fw-semibold" style="font-size:.9rem;">
-                        {% if not v %}<span class="text-body-tertiary">não informado</span>
-                        {% elif c.campo_chave == 'data_nascimento' %}{{ v|data_br }}
-                        {% elif c.campo_chave == 'sexo' %}{{ 'Masculino' if v == 'M' else ('Feminino' if v == 'F' else v) }}
-                        {% else %}{{ v }}{% endif %}
-                      </div>
-                    </div>
-                  </div>
-                {% endfor %}
-              </div>
-            </template>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    </div>
-    {% else %}
-    <div class="card shadow-sm">
-      <div class="card-body text-center py-5">
-        <i class="bi bi-people text-body-tertiary" style="font-size:2.5rem;"></i>
-        <p class="text-muted mt-2 mb-3">Nenhum atleta inscrito neste evento ainda.</p>
-        {% if not encerrado %}
-        <a href="{{ url_for('eventos_competicoes.incluir_avulso', evento_id=evento.id, academia_id=academia_id) }}"
-           class="btn btn-outline-success btn-sm">Incluir o primeiro</a>
-        {% endif %}
-      </div>
-    </div>
-    {% endif %}
+<div class="sh__faixa">
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">{{ 'Competição' if eh_competicao else 'Evento' }}</span>
+    <span class="sh__faixa-valor">{{ total }}</span>
+    <span class="lst-sub">{{ 'Atletas inscritos' if eh_competicao else 'Inscritos nesta academia' }}</span>
+  </div>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Enviadas</span>
+    <span class="sh__faixa-valor">{{ enviadas }}</span>
+    <span class="lst-sub">Já na associação, sem edição</span>
+  </div>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">A enviar</span>
+    <span class="sh__faixa-valor {% if pendentes %}sh__faixa-valor--alerta{% endif %}">{{ pendentes }}</span>
+    <span class="lst-sub">Ainda podem ser editadas</span>
+  </div>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Avulsos</span>
+    <span class="sh__faixa-valor">{{ avulsos }}</span>
+    <span class="lst-sub">Atletas sem cadastro no sistema</span>
+  </div>
 </div>
+
+{% if not encerrado %}
+<section class="lst-quadro">
+  <header class="lst-quadro__topo">
+    <div>
+      <h2 class="lst-quadro__titulo">Locais de treino desta inscrição</h2>
+      <span class="lst-sub">Marque quais locais aparecem no formulário de inscrição deste evento.</span>
+    </div>
+    {% set n_vinc = locais_evento | selectattr('vinculado') | list | length %}
+    <button class="sh__btn" type="button" data-bs-toggle="collapse" data-bs-target="#boxLocais">
+      {{ n_vinc }} vinculado{{ 's' if n_vinc != 1 }}
+    </button>
+  </header>
+
+  <div class="collapse" id="boxLocais">
+    <div class="insc-locais">
+      {% if locais_evento %}
+      <form method="POST" action="{{ url_for('eventos_competicoes.salvar_locais_inscricao', evento_id=evento.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="academia_id" value="{{ academia_id }}">
+        <div class="row g-2">
+          {% for l in locais_evento %}
+          <div class="col-12 col-md-6">
+            <label class="insc-local" for="lc_{{ l.id }}">
+              <input class="form-check-input mt-1" type="checkbox" name="local_id"
+                     value="{{ l.id }}" id="lc_{{ l.id }}" {% if l.vinculado %}checked{% endif %}>
+              <span style="min-width:0">
+                {{ l.nome }}
+                {% if l.professor_nome %}<span class="lst-sub">Prof. {{ l.professor_nome }}</span>{% endif %}
+              </span>
+            </label>
+          </div>
+          {% endfor %}
+        </div>
+        <div class="d-flex gap-2 mt-3">
+          <button type="submit" class="sh__btn sh__btn--forte"><i class="bi bi-check-lg"></i> Salvar locais</button>
+          <a href="{{ url_for('academia.locais_treino', academia_id=academia_id) }}" class="sh__btn">Cadastrar novo local</a>
+        </div>
+      </form>
+      {% else %}
+      <p class="lst-sub mb-2">Nenhum local de treino cadastrado nesta academia.</p>
+      <a href="{{ url_for('academia.locais_treino', academia_id=academia_id) }}" class="sh__btn">Cadastrar locais de treino</a>
+      {% endif %}
+    </div>
+  </div>
+</section>
+{% endif %}
+
+<section class="lst-quadro mt-3">
+  <header class="lst-quadro__topo">
+    <h2 class="lst-quadro__titulo">Inscritos</h2>
+    <span class="lst-quadro__meta">{{ total }} inscri{{ 'ções' if total != 1 else 'ção' }}</span>
+  </header>
+
+  <div class="lst-rolagem">
+    <div class="lst-largura" style="--lst-min:520px">
+      <div class="lst-linha lin-insc lst-cab">
+        <div>Atleta</div>
+        <div class="col-categoria">Categoria</div>
+        <div class="col-peso">Peso</div>
+        <div>Situação</div>
+        <div class="col-inscrito-em">Inscrito em</div>
+        <div class="lst-fim">Ações</div>
+      </div>
+
+      {% for i in inscricoes %}
+      {% set d = i.dados_form or {} %}
+      <div class="lst-linha lin-insc lst-item">
+        <div class="insc-pessoa">
+          <span class="insc-inicial">{{ (i.aluno_nome or d.get('nome') or '?')[:1] | upper }}</span>
+          <span style="min-width:0">
+            <span class="lst-nome lst-corta">{{ i.aluno_nome or d.get('nome') or 'Sem nome' }}</span>
+            <span class="lst-sub">
+              {% if i.inclusao_avulsa %}Avulso{% if d.get('graduacao_id') %} · {% endif %}{% endif %}
+              {%- if d.get('graduacao_id') %}{{ d.graduacao_id }}{% endif %}
+              {%- if not i.inclusao_avulsa and not d.get('graduacao_id') %}Aluno da academia{% endif %}
+            </span>
+          </span>
+        </div>
+
+        <div class="col-categoria lst-corta">
+          {% if d.get('categoria') %}{{ d.categoria }}{% else %}<span class="lst-vazio-celula">—</span>{% endif %}
+        </div>
+
+        <div class="col-peso">
+          {% if d.get('peso') %}{{ d.peso }} kg{% else %}<span class="lst-vazio-celula">—</span>{% endif %}
+        </div>
+
+        <div>
+          {% if i.status == 'enviada' %}
+          <span class="lst-situacao is-ativo"><i></i>Enviada</span>
+          {% else %}
+          <span class="lst-situacao"><i></i>Confirmada</span>
+          {% endif %}
+        </div>
+
+        <div class="col-inscrito-em">{{ i.created_at|data_br if i.created_at else '—' }}</div>
+
+        <div class="lst-acoes">
+          <button type="button" class="lst-acao" onclick="verDetalhes({{ i.id }})"
+                  title="Ver todos os dados" aria-label="Ver dados da inscrição">
+            <i class="bi bi-eye"></i>
+          </button>
+          {% if i.status != 'enviada' and not encerrado %}
+          <a class="lst-acao" title="Editar inscrição" aria-label="Editar inscrição"
+             href="{{ url_for('eventos_competicoes.editar_inscricao', evento_id=evento.id, inscricao_id=i.id, academia_id=academia_id) }}">
+            <i class="bi bi-pencil"></i>
+          </a>
+          <form method="POST"
+                action="{{ url_for('eventos_competicoes.cancelar_inscricao', evento_id=evento.id, inscricao_id=i.id) }}"
+                onsubmit="return confirm('Cancelar a inscrição de {{ i.aluno_nome or d.get('nome') or 'este atleta' }}?')">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="academia_id" value="{{ academia_id }}">
+            <button type="submit" class="lst-acao lst-acao--perigo" title="Cancelar inscrição"
+                    aria-label="Cancelar inscrição">
+              <i class="bi bi-x-lg"></i>
+            </button>
+          </form>
+          {% endif %}
+        </div>
+      </div>
+
+      {# Dados completos ficam aqui, ocultos, e o modal os copia ao abrir:
+         evita uma requisição por inscrição só para exibir o que já temos. #}
+      <template id="detalhes_{{ i.id }}">
+        <div class="row g-2">
+          {% for c in campos_form %}
+            {% set v = d.get(c.campo_chave) %}
+            <div class="col-12 col-sm-6">
+              <div class="border rounded p-2 h-100">
+                <div class="lst-campo__rotulo">{{ c.label }}</div>
+                <div class="fw-semibold" style="font-size:.9rem;">
+                  {% if not v %}<span class="lst-vazio-celula">não informado</span>
+                  {% elif c.campo_chave == 'data_nascimento' %}{{ v|data_br }}
+                  {% elif c.campo_chave == 'sexo' %}{{ 'Masculino' if v == 'M' else ('Feminino' if v == 'F' else v) }}
+                  {% else %}{{ v }}{% endif %}
+                </div>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      </template>
+      {% else %}
+      <p class="lst-vazio">
+        Nenhum atleta inscrito neste evento ainda.
+        {% if not encerrado %}
+        <a href="{{ url_for('eventos_competicoes.incluir_avulso', evento_id=evento.id, academia_id=academia_id) }}">Incluir o primeiro</a>.
+        {% endif %}
+      </p>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<footer class="lst-rodape">
+  © {{ current_year }} {{ academia.nome if academia else 'Unimaster' }}. Todos os direitos reservados.
+</footer>
 
 <!-- Detalhes completos da inscrição -->
 <div class="modal fade" id="modalDetalhes" tabindex="-1" aria-hidden="true">
@@ -304,7 +290,7 @@
       </div>
       <div class="modal-body" id="detalhes_corpo"></div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Fechar</button>
+        <button type="button" class="sh__btn" data-bs-dismiss="modal">Fechar</button>
       </div>
     </div>
   </div>
@@ -325,7 +311,7 @@
     if (!janelaDetalhes) janelaDetalhes = new bootstrap.Modal(document.getElementById('modalDetalhes'));
     const molde = document.getElementById('detalhes_' + id);
     document.getElementById('detalhes_corpo').innerHTML =
-      molde ? molde.innerHTML : '<p class="text-muted mb-0">Sem dados.</p>';
+      molde ? molde.innerHTML : '<p class="lst-sub mb-0">Sem dados.</p>';
     janelaDetalhes.show();
   }
 </script>

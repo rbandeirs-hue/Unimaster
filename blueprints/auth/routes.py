@@ -40,6 +40,23 @@ def _chave_brute(ip: str) -> str:
     return f"_bf_{ip}"
 
 
+def _limpar_contexto_sessao():
+    """Zera o contexto da sessão, preservando o contador de tentativas.
+
+    `logout_user()` remove só as chaves do Flask-Login. A academia escolhida na
+    entrada, o modo do painel e afins continuavam no cookie: o login seguinte
+    entrava direto na academia anterior, sem passar pela tela de escolha — e o
+    problema só não aparecia em aba anônima, que não tem cookie.
+
+    O contador de força bruta é por IP e tem de sobreviver: /logout é público,
+    e sem essa ressalva bastava passar por ele para zerar o bloqueio.
+    """
+    preservados = {k: v for k, v in session.items() if k.startswith("_bf_")}
+    session.clear()
+    session.update(preservados)
+    session.modified = True
+
+
 def _verificar_bloqueio(ip: str) -> tuple[bool, int]:
     """Retorna (bloqueado, segundos_restantes)."""
     chave = _chave_brute(ip)
@@ -183,6 +200,9 @@ def login():
         # 4️⃣ Logar usuário
         # --------------------------------------------
         _limpar_falhas(ip)
+        # Entrada limpa: sem isso, quem entra depois de outro usuário no mesmo
+        # navegador herda a academia e o modo de painel da sessão anterior.
+        _limpar_contexto_sessao()
         login_user(user_obj)
 
         # Se entrou pelo fallback de e-mail (sem CPF), forçar cadastro de CPF
@@ -243,6 +263,7 @@ def cadastrar_cpf():
 @auth_bp.route("/logout")
 def logout():
     logout_user()
+    _limpar_contexto_sessao()
     return redirect(url_for("auth.login"))
 
 

@@ -1,688 +1,625 @@
-{% extends "base.html" %}
-{% block title %}Ranking de Frequência{% endblock %}
+{# =======================================================================
+   Ranking de frequência — tela da academia / professor
+   =======================================================================
+   Um ranking só para todo o escopo (a turma vira filtro, não vira seção):
+   o pódio mostra os três primeiros, a tabela mostra todo mundo e a coluna
+   da direita responde "onde está o problema" — média por turma, faixas e
+   quem está abaixo de 60%.
 
-{% block extra_css %}
-<style>
-/* ═══════════════════════════════════════════════════════════
-   LAYOUT
-═══════════════════════════════════════════════════════════ */
-.rk-wrap { max-width:1200px; margin:0 auto; padding:1.5rem 1rem 3rem; }
+   O aluno continua vendo `ranking_frequencia_aluno.html`, que roda no
+   layout dele.
 
-.rk-wrap .btn-voltar-padrao {
-    border:1px solid #e5e9f2; background:#fff; color:#374151;
-    font-size:.82rem; font-weight:600;
-    padding:.5rem .85rem; border-radius:10px; gap:.4rem;
-    margin-bottom:1rem;
-    transition:all .15s;
-    text-decoration:none;
-}
-.rk-wrap .btn-voltar-padrao:hover {
-    background:#f8fbff; border-color:#0d6efd; color:#0d6efd;
-}
+   Contexto: ranking (utils.ranking_frequencia.ranking_frequencia_geral),
+   turmas_opcoes, turma_sel, tipo_filtro, mes_sel, ano_sel, anos_opts,
+   meses_opts, data_inicio_val, data_fim_val, destaque_aluno_id.
+   ======================================================================= #}
+{% extends "base_academia.html" %}
+{% set menu_ativo = 'ranking' %}
+{% block title %}Ranking de frequência{% endblock %}
 
-/* ═══════════════════════════════════════════════════════════
-   HERO
-═══════════════════════════════════════════════════════════ */
-.rk-hero {
-    background: linear-gradient(135deg,#1e1b4b 0%,#4f46e5 45%,#7c3aed 100%);
-    border-radius:20px;
-    padding:1.85rem 2rem 1.55rem;
-    margin-bottom:1.5rem;
-    position:relative;
-    overflow:hidden;
-    color:#fff;
-    box-shadow: 0 12px 40px rgba(79,70,229,.18);
-}
-.rk-hero::after {
-    content:''; position:absolute; top:-80px; right:-80px;
-    width:320px; height:320px;
-    background:radial-gradient(circle,rgba(250,204,21,.22) 0%,transparent 65%);
-    pointer-events:none;
-}
-.rk-hero::before {
-    content:'🏆'; position:absolute; bottom:-30px; right:32px;
-    font-size:9rem; opacity:.06; pointer-events:none;
-    transform:rotate(-12deg);
-}
-.rk-hero-row { display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap; position:relative; z-index:1; }
-.rk-hero-title {
-    font-size:1.7rem; font-weight:800; color:#fff;
-    letter-spacing:-.5px; margin:0 0 .25rem 0;
-    display:flex; align-items:center; gap:.55rem;
-}
-.rk-hero-title .ic {
-    width:42px; height:42px; border-radius:11px;
-    background:rgba(255,255,255,.16);
-    display:inline-flex; align-items:center; justify-content:center;
-    font-size:1.25rem;
-    backdrop-filter: blur(6px);
-}
-.rk-hero-sub { color:rgba(255,255,255,.78); font-size:.88rem; margin:0; }
-.rk-hero-stats { display:flex; flex-wrap:wrap; gap:.45rem; margin-top:.85rem; }
-.rk-hero-chip {
-    background:rgba(255,255,255,.18);
-    color:#fff; font-size:.78rem; font-weight:600;
-    padding:.35rem .8rem; border-radius:999px;
-    backdrop-filter: blur(6px);
-    border:1px solid rgba(255,255,255,.18);
-    display:inline-flex; align-items:center; gap:.3rem;
-}
+{% block pagina_titulo %}Ranking de frequência{% endblock %}
+{% block pagina_subtitulo %}
+  {{ ranking.periodo_rotulo }}
+  · {{ ranking.aulas }} chamada{{ 's' if ranking.aulas != 1 }}
+  · {{ ranking.alunos|length }} aluno{{ 's' if ranking.alunos|length != 1 }}
+  · {{ ranking.turmas|length }} turma{{ 's' if ranking.turmas|length != 1 }}
+{% endblock %}
 
-/* ═══════════════════════════════════════════════════════════
-   FILTRO
-═══════════════════════════════════════════════════════════ */
-.rk-filter {
-    background:#fff;
-    border:1px solid #e5e7eb;
-    border-radius:16px;
-    padding:1.1rem 1.25rem;
-    margin-bottom:1.5rem;
-    box-shadow:0 1px 3px rgba(15,23,42,.05);
-}
-.rk-lbl {
-    font-size:.65rem; font-weight:700; text-transform:uppercase;
-    letter-spacing:.08em; color:#9ca3af; margin-bottom:.35rem; display:block;
-}
-.rk-tipo-btns { display:inline-flex; gap:3px; padding:3px; background:#f1f5f9; border-radius:12px; border:1px solid #e5e7eb; }
-.rk-tipo-btn {
-    border:0; background:transparent; color:#6b7280;
-    border-radius:9px; padding:.4rem .85rem; font-size:.8rem; font-weight:600;
-    cursor:pointer; transition:all .15s; white-space:nowrap; line-height:1;
-    display:inline-flex; align-items:center; gap:.3rem;
-}
-.rk-tipo-btn:hover { color:#4f46e5; }
-.rk-tipo-btn.active { background:#fff; color:#4f46e5; box-shadow:0 1px 2px rgba(15,23,42,.08); }
+{% block pagina_acoes %}
+<a href="{{ back_url }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Voltar</a>
+<form method="GET" class="rk-filtros" id="rkForm"
+      action="{{ url_for('presencas.ranking_frequencia_pagina') }}">
+  {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
+  <input type="hidden" name="tipo_filtro" id="rkTipo" value="{{ tipo_filtro }}">
 
-.rk-nav-grp { display:flex; align-items:center; gap:4px; }
-.rk-nav-btn {
-    width:32px; height:32px; border-radius:9px;
-    border:1.5px solid #e5e7eb; background:#f9fafb; color:#6b7280;
-    display:inline-flex; align-items:center; justify-content:center;
-    font-size:.75rem; cursor:pointer; transition:all .15s; flex-shrink:0;
-}
-.rk-nav-btn:hover { border-color:#4f46e5; color:#4f46e5; background:#eef2ff; }
-.rk-val {
-    font-size:.9rem; font-weight:700; color:#111827;
-    min-width:95px; text-align:center; padding:0 4px;
-}
-[hidden] { display:none !important; }
+  {# Mês / Ano / Período: trocar o modo já recarrega, menos em "período",
+     que espera as duas datas antes de consultar. #}
+  <div class="rk-modos" role="group" aria-label="Período">
+    {% for chave, rotulo in [('mes', 'Mês'), ('ano', 'Ano'), ('periodo', 'Período')] %}
+    <button type="button" class="rk-modo {% if tipo_filtro == chave %}is-ativo{% endif %}"
+            data-tipo="{{ chave }}">{{ rotulo }}</button>
+    {% endfor %}
+  </div>
 
-/* ═══════════════════════════════════════════════════════════
-   CARD TURMA
-═══════════════════════════════════════════════════════════ */
-.rk-card {
-    background:#fff;
-    border:1px solid #e5e7eb;
-    border-radius:18px;
-    overflow:hidden;
-    margin-bottom:1.5rem;
-    box-shadow:0 1px 3px rgba(15,23,42,.05), 0 8px 24px rgba(15,23,42,.04);
-    transition:box-shadow .15s ease, transform .15s ease;
-}
-.rk-card:hover {
-    box-shadow:0 4px 12px rgba(15,23,42,.06), 0 16px 36px rgba(15,23,42,.06);
-}
-.rk-card-head {
-    display:flex; align-items:center; justify-content:space-between;
-    padding:1rem 1.5rem; gap:.75rem; flex-wrap:wrap;
-    background:linear-gradient(90deg,#f8f7ff 0%,#fff 100%);
-    border-bottom:1px solid #ede9fe;
-    position:relative;
-}
-.rk-card-head::before {
-    content:''; position:absolute;
-    left:0; top:0; bottom:0; width:4px;
-    background:linear-gradient(180deg,#7c3aed,#4f46e5);
-}
-.rk-card-nome {
-    font-weight:800; font-size:1.05rem; color:#1e1b4b;
-    display:flex; align-items:center; gap:.5rem;
-}
-.rk-card-nome i { color:#7c3aed; font-size:1.1rem; }
-.rk-card-badges { display:flex; gap:.4rem; flex-wrap:wrap; }
-.rk-card-badge {
-    font-size:.72rem; font-weight:700; letter-spacing:.02em;
-    background:#ede9fe; color:#6d28d9; border-radius:999px;
-    padding:.25rem .7rem; display:inline-flex; align-items:center; gap:.3rem;
-}
-.rk-card-badge.alt { background:#dcfce7; color:#15803d; }
+  <select name="mes" class="rk-campo" aria-label="Mês"
+          {% if tipo_filtro != 'mes' %}hidden disabled{% endif %}>
+    {% for numero, nome in meses_opts %}
+    <option value="{{ numero }}" {% if numero == mes_sel %}selected{% endif %}>{{ nome }}</option>
+    {% endfor %}
+  </select>
 
-/* ═══════════════════════════════════════════════════════════
-   PÓDIO
-═══════════════════════════════════════════════════════════ */
-.rk-podium-bg {
-    background:linear-gradient(180deg,#f5f3ff 0%,#faf9ff 100%);
-    padding:2rem 1.5rem 0;
-}
-.rk-podium {
-    display:flex; align-items:flex-end; justify-content:center;
-    gap:12px; max-width:560px; margin:0 auto;
-}
-.rk-slot {
-    flex:1; max-width:180px;
-    display:flex; flex-direction:column; align-items:center; justify-content:flex-end;
-}
-.rk-slot-inner {
-    display:flex; flex-direction:column; align-items:center; width:100%;
-}
-.rk-medal-wrap {
-    position:relative; margin-bottom:8px;
-}
-.rk-medal-num {
-    position:absolute; bottom:-4px; right:-4px;
-    width:28px; height:28px; border-radius:50%;
-    display:flex; align-items:center; justify-content:center;
-    font-size:.95rem; font-weight:800; border:3px solid #fff;
-    box-shadow:0 3px 8px rgba(15,23,42,.18);
-    line-height:1;
-}
-.rk-p1 .rk-medal-num { background:linear-gradient(135deg,#fbbf24,#f59e0b); color:#fff; }
-.rk-p2 .rk-medal-num { background:linear-gradient(135deg,#cbd5e1,#94a3b8); color:#fff; }
-.rk-p3 .rk-medal-num { background:linear-gradient(135deg,#d4a574,#b87333); color:#fff; }
+  <select name="ano" class="rk-campo" aria-label="Ano"
+          {% if tipo_filtro == 'periodo' %}hidden disabled{% endif %}>
+    {% for a in anos_opts %}
+    <option value="{{ a }}" {% if a == ano_sel %}selected{% endif %}>{{ a }}</option>
+    {% endfor %}
+  </select>
 
-.rk-avatar {
-    width:72px; height:72px; border-radius:50%; object-fit:cover;
-    border:4px solid #fff; box-shadow:0 4px 14px rgba(0,0,0,.18);
-}
-.rk-avatar-ph {
-    width:72px; height:72px; border-radius:50%;
-    display:flex; align-items:center; justify-content:center;
-    font-size:1.6rem; border:4px solid #fff;
-    box-shadow:0 4px 14px rgba(0,0,0,.12);
-}
-.rk-p1 .rk-avatar-ph { background:#fef3c7; color:#92400e; }
-.rk-p2 .rk-avatar-ph { background:#f1f5f9; color:#475569; }
-.rk-p3 .rk-avatar-ph { background:#fef3e2; color:#7c2d12; }
+  <input type="date" name="data_inicio" class="rk-campo rk-campo--data" aria-label="De"
+         value="{{ data_inicio_val }}" {% if tipo_filtro != 'periodo' %}hidden disabled{% endif %}>
+  <input type="date" name="data_fim" class="rk-campo rk-campo--data" aria-label="Até"
+         value="{{ data_fim_val }}" {% if tipo_filtro != 'periodo' %}hidden disabled{% endif %}>
 
-.rk-pedestal {
-    width:100%; border-radius:14px 14px 0 0;
-    padding:.85rem .5rem 1rem; text-align:center; margin-top:10px;
-}
-.rk-pnome {
-    font-weight:800; font-size:.8rem; line-height:1.3;
-    word-break:break-word; margin-bottom:5px;
-}
-.rk-ppts {
-    font-size:.72rem; font-weight:600;
-    background:rgba(255,255,255,.5); border-radius:20px;
-    padding:2px 10px; display:inline-block;
-}
+  <select name="turma_id" class="rk-campo rk-campo--turma" aria-label="Turma">
+    <option value="">Todas as turmas</option>
+    {% for t in turmas_opcoes %}
+    <option value="{{ t.TurmaID }}" {% if turma_sel == t.TurmaID %}selected{% endif %}>{{ t.Nome }}</option>
+    {% endfor %}
+  </select>
 
-/* gradientes pódio */
-.rk-p1 .rk-pedestal {
-    min-height:160px;
-    background:linear-gradient(180deg,#fef9c3 0%,#fde68a 40%,#fbbf24 100%);
-    border:2px solid #f59e0b;
-    box-shadow:0 -4px 20px rgba(245,158,11,.2);
-}
-.rk-p1 .rk-pnome { color:#78350f; }
-.rk-p1 .rk-ppts  { color:#92400e; }
+  {# Num período longo o aproveitamento sozinho engana: quem tem 2 presenças em
+     2 chamadas fica na frente de quem treina desde o início. Por isso o
+     critério é explícito, e já vem no que faz sentido para o recorte. #}
+  <select name="ordenar" class="rk-campo rk-campo--ordem" aria-label="Classificar por"
+          onchange="this.form.submit()">
+    <option value="periodo" {% if ordenar == 'periodo' %}selected{% endif %}>Presença no período (%)</option>
+    <option value="aproveitamento" {% if ordenar == 'aproveitamento' %}selected{% endif %}>Aproveitamento nas chamadas (%)</option>
+    <option value="presencas" {% if ordenar == 'presencas' %}selected{% endif %}>Número de presenças</option>
+  </select>
 
-.rk-p2 .rk-pedestal {
-    min-height:130px;
-    background:linear-gradient(180deg,#f8fafc 0%,#e2e8f0 50%,#cbd5e1 100%);
-    border:2px solid #94a3b8;
-    box-shadow:0 -4px 20px rgba(148,163,184,.15);
-}
-.rk-p2 .rk-pnome { color:#1e293b; }
-.rk-p2 .rk-ppts  { color:#475569; }
-
-.rk-p3 .rk-pedestal {
-    min-height:110px;
-    background:linear-gradient(180deg,#fff7f0 0%,#fed7aa 50%,#d4a574 100%);
-    border:2px solid #b87333;
-    box-shadow:0 -4px 20px rgba(184,115,51,.12);
-}
-.rk-p3 .rk-pnome { color:#7c2d12; }
-.rk-p3 .rk-ppts  { color:#9a3412; }
-
-.rk-empty .rk-pedestal {
-    min-height:70px; background:#f9fafb;
-    border:2px dashed #e5e7eb;
-    display:flex; align-items:center; justify-content:center;
-    color:#d1d5db; font-size:.75rem;
-}
-
-.rk-p1 { order:2; }
-.rk-p2 { order:1; }
-.rk-p3 { order:3; }
-
-.rk-slot.rk-hl .rk-pedestal { box-shadow:0 0 0 3px rgba(99,102,241,.5) !important; }
-
-/* ═══════════════════════════════════════════════════════════
-   TABELA RANKING
-═══════════════════════════════════════════════════════════ */
-.rk-tbl-section { border-top:2px solid #f5f3ff; }
-.rk-tbl-toggle {
-    display:flex; align-items:center; justify-content:space-between;
-    padding:.85rem 1.5rem; cursor:pointer; user-select:none;
-    transition:background .15s;
-}
-.rk-tbl-toggle:hover { background:#faf9ff; }
-.rk-tbl-label {
-    font-size:.7rem; font-weight:700; text-transform:uppercase;
-    letter-spacing:.08em; color:#7c3aed;
-    display:flex; align-items:center; gap:6px;
-}
-.rk-chevron { font-size:.72rem; color:#c4b5fd; transition:transform .2s; }
-.rk-tbl-toggle.open .rk-chevron { transform:rotate(180deg); }
-
-.rk-tbl-wrap { padding:0 1.5rem 1.5rem; }
-.rkt {
-    width:100%; border-collapse:collapse; font-size:.82rem;
-}
-.rkt thead tr {
-    border-bottom:2px solid #f3f4f6;
-}
-.rkt th {
-    font-size:.63rem; font-weight:700; text-transform:uppercase;
-    letter-spacing:.06em; color:#9ca3af; padding:6px 8px;
-}
-.rkt td {
-    padding:7px 8px; vertical-align:middle;
-    border-bottom:1px solid #f9fafb;
-}
-.rkt tbody tr:last-child td { border-bottom:none; }
-.rkt tbody tr:hover td { background:#faf9ff; }
-
-.rkt-pos {
-    font-weight:800; font-size:.75rem; width:28px;
-    text-align:center; color:#d1d5db;
-}
-.rkt-pos.p1 { color:#f59e0b; }
-.rkt-pos.p2 { color:#94a3b8; }
-.rkt-pos.p3 { color:#b87333; }
-
-.rkt-av { width:34px; height:34px; border-radius:50%; object-fit:cover; }
-.rkt-av-ph {
-    width:34px; height:34px; border-radius:50%;
-    background:#f1f5f9; color:#94a3b8;
-    display:inline-flex; align-items:center; justify-content:center; font-size:.85rem;
-}
-.rkt-nome { font-weight:600; color:#1e1b4b; }
-.rkt-pts {
-    font-size:.72rem; font-weight:700;
-    background:#ede9fe; color:#6d28d9;
-    border-radius:12px; padding:3px 10px; white-space:nowrap;
-}
-
-.rkt-dest td { background:#faf5ff !important; }
-.rkt-dest .rkt-pts { background:#ddd6fe; color:#4338ca; }
-
-/* barra de progresso mini */
-.rkt-bar-wrap { width:80px; }
-.rkt-bar-bg { background:#f3f4f6; border-radius:4px; height:5px; overflow:hidden; }
-.rkt-bar-fill { height:5px; border-radius:4px; background:linear-gradient(90deg,#7c3aed,#a78bfa); }
-
-/* paginação */
-.rk-pag {
-    display:flex; align-items:center; justify-content:space-between;
-    flex-wrap:wrap; gap:.5rem; margin-bottom:1.5rem;
-}
-.rk-pag-info { font-size:.8rem; color:#6b7280; }
-.rk-pag-info strong { color:#1e1b4b; }
-
-/* ═══════════════════════════════════════════════════════════
-   RESPONSIVO MOBILE
-═══════════════════════════════════════════════════════════ */
-@media (max-width:576px){
-    .rk-wrap { padding:1rem .75rem 2rem; }
-    .rk-hero { padding:1.25rem 1.25rem 1rem; border-radius:14px; }
-    .rk-hero-title { font-size:1.25rem; }
-    .rk-filter { padding:1rem; }
-    .rk-podium-bg { padding:1.25rem 1rem 0; }
-    .rk-podium { gap:6px; }
-    .rk-slot { max-width:110px; }
-    .rk-avatar, .rk-avatar-ph { width:52px; height:52px; font-size:1.1rem; }
-    .rk-medal-num { width:18px; height:18px; font-size:.55rem; }
-    .rk-p1 .rk-pedestal { min-height:110px; }
-    .rk-p2 .rk-pedestal { min-height:90px; }
-    .rk-p3 .rk-pedestal { min-height:76px; }
-    .rk-pnome { font-size:.68rem; }
-    .rk-ppts  { font-size:.62rem; padding:1px 7px; }
-    .rk-card-head { padding:.65rem 1rem; }
-    .rk-card-nome { font-size:.9rem; }
-    .rk-tbl-toggle { padding:.7rem 1rem; }
-    .rk-tbl-wrap { padding:0 1rem 1rem; }
-    .rkt { font-size:.75rem; }
-    .rkt-bar-wrap { width:60px; }
-    .rk-tipo-btns { gap:4px; }
-    .rk-tipo-btn { padding:5px 10px; font-size:.74rem; }
-    .rk-val { min-width:72px; font-size:.82rem; }
-}
-</style>
+  <button type="submit" class="sh__btn rk-buscar"
+          {% if tipo_filtro != 'periodo' %}hidden{% endif %}>Buscar</button>
+</form>
+<button type="button" class="sh__btn" id="rkImprimir"><i class="bi bi-printer"></i> Imprimir</button>
 {% endblock %}
 
 {% block content %}
-<div class="rk-wrap">
-    {% set back_url = back_url or get_back_url_default() %}
-    {% include 'components/botao_voltar.html' %}
+<style>
+  /* Filtros no cabeçalho, na mesma altura dos botões do shell. */
+  .rk-filtros { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
+  .rk-campo {
+    height: 42px;
+    padding: 0 .8rem;
+    border: 1px solid var(--sh-line);
+    border-radius: var(--u-radius-sm);
+    background: #fff;
+    color: var(--sh-ink);
+    font-size: .92rem;
+  }
+  .rk-campo:focus {
+    outline: none; border-color: #cfcbc4;
+    box-shadow: 0 0 0 3px rgba(28, 28, 28, .06);
+  }
+  .rk-campo--turma { max-width: 220px; }
+  .rk-campo--data { width: 150px; }
+  .rk-campo[hidden] { display: none; }
 
-    {# Hero #}
-    {% set _stats = namespace(alunos=0, presencas=0) %}
-    {% if turmas_ranking %}
-      {% for bl in turmas_ranking %}
-        {% set _stats.alunos = _stats.alunos + ((bl.alunos|length) if bl.alunos else 0) %}
-        {% for a in (bl.alunos or []) %}
-          {% set _stats.presencas = _stats.presencas + (a.total or 0) %}
-        {% endfor %}
-      {% endfor %}
-    {% endif %}
-    {% set _periodo_label = '' %}
-    {% if tipo_filtro == 'mes' %}
-      {%- set _mn=['','Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'] -%}
-      {% set _periodo_label = _mn[mes_sel] ~ '/' ~ ano_sel %}
-    {% elif tipo_filtro == 'ano' %}
-      {% set _periodo_label = 'Ano ' ~ ano_sel %}
-    {% else %}
-      {% set _periodo_label = (data_inicio_val or '') ~ ' a ' ~ (data_fim_val or '') %}
-    {% endif %}
-    <div class="rk-hero mb-3">
-        <div class="rk-hero-row">
-            <div>
-                <h1 class="rk-hero-title">
-                    <span class="ic"><i class="bi bi-trophy-fill text-warning"></i></span>
-                    Ranking de Frequência
-                </h1>
-                <p class="rk-hero-sub">Pódio e ranking completo por turma — {{ _periodo_label or tipo_filtro|capitalize }}</p>
-                <div class="rk-hero-stats">
-                    <span class="rk-hero-chip">
-                        <i class="bi bi-people-fill"></i>
-                        {{ turmas_ranking|length if turmas_ranking else 0 }} turma{% if (turmas_ranking|length if turmas_ranking else 0) != 1 %}s{% endif %}
-                    </span>
-                    <span class="rk-hero-chip">
-                        <i class="bi bi-person-fill-check"></i>
-                        {{ _stats.alunos }} aluno{% if _stats.alunos != 1 %}s{% endif %}
-                    </span>
-                    <span class="rk-hero-chip">
-                        <i class="bi bi-calendar-check-fill"></i>
-                        {{ _stats.presencas }} presença{% if _stats.presencas != 1 %}s{% endif %}
-                    </span>
-                </div>
-            </div>
-        </div>
-    </div>
+  .rk-modos {
+    display: inline-flex;
+    padding: 3px;
+    background: #f1efeb;
+    border: 1px solid var(--sh-line);
+    border-radius: var(--u-radius-sm);
+  }
+  .rk-modo {
+    border: 0; background: transparent;
+    padding: .4rem .85rem;
+    border-radius: 6px;
+    color: var(--sh-ink-soft);
+    font-size: .88rem; font-weight: 500;
+    cursor: pointer;
+  }
+  .rk-modo:hover { color: var(--sh-ink); }
+  .rk-modo.is-ativo { background: #fff; color: var(--sh-ink); font-weight: 600; box-shadow: var(--u-shadow-sm); }
 
-    {# Filtros #}
-    <div class="rk-filter">
-        <form method="GET" id="frmRk" action="{{ url_for('presencas.ranking_frequencia_pagina') }}">
-            <input type="hidden" name="page"        value="1">
-            <input type="hidden" name="tipo_filtro" id="tipoInput" value="{{ tipo_filtro }}">
-            <input type="hidden" name="mes"         id="mesInput"  value="{{ mes_sel }}">
-            <input type="hidden" name="ano"         id="anoInput"  value="{{ ano_sel }}">
-            <input type="hidden" name="turma_id"    id="turmaInput" value="{{ turma_sel or '' }}">
-            {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
+  /* ------------------------------------------------------------- caixas */
+  .rk-caixa {
+    background: #fff;
+    border: 1px solid var(--sh-line);
+    border-radius: var(--u-radius);
+    overflow: hidden;
+  }
+  .rk-caixa + .rk-caixa { margin-top: var(--u-space-3); }
+  .rk-caixa-topo {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: var(--u-space-3);
+    padding: .85rem 1.25rem;
+    border-bottom: 1px solid var(--sh-line);
+  }
+  .rk-caixa-titulo {
+    color: var(--sh-ink-soft);
+    font-size: .68rem; font-weight: 600;
+    letter-spacing: .14em; text-transform: uppercase;
+  }
+  .rk-caixa-nota { color: var(--sh-ink-soft); font-size: .84rem; white-space: nowrap; }
 
-            <div class="d-flex flex-wrap gap-4 align-items-end mb-3">
-                {# Tipo #}
-                <div>
-                    <span class="rk-lbl">Visualizar</span>
-                    <div class="rk-tipo-btns">
-                        <button type="button" class="rk-tipo-btn {% if tipo_filtro=='mes' %}active{% endif %}" onclick="setTipo('mes')">
-                            <i class="bi bi-calendar-month me-1"></i>Mês
-                        </button>
-                        <button type="button" class="rk-tipo-btn {% if tipo_filtro=='ano' %}active{% endif %}" onclick="setTipo('ano')">
-                            <i class="bi bi-calendar-range me-1"></i>Ano
-                        </button>
-                        <button type="button" class="rk-tipo-btn {% if tipo_filtro=='periodo' %}active{% endif %}" onclick="setTipo('periodo')">
-                            <i class="bi bi-calendar2-range me-1"></i>Período
-                        </button>
-                    </div>
-                </div>
+  /* Busca da classificação: filtra o que já está na tela, sem ida ao servidor. */
+  .rk-busca { display: flex; align-items: center; gap: .5rem; flex: 1; min-width: 0; max-width: 280px; }
+  .rk-busca i { color: var(--sh-ink-soft); font-size: .9rem; }
+  .rk-busca input {
+    flex: 1; min-width: 0;
+    border: 0; outline: none; background: transparent;
+    font-size: .92rem; color: var(--sh-ink);
+  }
 
-                {# Mês #}
-                <div id="secMes" {% if tipo_filtro!='mes' %}hidden{% endif %}>
-                    <span class="rk-lbl">Mês</span>
-                    <div class="rk-nav-grp">
-                        <button type="button" class="rk-nav-btn" onclick="navMes(-1)"><i class="bi bi-chevron-left"></i></button>
-                        <span class="rk-val" id="mesLabel">
-                            {%- set _mn=['','Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'] -%}
-                            {{ _mn[mes_sel] }}
-                        </span>
-                        <button type="button" class="rk-nav-btn" onclick="navMes(1)"><i class="bi bi-chevron-right"></i></button>
-                    </div>
-                </div>
+  /* -------------------------------------------------------------- pódio */
+  /* Três colunas iguais e um degrau por coluna: os blocos dividem a mesma
+     linha de base e ficam com a mesma largura, independente do tamanho do
+     nome. Sem isso o pódio "escorrega" e sobra coluna vazia à direita. */
+  .rk-podio {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: end;
+    gap: 0;
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 1.75rem 1.25rem 0;
+  }
+  .rk-degrau { display: flex; flex-direction: column; align-items: center; min-width: 0; }
+  .rk-degrau-topo { width: 100%; padding: 0 .5rem 1rem; text-align: center; min-width: 0; }
+  .rk-medalha {
+    width: 56px; height: 56px;
+    margin: 0 auto .7rem;
+    display: grid; place-items: center;
+    border-radius: 50%;
+    background: #f4f2ee;
+    border: 2px solid var(--sh-line);
+    color: var(--sh-ink-soft);
+    font-size: .82rem; font-weight: 700; letter-spacing: .03em;
+    object-fit: cover;
+  }
+  .rk-degrau--1 .rk-medalha { width: 66px; height: 66px; font-size: .95rem; border-color: #e0be5f; background: #fdf6e3; color: #8a6a16; }
+  .rk-degrau--3 .rk-medalha { border-color: #ecc9bd; background: #fdf1ec; color: #96543a; }
+  .rk-degrau-nome {
+    font-size: .95rem; font-weight: 600;
+    line-height: 1.3;
+    overflow-wrap: anywhere;
+  }
+  .rk-degrau--1 .rk-degrau-nome { font-size: 1.05rem; }
+  .rk-degrau-turma {
+    display: block;
+    margin-top: .15rem;
+    color: var(--sh-ink-soft);
+    font-size: .82rem;
+    overflow-wrap: anywhere;
+  }
 
-                {# Ano #}
-                <div id="secAno" {% if tipo_filtro=='periodo' %}hidden{% endif %}>
-                    <span class="rk-lbl">Ano</span>
-                    <div class="rk-nav-grp">
-                        <button type="button" class="rk-nav-btn" onclick="navAno(-1)"><i class="bi bi-chevron-left"></i></button>
-                        <span class="rk-val" id="anoLabel">{{ ano_sel }}</span>
-                        <button type="button" class="rk-nav-btn" onclick="navAno(1)"><i class="bi bi-chevron-right"></i></button>
-                    </div>
-                </div>
+  /* O bloco do degrau: altura fixa por posição, encostado no vizinho. */
+  .rk-bloco {
+    width: 100%;
+    padding: 1rem .75rem;
+    text-align: center;
+    border: 1px solid var(--sh-line);
+    border-bottom: 0;
+    border-radius: var(--u-radius-sm) var(--u-radius-sm) 0 0;
+    background: #faf9f7;
+  }
+  .rk-degrau--1 .rk-bloco { height: 148px; background: #fdf6e3; border-color: #ecd9a4; }
+  .rk-degrau--2 .rk-bloco { height: 116px; }
+  .rk-degrau--3 .rk-bloco { height: 96px; background: #fdf1ec; border-color: #f0d5c9; }
+  .rk-bloco-pos { font-size: 1.5rem; font-weight: 600; line-height: 1; }
+  .rk-bloco-freq { margin-top: .35rem; font-size: 1.05rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .rk-bloco-det { display: block; margin-top: .2rem; color: var(--sh-ink-soft); font-size: .82rem; }
+  .rk-degrau.is-vazio .rk-bloco { background: #faf9f7; border-style: dashed; color: var(--sh-ink-soft); }
+  .rk-degrau.is-vazio .rk-bloco-pos { color: #c9c6c0; }
 
-                {# Período + botões alinhados #}
-                <div id="secPeriodo" class="d-flex gap-2 align-items-end flex-wrap" {% if tipo_filtro!='periodo' %}hidden{% endif %}>
-                    <div>
-                        <span class="rk-lbl">De</span>
-                        <input type="date" name="data_inicio" id="inputDi" class="form-control form-control-sm" style="width:148px;"
-                            value="{{ data_inicio_val or '' }}" autocomplete="off"
-                            {% if tipo_filtro!='periodo' %}disabled{% endif %}>
-                    </div>
-                    <div>
-                        <span class="rk-lbl">Até</span>
-                        <input type="date" name="data_fim" id="inputDf" class="form-control form-control-sm" style="width:148px;"
-                            value="{{ data_fim_val or '' }}" autocomplete="off"
-                            {% if tipo_filtro!='periodo' %}disabled{% endif %}>
-                    </div>
-                    <div class="d-flex gap-2">
-                        <button type="submit" class="btn btn-primary btn-sm px-4 fw-semibold">
-                            <i class="bi bi-search me-1"></i>Buscar
-                        </button>
-                        <a href="{{ url_for('presencas.ranking_frequencia_pagina') }}?tipo_filtro=periodo" class="btn btn-outline-secondary btn-sm">Limpar</a>
-                    </div>
-                </div>
-            </div>
+  /* ----------------------------------------------------- colunas da tela */
+  .rk-colunas {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 340px;
+    gap: var(--u-space-3);
+    align-items: start;          /* a coluna da direita não estica à toa */
+    margin-top: var(--u-space-3);
+  }
+  @media (max-width: 1199.98px) { .rk-colunas { grid-template-columns: 1fr; } }
 
-            <div class="d-flex flex-wrap gap-3 align-items-end">
-                {% if turmas_opciones and turmas_opciones|length > 0 %}
-                <div>
-                    <span class="rk-lbl">Turma</span>
-                    <select id="turmaSelect" class="form-select form-select-sm" style="min-width:190px;max-width:300px;"
-                        onchange="document.getElementById('turmaInput').value=this.value;document.getElementById('frmRk').submit();">
-                        <option value="">Todas as turmas</option>
-                        {% for tt in turmas_opciones %}
-                        <option value="{{ tt.TurmaID }}" {% if turma_sel==tt.TurmaID %}selected{% endif %}>{{ tt.Nome }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                {% endif %}
+  /* ---------------------------------------------------------- tabela */
+  .rk-rolagem { overflow-x: auto; }
+  .rk-tabela { width: 100%; min-width: 620px; border-collapse: collapse; table-layout: fixed; }
+  /* Colunas fixas enxutas: o que sobra é do nome, que é o dado que o
+     professor procura na tela. */
+  .rk-tabela col.rk-c-pos   { width: 48px; }
+  .rk-tabela col.rk-c-turma { width: 180px; }
+  .rk-tabela col.rk-c-pres  { width: 104px; }
+  .rk-tabela col.rk-c-freq  { width: 140px; }
+  .rk-tabela th {
+    padding: .7rem 1.1rem;
+    border-bottom: 1px solid var(--sh-line);
+    color: var(--sh-ink-soft);
+    font-size: .68rem; font-weight: 600;
+    letter-spacing: .14em; text-transform: uppercase;
+    text-align: right;
+  }
+  .rk-tabela th:first-child, .rk-tabela th:nth-child(2), .rk-tabela th:nth-child(3) { text-align: left; }
+  .rk-tabela td {
+    padding: .65rem 1.1rem;
+    border-bottom: 1px solid var(--sh-line);
+    font-size: .92rem;
+    text-align: right;
+    vertical-align: middle;
+    font-variant-numeric: tabular-nums;
+  }
+  .rk-tabela tr:last-child td { border-bottom: 0; }
+  .rk-tabela td.rk-num { white-space: nowrap; }   /* "12 de 12" não quebra */
+  .rk-tabela tbody tr:hover td { background: var(--sh-page-bg); }
+  .rk-tabela tr.is-destaque td { background: #f4f2ee; }
 
-                {% if academias and academias|length > 1 %}
-                <div>
-                    <span class="rk-lbl">Academia</span>
-                    <select name="academia_id" class="form-select form-select-sm" style="max-width:260px;">
-                        {% for ac in academias %}
-                        <option value="{{ ac.id }}" {% if ac.id==academia_id %}selected{% endif %}>{{ ac.nome }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                {% endif %}
-            </div>
-        </form>
-    </div>
+  .rk-pos {
+    display: inline-grid; place-items: center;
+    width: 26px; height: 26px;
+    border-radius: 6px;
+    background: #f4f2ee;
+    color: var(--sh-ink-soft);
+    font-size: .8rem; font-weight: 600;
+  }
+  .rk-pos--1 { background: #fdf6e3; color: #8a6a16; }
+  .rk-pos--2 { background: #f1efeb; color: var(--sh-ink); }
+  .rk-pos--3 { background: #fdf1ec; color: #96543a; }
 
-    {# Paginação topo #}
-    {% if pagination and pagination.total_pages > 1 and not turma_sel %}
-    <div class="rk-pag">
-        <span class="rk-pag-info">
-            <strong>{{ pagination.total_turmas }}</strong> turma{% if pagination.total_turmas!=1 %}s{% endif %}
-            &nbsp;·&nbsp; página <strong>{{ pagination.page }}</strong> de {{ pagination.total_pages }}
-        </span>
-        <div class="btn-group btn-group-sm">
-            {% if pagination.url_prev %}<a class="btn btn-outline-primary" href="{{ pagination.url_prev }}"><i class="bi bi-chevron-left"></i> Anterior</a>{% else %}<span class="btn btn-outline-secondary disabled"><i class="bi bi-chevron-left"></i> Anterior</span>{% endif %}
-            {% if pagination.url_next %}<a class="btn btn-outline-primary" href="{{ pagination.url_next }}">Próxima <i class="bi bi-chevron-right"></i></a>{% else %}<span class="btn btn-outline-secondary disabled">Próxima <i class="bi bi-chevron-right"></i></span>{% endif %}
-        </div>
-    </div>
-    {% endif %}
+  .rk-aluno { display: flex; align-items: center; gap: .7rem; text-align: left; min-width: 0; }
+  .rk-avatar {
+    width: 30px; height: 30px; flex: 0 0 30px;
+    display: grid; place-items: center;
+    border-radius: 50%;
+    background: #f1efeb;
+    color: var(--sh-ink-soft);
+    font-size: .66rem; font-weight: 700; letter-spacing: .02em;
+    object-fit: cover;
+  }
+  /* O nome tem a coluna inteira: a turma vive na coluna dela, com largura
+     própria, e nenhuma das duas invade a outra. */
+  /* O nome quebra em vez de cortar: numa lista de ranking, meio nome não
+     serve. A turma, que é apoio, essa sim corta com reticências. */
+  .rk-nome { min-width: 0; line-height: 1.3; overflow-wrap: anywhere; }
+  .rk-tabela td.rk-turma {
+    text-align: left;
+    color: var(--sh-ink-soft);
+    font-size: .88rem;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  a.rk-nome, a.rk-linha-nome { color: inherit; text-decoration: none; }
+  a.rk-nome:hover, a.rk-linha-nome:hover { color: var(--sh-ink); text-decoration: underline; }
 
-    {# Cards #}
-    {% if turmas_ranking and turmas_ranking|length > 0 %}
-        {% for bl in turmas_ranking %}
-        {% set max_pts = bl.alunos[0].total if bl.alunos and bl.alunos|length > 0 else 1 %}
-        <div class="rk-card">
+  .rk-freq { display: flex; align-items: center; justify-content: flex-end; gap: .6rem; }
+  .rk-freq-barra {
+    width: 56px; height: 4px; flex: 0 0 56px;
+    border-radius: var(--u-radius-pill);
+    background: #eceae6;
+    overflow: hidden;
+  }
+  .rk-freq-barra span { display: block; height: 100%; background: currentColor; }
+  .rk-freq-num { min-width: 3.2rem; font-weight: 600; }
+  .rk-alta  { color: #17803d; }
+  .rk-media { color: #b45309; }
+  .rk-baixa { color: var(--sh-red); }
 
-            {# Cabeçalho #}
-            <div class="rk-card-head">
-                <span class="rk-card-nome">
-                    <i class="bi bi-people-fill"></i>{{ bl.turma_nome }}
-                </span>
-                <div class="rk-card-badges">
-                    <span class="rk-card-badge">
-                        <i class="bi bi-calendar-check"></i>{{ bl.rotulo }}
-                    </span>
-                    {% if bl.alunos and bl.alunos|length > 0 %}
-                    <span class="rk-card-badge alt">
-                        <i class="bi bi-person-fill-check"></i>{{ bl.alunos|length }} aluno{% if bl.alunos|length != 1 %}s{% endif %}
-                    </span>
-                    {% endif %}
-                </div>
-            </div>
+  /* -------------------------------------------------- coluna da direita */
+  .rk-rail { position: sticky; top: var(--u-space-3); display: grid; gap: var(--u-space-3); }
+  .rk-lista { padding: .35rem 0; }
+  .rk-linha {
+    display: flex; align-items: center; gap: .8rem;
+    padding: .7rem 1.25rem;
+  }
+  .rk-linha + .rk-linha { border-top: 1px solid var(--sh-line); }
+  .rk-linha-txt { flex: 1; min-width: 0; }
+  .rk-linha-nome { display: block; font-size: .92rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rk-linha-sub { display: block; color: var(--sh-ink-soft); font-size: .8rem; }
+  .rk-linha-valor { font-size: .92rem; font-weight: 600; font-variant-numeric: tabular-nums; }
 
-            {# Pódio #}
-            <div class="rk-podium-bg">
-                {% set top = bl.top3 %}
-                {% set p1 = top[0] if top|length > 0 else none %}
-                {% set p2 = top[1] if top|length > 1 else none %}
-                {% set p3 = top[2] if top|length > 2 else none %}
-                <div class="rk-podium">
-                    {% for px, cls in [(p2,'rk-p2'),(p1,'rk-p1'),(p3,'rk-p3')] %}
-                    {% set pos_num = loop.index if loop.index != 2 else (1 if loop.index==2 else loop.index) %}
-                    {% set pos = 2 if loop.index==1 else (1 if loop.index==2 else 3) %}
-                    <div class="rk-slot {{ cls }} {% if not px %}rk-empty{% endif %} {% if destaque_aluno_id is not none and px and px.aluno_id==destaque_aluno_id %}rk-hl{% endif %}">
-                        {% if px %}
-                        <div class="rk-slot-inner">
-                            <div class="rk-medal-wrap">
-                                {% if px.foto %}
-                                <img src="{{ url_for('static', filename='uploads/'+px.foto) }}" class="rk-avatar" alt="" loading="lazy"
-                                    onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
-                                <div class="rk-avatar-ph" style="display:none;"><i class="bi bi-person-fill"></i></div>
-                                {% else %}
-                                <div class="rk-avatar-ph"><i class="bi bi-person-fill"></i></div>
-                                {% endif %}
-                                {% set _medal_emoji = '🥇' if pos == 1 else ('🥈' if pos == 2 else '🥉') %}
-                                <span class="rk-medal-num">{{ _medal_emoji }}</span>
-                            </div>
-                            <div class="rk-pedestal">
-                                <div class="rk-pnome">{{ px.nome }}</div>
-                                <div class="rk-ppts">{{ px.total }} presença{% if px.total!=1 %}s{% endif %}</div>
-                            </div>
-                        </div>
-                        {% else %}
-                        <div class="rk-pedestal">—</div>
-                        {% endif %}
-                    </div>
-                    {% endfor %}
-                </div>
-            </div>
+  .rk-atencao { border-left: 3px solid var(--sh-red); }
+  .rk-atencao .rk-caixa-titulo { color: var(--sh-red); }
+  .rk-acao {
+    display: flex; align-items: center; gap: .4rem;
+    padding: .85rem 1.25rem;
+    border-top: 1px solid var(--sh-line);
+    color: var(--sh-ink);
+    font-size: .9rem;
+    text-decoration: none;
+  }
+  .rk-acao:hover { background: var(--sh-page-bg); color: var(--sh-ink); }
 
-            {# Tabela ranking completo #}
-            {% if bl.alunos and bl.alunos|length > 0 %}
-            <div class="rk-tbl-section">
-                <div class="rk-tbl-toggle" onclick="toggleTbl(this,'tbl{{ bl.turma_id }}')">
-                    <span class="rk-tbl-label">
-                        <i class="bi bi-list-ol"></i>
-                        Ranking completo &mdash; {{ bl.alunos|length }} aluno{% if bl.alunos|length!=1 %}s{% endif %}
-                    </span>
-                    <i class="bi bi-chevron-down rk-chevron"></i>
-                </div>
-                <div id="tbl{{ bl.turma_id }}" hidden class="rk-tbl-wrap">
-                    <table class="rkt">
-                        <thead>
-                            <tr>
-                                <th style="width:32px;">#</th>
-                                <th style="width:40px;"></th>
-                                <th>Aluno</th>
-                                <th style="width:100px;">Progresso</th>
-                                <th style="text-align:right; width:90px;">Presenças</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for row in bl.alunos %}
-                            {% set pct = ((row.total / max_pts) * 100)|int if max_pts > 0 else 0 %}
-                            <tr class="{% if destaque_aluno_id is not none and row.aluno_id==destaque_aluno_id %}rkt-dest{% endif %}">
-                                <td>
-                                    <span class="rkt-pos {% if row.lugar==1 %}p1{% elif row.lugar==2 %}p2{% elif row.lugar==3 %}p3{% endif %}">
-                                        {{ row.lugar }}
-                                    </span>
-                                </td>
-                                <td>
-                                    {% if row.foto %}
-                                    <img src="{{ url_for('static', filename='uploads/'+row.foto) }}" class="rkt-av" alt="" loading="lazy" onerror="this.style.display='none';">
-                                    {% else %}
-                                    <span class="rkt-av-ph"><i class="bi bi-person-fill"></i></span>
-                                    {% endif %}
-                                </td>
-                                <td class="rkt-nome">{{ row.nome }}</td>
-                                <td>
-                                    <div class="rkt-bar-bg">
-                                        <div class="rkt-bar-fill" style="width:{{ pct }}%;"></div>
-                                    </div>
-                                </td>
-                                <td style="text-align:right;">
-                                    <span class="rkt-pts">{{ row.total }}</span>
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-            {% endif %}
+  .rk-vazio { padding: 2.5rem 1.25rem; text-align: center; color: var(--sh-ink-soft); }
+  .rk-vazio i { font-size: 2rem; display: block; margin-bottom: .6rem; color: #cfcbc4; }
 
-        </div>
-        {% endfor %}
-    {% else %}
-    <div class="text-center py-5">
-        <i class="bi bi-trophy fs-1 d-block mb-2" style="color:#e5e7eb;"></i>
-        <p class="fw-semibold text-muted mb-1">Nenhuma presença encontrada</p>
-        <p class="small text-muted">Tente outro período ou verifique as turmas cadastradas.</p>
-    </div>
-    {% endif %}
+  @media (max-width: 767.98px) {
+    .rk-filtros { width: 100%; }
+    .rk-campo, .rk-modos { flex: 1 1 auto; }
+    .rk-campo--turma { max-width: none; }
+    .rk-podio { padding: 1.25rem .5rem 0; }
+    .rk-medalha { width: 44px; height: 44px; }
+    .rk-degrau--1 .rk-medalha { width: 52px; height: 52px; }
+    .rk-degrau-nome, .rk-degrau--1 .rk-degrau-nome { font-size: .84rem; }
+    .rk-degrau-turma { display: none; }
+    .rk-degrau--1 .rk-bloco { height: 112px; }
+    .rk-degrau--2 .rk-bloco { height: 92px; }
+    .rk-degrau--3 .rk-bloco { height: 78px; }
+    .rk-rail { position: static; }
+  }
 
+  /* A folha impressa é o ranking: lateral, topo e filtros não vão junto. */
+  @media print {
+    .sh__side, .sh__top, .sh__acoes, .sh__overlay, .rk-acao, .rk-busca, .toast-container { display: none !important; }
+    .sh__main { margin-left: 0; }
+    .sh__conteudo { padding: 0; max-width: none; }
+    .sh__cabecalho { margin-bottom: 1rem; }
+    .rk-caixa, .sh__faixa { break-inside: avoid; box-shadow: none; }
+    .rk-colunas { grid-template-columns: 1fr; }
+    .rk-tabela { min-width: 0; font-size: .82rem; }
+    .rk-rolagem { overflow: visible; }
+  }
+</style>
+
+{% macro tom_freq(v) %}{% if v >= 70 %}rk-alta{% elif v >= 60 %}rk-media{% else %}rk-baixa{% endif %}{% endmacro %}
+{% macro iniciais(nome) %}{% set p = (nome or '?').split() %}{{ p[0][0] }}{{ p[-1][0] if p|length > 1 }}{% endmacro %}
+
+<div class="sh__faixa">
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Chamadas no período</span>
+    <span class="sh__faixa-valor">{{ ranking.aulas }}</span>
+  </div>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Presenças</span>
+    <span class="sh__faixa-valor">{{ ranking.presencas }}</span>
+  </div>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Frequência média</span>
+    <span class="sh__faixa-valor">{{ ranking.frequencia_media }}%</span>
+  </div>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Abaixo de 60%</span>
+    <span class="sh__faixa-valor {% if ranking.abaixo_60 %}sh__faixa-valor--alerta{% endif %}">{{ ranking.abaixo_60|length }}</span>
+  </div>
 </div>
 
-<script>
-const MES_NOMES=['','Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
-const ANO_MIN={{ ano_min }}, ANO_MAX={{ ano_max }};
-let _mes={{ mes_sel }}, _ano={{ ano_sel }};
+{% if ranking.alunos %}
+{# ------------------------------------------------------------- pódio #}
+{% set p1 = ranking.alunos[0] if ranking.alunos|length > 0 else none %}
+{% set p2 = ranking.alunos[1] if ranking.alunos|length > 1 else none %}
+{% set p3 = ranking.alunos[2] if ranking.alunos|length > 2 else none %}
+<div class="rk-caixa" style="margin-top: var(--u-space-3);">
+  <div class="rk-caixa-topo">
+    <span class="rk-caixa-titulo">Pódio</span>
+    <span class="rk-caixa-nota">{{ ranking.periodo_rotulo }}{% if turma_sel %} · turma filtrada{% endif %}</span>
+  </div>
+  <div class="rk-podio">
+    {% for pos, aluno in [(2, p2), (1, p1), (3, p3)] %}
+    <div class="rk-degrau rk-degrau--{{ pos }} {% if not aluno %}is-vazio{% endif %}">
+      {% if aluno %}
+      <div class="rk-degrau-topo">
+        {% if aluno.foto %}
+        <img src="{{ url_for('static', filename='uploads/' ~ aluno.foto) }}" alt="" class="rk-medalha">
+        {% else %}
+        <span class="rk-medalha">{{ iniciais(aluno.nome) }}</span>
+        {% endif %}
+        <span class="rk-degrau-nome">{{ aluno.nome }}</span>
+        <span class="rk-degrau-turma">{{ aluno.turma_nome }}</span>
+      </div>
+      <div class="rk-bloco">
+        <span class="rk-bloco-pos">{{ pos }}º</span>
+        {% set pct_p = aluno.frequencia_periodo if ordenar != 'aproveitamento' else aluno.frequencia %}
+        {% set base_p = aluno.chamadas_periodo if ordenar != 'aproveitamento' else aluno.aulas %}
+        <div class="rk-bloco-freq {{ tom_freq(pct_p) }}">{{ pct_p }}%</div>
+        <span class="rk-bloco-det">{{ aluno.presencas }} de {{ base_p }} aulas</span>
+      </div>
+      {% else %}
+      <div class="rk-bloco">
+        <span class="rk-bloco-pos">{{ pos }}º</span>
+        <span class="rk-bloco-det">sem aluno</span>
+      </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
 
-function setTipo(t){
-    document.getElementById('tipoInput').value=t;
-    document.querySelectorAll('.rk-tipo-btn').forEach(b=>b.classList.remove('active'));
-    event.currentTarget.classList.add('active');
-    document.getElementById('secMes').hidden    = t!=='mes';
-    document.getElementById('secAno').hidden    = t==='periodo';
-    const sp = document.getElementById('secPeriodo');
-    sp.hidden = t!=='periodo';
-    document.getElementById('inputDi').disabled = t!=='periodo';
-    document.getElementById('inputDf').disabled = t!=='periodo';
-    if(t!=='periodo') document.getElementById('frmRk').submit();
-}
-function navMes(d){
-    _mes+=d;
-    if(_mes<1){_mes=12;_ano--;}
-    if(_mes>12){_mes=1;_ano++;}
-    _ano=Math.max(ANO_MIN,Math.min(ANO_MAX,_ano));
-    document.getElementById('mesInput').value=_mes;
-    document.getElementById('anoInput').value=_ano;
-    document.getElementById('mesLabel').textContent=MES_NOMES[_mes];
-    document.getElementById('anoLabel').textContent=_ano;
-    document.getElementById('frmRk').submit();
-}
-function navAno(d){
-    _ano=Math.max(ANO_MIN,Math.min(ANO_MAX,_ano+d));
-    document.getElementById('anoInput').value=_ano;
-    document.getElementById('anoLabel').textContent=_ano;
-    document.getElementById('frmRk').submit();
-}
-function toggleTbl(head,id){
-    const el=document.getElementById(id);
-    if(!el)return;
-    el.hidden=!el.hidden;
-    head.classList.toggle('open',!el.hidden);
-}
+<div class="rk-colunas">
+  {# --------------------------------------------------------- classificação #}
+  <section class="rk-caixa">
+    <div class="rk-caixa-topo">
+      <span class="rk-caixa-titulo">Classificação</span>
+      <span class="rk-busca">
+        <i class="bi bi-search"></i>
+        <input type="text" id="rkBusca" placeholder="Buscar aluno ou turma" autocomplete="off">
+      </span>
+      <span class="rk-caixa-nota" id="rkContagem">{{ ranking.alunos|length }} aluno{{ 's' if ranking.alunos|length != 1 }}</span>
+    </div>
+    <div class="rk-rolagem">
+      <table class="rk-tabela">
+        <colgroup>
+          <col class="rk-c-pos">
+          <col>
+          <col class="rk-c-turma">
+          <col class="rk-c-pres">
+          <col class="rk-c-freq">
+        </colgroup>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Aluno</th>
+            <th>Turma</th>
+            <th>Presenças</th>
+            <th>{{ 'Aproveitamento' if ordenar == 'aproveitamento' else 'Presença no período' }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for aluno in ranking.alunos %}
+          <tr data-busca="{{ (aluno.nome ~ ' ' ~ aluno.turma_nome)|lower }}"
+              class="{% if destaque_aluno_id is not none and aluno.aluno_id == destaque_aluno_id %}is-destaque{% endif %}">
+            <td style="text-align: left;">
+              <span class="rk-pos {% if aluno.lugar <= 3 %}rk-pos--{{ aluno.lugar }}{% endif %}">{{ aluno.lugar }}</span>
+            </td>
+            <td>
+              <div class="rk-aluno">
+                {% if aluno.foto %}
+                <img src="{{ url_for('static', filename='uploads/' ~ aluno.foto) }}" alt="" class="rk-avatar">
+                {% else %}
+                <span class="rk-avatar">{{ iniciais(aluno.nome) }}</span>
+                {% endif %}
+                <a class="rk-nome" href="{{ url_for('alunos.ficha_aluno', aluno_id=aluno.aluno_id) }}"
+                   title="{{ aluno.nome }}">{{ aluno.nome }}</a>
+              </div>
+            </td>
+            <td class="rk-turma" title="{{ aluno.turma_nome }}">{{ aluno.turma_nome }}</td>
+            {# Presenças sobre o denominador do critério em uso, para o número
+               da barra e a fração contarem a mesma história. #}
+            {% set base = aluno.chamadas_periodo if ordenar != 'aproveitamento' else aluno.aulas %}
+            {% set pct = aluno.frequencia_periodo if ordenar != 'aproveitamento' else aluno.frequencia %}
+            <td class="rk-num">{{ aluno.presencas }} de {{ base }}</td>
+            <td>
+              <div class="rk-freq {{ tom_freq(pct) }}">
+                <span class="rk-freq-barra"><span style="width: {{ pct }}%"></span></span>
+                <span class="rk-freq-num">{{ pct }}%</span>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  {# ------------------------------------------------------------- direita #}
+  <aside class="rk-rail">
+    <div class="rk-caixa">
+      <div class="rk-caixa-topo"><span class="rk-caixa-titulo">Média por turma</span></div>
+      <div class="rk-lista">
+        {% for turma in ranking.turmas %}
+        <div class="rk-linha">
+          <span class="rk-linha-txt">
+            <span class="rk-linha-nome" title="{{ turma.turma_nome }}">{{ turma.turma_nome }}</span>
+            <span class="rk-linha-sub">{{ turma.alunos }} aluno{{ 's' if turma.alunos != 1 }} · {{ turma.chamadas }} chamada{{ 's' if turma.chamadas != 1 }}</span>
+          </span>
+          <span class="rk-freq {{ tom_freq(turma.frequencia_media) }}">
+            <span class="rk-freq-barra"><span style="width: {{ turma.frequencia_media }}%"></span></span>
+            <span class="rk-linha-valor">{{ turma.frequencia_media }}%</span>
+          </span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="rk-caixa">
+      <div class="rk-caixa-topo"><span class="rk-caixa-titulo">Distribuição</span></div>
+      <div class="rk-lista">
+        {% for faixa in ranking.faixas %}
+        <div class="rk-linha">
+          <span class="rk-linha-txt"><span class="rk-linha-nome">{{ faixa.rotulo }}</span></span>
+          <span class="rk-freq rk-{{ faixa.tom }}">
+            <span class="rk-freq-barra">
+              <span style="width: {{ (faixa.alunos * 100 / ranking.alunos|length)|round|int }}%"></span>
+            </span>
+            <span class="rk-linha-valor">{{ faixa.alunos }}</span>
+          </span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    {% if ranking.abaixo_60 %}
+    <div class="rk-caixa rk-atencao">
+      <div class="rk-caixa-topo">
+        <span class="rk-caixa-titulo">
+          {{ ranking.abaixo_60|length }} aluno{{ 's' if ranking.abaixo_60|length != 1 }} abaixo de 60%
+        </span>
+      </div>
+      {# Só os piores: a lista completa é a tabela ao lado, ordenada pelo mesmo
+         critério. Aqui a coluna serve para agir, não para conferir. #}
+      <div class="rk-lista">
+        {% for aluno in ranking.abaixo_60[:8] %}
+        <div class="rk-linha">
+          <span class="rk-linha-txt">
+            <a class="rk-linha-nome" href="{{ url_for('alunos.ficha_aluno', aluno_id=aluno.aluno_id) }}"
+               title="{{ aluno.nome }}">{{ aluno.nome }}</a>
+            <span class="rk-linha-sub">{{ aluno.faltas }} falta{{ 's' if aluno.faltas != 1 }} · {{ aluno.turma_nome }}</span>
+          </span>
+          <span class="rk-linha-valor rk-baixa">{{ aluno.frequencia }}%</span>
+        </div>
+        {% endfor %}
+        {% if ranking.abaixo_60|length > 8 %}
+        <div class="rk-linha">
+          <span class="rk-linha-sub">e mais {{ ranking.abaixo_60|length - 8 }} na classificação ao lado</span>
+        </div>
+        {% endif %}
+      </div>
+      {% if academia_id %}
+      <a class="rk-acao" href="{{ url_for('academia.whatsapp_avisos', academia_id=academia_id) }}">
+        <i class="bi bi-whatsapp"></i> Cobrar presença pelo WhatsApp
+      </a>
+      {% endif %}
+    </div>
+    {% endif %}
+  </aside>
+</div>
+
+{% else %}
+<div class="rk-caixa" style="margin-top: var(--u-space-3);">
+  <div class="rk-vazio">
+    <i class="bi bi-trophy"></i>
+    Nenhuma chamada registrada em {{ ranking.periodo_rotulo|lower }}.
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  var form = document.getElementById('rkForm');
+  if (!form) return;
+  var tipo = document.getElementById('rkTipo');
+
+  // Trocar mês, ano ou turma recarrega direto. Em "período" a consulta espera
+  // as duas datas, então quem manda é o botão Buscar.
+  form.querySelectorAll('select').forEach(function (campo) {
+    campo.addEventListener('change', function () { form.submit(); });
+  });
+
+  form.querySelectorAll('.rk-modo').forEach(function (botao) {
+    botao.addEventListener('click', function () {
+      tipo.value = botao.dataset.tipo;
+      // "Período" só recarrega quando o usuário escolher as datas; os outros
+      // dois já têm valor no formulário.
+      if (botao.dataset.tipo === 'periodo') {
+        form.querySelectorAll('.rk-modo').forEach(function (b) { b.classList.remove('is-ativo'); });
+        botao.classList.add('is-ativo');
+        form.querySelectorAll('[name="mes"], [name="ano"]').forEach(function (c) { c.hidden = true; c.disabled = true; });
+        form.querySelectorAll('.rk-campo--data, .rk-buscar').forEach(function (c) { c.hidden = false; c.disabled = false; });
+        return;
+      }
+      form.submit();
+    });
+  });
+
+  var busca = document.getElementById('rkBusca');
+  var contagem = document.getElementById('rkContagem');
+  var linhas = Array.prototype.slice.call(document.querySelectorAll('.rk-tabela tbody tr'));
+  if (busca) {
+    busca.addEventListener('input', function () {
+      var termo = busca.value.trim().toLowerCase();
+      var visiveis = 0;
+      linhas.forEach(function (tr) {
+        var bate = !termo || (tr.dataset.busca || '').indexOf(termo) !== -1;
+        tr.style.display = bate ? '' : 'none';
+        if (bate) visiveis++;
+      });
+      contagem.textContent = termo
+        ? visiveis + ' de ' + linhas.length
+        : linhas.length + ' aluno' + (linhas.length === 1 ? '' : 's');
+    });
+  }
+
+  var imprimir = document.getElementById('rkImprimir');
+  if (imprimir) imprimir.addEventListener('click', function () { window.print(); });
+});
 </script>
 {% endblock %}

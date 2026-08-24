@@ -1,0 +1,121 @@
+{% extends 'base_um2.html' %}
+{% set um_ativo = 'professores' %}
+{% block title %}Professores{% endblock %}
+
+{% block um_css %}
+  .lin-prof { display:grid; grid-template-columns:minmax(230px,1fr) minmax(200px,1fr) 150px 140px 100px 96px; }
+  @media (max-width: 1100px) {
+    .lin-prof { grid-template-columns:minmax(200px,1fr) minmax(180px,1fr) 140px 100px 96px; }
+    .col-tel { display:none !important; }
+  }
+{% endblock %}
+
+{% block um_conteudo %}
+<div style="display:flex; align-items:flex-end; justify-content:space-between; gap:20px; flex-wrap:wrap">
+  <div style="display:flex; flex-direction:column; gap:7px">
+    <h1 class="um-h1" style="margin:0">Professores</h1>
+    <div class="um-sub">Vincule usuários como professores e gerencie suas modalidades.</div>
+  </div>
+  <a href="{{ url_for('professores.cadastrar', academia_id=academia_id, origin=origin) }}" class="um-btn-primario">
+    <i class="bi bi-person-plus" style="font-size:14px"></i>Vincular professor
+  </a>
+</div>
+
+{% set ativos = professores|selectattr('ativo')|list|length %}
+<div class="um-faixa">
+  <div class="um-kpi">
+    <span class="um-kpi-lbl">Professores</span>
+    <span class="um-kpi-val">{{ professores|length }}</span>
+    <span class="um-kpi-nota">Vinculados a {{ academia.nome }}</span>
+  </div>
+  <div class="um-kpi">
+    <span class="um-kpi-lbl">Ativos</span>
+    <span class="um-kpi-val" style="color:#15803d">{{ ativos }}</span>
+    <span class="um-kpi-nota">Podem lançar presença</span>
+  </div>
+  <div class="um-kpi">
+    <span class="um-kpi-lbl">Inativos</span>
+    <span class="um-kpi-val">{{ professores|length - ativos }}</span>
+    <span class="um-kpi-nota">Sem acesso às turmas</span>
+  </div>
+  <div class="um-kpi">
+    <span class="um-kpi-lbl">Modalidades cobertas</span>
+    <span class="um-kpi-val">{{ modalidades_cobertas|default(0) }}</span>
+    <span class="um-kpi-nota">Com pelo menos um professor</span>
+  </div>
+</div>
+
+<form method="get" class="um-filtros">
+  <div class="um-filtro" style="flex:1 1 260px">
+    <label for="f-busca">Buscar</label>
+    <input type="text" id="f-busca" name="q" value="{{ request.args.get('q', '') }}" placeholder="Nome, e-mail ou telefone">
+  </div>
+  <div class="um-filtro" style="flex:0 1 180px">
+    <label for="f-mod">Modalidade</label>
+    <select id="f-mod" name="modalidade_id">
+      <option value="">Todas</option>
+      {% for m in modalidades|default([]) %}
+      <option value="{{ m.id }}" {% if m.id|string == request.args.get('modalidade_id', '') %}selected{% endif %}>{{ m.nome }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="um-filtro" style="flex:0 1 150px">
+    <label for="f-sit">Situação</label>
+    <select id="f-sit" name="situacao">
+      <option value="">Todos</option>
+      <option value="ativos" {% if request.args.get('situacao') == 'ativos' %}selected{% endif %}>Ativos</option>
+      <option value="inativos" {% if request.args.get('situacao') == 'inativos' %}selected{% endif %}>Inativos</option>
+    </select>
+  </div>
+  <button type="submit" class="um-btn" style="flex:none">Filtrar</button>
+</form>
+
+<div class="um-card" style="overflow:hidden">
+  <div class="um-cab">
+    <span class="um-secao">Equipe técnica</span>
+    <span class="um-kpi-nota">{{ professores|length }} professor{{ 'es' if professores|length != 1 else '' }}</span>
+  </div>
+  <div class="um-rolagem">
+    <div style="min-width:820px">
+      <div class="lin-prof um-th">
+        <span>Professor</span><span>E-mail</span><span class="col-tel">Telefone</span>
+        <span>Modalidades</span><span>Situação</span><span style="text-align:right">Ações</span>
+      </div>
+      {% for p in professores %}
+      <div class="lin-prof um-td">
+        <div style="display:flex; align-items:center; gap:11px; min-width:0">
+          {% if p.foto_url %}
+          <img src="{{ p.foto_url }}" alt="" style="flex:none; width:32px; height:32px; border-radius:50%; object-fit:cover; border:1px solid #e7e5e4">
+          {% else %}
+          <span style="flex:none; width:32px; height:32px; border-radius:50%; background:#f5f5f4; border:1px solid #e7e5e4;
+                       display:flex; align-items:center; justify-content:center; font:600 11px/1 'Public Sans',sans-serif; color:#57534e">
+            {{ p.nome.split()[0][0]|upper }}{{ p.nome.split()[-1][0]|upper if p.nome.split()|length > 1 else '' }}
+          </span>
+          {% endif %}
+          <a href="{{ url_for('professores.editar', professor_id=p.id) }}" style="font-weight:500; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">{{ p.nome }}</a>
+        </div>
+        <span style="min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#57534e">{{ p.email or '—' }}</span>
+        <span class="col-tel" style="color:#57534e">{{ p.telefone or '—' }}</span>
+        <span><span class="um-tag">{{ p.modalidades_nomes or '—' }}</span></span>
+        <span style="display:flex; align-items:center; gap:6px; font:500 12.5px/1 'Public Sans',sans-serif; color:{{ '#15803d' if p.ativo else '#a8a29e' }}">
+          <span style="width:6px; height:6px; border-radius:50%; background:{{ '#15803d' if p.ativo else '#a8a29e' }}"></span>{{ 'Ativo' if p.ativo else 'Inativo' }}
+        </span>
+        <span style="display:flex; gap:14px; justify-content:flex-end">
+          <a href="{{ url_for('professores.editar', professor_id=p.id) }}" title="Editar" style="color:#78716c"><i class="bi bi-pencil" style="font-size:14px"></i></a>
+          <form method="post" action="{{ url_for('professores.excluir', professor_id=p.id) }}"
+                onsubmit="return confirm('Remover {{ p.nome }} da academia?')" style="display:inline">
+            <button type="submit" title="Excluir" style="background:none; border:0; padding:0; color:#78716c; cursor:pointer"><i class="bi bi-trash" style="font-size:14px"></i></button>
+          </form>
+        </span>
+      </div>
+      {% else %}
+      <div style="padding:32px 16px; text-align:center; color:#a8a29e; font:400 12.5px/1.5 'Public Sans',sans-serif">
+        Nenhum professor vinculado ainda.
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<div style="font:400 11.5px/1 'Public Sans',sans-serif; color:#a8a29e">© {{ ano_atual|default('') }} {{ academia.nome }}. Todos os direitos reservados.</div>
+{% endblock %}

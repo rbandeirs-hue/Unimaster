@@ -170,6 +170,9 @@ def lista():
         return redirect(url_for("academia.painel_academia"))
 
     busca = request.args.get("busca", "").strip()
+    origem_filtro = (request.args.get("origem") or "").strip().lower()
+    if origem_filtro not in ("precadastro", "aula_experimental", "matricula"):
+        origem_filtro = ""
     page = int(request.args.get("page", 1))
     por_pagina = 15
     offset = (page - 1) * por_pagina
@@ -177,11 +180,23 @@ def lista():
     conn = get_db_connection()
     cur = conn.cursor(dictionary=True)
 
+    # A origem é derivada quando a coluna está vazia — o mesmo CASE do SELECT,
+    # para o filtro e os indicadores enxergarem exatamente o que a lista mostra.
+    origem_sql = """COALESCE(origem,
+                   CASE
+                     WHEN matricula_status IS NOT NULL OR matricula_payment_id IS NOT NULL OR matricula_valor IS NOT NULL THEN 'matricula'
+                     WHEN aula_experimental = 1 THEN 'aula_experimental'
+                     ELSE 'precadastro'
+                   END)"""
+
     where = "academia_id = %s"
     params = [academia_id]
     if busca:
         where += " AND (nome LIKE %s OR email LIKE %s OR telefone LIKE %s OR cpf LIKE %s)"
         params.extend([f"%{busca}%", f"%{busca}%", f"%{busca}%", f"%{busca}%"])
+    if origem_filtro:
+        where += f" AND {origem_sql} = %s"
+        params.append(origem_filtro)
 
     cur.execute(f"SELECT COUNT(*) AS total FROM pre_cadastro WHERE {where}", params)
     total = cur.fetchone()["total"]
@@ -202,6 +217,48 @@ def lista():
         LIMIT %s OFFSET %s
     """, params + [por_pagina, offset])
     precadastros = cur.fetchall()
+
+    # Indicadores do topo: contam a academia inteira, não a página nem o filtro.
+    stats = {"precadastro": 0, "aula_experimental": 0, "matricula": 0, "promovidos": 0,
+             "matriculas_pagas": 0}
+    try:
+        cur.execute(
+            f"SELECT {origem_sql} AS origem, COUNT(*) AS c FROM pre_cadastro "
+            "WHERE academia_id = %s GROUP BY origem",
+            (academia_id,),
+        )
+        for r in cur.fetchall():
+            if r["origem"] in stats:
+                stats[r["origem"]] = r["c"] or 0
+    except Exception:
+        pass
+    try:
+        # Quantos já pagaram a matrícula — o indicador que a secretaria usa
+        # para saber quem pode ser promovido a aluno.
+        cur.execute(
+            "SELECT COUNT(*) AS c FROM pre_cadastro "
+            "WHERE academia_id = %s AND matricula_status = 'pago'",
+            (academia_id,),
+        )
+        stats["matriculas_pagas"] = (cur.fetchone() or {}).get("c", 0) or 0
+    except Exception:
+        stats["matriculas_pagas"] = 0
+
+    try:
+        # Promovido = já existe aluno com o mesmo e-mail ou CPF na academia.
+        cur.execute("""
+            SELECT COUNT(*) AS c FROM pre_cadastro p
+            WHERE p.academia_id = %s AND EXISTS (
+                SELECT 1 FROM alunos a WHERE a.id_academia = p.academia_id AND (
+                    (p.email IS NOT NULL AND p.email <> '' AND a.email = p.email)
+                    OR (p.cpf IS NOT NULL AND p.cpf <> ''
+                        AND REGEXP_REPLACE(a.cpf, '[^0-9]', '') = REGEXP_REPLACE(p.cpf, '[^0-9]', ''))
+                )
+            )
+        """, (academia_id,))
+        stats["promovidos"] = cur.fetchone().get("c", 0) or 0
+    except Exception:
+        stats["promovidos"] = 0
 
     cur.execute("SELECT id, nome, slug, valor_matricula FROM academias WHERE id = %s", (academia_id,))
     row = cur.fetchone()
@@ -230,10 +287,24 @@ def lista():
     link_matricula = url_for("precadastro.matricula_publica", academia_slug=academia_slug or academia_id, _external=True)
     link_landing = url_for("precadastro.landing", academia_slug=academia_slug or academia_id, _external=True)
 
+    # Sem gateway configurado a matrícula vira pagamento avulso — a tela precisa
+    # dizer qual dos dois caminhos o aluno vai encontrar.
+    gateway_ativo = ""
+    try:
+        from blueprints.financeiro.routes import _gateway_config_academia, _gateway_ativo
+        gateway_ativo = _gateway_ativo(_gateway_config_academia(academia_id)) or ""
+    except Exception:
+        gateway_ativo = ""
+
     return render_template(
         "precadastro/lista.html",
         precadastros=precadastros,
+        gateway_ativo=gateway_ativo,
         busca=busca,
+        origem_filtro=origem_filtro,
+        stats=stats,
+        total=total,
+        filtrado=bool(busca or origem_filtro),
         pagina_atual=page,
         total_paginas=total_paginas,
         academias=academias,
@@ -362,11 +433,38 @@ def cupons():
         (academia_id,),
     )
     lista_cupons = cur.fetchall()
+
+    # Estatísticas do topo
+    cupons_ativos = sum(1 for c in lista_cupons if c.get("ativo"))
+    visiveis = sum(1 for c in lista_cupons if c.get("ativo") and c.get("mostrar_form"))
+    usados_mes = 0
+    desconto_mes = 0.0
+    try:
+        cur.execute(
+            """SELECT COUNT(*) AS n, COALESCE(SUM(matricula_desconto), 0) AS d
+               FROM pre_cadastro
+               WHERE academia_id=%s AND matricula_cupom IS NOT NULL
+                 AND YEAR(created_at)=YEAR(CURDATE()) AND MONTH(created_at)=MONTH(CURDATE())""",
+            (academia_id,),
+        )
+        _r = cur.fetchone() or {}
+        usados_mes = int(_r.get("n") or 0)
+        desconto_mes = float(_r.get("d") or 0)
+    except Exception:
+        usados_mes, desconto_mes = 0, 0.0
+
+    _meses = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho",
+              "agosto", "setembro", "outubro", "novembro", "dezembro"]
+    _hoje = date.today()
+    mes_label = f"{_meses[_hoje.month - 1]} de {_hoje.year}"
+
     cur.close()
     conn.close()
     return render_template(
         "precadastro/cupons.html",
         cupons=lista_cupons, academias=academias, academia_id=academia_id,
+        cupons_ativos=cupons_ativos, visiveis=visiveis,
+        usados_mes=usados_mes, desconto_mes=desconto_mes, mes_label=mes_label, hoje=_hoje,
     )
 
 
@@ -471,6 +569,12 @@ def form_publico(academia_slug):
     conn_grad.close()
 
     def _render_form(form_data, sucesso=False):
+        _logo_url = None
+        try:
+            from utils.contexto_logo import buscar_logo_url
+            _logo_url = buscar_logo_url("academia", academia_id)
+        except Exception:
+            _logo_url = None
         return render_template(
             "precadastro/form_publico.html",
             academia_id=academia_id,
@@ -479,6 +583,7 @@ def form_publico(academia_slug):
             form=form_data,
             sucesso=sucesso,
             graduacoes=graduacoes,
+            logo_url=_logo_url,
         )
 
     if request.method == "POST":
@@ -824,6 +929,10 @@ def matricula_publica(academia_slug):
     if not resp_nome:
         flash("Informe o nome do responsável financeiro (ou marque 'próprio aluno').", "danger")
         return _render(form)
+    # E-mail é por onde sai o recibo da matrícula e o acesso do aluno.
+    if not email or "@" not in email or "." not in email.split("@")[-1]:
+        flash("Informe um e-mail válido — é para onde vai o recibo da matrícula.", "danger")
+        return _render(form)
 
     # Cupom de desconto (opcional)
     cupom_codigo = (form.get("cupom") or "").strip().upper() or None
@@ -925,13 +1034,57 @@ def matricula_publica(academia_slug):
             "nome": (resp_nome or nome or "").split(" ")[0],
             "aluno": nome,
             "valor": (f"R$ {float(valor_final):.2f}".replace(".", ",")) if valor_final else "",
-            "link": resultado.get("link") or "",
+            "link": _link_curto_matricula(precad_id) or (resultado.get("link") or ""),
             "academia": academia_nome,
         })
     except Exception:
         pass
 
     return _render(form, resultado=resultado)
+
+
+def _token_curto_matricula(precad_id):
+    import hmac, hashlib
+    secret = (current_app.secret_key or "unimaster").encode()
+    return hmac.new(secret, f"matricula-{precad_id}".encode(), hashlib.sha256).hexdigest()[:10]
+
+
+def _link_curto_matricula(precad_id):
+    """URL curta e pública que redireciona para o link de pagamento do gateway.
+    Evita mandar no WhatsApp/e-mail o link gigante (ex.: InfinitePay com ~450 chars)."""
+    try:
+        return url_for("precadastro.pagar_matricula", precad_id=precad_id,
+                       t=_token_curto_matricula(precad_id), _external=True)
+    except Exception:
+        return None
+
+
+@bp_precadastro.route("/pg/<int:precad_id>/<t>")
+def pagar_matricula(precad_id, t):
+    """Redirect curto (público) -> link de pagamento da matrícula. Token HMAC evita
+    enumeração por id. Usado nas mensagens de WhatsApp/e-mail."""
+    import hmac
+    if not hmac.compare_digest(str(t), _token_curto_matricula(precad_id)):
+        return ("Link inválido.", 404)
+    conn = get_db_connection(); cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute("SELECT matricula_link FROM pre_cadastro WHERE id=%s", (precad_id,))
+        row = cur.fetchone()
+    finally:
+        cur.close(); conn.close()
+    link = (row or {}).get("matricula_link") if row else None
+    if not link:
+        return ("Cobrança não encontrada.", 404)
+    return redirect(link)
+
+
+def _quer_parcial():
+    """True quando a tela foi pedida para dentro de um modal (fetch da lista).
+
+    A mesma rota serve a página cheia e o fragmento — assim o link continua
+    funcionando se o JS falhar, e não há dois templates para manter."""
+    return (request.args.get("parcial") == "1"
+            or request.headers.get("X-Requested-With") == "XMLHttpRequest")
 
 
 @bp_precadastro.route("/<int:precad_id>/pagamento")
@@ -959,7 +1112,109 @@ def matricula_pagamento(precad_id):
         flash("Esta matrícula não tem cobrança online gerada.", "warning")
         return redirect(url_for("precadastro.lista", academia_id=p["academia_id"]))
     back_url = request.referrer or url_for("precadastro.lista", academia_id=p["academia_id"])
+    if _quer_parcial():
+        return render_template("precadastro/_matricula_pagamento_conteudo.html", p=p, back_url=back_url)
     return render_template("precadastro/matricula_pagamento.html", p=p, back_url=back_url)
+
+
+@bp_precadastro.route("/<int:precad_id>/registrar-pagamento", methods=["GET", "POST"])
+@login_required
+def matricula_registrar_pagamento(precad_id):
+    """Baixa manual da matrícula — para quem pagou por fora da cobrança online.
+
+    O pagamento automático nem sempre funciona (gateway fora do ar, a pessoa
+    manda PIX direto para a chave da academia). Sem isso a secretaria ficava
+    sem como marcar a matrícula como paga e o dinheiro não entrava no
+    financeiro. Usa a mesma rotina do webhook, então a receita e o razão saem
+    idênticos aos da baixa automática.
+    """
+    academia_id, _ = _get_academia_filtro()
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute(
+            """SELECT p.*, ac.nome AS academia_nome, ac.valor_matricula
+               FROM pre_cadastro p LEFT JOIN academias ac ON ac.id = p.academia_id
+               WHERE p.id = %s""",
+            (precad_id,),
+        )
+        p = cur.fetchone()
+        if not p:
+            flash("Pré-cadastro não encontrado.", "danger")
+            return redirect(url_for("precadastro.lista"))
+        if academia_id and p["academia_id"] != academia_id and not current_user.has_role("admin"):
+            flash("Sem permissão.", "danger")
+            return redirect(url_for("precadastro.lista"))
+
+        destino = url_for("precadastro.lista", academia_id=p["academia_id"])
+        if (p.get("matricula_status") or "") == "pago":
+            if _quer_parcial():
+                from markupsafe import escape
+                return ('<p class="text-success mb-0"><i class="bi bi-check2-circle me-1"></i>'
+                        "A matrícula de %s já está paga.</p>" % escape(p.get("nome") or ""))
+            flash("A matrícula de " + (p.get("nome") or "") + " já está paga.", "info")
+            return redirect(destino)
+
+        cur.execute(
+            """SELECT id, nome FROM formas_pagamento
+               WHERE id_academia = %s AND COALESCE(ativo, 1) = 1
+               ORDER BY ordem, nome""",
+            (p["academia_id"],),
+        )
+        formas = cur.fetchall()
+    finally:
+        cur.close()
+        conn.close()
+
+    if request.method == "GET":
+        sugerido = p.get("matricula_valor") or p.get("valor_matricula") or 0
+        ctx = dict(p=p, formas=formas, valor_sugerido=float(sugerido or 0),
+                   hoje=date.today().isoformat(),
+                   back_url=request.referrer or destino)
+        if _quer_parcial():
+            return render_template("precadastro/_matricula_registrar_conteudo.html", **ctx)
+        return render_template("precadastro/registrar_pagamento_matricula.html", **ctx)
+
+    bruto = (request.form.get("valor") or "").strip()
+    if "," in bruto:
+        bruto = bruto.replace(".", "").replace(",", ".")
+    try:
+        valor = round(float(bruto), 2)
+    except (TypeError, ValueError):
+        valor = 0.0
+    if valor <= 0:
+        flash("Informe o valor recebido da matrícula.", "danger")
+        return redirect(url_for("precadastro.matricula_registrar_pagamento", precad_id=precad_id))
+
+    try:
+        data_pag = datetime.strptime((request.form.get("data_pagamento") or "")[:10], "%Y-%m-%d").date()
+    except ValueError:
+        data_pag = date.today()
+    if data_pag > date.today():
+        flash("A data do pagamento não pode ser no futuro.", "danger")
+        return redirect(url_for("precadastro.matricula_registrar_pagamento", precad_id=precad_id))
+
+    forma_id = request.form.get("id_forma_pagamento", type=int)
+    if forma_id and forma_id not in [f["id"] for f in formas]:
+        forma_id = None
+    notificar = request.form.get("notificar_whatsapp") == "1"
+
+    from blueprints.financeiro.routes import _baixar_matricula_paga
+
+    ok = _baixar_matricula_paga(
+        precad_id=precad_id, valor=valor, data_pagamento=data_pag,
+        id_forma_pagamento=forma_id, manual=True, notificar=notificar,
+    )
+    if ok:
+        flash(
+            "Matrícula de " + (p.get("nome") or "") + " registrada como paga "
+            "(R$ %.2f) e lançada no financeiro." % valor
+            + (" Confirmação enviada por WhatsApp." if notificar else ""),
+            "success",
+        )
+    else:
+        flash("Não foi possível registrar o pagamento da matrícula.", "danger")
+    return redirect(destino)
 
 
 @bp_precadastro.route("/<int:precad_id>/reenviar-email", methods=["POST"])
@@ -1972,12 +2227,31 @@ def promover(precadastro_id):
             )
         if aluno_criado_via_responsavel:
             flash(
-                "O cadastro do aluno foi criado automaticamente e vinculado ao responsável. "
-                "Você pode editar a ficha do aluno para complementar os dados.",
+                "O cadastro do aluno foi criado automaticamente e vinculado ao responsável.",
                 "info",
             )
+        # Antes a promoção despejava o gestor na ficha para digitar o que
+        # faltava. Agora o próprio aluno completa no primeiro acesso, então a
+        # tela só avisa o que ficou pendente e volta para a lista. Quem quiser
+        # adiantar continua tendo o link da ficha.
         if aluno_id:
-            return redirect(url_for("alunos.editar_aluno", aluno_id=aluno_id, next=url_for("precadastro.lista", academia_id=academia_id)))
+            try:
+                from blueprints.aluno.alunos import campos_pendentes_autopreenchiveis
+
+                _cn = get_db_connection(); _cc = _cn.cursor(dictionary=True)
+                _cc.execute("SELECT * FROM alunos WHERE id = %s", (aluno_id,))
+                _al = _cc.fetchone()
+                _cc.close(); _cn.close()
+                _falta = [rot for _c, rot, _col in campos_pendentes_autopreenchiveis(_al)]
+                if _falta:
+                    flash(
+                        "Faltam dados na ficha (%s). O aluno completa no primeiro acesso; "
+                        "se preferir preencher agora, abra a ficha dele."
+                        % ", ".join(_falta[:5] + (["…"] if len(_falta) > 5 else [])),
+                        "info",
+                    )
+            except Exception:
+                pass
         return redirect(url_for("precadastro.lista", academia_id=academia_id))
 
     except Exception as e:

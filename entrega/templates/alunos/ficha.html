@@ -1,0 +1,245 @@
+{% extends 'base_um.html' %}
+{% set um_ativo = 'alunos' %}
+{% block title %}{{ aluno.nome }}{% endblock %}
+
+{% block um_css %}
+  .duas { display:grid; grid-template-columns:300px minmax(0,1fr); gap:16px; align-items:start; }
+  .dados { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0 24px; }
+  .campo { display:flex; justify-content:space-between; gap:12px; padding:10px 0;
+    border-bottom:1px solid #f4f4f5; font:400 13px/1.4 'Inter',sans-serif; }
+  .campo span:first-child { color:#71717a; flex-shrink:0; }
+  .campo span:last-child { color:#18181b; font-weight:500; text-align:right; min-width:0; word-break:break-word; }
+  .lin3 { display:grid; grid-template-columns:110px minmax(0,1fr) 110px; gap:14px; }
+  @media (max-width: 1180px) { .duas { grid-template-columns:minmax(0,1fr); } }
+  @media (max-width: 900px) { .dados { grid-template-columns:minmax(0,1fr); } }
+{% endblock %}
+
+{% block um_conteudo %}
+{% include 'components/_modal.html' %}
+{% set aba = aba|default('academico') %}
+
+{# ------------------------------- CABEÇALHO ------------------------------- #}
+<div style="display:flex; align-items:center; gap:8px; font:400 12.5px/1 'Inter',sans-serif; color:#a1a1aa">
+  <a href="{{ url_for('alunos.lista_alunos') }}" style="color:#71717a">Alunos</a>
+  <i class="bi bi-chevron-right" style="font-size:9px"></i>
+  <span style="color:#18181b">{{ aluno.nome }}</span>
+</div>
+
+<div style="display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap">
+  <div style="display:flex; align-items:center; gap:14px; min-width:0">
+    <div style="width:56px; height:56px; border-radius:50%; background:#f4f4f5; display:flex; align-items:center; justify-content:center; color:#a1a1aa; flex-shrink:0; overflow:hidden">
+      {% if aluno.foto %}<img src="{{ aluno.foto }}" alt="" style="width:100%; height:100%; object-fit:cover">
+      {% else %}<i class="bi bi-person-fill" style="font-size:24px"></i>{% endif %}
+    </div>
+    <div style="min-width:0; display:flex; flex-direction:column; gap:7px">
+      <div class="um-h1">{{ aluno.nome }}</div>
+      <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap">
+        {% if aluno.graduacao %}
+        <span style="display:inline-flex; align-items:center; gap:7px; font:400 12.5px/1 'Inter',sans-serif; color:#52525b">
+          <span style="width:16px; height:7px; border-radius:2px; border:1px solid rgba(0,0,0,.18); background:{{ aluno.cor_faixa }}"></span>{{ aluno.graduacao }}
+        </span>
+        {% endif %}
+        {% set cor = '#15803d' if aluno.ativo else '#a1a1aa' %}
+        <span style="display:inline-flex; align-items:center; gap:6px; font:500 12px/1 'Inter',sans-serif; color:{{ cor }}">
+          <span style="width:6px; height:6px; border-radius:50%; background:{{ cor }}"></span>{{ 'Ativo' if aluno.ativo else 'Inativo' }}
+        </span>
+        <span style="font:400 12.5px/1 'Inter',sans-serif; color:#a1a1aa">{{ aluno.idade }} anos</span>
+      </div>
+    </div>
+  </div>
+  <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap">
+    <a class="um-btn" href="{{ url_for('alunos.lista_alunos') }}"><i class="bi bi-arrow-left" style="font-size:12px"></i> Voltar</a>
+    <a class="um-btn" href="{{ url_for('alunos.editar', id=aluno.id) }}"><i class="bi bi-pencil" style="font-size:12px"></i> Editar cadastro</a>
+    {% if aluno.whatsapp %}
+    <a class="um-btn-primario" href="https://wa.me/{{ aluno.whatsapp }}" target="_blank"><i class="bi bi-whatsapp" style="font-size:13px"></i> WhatsApp</a>
+    {% endif %}
+  </div>
+</div>
+
+{# ------------------------ FAIXA DE SITUAÇÃO FINANCEIRA ------------------------ #}
+{% set est = {
+  'atraso': ('#fef2f2', '#991b1b', 'bi-exclamation-triangle-fill'),
+  'pend':   ('#fefce8', '#854d0e', 'bi-clock'),
+  'dia':    ('#f4f4f5', '#3f3f46', 'bi-check-circle'),
+  'sem':    ('#fafafa', '#a1a1aa', 'bi-dash-circle')
+}[aluno.financeiro] %}
+<div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; padding:13px 18px; border-radius:10px; background:{{ est[0] }}; color:{{ est[1] }}; font:500 13px/1.4 'Inter',sans-serif">
+  <span style="display:flex; align-items:center; gap:9px"><i class="bi {{ est[2] }}" style="font-size:14px"></i>{{ aluno.financeiro_texto }}</span>
+  <div style="display:flex; align-items:center; gap:14px">
+    {% if aluno.financeiro_valor %}<span style="font-weight:600">{{ aluno.financeiro_valor }}</span>{% endif %}
+    <a href="{{ url_for('alunos.mensalidades', id=aluno.id) }}" style="color:inherit; font-weight:600; text-decoration:underline">Ver mensalidades</a>
+  </div>
+</div>
+
+<div class="duas">
+  {# -------------------------- COLUNA: DADOS FIXOS -------------------------- #}
+  <div style="display:flex; flex-direction:column; gap:16px">
+    <div class="um-card" style="padding:16px 18px; display:flex; flex-direction:column; gap:12px">
+      <div style="font:500 11px/1 'Inter',sans-serif; color:#a1a1aa; text-transform:uppercase; letter-spacing:.08em">Contato</div>
+      <div class="campo"><span>Telefone</span><span>{{ aluno.telefone or '—' }}</span></div>
+      <div class="campo"><span>E-mail</span><span>{{ aluno.email or '—' }}</span></div>
+      <div class="campo" style="border-bottom:0"><span>Responsável</span><span>{{ aluno.responsavel or '—' }}</span></div>
+    </div>
+
+    <div class="um-card" style="padding:16px 18px; display:flex; flex-direction:column; gap:12px">
+      <div style="font:500 11px/1 'Inter',sans-serif; color:#a1a1aa; text-transform:uppercase; letter-spacing:.08em">Vínculos</div>
+      <div class="campo"><span>Academia</span><span>{{ aluno.academia }}</span></div>
+      <div class="campo"><span>Associação</span><span>{{ aluno.associacao or '—' }}</span></div>
+      <div class="campo" style="border-bottom:0; flex-direction:column; align-items:flex-start; gap:7px">
+        <span>Turmas</span>
+        <div style="display:flex; flex-wrap:wrap; gap:5px">
+          {% for t in aluno.turmas %}<span class="um-pill" style="font-weight:500">{{ t }}</span>
+          {% else %}<span style="color:#a1a1aa; font-weight:400">Sem turma</span>{% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="um-card" style="padding:16px 18px; display:flex; flex-direction:column; gap:11px">
+      <div style="font:500 11px/1 'Inter',sans-serif; color:#a1a1aa; text-transform:uppercase; letter-spacing:.08em">Atalhos</div>
+      {% for rota, icone, texto in [
+        (url_for('alunos.graduar', id=aluno.id), 'bi-stars', 'Registrar graduação'),
+        (url_for('alunos.observacoes', id=aluno.id), 'bi-chat-heart', 'Observações'),
+        (url_for('alunos.frequencia', id=aluno.id), 'bi-calendar-check', 'Frequência detalhada')
+      ] %}
+      <a href="{{ rota }}" style="display:flex; align-items:center; gap:10px; padding:9px 11px; border:1px solid #e4e4e7; border-radius:8px; font:500 12.5px/1 'Inter',sans-serif; color:#3f3f46">
+        <i class="bi {{ icone }}" style="font-size:13px; color:#71717a"></i>{{ texto }}
+        <i class="bi bi-chevron-right" style="font-size:10px; color:#d4d4d8; margin-left:auto"></i>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+
+  {# ----------------------------- COLUNA: ABAS ----------------------------- #}
+  <div style="display:flex; flex-direction:column; gap:16px">
+    <div class="um-abas">
+      {% for chave, nome in [('academico','Acadêmico'), ('frequencia','Frequência'),
+                             ('financeiro','Financeiro'), ('cadastro','Cadastro completo')] %}
+      <a class="um-aba {% if aba == chave %}ativa{% endif %}" href="{{ url_for(request.endpoint, id=aluno.id, aba=chave) }}">{{ nome }}</a>
+      {% endfor %}
+    </div>
+
+    {# ------------------------------ ACADÊMICO ------------------------------ #}
+    {% if aba == 'academico' %}
+    <div class="um-stats">
+      <div class="um-stat"><div class="um-stat-lbl">Graduação atual</div><div class="um-stat-val" style="font-size:15px">{{ aluno.graduacao or '—' }}</div></div>
+      <div class="um-div"></div>
+      <div class="um-stat"><div class="um-stat-lbl">Última graduação</div><div class="um-stat-val" style="font-size:15px">{{ aluno.ultima_graduacao.strftime('%d/%m/%Y') if aluno.ultima_graduacao else '—' }}</div></div>
+      <div class="um-div"></div>
+      <div class="um-stat"><div class="um-stat-lbl">Tempo na faixa</div><div class="um-stat-val" style="font-size:15px">{{ aluno.tempo_faixa or '—' }}</div></div>
+    </div>
+
+    <div class="um-card" style="overflow:hidden">
+      <div style="padding:14px 18px; border-bottom:1px solid #f4f4f5; display:flex; align-items:center; justify-content:space-between; gap:12px">
+        <div style="font:600 14px/1 'Inter',sans-serif; color:#18181b">Histórico de graduações</div>
+        <a class="um-btn" style="padding:8px 12px; font-size:12.5px" href="{{ url_for('alunos.graduar', id=aluno.id) }}"><i class="bi bi-plus-lg" style="font-size:11px"></i>Nova</a>
+      </div>
+      <div class="lin3 um-th" style="padding:10px 18px"><div>Data</div><div>Graduação</div><div style="text-align:right">Exame</div></div>
+      {% for g in graduacoes %}
+      <div class="lin3 um-td" style="padding:11px 18px; background:{{ loop.cycle('#ffffff','#fafafa') }}">
+        <div style="font:500 12.5px/1 'Inter',sans-serif; color:#18181b">{{ g.data.strftime('%d/%m/%Y') }}</div>
+        <div style="display:flex; align-items:center; gap:9px; min-width:0">
+          <span style="width:16px; height:7px; border-radius:2px; border:1px solid rgba(0,0,0,.18); background:{{ g.cor }}; flex-shrink:0"></span>
+          <span style="font:400 12.5px/1.3 'Inter',sans-serif; color:#52525b">{{ g.nome }}</span>
+        </div>
+        <div style="text-align:right; font:400 12px/1.3 'Inter',sans-serif; color:#a1a1aa">{{ g.exame or '—' }}</div>
+      </div>
+      {% else %}
+      <div style="padding:24px 18px; text-align:center; color:#a1a1aa; font:400 12.5px/1.5 'Inter',sans-serif">Nenhuma graduação registrada.</div>
+      {% endfor %}
+    </div>
+
+    <div class="um-card" style="overflow:hidden">
+      <div style="padding:14px 18px; border-bottom:1px solid #f4f4f5; font:600 14px/1 'Inter',sans-serif; color:#18181b">Observações recentes</div>
+      {% for o in observacoes %}
+      <div style="padding:13px 18px; border-bottom:1px solid #f4f4f5; display:flex; flex-direction:column; gap:5px">
+        <div style="display:flex; align-items:center; gap:9px; font:400 11.5px/1 'Inter',sans-serif; color:#a1a1aa">
+          <span>{{ o.data.strftime('%d/%m/%Y') }}</span>{% if o.autor %}<span>·</span><span>{{ o.autor }}</span>{% endif %}
+        </div>
+        <div style="font:400 12.5px/1.55 'Inter',sans-serif; color:#3f3f46; text-wrap:pretty">{{ o.texto }}</div>
+      </div>
+      {% else %}
+      <div style="padding:24px 18px; text-align:center; color:#a1a1aa; font:400 12.5px/1.5 'Inter',sans-serif">Nenhuma observação registrada.</div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {# ------------------------------ FREQUÊNCIA ----------------------------- #}
+    {% if aba == 'frequencia' %}
+    <div class="um-stats">
+      <div class="um-stat"><div class="um-stat-lbl">Frequência</div><div class="um-stat-val">{{ freq.pct }}%</div></div>
+      <div class="um-div"></div>
+      <div class="um-stat"><div class="um-stat-lbl">Presenças</div><div class="um-stat-val">{{ freq.presencas }}</div></div>
+      <div class="um-div"></div>
+      <div class="um-stat"><div class="um-stat-lbl">Faltas</div><div class="um-stat-val">{{ freq.faltas }}</div></div>
+      <div class="um-div"></div>
+      <div class="um-stat"><div class="um-stat-lbl">Última presença</div><div class="um-stat-val" style="font-size:15px">{{ freq.ultima.strftime('%d/%m/%Y') if freq.ultima else '—' }}</div></div>
+    </div>
+
+    <div class="um-card" style="overflow:hidden">
+      <div style="padding:14px 18px; border-bottom:1px solid #f4f4f5; font:600 14px/1 'Inter',sans-serif; color:#18181b">Últimas aulas</div>
+      {% for a in freq.aulas %}
+      <div style="display:flex; align-items:center; gap:14px; padding:11px 18px; border-bottom:1px solid #f4f4f5; background:{{ loop.cycle('#ffffff','#fafafa') }}">
+        <div style="width:60px; flex-shrink:0; font:500 12.5px/1 'Inter',sans-serif; color:#18181b">{{ a.data.strftime('%d/%m/%y') }}</div>
+        <div style="flex:1; min-width:0; font:400 12.5px/1.3 'Inter',sans-serif; color:#52525b; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">{{ a.turma }} — {{ a.horario }}</div>
+        {% set c = '#15803d' if a.presente else '#C8102E' %}
+        <div style="font:500 12px/1 'Inter',sans-serif; color:{{ c }}; display:flex; align-items:center; gap:6px; flex-shrink:0">
+          <span style="width:6px; height:6px; border-radius:50%; background:{{ c }}"></span>{{ 'Presente' if a.presente else 'Falta' }}
+        </div>
+      </div>
+      {% endfor %}
+      <div style="padding:12px 18px">
+        <a href="{{ url_for('alunos.frequencia', id=aluno.id) }}" style="font:500 12.5px/1 'Inter',sans-serif">Ver frequência completa</a>
+      </div>
+    </div>
+    {% endif %}
+
+    {# ------------------------------ FINANCEIRO ----------------------------- #}
+    {% if aba == 'financeiro' %}
+    <div class="um-stats">
+      <div class="um-stat"><div class="um-stat-lbl">Plano</div><div class="um-stat-val" style="font-size:15px">{{ fin.plano or '—' }}</div></div>
+      <div class="um-div"></div>
+      <div class="um-stat"><div class="um-stat-lbl">Valor</div><div class="um-stat-val" style="font-size:15px">{{ 'R$ %.2f'|format(fin.valor)|replace('.',',') if fin.valor else '—' }}</div></div>
+      <div class="um-div"></div>
+      <div class="um-stat"><div class="um-stat-lbl">Em atraso</div><div class="um-stat-val" style="font-size:15px; color:{{ '#991b1b' if fin.total_atraso else '#18181b' }}">{{ 'R$ %.2f'|format(fin.total_atraso)|replace('.',',') }}</div></div>
+    </div>
+
+    <div class="um-card" style="overflow:hidden">
+      <div style="padding:14px 18px; border-bottom:1px solid #f4f4f5; display:flex; align-items:center; justify-content:space-between; gap:12px">
+        <div style="font:600 14px/1 'Inter',sans-serif; color:#18181b">Mensalidades</div>
+        <a href="{{ url_for('alunos.mensalidades', id=aluno.id) }}" style="font:500 12px/1 'Inter',sans-serif">Ver todas</a>
+      </div>
+      <div class="lin3 um-th" style="padding:10px 18px"><div>Vencimento</div><div>Competência</div><div style="text-align:right">Valor</div></div>
+      {% for m in fin.mensalidades %}
+      <div class="lin3 um-td" style="padding:11px 18px; background:{{ loop.cycle('#ffffff','#fafafa') }}">
+        <div style="font:500 12.5px/1 'Inter',sans-serif; color:#18181b">{{ m.vencimento.strftime('%d/%m/%Y') }}</div>
+        <div style="display:flex; align-items:center; gap:9px; min-width:0">
+          <span style="font:400 12.5px/1.3 'Inter',sans-serif; color:#52525b">{{ m.competencia }}</span>
+          {% set bg = {'Pago':'#f4f4f5','Pendente':'#fefce8','Atrasado':'#fef2f2','Cancelado':'#fafafa'}[m.status] %}
+          {% set cr = {'Pago':'#3f3f46','Pendente':'#854d0e','Atrasado':'#991b1b','Cancelado':'#a1a1aa'}[m.status] %}
+          <span class="um-pill" style="background:{{ bg }}; color:{{ cr }}; font-size:10.5px">{{ m.status }}</span>
+        </div>
+        <div style="text-align:right; font:600 12.5px/1 'Inter',sans-serif; color:#18181b">R$ {{ '%.2f'|format(m.valor)|replace('.',',') }}</div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {# --------------------------- CADASTRO COMPLETO -------------------------- #}
+    {% if aba == 'cadastro' %}
+    {% for secao, campos in cadastro %}
+    <div class="um-card" style="padding:16px 18px; display:flex; flex-direction:column; gap:12px">
+      <div style="font:600 13.5px/1 'Inter',sans-serif; color:#18181b">{{ secao }}</div>
+      <div class="dados">
+        {% for rotulo, valor in campos %}
+        <div class="campo"><span>{{ rotulo }}</span><span>{{ valor or '—' }}</span></div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+    <div>
+      <a class="um-btn-primario" href="{{ url_for('alunos.editar', id=aluno.id) }}"><i class="bi bi-pencil" style="font-size:12px"></i>Editar cadastro</a>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

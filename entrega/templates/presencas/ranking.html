@@ -1,0 +1,164 @@
+{% extends 'base_um.html' %}
+{% set um_ativo = 'ranking' %}
+{% block title %}Ranking de Frequência{% endblock %}
+
+{% block um_css %}
+  .rk-filtros { display:flex; flex-wrap:wrap; align-items:flex-end; gap:14px; }
+  .rk-podio { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; align-items:end; }
+  .rk-linha { display:grid; grid-template-columns:36px 1fr 120px 78px; gap:12px; }
+  @media (max-width: 900px) {
+    .rk-linha { grid-template-columns:26px 1fr 64px !important; }
+    .rk-barra { display:none !important; }
+  }
+{% endblock %}
+
+{% block um_conteudo %}
+{% set tipo = tipo|default('mes') %}
+{% set CORES = ['#8a8f98', '#C8102E', '#a9784a'] %}
+{% set FUNDOS = ['#f4f4f5', '#fef2f2', '#faf4ee'] %}
+{% set MEDALHAS = ['Prata', 'Ouro', 'Bronze'] %}
+{% set TROFEUS = ['bi-award-fill', 'bi-trophy-fill', 'bi-award-fill'] %}
+{% set TAMANHOS = ['64px', '84px', '58px'] %}
+{% set ALTURAS = ['84px', '108px', '74px'] %}
+{% set TAMTROFEU = ['17px', '22px', '16px'] %}
+
+<div style="display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap">
+  <div style="display:flex; flex-direction:column; gap:6px">
+    <div class="um-h1">Ranking de Frequência</div>
+    <div class="um-sub">Pódio e ranking completo por turma — {{ periodo_label }}</div>
+  </div>
+  <a class="um-btn" href="{{ url_for('presencas.hub') }}"><i class="bi bi-arrow-left" style="font-size:12px"></i> Voltar</a>
+</div>
+
+<div class="um-stats">
+  <div class="um-stat"><div class="um-stat-lbl">Turmas</div><div class="um-stat-val">{{ ranking|length }}</div></div>
+  <div class="um-div"></div>
+  <div class="um-stat"><div class="um-stat-lbl">Alunos</div><div class="um-stat-val">{{ total_alunos }}</div></div>
+  <div class="um-div"></div>
+  <div class="um-stat"><div class="um-stat-lbl">Presenças</div><div class="um-stat-val">{{ total_presencas }}</div></div>
+</div>
+
+<div class="um-card" style="padding:16px 18px">
+  <form method="GET" class="rk-filtros">
+    <div style="display:flex; flex-direction:column; gap:7px">
+      <label>Visualizar</label>
+      <div style="display:flex; gap:6px">
+        {% for chave, rotulo in [('mes','Mês'), ('ano','Ano'), ('periodo','Período')] %}
+        <button type="submit" name="tipo" value="{{ chave }}"
+          style="padding:9px 14px; border-radius:8px; cursor:pointer;
+                 {% if tipo == chave %}background:#18181b; border:0; color:#fff; font:600 12.5px/1 'Inter',sans-serif;
+                 {% else %}background:#fff; border:1px solid #e4e4e7; color:#3f3f46; font:500 12.5px/1 'Inter',sans-serif;{% endif %}">{{ rotulo }}</button>
+        {% endfor %}
+      </div>
+    </div>
+
+    {% if tipo == 'mes' %}
+    <div style="display:flex; flex-direction:column; gap:7px">
+      <label>Mês</label>
+      <select name="mes" onchange="this.form.submit()">
+        {% for m in range(1, 13) %}<option value="{{ m }}" {% if mes == m %}selected{% endif %}>{{ MESES[m-1] }}</option>{% endfor %}
+      </select>
+    </div>
+    {% endif %}
+
+    {% if tipo != 'periodo' %}
+    <div style="display:flex; flex-direction:column; gap:7px">
+      <label>Ano</label>
+      <select name="ano" onchange="this.form.submit()">
+        {% for a in anos %}<option value="{{ a }}" {% if ano == a %}selected{% endif %}>{{ a }}</option>{% endfor %}
+      </select>
+    </div>
+    {% else %}
+    <div style="display:flex; flex-direction:column; gap:7px; width:160px"><label>De</label><input type="date" name="inicio" value="{{ inicio }}"></div>
+    <div style="display:flex; flex-direction:column; gap:7px; width:160px"><label>Até</label><input type="date" name="fim" value="{{ fim }}"></div>
+    <button class="um-btn-primario" type="submit"><i class="bi bi-search" style="font-size:12px"></i>Buscar</button>
+    <a class="um-btn" href="{{ url_for(request.endpoint) }}">Limpar</a>
+    {% endif %}
+
+    <div style="display:flex; flex-direction:column; gap:7px; min-width:200px">
+      <label>Turma</label>
+      <select name="turma_id" onchange="this.form.submit()">
+        <option value="">Todas as turmas</option>
+        {% for t in turmas %}<option value="{{ t.id }}" {% if turma_id == t.id %}selected{% endif %}>{{ t.nome }}</option>{% endfor %}
+      </select>
+    </div>
+
+    {% if academias and academias|length > 1 %}
+    <div style="display:flex; flex-direction:column; gap:7px; min-width:200px">
+      <label>Academia</label>
+      <select name="academia_id" onchange="this.form.submit()">
+        {% for a in academias %}<option value="{{ a.id }}" {% if a.id == academia.id %}selected{% endif %}>{{ a.nome }}</option>{% endfor %}
+      </select>
+    </div>
+    {% endif %}
+  </form>
+</div>
+
+{% for t in ranking %}
+<div class="um-card" style="overflow:hidden">
+  <div style="padding:14px 18px; border-bottom:1px solid #f4f4f5; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap">
+    <div style="font:600 14.5px/1 'Inter',sans-serif; color:#18181b">{{ t.nome }}</div>
+    <div style="display:flex; align-items:center; gap:8px; font:400 12px/1 'Inter',sans-serif; color:#a1a1aa">
+      <span>{{ periodo_label }}</span><span style="color:#d4d4d8">·</span><span>{{ t.alunos|length }} alunos</span>
+    </div>
+  </div>
+
+  {# Pódio: ordem visual 2º, 1º, 3º #}
+  <div style="padding:20px 18px; background:#fafafa; border-bottom:1px solid #f4f4f5">
+    <div class="rk-podio">
+      {% for idx in [1, 0, 2] %}
+      {% set pos = loop.index0 %}
+      {% set a = t.alunos[idx] if t.alunos|length > idx else None %}
+      <div style="display:flex; flex-direction:column; align-items:center; gap:10px">
+        <i class="bi {{ TROFEUS[pos] }}" style="font-size:{{ TAMTROFEU[pos] }}; color:{{ CORES[pos] }}"></i>
+        <div style="position:relative">
+          <div style="width:{{ TAMANHOS[pos] }}; height:{{ TAMANHOS[pos] }}; border-radius:50%; background:#fff; border:2px solid {{ CORES[pos] }}; display:flex; align-items:center; justify-content:center; color:#a1a1aa; overflow:hidden">
+            {% if a and a.foto %}<img src="{{ a.foto }}" alt="" style="width:100%; height:100%; object-fit:cover">
+            {% else %}<i class="bi bi-person-fill" style="font-size:22px"></i>{% endif %}
+          </div>
+          <div style="position:absolute; bottom:-5px; left:50%; transform:translateX(-50%); min-width:22px; height:22px; padding:0 6px; border-radius:999px; background:{{ CORES[pos] }}; border:2px solid #fafafa; display:flex; align-items:center; justify-content:center; font:700 11px/1 'Inter',sans-serif; color:#fff">{{ idx + 1 }}º</div>
+        </div>
+        <div style="width:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:5px; padding:14px 10px; background:{{ FUNDOS[pos] }}; border:1px solid {{ CORES[pos] }}; border-radius:9px; min-height:{{ ALTURAS[pos] }}">
+          <div style="font:500 10px/1 'Inter',sans-serif; color:{{ CORES[pos] }}; text-transform:uppercase; letter-spacing:.09em">{{ MEDALHAS[pos] }}</div>
+          <div style="font:{% if pos == 1 %}600 13.5px{% else %}500 12.5px{% endif %}/1.3 'Inter',sans-serif; color:#18181b; text-align:center; text-wrap:pretty">{{ a.nome if a else '—' }}</div>
+          <div style="font:600 11.5px/1 'Inter',sans-serif; color:#52525b">{{ a.total if a else 0 }} presenças</div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <details>
+    <summary style="padding:12px 18px; display:flex; align-items:center; justify-content:space-between; gap:12px; cursor:pointer; list-style:none">
+      <div style="font:500 12.5px/1 'Inter',sans-serif; color:#3f3f46">Ranking completo — {{ t.alunos|length }} alunos</div>
+      <i class="bi bi-chevron-down" style="font-size:12px; color:#a1a1aa"></i>
+    </summary>
+    <div style="border-top:1px solid #f4f4f5">
+      <div class="rk-linha um-th" style="padding:10px 18px">
+        <div>#</div><div>Aluno</div><div class="rk-barra">Progresso</div><div style="text-align:right">Presenças</div>
+      </div>
+      {% set maximo = t.alunos[0].total if t.alunos else 1 %}
+      {% for a in t.alunos %}
+      {% set p = loop.index0 %}
+      <div class="rk-linha um-td" style="padding:10px 18px; background:{{ loop.cycle('#ffffff','#fafafa') }}">
+        <div style="font:600 12.5px/1 'Inter',sans-serif; color:{% if p == 0 %}#C8102E{% elif p == 1 %}#8a8f98{% elif p == 2 %}#a9784a{% else %}#71717a{% endif %}">{{ loop.index }}</div>
+        <div style="display:flex; align-items:center; gap:10px; min-width:0">
+          <div style="width:26px; height:26px; border-radius:50%; background:#f4f4f5; display:flex; align-items:center; justify-content:center; color:#a1a1aa; flex-shrink:0"><i class="bi bi-person-fill" style="font-size:12px"></i></div>
+          <span style="font:500 12.5px/1.3 'Inter',sans-serif; color:#18181b; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">{{ a.nome }}</span>
+        </div>
+        <div class="rk-barra">
+          <div style="height:5px; border-radius:999px; background:#f4f4f5; overflow:hidden"><div style="height:100%; width:{{ (100 * a.total / maximo)|round|int }}%; background:#18181b"></div></div>
+        </div>
+        <div style="text-align:right; font:600 12.5px/1 'Inter',sans-serif; color:#18181b">{{ a.total }}</div>
+      </div>
+      {% endfor %}
+    </div>
+  </details>
+</div>
+{% else %}
+<div class="um-card" style="padding:40px 24px; text-align:center; color:#a1a1aa">
+  <i class="bi bi-trophy" style="font-size:28px; display:block; margin-bottom:10px; opacity:.5"></i>
+  <div style="font:500 13.5px/1.5 'Inter',sans-serif">Nenhuma presença registrada no período.</div>
+</div>
+{% endfor %}
+{% endblock %}

@@ -1,0 +1,121 @@
+{% extends 'base_um2.html' %}
+{% set um_ativo = 'eventos' %}
+{% block title %}Eventos e competições{% endblock %}
+
+{% block um_css %}
+  .lin-ev { display:grid; grid-template-columns:minmax(260px,1fr) 150px 140px 130px 120px 130px; gap:0 14px; }
+  .rol-ev { min-width:1050px; }
+{% endblock %}
+
+{% block um_conteudo %}
+{% set aba = aba|default('eventos') %}
+{% set ehEventos = aba == 'eventos' %}
+
+<div style="display:flex; align-items:flex-end; justify-content:space-between; gap:20px; flex-wrap:wrap">
+  <div style="display:flex; flex-direction:column; gap:7px">
+    <h1 class="um-h1" style="margin:0">Eventos e competições</h1>
+    <div class="um-sub">{{ 'Aderir e gerenciar inscrições em eventos da academia.' if ehEventos else 'Aderir e inscrever atletas em competições de judô.' }}</div>
+  </div>
+  <div style="display:flex; gap:9px; flex-wrap:wrap; align-items:center">
+    <form method="get" style="display:flex; gap:9px; align-items:center">
+      <input type="hidden" name="aba" value="{{ aba }}">
+      <select name="academia_id" onchange="this.form.submit()" style="min-width:180px">
+        {% for ac in academias %}<option value="{{ ac.id }}" {% if ac.id == academia.id %}selected{% endif %}>{{ ac.nome }}</option>{% endfor %}
+      </select>
+    </form>
+    <a href="{{ url_for('calendario.visualizar') }}" class="um-btn"><i class="bi bi-calendar3" style="font-size:13px"></i>Ver calendário</a>
+  </div>
+</div>
+
+<div style="display:flex; gap:2px; flex-wrap:wrap; border-bottom:1px solid #e7e5e4">
+  {% for chave, rotulo, qtd in [('eventos', 'Eventos', eventos|length), ('competicoes', 'Competições', competicoes|length)] %}
+  {% set on = aba == chave %}
+  <a href="{{ url_for(request.endpoint, aba=chave) }}"
+     style="padding:11px 15px; margin-bottom:-1px; display:flex; align-items:center; gap:8px;
+            border-bottom:2px solid {{ '#C8102E' if on else 'transparent' }};
+            font:{{ '600' if on else '400' }} 13px/1 'Public Sans',sans-serif;
+            color:{{ '#1C1917' if on else '#a8a29e' }}">{{ rotulo }}
+    <span style="padding:2px 7px; border-radius:2px; background:{{ '#fef2f2' if on else '#f5f5f4' }};
+                 font:600 11px/1.3 'Public Sans',sans-serif; color:{{ '#C8102E' if on else '#78716c' }}">{{ qtd }}</span>
+  </a>
+  {% endfor %}
+</div>
+
+{% set itens = eventos if ehEventos else competicoes %}
+{% set aderidos = itens|selectattr('aderido')|list|length %}
+<div class="um-faixa">
+  <div class="um-kpi">
+    <span class="um-kpi-lbl">{{ 'Eventos' if ehEventos else 'Competições' }}</span>
+    <span class="um-kpi-val">{{ itens|length }}</span>
+    <span class="um-kpi-nota">Disponíveis para adesão</span>
+  </div>
+  <div class="um-kpi">
+    <span class="um-kpi-lbl">{{ 'Aderidos' if ehEventos else 'Aderidas' }}</span>
+    <span class="um-kpi-val" style="color:#15803d">{{ aderidos }}</span>
+    <span class="um-kpi-nota">Academia participando</span>
+  </div>
+  <div class="um-kpi">
+    <span class="um-kpi-lbl">Inscrições abertas</span>
+    <span class="um-kpi-val">{{ itens|selectattr('inscricoes_abertas')|list|length }}</span>
+    <span class="um-kpi-nota">Dentro do prazo</span>
+  </div>
+  <div class="um-kpi">
+    <span class="um-kpi-lbl">{{ 'Alunos inscritos' if ehEventos else 'Atletas inscritos' }}</span>
+    <span class="um-kpi-val">{{ itens|sum(attribute='inscritos') }}</span>
+    <span class="um-kpi-nota">Somando todos os registros</span>
+  </div>
+</div>
+
+<form method="get" class="um-filtros">
+  <input type="hidden" name="aba" value="{{ aba }}">
+  <div class="um-filtro" style="flex:1 1 240px"><label for="e-q">Buscar</label><input type="text" id="e-q" name="q" value="{{ request.args.get('q','') }}" placeholder="Nome do evento"></div>
+  <div class="um-filtro" style="flex:0 1 170px">
+    <label for="e-ad">Adesão</label>
+    <select id="e-ad" name="adesao"><option value="">Todos</option>
+      <option value="sim" {% if request.args.get('adesao') == 'sim' %}selected{% endif %}>Aderidos</option>
+      <option value="nao" {% if request.args.get('adesao') == 'nao' %}selected{% endif %}>Sem adesão</option>
+    </select>
+  </div>
+  <div class="um-filtro" style="flex:0 1 170px">
+    <label for="e-in">Inscrições</label>
+    <select id="e-in" name="inscricoes"><option value="">Todas</option>
+      <option value="abertas" {% if request.args.get('inscricoes') == 'abertas' %}selected{% endif %}>Abertas</option>
+      <option value="encerradas" {% if request.args.get('inscricoes') == 'encerradas' %}selected{% endif %}>Encerradas</option>
+    </select>
+  </div>
+  <button type="submit" class="um-btn" style="flex:none">Filtrar</button>
+</form>
+
+<div class="um-card" style="overflow:hidden">
+  <div class="um-cab">
+    <span class="um-secao">{{ 'Eventos disponíveis' if ehEventos else 'Competições disponíveis' }}</span>
+    <span class="um-kpi-nota">{{ itens|length }} registro{{ 's' if itens|length != 1 else '' }}</span>
+  </div>
+  <div class="um-rolagem"><div class="rol-ev">
+    <div class="lin-ev um-th"><span>Evento</span><span>Tipo</span><span>Inscrições até</span><span>Adesão</span><span style="text-align:right">Inscritos</span><span style="text-align:right">Ações</span></div>
+    {% for e in itens %}
+    <div class="lin-ev um-td">
+      <div style="min-width:0; display:flex; flex-direction:column; gap:3px">
+        <a href="{{ url_for('eventos_competicoes.detalhe', id=e.id) }}" style="font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">{{ e.nome }}</a>
+        <span style="font:400 11.5px/1 'Public Sans',sans-serif; color:#a8a29e">{{ e.formulario or 'Sem formulário' }}</span>
+      </div>
+      <span><span class="um-tag">{{ e.tipo }}</span></span>
+      <span style="color:#57534e">{{ e.encerra.strftime('%d/%m/%Y') if e.encerra else '—' }}</span>
+      {% set c = '#15803d' if e.aderido else '#a8a29e' %}
+      <span style="display:flex; align-items:center; gap:6px; font:500 12.5px/1 'Public Sans',sans-serif; color:{{ c }}"><span style="width:6px; height:6px; border-radius:50%; background:{{ c }}"></span>{{ 'Aderido' if e.aderido else 'Sem adesão' }}</span>
+      <span style="text-align:right; font-weight:600">{{ e.inscritos if e.aderido else '—' }}</span>
+      <span style="display:flex; gap:9px; justify-content:flex-end; align-items:center">
+        {% if e.aderido %}
+        <a href="{{ url_for('eventos_competicoes.inscritos', id=e.id) }}" class="um-btn-primario" style="padding:7px 11px; font-size:12px">Inscritos</a>
+        <a href="{{ url_for('eventos_competicoes.remover_adesao', id=e.id) }}" title="Remover adesão" style="color:#78716c"><i class="bi bi-x-lg" style="font-size:13px"></i></a>
+        {% else %}
+        <a href="{{ url_for('eventos_competicoes.aderir', id=e.id) }}" class="um-btn" style="padding:7px 11px; font-size:12px">Aderir</a>
+        {% endif %}
+      </span>
+    </div>
+    {% else %}
+    <div style="padding:32px 16px; text-align:center; color:#a8a29e; font:400 12.5px/1.5 'Public Sans',sans-serif">Nada disponível no momento.</div>
+    {% endfor %}
+  </div></div>
+</div>
+{% endblock %}

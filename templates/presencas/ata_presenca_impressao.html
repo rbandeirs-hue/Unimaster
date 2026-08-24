@@ -1,0 +1,261 @@
+{# =======================================================================
+   Ata de presença — documento para impressão
+   =======================================================================
+   Uma folha por turma, com a matriz aluno × dia de aula. Página solta: o que
+   sai na impressora é a folha, sem lateral nem navegação.
+   ======================================================================= #}
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ata de presença — {{ periodo_label }}</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
+  <style>
+    :root {
+      --doc-ink: #1c1c1c;
+      --doc-soft: #6b6862;
+      --doc-line: #e0ddd8;
+      --doc-red: #c8102e;
+      --doc-verde: #17803d;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #ecebe8;
+      color: var(--doc-ink);
+      font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
+    .barra {
+      display: flex; align-items: center; gap: .6rem; flex-wrap: wrap;
+      padding: .9rem 1.2rem;
+      background: #fff;
+      border-bottom: 1px solid var(--doc-line);
+    }
+    .barra .espaco { flex: 1; }
+    .barra a, .barra button, .barra select, .barra input {
+      height: 38px; padding: 0 .85rem;
+      border: 1px solid var(--doc-line);
+      border-radius: 8px;
+      background: #fff; color: var(--doc-ink);
+      font: inherit; text-decoration: none;
+      display: inline-flex; align-items: center; gap: .45rem;
+      cursor: pointer;
+    }
+    .barra input { width: 88px; }
+    .barra .forte { background: var(--doc-ink); border-color: var(--doc-ink); color: #fff; }
+
+    /* Folha A4 deitada: a matriz cresce com o número de aulas do mês. */
+    .folha {
+      width: 297mm;
+      min-height: 210mm;
+      margin: 1.5rem auto;
+      padding: 12mm 14mm;
+      background: #fff;
+      box-shadow: 0 4px 24px rgba(0, 0, 0, .10);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .doc-topo {
+      display: flex; align-items: flex-start; justify-content: space-between; gap: 1.5rem;
+      padding-bottom: .8rem;
+      border-bottom: 2px solid var(--doc-ink);
+    }
+    .doc-marca { display: flex; align-items: center; gap: .7rem; }
+    .doc-marca-quadro { width: 24px; height: 24px; flex: 0 0 24px; background: var(--doc-red); border-radius: 3px; }
+    .doc-marca-nome { display: block; font-size: 10.5px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+    .doc-marca-nome em { font-style: normal; color: var(--doc-red); }
+    .doc-marca-sub { display: block; color: var(--doc-soft); font-size: 10.5px; margin-top: .1rem; }
+    .doc-titulo { text-align: right; }
+    .doc-titulo strong { display: block; font-size: 16px; font-weight: 600; }
+    .doc-titulo span { color: var(--doc-soft); font-size: 11.5px; }
+
+    .doc-numeros { display: grid; grid-template-columns: repeat(4, 1fr); border: 1px solid var(--doc-line); margin: 1rem 0; }
+    .doc-numero {
+      display: flex; align-items: center; justify-content: space-between; gap: .6rem;
+      padding: .5rem .8rem;
+      border-left: 1px solid var(--doc-line);
+    }
+    .doc-numero:first-child { border-left: 0; }
+    .doc-numero-rotulo { color: var(--doc-soft); font-size: 9px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; }
+    .doc-numero-valor { font-size: 15px; font-weight: 600; }
+    .doc-verde { color: var(--doc-verde); }
+    .doc-vermelho { color: var(--doc-red); }
+
+    /* ------------------------------------------------------- matriz */
+    .doc-tabela { width: 100%; border-collapse: collapse; border: 1px solid var(--doc-line); }
+    .doc-tabela th, .doc-tabela td { border-bottom: 1px solid var(--doc-line); }
+    .doc-tabela thead th {
+      padding: .35rem .3rem;
+      background: #faf9f7;
+      color: var(--doc-soft);
+      font-size: 9px; font-weight: 600;
+      text-align: center;
+      vertical-align: bottom;
+    }
+    .doc-tabela thead th.aluno {
+      padding-left: .7rem;
+      text-align: left;
+      letter-spacing: .12em; text-transform: uppercase;
+    }
+    .doc-dia { display: block; font-size: 10px; color: var(--doc-ink); font-weight: 600; }
+    .doc-dia-sem { display: block; font-size: 8px; color: var(--doc-soft); }
+    .doc-tabela td { padding: .3rem; text-align: center; font-size: 10.5px; }
+    .doc-tabela td.aluno { padding-left: .7rem; text-align: left; font-size: 11px; }
+    .doc-tabela tbody tr:nth-child(even) { background: #fcfbfa; }
+    .doc-tabela tr:last-child td { border-bottom: 0; }
+    .doc-p { color: var(--doc-verde); font-weight: 600; }
+    .doc-f { color: var(--doc-red); font-weight: 600; }
+    .doc-na { color: #c9c5be; }
+    .doc-col-num { width: 26px; }
+    .doc-col-dia { width: 24px; }
+    .doc-col-pct { width: 42px; }
+    .doc-tot { font-weight: 600; }
+
+    .doc-legenda { margin-top: .7rem; color: var(--doc-soft); font-size: 9.5px; }
+    .doc-legenda b { color: var(--doc-ink); }
+
+    .doc-rodape {
+      margin-top: auto;
+      padding-top: 1.5rem;
+      display: flex; align-items: flex-end; justify-content: space-between; gap: 2rem;
+      color: var(--doc-soft);
+      font-size: 10px;
+    }
+    .doc-assinaturas { display: flex; gap: 2rem; }
+    .doc-assinatura { text-align: center; }
+    .doc-assinatura-linha { width: 62mm; border-top: 1px solid var(--doc-ink); margin-bottom: .25rem; }
+
+    .doc-vazio { padding: 2rem; text-align: center; color: var(--doc-soft); }
+
+    @page { size: A4 landscape; margin: 10mm; }
+    @media print {
+      body { background: #fff; }
+      .nao-imprime { display: none !important; }
+      .folha {
+        width: auto; min-height: 0; margin: 0; padding: 0;
+        box-shadow: none;
+        break-after: page;
+      }
+      .folha:last-child { break-after: auto; }
+      .doc-tabela tr { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="barra nao-imprime">
+  <a href="{{ url_for('presencas.ata_presenca', academia_id=academia_id, mes=mes, ano=ano, turma=turma_filtro) }}">
+    <i class="bi bi-arrow-left"></i> Voltar
+  </a>
+  <form method="GET" style="display: flex; gap: .6rem;">
+    {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
+    {% if turma_filtro %}<input type="hidden" name="turma" value="{{ turma_filtro }}">{% endif %}
+    <select name="mes" onchange="this.form.submit()" aria-label="Mês">
+      {% for i in range(0, 13) %}
+      <option value="{{ i }}" {% if i == mes %}selected{% endif %}>{{ meses[i]|capitalize }}</option>
+      {% endfor %}
+    </select>
+    <input type="number" name="ano" value="{{ ano }}" min="2000" max="2100" onchange="this.form.submit()" aria-label="Ano">
+  </form>
+  <span class="espaco"></span>
+  <span style="color:#6b6862">{{ documentos|length }} turma{{ 's' if documentos|length != 1 }} · {{ periodo_label }}</span>
+  <button type="button" class="forte" onclick="window.print()">
+    <i class="bi bi-printer"></i> Imprimir / salvar PDF
+  </button>
+</div>
+
+{% if not documentos %}
+<div class="folha">
+  <div class="doc-vazio">Nenhuma chamada registrada em {{ periodo_label }}.</div>
+</div>
+{% endif %}
+
+{% for doc in documentos %}
+<div class="folha">
+  <div class="doc-topo">
+    <div class="doc-marca">
+      <span class="doc-marca-quadro"></span>
+      <span>
+        <span class="doc-marca-nome">Unimaster <em>Judô</em></span>
+        <span class="doc-marca-sub">
+          {{ academia.nome if academia else 'Academia' }}
+          {%- if academia and academia.cidade %} · {{ academia.cidade }}{% if academia.uf %}/{{ academia.uf }}{% endif %}{% endif %}
+        </span>
+      </span>
+    </div>
+    <div class="doc-titulo">
+      <strong>Ata de presença · {{ doc.turma }}</strong>
+      <span>
+        {{ periodo_label|capitalize }}
+        {%- if doc.horario %} · {{ doc.horario }}{% endif -%}
+        {%- if doc.professor %} · {{ doc.professor }}{% endif -%}
+      </span>
+    </div>
+  </div>
+
+  <div class="doc-numeros">
+    <div class="doc-numero"><span class="doc-numero-rotulo">Alunos</span><span class="doc-numero-valor">{{ doc.alunos }}</span></div>
+    <div class="doc-numero"><span class="doc-numero-rotulo">Aulas</span><span class="doc-numero-valor">{{ doc.aulas }}</span></div>
+    <div class="doc-numero"><span class="doc-numero-rotulo">Presenças</span><span class="doc-numero-valor doc-verde">{{ doc.presencas }}</span></div>
+    <div class="doc-numero">
+      <span class="doc-numero-rotulo">Frequência</span>
+      <span class="doc-numero-valor {% if doc.frequencia >= 70 %}doc-verde{% elif doc.frequencia < 60 %}doc-vermelho{% endif %}">{{ doc.frequencia }}%</span>
+    </div>
+  </div>
+
+  <table class="doc-tabela">
+    <colgroup>
+      <col>
+      {% for c in doc.colunas %}<col class="doc-col-dia">{% endfor %}
+      <col class="doc-col-num"><col class="doc-col-num"><col class="doc-col-pct">
+    </colgroup>
+    <thead>
+      <tr>
+        <th class="aluno">Aluno</th>
+        {% for c in doc.colunas %}
+        <th><span class="doc-dia">{{ c.dia }}</span><span class="doc-dia-sem">{{ c.semana }}</span></th>
+        {% endfor %}
+        <th>P</th>
+        <th>F</th>
+        <th>%</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for l in doc.linhas %}
+      <tr>
+        <td class="aluno">{{ l.nome }}</td>
+        {% for c in l.celulas %}
+        <td class="{{ 'doc-p' if c == 'P' else ('doc-f' if c == 'F' else 'doc-na') }}">{{ c or '—' }}</td>
+        {% endfor %}
+        <td class="doc-tot">{{ l.presencas }}</td>
+        <td class="doc-tot {% if l.faltas %}doc-f{% endif %}">{{ l.faltas }}</td>
+        <td class="doc-tot {% if l.frequencia >= 70 %}doc-verde{% elif l.frequencia < 60 %}doc-vermelho{% endif %}">{{ l.frequencia }}%</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <div class="doc-legenda">
+    <b class="doc-p">P</b> presente &nbsp; <b class="doc-f">F</b> falta &nbsp; <b class="doc-na">—</b> sem chamada para o aluno na data
+  </div>
+
+  <div class="doc-rodape">
+    <div>Emitido em {{ emitido_em }} por {{ current_user.nome }}.<br>Documento gerado pelo sistema Unimaster Judô.</div>
+    <div class="doc-assinaturas">
+      {% if doc.professor %}
+      <div class="doc-assinatura"><div class="doc-assinatura-linha"></div>{{ doc.professor }}</div>
+      {% endif %}
+      <div class="doc-assinatura"><div class="doc-assinatura-linha"></div>Responsável técnico</div>
+    </div>
+  </div>
+</div>
+{% endfor %}
+
+</body>
+</html>

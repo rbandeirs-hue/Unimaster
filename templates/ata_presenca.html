@@ -1,312 +1,317 @@
-{% extends "base.html" %}
-{% block title %}Ata de Presença{% endblock %}
+{% extends "base_academia.html" %}
+{% set menu_ativo = 'presencas' %}
+{% block title %}Ata de presença{% endblock %}
+
+{% block pagina_titulo %}Ata de presença{% endblock %}
+{% block pagina_subtitulo %}
+  {{ resumo.aulas }} aula{{ 's' if resumo.aulas != 1 }} registrada{{ 's' if resumo.aulas != 1 }} em {{ periodo_label }}
+{% endblock %}
+
+{% block pagina_acoes %}
+  {% set back_url = back_url or get_back_url_default() %}
+  <a href="{{ back_url }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Voltar</a>
+  <form method="GET" class="ata-periodo" id="ataFiltros">
+    {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
+    <select name="mes" onchange="this.form.submit()" aria-label="Mês">
+      {% for i in range(0, 13) %}
+      <option value="{{ i }}" {% if i == mes %}selected{% endif %}>{{ meses[i]|capitalize }}</option>
+      {% endfor %}
+    </select>
+    <input type="number" name="ano" value="{{ ano }}" min="2000" max="2100" onchange="this.form.submit()" aria-label="Ano">
+    <select name="turma" onchange="this.form.submit()" aria-label="Turma">
+      <option value="0">Todas as turmas</option>
+      {% for tid, tnome in turmas.items() %}
+      <option value="{{ tid }}" {% if tid == turma_id %}selected{% endif %}>{{ tnome }}</option>
+      {% endfor %}
+    </select>
+  </form>
+  <a class="sh__btn" target="_blank" rel="noopener"
+     href="{{ url_for('presencas.ata_presenca_impressao', academia_id=academia_id, mes=mes, ano=ano, turma=turma_id) }}">
+    <i class="bi bi-printer"></i> Imprimir ata
+  </a>
+{% endblock %}
+
 {% block content %}
 <style>
-    /* Estilização básica para o acordeão */
-    .accordion-item {
-        margin-bottom: 1rem;
-        border: 1px solid #dee2e6;
-        border-radius: 0.5rem;
-    }
+  .ata-periodo { display: flex; gap: .6rem; }
+  .ata-periodo select, .ata-periodo input {
+    height: 42px; padding: 0 .8rem;
+    border: 1px solid var(--sh-line);
+    border-radius: var(--u-radius-sm);
+    background: #fff; color: var(--sh-ink);
+    font-size: .92rem;
+  }
+  .ata-periodo input { width: 92px; }
+  .ata-periodo select:focus, .ata-periodo input:focus {
+    outline: none; border-color: #cfcbc4;
+    box-shadow: 0 0 0 3px rgba(28, 28, 28, .06);
+  }
 
-    /* Estilização para o filtro fixo */
-    .sticky-top-filters {
-        position: sticky;
-        top: 0;
-        z-index: 1000;
-        background-color: #fff;
-        padding-top: 10px;
-        padding-bottom: 10px;
-        border-bottom: 1px solid #e9ecef;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-    }
+  /* Régua que separa um dia do outro. */
+  .ata-dia {
+    display: flex; align-items: center; gap: .9rem;
+    margin: 2rem 0 .8rem;
+    color: var(--sh-ink);
+    font-size: .74rem; font-weight: 600;
+    letter-spacing: .14em; text-transform: uppercase;
+  }
+  .ata-dia-n { color: var(--sh-ink-soft); font-weight: 400; letter-spacing: 0; text-transform: none; font-size: .86rem; }
+  .ata-dia::after { content: ""; flex: 1; height: 1px; background: var(--sh-line); }
 
-    .accordion-button.bg-primary {
-        background-color: var(--bs-primary) !important;
-        color: white !important;
-        font-weight: bold;
-    }
+  .ata-lista { background: #fff; border: 1px solid var(--sh-line); border-radius: var(--u-radius); overflow: hidden; }
+  .ata-aula + .ata-aula { border-top: 1px solid var(--sh-line); }
 
-    .accordion-button:not(.collapsed) {
-        background-color: var(--bs-indigo) !important; /* Cor diferente quando aberto */
-        box-shadow: none;
-    }
+  /* Cabeçalho da aula: clicável inteiro, abre o detalhe. */
+  .ata-cab {
+    display: flex; align-items: center; gap: 1rem;
+    width: 100%;
+    padding: 1rem 1.25rem;
+    border: 0; background: none;
+    text-align: left;
+    cursor: pointer;
+  }
+  .ata-cab:hover { background: #fbfaf8; }
+  .ata-seta { color: var(--sh-ink-soft); font-size: .9rem; transition: transform var(--u-transition); }
+  .ata-aula.is-aberta .ata-seta { transform: rotate(90deg); }
+  .ata-cab-txt { flex: 1; min-width: 0; }
+  .ata-turma { display: block; font-size: 1rem; font-weight: 600; }
+  .ata-sub { display: block; color: var(--sh-ink-soft); font-size: .88rem; margin-top: .1rem; }
+  .ata-resumo { display: flex; align-items: center; gap: .9rem; flex-shrink: 0; }
+  .ata-resumo-txt { color: var(--sh-ink-soft); font-size: .9rem; white-space: nowrap; }
+  .ata-barra { width: 60px; height: 4px; border-radius: var(--u-radius-pill); background: #eceae6; overflow: hidden; }
+  .ata-barra span { display: block; height: 100%; background: currentColor; }
+  .ata-pct { min-width: 3.2rem; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .ata-alta { color: #17803d; }
+  .ata-media { color: #b45309; }
+  .ata-baixa { color: var(--sh-red); }
 
-    .table th, .table td {
-        vertical-align: middle;
-    }
+  .ata-corpo[hidden] { display: none; }
+  .ata-acoes {
+    display: flex; align-items: center; gap: .5rem; flex-wrap: wrap;
+    padding: 0 1.25rem 1rem;
+  }
+  .ata-acoes .sh__btn { padding: .5rem .8rem; font-size: .88rem; }
+  .ata-registrado { margin-left: auto; color: var(--sh-ink-soft); font-size: .84rem; }
 
-    .ata-indicadores {
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 0.6rem;
-    }
-    .ata-ind-card {
-        border: 1px solid #e9ecef;
-        border-radius: 10px;
-        padding: 0.65rem 0.75rem;
-        background: #fff;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 0.5rem;
-    }
-    .ata-ind-card .lbl {
-        font-size: 0.72rem;
-        text-transform: uppercase;
-        letter-spacing: .04em;
-        font-weight: 700;
-        color: #6c757d;
-    }
-    .ata-ind-card .val {
-        font-size: 1.15rem;
-        font-weight: 800;
-        line-height: 1;
-    }
-    .ata-ind-card.total .val { color: #0d6efd; }
-    .ata-ind-card.pres .val { color: #198754; }
-    .ata-ind-card.falt .val { color: #dc3545; }
+  .ata-contagem { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--sh-line); border-bottom: 1px solid var(--sh-line); }
+  .ata-contagem-item {
+    display: flex; align-items: center; justify-content: space-between; gap: .6rem;
+    padding: .8rem 1.25rem;
+    border-left: 1px solid var(--sh-line);
+  }
+  .ata-contagem-item:first-child { border-left: 0; }
+  .ata-contagem-rotulo { color: var(--sh-ink-soft); font-size: .68rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; }
+  .ata-contagem-valor { font-size: 1.3rem; font-weight: 600; font-variant-numeric: tabular-nums; }
 
-    @media (max-width: 768px) {
-        .accordion-button {
-            font-size: 0.9rem;
-        }
-        .ata-indicadores {
-            grid-template-columns: 1fr;
-        }
-    }
+  /* Chamada em três colunas, com a régua entre as células. */
+  .ata-alunos { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+  .ata-aluno {
+    display: flex; align-items: center; gap: .6rem;
+    padding: .6rem 1.25rem;
+    margin: 0 -1px -1px 0;
+    border-right: 1px solid var(--sh-line);
+    border-bottom: 1px solid var(--sh-line);
+    font-size: .93rem;
+    min-width: 0;
+  }
+  .ata-aluno i { flex: 0 0 auto; }
+  .ata-aluno .bi-check-circle-fill { color: #17803d; }
+  .ata-aluno .bi-x-circle-fill { color: var(--sh-red); }
+  .ata-aluno-nome { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ata-aluno.faltou .ata-aluno-nome { color: var(--sh-ink-soft); }
+  .ata-tag {
+    margin-left: auto;
+    padding: .1rem .45rem;
+    border: 1px solid var(--sh-line);
+    border-radius: var(--u-radius-pill);
+    color: var(--sh-ink-soft);
+    font-size: .72rem;
+    white-space: nowrap;
+  }
+
+  .ata-vazio {
+    background: #fff; border: 1px dashed var(--sh-line); border-radius: var(--u-radius);
+    padding: 3rem 1rem; text-align: center; color: var(--sh-ink-soft);
+  }
+  .ata-vazio i { font-size: 2.6rem; display: block; margin-bottom: .75rem; color: #cfcbc4; }
+
+  @media (max-width: 767.98px) {
+    .ata-periodo { width: 100%; flex-wrap: wrap; }
+    .ata-periodo select { flex: 1 1 100%; }
+    .ata-periodo input { flex: 1 1 100%; width: auto; }
+    .ata-cab { padding: .9rem 1rem; gap: .7rem; }
+    .ata-acoes { padding: 0 1rem 1rem; }
+    .ata-acoes .sh__btn { flex: 1 1 100%; justify-content: center; }
+    .ata-registrado { margin-left: 0; }
+    .ata-aluno { padding: .6rem 1rem; }
+    .ata-resumo-txt, .ata-barra { display: none; }
+    .ata-contagem { grid-template-columns: 1fr; }
+    .ata-contagem-item { border-left: 0; border-top: 1px solid var(--sh-line); }
+    .ata-contagem-item:first-child { border-top: 0; }
+  }
 </style>
 
-<div class="container mt-4">
-
-    {% set back_url = back_url or get_back_url_default() %}
-{% include 'components/botao_voltar.html' %}
-    <h2 class="mb-4 text-center text-primary fw-bold">📋 Ata de Presença</h2>
-
-    <!-- Filtros fixos no topo -->
-    <div class="row mb-4 justify-content-center g-2 sticky-top-filters">
-        <div class="col-md-3 col-sm-6">
-            <select id="mes" class="form-select shadow-sm">
-                <option value="0" {% if mes==0 %}selected{% endif %}>Todos os meses</option>
-                {% set meses = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho",
-                                 "Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"] %}
-                {% for i in range(1,13) %}
-                <option value="{{ i }}" {% if i==mes %}selected{% endif %}>{{ meses[i-1] }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="col-md-2 col-sm-6">
-            <select id="ano" class="form-select shadow-sm">
-                {% for y in range(ano-5, ano+1) %}
-                <option value="{{ y }}" {% if y==ano %}selected{% endif %}>{{ y }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="col-md-3 col-sm-12">
-            <select id="turma" class="form-select shadow-sm">
-                <option value="0" {% if turma_id==0 %}selected{% endif %}>Todas as turmas</option>
-                {% for tid, nome in turmas.items() %}
-                <option value="{{ tid }}" {% if tid|string == turma_id|string %}selected{% endif %}>{{ nome }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="col-md-2 col-sm-12 d-grid">
-            <!-- Botão de Atualizar para garantir que o filtro funciona em navegadores sem JS no evento 'change' -->
-            <button class="btn btn-primary shadow-sm" onclick="atualizarPresencas()">
-                <i class="bi bi-funnel-fill"></i> Filtrar
-            </button>
-        </div>
-    </div>
-
-    {% if presencas_por_mes %}
-    <div class="accordion" id="accordionAta">
-        {% set idx = 0 %}
-        {% for mes_ano, aulas in presencas_por_mes.items() %}
-            <h4 class="mt-4 mb-2 text-secondary border-bottom pb-1">{{ mes_ano }}</h4>
-            
-            {% for data, turmas_dict in aulas.items() %}
-                {% for registro_key, registro in turmas_dict.items() %}
-                    {% set idx = idx + 1 %}
-                    {% set unique_key = mes_ano|replace('/','_') ~ "_" ~ data|replace('/','_') ~ "_" ~ registro_key %}
-                    {% set collapse_id = "collapse_" ~ unique_key %}
-                    {% set heading_id = "heading_" ~ unique_key %}
-                    {% set modal_obs_id = "modal_obs_" ~ unique_key %}
-                    {% set modal_plano_id = "modal_plano_" ~ unique_key %}
-                    
-                    <div class="accordion-item mb-3 shadow-sm">
-                        <h2 class="accordion-header" id="{{ heading_id }}">
-                            <button class="accordion-button collapsed bg-primary text-white" type="button"
-                                    data-bs-toggle="collapse" data-bs-target="#{{ collapse_id }}"
-                                    aria-expanded="false" aria-controls="{{ collapse_id }}">
-                                <span class="d-flex flex-column flex-md-row flex-wrap gap-1 gap-md-2 align-items-start">
-                                    <span><i class="bi bi-calendar-check-fill me-2"></i> Aula em {{ data }} — Turma: {{ turmas.get(registro.turma_id, 'Turma ' ~ registro.turma_id) }} — Horário: {{ registro.horario_aula or '00:00' }}</span>
-                                    <span class="small">Registrado por: {{ registro.responsavel }}{% if registro.abertura_registro %} <span class="text-white-50">•</span> aberto em {{ registro.abertura_registro.strftime('%d/%m/%Y %H:%M') }}{% endif %}</span>
-                                </span>
-                            </button>
-                        </h2>
-                        <div id="{{ collapse_id }}" class="accordion-collapse collapse"
-                            aria-labelledby="{{ heading_id }}" data-bs-parent="#accordionAta">
-                            <div class="accordion-body p-0">
-                                {% set ns = namespace(total=0, presentes=0) %}
-                                {% for aluno in registro.alunos %}
-                                    {% set ns.total = ns.total + 1 %}
-                                    {% if aluno.id in registro.presentes %}
-                                        {% set ns.presentes = ns.presentes + 1 %}
-                                    {% endif %}
-                                {% endfor %}
-                                {% set faltantes = ns.total - ns.presentes %}
-                                <div class="p-3 border-bottom d-flex flex-wrap gap-2">
-                                    <button type="button" class="btn btn-sm btn-outline-secondary"
-                                            data-bs-toggle="modal" data-bs-target="#{{ modal_obs_id }}"
-                                            {% if not registro.observacao %}disabled{% endif %}>
-                                        <i class="bi bi-journal-text me-1"></i> Ver Observação
-                                    </button>
-                                    <button type="button" class="btn btn-sm btn-outline-primary"
-                                            data-bs-toggle="modal" data-bs-target="#{{ modal_plano_id }}"
-                                            {% if not registro.plano_aula_texto and not registro.plano_aula_arquivo %}disabled{% endif %}>
-                                        <i class="bi bi-book me-1"></i> Ver Plano de Aula
-                                    </button>
-                                </div>
-                                <div class="p-3 border-bottom">
-                                    <div class="ata-indicadores">
-                                        <div class="ata-ind-card total">
-                                            <span class="lbl"><i class="bi bi-people-fill me-1"></i>Na aula</span>
-                                            <span class="val">{{ ns.total }}</span>
-                                        </div>
-                                        <div class="ata-ind-card pres">
-                                            <span class="lbl"><i class="bi bi-check-circle-fill me-1"></i>Presentes</span>
-                                            <span class="val">{{ ns.presentes }}</span>
-                                        </div>
-                                        <div class="ata-ind-card falt">
-                                            <span class="lbl"><i class="bi bi-x-circle-fill me-1"></i>Faltantes</span>
-                                            <span class="val">{{ faltantes if faltantes > 0 else 0 }}</span>
-                                        </div>
-                                    </div>
-                                </div>
-                                <table class="table table-hover table-striped mb-0">
-                                    <thead class="table-light">
-                                        <tr>
-                                            <th scope="col" class="py-3">Aluno</th>
-                                            <th scope="col" class="text-center py-3">Status</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {% for aluno in registro.alunos %}
-                                        <tr>
-                                            <td>
-                                                <div class="d-flex align-items-center gap-2 flex-wrap">
-                                                    {% if aluno.foto %}
-                                                    <img src="{{ url_for('static', filename='uploads/' + aluno.foto) }}" alt="" class="rounded-circle border" style="width:40px;height:40px;object-fit:cover;">
-                                                    {% endif %}
-                                                    <span>{{ aluno.nome }}</span>
-                                                </div>
-                                                {% if aluno.presenca_avulsa %}
-                                                    <span class="badge bg-secondary ms-1">Avulso</span>
-                                                {% elif aluno.aluno_outra_turma %}
-                                                    <span class="badge bg-primary ms-1">Outra turma</span>
-                                                    {% if aluno.turma_origem_nome %}
-                                                        <div class="small text-muted mt-1">
-                                                            <i class="bi bi-people me-1"></i>{{ aluno.turma_origem_nome }}
-                                                        </div>
-                                                    {% endif %}
-                                                {% endif %}
-                                            </td>
-                                            <td class="text-center">
-                                                {% if aluno.id in registro.presentes %}
-                                                    <span class="badge bg-success py-2 px-3"><i class="bi bi-check-circle-fill me-1"></i> Presente</span>
-                                                {% else %}
-                                                    <span class="badge bg-danger py-2 px-3"><i class="bi bi-x-circle-fill me-1"></i> Faltou</span>
-                                                {% endif %}
-                                            </td>
-                                        </tr>
-                                        {% endfor %}
-                                        {% if not registro.alunos %}
-                                        <tr>
-                                            <td colspan="2" class="text-center text-muted py-3">Sem alunos listados para este registro.</td>
-                                        </tr>
-                                        {% endif %}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="modal fade" id="{{ modal_obs_id }}" tabindex="-1" aria-hidden="true">
-                        <div class="modal-dialog modal-lg modal-dialog-scrollable">
-                            <div class="modal-content">
-                                <div class="modal-header">
-                                    <h5 class="modal-title">Observação da Aula</h5>
-                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
-                                </div>
-                                <div class="modal-body">
-                                    {% if registro.observacao %}
-                                        <p class="mb-0" style="white-space: pre-line;">{{ registro.observacao }}</p>
-                                    {% else %}
-                                        <p class="text-muted mb-0">Sem observação registrada.</p>
-                                    {% endif %}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="modal fade" id="{{ modal_plano_id }}" tabindex="-1" aria-hidden="true">
-                        <div class="modal-dialog modal-lg modal-dialog-scrollable">
-                            <div class="modal-content">
-                                <div class="modal-header">
-                                    <h5 class="modal-title">Plano de Aula</h5>
-                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
-                                </div>
-                                <div class="modal-body">
-                                    {% if registro.plano_aula_texto %}
-                                        <h6 class="fw-bold">Texto</h6>
-                                        <p class="mb-3" style="white-space: pre-line;">{{ registro.plano_aula_texto }}</p>
-                                    {% endif %}
-                                    {% if registro.plano_aula_arquivo %}
-                                        <h6 class="fw-bold">Arquivo</h6>
-                                        <a class="btn btn-sm btn-outline-primary"
-                                           href="{{ url_for('static', filename='uploads/planos_aula/' + registro.plano_aula_arquivo) }}"
-                                           target="_blank" rel="noopener">
-                                            <i class="bi bi-paperclip me-1"></i>{{ registro.plano_aula_arquivo_original or registro.plano_aula_arquivo }}
-                                        </a>
-                                    {% endif %}
-                                    {% if not registro.plano_aula_texto and not registro.plano_aula_arquivo %}
-                                        <p class="text-muted mb-0">Sem plano de aula registrado.</p>
-                                    {% endif %}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                {% endfor %}
-            {% endfor %}
-        {% endfor %}
-    </div>
-
-    {% else %}
-        <div class="alert alert-info text-center mt-5" role="alert">
-            <h4 class="alert-heading"><i class="bi bi-info-circle"></i> Sem Registros</h4>
-            <p>Nenhuma presença registrada para os filtros selecionados.</p>
-        </div>
-    {% endif %}
-
+<div class="sh__faixa">
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Aulas registradas</span>
+    <span class="sh__faixa-valor">{{ resumo.aulas }}</span>
+  </div>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Presenças</span>
+    <span class="sh__faixa-valor ata-alta">{{ resumo.presencas }}</span>
+  </div>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Faltas</span>
+    <span class="sh__faixa-valor {% if resumo.faltas %}ata-baixa{% endif %}">{{ resumo.faltas }}</span>
+  </div>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Frequência média</span>
+    <span class="sh__faixa-valor {% if resumo.frequencia >= 70 %}ata-alta{% elif resumo.frequencia < 60 %}ata-baixa{% else %}ata-media{% endif %}">{{ resumo.frequencia }}%</span>
+  </div>
 </div>
 
+{% if presencas_por_mes %}
+  {% for mes_ano, aulas in presencas_por_mes.items() %}
+    {% for data, turmas_dict in aulas.items() %}
+    <div class="ata-dia">
+      {{ data }}{% if dias_semana.get(data) %} · {{ dias_semana[data] }}{% endif %}
+      <span class="ata-dia-n">{{ turmas_dict|length }} aula{{ 's' if turmas_dict|length != 1 }}</span>
+    </div>
+
+    <div class="ata-lista">
+      {% for registro_key, registro in turmas_dict.items() %}
+      {% set chave = data|replace('/','') ~ '_' ~ registro_key %}
+      {% set ns = namespace(total=0, presentes=0) %}
+      {% for aluno in registro.alunos %}
+        {% set ns.total = ns.total + 1 %}
+        {% if aluno.id in registro.presentes %}{% set ns.presentes = ns.presentes + 1 %}{% endif %}
+      {% endfor %}
+      {% set pct = (ns.presentes * 100 // ns.total) if ns.total else 0 %}
+      {% set tom = 'ata-alta' if pct >= 70 else ('ata-media' if pct >= 60 else 'ata-baixa') %}
+
+      <div class="ata-aula" id="aula-{{ chave }}">
+        <button type="button" class="ata-cab" data-alvo="corpo-{{ chave }}">
+          <i class="bi bi-chevron-right ata-seta"></i>
+          <span class="ata-cab-txt">
+            <span class="ata-turma">{{ turmas.get(registro.turma_id, 'Turma ' ~ registro.turma_id) }}</span>
+            <span class="ata-sub">
+              {{ registro.horario_aula or '00:00' }}
+              {%- if registro.responsavel and registro.responsavel != '-' %} · {{ registro.responsavel }}{% endif -%}
+            </span>
+          </span>
+          <span class="ata-resumo {{ tom }}">
+            <span class="ata-resumo-txt">{{ ns.presentes }} de {{ ns.total }} presentes</span>
+            <span class="ata-barra"><span style="width: {{ pct }}%"></span></span>
+            <span class="ata-pct">{{ pct }}%</span>
+          </span>
+        </button>
+
+        <div class="ata-corpo" id="corpo-{{ chave }}" hidden>
+          <div class="ata-acoes">
+            <button type="button" class="sh__btn" data-bs-toggle="modal" data-bs-target="#obs-{{ chave }}"
+                    {% if not registro.observacao %}disabled{% endif %}>
+              <i class="bi bi-journal-text"></i> Ver observação
+            </button>
+            <button type="button" class="sh__btn" data-bs-toggle="modal" data-bs-target="#plano-{{ chave }}"
+                    {% if not registro.plano_aula_texto and not registro.plano_aula_arquivo %}disabled{% endif %}>
+              <i class="bi bi-book"></i> Ver plano de aula
+            </button>
+            {% set data_iso = data[6:10] ~ '-' ~ data[3:5] ~ '-' ~ data[0:2] %}
+            <a class="sh__btn"
+               href="{{ url_for('presencas.registro_presenca', academia_id=academia_id, turma_id=registro.turma_id, data_presenca=data_iso, horario_aula=registro.horario_aula) }}">
+              <i class="bi bi-pencil"></i> Corrigir chamada
+            </a>
+            {% if registro.abertura_registro %}
+            <span class="ata-registrado">Registrado em {{ registro.abertura_registro.strftime('%d/%m/%Y %H:%M') }}</span>
+            {% endif %}
+          </div>
+
+          <div class="ata-contagem">
+            <div class="ata-contagem-item">
+              <span class="ata-contagem-rotulo">Na aula</span>
+              <span class="ata-contagem-valor">{{ ns.total }}</span>
+            </div>
+            <div class="ata-contagem-item">
+              <span class="ata-contagem-rotulo">Presentes</span>
+              <span class="ata-contagem-valor ata-alta">{{ ns.presentes }}</span>
+            </div>
+            <div class="ata-contagem-item">
+              <span class="ata-contagem-rotulo">Faltantes</span>
+              <span class="ata-contagem-valor {% if ns.total - ns.presentes %}ata-baixa{% endif %}">{{ ns.total - ns.presentes }}</span>
+            </div>
+          </div>
+
+          <div class="ata-alunos">
+            {% for aluno in registro.alunos %}
+            {% set presente = aluno.id in registro.presentes %}
+            <div class="ata-aluno {{ '' if presente else 'faltou' }}">
+              <i class="bi {{ 'bi-check-circle-fill' if presente else 'bi-x-circle-fill' }}"></i>
+              <span class="ata-aluno-nome">{{ aluno.nome }}</span>
+              {% if aluno.presenca_avulsa %}<span class="ata-tag">avulso</span>
+              {% elif aluno.aluno_outra_turma %}<span class="ata-tag">outra turma</span>{% endif %}
+            </div>
+            {% endfor %}
+            {% if not registro.alunos %}
+            <div class="ata-aluno"><span class="ata-aluno-nome">Sem alunos listados neste registro.</span></div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <div class="modal fade" id="obs-{{ chave }}" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">Observação da aula</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+            </div>
+            <div class="modal-body" style="white-space: pre-wrap;">{{ registro.observacao or 'Sem observação registrada.' }}</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal fade" id="plano-{{ chave }}" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">Plano de aula</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+            </div>
+            <div class="modal-body">
+              <div style="white-space: pre-wrap;">{{ registro.plano_aula_texto or 'Sem texto do plano de aula.' }}</div>
+              {% if registro.plano_aula_arquivo %}
+              <a class="sh__btn mt-3" target="_blank" rel="noopener"
+                 href="{{ url_for('static', filename='uploads/planos_aula/' ~ registro.plano_aula_arquivo) }}">
+                <i class="bi bi-paperclip"></i> {{ registro.plano_aula_arquivo_original or 'Abrir anexo' }}
+              </a>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endfor %}
+  {% endfor %}
+{% else %}
+<div class="ata-vazio">
+  <i class="bi bi-calendar-x"></i>
+  Nenhuma chamada registrada em {{ periodo_label }}.
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
 <script>
-    const mesSelect = document.getElementById('mes');
-    const anoSelect = document.getElementById('ano');
-    const turmaSelect = document.getElementById('turma');
-
-    function atualizarPresencas() {
-        const mes = mesSelect.value;
-        const ano = anoSelect.value;
-        const turma = turmaSelect.value;
-        let url = `{{ url_for('presencas.ata_presenca') }}?mes=${mes}&ano=${ano}&turma=${turma}`;
-        {% if academia_id %}url += '&academia_id={{ academia_id }}';{% endif %}
-        window.location.href = url;
-    }
-
-    // Adiciona o listener para atualizar a página automaticamente ao mudar o filtro
-    mesSelect.addEventListener('change', atualizarPresencas);
-    anoSelect.addEventListener('change', atualizarPresencas);
-    turmaSelect.addEventListener('change', atualizarPresencas);
+document.addEventListener('DOMContentLoaded', function () {
+  document.querySelectorAll('.ata-cab').forEach(function (cab) {
+    cab.addEventListener('click', function () {
+      var corpo = document.getElementById(cab.dataset.alvo);
+      if (!corpo) return;
+      corpo.hidden = !corpo.hidden;
+      cab.closest('.ata-aula').classList.toggle('is-aberta', !corpo.hidden);
+    });
+  });
+});
 </script>
 {% endblock %}

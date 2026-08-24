@@ -1,0 +1,62 @@
+{# Folha A4 do relatório financeiro.
+   Usada em dois lugares:
+     1. dentro do "Como fica o PDF" (prévia na tela)
+     2. na rota /financeiro/relatorio.pdf — renderize um HTML só com este
+        include + o <style> de impressão abaixo e mande para o WeasyPrint
+        (ou deixe o usuário usar Ctrl+P; @page já está definido).
+   Espera: academia, mes_label, fech, entradas_cat, saidas_cat, emitido_por, emitido_em #}
+<style>
+  @page { size: A4; margin: 14mm; }
+  @media print {
+    body * { visibility: hidden; }
+    .um-folha, .um-folha * { visibility: visible; }
+    .um-folha { position:absolute; left:0; top:0; width:100%; border:0 !important; padding:0 !important; }
+  }
+</style>
+<div class="um-folha" style="width:100%; max-width:520px; background:#fff; border:1px solid #e4e4e7; padding:32px 30px; display:flex; flex-direction:column; gap:18px">
+
+  <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:14px; padding-bottom:14px; border-bottom:2px solid #18181b">
+    <div style="display:flex; align-items:center; gap:11px">
+      <img src="{{ url_for('static', filename='img/judo-icon.png') }}" alt="" style="width:34px; height:34px; border-radius:6px; object-fit:contain; background:#C8102E">
+      <div style="display:flex; flex-direction:column; gap:3px">
+        <div style="font:600 13px/1.2 'Inter',sans-serif; color:#18181b">{{ academia.nome }}</div>
+        <div style="font:400 10.5px/1.2 'Inter',sans-serif; color:#71717a">Unimaster Judô</div>
+      </div>
+    </div>
+    <div style="text-align:right; display:flex; flex-direction:column; gap:3px">
+      <div style="font:600 12px/1.2 'Inter',sans-serif; color:#18181b">Relatório financeiro</div>
+      <div style="font:400 10.5px/1.2 'Inter',sans-serif; color:#71717a">{{ mes_label }}</div>
+    </div>
+  </div>
+
+  <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:10px">
+    {% for lbl, val in [('Receitas', fech.receitas), ('Despesas', fech.despesas), ('Saldo', fech.saldo), ('Em atraso', fech.em_atraso)] %}
+    <div style="display:flex; flex-direction:column; gap:3px">
+      <span style="font:500 8.5px/1.2 'Inter',sans-serif; color:#71717a; text-transform:uppercase; letter-spacing:.07em">{{ lbl }}</span>
+      <span style="font:600 12px/1.2 'Inter',sans-serif; color:#18181b">{{ '%.2f'|format(val)|replace('.',',') }}</span>
+    </div>
+    {% endfor %}
+  </div>
+
+  {% for titulo, itens in [('Receitas por categoria', entradas_cat), ('Despesas por categoria', saidas_cat)] %}
+  <div style="display:flex; flex-direction:column; gap:7px">
+    <div style="font:600 10px/1 'Inter',sans-serif; color:#18181b; text-transform:uppercase; letter-spacing:.08em; padding-bottom:5px; border-bottom:1px solid #e4e4e7">{{ titulo }}</div>
+    {% for c in itens %}
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; font:400 10.5px/1.5 'Inter',sans-serif; color:#3f3f46">
+      <span>{{ c.nome or 'Sem categoria' }}</span>
+      <span style="font-weight:600; color:#18181b">R$ {{ '%.2f'|format(c.valor)|replace('.',',') }}</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% endfor %}
+
+  <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding:11px 0; border-top:2px solid #18181b">
+    <span style="font:600 11.5px/1 'Inter',sans-serif; color:#18181b">Deve fechar o mês com</span>
+    <span style="font:600 15px/1 'Inter',sans-serif; color:#18181b">R$ {{ '%.2f'|format(fech.saldo)|replace('.',',') }}</span>
+  </div>
+
+  <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding-top:12px; border-top:1px solid #e4e4e7; font:400 9px/1.4 'Inter',sans-serif; color:#a1a1aa">
+    <span>Emitido em {{ emitido_em }} por {{ emitido_por }}</span>
+    <span>Página 1 de 1</span>
+  </div>
+</div>

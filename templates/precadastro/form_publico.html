@@ -4,30 +4,27 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Pré-cadastro — {{ academia_nome }}</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/photo-cropper.css') }}">
     <style>
       :root {
-        --c-bg: #f5f7fb;
+        --c-bg: #f4f4f2;
         --c-surface: #ffffff;
-        --c-border: #e5e9f2;
-        --c-text: #1f2937;
-        --c-muted: #6b7280;
-        --c-primary: #0d6efd;
-        --c-primary-soft: #e8f1ff;
+        --c-border: #e7e6e3;
+        --c-text: #1c1a19;
+        --c-muted: #6f6b66;
+        --c-primary: #c1121f;
+        --c-primary-soft: #fdecec;
       }
       * { box-sizing: border-box; }
       body {
         margin: 0;
-        font-family: "Inter", system-ui, -apple-system, sans-serif;
+        font-family: "Instrument Sans", system-ui, -apple-system, sans-serif;
         color: var(--c-text);
-        background:
-          radial-gradient(900px 400px at 100% -10%, rgba(13,110,253,.07), transparent 60%),
-          radial-gradient(700px 360px at -10% 30%, rgba(139,92,246,.06), transparent 60%),
-          var(--c-bg);
+        background: var(--c-bg);
         -webkit-font-smoothing: antialiased;
       }
 
@@ -84,13 +81,13 @@
         border-radius: 10px;
         border: 1px solid var(--c-border);
         padding: .6rem .85rem;
-        background: #f9fafb;
+        background: #ffffff;
         font-size: .95rem;
         transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
       }
       .form-control:focus, .form-select:focus {
         border-color: var(--c-primary);
-        box-shadow: 0 0 0 3px rgba(13,110,253,.15);
+        box-shadow: 0 0 0 3px rgba(193,18,31,.14);
         background: #fff;
         outline: none;
       }
@@ -141,7 +138,7 @@
       }
       .photo-actions .photo-btn:hover { border-color: var(--c-primary); color: var(--c-primary); background: #f8fbff; }
       .photo-actions .photo-btn.primary { background: var(--c-primary); color: #fff; border-color: var(--c-primary); }
-      .photo-actions .photo-btn.primary:hover { background: #0856c5; border-color: #0856c5; }
+      .photo-actions .photo-btn.primary:hover { background: #8f0d17; border-color: #8f0d17; }
 
       /* Toggle "responsável é o próprio" */
       .toggle-card {
@@ -185,11 +182,11 @@
         border-radius: 12px;
         font-weight: 700; font-size: 1rem;
         cursor: pointer;
-        box-shadow: 0 4px 12px rgba(13,110,253,.28);
+        box-shadow: 0 4px 12px rgba(193,18,31,.28);
         transition: all .15s ease;
         display: inline-flex; align-items: center; gap: .5rem;
       }
-      .btn-submit:hover { box-shadow: 0 6px 18px rgba(13,110,253,.4); transform: translateY(-1px); }
+      .btn-submit:hover { box-shadow: 0 6px 18px rgba(193,18,31,.4); transform: translateY(-1px); }
       .btn-submit:active { transform: translateY(0); }
 
       .alert {
@@ -212,200 +209,188 @@
         .submit-card { justify-content: stretch; }
         .submit-card .btn-submit { flex: 1 1 100%; justify-content: center; }
       }
+
+      /* ===== Layout em passos (mesmo padrão da matrícula/aula) ===== */
+      .topbar{ display:flex; align-items:center; background:#fff; border-bottom:1px solid #e7e7e4; padding:14px 26px; }
+      .brand{ display:flex; align-items:center; gap:9px; min-width:0; }
+      .brand .mk{ width:30px;height:30px;border-radius:50%;overflow:hidden;background:var(--c-primary);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:700;flex:none; }
+      .brand .mk img{ width:100%;height:100%;object-fit:cover; }
+      .brand .bn{ font-weight:600;font-size:.9rem;color:var(--c-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px; }
+      .wrap{ max-width:1140px; margin:0 auto; padding:44px 28px 60px; }
+      .eyebrow{ font-size:.72rem;letter-spacing:.13em;text-transform:uppercase;font-weight:600;color:var(--c-primary);margin-bottom:10px; }
+      .page-title{ font-size:2.4rem;font-weight:700;letter-spacing:-.02em;margin:0 0 12px; color:var(--c-text); }
+      .subtitle{ max-width:640px;color:var(--c-muted);font-size:1rem;line-height:1.55;margin:0 0 30px;text-wrap:pretty; }
+      .stepcard{ background:#fff;border:1px solid var(--c-border);border-radius:14px;overflow:hidden;box-shadow:0 1px 2px rgba(20,18,16,.03); }
+      .sec{ display:grid;grid-template-columns:210px minmax(0,1fr);gap:34px;padding:28px 32px; }
+      .sec + .sec{ border-top:1px solid #ededea; }
+      .sec-num{ font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;font-weight:600;color:#9a968f; }
+      .sec-desc{ font-size:.82rem;color:#8a8681;margin-top:.35rem;line-height:1.35; }
+      .fields{ display:flex;flex-direction:column;gap:18px; }
+      .foto-row{ display:flex;align-items:center;gap:16px; }
+      .btn-mat{ width:100%;border-radius:9px;font-weight:700;padding:.9rem 1rem;background:var(--c-primary);border:0;color:#fff;box-shadow:0 8px 20px -8px rgba(193,18,31,.5);display:inline-flex;align-items:center;justify-content:center;gap:8px; }
+      .btn-mat:hover{ filter:brightness(1.06);color:#fff; }
+      .foot{ text-align:center;color:#adaaa4;font-size:.78rem;letter-spacing:.02em;margin-top:26px; }
+      /* foto menor e inline */
+      .photo-frame{ width:64px;height:64px;padding:2px;background:#f4f4f2;box-shadow:0 0 0 1px var(--c-border); }
+      .photo-frame > img, .photo-frame > .placeholder{ border:2px solid #fff; }
+      .photo-frame > .placeholder{ font-size:1.5rem; }
+      .photo-btn{ padding:.5rem .9rem; }
+      .toggle-card{ margin-bottom:0; }
+      @media (max-width:860px){ .sec{ grid-template-columns:1fr;gap:14px; } }
+      @media (max-width:640px){ .sec{ padding:20px 16px; } .page-title{ font-size:1.8rem; } .wrap{ padding:26px 14px 44px; } }
     </style>
 </head>
 <body>
-<div class="form-page">
-
-  <div class="form-page-header">
-    <div class="ic"><i class="bi bi-person-plus-fill"></i></div>
-    <div class="flex-grow-1">
-      <h1>Pré-cadastro</h1>
-      <p class="subtitle">Preencha seus dados — em seguida a {{ academia_nome }} entrará em contato.</p>
-    </div>
+<div class="topbar">
+  <div class="brand">
+    <span class="mk">{% if logo_url %}<img src="{{ logo_url }}" alt="">{% else %}<i class="bi bi-shield"></i>{% endif %}</span>
+    <span class="bn">{{ academia_nome }}</span>
   </div>
+</div>
+
+<div class="wrap">
 
   {% with messages = get_flashed_messages(with_categories=true) %}
-  {% if messages %}
     {% for cat, msg in messages %}
-    <div class="alert alert-{{ cat }} alert-dismissible fade show">{{ msg }}
-      <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-    </div>
+    <div class="alert alert-{{ cat }} py-2 mb-3">{{ msg }}</div>
     {% endfor %}
-  {% endif %}
   {% endwith %}
 
   {% if sucesso %}
-  <div class="section-card text-center">
-    <div style="width:72px;height:72px;background:#ecfdf5;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;margin-bottom:1rem;">
-      <i class="bi bi-check-circle-fill" style="font-size:2rem;color:#10b981;"></i>
+    <div class="eyebrow" style="color:#15803d;">Pré-cadastro enviado</div>
+    <h1 class="page-title">Tudo certo!</h1>
+    <div class="stepcard" style="padding:28px 30px; max-width:620px;">
+      <div style="display:flex; align-items:flex-start; gap:14px;">
+        <i class="bi bi-check-circle-fill" style="color:#15803d; font-size:1.7rem;"></i>
+        <div>
+          <p style="margin:0 0 4px; font-weight:600;">Recebemos seu pré-cadastro.</p>
+          <p style="margin:0; color:var(--c-muted); font-size:.92rem;">Em breve a {{ academia_nome }} entrará em contato com você.</p>
+          <a href="{{ url_for('precadastro.form_publico', academia_slug=academia_slug) }}" class="photo-btn d-inline-flex mt-3"><i class="bi bi-plus-lg me-1"></i> Fazer outro pré-cadastro</a>
+        </div>
+      </div>
     </div>
-    <h2 style="font-size:1.25rem;font-weight:700;margin-bottom:.5rem;">Pré-cadastro enviado!</h2>
-    <p style="color:var(--c-muted);margin-bottom:1.25rem;">Em breve a {{ academia_nome }} entrará em contato com você.</p>
-    <a href="{{ url_for('precadastro.form_publico', academia_slug=academia_slug) }}" class="photo-btn" style="display:inline-flex;">
-      <i class="bi bi-arrow-clockwise"></i> Fazer outro pré-cadastro
-    </a>
-  </div>
   {% else %}
+    <div class="eyebrow">{{ academia_nome }}</div>
+    <h1 class="page-title">Pré-cadastro</h1>
+    <p class="subtitle">Preencha seus dados e a secretaria do {{ academia_nome }} entrará em contato. Campos marcados com <span class="req">*</span> são obrigatórios.</p>
 
-  <form method="POST" enctype="multipart/form-data" id="formPrecad">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <form method="POST" enctype="multipart/form-data" id="formPrecad">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="stepcard">
 
-    <!-- IDENTIFICAÇÃO -->
-    <div class="section-card">
-      <div class="section-title"><i class="bi bi-person-vcard"></i> Dados do aluno</div>
-      <div class="row g-3">
-        <div class="col-12">
-          <label class="form-label" for="nomeInput">Nome completo <span class="req">*</span></label>
-          <div class="input-icon-wrap">
-            <i class="bi bi-person"></i>
-            <input id="nomeInput" type="text" class="form-control" name="nome" required value="{{ form.get('nome','') }}" placeholder="Seu nome completo">
-          </div>
-        </div>
-        <div class="col-12 col-md-6">
-          <label class="form-label" for="dataNasc">Data de nascimento</label>
-          <div class="input-icon-wrap">
-            <i class="bi bi-calendar2-event"></i>
-            <input type="date" class="form-control" name="data_nascimento" id="dataNasc" value="{{ form.get('data_nascimento','') }}">
-          </div>
-        </div>
-        <div class="col-12 col-md-6">
-          <label class="form-label">Sexo</label>
-          <div class="input-icon-wrap">
-            <i class="bi bi-gender-ambiguous"></i>
-            <select class="form-control" name="sexo">
-              <option value="">Selecione…</option>
-              <option value="M" {% if form.get('sexo')=='M' %}selected{% endif %}>Masculino</option>
-              <option value="F" {% if form.get('sexo')=='F' %}selected{% endif %}>Feminino</option>
-              <option value="O" {% if form.get('sexo')=='O' %}selected{% endif %}>Outro</option>
-            </select>
-          </div>
-        </div>
-        <div class="col-12 col-md-6">
-          <label class="form-label">Graduação</label>
-          <div class="input-icon-wrap">
-            <i class="bi bi-award"></i>
-            <select class="form-control" name="graduacao_id">
-              <option value="">Selecione…</option>
-              {% for g in graduacoes or [] %}
-              <option value="{{ g.id }}" {% if form.get('graduacao_id') == (g.id|string) %}selected{% endif %}>
-                {{ g.faixa }}{% if g.graduacao %} {{ g.graduacao }}{% endif %}
-              </option>
-              {% endfor %}
-            </select>
-          </div>
-        </div>
-        <div class="col-12 col-md-6">
-          <label class="form-label" for="cpfAluno">CPF do aluno</label>
-          <div class="input-icon-wrap">
-            <i class="bi bi-person-badge"></i>
-            <input type="text" class="form-control" name="cpf" id="cpfAluno" data-mask="cpf" placeholder="000.000.000-00" value="{{ form.get('cpf','') }}">
-          </div>
-          <div class="form-text-help">
-            Obrigatório informar o CPF do aluno <strong>ou</strong> do responsável financeiro — será o login do sistema.
-          </div>
-        </div>
-        <div class="col-12 col-md-6">
-          <label class="form-label" for="telAluno">Telefone <span class="text-danger">*</span></label>
-          <div class="input-icon-wrap">
-            <i class="bi bi-telephone"></i>
-            <input type="text" class="form-control" name="telefone" id="telAluno" data-mask="phone" placeholder="(11) 99999-9999" value="{{ form.get('telefone','') }}" required>
-          </div>
-          <div class="form-text">Usado para enviar os dados de acesso ao responsável.</div>
-        </div>
-        <div class="col-12 col-md-6">
-          <label class="form-label" for="emailInput">E-mail <span class="req">*</span></label>
-          <div class="input-icon-wrap">
-            <i class="bi bi-envelope"></i>
-            <input type="email" class="form-control" name="email" id="emailInput" placeholder="email@exemplo.com" required value="{{ form.get('email','') }}">
-          </div>
-          <div class="form-text-help">Será usado para recuperação de senha.</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- FOTO -->
-    <div class="section-card">
-      <div class="section-title"><i class="bi bi-camera"></i> Foto do aluno <span class="req" style="margin-left:.4rem;">*</span></div>
-      <div class="section-help">Use a câmera ou envie uma imagem da galeria. A foto é obrigatória.</div>
-      <div class="photo-row">
-        <div class="photo-frame">
-          <img id="miniatura" src="" alt="" class="d-none">
-          <div id="miniaturaPlaceholder" class="placeholder"><i class="bi bi-person-fill"></i></div>
-        </div>
-        <div class="photo-actions">
-          <input type="hidden" name="foto" id="fotoInput">
-          <button type="button" class="photo-btn primary" id="btnCamera">
-            <i class="bi bi-camera-fill"></i> Tirar foto pela câmera
-          </button>
-          <label for="fotoArquivoPrecad" class="photo-btn">
-            <i class="bi bi-images"></i> Escolher da galeria
-          </label>
-          <input type="file" class="visually-hidden" name="foto_arquivo" id="fotoArquivoPrecad" accept="image/*,.heic,.heif">
-        </div>
-      </div>
-    </div>
-
-
-    <!-- RESPONSÁVEL FINANCEIRO -->
-    <div class="section-card">
-      <div class="section-title"><i class="bi bi-cash-coin"></i> Responsável financeiro</div>
-      <div class="section-help">Para alunos menores ou quando outra pessoa é responsável pelas mensalidades.</div>
-
-      <label class="toggle-card" data-toggle-card id="toggleRespProprio">
-        <input type="checkbox" name="responsavel_eh_proprio" id="respProprio" value="1" {% if form.get('responsavel_eh_proprio')=='1' %}checked{% endif %}>
-        <span class="toggle-switch"></span>
-        <span class="flex-grow-1">
-          <div class="toggle-label">O responsável financeiro sou eu (o próprio aluno)</div>
-          <div class="toggle-desc">Marque se você mesmo paga as mensalidades.</div>
-        </span>
-      </label>
-
-      <div id="blocoRespFinanceiro">
-        <div class="row g-3">
-          <div class="col-12 col-md-6">
-            <label class="form-label" for="respNome">Nome do responsável financeiro</label>
-            <div class="input-icon-wrap">
-              <i class="bi bi-person"></i>
-              <input type="text" class="form-control" name="responsavel_financeiro_nome" id="respNome" value="{{ form.get('responsavel_financeiro_nome','') }}" placeholder="Nome completo">
+        <!-- 01 DADOS DO ALUNO -->
+        <div class="sec">
+          <div><div class="sec-num">01 · Dados do aluno</div><div class="sec-desc">Quem vai treinar.</div></div>
+          <div class="fields">
+            <div class="foto-row">
+              <div class="photo-frame">
+                <img id="miniatura" src="" alt="" class="d-none">
+                <div id="miniaturaPlaceholder" class="placeholder"><i class="bi bi-person-fill"></i></div>
+              </div>
+              <div>
+                <label class="form-label d-block">Foto do aluno <span class="req">*</span></label>
+                <input type="hidden" name="foto" id="fotoInput">
+                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                  <button type="button" class="photo-btn" id="btnCamera"><i class="bi bi-camera-fill"></i> Tirar foto</button>
+                  <label for="fotoArquivoPrecad" class="photo-btn"><i class="bi bi-images"></i> Escolher da galeria</label>
+                  <input type="file" class="visually-hidden" name="foto_arquivo" id="fotoArquivoPrecad" accept="image/*,.heic,.heif">
+                </div>
+                <div class="form-text-help mt-1">A foto é obrigatória — use a câmera ou envie da galeria.</div>
+              </div>
+            </div>
+            <div>
+              <label class="form-label" for="nomeInput">Nome completo <span class="req">*</span></label>
+              <input id="nomeInput" type="text" class="form-control" name="nome" required value="{{ form.get('nome','') }}" placeholder="Nome do aluno">
+            </div>
+            <div class="row g-3">
+              <div class="col-12 col-md-6">
+                <label class="form-label" for="dataNasc">Data de nascimento</label>
+                <input type="date" class="form-control" name="data_nascimento" id="dataNasc" value="{{ form.get('data_nascimento','') }}">
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label">Sexo</label>
+                <select class="form-select" name="sexo">
+                  <option value="">—</option>
+                  <option value="M" {% if form.get('sexo')=='M' %}selected{% endif %}>Masculino</option>
+                  <option value="F" {% if form.get('sexo')=='F' %}selected{% endif %}>Feminino</option>
+                  <option value="O" {% if form.get('sexo')=='O' %}selected{% endif %}>Outro</option>
+                </select>
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label">Graduação</label>
+                <select class="form-select" name="graduacao_id">
+                  <option value="">Sem graduação</option>
+                  {% for g in graduacoes or [] %}
+                  <option value="{{ g.id }}" {% if form.get('graduacao_id') == (g.id|string) %}selected{% endif %}>{{ g.faixa }}{% if g.graduacao %} {{ g.graduacao }}{% endif %}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label" for="cpfAluno">CPF do aluno</label>
+                <input type="text" class="form-control" name="cpf" id="cpfAluno" data-mask="cpf" placeholder="000.000.000-00" value="{{ form.get('cpf','') }}">
+                <div class="form-text-help mt-1">Informe o CPF do aluno ou o do responsável — será o login do sistema.</div>
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label" for="telAluno">Telefone <span class="req">*</span></label>
+                <input type="text" class="form-control" name="telefone" id="telAluno" data-mask="phone" placeholder="(11) 99999-9999" value="{{ form.get('telefone','') }}" required>
+                <div class="form-text-help mt-1">Usado para enviar os dados de acesso.</div>
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label" for="emailInput">E-mail <span class="req">*</span></label>
+                <input type="email" class="form-control" name="email" id="emailInput" placeholder="email@exemplo.com" required value="{{ form.get('email','') }}">
+                <div class="form-text-help mt-1">Usado para recuperação de senha.</div>
+              </div>
             </div>
           </div>
-          <div class="col-12 col-md-6">
-            <label class="form-label" for="respCpf">CPF do responsável financeiro</label>
-            <div class="input-icon-wrap">
-              <i class="bi bi-person-badge"></i>
-              <input type="text" class="form-control" name="responsavel_financeiro_cpf" id="respCpf" data-mask="cpf" placeholder="000.000.000-00" value="{{ form.get('responsavel_financeiro_cpf','') }}">
+        </div>
+
+        <!-- 02 RESPONSÁVEL FINANCEIRO -->
+        <div class="sec">
+          <div><div class="sec-num">02 · Responsável financeiro</div><div class="sec-desc">Para alunos menores ou quando outra pessoa paga as mensalidades.</div></div>
+          <div class="fields">
+            <label class="toggle-card" data-toggle-card id="toggleRespProprio">
+              <input type="checkbox" name="responsavel_eh_proprio" id="respProprio" value="1" {% if form.get('responsavel_eh_proprio')=='1' %}checked{% endif %}>
+              <span class="toggle-switch"></span>
+              <span class="flex-grow-1"><div class="toggle-label">O próprio aluno paga as mensalidades</div></span>
+            </label>
+            <div id="blocoRespFinanceiro">
+              <div class="row g-3">
+                <div class="col-12 col-md-6">
+                  <label class="form-label" for="respNome">Nome do responsável</label>
+                  <input type="text" class="form-control" name="responsavel_financeiro_nome" id="respNome" value="{{ form.get('responsavel_financeiro_nome','') }}" placeholder="Nome completo">
+                </div>
+                <div class="col-12 col-md-6">
+                  <label class="form-label" for="respCpf">CPF do responsável</label>
+                  <input type="text" class="form-control" name="responsavel_financeiro_cpf" id="respCpf" data-mask="cpf" placeholder="000.000.000-00" value="{{ form.get('responsavel_financeiro_cpf','') }}">
+                  <div class="form-text-help mt-1">Vira o login quando o aluno não tem CPF próprio.</div>
+                </div>
+              </div>
             </div>
-            <div class="form-text-help">Usado como login se o aluno não tiver CPF próprio.</div>
           </div>
         </div>
+
+        <!-- 03 OBSERVAÇÕES -->
+        <div class="sec">
+          <div><div class="sec-num">03 · Observações</div><div class="sec-desc">Opcional.</div></div>
+          <div class="fields">
+            <div>
+              <label class="form-label">Algo que a academia precisa saber?</label>
+              <textarea class="form-control" name="observacoes" rows="3" placeholder="Restrição médica, horário preferido, indicação de amigo">{{ form.get('observacoes','') }}</textarea>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" name="aula_experimental" id="aulaExperimental" value="1" {% if form.get('aula_experimental') in ('1','on','true','True') %}checked{% endif %}>
+              <label class="form-check-label" for="aulaExperimental">Tenho interesse em fazer uma <strong>aula experimental</strong></label>
+            </div>
+          </div>
+        </div>
+
       </div>
-    </div>
 
-    <!-- OBSERVAÇÕES -->
-    <div class="section-card">
-      <div class="section-title"><i class="bi bi-chat-left-text"></i> Observações</div>
-      <textarea class="form-control" name="observacoes" rows="3" placeholder="Algo que a academia precise saber? (opcional)">{{ form.get('observacoes','') }}</textarea>
-    </div>
-
-    <!-- AULA EXPERIMENTAL -->
-    <div class="section-card">
-      <div class="form-check">
-        <input class="form-check-input" type="checkbox" name="aula_experimental" id="aulaExperimental" value="1"
-               {% if form.get('aula_experimental') in ('1','on','true','True') %}checked{% endif %}>
-        <label class="form-check-label" for="aulaExperimental">
-          <i class="bi bi-stars text-primary me-1"></i> Tenho interesse em fazer uma <strong>aula experimental</strong>
-        </label>
-      </div>
-    </div>
-
-    <div class="submit-card">
-      <button type="submit" class="btn-submit">
-        <i class="bi bi-send-fill"></i> Enviar pré-cadastro
-      </button>
-    </div>
-  </form>
+      <button type="submit" class="btn-mat mt-3"><i class="bi bi-send-fill"></i> Enviar pré-cadastro</button>
+    </form>
   {% endif %}
+
+  <p class="foot">Powered by Unimaster</p>
 </div>
 
 <div class="camera-modal" id="cameraModal">

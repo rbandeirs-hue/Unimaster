@@ -1,92 +1,133 @@
-{% extends "financeiro/painel/_layout.html" %}
-{% block title %}Planos de Mensalidade{% endblock %}
+{% extends "financeiro/painel/_base.html" %}
+{% set fin_aba = 'planos' %}
+{% block title %}Planos — Financeiro{% endblock %}
 
-{% block conteudo %}
-<div class="fp-page fp-page--form">
+{% block pagina_titulo %}Financeiro{% endblock %}
+{% block pagina_subtitulo %}Planos de mensalidade oferecidos pela academia{% endblock %}
 
-  <div class="fp-head fp-head--row">
-    <div>
-      <h1 class="fp-h1">Planos de Mensalidade</h1>
-      <p class="fp-sub">{{ n_ativos }} planos ativos · {{ n_inativos }} inativos</p>
-    </div>
-    <a class="fp-btn" href="{{ url_for('financeiro_painel.planos', academia_id=academia_id, novo=1) }}">+ Novo Plano</a>
-  </div>
+{% block pagina_acoes %}
+  <a class="sh__btn sh__btn--forte" href="{{ url_for('financeiro_painel.planos', academia_id=academia_id, novo=1) }}">
+    <i class="bi bi-plus-lg"></i> Novo plano
+  </a>
+{% endblock %}
 
-  {% if mostrar_form %}
-  <form class="fp-card fp-card--form" method="POST" action="{{ url_for('financeiro_painel.planos_salvar') }}">
+{% block fin_conteudo %}
+{% if em_edicao or request.args.get('novo') %}
+{# O formulário só aparece quando há o que editar ou criar: fora disso a tela
+   é a lista, que é o que o gestor abre no dia a dia. #}
+<section class="lst-quadro">
+  <header class="lst-quadro__topo">
+    <h2 class="lst-quadro__titulo">{{ 'Editar plano' if em_edicao else 'Novo plano' }}</h2>
+  </header>
+  <form method="POST" action="{{ url_for('financeiro_painel.planos_salvar') }}" class="lst-filtros" style="border:0; margin:0">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
     {% if em_edicao %}<input type="hidden" name="id" value="{{ em_edicao.id }}">{% endif %}
 
-    <h2 class="fp-h2 fp-h2--form">{{ 'Editar Plano' if em_edicao else 'Novo Plano de Mensalidade' }}</h2>
-
-    <div class="fp-form-grid">
-      <div>
-        <label class="fp-label" for="pl-nome">Nome do Plano *</label>
-        <input class="fp-input" id="pl-nome" name="nome" required maxlength="120"
-               value="{{ em_edicao.nome if em_edicao else '' }}" placeholder="Ex: Plano Iniciante">
-      </div>
-      <div>
-        <label class="fp-label" for="pl-valor">Valor Mensal (R$) *</label>
-        <input class="fp-input" id="pl-valor" name="valor" type="number" min="0" step="0.01" required
-               value="{{ '%.2f'|format(em_edicao.valor) if em_edicao else '' }}" placeholder="0,00">
-      </div>
-      <div class="fp-span-2">
-        <label class="fp-label" for="pl-desc">Descrição</label>
-        <input class="fp-input" id="pl-desc" name="descricao" maxlength="255"
-               value="{{ em_edicao.descricao or '' if em_edicao else '' }}" placeholder="Descrição do plano">
-      </div>
-      <div>
-        <label class="fp-label" for="pl-ativo">Status</label>
-        <select class="fp-input" id="pl-ativo" name="ativo">
-          <option value="ativo" {% if not em_edicao or em_edicao.ativo %}selected{% endif %}>Ativo</option>
-          <option value="inativo" {% if em_edicao and not em_edicao.ativo %}selected{% endif %}>Inativo</option>
-        </select>
-      </div>
-    </div>
-
-    <div class="fp-form-acoes">
-      <button class="fp-btn" type="submit">{{ 'Salvar Alterações' if em_edicao else 'Cadastrar Plano' }}</button>
-      <a class="fp-btn-ghost" href="{{ url_for('financeiro_painel.planos', academia_id=academia_id) }}">Cancelar</a>
+    <label class="lst-campo lst-campo--largo">
+      <span class="lst-campo__rotulo">Nome do plano *</span>
+      <input name="nome" required maxlength="120" value="{{ em_edicao.nome if em_edicao else '' }}"
+             placeholder="Mensalidade padrão">
+    </label>
+    <label class="lst-campo lst-campo--curto">
+      <span class="lst-campo__rotulo">Valor mensal (R$) *</span>
+      <input name="valor" type="number" min="0" step="0.01" required
+             value="{{ '%.2f'|format(em_edicao.valor|float) if em_edicao else '' }}">
+    </label>
+    <label class="lst-campo lst-campo--largo">
+      <span class="lst-campo__rotulo">Descrição</span>
+      <input name="descricao" maxlength="255" value="{{ em_edicao.descricao if em_edicao and em_edicao.descricao else '' }}"
+             placeholder="O que este plano inclui">
+    </label>
+    <label class="lst-campo lst-campo--curto">
+      <span class="lst-campo__rotulo">Status</span>
+      <select name="ativo">
+        <option value="1" {% if not em_edicao or em_edicao.ativo %}selected{% endif %}>Ativo</option>
+        <option value="0" {% if em_edicao and not em_edicao.ativo %}selected{% endif %}>Inativo</option>
+      </select>
+    </label>
+    <label class="lst-campo lst-campo--curto">
+      <span class="lst-campo__rotulo">Juros e multa por atraso</span>
+      <select name="aplicar_juros_multas" id="plano-juros">
+        <option value="0" {% if not em_edicao or not em_edicao.get('aplicar_juros_multas') %}selected{% endif %}>Não cobrar</option>
+        <option value="1" {% if em_edicao and em_edicao.get('aplicar_juros_multas') %}selected{% endif %}>Cobrar</option>
+      </select>
+    </label>
+    <label class="lst-campo lst-campo--curto js-plano-encargo" {% if not (em_edicao and em_edicao.get('aplicar_juros_multas')) %}hidden{% endif %}>
+      <span class="lst-campo__rotulo">Multa (% sobre o valor)</span>
+      <input name="percentual_multa_mes" type="number" min="0" max="99.99" step="0.01"
+             value="{{ '%.2f'|format((em_edicao.get('percentual_multa_mes') or 2)|float) if em_edicao else '2.00' }}">
+    </label>
+    <label class="lst-campo lst-campo--curto js-plano-encargo" {% if not (em_edicao and em_edicao.get('aplicar_juros_multas')) %}hidden{% endif %}>
+      <span class="lst-campo__rotulo">Juros (% ao dia)</span>
+      <input name="percentual_juros_dia" type="number" min="0" max="9.9999" step="0.0001"
+             value="{{ '%.4f'|format((em_edicao.get('percentual_juros_dia') or 0.0333)|float) if em_edicao else '0.0333' }}">
+    </label>
+    <div class="lst-filtros__acoes">
+      <button type="submit" class="sh__btn sh__btn--forte">{{ 'Salvar alterações' if em_edicao else 'Cadastrar plano' }}</button>
+      <a class="sh__btn" href="{{ url_for('financeiro_painel.planos', academia_id=academia_id) }}">Cancelar</a>
     </div>
   </form>
-  {% endif %}
+</section>
+<script>
+  // Os percentuais só fazem sentido quando o plano cobra encargo: some com eles fora disso.
+  (function () {
+    var seletor = document.getElementById('plano-juros');
+    if (!seletor) return;
+    var campos = document.querySelectorAll('.js-plano-encargo');
+    seletor.addEventListener('change', function () {
+      var cobra = seletor.value === '1';
+      campos.forEach(function (c) { c.hidden = !cobra; });
+    });
+  })();
+</script>
+{% endif %}
 
-  <div class="fp-planos">
+<section class="lst-quadro">
+  <header class="lst-quadro__topo">
+    <h2 class="lst-quadro__titulo">Planos de mensalidade</h2>
+    <span class="lst-quadro__meta">{{ n_ativos }} ativo{{ 's' if n_ativos != 1 }} · {{ n_inativos }} inativo{{ 's' if n_inativos != 1 }}</span>
+  </header>
+
+  <div class="fin-lista-planos">
     {% for p in lista %}
-    <div class="fp-card fp-plano {% if not p.ativo %}is-off{% endif %}">
-      <div class="fp-plano__row">
-        <div style="flex:1;min-width:0">
-          <div class="fp-plano__nome-row">
-            <span class="fp-plano__nome">{{ p.nome }}</span>
-            <span class="fp-badge fp-badge--{{ 'ativo' if p.ativo else 'inativo' }}">{{ 'Ativo' if p.ativo else 'Inativo' }}</span>
-          </div>
-          <p class="fp-plano__desc">{{ p.descricao or 'Sem descrição' }}</p>
+    <article class="fin-plano {% if not p.ativo %}is-inativo{% endif %}">
+      <div class="fin-plano__info">
+        <span class="fin-plano__nome">{{ p.nome }}</span>
+        <span class="lst-situacao {% if p.ativo %}is-ativo{% endif %}" style="margin-left:.5rem"><i></i>{{ 'Ativo' if p.ativo else 'Inativo' }}</span>
+        <p class="fin-plano__desc">{{ p.descricao or 'Sem descrição.' }}</p>
+        <span class="lst-sub">
+          {%- if p.get('aplicar_juros_multas') -%}
+            Atraso: multa de {{ '%.2f'|format((p.get('percentual_multa_mes') or 2)|float)|replace('.', ',') }}% + juros de {{ '%.4f'|format((p.get('percentual_juros_dia') or 0.0333)|float)|replace('.', ',') }}% ao dia
+          {%- else -%}
+            Sem juros e multa por atraso
+          {%- endif -%}
+        </span>
+      </div>
+      <div class="fin-plano__dir">
+        <div>
+          <div class="fin-plano__valor fin-valor">{{ fmt_moeda(p.valor) }}</div>
+          <span class="lst-sub" style="text-align:right; display:block">por mês</span>
         </div>
-        <div class="fp-plano__dir">
-          <div class="fp-plano__valor">{{ fmt_moeda(p.valor) }}</div>
-          <div class="fp-plano__venc">por mês</div>
-          <div class="fp-plano__acoes">
-            <a class="fp-btn-mini" href="{{ url_for('financeiro_painel.planos', academia_id=academia_id, editar=p.id) }}">Editar</a>
-            <form method="POST" action="{{ url_for('financeiro_painel.planos_alternar', plano_id=p.id) }}" style="display:inline">
-              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-              {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
-              <button class="fp-btn-mini" type="submit">{{ 'Desativar' if p.ativo else 'Ativar' }}</button>
-            </form>
-            <form method="POST" action="{{ url_for('financeiro_painel.planos_excluir', plano_id=p.id) }}" style="display:inline"
-                  onsubmit="return confirm('Excluir o plano {{ p.nome|e }}?')">
-              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-              {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
-              <button class="fp-btn-mini fp-btn-mini--danger" type="submit">Excluir</button>
-            </form>
-          </div>
+        <div class="lst-filtros__acoes">
+          <a class="sh__btn" href="{{ url_for('financeiro_painel.planos', academia_id=academia_id, editar=p.id) }}">Editar</a>
+          <form method="POST" action="{{ url_for('financeiro_painel.planos_alternar', plano_id=p.id) }}" style="display:inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
+            <button type="submit" class="sh__btn">{{ 'Desativar' if p.ativo else 'Ativar' }}</button>
+          </form>
+          <form method="POST" action="{{ url_for('financeiro_painel.planos_excluir', plano_id=p.id) }}" style="display:inline"
+                onsubmit="return confirm('Excluir o plano {{ p.nome|e }}?')">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
+            <button type="submit" class="sh__btn">Excluir</button>
+          </form>
         </div>
       </div>
-    </div>
+    </article>
     {% else %}
-    <div class="fp-card fp-empty fp-empty--tall">Nenhum plano cadastrado ainda.</div>
+    <p class="lst-vazio">Nenhum plano cadastrado ainda.</p>
     {% endfor %}
   </div>
-
-</div>
+</section>
 {% endblock %}

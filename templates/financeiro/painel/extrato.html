@@ -1,0 +1,135 @@
+{% extends "financeiro/painel/_base.html" %}
+{% set fin_aba = 'extrato' %}
+{% block title %}Extrato — Financeiro{% endblock %}
+
+{% block pagina_titulo %}Financeiro{% endblock %}
+{% block pagina_subtitulo %}Extrato da conta · {{ mes_label }}{% endblock %}
+
+{% block fin_css %}
+<style>
+  .lin-ext { grid-template-columns: 110px minmax(0,1.8fr) 130px 130px 140px 70px; }
+  @media (max-width: 1120px) {
+    .lin-ext { grid-template-columns: 110px minmax(0,1.8fr) 130px 140px 70px; }
+    .col-saida { display: none !important; }
+  }
+  @media (max-width: 820px) {
+    .lin-ext { grid-template-columns: 100px minmax(0,1.6fr) 130px 70px; }
+    .col-saldo { display: none !important; }
+  }
+  /* Correção da conta: o histórico não guardava de onde a despesa saiu, então
+     o vínculo precisa poder ser ajustado depois. */
+  .ext-mover { display: flex; gap: .3rem; align-items: center; }
+  .ext-mover select { height: 30px; padding: 0 .35rem; font-size: .8rem; min-width: 0; }
+  .ext-entrada { color: #16713c; }
+  .ext-saida { color: #a4131f; }
+  .ext-negativo { color: #a4131f; }
+</style>
+{% endblock %}
+
+{% block fin_conteudo %}
+{% if not contas %}
+<section class="lst-quadro">
+  <p class="lst-vazio">
+    Nenhuma conta cadastrada.
+    <a href="{{ url_for('financeiro_painel.controle', academia_id=academia_id) }}">Preparar contas</a>.
+  </p>
+</section>
+{% else %}
+
+<form method="GET" class="lst-filtros">
+  {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
+  <label class="lst-campo lst-campo--curto">
+    <span class="lst-campo__rotulo">Conta</span>
+    <select name="conta" onchange="this.form.submit()">
+      {% for c in contas %}
+      <option value="{{ c.id }}" {% if c.id == id_conta %}selected{% endif %}>{{ c.nome }} · {{ fmt_moeda(c.saldo) }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label class="lst-campo lst-campo--curto">
+    <span class="lst-campo__rotulo">Mês</span>
+    <input type="month" name="mes" value="{{ mes_chave }}" onchange="this.form.submit()">
+  </label>
+</form>
+
+{# Saldo inicial, o que entrou, o que saiu e onde fechou — a leitura de um
+   extrato bancário. #}
+<div class="sh__faixa">
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Saldo inicial</span>
+    <span class="sh__faixa-valor fin-valor {% if saldo_inicial < 0 %}ext-negativo{% endif %}">{{ fmt_moeda(saldo_inicial) }}</span>
+    <span class="lst-sub">Antes de {{ mes_label }}</span>
+  </div>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Entradas</span>
+    <span class="sh__faixa-valor fin-valor ext-entrada">{{ fmt_moeda(entradas) }}</span>
+    <span class="lst-sub">Recebido no mês</span>
+  </div>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Saídas</span>
+    <span class="sh__faixa-valor fin-valor ext-saida">{{ fmt_moeda(saidas) }}</span>
+    <span class="lst-sub">Pago no mês</span>
+  </div>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Saldo final</span>
+    <span class="sh__faixa-valor fin-valor {% if saldo_final < 0 %}ext-negativo{% endif %}">{{ fmt_moeda(saldo_final) }}</span>
+    <span class="lst-sub">Ao fim de {{ mes_label }}</span>
+  </div>
+</div>
+
+<section class="lst-quadro">
+  <header class="lst-quadro__topo">
+    <h2 class="lst-quadro__titulo">Movimentações</h2>
+    <span class="lst-quadro__meta">{{ linhas|length }} lançamento{{ 's' if linhas|length != 1 }}</span>
+  </header>
+
+  <div class="lst-rolagem">
+    <div class="lst-largura" style="--lst-min:560px">
+      <div class="lst-linha lin-ext lst-cab">
+        <div>Data</div>
+        <div>Descrição</div>
+        <div class="lst-num">Entrada</div>
+        <div class="col-saida lst-num">Saída</div>
+        <div class="col-saldo lst-num">Saldo</div>
+        <div class="lst-fim">Conta</div>
+      </div>
+
+      {% for l in linhas %}
+      <div class="lst-linha lin-ext lst-item">
+        <div>{{ (l.data_efetivacao or l.data_competencia)|data_br }}</div>
+        <div style="min-width:0">
+          <span class="lst-nome lst-corta">{{ l.descricao }}</span>
+          <span class="lst-sub">
+            {{- l.origem|capitalize }}
+            {%- if l.aluno_nome %} · {{ l.aluno_nome }}{% endif %}
+            {%- if l.forma_nome %} · {{ l.forma_nome }}{% endif %}
+            {%- if l.id_estorno %} · estornado{% endif -%}
+          </span>
+        </div>
+        <div class="lst-num fin-valor ext-entrada">{{ fmt_moeda(l.valor) if l.sentido == 'entrada' else '' }}</div>
+        <div class="col-saida lst-num fin-valor ext-saida">{{ fmt_moeda(l.valor) if l.sentido == 'saida' else '' }}</div>
+        <div class="col-saldo lst-num {% if l.saldo_corrente < 0 %}ext-negativo{% endif %}">{{ fmt_moeda(l.saldo_corrente) }}</div>
+        <div class="lst-acoes">
+          {% if pode_gerir and not l.id_transferencia %}
+          <form method="POST" action="{{ url_for('financeiro_painel.extrato_reatribuir', lanc_id=l.id) }}"
+                class="ext-mover" title="Mover este lançamento para outra conta">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
+            <select name="conta" onchange="this.form.submit()" aria-label="Mover para outra conta">
+              <option value="">mover…</option>
+              {% for c in contas if c.id != l.id_conta %}
+              <option value="{{ c.id }}">{{ c.nome }}</option>
+              {% endfor %}
+            </select>
+          </form>
+          {% endif %}
+        </div>
+      </div>
+      {% else %}
+      <p class="lst-vazio">Nenhuma movimentação nesta conta em {{ mes_label }}.</p>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endif %}
+{% endblock %}

@@ -1,182 +1,213 @@
-{% extends "base.html" %}
-{% block title %}Aplicar Desconto{% endblock %}
+{% extends "base_academia.html" %}
+{% set menu_ativo = 'financeiro' %}
+{% block title %}Aplicar desconto{% endblock %}
+
+{% block pagina_titulo %}Aplicar desconto{% endblock %}
+{% block pagina_subtitulo %}Desconto por aluno, por pacote e por período de vigência.{% endblock %}
+
 {% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/financeiro/responsive.css') }}?v=2">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/base/listas.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/painel/financeiro.css') }}">
+<style>
+  .lin-desc { grid-template-columns: minmax(0,1.4fr) minmax(0,1.2fr) minmax(0,1fr) 190px 110px; }
+  @media (max-width: 1240px) {
+    .lin-desc { grid-template-columns: minmax(0,1.4fr) minmax(0,1.2fr) 190px 110px; }
+    .col-pacotes { display: none !important; }
+  }
+  @media (max-width: 1024px) {
+    .lin-desc { grid-template-columns: minmax(0,1.4fr) minmax(0,1.2fr) minmax(0,1fr) 190px 110px; }
+    .col-pacotes { display: block !important; }
+  }
+  @media (max-width: 880px) {
+    .lin-desc { grid-template-columns: minmax(0,1.4fr) minmax(0,1.2fr) 110px; }
+    .col-pacotes, .col-vigencia { display: none !important; }
+  }
+
+  /* Busca de aluno: a lista de resultados cai sobre o formulário. */
+  .desc-busca { position: relative; }
+  .desc-lista {
+    position: absolute; z-index: 30; left: 0; right: 0; top: calc(100% + .25rem);
+    max-height: 260px; overflow-y: auto; display: none;
+    background: #fff; border: 1px solid var(--sh-line); border-radius: var(--u-radius-sm);
+    box-shadow: var(--u-shadow);
+  }
+  .desc-lista .aluno-item { padding: .5rem .75rem; border-bottom: 1px solid #f2f0ec; }
+  .desc-lista .aluno-item:hover { background: #f4f2ee; }
+  .desc-escolhido { display: inline-flex; align-items: center; gap: .6rem; }
+
+  .desc-pacotes { border: 1px solid var(--sh-line); border-radius: var(--u-radius-sm); padding: .85rem; background: #fdfcfa; }
+</style>
 {% endblock %}
+
+{% block pagina_acoes %}
+  {% set _a = {'academia_id': academia_id} if academia_id else {} %}
+  <a href="{{ url_for('financeiro.mensalidades_alunos', **_a) }}" class="sh__btn">
+    <i class="bi bi-arrow-left"></i> Voltar
+  </a>
+{% endblock %}
+
 {% block content %}
-<div class="container mt-4 aplicar-desconto-page">
-    {% if academias and academias|length > 1 %}
-    <form method="GET" class="mb-3">
-        <label class="form-label small fw-semibold">Academia:</label>
-        <select name="academia_id" class="form-select form-select-sm d-inline-block w-auto" onchange="this.form.submit()">
-            {% for ac in academias %}
-            <option value="{{ ac.id }}" {% if ac.id == academia_id %}selected{% endif %}>{{ ac.nome }}</option>
+{% if academias and academias|length > 1 %}
+<form method="GET" class="lst-filtros">
+  <label class="lst-campo lst-campo--curto">
+    <span class="lst-campo__rotulo">Academia</span>
+    <select name="academia_id" onchange="this.form.submit()">
+      {% for ac in academias %}
+      <option value="{{ ac.id }}" {% if ac.id == academia_id %}selected{% endif %}>{{ ac.nome }}</option>
+      {% endfor %}
+    </select>
+  </label>
+</form>
+{% endif %}
+
+<section class="lst-quadro">
+  <header class="lst-quadro__topo">
+    <h2 class="lst-quadro__titulo">Novo desconto</h2>
+    <span class="lst-quadro__meta">As mensalidades já lançadas no período são atualizadas</span>
+  </header>
+
+  <div style="padding: 1.25rem">
+    <p class="lst-sub" style="margin: 0 0 1rem">
+      Busque o aluno, escolha o desconto, em quais pacotes ele vale e o período de vigência.
+      Desconto de 100% marca a mensalidade como paga. Dá para cancelar depois.
+    </p>
+
+    <form method="POST" id="form-aplicar">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="acao" value="aplicar">
+      <input type="hidden" name="aluno_id" id="aluno_id" value="">
+
+      <div class="lst-filtros" style="align-items: flex-end">
+        <label class="lst-campo lst-campo--largo desc-busca">
+          <span class="lst-campo__rotulo">Aluno</span>
+          <input type="text" id="busca_aluno" placeholder="Digite o nome do aluno" autocomplete="off">
+          <div id="lista_alunos" class="desc-lista"></div>
+        </label>
+
+        <label class="lst-campo lst-campo--curto">
+          <span class="lst-campo__rotulo">Desconto</span>
+          <select name="desconto_id" required>
+            <option value="">Selecione…</option>
+            {% for d in descontos %}
+            <option value="{{ d.id }}">{{ d.nome }} — {% if d.tipo == 'percentual' %}{{ "%.0f"|format(d.valor|float) }}%{% else %}R$ {{ "%.2f"|format(d.valor|float) }}{% endif %}</option>
             {% endfor %}
-        </select>
+          </select>
+        </label>
+
+        <label class="lst-campo lst-campo--curto">
+          <span class="lst-campo__rotulo">Início da vigência</span>
+          <input type="date" name="data_inicio" id="data_inicio">
+        </label>
+
+        <label class="lst-campo lst-campo--curto">
+          <span class="lst-campo__rotulo">Fim da vigência</span>
+          <input type="date" name="data_fim" id="data_fim">
+        </label>
+
+        <div class="lst-filtros__acoes">
+          <button type="submit" class="sh__btn sh__btn--forte">Aplicar</button>
+        </div>
+      </div>
+
+      <div id="aluno_selecionado" class="d-none" style="margin-top: .75rem">
+        <span class="desc-escolhido">
+          <span class="lst-tag lst-tag--ok" id="nome_aluno_sel"></span>
+          <button type="button" class="sh__btn" style="padding:.3rem .65rem" id="limpar_aluno">Trocar aluno</button>
+        </span>
+      </div>
+
+      {% if pacotes_mensalidades and pacotes_mensalidades|length > 0 %}
+      <div style="margin-top: 1rem">
+        <input type="hidden" name="aplica_todos_pacotes" id="fldAplicaTodos" value="1">
+        <label class="d-inline-flex align-items-center gap-2" style="cursor:pointer">
+          <input class="form-check-input mt-0" type="checkbox" id="chkTodosPacotes" checked>
+          Aplicar a todos os pacotes (planos de mensalidade)
+        </label>
+        <div id="blocoEscolherPacotes" class="d-none desc-pacotes" style="margin-top:.65rem">
+          <div class="lst-sub" style="margin-bottom:.5rem">Selecione um ou mais pacotes:</div>
+          <div class="row row-cols-1 row-cols-sm-2 g-2">
+            {% for p in pacotes_mensalidades %}
+            <div class="col">
+              <label class="d-inline-flex align-items-center gap-2" style="cursor:pointer">
+                <input class="form-check-input mt-0 js-cb-pacote" type="checkbox" name="pacotes_mensalidade_id" value="{{ p.id }}" id="pac_{{ p.id }}">
+                {{ p.nome }}
+              </label>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+      {% else %}
+      <input type="hidden" name="aplica_todos_pacotes" value="1">
+      {% endif %}
     </form>
-    {% endif %}
-    {% set back_url = url_for('financeiro.mensalidades_alunos', academia_id=academia_id) if academia_id else url_for('financeiro.mensalidades_alunos') %}
-    {% include 'components/botao_voltar.html' %}
-    <h2 class="h4 fw-bold mb-3">Aplicar Desconto</h2>
-    <p class="text-muted mb-4">Busque o aluno, selecione o desconto, os pacotes (planos de mensalidade) nos quais o desconto vale e o período de vigência. As mensalidades existentes no período serão atualizadas só nos pacotes escolhidos (ou em todos). Desconto 100% marca como pago. Você pode cancelar o desconto depois.</p>
+  </div>
+</section>
 
-    <div class="card border-0 shadow-sm mb-4">
-        <div class="card-header bg-light">
-            <h6 class="mb-0 fw-bold"><i class="bi bi-plus-circle me-2"></i> Aplicar desconto</h6>
-        </div>
-        <div class="card-body">
-            <form method="POST" id="form-aplicar">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <input type="hidden" name="acao" value="aplicar">
-                <input type="hidden" name="aluno_id" id="aluno_id" value="">
-                <div class="row g-3">
-                    <div class="col-12">
-                        <label class="form-label fw-semibold">Buscar aluno <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control" id="busca_aluno" placeholder="Digite o nome do aluno..." autocomplete="off">
-                        <div id="lista_alunos" class="border rounded mt-2 aplicar-desconto-lista-alunos" style="max-height: 220px; overflow-y: auto; display: none; background: var(--bs-body-bg);">
-                        </div>
-                        <div id="aluno_selecionado" class="mt-2 d-none">
-                            <span class="badge bg-success fs-6" id="nome_aluno_sel"></span>
-                            <button type="button" class="btn btn-sm btn-outline-secondary ms-2" id="limpar_aluno">Alterar</button>
-                        </div>
-                    </div>
-                    <div class="col-12 col-md-4">
-                        <label class="form-label fw-semibold">Desconto <span class="text-danger">*</span></label>
-                        <select name="desconto_id" class="form-select" required>
-                            <option value="">Selecione...</option>
-                            {% for d in descontos %}
-                            <option value="{{ d.id }}">{{ d.nome }} — {% if d.tipo == 'percentual' %}{{ "%.0f"|format(d.valor|float) }}%{% else %}R$ {{ "%.2f"|format(d.valor|float) }}{% endif %}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    {% if pacotes_mensalidades and pacotes_mensalidades|length > 0 %}
-                    <div class="col-12">
-                        <input type="hidden" name="aplica_todos_pacotes" id="fldAplicaTodos" value="1">
-                        <div class="form-check mb-2">
-                            <input class="form-check-input" type="checkbox" id="chkTodosPacotes" checked>
-                            <label class="form-check-label fw-semibold" for="chkTodosPacotes">Aplicar a todos os pacotes (planos de mensalidade)</label>
-                        </div>
-                        <div id="blocoEscolherPacotes" class="d-none border rounded p-3 bg-body-secondary">
-                            <div class="small text-muted mb-2">Selecione um ou mais pacotes:</div>
-                            <div class="row row-cols-1 row-cols-sm-2 g-2">
-                                {% for p in pacotes_mensalidades %}
-                                <div class="col">
-                                    <div class="form-check">
-                                        <input class="form-check-input js-cb-pacote" type="checkbox" name="pacotes_mensalidade_id" value="{{ p.id }}" id="pac_{{ p.id }}">
-                                        <label class="form-check-label" for="pac_{{ p.id }}">{{ p.nome }}</label>
-                                    </div>
-                                </div>
-                                {% endfor %}
-                            </div>
-                        </div>
-                    </div>
-                    {% else %}
-                    <input type="hidden" name="aplica_todos_pacotes" value="1">
-                    {% endif %}
-                    <div class="col-6 col-md-2">
-                        <label class="form-label fw-semibold">Início vigência</label>
-                        <input type="date" name="data_inicio" class="form-control" id="data_inicio">
-                    </div>
-                    <div class="col-6 col-md-2">
-                        <label class="form-label fw-semibold">Fim vigência</label>
-                        <input type="date" name="data_fim" class="form-control" id="data_fim">
-                    </div>
-                    <div class="col-12 col-md-2 d-flex align-items-end">
-                        <button type="submit" class="btn btn-primary w-100">Aplicar</button>
-                    </div>
-                </div>
-            </form>
-        </div>
-    </div>
+<section class="lst-quadro mt-3">
+  <header class="lst-quadro__topo">
+    <h2 class="lst-quadro__titulo">Descontos ativos</h2>
+    <span class="lst-quadro__meta">{{ vinculos|length }} desconto{{ 's' if vinculos|length != 1 }}</span>
+  </header>
 
-    <div class="card border-0 shadow-sm">
-        <div class="card-header bg-light">
-            <h6 class="mb-0 fw-bold"><i class="bi bi-list me-2"></i> Descontos ativos</h6>
+  <div class="lst-rolagem">
+    <div class="lst-largura" style="--lst-min:520px">
+      <div class="lst-linha lin-desc lst-cab">
+        <div>Aluno</div>
+        <div>Desconto</div>
+        <div class="col-pacotes">Pacotes</div>
+        <div class="col-vigencia">Vigência</div>
+        <div class="lst-fim">Ações</div>
+      </div>
+
+      {% for v in vinculos %}
+      <div class="lst-linha lin-desc lst-item">
+        <div style="min-width:0">
+          <span class="lst-nome">{{ v.aluno_nome }}</span>
+          <span class="lst-sub">{{ v.data_inicio|data_br or '—' }} até {{ v.data_fim|data_br or '—' }}</span>
         </div>
-        <div class="card-body p-0">
-            {% if vinculos %}
-            <div class="table-responsive d-none d-md-block">
-                <table class="table table-hover mb-0">
-                    <thead class="table-light">
-                        <tr>
-                            <th>Aluno</th>
-                            <th>Desconto</th>
-                            <th>Pacotes</th>
-                            <th>Vigência</th>
-                            <th class="text-end">Ação</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for v in vinculos %}
-                        <tr>
-                            <td class="fw-semibold">{{ v.aluno_nome }}</td>
-                            <td>
-                                {{ v.desconto_nome }}
-                                {% if v.desconto_tipo == 'percentual' %}
-                                <span class="badge bg-secondary">{{ "%.0f"|format(v.desconto_valor|float) }}%</span>
-                                {% else %}
-                                <span class="badge bg-secondary">R$ {{ "%.2f"|format(v.desconto_valor|float) }}</span>
-                                {% endif %}
-                            </td>
-                            <td class="small">{{ v.pacotes_resumo or '—' }}</td>
-                            <td>{{ v.data_inicio|data_br or '-' }} até {{ v.data_fim|data_br or '-' }}</td>
-                            <td class="text-end">
-                                <button type="button" class="btn btn-sm btn-outline-primary me-1" data-bs-toggle="modal" data-bs-target="#modalEditar{{ v.id }}">
-                                    <i class="bi bi-pencil"></i> Editar
-                                </button>
-                                <form method="POST" class="d-inline" onsubmit="return confirm('Cancelar este desconto? As mensalidades não pagas voltarão ao valor normal; as marcadas como paga por desconto 100% voltarão para pendente.');">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                    <input type="hidden" name="acao" value="cancelar">
-                                    <input type="hidden" name="aluno_id" value="{{ v.aluno_id }}">
-                                    <input type="hidden" name="desconto_id" value="{{ v.desconto_id }}">
-                                    <button type="submit" class="btn btn-sm btn-outline-danger">Cancelar</button>
-                                </form>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-            <div class="d-md-none aplicar-desconto-mobile-cards">
-                {% for v in vinculos %}
-                <div class="card border-0 border-bottom rounded-0">
-                    <div class="card-body p-3">
-                        <p class="mb-1 fw-bold">{{ v.aluno_nome }}</p>
-                        <p class="mb-1 small text-muted">
-                            {{ v.desconto_nome }}
-                            {% if v.desconto_tipo == 'percentual' %}
-                            <span class="badge bg-secondary">{{ "%.0f"|format(v.desconto_valor|float) }}%</span>
-                            {% else %}
-                            <span class="badge bg-secondary">R$ {{ "%.2f"|format(v.desconto_valor|float) }}</span>
-                            {% endif %}
-                        </p>
-                        <p class="mb-1 small text-muted">Pacotes: {{ v.pacotes_resumo or '—' }}</p>
-                        <p class="mb-2 small">{{ v.data_inicio|data_br or '-' }} até {{ v.data_fim|data_br or '-' }}</p>
-                        <div class="d-flex flex-column gap-1">
-                            <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalEditar{{ v.id }}">
-                                <i class="bi bi-pencil"></i> Editar
-                            </button>
-                            <form method="POST" onsubmit="return confirm('Cancelar este desconto?');">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <input type="hidden" name="acao" value="cancelar">
-                                <input type="hidden" name="aluno_id" value="{{ v.aluno_id }}">
-                                <input type="hidden" name="desconto_id" value="{{ v.desconto_id }}">
-                                <button type="submit" class="btn btn-sm btn-outline-danger w-100">Cancelar</button>
-                            </form>
-                        </div>
-                    </div>
-                </div>
-                {% endfor %}
-            </div>
-            {% else %}
-            <div class="p-4 text-center text-muted">
-                <i class="bi bi-percent fs-1"></i>
-                <p class="mb-0">Nenhum desconto ativo no momento.</p>
-            </div>
-            {% endif %}
+
+        <div style="min-width:0">
+          <span class="lst-corta">{{ v.desconto_nome }}</span>
+          <span class="lst-sub">
+            {% if v.desconto_tipo == 'percentual' %}{{ "%.0f"|format(v.desconto_valor|float) }}%
+            {% else %}R$ {{ "%.2f"|format(v.desconto_valor|float) }}{% endif %}
+          </span>
         </div>
+
+        <div class="col-pacotes lst-corta">{{ v.pacotes_resumo or 'Todos' }}</div>
+        <div class="col-vigencia">{{ v.data_inicio|data_br or '—' }} até {{ v.data_fim|data_br or '—' }}</div>
+
+        <div class="lst-acoes">
+          <button type="button" class="lst-acao" title="Editar desconto"
+                  aria-label="Editar desconto de {{ v.aluno_nome }}"
+                  data-bs-toggle="modal" data-bs-target="#modalEditar{{ v.id }}">
+            <i class="bi bi-pencil"></i>
+          </button>
+          <form method="POST"
+                onsubmit="return confirm('Cancelar este desconto? As mensalidades não pagas voltarão ao valor normal; as marcadas como paga por desconto 100% voltarão para pendente.');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="acao" value="cancelar">
+            <input type="hidden" name="aluno_id" value="{{ v.aluno_id }}">
+            <input type="hidden" name="desconto_id" value="{{ v.desconto_id }}">
+            <button type="submit" class="lst-acao lst-acao--perigo" title="Cancelar desconto"
+                    aria-label="Cancelar desconto de {{ v.aluno_nome }}">
+              <i class="bi bi-x-circle"></i>
+            </button>
+          </form>
+        </div>
+      </div>
+      {% else %}
+      <p class="lst-vazio">Nenhum desconto ativo no momento.</p>
+      {% endfor %}
     </div>
-</div>
+  </div>
+</section>
+
+{% set _ac_atual = (academias | selectattr('id', 'equalto', academia_id) | first) if academias else None %}
+<footer class="lst-rodape">
+  © {{ current_year }} {{ (_ac_atual.nome if _ac_atual else None) or 'Unimaster' }}. Todos os direitos reservados.
+</footer>
 
 {# Modais Editar #}
 {% for v in vinculos %}
@@ -281,7 +312,7 @@
                             alunoIdInput.value = a.id;
                             nomeAlunoSel.textContent = a.nome || '-';
                             alunoSelecionado.classList.remove('d-none');
-                            buscaInput.classList.add('d-none');
+                            buscaInput.closest('.desc-busca').classList.add('d-none');
                             listaAlunos.style.display = 'none';
                         });
                         listaAlunos.appendChild(div);
@@ -307,7 +338,7 @@
     limparBtn.addEventListener('click', function() {
         alunoIdInput.value = '';
         alunoSelecionado.classList.add('d-none');
-        buscaInput.classList.remove('d-none');
+        buscaInput.closest('.desc-busca').classList.remove('d-none');
         buscaInput.value = '';
         buscaInput.focus();
     });

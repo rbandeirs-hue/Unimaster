@@ -1,0 +1,412 @@
+{% extends 'base_um2.html' %}
+{% set um_ativo = 'financeiro' %}
+{% block title %}Financeiro{% endblock %}
+
+{% block um_css %}
+  .duas { display:flex; flex-wrap:wrap; gap:16px; align-items:flex-start; }
+  .lin-pend { display:grid; grid-template-columns:minmax(230px,1fr) 130px 110px 110px 70px; gap:0 14px; }
+  .lin-mens { display:grid; grid-template-columns:minmax(210px,1fr) 140px 120px 100px 110px 110px 130px; gap:0 14px; }
+  .lin-forma { display:grid; grid-template-columns:80px minmax(180px,1fr) 170px 110px 170px; gap:0 14px; }
+  .lin-desc { display:grid; grid-template-columns:minmax(200px,1fr) 120px 100px minmax(240px,1.4fr) 110px 90px; gap:0 14px; }
+  .lin-cob { display:grid; grid-template-columns:minmax(210px,1fr) 110px 110px 110px 110px 120px; gap:0 14px; }
+  .lin-hist { display:grid; grid-template-columns:70px minmax(210px,1fr) 110px 120px 120px 110px 100px 110px; gap:0 14px; }
+  .rol-pend { min-width:750px; } .rol-mens { min-width:1100px; } .rol-forma { min-width:810px; }
+  .rol-desc { min-width:962px; } .rol-cob { min-width:890px; } .rol-hist { min-width:1090px; }
+  .seg { display:flex; padding:3px; border:1px solid #d6d3d1; border-radius:3px; background:#fff; flex-wrap:wrap; }
+  .seg a { padding:7px 12px; border-radius:2px; font:400 12.5px/1 'Public Sans',sans-serif; color:#78716c; white-space:nowrap; }
+  .seg a.on { background:#1C1917; font-weight:600; color:#FAFAF9; }
+{% endblock %}
+
+{% block um_conteudo %}
+{% macro brl(v) %}R$ {{ '%.2f'|format(v or 0)|replace('.', ',') }}{% endmacro %}
+{% set aba = aba|default('dashboard') %}
+{% set titulos = {
+  'dashboard': ('Visão geral financeira da academia · ' ~ mes_label, 'Gerar cobranças', 'bi-lightning-charge', 'cobrancas'),
+  'mensalidades': ('Gestão de cobranças mensais · ' ~ mes_label, 'Notificar atrasados', 'bi-whatsapp', 'mensalidades'),
+  'planos': ('Planos de mensalidade oferecidos pela academia', 'Novo plano', 'bi-plus-lg', 'planos'),
+  'formas': ('Formas aceitas nos lançamentos financeiros', 'Nova forma', 'bi-plus-lg', 'formas'),
+  'descontos': ('Regras de desconto aplicáveis às mensalidades', 'Novo desconto', 'bi-plus-lg', 'descontos'),
+  'cobrancas': ('Gere e acompanhe as cobranças do mês', 'Gerar cobranças', 'bi-lightning-charge', 'cobrancas'),
+  'historico': ('Todos os lançamentos de mensalidade registrados', 'Exportar histórico', 'bi-download', 'historico')
+} %}
+{% set meta = titulos.get(aba, titulos['dashboard']) %}
+
+<div style="display:flex; align-items:flex-end; justify-content:space-between; gap:20px; flex-wrap:wrap">
+  <div style="display:flex; flex-direction:column; gap:7px">
+    <h1 class="um-h1" style="margin:0">Financeiro</h1>
+    <div class="um-sub">{{ meta[0] }}</div>
+  </div>
+  <a href="{{ url_for(request.endpoint, aba=meta[3]) }}" class="um-btn-primario"><i class="bi {{ meta[1] and meta[2] }}" style="font-size:14px"></i>{{ meta[1] }}</a>
+</div>
+
+{# ------------------------------- ABAS ------------------------------------- #}
+<div style="display:flex; gap:2px; flex-wrap:wrap; border-bottom:1px solid #e7e5e4">
+  {% for chave, rotulo in [('dashboard','Dashboard'), ('mensalidades','Mensalidades'), ('planos','Planos'),
+                            ('formas','Formas de pagamento'), ('descontos','Descontos'),
+                            ('cobrancas','Gerar cobranças'), ('historico','Histórico')] %}
+  <a href="{{ url_for(request.endpoint, aba=chave, mes=mes, ano=ano) }}"
+     style="padding:11px 14px; margin-bottom:-1px; white-space:nowrap;
+            border-bottom:2px solid {{ '#C8102E' if aba == chave else 'transparent' }};
+            font:{{ '600' if aba == chave else '400' }} 13px/1 'Public Sans',sans-serif;
+            color:{{ '#1C1917' if aba == chave else '#a8a29e' }}">{{ rotulo }}</a>
+  {% endfor %}
+</div>
+
+{# ----------------------------- DASHBOARD ---------------------------------- #}
+{% if aba == 'dashboard' %}
+  <form method="get" class="um-filtros">
+    <input type="hidden" name="aba" value="dashboard">
+    <div class="um-filtro" style="flex:0 1 130px">
+      <label for="f-mes">Mês</label>
+      <select id="f-mes" name="mes">
+        {% for n, nome in meses_opcoes %}<option value="{{ n }}" {% if n == mes %}selected{% endif %}>{{ nome }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="um-filtro" style="flex:0 1 100px">
+      <label for="f-ano">Ano</label>
+      <select id="f-ano" name="ano">
+        {% for x in anos_opcoes %}<option value="{{ x }}" {% if x == ano %}selected{% endif %}>{{ x }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="um-filtro">
+      <label for="f-q">Buscar aluno</label>
+      <input type="text" id="f-q" name="q" value="{{ request.args.get('q','') }}" placeholder="Nome do aluno">
+    </div>
+    <button type="submit" class="um-btn" style="flex:none">Filtrar</button>
+  </form>
+
+  <div class="um-faixa">
+    <div class="um-kpi"><span class="um-kpi-lbl">Receita do mês</span><span class="um-kpi-val" style="color:#15803d">{{ brl(kpi.receita_mes) }}</span><span class="um-kpi-nota">Mês anterior: {{ brl(kpi.receita_anterior) }}</span></div>
+    <div class="um-kpi"><span class="um-kpi-lbl">Receita potencial</span><span class="um-kpi-val">{{ brl(kpi.potencial) }}</span><span class="um-kpi-nota">Se todos pagarem</span></div>
+    <div class="um-kpi"><span class="um-kpi-lbl">Inadimplentes</span><span class="um-kpi-val" style="color:#C8102E">{{ kpi.inadimplentes }}</span><span class="um-kpi-nota">Pendentes + atrasados</span></div>
+    <div class="um-kpi"><span class="um-kpi-lbl">Adimplência</span><span class="um-kpi-val">{{ kpi.adimplencia }}%</span><span class="um-kpi-nota">{{ kpi.ativos }} alunos ativos</span></div>
+  </div>
+
+  {% set pct = (100 * kpi.pagas / kpi.total_cobrancas)|round|int if kpi.total_cobrancas else 0 %}
+  <div class="um-card" style="padding:18px; display:flex; flex-direction:column; gap:11px">
+    <div style="display:flex; align-items:baseline; justify-content:space-between; gap:12px; flex-wrap:wrap">
+      <span style="font:600 13px/1 'Public Sans',sans-serif">Taxa de arrecadação · {{ mes_label }}</span>
+      <span style="font:400 12.5px/1 'Public Sans',sans-serif; color:#78716c">{{ kpi.pagas }} de {{ kpi.total_cobrancas }} mensalidades pagas</span>
+    </div>
+    <div style="height:8px; border-radius:2px; background:#f5f5f4; overflow:hidden"><div style="width:{{ pct }}%; height:100%; background:#15803d"></div></div>
+    <span class="um-kpi-nota">Receita do mês {{ brl(kpi.receita_mes) }} de {{ brl(kpi.potencial) }} previstos se todos pagarem.</span>
+  </div>
+
+  <div class="duas">
+    <div class="um-card" style="flex:1 1 560px; min-width:0; overflow:hidden">
+      <div class="um-cab">
+        <span class="um-secao">Pendências · {{ mes_label }}</span>
+        <span class="um-kpi-nota">{{ pendencias|length }} registros</span>
+      </div>
+      <div class="um-rolagem"><div class="rol-pend">
+        <div class="lin-pend um-th"><span>Aluno</span><span>Vencimento</span><span style="text-align:right">Valor</span><span>Situação</span><span style="text-align:right">Ação</span></div>
+        {% for p in pendencias %}
+        <div class="lin-pend um-td">
+          <div style="display:flex; align-items:center; gap:10px; min-width:0">
+            <span style="flex:none; width:14px; height:6px; border-radius:2px; border:1px solid rgba(0,0,0,.18); background:{{ p.cor_faixa or '#e7e5e4' }}"></span>
+            <div style="min-width:0; display:flex; flex-direction:column; gap:3px">
+              <a href="{{ url_for('alunos.ficha', id=p.aluno_id) }}" style="font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">{{ p.nome }}</a>
+              <span style="font:400 11.5px/1 'Public Sans',sans-serif; color:#a8a29e">{{ p.faixa or '—' }}</span>
+            </div>
+          </div>
+          <span style="color:#57534e">{{ p.vencimento.strftime('%d/%m/%Y') if p.vencimento else '—' }}</span>
+          <span style="text-align:right; font-weight:600">{{ brl(p.valor) }}</span>
+          {% set cs = '#C8102E' if p.status == 'atrasado' else '#b45309' %}
+          <span style="display:flex; align-items:center; gap:6px; font:500 12.5px/1 'Public Sans',sans-serif; color:{{ cs }}"><span style="width:6px; height:6px; border-radius:50%; background:{{ cs }}"></span>{{ p.status|capitalize }}</span>
+          <span style="display:flex; gap:12px; justify-content:flex-end">
+            <a href="{{ url_for('financeiro_painel.dashboard', aba='mensalidades', receber=p.id) }}" title="Registrar pagamento" style="color:#78716c"><i class="bi bi-check2-circle" style="font-size:14px"></i></a>
+            <a href="{{ url_for('academia.whatsapp', aluno_id=p.aluno_id) }}" title="Cobrar" style="color:#78716c"><i class="bi bi-whatsapp" style="font-size:14px"></i></a>
+          </span>
+        </div>
+        {% else %}
+        <div style="padding:28px 16px; text-align:center; color:#a8a29e; font:400 12.5px/1.5 'Public Sans',sans-serif">Nenhuma pendência no mês.</div>
+        {% endfor %}
+      </div></div>
+    </div>
+
+    <div class="um-card" style="flex:1 1 300px; min-width:0; overflow:hidden">
+      <div class="um-cab"><span class="um-secao">Alunos por faixa</span><span class="um-kpi-nota">{{ kpi.ativos }} ativos</span></div>
+      {% set maxf = (por_faixa|map(attribute='qtd')|max) if por_faixa else 1 %}
+      {% for f in por_faixa %}
+      <div style="padding:11px 16px; border-bottom:1px solid #f5f5f4; display:flex; flex-direction:column; gap:7px">
+        <div style="display:flex; align-items:baseline; justify-content:space-between; gap:12px">
+          <span style="font:500 12.5px/1 'Public Sans',sans-serif">{{ f.nome }}</span>
+          <span style="font:600 12.5px/1 'Public Sans',sans-serif; color:#57534e">{{ f.qtd }}</span>
+        </div>
+        <div style="height:5px; border-radius:2px; background:#f5f5f4; overflow:hidden">
+          <div style="width:{{ (100 * f.qtd / maxf)|round|int }}%; height:100%; background:{{ f.cor or '#d6d3d1' }}"></div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+{# ---------------------------- MENSALIDADES -------------------------------- #}
+{% elif aba == 'mensalidades' %}
+  {% set pct = (100 * kpi.pagas / kpi.total_cobrancas)|round|int if kpi.total_cobrancas else 0 %}
+  <div class="um-card" style="padding:18px; display:flex; align-items:flex-end; justify-content:space-between; gap:20px; flex-wrap:wrap">
+    <div style="flex:1 1 320px; min-width:0; display:flex; flex-direction:column; gap:11px">
+      <div style="display:flex; align-items:baseline; justify-content:space-between; gap:12px; flex-wrap:wrap">
+        <span style="font:600 13px/1 'Public Sans',sans-serif">Taxa de arrecadação · {{ mes_label }}</span>
+        <span style="font:400 12.5px/1 'Public Sans',sans-serif; color:#78716c">{{ kpi.pagas }} de {{ kpi.total_cobrancas }} alunos</span>
+      </div>
+      <div style="height:8px; border-radius:2px; background:#f5f5f4; overflow:hidden"><div style="width:{{ pct }}%; height:100%; background:#15803d"></div></div>
+    </div>
+    <div style="flex:none; display:flex; gap:26px">
+      <div style="display:flex; flex-direction:column; gap:6px"><span class="um-kpi-lbl">Arrecadado</span><span style="font:600 19px/1 'Public Sans',sans-serif; color:#15803d">{{ brl(kpi.receita_mes) }}</span></div>
+      <div style="display:flex; flex-direction:column; gap:6px"><span class="um-kpi-lbl">Pendente</span><span style="font:600 19px/1 'Public Sans',sans-serif; color:#b45309">{{ brl(kpi.pendente) }}</span></div>
+    </div>
+  </div>
+
+  <div class="um-card" style="overflow:hidden">
+    <div class="um-cab">
+      <span class="um-secao">Cobranças mensais</span>
+      <div style="display:flex; gap:8px; flex-wrap:wrap">
+        <a href="{{ url_for(request.endpoint, aba='mensalidades', atualizar_links=1) }}" class="um-btn" style="padding:8px 13px; font-size:12.5px"><i class="bi bi-arrow-repeat" style="font-size:12px"></i>Atualizar links</a>
+        <a href="{{ url_for('academia.whatsapp', lote='atrasados') }}" style="display:flex; align-items:center; gap:7px; padding:8px 13px; border:1px solid #C8102E; border-radius:3px; background:#C8102E; font:600 12.5px/1 'Public Sans',sans-serif; color:#fff"><i class="bi bi-whatsapp" style="font-size:12px"></i>Notificar {{ kpi.inadimplentes }} atrasados</a>
+      </div>
+    </div>
+    <div class="um-rolagem"><div class="rol-mens">
+      <div class="lin-mens um-th"><span>Aluno</span><span>Faixa</span><span>Vencimento</span><span style="text-align:right">Valor</span><span style="text-align:right">Juros/multa</span><span>Status</span><span style="text-align:right">Ação</span></div>
+      {% for m in mensalidades %}
+      <div class="lin-mens um-td">
+        <a href="{{ url_for('alunos.ficha', id=m.aluno_id) }}" style="font-weight:500; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">{{ m.nome }}</a>
+        <span style="display:flex; align-items:center; gap:8px; min-width:0">
+          <span style="flex:none; width:14px; height:6px; border-radius:2px; border:1px solid rgba(0,0,0,.18); background:{{ m.cor_faixa or '#e7e5e4' }}"></span>
+          <span style="font:400 12px/1 'Public Sans',sans-serif; color:#78716c; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">{{ m.faixa or '—' }}</span>
+        </span>
+        <span style="color:#57534e">{{ m.vencimento.strftime('%d/%m/%Y') if m.vencimento else '—' }}</span>
+        <span style="text-align:right; font-weight:600">{{ brl(m.valor) }}</span>
+        <span style="text-align:right; color:{{ '#C8102E' if m.juros else '#a8a29e' }}">{% if m.juros %}+ {{ brl(m.juros) }}{% elif m.isento %}Isento{% else %}—{% endif %}</span>
+        {% set pago = m.status == 'pago' %}
+        <span style="display:flex; align-items:center; gap:6px; font:500 12.5px/1 'Public Sans',sans-serif; color:{{ '#15803d' if pago else '#C8102E' }}"><span style="width:6px; height:6px; border-radius:50%; background:{{ '#15803d' if pago else '#C8102E' }}"></span>{{ m.status|capitalize }}</span>
+        <span style="display:flex; gap:8px; justify-content:flex-end; align-items:center">
+          <a href="{{ url_for(request.endpoint, aba='mensalidades', alternar=m.id) }}" style="padding:6px 10px; border:1px solid #d6d3d1; border-radius:3px; font:500 12px/1 'Public Sans',sans-serif; color:#57534e; white-space:nowrap">{{ 'Cancelar' if pago else 'Registrar' }}</a>
+          <a href="{{ url_for(request.endpoint, aba='mensalidades', detalhe=m.id) }}" style="color:#78716c"><i class="bi bi-three-dots" style="font-size:14px"></i></a>
+        </span>
+      </div>
+      {% endfor %}
+    </div></div>
+    <div style="padding:13px 16px; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap">
+      <span class="um-kpi-nota">Data de pagamento e forma aparecem no detalhe de cada cobrança.</span>
+      <span class="um-kpi-nota">{{ mensalidades|length }} de {{ kpi.total_cobrancas }} cobranças</span>
+    </div>
+  </div>
+
+{# ------------------------------- PLANOS ----------------------------------- #}
+{% elif aba == 'planos' %}
+  <div class="um-card" style="overflow:hidden">
+    <div class="um-cab">
+      <span class="um-secao">Planos de mensalidade</span>
+      <span class="um-kpi-nota">{{ planos|selectattr('ativo')|list|length }} ativos · {{ planos|rejectattr('ativo')|list|length }} inativos</span>
+    </div>
+    {% for p in planos %}
+    <div style="padding:16px; border-bottom:1px solid #f5f5f4; display:flex; align-items:flex-start; gap:20px; flex-wrap:wrap">
+      <div style="flex:1 1 340px; min-width:0; display:flex; flex-direction:column; gap:6px">
+        <div style="display:flex; align-items:center; gap:9px; flex-wrap:wrap">
+          <span style="font:600 14px/1.3 'Public Sans',sans-serif">{{ p.nome }}</span>
+          {% set c = '#15803d' if p.ativo else '#a8a29e' %}
+          <span style="display:flex; align-items:center; gap:6px; font:500 12px/1 'Public Sans',sans-serif; color:{{ c }}"><span style="width:6px; height:6px; border-radius:50%; background:{{ c }}"></span>{{ 'Ativo' if p.ativo else 'Inativo' }}</span>
+        </div>
+        <div style="font:400 12.5px/1.5 'Public Sans',sans-serif; color:#78716c; text-wrap:pretty">{{ p.descricao or 'Sem descrição.' }}</div>
+      </div>
+      <div style="flex:none; display:flex; align-items:center; gap:20px; flex-wrap:wrap">
+        <div style="display:flex; flex-direction:column; gap:4px; text-align:right">
+          <span style="font:600 19px/1 'Public Sans',sans-serif">{{ brl(p.valor) }}</span>
+          <span class="um-kpi-nota">por mês</span>
+        </div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap">
+          <a href="{{ url_for(request.endpoint, aba='planos', editar=p.id) }}" class="um-btn" style="padding:8px 12px; font-size:12.5px">Editar</a>
+          <a href="{{ url_for(request.endpoint, aba='planos', alternar=p.id) }}" class="um-btn" style="padding:8px 12px; font-size:12.5px; color:#57534e">{{ 'Desativar' if p.ativo else 'Ativar' }}</a>
+          <a href="{{ url_for(request.endpoint, aba='planos', excluir=p.id) }}" style="padding:8px 12px; border:1px solid #e7e5e4; border-radius:3px; font:500 12.5px/1 'Public Sans',sans-serif; color:#C8102E">Excluir</a>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+{# --------------------------- FORMAS DE PAGTO ------------------------------ #}
+{% elif aba == 'formas' %}
+  <div class="um-card" style="overflow:hidden">
+    <div class="um-cab">
+      <span class="um-secao">Formas de pagamento</span>
+      <span class="um-kpi-nota">{{ formas|selectattr('ativo')|list|length }} ativas · {{ formas|rejectattr('ativo')|list|length }} inativas</span>
+    </div>
+    <div class="um-rolagem"><div class="rol-forma">
+      <div class="lin-forma um-th"><span>Ordem</span><span>Forma</span><span>Usos</span><span>Status</span><span style="text-align:right">Ações</span></div>
+      {% for f in formas %}
+      <div class="lin-forma um-td">
+        <span style="color:#a8a29e">{{ loop.index }}</span>
+        <span style="font-weight:500">{{ f.nome }}</span>
+        <span style="color:#57534e">{% if f.usos %}{{ f.usos }} lançamento(s){% else %}—{% endif %}</span>
+        {% set c = '#15803d' if f.ativo else '#a8a29e' %}
+        <span style="display:flex; align-items:center; gap:6px; font:500 12.5px/1 'Public Sans',sans-serif; color:{{ c }}"><span style="width:6px; height:6px; border-radius:50%; background:{{ c }}"></span>{{ 'Ativa' if f.ativo else 'Inativa' }}</span>
+        <span style="display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap">
+          <a href="{{ url_for(request.endpoint, aba='formas', editar=f.id) }}" class="um-btn" style="padding:7px 11px; font-size:12px">Editar</a>
+          <a href="{{ url_for(request.endpoint, aba='formas', alternar=f.id) }}" class="um-btn" style="padding:7px 11px; font-size:12px; color:#57534e">{{ 'Desativar' if f.ativo else 'Ativar' }}</a>
+        </span>
+      </div>
+      {% endfor %}
+    </div></div>
+  </div>
+  <span style="font:400 12px/1.5 'Public Sans',sans-serif; color:#a8a29e">Formas já usadas em lançamentos não são excluídas: viram inativas, para o histórico continuar íntegro.</span>
+
+{# ------------------------------ DESCONTOS --------------------------------- #}
+{% elif aba == 'descontos' %}
+  <div class="um-card" style="overflow:hidden">
+    <div class="um-cab">
+      <span class="um-secao">Descontos</span>
+      <span class="um-kpi-nota">{{ descontos|selectattr('ativo')|list|length }} ativos · {{ descontos|rejectattr('ativo')|list|length }} inativos</span>
+    </div>
+    <div class="um-rolagem"><div class="rol-desc">
+      <div class="lin-desc um-th"><span>Nome</span><span>Tipo</span><span style="text-align:right">Desconto</span><span>Motivo</span><span>Status</span><span style="text-align:right">Ações</span></div>
+      {% for d in descontos %}
+      <div class="lin-desc um-td">
+        <span style="font-weight:500; min-width:0">{{ d.nome }}</span>
+        <span><span class="um-tag">{{ 'Percentual' if d.tipo == 'percentual' else 'Valor fixo' }}</span></span>
+        <span style="text-align:right; font-weight:600">{% if d.tipo == 'percentual' %}{{ d.valor|int }}%{% else %}{{ brl(d.valor) }}{% endif %}</span>
+        <span style="min-width:0; font:400 12.5px/1.4 'Public Sans',sans-serif; color:#78716c; text-wrap:pretty">{{ d.motivo }}</span>
+        {% set c = '#15803d' if d.ativo else '#a8a29e' %}
+        <span style="display:flex; align-items:center; gap:6px; font:500 12.5px/1 'Public Sans',sans-serif; color:{{ c }}"><span style="width:6px; height:6px; border-radius:50%; background:{{ c }}"></span>{{ 'Ativo' if d.ativo else 'Inativo' }}</span>
+        <span style="display:flex; gap:14px; justify-content:flex-end">
+          <a href="{{ url_for(request.endpoint, aba='descontos', editar=d.id) }}" style="color:#78716c"><i class="bi bi-pencil" style="font-size:14px"></i></a>
+          <a href="{{ url_for(request.endpoint, aba='descontos', excluir=d.id) }}" style="color:#78716c"><i class="bi bi-trash" style="font-size:14px"></i></a>
+        </span>
+      </div>
+      {% endfor %}
+    </div></div>
+  </div>
+
+{# --------------------------- GERAR COBRANÇAS ------------------------------ #}
+{% elif aba == 'cobrancas' %}
+  <div class="duas">
+    <form method="post" action="{{ url_for(request.endpoint, aba='cobrancas') }}" class="um-card" style="flex:1 1 340px; min-width:0; overflow:hidden">
+      <div class="um-cab"><span class="um-secao">Nova cobrança · {{ mes_label }}</span><a href="#" onclick="umTodos();return false" style="font:500 12px/1 'Public Sans',sans-serif; color:#78716c">Selecionar todos</a></div>
+      <div style="padding:12px 16px; border-bottom:1px solid #f5f5f4; display:flex; flex-direction:column; gap:2px; max-height:230px; overflow-y:auto">
+        <div style="padding:0 0 8px" class="um-kpi-lbl">Alunos sem cobrança ({{ sem_cobranca|length }})</div>
+        {% for a in sem_cobranca %}
+        <label style="display:flex; align-items:center; gap:10px; padding:7px 0; font:400 13px/1 'Public Sans',sans-serif; cursor:pointer">
+          <input type="checkbox" name="alunos" value="{{ a.id }}" style="width:14px; height:14px; padding:0; accent-color:#1C1917">
+          <span style="width:8px; height:8px; border-radius:50%; background:{{ a.cor_faixa or '#d6d3d1' }}"></span>{{ a.nome }}
+        </label>
+        {% endfor %}
+      </div>
+      <div style="padding:14px 16px; display:flex; flex-direction:column; gap:12px">
+        <div class="um-filtro" style="flex:none">
+          <label for="c-plano">Plano</label>
+          <select id="c-plano" name="plano_id" required>
+            {% for p in planos if p.ativo %}<option value="{{ p.id }}">{{ p.nome }} · {{ brl(p.valor) }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="um-filtro" style="flex:none">
+          <label for="c-desc">Desconto</label>
+          <select id="c-desc" name="desconto_id"><option value="">Sem desconto</option>
+            {% for d in descontos if d.ativo %}<option value="{{ d.id }}">{{ d.nome }}</option>{% endfor %}
+          </select>
+        </div>
+        <div style="display:flex; gap:12px; flex-wrap:wrap">
+          <div class="um-filtro" style="flex:0 1 120px"><label for="c-venc">Vencimento</label><input type="number" id="c-venc" name="dia_vencimento" min="1" max="31" value="{{ dia_vencimento|default(10) }}"></div>
+          <div class="um-filtro"><label for="c-obs">Observação</label><input type="text" id="c-obs" name="observacao" placeholder="Opcional"></div>
+        </div>
+        <button type="submit" class="um-btn-primario" style="justify-content:center"><i class="bi bi-lightning-charge" style="font-size:13px"></i>Gerar cobranças</button>
+      </div>
+    </form>
+
+    <div style="flex:1 1 520px; min-width:0; display:flex; flex-direction:column; gap:12px">
+      <div class="um-faixa">
+        <div class="um-kpi" style="flex:1 1 150px"><span class="um-kpi-lbl">Cobranças</span><span class="um-kpi-val" style="font-size:20px">{{ cob.total }}</span></div>
+        <div class="um-kpi" style="flex:1 1 150px"><span class="um-kpi-lbl">Em aberto</span><span class="um-kpi-val" style="font-size:20px; color:#b45309">{{ cob.abertas }}</span></div>
+        <div class="um-kpi" style="flex:1 1 150px"><span class="um-kpi-lbl">Pagas</span><span class="um-kpi-val" style="font-size:20px; color:#15803d">{{ cob.pagas }}</span></div>
+        <div class="um-kpi" style="flex:1 1 150px"><span class="um-kpi-lbl">Total</span><span class="um-kpi-val" style="font-size:20px">{{ brl(cob.valor_total) }}</span></div>
+      </div>
+
+      <div class="um-card" style="overflow:hidden">
+        <div class="um-cab">
+          <div class="seg">
+            {% for chave, rotulo in [('', 'Todos'), ('gerada','Gerada'), ('atrasado','Atrasado'), ('paga','Paga'), ('cancelada','Cancelada')] %}
+            <a href="{{ url_for(request.endpoint, aba='cobrancas', status=chave) }}" class="{{ 'on' if request.args.get('status','') == chave else '' }}">{{ rotulo }}</a>
+            {% endfor %}
+          </div>
+          <span style="font:600 13px/1 'Public Sans',sans-serif">{{ brl(cob.valor_total) }}</span>
+        </div>
+        <div class="um-rolagem"><div class="rol-cob">
+          <div class="lin-cob um-th"><span>Aluno</span><span style="text-align:right">Original</span><span style="text-align:right">Desconto</span><span style="text-align:right">Final</span><span>Status</span><span style="text-align:right">Vencimento</span></div>
+          {% for c in cobrancas %}
+          <div class="lin-cob um-td">
+            <div style="display:flex; align-items:center; gap:10px; min-width:0">
+              <span style="flex:none; width:14px; height:6px; border-radius:2px; border:1px solid rgba(0,0,0,.18); background:{{ c.cor_faixa or '#e7e5e4' }}"></span>
+              <a href="{{ url_for('alunos.ficha', id=c.aluno_id) }}" style="font-weight:500; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">{{ c.nome }}</a>
+            </div>
+            <span style="text-align:right; color:#57534e">{{ brl(c.original) }}</span>
+            <span style="text-align:right; color:#a8a29e">{% if c.desconto %}− {{ brl(c.desconto) }}{% else %}—{% endif %}</span>
+            <span style="text-align:right; font-weight:600">{{ brl(c.final) }}</span>
+            {% set c2 = '#15803d' if c.status == 'paga' else ('#C8102E' if c.status == 'atrasado' else '#a8a29e') %}
+            <span style="display:flex; align-items:center; gap:6px; font:500 12.5px/1 'Public Sans',sans-serif; color:{{ c2 }}"><span style="width:6px; height:6px; border-radius:50%; background:{{ c2 }}"></span>{{ c.status|capitalize }}</span>
+            <span style="text-align:right; color:#78716c">{{ c.vencimento.strftime('%d/%m/%Y') if c.vencimento else '—' }}</span>
+          </div>
+          {% endfor %}
+        </div></div>
+      </div>
+    </div>
+  </div>
+
+{# ------------------------------ HISTÓRICO --------------------------------- #}
+{% else %}
+  <form method="get" class="um-filtros">
+    <input type="hidden" name="aba" value="historico">
+    <div style="flex:none; display:flex; flex-direction:column; gap:6px">
+      <label>Status</label>
+      <div class="seg">
+        {% for chave, rotulo in [('', 'Todos'), ('pago','Pago'), ('pendente','Pendente'), ('atrasado','Atrasado')] %}
+        <a href="{{ url_for(request.endpoint, aba='historico', status=chave) }}" class="{{ 'on' if request.args.get('status','') == chave else '' }}">{{ rotulo }}</a>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="um-filtro" style="flex:0 1 170px">
+      <label for="h-forma">Forma</label>
+      <select id="h-forma" name="forma_id"><option value="">Todas</option>
+        {% for f in formas %}<option value="{{ f.id }}" {% if f.id|string == request.args.get('forma_id','') %}selected{% endif %}>{{ f.nome }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="um-filtro" style="flex:0 1 150px">
+      <label for="h-mes">Mês</label>
+      <select id="h-mes" name="competencia"><option value="">Todos</option>
+        {% for c in competencias|default([]) %}<option value="{{ c }}" {% if c == request.args.get('competencia','') %}selected{% endif %}>{{ c }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="um-filtro"><label for="h-q">Buscar aluno</label><input type="text" id="h-q" name="q" value="{{ request.args.get('q','') }}" placeholder="Nome do aluno"></div>
+    <button type="submit" class="um-btn" style="flex:none">Filtrar</button>
+  </form>
+
+  <div class="um-card" style="overflow:hidden">
+    <div class="um-cab">
+      <span class="um-secao">Histórico de pagamentos</span>
+      <span class="um-kpi-nota">{{ hist_total }} registros · total pago {{ brl(hist_pago) }}</span>
+    </div>
+    <div class="um-rolagem"><div class="rol-hist">
+      <div class="lin-hist um-th"><span>#</span><span>Aluno</span><span>Mês</span><span>Vencimento</span><span>Pagamento</span><span>Forma</span><span style="text-align:right">Valor</span><span>Status</span></div>
+      {% for h in historico %}
+      <div class="lin-hist um-td">
+        <span style="color:#a8a29e">{{ h.id }}</span>
+        <a href="{{ url_for('alunos.ficha', id=h.aluno_id) }}" style="font-weight:500; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">{{ h.nome }}</a>
+        <span style="color:#57534e">{{ h.competencia }}</span>
+        <span style="color:#57534e">{{ h.vencimento.strftime('%d/%m/%Y') if h.vencimento else '—' }}</span>
+        <span style="color:#78716c">{{ h.pagamento.strftime('%d/%m/%Y') if h.pagamento else '—' }}</span>
+        <span style="color:#78716c">{{ h.forma or '—' }}</span>
+        <span style="text-align:right; font-weight:600">{{ brl(h.valor) }}</span>
+        {% set c3 = '#15803d' if h.status == 'pago' else ('#C8102E' if h.status == 'atrasado' else '#b45309') %}
+        <span style="display:flex; align-items:center; gap:6px; font:500 12.5px/1 'Public Sans',sans-serif; color:{{ c3 }}"><span style="width:6px; height:6px; border-radius:50%; background:{{ c3 }}"></span>{{ h.status|capitalize }}</span>
+      </div>
+      {% endfor %}
+    </div></div>
+  </div>
+{% endif %}
+{% endblock %}
+
+{% block um_js %}
+<script>
+function umTodos() {
+  document.querySelectorAll('input[name="alunos"]').forEach(function (c) { c.checked = true; });
+}
+</script>
+{% endblock %}

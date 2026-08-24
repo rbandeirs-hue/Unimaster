@@ -53,7 +53,21 @@ def _academia_permitida(academia_id):
 @bp_solicitacoes.route("")
 @login_required
 def lista():
-    """Hub de solicitações agrupadas por tipo."""
+    """Entrada de Solicitações.
+
+    Enquanto visita for o único tipo, o hub de um cartão só era uma parada a
+    mais no caminho: a entrada leva direto à lista, que já traz os dois lados
+    do fluxo em abas. Voltando a existir mais de um tipo, o hub volta aqui.
+    """
+    academia_id = request.args.get("academia_id", type=int)
+    return redirect(url_for("solicitacoes.visita_lista", academia_id=academia_id) if academia_id
+                    else url_for("solicitacoes.visita_lista"))
+
+
+@bp_solicitacoes.route("/hub")
+@login_required
+def hub():
+    """Hub por tipo de solicitação (mantido para quando houver mais de um)."""
     ids = _get_academias_ids()
     if not ids:
         flash("Nenhuma academia disponível.", "danger")

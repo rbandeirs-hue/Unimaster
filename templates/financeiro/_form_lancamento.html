@@ -1,0 +1,124 @@
+{# =====================================================================
+   Formulário de receita e de despesa
+   =====================================================================
+   Os dois são o mesmo formulário — descrição, valor, data, categoria,
+   academia e observações. O que muda é o rótulo, a cor do valor e para onde
+   volta. Um arquivo só evita que um ganhe melhoria e o outro fique para trás.
+
+   Parâmetros: `registro` (None ao cadastrar), `tipo` ('receita'|'despesa'),
+   `sugestoes` (categorias comuns) e `hoje_iso` (data padrão ao cadastrar).
+   A macro não enxerga o contexto do template: tudo entra por parâmetro.
+   ===================================================================== #}
+{% macro form_lancamento(registro, tipo, academias, academia_id, sugestoes, hoje_iso='') %}
+{% set eh_receita = tipo == 'receita' %}
+{% set voltar = url_for('financeiro.lista_receitas' if eh_receita else 'financeiro.lista_despesas',
+                        academia_id=academia_id) %}
+
+<form method="POST" class="lst-quadro" style="max-width:720px">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+  <div class="lan-corpo">
+    <div class="lan-campo">
+      <label for="descricao">Descrição <span class="lan-req">*</span></label>
+      <input type="text" id="descricao" name="descricao" required
+             value="{{ registro.descricao if registro else '' }}"
+             placeholder="{{ 'Ex.: patrocínio, venda de uniforme' if eh_receita else 'Ex.: aluguel, luz, material' }}">
+    </div>
+
+    <div class="lan-linha">
+      <div class="lan-campo">
+        <label for="valor">Valor (R$) <span class="lan-req">*</span></label>
+        <input type="text" id="valor" name="valor" required inputmode="decimal"
+               value="{{ (registro.valor|default('')) if registro else '' }}"
+               placeholder="0,00" pattern="[0-9]+([,\.][0-9]{1,2})?">
+      </div>
+      <div class="lan-campo">
+        <label for="data">Data <span class="lan-req">*</span></label>
+        <input type="date" id="data" name="data" required
+               value="{{ (registro.data.strftime('%Y-%m-%d')
+                          if registro.data and not (registro.data is string)
+                          else (registro.data or '')) if registro else hoje_iso }}">
+      </div>
+    </div>
+
+    <div class="lan-campo">
+      <label for="categoria">Categoria</label>
+      <input type="text" id="categoria" name="categoria" list="lan-categorias"
+             value="{{ (registro.categoria or '') if registro else '' }}"
+             placeholder="{{ 'Ex.: matrículas, eventos' if eh_receita else 'Ex.: aluguel, contas, material' }}">
+      {# Sugestões vindas do que já foi lançado antes: evita a mesma categoria
+         escrita de três formas diferentes, que estraga os totais por categoria. #}
+      <datalist id="lan-categorias">
+        {% for c in sugestoes or [] %}<option value="{{ c }}">{% endfor %}
+      </datalist>
+      <span class="lan-ajuda">Agrupa os lançamentos nos relatórios. Escolha uma da lista ou escreva outra.</span>
+    </div>
+
+    {% if academias and academias|length > 1 %}
+    <div class="lan-campo">
+      <label for="id_academia">Academia</label>
+      <select id="id_academia" name="id_academia">
+        {% for ac in academias %}
+        <option value="{{ ac.id }}"
+          {% if (registro and registro.id_academia == ac.id) or (not registro and ac.id == academia_id) %}selected{% endif %}>
+          {{ ac.nome }}
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+    {% else %}
+    <input type="hidden" name="id_academia" value="{{ academias[0].id if academias else academia_id }}">
+    {% endif %}
+
+    <div class="lan-campo">
+      <label for="observacoes">Observações</label>
+      <textarea id="observacoes" name="observacoes" rows="3"
+                placeholder="Detalhes que ajudem a entender o lançamento depois">{{ (registro.observacoes or '') if registro else '' }}</textarea>
+    </div>
+  </div>
+
+  <div class="lan-rodape">
+    <button type="submit" class="sh__btn sh__btn--forte">
+      <i class="bi bi-check-lg"></i> {{ 'Salvar alterações' if registro else ('Cadastrar receita' if eh_receita else 'Cadastrar despesa') }}
+    </button>
+    <a href="{{ voltar }}" class="sh__btn">Cancelar</a>
+  </div>
+</form>
+{% endmacro %}
+
+{% macro css_lancamento() %}
+<style>
+  .lan-corpo { padding: 1.25rem; }
+  .lan-linha { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 1rem; }
+  @media (max-width: 560px) { .lan-linha { grid-template-columns: 1fr; } }
+
+  .lan-campo { margin-bottom: 1.1rem; }
+  .lan-campo label { display: block; font-weight: 600; font-size: .88rem; margin-bottom: .3rem; }
+  .lan-req { color: var(--sh-red); }
+  .lan-campo input,
+  .lan-campo select,
+  .lan-campo textarea {
+    width: 100%;
+    padding: .55rem .7rem;
+    border: 1px solid var(--sh-line);
+    border-radius: var(--u-radius-sm);
+    font: inherit;
+    color: var(--sh-ink);
+    background: #fff;
+  }
+  .lan-campo textarea { resize: vertical; }
+  .lan-campo input:focus,
+  .lan-campo select:focus,
+  .lan-campo textarea:focus {
+    outline: none;
+    border-color: var(--sh-ink);
+    box-shadow: 0 0 0 3px rgba(28, 28, 28, .07);
+  }
+  .lan-ajuda { display: block; margin-top: .3rem; color: var(--sh-ink-soft); font-size: .82rem; }
+
+  .lan-rodape {
+    display: flex; gap: .6rem; flex-wrap: wrap;
+    padding: 1.25rem; border-top: 1px solid var(--sh-line);
+  }
+</style>
+{% endmacro %}

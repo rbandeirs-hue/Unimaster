@@ -1,0 +1,993 @@
+{# Modal rico de registrar/confirmar pagamento de mensalidade — parcelas, soma,
+   cancelar juros/multa, desconto (cadastrado/avulso) e prévia. Compartilhado
+   entre a tela de mensalidades e a ficha do aluno.
+   Contexto necessário: formas_lista (formas de pagamento) e descontos.
+   Acionado por botões .js-fin-open-modal-pagamento-financeiro com
+   data-post-url, data-registro-id, data-valor-total, data-competencia, data-fluxo. #}
+<style>
+  .fin-val__juros { color: #9a6700; }
+  .js-fin-pag-linhas .js-fin-pag-linha .js-fin-pag-del-line { display: none !important; }
+  .js-fin-pag-linhas .js-fin-pag-linha:nth-child(2) .js-fin-pag-del-line { display: inline-flex !important; }
+</style>
+<div class="modal fade" id="modalPagamentoMensalidadesFinanceiro" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header border-0 pb-0">
+                <h5 class="modal-title fw-bold js-fin-pag-titulo">Pagamento</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+            </div>
+            <form class="js-modal-pagamento-mensal-form js-fin-modal-pagamento-page" method="post" action="#" novalidate>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body pt-0">
+                    <div class="js-fin-pag-extra d-none mb-2 small border-bottom pb-2"></div>
+                    <p class="small text-muted mb-3 js-fin-pag-sub"></p>
+                    <script type="application/json" class="js-formas-json-src">{{ formas_lista | default([]) | tojson }}</script>
+                    <div class="js-fin-pag-linhas mb-2"></div>
+                    <p class="small text-muted mb-2 mb-md-3">Para dividir em duas formas, altere o valor da primeira linha; a segunda abre automaticamente com o restante.</p>
+
+                    <div class="border-top pt-3 mt-2">
+                      <div class="form-check mb-2">
+                        <input class="form-check-input js-fin-pag-semjuros" type="checkbox" name="remover_juros_manual" value="1" id="finPagSemJuros">
+                        <label class="form-check-label small" for="finPagSemJuros">Cancelar juros e multa (pagou em dia / cortesia)</label>
+                      </div>
+                      <div class="row g-2 align-items-end">
+                        <div class="col-12 col-md-6">
+                          <label class="form-label small fw-semibold mb-1">Desconto <span class="text-muted fw-normal">— se o aluno tiver direito</span></label>
+                          <select class="form-select form-select-sm js-fin-pag-desc-sel" name="desconto_id_pagamento">
+                            <option value="">Sem desconto</option>
+                            {% for d in descontos or [] %}
+                            <option value="{{ d.id }}" data-tipo="{{ d.tipo }}" data-valor="{{ '%.2f'|format(d.valor or 0) }}">{{ d.nome }} — {% if d.tipo == 'percentual' %}{{ '%.0f'|format(d.valor|float) }}%{% else %}R$ {{ '%.2f'|format(d.valor|float) }}{% endif %}</option>
+                            {% endfor %}
+                            <option value="avulso" data-tipo="avulso">Desconto avulso…</option>
+                          </select>
+                        </div>
+                        <div class="col-4 col-md-2 js-fin-pag-desc-avulso" style="display:none;">
+                          <select class="form-select form-select-sm js-fin-pag-desc-tipo">
+                            <option value="percentual">%</option>
+                            <option value="valor_fixo">R$</option>
+                          </select>
+                        </div>
+                        <div class="col-8 col-md-4 js-fin-pag-desc-avulso" style="display:none;">
+                          <input type="text" class="form-control form-control-sm js-fin-pag-desc-valor" placeholder="Valor do desconto" inputmode="decimal">
+                        </div>
+                      </div>
+                      <input type="hidden" name="desconto_flat" value="" class="js-fin-pag-desc-flat">
+                    </div>
+
+                    {# Ajustes desta cobrança antes de dar baixa: o vencimento (que
+                       muda juros/multa) e o pacote. O total é sempre recalculado no
+                       servidor, então a tela nunca inventa um número próprio. #}
+                    <div class="border-top pt-3 mt-2 js-fin-pag-ajustes">
+                      <div class="row g-2 align-items-end">
+                        <div class="col-12 col-md-5">
+                          <label class="form-label small fw-semibold mb-1" for="finPagVenc">
+                            Vencimento <span class="text-muted fw-normal">— desta cobrança</span>
+                          </label>
+                          <input type="date" class="form-control form-control-sm js-fin-pag-venc" id="finPagVenc" name="novo_vencimento">
+                        </div>
+                        {% set _planos_pag = planos_cobranca | default([]) %}
+                        {% if _planos_pag | length > 1 %}
+                        <div class="col-12 col-md-7">
+                          <label class="form-label small fw-semibold mb-1" for="finPagPlano">
+                            Pacote <span class="text-muted fw-normal">— trocar de plano</span>
+                          </label>
+                          <select class="form-select form-select-sm js-fin-pag-plano" id="finPagPlano" name="novo_plano_id">
+                            {% for pl in _planos_pag %}
+                            <option value="{{ pl.id }}">{{ pl.nome }} — R$ {{ '%.2f'|format(pl.valor|float)|replace('.', ',') }}</option>
+                            {% endfor %}
+                          </select>
+                        </div>
+                        {% endif %}
+                      </div>
+                      <div class="form-text small mt-1">Mudar o vencimento recalcula juros e multa desta cobrança.</div>
+
+                      {# Alcance da mudança de vencimento. Só nesta cobrança é
+                         correção pontual; "nas próximas" muda o dia do aluno e
+                         abre a cobrança dos dias que ficam descobertos. #}
+                      <div class="mt-2 js-fin-pag-venc-quando" style="display:none;">
+                        <span class="small fw-semibold d-block mb-1">Aplicar o novo vencimento:</span>
+                        <div class="form-check form-check-inline">
+                          <input class="form-check-input js-fin-pag-venc-aplicar" type="radio" name="vencimento_aplicar" id="finPagVencApenas" value="apenas" checked>
+                          <label class="form-check-label small" for="finPagVencApenas">Só nesta cobrança</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                          <input class="form-check-input js-fin-pag-venc-aplicar" type="radio" name="vencimento_aplicar" id="finPagVencProx" value="proximos">
+                          <label class="form-check-label small" for="finPagVencProx">Nesta e nas próximas</label>
+                        </div>
+                        <div class="form-text small mb-0 js-fin-pag-venc-nota"></div>
+                        <div class="form-check mt-2 js-fin-pag-prop-wrap" style="display:none;">
+                          <input class="form-check-input js-fin-pag-prop" type="checkbox" name="cobrar_proporcional" value="1" id="finPagProporcional">
+                          <label class="form-check-label small" for="finPagProporcional">
+                            <span class="js-fin-pag-prop-label">Cobrar o período proporcional</span>
+                            <span class="d-block text-muted">Dias que ficam sem mensalidade por causa do adiamento, a preço de dia (valor ÷ 30). Entram nesta cobrança.</span>
+                          </label>
+                        </div>
+                      </div>
+
+                      <div class="mt-2 js-fin-pag-plano-quando" style="display:none;">
+                        <span class="small fw-semibold d-block mb-1">Aplicar a troca de pacote:</span>
+                        <div class="form-check form-check-inline">
+                          <input class="form-check-input js-fin-pag-plano-aplicar" type="radio" name="plano_aplicar" id="finPagPlanoAgora" value="agora" checked>
+                          <label class="form-check-label small" for="finPagPlanoAgora">Neste pagamento</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                          <input class="form-check-input js-fin-pag-plano-aplicar" type="radio" name="plano_aplicar" id="finPagPlanoProx" value="proximos">
+                          <label class="form-check-label small" for="finPagPlanoProx">Só nas próximas</label>
+                        </div>
+                        <div class="form-text small mb-0 js-fin-pag-plano-nota"></div>
+                      </div>
+                    </div>
+
+                    <div class="border-top pt-3 mt-2 js-fin-pag-carteira-wrap" style="display:none;">
+                      <div class="form-check mb-2">
+                        <input class="form-check-input js-fin-pag-cart-chk" type="checkbox" id="finPagUsarCarteira">
+                        <label class="form-check-label small fw-semibold" for="finPagUsarCarteira">
+                          Usar crédito de carteira
+                          <span class="text-muted fw-normal">— saldo R$ <span class="js-fin-pag-cart-saldo">0,00</span></span>
+                        </label>
+                      </div>
+                      <div class="row g-2 align-items-end js-fin-pag-cart-row" style="display:none;">
+                        <div class="col-6 col-md-4">
+                          <label class="form-label small mb-1">Valor do crédito (R$)</label>
+                          <input type="text" class="form-control form-control-sm js-fin-pag-cart-valor" inputmode="decimal" autocomplete="off">
+                        </div>
+                        <div class="col-6 col-md-8 small text-muted pb-2">O crédito abate do total; o restante é pago nas formas acima.</div>
+                      </div>
+                    </div>
+                    <input type="hidden" name="carteira_valor" value="" class="js-fin-pag-cart-flat">
+
+                    <div class="mt-3 d-flex flex-wrap justify-content-between align-items-center gap-2 small border-top pt-3">
+                        <span>Soma: <strong class="js-fin-pag-soma text-primary">0,00</strong></span>
+                        <span class="js-fin-pag-cart-resumo" style="display:none;">Crédito: <strong class="js-fin-pag-cart-show text-success">0,00</strong></span>
+                        <span>Total devido: <strong class="js-fin-pag-total">0,00</strong></span>
+                    </div>
+                    <div class="alert alert-danger py-2 mt-2 mb-0 d-none js-fin-pag-erro-soma" role="alert">A soma dos valores deve igualar o total devido.</div>
+                    <input type="hidden" name="next" value="" class="js-fin-pag-next-hidden">
+                    <input type="hidden" name="pagamentos_json" value="" class="js-fin-pag-json-inp">
+                    <input type="hidden" name="tipo" value="mensalidade_aluno" class="js-fin-pag-tipo-inp" disabled>
+                    <input type="hidden" name="registro_id" value="" class="js-fin-pag-reg-inp" disabled>
+                </div>
+                <div class="modal-footer border-0 bg-light">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-success btn-sm js-fin-pag-submit">
+                        <i class="bi bi-check-lg me-1"></i>Confirmar pagamento
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<script>
+(function () {
+    var MODAL_ID = 'modalPagamentoMensalidadesFinanceiro';
+
+    function escapeFinHtml(s) {
+        if (s === null || s === undefined) return '';
+        var d = document.createElement('div');
+        d.textContent = s;
+        return d.innerHTML;
+    }
+    function parseValorLinha(s) {
+        if (!s) return NaN;
+        var t = String(s).trim();
+        if (t.indexOf(',') >= 0) t = t.replace(/\./g, '').replace(',', '.');
+        return parseFloat(t);
+    }
+    function fmtBRL(n) {
+        var x = Math.round(Number(n) * 100) / 100;
+        return x.toFixed(2).replace('.', ',');
+    }
+    // Crédito de carteira em uso (R$) — abate do total; as formas cobrem o resto.
+    function carteiraUsada(form) {
+        return Math.max(0, Math.round((parseFloat(form.dataset.carteira || '0') || 0) * 100) / 100);
+    }
+    // Alvo que as linhas de forma devem somar = total devido menos o crédito.
+    function alvoLinhas(form) {
+        var T = parseFloat(form.dataset.valorTotal || '0') || 0;
+        return Math.max(0, Math.round((T - carteiraUsada(form)) * 100) / 100);
+    }
+    // Reflete o crédito no resumo (Crédito / Total devido) e no hidden enviado.
+    function sincronizarCarteira(modalPag) {
+        var form = modalPag.querySelector('.js-modal-pagamento-mensal-form');
+        if (!form) return;
+        var cart = carteiraUsada(form);
+        var flat = modalPag.querySelector('.js-fin-pag-cart-flat');
+        if (flat) flat.value = cart > 0 ? cart.toFixed(2) : '';
+        var resumo = modalPag.querySelector('.js-fin-pag-cart-resumo');
+        var show = modalPag.querySelector('.js-fin-pag-cart-show');
+        if (show) show.textContent = fmtBRL(cart);
+        if (resumo) resumo.style.display = cart > 0 ? '' : 'none';
+    }
+    // Garante que o crédito em uso não passe do saldo nem do total devido (o total
+    // muda com desconto/juros; o crédito precisa acompanhar).
+    function clampCarteira(modalPag) {
+        var form = modalPag.querySelector('.js-modal-pagamento-mensal-form');
+        if (!form) return;
+        var saldo = Math.max(0, parseFloat(form.dataset.saldoCarteira || '0') || 0);
+        var total = parseFloat(form.dataset.valorTotal || '0') || 0;
+        var teto = Math.round(Math.min(saldo, total) * 100) / 100;
+        if (carteiraUsada(form) > teto) {
+            form.dataset.carteira = teto.toFixed(2);
+            var vi = modalPag.querySelector('.js-fin-pag-cart-valor');
+            if (vi && vi.value) vi.value = fmtBRL(teto);
+        }
+        sincronizarCarteira(modalPag);
+    }
+    // Liga/ajusta o uso do crédito e reflui as linhas de forma para o valor restante.
+    function aplicarCarteira(modalPag) {
+        var form = modalPag.querySelector('.js-modal-pagamento-mensal-form');
+        if (!form) return;
+        var chk = modalPag.querySelector('.js-fin-pag-cart-chk');
+        var row = modalPag.querySelector('.js-fin-pag-cart-row');
+        var valInp = modalPag.querySelector('.js-fin-pag-cart-valor');
+        var saldo = Math.max(0, parseFloat(form.dataset.saldoCarteira || '0') || 0);
+        var total = parseFloat(form.dataset.valorTotal || '0') || 0;
+        var teto = Math.round(Math.min(saldo, total) * 100) / 100;
+        if (!chk || !chk.checked) {
+            form.dataset.carteira = '0';
+            if (row) row.style.display = 'none';
+            if (valInp) valInp.value = '';
+        } else {
+            if (row) row.style.display = '';
+            var v = valInp ? parseValorLinha(valInp.value) : NaN;
+            if (isNaN(v) || v <= 0) { v = teto; if (valInp) valInp.value = fmtBRL(teto); }
+            if (v > teto) { v = teto; if (valInp) valInp.value = fmtBRL(teto); }
+            if (v < 0) v = 0;
+            form.dataset.carteira = (Math.round(v * 100) / 100).toFixed(2);
+        }
+        sincronizarCarteira(modalPag);
+        // Reflui: uma linha só, com o valor restante a pagar nas formas.
+        var linhasBox = modalPag.querySelector('.js-fin-pag-linhas');
+        if (linhasBox) {
+            while (linhasBox.querySelectorAll('.js-fin-pag-linha').length > 1) {
+                linhasBox.querySelectorAll('.js-fin-pag-linha')[linhasBox.querySelectorAll('.js-fin-pag-linha').length - 1].remove();
+            }
+            var row0 = linhasBox.querySelector('.js-fin-pag-linha');
+            var inp0 = row0 && row0.querySelector('.js-fin-inp-valor');
+            if (inp0) inp0.value = fmtBRL(alvoLinhas(form));
+        }
+        atualizaSomaPag(modalPag);
+    }
+    function atualizaSomaPag(modalPag) {
+        var soma = 0;
+        modalPag.querySelectorAll('.js-fin-pag-linha').forEach(function (row) {
+            var inp = row.querySelector('.js-fin-inp-valor');
+            if (!inp) return;
+            var v = parseValorLinha(inp.value);
+            if (!isNaN(v)) soma += v;
+        });
+        var se = modalPag.querySelector('.js-fin-pag-soma');
+        if (se) se.textContent = fmtBRL(soma);
+    }
+    function removerLinhasExtras(modalPag) {
+        var linhasBox = modalPag.querySelector('.js-fin-pag-linhas');
+        if (!linhasBox) return;
+        while (linhasBox.querySelectorAll('.js-fin-pag-linha').length > 1) {
+            var nodes = linhasBox.querySelectorAll('.js-fin-pag-linha');
+            if (nodes.length <= 1) break;
+            nodes[nodes.length - 1].remove();
+        }
+    }
+    function aplicarRegraLinhasPagamento(modalPag, changedRow) {
+        var form = modalPag.querySelector('.js-modal-pagamento-mensal-form');
+        if (!form) return;
+        var T = alvoLinhas(form);
+        var linhasBox = modalPag.querySelector('.js-fin-pag-linhas');
+        if (!linhasBox) return;
+        var rows = linhasBox.querySelectorAll('.js-fin-pag-linha');
+        if (!rows.length) return;
+        var idx = Array.prototype.indexOf.call(rows, changedRow);
+        if (idx < 0) return;
+        if (idx >= 1) {
+            atualizaSomaPag(modalPag);
+            return;
+        }
+        var inp0 = rows[0].querySelector('.js-fin-inp-valor');
+        var raw0 = inp0 ? (inp0.value || '').trim() : '';
+        var v1 = raw0 === '' ? NaN : parseValorLinha(inp0.value);
+        if (rows.length === 1) {
+            if (!isNaN(v1) && v1 > 0 && T - v1 > 0.02) {
+                var formasSrc = modalPag.querySelector('.js-formas-json-src');
+                var formas = [];
+                try {
+                    formas = JSON.parse((formasSrc && formasSrc.textContent) || '[]');
+                } catch (e0) {
+                    formas = [];
+                }
+                var dataEl = rows[0].querySelector('.js-fin-inp-data');
+                var dt =
+                    dataEl && dataEl.value
+                        ? dataEl.value
+                        : new Date().toISOString().slice(0, 10);
+                var rest = Math.round((T - v1) * 100) / 100;
+                criarLinha(formas, rest, dt, modalPag);
+            }
+            atualizaSomaPag(modalPag);
+            return;
+        }
+        if (raw0 === '' || isNaN(v1) || v1 <= 0) {
+            removerLinhasExtras(modalPag);
+            rows = linhasBox.querySelectorAll('.js-fin-pag-linha');
+            inp0 = rows[0] && rows[0].querySelector('.js-fin-inp-valor');
+            if (inp0) inp0.value = fmtBRL(T);
+            atualizaSomaPag(modalPag);
+            return;
+        }
+        if (Math.abs(v1 - T) <= 0.02 || v1 >= T) {
+            removerLinhasExtras(modalPag);
+            rows = linhasBox.querySelectorAll('.js-fin-pag-linha');
+            inp0 = rows[0] && rows[0].querySelector('.js-fin-inp-valor');
+            if (inp0) inp0.value = fmtBRL(T);
+            atualizaSomaPag(modalPag);
+            return;
+        }
+        var inp1 = rows[1].querySelector('.js-fin-inp-valor');
+        if (inp1) {
+            var r = Math.round((T - v1) * 100) / 100;
+            inp1.value = r > 0 ? fmtBRL(r) : '';
+        }
+        atualizaSomaPag(modalPag);
+    }
+    function criarLinha(formas, valorDefault, dataDefault, modalPag) {
+        var opts = (formas || []).map(function (f) {
+            return '<option value="' + String(f.id) + '">' + escapeFinHtml(f.nome) + '</option>';
+        }).join('');
+        var vd = valorDefault != null && valorDefault !== '' ? fmtBRL(Number(valorDefault)) : '';
+        var div = document.createElement('div');
+        div.className = 'row g-2 mb-2 align-items-end js-fin-pag-linha';
+        div.innerHTML =
+            '<div class="col-md-5 col-12"><label class="small text-muted mb-0">Forma de pagamento</label>' +
+            '<select class="form-select form-select-sm js-fin-sel-fp"><option value="">Selecione…</option>' +
+            opts +
+            '</select></div>' +
+            '<div class="col-md-3 col-6"><label class="small text-muted mb-0">Valor (R$)</label>' +
+            '<input type="text" class="form-control form-control-sm js-fin-inp-valor" inputmode="decimal" autocomplete="off" required value="' +
+            vd +
+            '"></div>' +
+            '<div class="col-md-3 col-6"><label class="small text-muted mb-0">Data do pagamento</label>' +
+            '<input type="date" class="form-control form-control-sm js-fin-inp-data" required value="' +
+            (dataDefault || '') +
+            '"></div>' +
+            '<div class="col-md-1 col-12 text-md-end pb-md-2">' +
+            '<button type="button" class="btn btn-outline-danger btn-sm js-fin-pag-del-line mt-3 mt-md-0" title="Remover esta forma e voltar o valor total à primeira linha"><i class="bi bi-x-lg"></i></button></div>';
+        var linhas = modalPag.querySelector('.js-fin-pag-linhas');
+        if (linhas) linhas.appendChild(div);
+        atualizaSomaPag(modalPag);
+    }
+    var finPagTimers = {};
+
+    // Ajustes pedidos no modal (vencimento / pacote). Só devolve o que mudou de
+    // fato — mandar o valor original faria o servidor "trocar" para o mesmo
+    // pacote e gravar padrão do aluno sem ninguém ter pedido.
+    function ajustesPagamento(modalPag) {
+        var form = modalPag.querySelector('.js-modal-pagamento-mensal-form');
+        var out = { vencimento: '', vencAplicar: 'apenas', cobrarProp: false, planoId: '', aplicar: 'agora' };
+        if (!form) return out;
+        var venc = modalPag.querySelector('.js-fin-pag-venc');
+        if (venc && venc.value && venc.value !== (form.dataset.vencOriginal || '')) {
+            out.vencimento = venc.value;
+            var escV = modalPag.querySelector('.js-fin-pag-venc-aplicar:checked');
+            out.vencAplicar = (escV && escV.value) || 'apenas';
+            var prop = modalPag.querySelector('.js-fin-pag-prop');
+            out.cobrarProp = !!(prop && prop.checked && out.vencAplicar === 'proximos');
+        }
+        var plano = modalPag.querySelector('.js-fin-pag-plano');
+        if (plano && plano.value && plano.value !== (form.dataset.planoOriginal || '')) {
+            out.planoId = plano.value;
+            var esc = modalPag.querySelector('.js-fin-pag-plano-aplicar:checked');
+            out.aplicar = (esc && esc.value) || 'agora';
+        }
+        return out;
+    }
+
+    // O total sai sempre do servidor, já com os ajustes aplicados — é o mesmo
+    // cálculo que roda na gravação.
+    function urlValorNaData(modalPag, registroId, dataMaior) {
+        var a = ajustesPagamento(modalPag);
+        var url = '/financeiro/mensalidades/' + registroId + '/valor-na-data?data=' + dataMaior;
+        if (a.vencimento) {
+            url += '&vencimento=' + encodeURIComponent(a.vencimento) +
+                   '&vencimento_aplicar=' + a.vencAplicar +
+                   '&cobrar_proporcional=' + (a.cobrarProp ? '1' : '0');
+        }
+        if (a.planoId) url += '&plano_id=' + encodeURIComponent(a.planoId) + '&plano_aplicar=' + a.aplicar;
+        return url;
+    }
+
+    // Os radios de alcance só fazem sentido depois que a data mudou; a
+    // cobrança proporcional, só quando a mudança vale para os próximos meses E
+    // o dia foi adiado (antecipar não gera dias descobertos).
+    function sincronizarTrocaVencimento(modalPag) {
+        var form = modalPag.querySelector('.js-modal-pagamento-mensal-form');
+        var venc = modalPag.querySelector('.js-fin-pag-venc');
+        var quando = modalPag.querySelector('.js-fin-pag-venc-quando');
+        if (!form || !venc || !quando) return;
+        var original = form.dataset.vencOriginal || '';
+        var mudou = venc.value && venc.value !== original;
+        quando.style.display = mudou ? '' : 'none';
+        var propWrap = modalPag.querySelector('.js-fin-pag-prop-wrap');
+        var prop = modalPag.querySelector('.js-fin-pag-prop');
+        if (!mudou) {
+            if (propWrap) propWrap.style.display = 'none';
+            if (prop) prop.checked = false;
+            return;
+        }
+        var esc = modalPag.querySelector('.js-fin-pag-venc-aplicar:checked');
+        var proximos = esc && esc.value === 'proximos';
+        // Dia do mês, não a data inteira: adiar de 10/09 para 25/09 são 15 dias
+        // descobertos; mudar de mês mantendo o dia não descobre nada.
+        var diaNovo = parseInt((venc.value || '').slice(8, 10), 10) || 0;
+        var diaAntigo = parseInt((original || '').slice(8, 10), 10) || 0;
+        var adiou = diaNovo > diaAntigo;
+        var nota = modalPag.querySelector('.js-fin-pag-venc-nota');
+        if (nota) {
+            nota.textContent = proximos
+                ? 'O aluno passa a vencer no dia ' + (diaNovo || '—') + '. As outras cobranças em aberto vão junto e as próximas já nascem nesse dia.'
+                : 'Vale só para esta cobrança. As próximas continuam no dia ' + (diaAntigo || '—') + '.';
+        }
+        if (propWrap) propWrap.style.display = (proximos && adiou) ? '' : 'none';
+        if (prop && !(proximos && adiou)) prop.checked = false;
+    }
+
+    // Quantos dias e quanto custam — o número vem do servidor, o mesmo que
+    // será cobrado.
+    function mostrarProporcional(modalPag, j) {
+        var lbl = modalPag.querySelector('.js-fin-pag-prop-label');
+        if (!lbl || !j) return;
+        lbl.textContent = (j.dias_proporcionais > 0)
+            ? 'Cobrar o período proporcional — ' + j.dias_proporcionais + ' dia(s), R$ ' + fmtBRL(j.proporcional)
+            : 'Cobrar o período proporcional';
+    }
+
+    // Os radios "neste pagamento / só nas próximas" só fazem sentido quando o
+    // pacote realmente mudou.
+    function sincronizarTrocaPacote(modalPag) {
+        var form = modalPag.querySelector('.js-modal-pagamento-mensal-form');
+        var plano = modalPag.querySelector('.js-fin-pag-plano');
+        var quando = modalPag.querySelector('.js-fin-pag-plano-quando');
+        if (!form || !plano || !quando) return;
+        var mudou = plano.value && plano.value !== (form.dataset.planoOriginal || '');
+        quando.style.display = mudou ? '' : 'none';
+        if (!mudou) return;
+        var esc = modalPag.querySelector('.js-fin-pag-plano-aplicar:checked');
+        var nota = modalPag.querySelector('.js-fin-pag-plano-nota');
+        if (nota) {
+            nota.textContent = (esc && esc.value === 'proximos')
+                ? 'Esta cobrança continua no pacote atual; o novo vale a partir da próxima mensalidade.'
+                : 'Esta cobrança passa para o pacote novo (o total abaixo já reflete a troca) e ele segue nas próximas.';
+        }
+    }
+
+    // Reaproveita o recálculo que já existe: mexer no vencimento ou no pacote
+    // dispara o mesmo caminho da mudança de data de pagamento.
+    function recalcularPorAjuste(modalPag) {
+        var d0 = modalPag.querySelector('.js-fin-pag-linhas .js-fin-inp-data');
+        if (d0) d0.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    function preencherExtra(modalPag, btn) {
+        var ex = modalPag.querySelector('.js-fin-pag-extra');
+        if (!ex) return;
+        ex.classList.add('d-none');
+        ex.innerHTML = '';
+        var h = btn.getAttribute('data-comprovante-href');
+        var c = btn.getAttribute('data-comentario');
+        if (!h && !c) return;
+        ex.classList.remove('d-none');
+        if (h) {
+            var a = document.createElement('a');
+            a.href = h;
+            a.target = '_blank';
+            a.rel = 'noopener';
+            a.className = 'd-inline-block fw-semibold';
+            a.innerHTML = '<i class="bi bi-file-earmark-image me-1"></i>Ver comprovante';
+            ex.appendChild(a);
+        }
+        if (c) {
+            var p = document.createElement('p');
+            p.className = 'mb-0 mt-1 text-muted small';
+            p.textContent = c;
+            ex.appendChild(p);
+        }
+    }
+
+    document.addEventListener(
+        'click',
+        function (ev) {
+            var btn = ev.target && ev.target.closest && ev.target.closest('.js-fin-open-modal-pagamento-financeiro');
+            if (!btn) return;
+            var modalPag = document.getElementById(MODAL_ID);
+            if (!modalPag) return;
+            var form = modalPag.querySelector('.js-modal-pagamento-mensal-form');
+            if (!form) return;
+            var formasSrc = modalPag.querySelector('.js-formas-json-src');
+            var formas = [];
+            try {
+                formas = JSON.parse((formasSrc && formasSrc.textContent) || '[]');
+            } catch (e1) {
+                formas = [];
+            }
+            if (!formas.length) return;
+            form.dataset.postUrl = btn.getAttribute('data-post-url') || '';
+            form.dataset.fluxo = btn.getAttribute('data-fluxo') || '';
+            form.dataset.registroId = btn.getAttribute('data-registro-id') || '';
+            form.dataset.valorTotal = btn.getAttribute('data-valor-total') || '0';
+            var vtot = parseFloat(form.dataset.valorTotal) || 0;
+            var comp = btn.getAttribute('data-competencia') || '';
+            var fluxo = form.dataset.fluxo;
+            var tit = modalPag.querySelector('.js-fin-pag-titulo');
+            if (tit) {
+                tit.textContent =
+                    (fluxo === 'confirmar' ? 'Confirmar pagamento' : 'Registrar pagamento') +
+                    (comp ? ' — Competência ' + comp : '');
+            }
+            var sub = modalPag.querySelector('.js-fin-pag-sub');
+            if (sub) {
+                sub.textContent =
+                    'O valor total deve ser exatamente R$ ' +
+                    fmtBRL(vtot) +
+                    '. Para duas formas, altere o valor da primeira linha; a segunda abre com o restante.';
+            }
+            preencherExtra(modalPag, btn);
+            var totEl = modalPag.querySelector('.js-fin-pag-total');
+            if (totEl) totEl.textContent = fmtBRL(vtot);
+            var linhasBox = modalPag.querySelector('.js-fin-pag-linhas');
+            if (linhasBox) linhasBox.innerHTML = '';
+            var hoje = new Date().toISOString().slice(0, 10);
+            criarLinha(formas, vtot, hoje, modalPag);
+            var tipoInp = form.querySelector('.js-fin-pag-tipo-inp');
+            var regInp = form.querySelector('.js-fin-pag-reg-inp');
+            if (fluxo === 'registrar') {
+                if (tipoInp) {
+                    tipoInp.removeAttribute('disabled');
+                    tipoInp.value = 'mensalidade_aluno';
+                }
+                if (regInp) {
+                    regInp.removeAttribute('disabled');
+                    regInp.value = form.dataset.registroId || '';
+                }
+            } else {
+                if (tipoInp) {
+                    tipoInp.setAttribute('disabled', 'disabled');
+                    tipoInp.value = '';
+                }
+                if (regInp) {
+                    regInp.setAttribute('disabled', 'disabled');
+                    regInp.value = '';
+                }
+            }
+            var errBox = modalPag.querySelector('.js-fin-pag-erro-soma');
+            if (errBox) errBox.classList.add('d-none');
+            var nextInp = form.querySelector('.js-fin-pag-next-hidden');
+            if (nextInp) nextInp.value = window.location.pathname + window.location.search;
+            // Reseta desconto/cancelar-juros (modal é reutilizado entre alunos).
+            var _sj = modalPag.querySelector('.js-fin-pag-semjuros'); if (_sj) _sj.checked = false;
+            var _dsel = modalPag.querySelector('.js-fin-pag-desc-sel'); if (_dsel) _dsel.value = '';
+            var _dval = modalPag.querySelector('.js-fin-pag-desc-valor'); if (_dval) _dval.value = '';
+            var _dflat = modalPag.querySelector('.js-fin-pag-desc-flat'); if (_dflat) _dflat.value = '';
+            modalPag.querySelectorAll('.js-fin-pag-desc-avulso').forEach(function (e) { e.style.display = 'none'; });
+            // Ajustes desta cobrança: vencimento e pacote atuais viram o ponto de
+            // partida, e o que for igual a eles não é enviado.
+            var _vencEl = modalPag.querySelector('.js-fin-pag-venc');
+            var _vencAtual = btn.getAttribute('data-vencimento') || '';
+            form.dataset.vencOriginal = _vencAtual;
+            if (_vencEl) _vencEl.value = _vencAtual;
+            var _planoEl = modalPag.querySelector('.js-fin-pag-plano');
+            var _planoAtual = btn.getAttribute('data-plano-id') || '';
+            form.dataset.planoOriginal = _planoAtual;
+            if (_planoEl) {
+                // Sobra de uma abertura anterior: a opção do pacote atual é
+                // recriada a cada vez, senão ela vazaria para outro aluno.
+                var _antiga = _planoEl.querySelector('option[data-atual-fora="1"]');
+                if (_antiga) _antiga.remove();
+                var _temOpc = Array.prototype.some.call(_planoEl.options, function (o) { return o.value === _planoAtual; });
+                if (_planoAtual && !_temOpc) {
+                    // Pacote descontinuado ou de outra academia: sem uma opção
+                    // para ele o select cairia no primeiro plano da lista e a
+                    // tela ofereceria uma troca que ninguém pediu. Entra como
+                    // opção própria, para trocar dele continuar possível.
+                    var _op = document.createElement('option');
+                    _op.value = _planoAtual;
+                    _op.textContent = 'Pacote atual (fora da lista de ativos)';
+                    _op.setAttribute('data-atual-fora', '1');
+                    _planoEl.insertBefore(_op, _planoEl.firstChild);
+                }
+                _planoEl.value = _planoAtual;
+            }
+            var _agora = modalPag.querySelector('#finPagPlanoAgora');
+            if (_agora) _agora.checked = true;
+            var _vApenas = modalPag.querySelector('#finPagVencApenas');
+            if (_vApenas) _vApenas.checked = true;
+            var _prop = modalPag.querySelector('.js-fin-pag-prop');
+            if (_prop) _prop.checked = false;
+            // Só no fluxo "registrar": em "confirmar" o aluno já informou o que
+            // pagou, e o botão nem traz o id da cobrança para recalcular.
+            var _ajustes = modalPag.querySelector('.js-fin-pag-ajustes');
+            if (_ajustes) _ajustes.style.display = (fluxo === 'registrar' && form.dataset.registroId) ? '' : 'none';
+            sincronizarTrocaVencimento(modalPag);
+            sincronizarTrocaPacote(modalPag);
+            // Reseta e configura a carteira do aluno (crédito disponível).
+            form.dataset.carteira = '0';
+            var _saldoCart = parseFloat(btn.getAttribute('data-saldo-carteira') || '0') || 0;
+            form.dataset.saldoCarteira = _saldoCart > 0 ? _saldoCart.toFixed(2) : '0';
+            var _cartWrap = modalPag.querySelector('.js-fin-pag-carteira-wrap');
+            var _cartChk = modalPag.querySelector('.js-fin-pag-cart-chk');
+            var _cartRow = modalPag.querySelector('.js-fin-pag-cart-row');
+            var _cartVal = modalPag.querySelector('.js-fin-pag-cart-valor');
+            var _cartSaldoEl = modalPag.querySelector('.js-fin-pag-cart-saldo');
+            if (_cartChk) _cartChk.checked = false;
+            if (_cartVal) _cartVal.value = '';
+            if (_cartRow) _cartRow.style.display = 'none';
+            if (_cartSaldoEl) _cartSaldoEl.textContent = fmtBRL(_saldoCart);
+            if (_cartWrap) _cartWrap.style.display = (_saldoCart > 0 && fluxo === 'registrar') ? '' : 'none';
+            sincronizarCarteira(modalPag);
+            var inst = bootstrap.Modal.getOrCreateInstance(modalPag);
+            inst.show();
+            // Recalcula o total pela data (traz juros/multa corretos ao abrir —
+            // importante quando o gatilho não trouxe o total já com juros).
+            setTimeout(function () {
+                var d0 = modalPag.querySelector('.js-fin-pag-linhas .js-fin-inp-data');
+                if (d0) d0.dispatchEvent(new Event('change', { bubbles: true }));
+            }, 0);
+        },
+        true
+    );
+
+    // Trocar a data do pagamento recalcula o total: juros e multa contam até o
+    // dia em que o aluno pagou, não até o dia em que a baixa está sendo lançada.
+    document.addEventListener('change', function (ev) {
+        var inpData = ev.target && ev.target.closest && ev.target.closest('.js-fin-inp-data');
+        if (!inpData) return;
+        var modalPag = inpData.closest('#' + MODAL_ID);
+        if (!modalPag) return;
+        var form = modalPag.querySelector('.js-modal-pagamento-mensal-form');
+        var tipoInp = form && form.querySelector('.js-fin-pag-tipo-inp');
+        if (!form || !form.dataset.registroId) return;
+        if (tipoInp && tipoInp.value && tipoInp.value !== 'mensalidade_aluno') return;
+        var linhasBox = modalPag.querySelector('.js-fin-pag-linhas');
+        var rows = linhasBox ? linhasBox.querySelectorAll('.js-fin-pag-linha') : [];
+        // Com várias linhas vale a data mais recente — a mesma regra do servidor.
+        var maior = '';
+        rows.forEach(function (r) {
+            var d = r.querySelector('.js-fin-inp-data');
+            if (d && d.value && d.value > maior) maior = d.value;
+        });
+        if (!maior) return;
+
+        fetch(urlValorNaData(modalPag, form.dataset.registroId, maior), {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (j) {
+                if (!j || typeof j.total !== 'number') return;
+                // Antes do corte por "total igual": o rótulo dos dias tem que
+                // aparecer mesmo quando o proporcional ainda não foi marcado.
+                mostrarProporcional(modalPag, j);
+                var antigo = parseFloat(form.dataset.valorTotal || '0') || 0;
+                if (Math.abs(antigo - j.total) < 0.005) return;
+                form.dataset.valorTotal = j.total.toFixed(2);
+                var totEl = modalPag.querySelector('.js-fin-pag-total');
+                if (totEl) totEl.textContent = fmtBRL(j.total);
+                var sub = modalPag.querySelector('.js-fin-pag-sub');
+                if (sub) {
+                    var extra = (j.juros || j.multa)
+                        ? ' (multa R$ ' + fmtBRL(j.multa) + ' + juros R$ ' + fmtBRL(j.juros) + ' até ' +
+                          maior.split('-').reverse().join('/') + ')'
+                        : '';
+                    sub.textContent = 'O valor total deve ser exatamente R$ ' + fmtBRL(j.total) + extra + '.';
+                }
+                clampCarteira(modalPag);
+                var alvo = alvoLinhas(form);
+                // Uma linha só: ajusta direto. Várias: recalcula a última, mantendo as demais.
+                if (rows.length === 1) {
+                    var inp0 = rows[0].querySelector('.js-fin-inp-valor');
+                    if (inp0) inp0.value = fmtBRL(alvo);
+                } else if (rows.length > 1) {
+                    var soma = 0;
+                    for (var i = 0; i < rows.length - 1; i++) {
+                        var vi = parseValorLinha((rows[i].querySelector('.js-fin-inp-valor') || {}).value || '0');
+                        if (!isNaN(vi)) soma += vi;
+                    }
+                    var ult = rows[rows.length - 1].querySelector('.js-fin-inp-valor');
+                    if (ult) ult.value = fmtBRL(Math.max(0, Math.round((alvo - soma) * 100) / 100));
+                }
+                atualizaSomaPag(modalPag);
+                var _sj = modalPag.querySelector('.js-fin-pag-semjuros');
+                var _ds = modalPag.querySelector('.js-fin-pag-desc-sel');
+                if ((_sj && _sj.checked) || (_ds && _ds.value)) recalcDescontoJuros(modalPag);
+            })
+            .catch(function () { /* sem rede: o servidor ainda valida no envio */ });
+    });
+
+    // Cancelar juros/multa e desconto recalculam o total devido — mantendo o
+    // número do cliente igual ao que o servidor valida (desconto sobre a base
+    // sem juros; cancelar juros zera juros/multa).
+    function recalcDescontoJuros(modalPag) {
+        var form = modalPag.querySelector('.js-modal-pagamento-mensal-form');
+        if (!form || !form.dataset.registroId) return;
+        var tipoInp = form.querySelector('.js-fin-pag-tipo-inp');
+        if (tipoInp && tipoInp.value && tipoInp.value !== 'mensalidade_aluno') return;
+        var linhasBox = modalPag.querySelector('.js-fin-pag-linhas');
+        var rows = linhasBox ? linhasBox.querySelectorAll('.js-fin-pag-linha') : [];
+        var maior = '';
+        rows.forEach(function (r) { var d = r.querySelector('.js-fin-inp-data'); if (d && d.value && d.value > maior) maior = d.value; });
+        if (!maior) return;
+        fetch(urlValorNaData(modalPag, form.dataset.registroId, maior), { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (j) {
+                if (!j || typeof j.total !== 'number') return;
+                mostrarProporcional(modalPag, j);
+                var jm = (j.juros || 0) + (j.multa || 0);
+                var baseSemJuros = Math.round((j.total - jm) * 100) / 100;
+                var semJuros = modalPag.querySelector('.js-fin-pag-semjuros');
+                var waive = semJuros && semJuros.checked;
+                var displayedBase = waive ? baseSemJuros : j.total;
+                var sel = modalPag.querySelector('.js-fin-pag-desc-sel');
+                var flat = 0;
+                if (sel && sel.value) {
+                    var tipo, valor;
+                    if (sel.value === 'avulso') {
+                        tipo = (modalPag.querySelector('.js-fin-pag-desc-tipo') || {}).value;
+                        valor = parseFloat(((modalPag.querySelector('.js-fin-pag-desc-valor') || {}).value || '').replace(/\./g, '').replace(',', '.'));
+                    } else {
+                        var o = sel.options[sel.selectedIndex];
+                        tipo = o.getAttribute('data-tipo'); valor = parseFloat(o.getAttribute('data-valor') || '0');
+                    }
+                    if (!isNaN(valor) && valor > 0) {
+                        flat = (tipo === 'percentual') ? baseSemJuros * (valor / 100) : Math.min(valor, baseSemJuros);
+                        flat = Math.round(flat * 100) / 100;
+                    }
+                }
+                var newTotal = Math.max(0, Math.round((displayedBase - flat) * 100) / 100);
+                form.dataset.valorTotal = newTotal.toFixed(2);
+                var flatInp = modalPag.querySelector('.js-fin-pag-desc-flat');
+                if (flatInp) flatInp.value = flat.toFixed(2);
+                var totEl = modalPag.querySelector('.js-fin-pag-total');
+                if (totEl) totEl.textContent = fmtBRL(newTotal);
+                clampCarteira(modalPag);
+                var alvo = alvoLinhas(form);
+                if (rows.length === 1) {
+                    var inp0 = rows[0].querySelector('.js-fin-inp-valor'); if (inp0) inp0.value = fmtBRL(alvo);
+                } else if (rows.length > 1) {
+                    var soma = 0;
+                    for (var i = 0; i < rows.length - 1; i++) { var vi = parseValorLinha((rows[i].querySelector('.js-fin-inp-valor') || {}).value || '0'); if (!isNaN(vi)) soma += vi; }
+                    var ult = rows[rows.length - 1].querySelector('.js-fin-inp-valor'); if (ult) ult.value = fmtBRL(Math.max(0, Math.round((alvo - soma) * 100) / 100));
+                }
+                atualizaSomaPag(modalPag);
+            })
+            .catch(function () { });
+    }
+    document.addEventListener('change', function (ev) {
+        var t = ev.target; if (!t || !t.closest) return;
+        var modalPag = t.closest('#' + MODAL_ID); if (!modalPag) return;
+        var cls = t.classList || { contains: function () { return false; } };
+        if (cls.contains('js-fin-pag-desc-sel')) {
+            modalPag.querySelectorAll('.js-fin-pag-desc-avulso').forEach(function (e) { e.style.display = (t.value === 'avulso') ? '' : 'none'; });
+        }
+        if (cls.contains('js-fin-pag-semjuros') || cls.contains('js-fin-pag-desc-sel') || cls.contains('js-fin-pag-desc-tipo')) {
+            recalcDescontoJuros(modalPag);
+        }
+    });
+    document.addEventListener('input', function (ev) {
+        var t = ev.target; if (!t || !t.classList || !t.classList.contains('js-fin-pag-desc-valor')) return;
+        var modalPag = t.closest('#' + MODAL_ID); if (!modalPag) return;
+        clearTimeout(window._ncDescPag); window._ncDescPag = setTimeout(function () { recalcDescontoJuros(modalPag); }, 300);
+    });
+    // Carteira: liga/desliga o crédito e ajusta o valor usado.
+    document.addEventListener('change', function (ev) {
+        var t = ev.target; if (!t || !t.closest) return;
+        var modalPag = t.closest('#' + MODAL_ID); if (!modalPag) return;
+        if (t.classList && t.classList.contains('js-fin-pag-cart-chk')) aplicarCarteira(modalPag);
+    });
+    document.addEventListener('input', function (ev) {
+        var t = ev.target; if (!t || !t.classList || !t.classList.contains('js-fin-pag-cart-valor')) return;
+        var modalPag = t.closest('#' + MODAL_ID); if (!modalPag) return;
+        clearTimeout(window._ncCartPag); window._ncCartPag = setTimeout(function () { aplicarCarteira(modalPag); }, 300);
+    });
+
+    document.addEventListener(
+        'click',
+        function (ev) {
+            var delBtn = ev.target && ev.target.closest && ev.target.closest('.js-fin-pag-del-line');
+            if (!delBtn) return;
+            var modalPag = delBtn.closest('#' + MODAL_ID);
+            var linhasBox = modalPag && modalPag.querySelector('.js-fin-pag-linhas');
+            var row = delBtn.closest('.js-fin-pag-linha');
+            if (!modalPag || !linhasBox || !row) return;
+            if (linhasBox.querySelectorAll('.js-fin-pag-linha').length <= 1) return;
+            row.remove();
+            var form = modalPag.querySelector('.js-modal-pagamento-mensal-form');
+            var T = form ? alvoLinhas(form) : 0;
+            var rowsLeft = linhasBox.querySelectorAll('.js-fin-pag-linha');
+            if (rowsLeft.length === 1) {
+                var inp0 = rowsLeft[0].querySelector('.js-fin-inp-valor');
+                if (inp0) inp0.value = fmtBRL(T);
+            }
+            atualizaSomaPag(modalPag);
+        },
+        true
+    );
+
+    document.addEventListener(
+        'input',
+        function (ev) {
+            var t = ev.target;
+            if (!t || !t.classList.contains('js-fin-inp-valor')) return;
+            var modalPag = document.getElementById(MODAL_ID);
+            if (!modalPag || !modalPag.contains(t)) return;
+            var row = t.closest('.js-fin-pag-linha');
+            if (!row) return;
+            var rows = modalPag.querySelectorAll('.js-fin-pag-linha');
+            var idx = Array.prototype.indexOf.call(rows, row);
+            if (idx === 0) {
+                clearTimeout(finPagTimers[MODAL_ID]);
+                finPagTimers[MODAL_ID] = setTimeout(function () {
+                    aplicarRegraLinhasPagamento(modalPag, row);
+                    delete finPagTimers[MODAL_ID];
+                }, 400);
+            } else {
+                atualizaSomaPag(modalPag);
+            }
+        },
+        true
+    );
+    document.addEventListener(
+        'blur',
+        function (ev) {
+            var t = ev.target;
+            if (!t || !t.classList.contains('js-fin-inp-valor')) return;
+            var modalPag = document.getElementById(MODAL_ID);
+            if (!modalPag || !modalPag.contains(t)) return;
+            var row = t.closest('.js-fin-pag-linha');
+            var rows = modalPag.querySelectorAll('.js-fin-pag-linha');
+            if (Array.prototype.indexOf.call(rows, row) !== 0) return;
+            clearTimeout(finPagTimers[MODAL_ID]);
+            aplicarRegraLinhasPagamento(modalPag, row);
+        },
+        true
+    );
+
+    // Mexeu no vencimento, no pacote ou em quando aplicar: o total volta do
+    // servidor já com o ajuste.
+    document.addEventListener('change', function (ev) {
+        var t = ev.target;
+        if (!t || !t.closest) return;
+        if (!t.classList.contains('js-fin-pag-venc') &&
+            !t.classList.contains('js-fin-pag-venc-aplicar') &&
+            !t.classList.contains('js-fin-pag-prop') &&
+            !t.classList.contains('js-fin-pag-plano') &&
+            !t.classList.contains('js-fin-pag-plano-aplicar')) return;
+        var modalPag = t.closest('#' + MODAL_ID);
+        if (!modalPag) return;
+        sincronizarTrocaVencimento(modalPag);
+        sincronizarTrocaPacote(modalPag);
+        recalcularPorAjuste(modalPag);
+    });
+
+    document.addEventListener('submit', function (ev) {
+        var form = ev.target;
+        if (!form.classList || !form.classList.contains('js-fin-modal-pagamento-page')) return;
+        ev.preventDefault();
+        var modalPag = document.getElementById(MODAL_ID);
+        if (!modalPag) return;
+        var fluxo = form.dataset.fluxo;
+        var postUrl = form.dataset.postUrl;
+        var valorTotal = parseFloat(form.dataset.valorTotal || '0') || 0;
+        var cartUso = carteiraUsada(form);
+        // As formas cobrem o total devido menos o crédito de carteira aplicado.
+        var alvo = Math.max(0, Math.round((valorTotal - cartUso) * 100) / 100);
+        var zeroTotal = alvo <= 0.001;
+        var partes = [];
+        var ok = true;
+        modalPag.querySelectorAll('.js-fin-pag-linha').forEach(function (row) {
+            var sid = row.querySelector('.js-fin-sel-fp');
+            var vin = row.querySelector('.js-fin-inp-valor');
+            var din = row.querySelector('.js-fin-inp-data');
+            var fid = sid && sid.value ? parseInt(sid.value, 10) : 0;
+            var rawV = vin && (vin.value || '').trim() ? String(vin.value).trim() : '';
+            var vv = rawV === '' ? 0 : parseValorLinha(vin.value);
+            var ds = din && din.value ? din.value.trim() : '';
+            if (!ds) {
+                ok = false;
+                return;
+            }
+            if (isNaN(vv) || vv < 0) {
+                ok = false;
+                return;
+            }
+            if (zeroTotal) {
+                partes.push({
+                    forma_pagamento_id: fid > 0 ? fid : 0,
+                    valor: Math.round(vv * 100) / 100,
+                    data_pagamento: ds
+                });
+            } else {
+                if (!fid || vv <= 0) ok = false;
+                else
+                    partes.push({
+                        forma_pagamento_id: fid,
+                        valor: Math.round(vv * 100) / 100,
+                        data_pagamento: ds
+                    });
+            }
+        });
+        // Crédito cobrindo tudo: as linhas de forma podem ficar vazias (só carteira).
+        var soCarteira = zeroTotal && cartUso > 0;
+        if (soCarteira) { partes = []; ok = true; }
+        if (!soCarteira && (!ok || !partes.length)) {
+            window.alert(
+                zeroTotal
+                    ? 'Informe a data em cada linha (valor 0,00). A forma de pagamento é opcional quando o total for zero.'
+                    : 'Preencha forma, valor e data em cada linha.'
+            );
+            return;
+        }
+        var soma = Math.round(partes.reduce(function (a, p) { return a + p.valor; }, 0) * 100) / 100;
+        var tolSoma = zeroTotal ? 0.001 : 0.02;
+        if (Math.abs(soma - alvo) > tolSoma) {
+            var errBox = modalPag.querySelector('.js-fin-pag-erro-soma');
+            if (errBox) errBox.classList.remove('d-none');
+            return;
+        }
+        var nextInp = form.querySelector('.js-fin-pag-next-hidden');
+        var payload = new URLSearchParams();
+        // O corpo é montado campo a campo, então o csrf_token do formulário não
+        // entra sozinho. Sem ele o Flask-WTF recusa o POST com 400 e o
+        // pagamento não era gravado — o modal só recarregava a página.
+        var tokenInp = form.querySelector('input[name="csrf_token"]');
+        var tokenMeta = document.querySelector('meta[name="csrf-token"]');
+        var csrfToken = (tokenInp && tokenInp.value) || (tokenMeta && tokenMeta.content) || '';
+        if (csrfToken) payload.append('csrf_token', csrfToken);
+        payload.append('next', nextInp ? nextInp.value || '' : '');
+        payload.append('pagamentos_json', JSON.stringify(partes));
+        if (cartUso > 0) payload.append('carteira_valor', cartUso.toFixed(2));
+        var _dflatEl = modalPag.querySelector('.js-fin-pag-desc-flat');
+        if (_dflatEl && _dflatEl.value) payload.append('desconto_flat', _dflatEl.value);
+        var _dselEl = modalPag.querySelector('.js-fin-pag-desc-sel');
+        if (_dselEl && _dselEl.value && _dselEl.value !== 'avulso') payload.append('desconto_id_pagamento', _dselEl.value);
+        var _sjEl = modalPag.querySelector('.js-fin-pag-semjuros');
+        if (_sjEl && _sjEl.checked) payload.append('remover_juros_manual', '1');
+        var _aj = ajustesPagamento(modalPag);
+        if (_aj.vencimento) {
+            payload.append('novo_vencimento', _aj.vencimento);
+            payload.append('vencimento_aplicar', _aj.vencAplicar);
+            if (_aj.cobrarProp) payload.append('cobrar_proporcional', '1');
+        }
+        if (_aj.planoId) {
+            payload.append('novo_plano_id', _aj.planoId);
+            payload.append('plano_aplicar', _aj.aplicar);
+        }
+        if (fluxo === 'registrar') {
+            payload.append('tipo', 'mensalidade_aluno');
+            payload.append('registro_id', form.dataset.registroId || '');
+        }
+        var subBtn = form.querySelector('.js-fin-pag-submit');
+        if (subBtn) subBtn.disabled = true;
+        fetch(postUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRFToken': csrfToken
+            },
+            body: payload.toString(),
+            credentials: 'same-origin'
+        })
+            .then(function (response) {
+                if (!response.ok) throw new Error('Falha ao registrar pagamento (' + response.status + ')');
+                window.location.reload();
+            })
+            .catch(function (erro) {
+                // Recarregar em silêncio fazia a falha parecer sucesso: a tela
+                // voltava igual e ninguém sabia que nada tinha sido gravado.
+                if (subBtn) subBtn.disabled = false;
+                alert('Não foi possível registrar o pagamento. ' + (erro && erro.message ? erro.message : '')
+                      + '\nA tela será recarregada para você conferir.');
+                window.location.reload();
+            })
+            .finally(function () {
+                if (subBtn) subBtn.disabled = false;
+            });
+    }, true);
+})();
+</script>

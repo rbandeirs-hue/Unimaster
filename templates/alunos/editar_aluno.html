@@ -1,10 +1,341 @@
-{% extends "base.html" %}
+{% extends "base_academia.html" %}
+{% set menu_ativo = 'alunos' %}
 {% block title %}Editar Aluno{% endblock %}
 {% block extra_css %}
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/photo-cropper.css') }}">
 {% endblock %}
+
+{% set back_url = back_url or get_back_url_default() %}
+{% set partes_nome = (aluno.nome or '?').split() %}
+
+{# Barra de contexto no lugar da barra do shell: quem está editando precisa ver
+   de quem é o cadastro e ter salvar/cancelar sempre à mão. #}
+{% block topo %}
+<header class="sh__top ed-topo">
+  <div class="ed-topo-esq">
+    {# Sem este botão a lateral não abre no celular: esta tela troca a barra
+       padrão do shell, que é onde ele mora. #}
+    <button class="sh__menu-botao" id="shMenuBotao" type="button" aria-label="Abrir menu">
+      <i class="bi bi-list"></i>
+    </button>
+    <a href="{{ back_url }}" class="sh__btn sh__btn--icone ed-voltar" aria-label="Voltar"><i class="bi bi-arrow-left"></i></a>
+    {% if aluno.foto %}
+    <img src="{{ url_for('static', filename='uploads/' ~ aluno.foto) }}" alt="" class="ed-avatar">
+    {% else %}
+    <span class="ed-avatar">{{ partes_nome[0][0] }}{{ partes_nome[-1][0] if partes_nome|length > 1 }}</span>
+    {% endif %}
+    <span class="ed-identidade">
+      <span class="ed-nome">{{ aluno.nome }}</span>
+      <span class="ed-sub">Editando cadastro{% if aluno.academia_nome %} · {{ aluno.academia_nome }}{% endif %}</span>
+    </span>
+  </div>
+  <div class="ed-topo-dir">
+    <a href="{{ back_url }}" class="sh__btn">Cancelar</a>
+    <button type="submit" form="formEditarAluno" class="sh__btn sh__btn--forte">
+      <i class="bi bi-check-lg"></i> Salvar alterações
+    </button>
+  </div>
+</header>
+
+{# Passos do formulário. A troca é só de visibilidade: o <form> continua um só,
+   e o POST leva todos os campos, esteja a aba aberta ou não. #}
+<nav class="ed-abas" id="edAbas">
+  <div class="ed-abas-itens">
+    <button type="button" class="ed-aba is-ativa" data-passo="1"><i class="bi bi-person"></i> Dados pessoais</button>
+    <button type="button" class="ed-aba" data-passo="2"><i class="bi bi-diagram-3"></i> Vínculos</button>
+    <button type="button" class="ed-aba" data-passo="3"><i class="bi bi-people"></i> Filiação</button>
+    <button type="button" class="ed-aba" data-passo="4"><i class="bi bi-collection"></i> Turmas</button>
+    <button type="button" class="ed-aba" data-passo="5"><i class="bi bi-file-text"></i> Documentos</button>
+    <button type="button" class="ed-aba" data-passo="6"><i class="bi bi-geo-alt"></i> Endereço</button>
+    <button type="button" class="ed-aba" data-passo="7"><i class="bi bi-telephone"></i> Contatos</button>
+    <button type="button" class="ed-aba" data-passo="8"><i class="bi bi-cash-coin"></i> Financeiro</button>
+  </div>
+  <div class="ed-passo-nav">
+    <span class="ed-contador"><span id="edPassoAtual">1</span> de 8</span>
+    <button type="button" class="sh__btn sh__btn--icone" id="edAnterior" aria-label="Passo anterior"><i class="bi bi-chevron-left"></i></button>
+    <button type="button" class="sh__btn sh__btn--icone" id="edProximo" aria-label="Próximo passo"><i class="bi bi-chevron-right"></i></button>
+  </div>
+</nav>
+{% endblock %}
+
+{% block cabecalho %}{% endblock %}
+
 {% block content %}
+
+<style>
+    /* ------------------------------------------------- barra de contexto */
+    .ed-topo { position: sticky; top: 0; z-index: 1030; }
+    .ed-topo-esq { display: flex; align-items: center; gap: .8rem; min-width: 0; }
+    .ed-topo-dir { display: flex; align-items: center; gap: .6rem; }
+    .ed-avatar {
+      width: 42px; height: 42px; flex: 0 0 42px;
+      display: grid; place-items: center;
+      border-radius: var(--u-radius-sm);
+      background: var(--sh-ink);
+      color: #fff;
+      font-size: .82rem; font-weight: 700;
+      object-fit: cover;
+    }
+    .ed-identidade { min-width: 0; }
+    .ed-nome {
+      display: block; font-size: 1.02rem; font-weight: 600; line-height: 1.25;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .ed-sub { display: block; color: var(--sh-ink-soft); font-size: .84rem; }
+    .sh__btn--icone { flex: 0 0 42px; justify-content: center; padding: .6rem 0; }
+
+    /* ------------------------------------------------------------- abas */
+    .ed-abas {
+      position: sticky; top: 71px; z-index: 1029;
+      display: flex; align-items: flex-start; justify-content: space-between; gap: var(--u-space-3);
+      padding: 0 2rem;
+      background: #fff;
+      border-bottom: 1px solid var(--sh-line);
+    }
+    .ed-abas-itens { display: flex; flex-wrap: wrap; gap: 1.4rem; }
+    .ed-aba {
+      display: inline-flex; align-items: center; gap: .45rem;
+      padding: .85rem 0;
+      border: 0; background: none;
+      border-bottom: 2px solid transparent;
+      color: var(--sh-ink-soft);
+      font-size: .95rem;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .ed-aba:hover { color: var(--sh-ink); }
+    .ed-aba.is-ativa { color: var(--sh-ink); border-bottom-color: var(--sh-red); font-weight: 600; }
+    /* Não encolhe: as setas e o contador se espremiam quando as abas quebravam. */
+    .ed-passo-nav { display: flex; align-items: center; gap: .5rem; padding: .6rem 0; flex: 0 0 auto; }
+    .ed-contador { color: var(--sh-ink-soft); font-size: .88rem; margin-right: .2rem; white-space: nowrap; }
+
+    /* --------------------------------------------------------- conteúdo */
+    .ed-cartao {
+      background: #fff;
+      border: 1px solid var(--sh-line);
+      border-radius: var(--u-radius);
+      overflow: hidden;
+    }
+    .ed-cartao-topo {
+      padding: .9rem 1.5rem;
+      border-bottom: 1px solid var(--sh-line);
+      color: var(--sh-ink-soft);
+      font-size: .68rem; font-weight: 600;
+      letter-spacing: .14em; text-transform: uppercase;
+    }
+    .ed-cartao-corpo { padding: 1.5rem; }
+    .ed-passo[hidden] { display: none; }
+
+    /* Um traço só para todos os campos, no lugar do azul do Bootstrap. */
+    .editar-aluno-page .form-label, .editar-aluno-page label.fw-semibold {
+      font-weight: 400 !important;
+      color: var(--sh-ink);
+      font-size: .92rem;
+      margin-bottom: .35rem;
+    }
+    .editar-aluno-page .form-control,
+    .editar-aluno-page .form-select {
+      min-height: 46px;
+      border: 1px solid var(--sh-line);
+      border-radius: var(--u-radius-sm);
+      color: var(--sh-ink);
+      font-size: .95rem;
+    }
+    .editar-aluno-page textarea.form-control { min-height: 92px; }
+    .editar-aluno-page .form-control:focus,
+    .editar-aluno-page .form-select:focus {
+      border-color: #cfcbc4;
+      box-shadow: 0 0 0 3px rgba(28, 28, 28, .06);
+    }
+    .editar-aluno-page .form-control::placeholder { color: #b3afa8; }
+    .editar-aluno-page h6.border-bottom { display: none; }  /* o título agora é a aba */
+
+    .editar-aluno-page .btn-primary,
+    .editar-aluno-page .btn-success {
+      background: var(--sh-ink); border-color: var(--sh-ink); color: #fff;
+    }
+    .editar-aluno-page .btn-primary:hover,
+    .editar-aluno-page .btn-success:hover { background: #000; border-color: #000; }
+    .editar-aluno-page .btn-outline-primary,
+    .editar-aluno-page .btn-outline-secondary {
+      border-color: var(--sh-line); color: var(--sh-ink);
+    }
+    .editar-aluno-page .btn-outline-primary:hover,
+    .editar-aluno-page .btn-outline-secondary:hover { background: #f4f2ee; color: var(--sh-ink); }
+
+    /* Foto ao lado dos dados, como no restante do sistema. */
+    .ed-foto { display: flex; gap: 1.5rem; align-items: flex-start; flex-wrap: wrap; }
+    .ed-foto-col { width: 168px; flex: 0 0 168px; text-align: center; }
+    .ed-foto-campos { flex: 1 1 420px; min-width: 0; }
+    .ed-foto-caixa {
+      width: 168px; height: 168px;
+      display: grid; place-items: center;
+      border: 1px solid var(--sh-line);
+      border-radius: var(--u-radius-sm);
+      background: #f4f2ee;
+      color: #b3afa8;
+      font-size: 3rem;
+      overflow: hidden;
+    }
+    #miniatura { width: 100%; height: 100%; object-fit: cover; border: 0; border-radius: 0; }
+    .ed-foto-botoes { display: flex; gap: .5rem; margin-top: .6rem; }
+    .ed-foto-botoes .sh__btn { flex: 1; justify-content: center; }
+    .ed-foto-dica { display: block; margin-top: .5rem; color: var(--sh-ink-soft); font-size: .8rem; }
+    #fotoArquivoEditarAluno { display: none; }
+
+    /* ------------------------------------------------------------ vínculos */
+    .ed-info { color: var(--sh-ink-soft); font-size: .85rem; cursor: help; }
+    .ed-vinculos { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: .75rem; }
+    .ed-vinculo {
+      display: inline-flex; align-items: center; gap: .5rem;
+      padding: .5rem .8rem;
+      border: 1px solid var(--sh-line);
+      border-radius: var(--u-radius-sm);
+      background: #fff;
+      font-size: .94rem;
+    }
+    .ed-vinculo .bi-star-fill { color: var(--sh-red); font-size: .78rem; }
+    .ed-vinculo-nome { font-weight: 500; }
+    .ed-vinculo-tag { color: var(--sh-ink-soft); font-size: .86rem; }
+    .ed-vinculo-acao {
+      border: 0; background: none; padding: 0;
+      color: var(--sh-ink-soft);
+      font-size: .82rem;
+      text-decoration: underline;
+      cursor: pointer;
+    }
+    .ed-vinculo-acao:hover { color: var(--sh-ink); }
+    .ed-vinculo-remover {
+      border: 0; background: none; padding: 0 0 0 .1rem;
+      color: var(--sh-ink-soft);
+      font-size: .78rem;
+      line-height: 1;
+      cursor: pointer;
+    }
+    .ed-vinculo-remover:hover { color: var(--sh-red); }
+
+    /* O seletor ocupa a linha e o botão fica encostado nele, como nos filtros. */
+    .ed-vincular { display: flex; gap: .6rem; align-items: stretch; flex-wrap: wrap; }
+    .ed-vincular .form-select { flex: 1 1 320px; }
+    .ed-vincular .sh__btn { flex: 0 0 auto; }
+
+    /* --------------------------------------------------- turmas e opções */
+    .ed-cartao-topo--conta { display: flex; align-items: center; justify-content: space-between; gap: .6rem; }
+    .ed-conta { letter-spacing: 0; text-transform: none; font-weight: 400; font-size: .84rem; }
+    .ed-dica { color: var(--sh-ink-soft); font-size: .88rem; margin: 0; }
+
+    /* Grade de turmas: células dividindo borda, como as grades do painel. */
+    .ed-grade-turmas {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+      border: 1px solid var(--sh-line);
+      border-radius: var(--u-radius-sm);
+      overflow: hidden;
+    }
+    .ed-turma {
+      display: flex; align-items: flex-start; gap: .7rem;
+      padding: .85rem 1rem;
+      margin: 0 -1px -1px 0;
+      border-right: 1px solid var(--sh-line);
+      border-bottom: 1px solid var(--sh-line);
+      cursor: pointer;
+      transition: background var(--u-transition);
+    }
+    .ed-turma:hover { background: #fbfaf8; }
+    .ed-turma:has(input:checked) { background: #f6f4f1; }
+    .ed-turma .form-check-input { margin: .2rem 0 0; flex: 0 0 auto; }
+    .ed-turma-txt { min-width: 0; }
+    .ed-turma-nome { display: block; font-weight: 600; font-size: .96rem; line-height: 1.3; }
+    .ed-turma-sub { display: block; color: var(--sh-ink-soft); font-size: .86rem; margin-top: .1rem; }
+
+    /* Opções em caixa (modalidades). */
+    .ed-opcoes { display: flex; flex-wrap: wrap; gap: .6rem; }
+    .ed-opcao {
+      display: inline-flex; align-items: center; gap: .6rem;
+      padding: .7rem 1rem;
+      border: 1px solid var(--sh-line);
+      border-radius: var(--u-radius-sm);
+      background: #fff;
+      cursor: pointer;
+      transition: border-color var(--u-transition);
+    }
+    .ed-opcao:hover { border-color: #cfcbc4; }
+    .ed-opcao:has(input:checked) { border-color: var(--sh-ink); }
+    .ed-opcao .form-check-input { margin: 0; }
+
+    /* Zempo: a barra liga os campos que vêm abaixo. */
+    .ed-zempo { border: 1px solid var(--sh-line); border-radius: var(--u-radius-sm); overflow: hidden; }
+    .ed-zempo-barra {
+      display: flex; align-items: center; gap: .7rem; flex-wrap: wrap;
+      padding: .85rem 1rem;
+      margin: 0;
+      background: #faf9f7;
+      border-bottom: 1px solid var(--sh-line);
+      cursor: pointer;
+    }
+    .ed-zempo-barra .form-check-input { margin: 0; }
+    .ed-zempo-titulo { font-weight: 600; }
+    .ed-zempo-campos {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 1rem;
+      padding: 1.1rem 1rem;
+    }
+    .editar-aluno-page .form-control:disabled { background: #f4f2ee; color: #a5a29c; }
+
+    /* Marcação em vermelho, como o resto dos estados do sistema. */
+    .editar-aluno-page .form-check-input { width: 1.15rem; height: 1.15rem; }
+    .editar-aluno-page .form-check-input:checked {
+      background-color: var(--sh-red);
+      border-color: var(--sh-red);
+    }
+    .editar-aluno-page .form-check-input:focus {
+      border-color: #cfcbc4;
+      box-shadow: 0 0 0 3px rgba(28, 28, 28, .06);
+    }
+
+    /* ---------------------------------------------------------- rodapé */
+    .ed-rodape {
+      display: flex; align-items: center; justify-content: space-between; gap: .6rem;
+      margin-top: var(--u-space-3);
+      flex-wrap: wrap;
+    }
+    .ed-perigo { border-color: var(--sh-line); color: var(--sh-red); }
+    .ed-perigo:hover { background: #fff5f6; border-color: var(--sh-red); color: var(--sh-red); }
+
+    @media (max-width: 991.98px) {
+      .ed-abas { position: static; padding: 0 1.5rem; }
+      .ed-topo { position: static; }
+    }
+    @media (max-width: 767.98px) {
+      .ed-sub { display: none; }
+      .ed-nome { font-size: .95rem; }
+      .ed-voltar { display: none; }          /* a seta do menu e o Cancelar já bastam */
+      .ed-avatar { width: 34px; height: 34px; flex-basis: 34px; font-size: .72rem; }
+      .ed-topo-dir .sh__btn { padding: .6rem .8rem; font-size: .88rem; }
+
+      /* As oito abas viravam uma coluna de oito linhas; aqui elas correm na
+         horizontal e a navegação por passo fica fixa ao lado. */
+      .ed-abas { padding: 0 0 0 1.15rem; gap: .5rem; align-items: center; }
+      .ed-abas-itens {
+        flex-wrap: nowrap;
+        gap: 1.2rem;
+        overflow-x: auto;
+        scrollbar-width: none;
+        -webkit-overflow-scrolling: touch;
+      }
+      .ed-abas-itens::-webkit-scrollbar { display: none; }
+      .ed-passo-nav { padding: .5rem 1.15rem .5rem .5rem; background: #fff; box-shadow: -8px 0 12px #fff; }
+      .ed-contador { display: none; }
+
+      .ed-cartao-corpo { padding: 1.15rem; }
+      .ed-foto-col, .ed-foto-caixa { width: 100%; flex-basis: auto; }
+      .ed-foto-caixa { height: 220px; }
+      .ed-rodape .sh__btn { flex: 1; justify-content: center; }
+      .ed-zempo-campos { padding: 1rem; }
+    }
+</style>
 
 <style>
     .card {
@@ -30,12 +361,9 @@
         .editar-aluno-page .camera-content { width: 95%; }
         .editar-aluno-page h6.border-bottom { font-size: 0.95rem; }
     }
-    #miniatura {
-        width: 150px; height: 150px;
-        object-fit: cover;
-        border-radius: 50%;
-        border: 3px solid #0d6efd;
-    }
+    /* O desenho da miniatura vem do bloco novo (.ed-foto-caixa); aqui só resta
+       o recorte, para a foto preencher a caixa sem distorcer. */
+    #miniatura { object-fit: cover; }
     .camera-modal {
         display: none;
         position: fixed; top: 0; left: 0;
@@ -85,32 +413,58 @@
     .camera-buttons button { margin: 5px; }
 </style>
 
-<div class="container-fluid px-3 px-md-4 mt-4 editar-aluno-page">
+<div class="editar-aluno-page">
 
-    <div class="text-center mb-4">
-        <h2 class="display-6 text-primary fw-bold">Editar Aluno</h2>
-        <p class="lead text-muted">Atualize os dados necessários abaixo.</p>
+{% if campos_pendentes %}
+{# Cadastro anterior à regra de campos obrigatórios: aqui só avisamos o que
+   falta. O salvamento continua livre — travar impediria até corrigir um
+   telefone antes de completar a ficha inteira. #}
+<div class="alert alert-warning d-flex align-items-start gap-2" role="status">
+  <i class="bi bi-exclamation-triangle-fill mt-1"></i>
+  <div>
+    <strong>Cadastro incompleto.</strong>
+    Falta preencher: {{ campos_pendentes|join(', ') }}.
+    <div class="small text-muted mt-1">
+      Você pode salvar assim mesmo — o aviso some quando os campos forem preenchidos.
     </div>
+  </div>
+</div>
+{% endif %}
 
-    <div class="card shadow-lg p-3 p-md-4">
-
-        <div class="card-header bg-primary text-white">
-            <h5 class="mb-0"><i class="bi bi-person-lines-fill me-2"></i>Dados do Aluno</h5>
-        </div>
-
-        <div class="card-body p-4">
-
-            <form method="POST" enctype="multipart/form-data">
+            <form method="POST" enctype="multipart/form-data" id="formEditarAluno">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="next" value="{{ back_url }}">
 
                 <!-- ===================================================== -->
-                <!-- 1 — Dados pessoais -->
+                <!-- 1 — Dados pessoais (com a foto ao lado) -->
                 <!-- ===================================================== -->
+                <div class="ed-passo" id="ed-passo-1">
+                <div class="ed-cartao">
+                <div class="ed-cartao-topo">Dados pessoais</div>
+                <div class="ed-cartao-corpo">
+                <div class="ed-foto">
 
-                <h6 class="border-bottom pb-2 mb-3 text-secondary fw-bold">
-                    <i class="bi bi-person-fill me-1"></i> Dados Pessoais
-                </h6>
+                  <div class="ed-foto-col">
+                    <div class="ed-foto-caixa">
+                      <img id="miniatura"
+                           src="{{ url_for('static', filename='uploads/' ~ aluno.foto) if aluno.foto else '' }}"
+                           class="{{ 'd-block' if aluno.foto else 'd-none' }}" alt="">
+                      {% if not aluno.foto %}<i class="bi bi-person" id="fotoVazia"></i>{% endif %}
+                    </div>
+                    <input type="hidden" name="foto" id="fotoInput">
+                    <div class="ed-foto-botoes">
+                      <button type="button" class="sh__btn" id="btnAbrirCamera" title="Tirar foto">
+                        <i class="bi bi-camera"></i>
+                      </button>
+                      <button type="button" class="sh__btn" id="btnEscolherFoto" title="Enviar arquivo">
+                        <i class="bi bi-upload"></i>
+                      </button>
+                    </div>
+                    <input type="file" name="foto_arquivo" id="fotoArquivoEditarAluno" accept="image/*" capture="environment">
+                    <span class="ed-foto-dica">JPG ou PNG, até 5 MB</span>
+                  </div>
+
+                  <div class="ed-foto-campos">
 
                 <div class="row">
                     <div class="col-md-12 mb-3">
@@ -159,10 +513,27 @@
                             <option value="O" {% if aluno.sexo == 'O' %}selected{% endif %}>Outro</option>
                         </select>
                     </div>
+
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label fw-semibold">Peso</label>
+                        {# Sem peso o campo fica vazio: `{{ aluno.peso }}` cru imprimia
+                           value="None" quando a coluna era nula. #}
+                        <input type="number" step="0.1" min="0" class="form-control" name="peso"
+                               placeholder="Peso (kg)"
+                               value="{{ aluno.peso if aluno.peso is not none else '' }}">
+                    </div>
                 </div>
 
                 <!-- ===================================================== -->
+                  </div>
+                </div>
+                </div></div></div>
+
                 <!-- 2 — Vínculos -->
+                <div class="ed-passo" id="ed-passo-2" hidden>
+                <div class="ed-cartao">
+                <div class="ed-cartao-topo">Vínculos</div>
+                <div class="ed-cartao-corpo">
                 <!-- ===================================================== -->
 
                 <h6 class="border-bottom pb-2 mb-3 mt-4 text-secondary fw-bold">
@@ -184,60 +555,65 @@
                 </div>
 
                 {% if academias_vinculadas %}
-                <div class="row">
-                  <div class="col-12 mb-3">
-                    <label class="form-label fw-semibold">
-                      Academias onde treina
-                      <i class="bi bi-info-circle text-muted"
-                         title="A principal é a academia de origem e é a que conta nos relatórios. As demais também veem e atendem o aluno."></i>
-                    </label>
-                    <div class="border rounded p-2">
-                      <div class="d-flex flex-wrap gap-2 align-items-center">
-                        {% for ac in academias_vinculadas %}
-                          <span class="badge {{ 'bg-primary' if ac.principal else 'bg-secondary' }} d-inline-flex align-items-center gap-1 py-2">
-                            {% if ac.principal %}<i class="bi bi-star-fill" style="font-size:.7rem;"></i>{% endif %}
-                            {{ ac.nome }}
-                            {% if ac.principal %}
-                              <span class="small fw-normal">(principal)</span>
-                            {% elif pode_vincular_academia %}
-                              {# Submits próprios, fora do <form> principal, para não salvar o cadastro junto. #}
-                              <button type="submit" class="btn btn-sm btn-link text-white p-0 ms-1 text-decoration-none"
-                                      form="principal_{{ ac.id }}" title="Tornar academia principal"
-                                      style="font-size:.72rem;"
-                                      onclick="return confirm('Tornar {{ ac.nome }} a academia principal deste aluno?');">
-                                tornar principal
-                              </button>
-                              <button type="submit" class="btn-close btn-close-white btn-sm ms-1"
-                                      form="desvincular_{{ ac.id }}" title="Remover vínculo"
-                                      onclick="return confirm('Remover o vínculo com {{ ac.nome }}?');"></button>
-                            {% endif %}
-                          </span>
-                        {% endfor %}
-                      </div>
+                <label class="form-label fw-semibold">
+                  Academias onde treina
+                  <i class="bi bi-info-circle ed-info"
+                     title="A principal é a academia de origem e é a que conta nos relatórios. As demais também veem e atendem o aluno."></i>
+                </label>
 
-                      {% if pode_vincular_academia and academias_para_vincular %}
-                      <div class="input-group input-group-sm mt-2" style="max-width:420px;">
-                        <select name="academia_id" class="form-select" form="vincular_academia">
-                          <option value="">Vincular a outra academia…</option>
-                          {% for ac in academias_para_vincular %}
-                            <option value="{{ ac.id }}">{{ ac.nome }}</option>
-                          {% endfor %}
-                        </select>
-                        <button type="submit" class="btn btn-outline-primary" form="vincular_academia">
-                          <i class="bi bi-plus-lg me-1"></i>Vincular
-                        </button>
-                      </div>
-                      <div class="form-text">
-                        Só academias da mesma associação. O aluno passa a aparecer nas duas.
-                      </div>
-                      {% endif %}
-                    </div>
-                  </div>
+                {# Cada vínculo é uma etiqueta; as ações (tornar principal, remover)
+                   aparecem dentro dela e postam em formulários próprios, fora do
+                   <form> do cadastro, para não salvar o resto junto. #}
+                <div class="ed-vinculos">
+                  {% for ac in academias_vinculadas %}
+                  <span class="ed-vinculo {% if ac.principal %}ed-vinculo--principal{% endif %}">
+                    {% if ac.principal %}<i class="bi bi-star-fill"></i>{% endif %}
+                    <span class="ed-vinculo-nome">{{ ac.nome }}</span>
+                    {% if ac.principal %}
+                      <span class="ed-vinculo-tag">principal</span>
+                    {% elif pode_vincular_academia %}
+                      <button type="submit" class="ed-vinculo-acao"
+                              form="principal_{{ ac.id }}" title="Tornar academia principal"
+                              onclick="return confirm('Tornar {{ ac.nome }} a academia principal deste aluno?');">
+                        tornar principal
+                      </button>
+                      <button type="submit" class="ed-vinculo-remover"
+                              form="desvincular_{{ ac.id }}" title="Remover vínculo"
+                              aria-label="Remover vínculo com {{ ac.nome }}"
+                              onclick="return confirm('Remover o vínculo com {{ ac.nome }}?');">
+                        <i class="bi bi-x-lg"></i>
+                      </button>
+                    {% endif %}
+                  </span>
+                  {% endfor %}
                 </div>
+
+                {% if pode_vincular_academia and academias_para_vincular %}
+                <div class="ed-vincular">
+                  <select name="academia_id" class="form-select" form="vincular_academia" aria-label="Academia para vincular">
+                    <option value="">Vincular a outra academia…</option>
+                    {% for ac in academias_para_vincular %}
+                      <option value="{{ ac.id }}">{{ ac.nome }}</option>
+                    {% endfor %}
+                  </select>
+                  <button type="submit" class="sh__btn" form="vincular_academia">
+                    <i class="bi bi-plus-lg"></i> Vincular
+                  </button>
+                </div>
+                <p class="ed-dica mt-2">Só academias da mesma associação. O aluno passa a aparecer nas duas.</p>
+                {% elif pode_vincular_academia %}
+                <p class="ed-dica mt-2">Não há outra academia da mesma associação para vincular.</p>
+                {% endif %}
                 {% endif %}
 
                 <!-- ===================================================== -->
+                </div></div></div>
+
                 <!-- 3 — Filiação -->
+                <div class="ed-passo" id="ed-passo-3" hidden>
+                <div class="ed-cartao">
+                <div class="ed-cartao-topo">Filiação</div>
+                <div class="ed-cartao-corpo">
                 <!-- ===================================================== -->
 
                 <h6 class="border-bottom pb-2 mb-3 mt-4 text-secondary fw-bold">
@@ -261,7 +637,16 @@
                 </div>
 
                 <!-- ===================================================== -->
+                </div></div></div>
+
                 <!-- 4 — Classificação -->
+                <div class="ed-passo" id="ed-passo-4" hidden>
+                <div class="ed-cartao">
+                <div class="ed-cartao-topo ed-cartao-topo--conta">
+                  <span>Turma e modalidades</span>
+                  <span class="ed-conta" id="edTurmasContagem"></span>
+                </div>
+                <div class="ed-cartao-corpo">
                 <!-- ===================================================== -->
 
                 {% set pode_editar_turma_modalidade = current_user.has_role('admin') or current_user.has_role('gestor_academia') %}
@@ -270,63 +655,67 @@
                 </h6>
 
                 {% if pode_editar_turma_modalidade %}
-                <div class="row">
-                    <div class="col-md-8 mb-3">
-                        <label class="form-label fw-semibold">Turma(s)</label>
-                        <p class="small text-muted mb-2">Marque uma ou mais turmas em que o aluno está matriculado</p>
-                        <div class="d-flex flex-wrap gap-3">
-                            {% for t in turmas %}
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" name="turmas_ids" value="{{ t.TurmaID }}" id="turma_{{ t.TurmaID }}"
-                                    {% if t.TurmaID in (aluno.turmas_ids or []) or (not (aluno.turmas_ids or []) and aluno.TurmaID == t.TurmaID) %}checked{% endif %}>
-                                <label class="form-check-label" for="turma_{{ t.TurmaID }}">
-                                    {{ t.Nome }} ({{ t.Classificacao }}{% if t.DiasHorario %}, {{ t.DiasHorario }}{% endif %})
-                                </label>
-                            </div>
-                            {% endfor %}
-                        </div>
-                    </div>
+                <label class="form-label fw-semibold">Turma(s)</label>
+                <p class="ed-dica mb-2">Marque uma ou mais turmas em que o aluno está matriculado</p>
 
-                </div>
-                <div class="form-check mb-3">
-                    <input class="form-check-input" type="checkbox" id="cadastro_zempo_gestor" name="cadastro_zempo" value="1"
-                           {% if aluno.zempo or aluno.data_cadastro_zempo %}checked{% endif %}>
-                    <label class="form-check-label fw-semibold" for="cadastro_zempo_gestor">Cadastro no Zempo</label>
-                </div>
-                <div class="row">
-                    <div class="col-md-4 mb-3">
-                        <label class="form-label fw-semibold">Registro Zempo nº</label>
-                        <input type="text" class="form-control" name="zempo" id="zempo_gestor"
-                               placeholder="Número do registro Zempo"
-                               value="{{ aluno.zempo or '' }}">
-                    </div>
-                    <div class="col-md-4 mb-3">
-                        <label class="form-label fw-semibold">Data de Cadastro Zempo</label>
-                        <input type="date" class="form-control" name="data_cadastro_zempo" id="data_cadastro_zempo_gestor"
-                               placeholder="Data de cadastro"
-                               value="{{ aluno.data_cadastro_zempo or '' }}">
-                    </div>
-                    <div class="col-md-4 mb-3">
-                        <label class="form-label fw-semibold">Peso</label>
-                        <input type="number" step="0.1" class="form-control" name="peso"
-                               placeholder="Peso (kg)"
-                               value="{{ aluno.peso }}">
-                    </div>
+                {# Células que dividem borda: a turma inteira é clicável, não só a
+                   caixinha. O horário fica na segunda linha para o nome não virar
+                   uma frase comprida. #}
+                <div class="ed-grade-turmas">
+                    {% for t in turmas %}
+                    <label class="ed-turma" for="turma_{{ t.TurmaID }}">
+                        <input class="form-check-input" type="checkbox" name="turmas_ids" value="{{ t.TurmaID }}" id="turma_{{ t.TurmaID }}"
+                            {% if t.TurmaID in (aluno.turmas_ids or []) or (not (aluno.turmas_ids or []) and aluno.TurmaID == t.TurmaID) %}checked{% endif %}>
+                        <span class="ed-turma-txt">
+                            <span class="ed-turma-nome">{{ t.Nome }}</span>
+                            <span class="ed-turma-sub">
+                                {{- t.Classificacao|capitalize -}}
+                                {%- if t.DiasHorario %} · {{ t.DiasHorario }}{% endif -%}
+                            </span>
+                        </span>
+                    </label>
+                    {% endfor %}
                 </div>
 
-                <div class="mb-3">
-                    <label class="form-label fw-semibold">Modalidades *</label>
-                    <div class="d-flex flex-wrap gap-2">
+                <div class="mt-3 mb-3">
+                    <label class="form-label fw-semibold">Modalidades <span class="text-danger">*</span></label>
+                    <div class="ed-opcoes">
                         {% for m in modalidades %}
-                        <div class="form-check">
+                        <label class="ed-opcao">
                             <input class="form-check-input" type="checkbox"
                                    name="aluno_modalidade_ids"
                                    value="{{ m.id }}"
                                    {% if m.id in aluno.modalidades_ids %}checked{% endif %}>
-                            <label class="form-check-label">{{ m.nome }}</label>
-                        </div>
+                            <span>{{ m.nome }}</span>
+                        </label>
                         {% endfor %}
                     </div>
+                </div>
+
+                <div class="ed-zempo">
+                    <label class="ed-zempo-barra" for="cadastro_zempo_gestor">
+                        <input class="form-check-input" type="checkbox" id="cadastro_zempo_gestor" name="cadastro_zempo" value="1"
+                               {% if aluno.zempo or aluno.data_cadastro_zempo %}checked{% endif %}>
+                        <span class="ed-zempo-titulo">Cadastro no Zempo</span>
+                        <span class="ed-dica">marque para liberar os campos</span>
+                    </label>
+                    <div class="ed-zempo-campos">
+                        <div>
+                            <label class="form-label fw-semibold">Registro Zempo nº</label>
+                            <input type="text" class="form-control" name="zempo" id="zempo_gestor"
+                                   placeholder="Número do registro Zempo"
+                                   value="{{ aluno.zempo or '' }}">
+                        </div>
+                        <div>
+                            <label class="form-label fw-semibold">Data de cadastro Zempo</label>
+                            <input type="date" class="form-control" name="data_cadastro_zempo" id="data_cadastro_zempo_gestor"
+                                   placeholder="Data de cadastro"
+                                   value="{{ aluno.data_cadastro_zempo or '' }}">
+                        </div>
+                    </div>
+                    {# Peso mora no passo "Dados pessoais". Ele precisa ser enviado
+                       sempre: o POST faz `form.get("peso") or None` e gravaria nulo
+                       se o campo faltasse. #}
                 </div>
                 {% else %}
                 {# Aluno e responsável: exibem turma e modalidades somente leitura, e podem editar Zempo e Peso #}
@@ -360,12 +749,9 @@
                                placeholder="Data de cadastro"
                                value="{{ aluno.data_cadastro_zempo or '' }}">
                     </div>
-                    <div class="col-md-4 mb-3">
-                        <label class="form-label fw-semibold">Peso</label>
-                        <input type="number" step="0.1" class="form-control" name="peso"
-                               placeholder="Peso (kg)"
-                               value="{{ aluno.peso }}">
-                    </div>
+                    {# Peso mora no passo "Dados pessoais". Ele precisa ser enviado
+                       sempre: o POST faz `form.get("peso") or None` e gravaria nulo
+                       se o campo faltasse. #}
                 </div>
                 {# Campos hidden para manter turmas e modalidades ao enviar o form (não alteram) #}
                 {% for tid in (aluno.turmas_ids or []) %}
@@ -380,7 +766,13 @@
                 {% endif %}
 
                 <!-- ===================================================== -->
+                </div></div></div>
+
                 <!-- 5 — Documentos -->
+                <div class="ed-passo" id="ed-passo-5" hidden>
+                <div class="ed-cartao">
+                <div class="ed-cartao-topo">Documentos</div>
+                <div class="ed-cartao-corpo">
                 <!-- ===================================================== -->
 
                 <h6 class="border-bottom pb-2 mb-3 mt-4 text-secondary fw-bold">
@@ -427,7 +819,13 @@
                 </div>
 
                 <!-- ===================================================== -->
+                </div></div></div>
+
                 <!-- 6 — Endereço -->
+                <div class="ed-passo" id="ed-passo-6" hidden>
+                <div class="ed-cartao">
+                <div class="ed-cartao-topo">Endereço</div>
+                <div class="ed-cartao-corpo">
                 <!-- ===================================================== -->
 
                 <h6 class="border-bottom pb-2 mb-3 mt-4 text-secondary fw-bold">
@@ -492,7 +890,13 @@
                 </div>
 
                 <!-- ===================================================== -->
+                </div></div></div>
+
                 <!-- 7 — Contatos -->
+                <div class="ed-passo" id="ed-passo-7" hidden>
+                <div class="ed-cartao">
+                <div class="ed-cartao-topo">Contatos</div>
+                <div class="ed-cartao-corpo">
                 <!-- ===================================================== -->
 
                 <h6 class="border-bottom pb-2 mb-3 mt-4 text-secondary fw-bold">
@@ -571,7 +975,13 @@
                 </div>
 
                 <!-- ===================================================== -->
+                </div></div></div>
+
                 <!-- 8 — Responsável Financeiro -->
+                <div class="ed-passo" id="ed-passo-8" hidden>
+                <div class="ed-cartao">
+                <div class="ed-cartao-topo">Financeiro</div>
+                <div class="ed-cartao-corpo">
                 <!-- ===================================================== -->
 
                 <h6 class="border-bottom pb-2 mb-3 mt-4 text-secondary fw-bold">
@@ -596,13 +1006,28 @@
                     </div>
 
                     <div class="col-md-3 mb-3">
-                        <label class="form-label fw-semibold">Telefone <span class="text-danger">*</span></label>
+                        {# Obrigatório também na edição: é o número usado na cobrança
+                           online e no lembrete de WhatsApp — sem ele a mensalidade
+                           não chega a ninguém. #}
+                        <label class="form-label fw-semibold" for="responsavel_financeiro_telefone">
+                          Telefone <span class="text-danger">*</span>
+                        </label>
                         <input type="text" class="form-control" data-mask="phone" required
                                placeholder="(00) 00000-0000"
                                id="responsavel_financeiro_telefone"
                                name="responsavel_financeiro_telefone"
                                value="{{ aluno.responsavel_financeiro_telefone or '' }}">
-                        <small class="text-muted">Usado na cobrança online (InfinitePay).</small>
+                        <small class="text-muted">Usado na cobrança online e no lembrete de WhatsApp.</small>
+                        {% set _tel_aluno = aluno.tel_celular or aluno.telefone %}
+                        {% if _tel_aluno and not aluno.responsavel_financeiro_telefone %}
+                        {# A maior parte dos cadastros antigos nasceu sem este campo;
+                           sem um atalho, torná-lo obrigatório emperraria qualquer
+                           correção nessas fichas. #}
+                        <button type="button" class="btn btn-link btn-sm p-0 mt-1"
+                                id="btnUsarTelefoneAluno" data-tel="{{ _tel_aluno }}">
+                          Usar o telefone do aluno ({{ _tel_aluno }})
+                        </button>
+                        {% endif %}
                     </div>
 
                     <div class="col-md-2 mb-3 d-grid">
@@ -614,56 +1039,37 @@
                     </div>
                 </div>
 
-                <!-- ===================================================== -->
-                <!-- 9 — Foto -->
-                <!-- ===================================================== -->
-
-                <h6 class="border-bottom pb-2 mb-3 mt-4 text-secondary fw-bold">
-                    <i class="bi bi-camera-fill me-1"></i> Foto
-                </h6>
-
-                <div class="d-flex flex-column flex-md-row align-items-start gap-4">
-
-                    <div class="text-center">
-                        <label class="fw-semibold">Foto atual</label><br>
-                        <img id="miniatura"
-                             src="{{ url_for('static', filename='uploads/' ~ aluno.foto) if aluno.foto else '' }}"
-                             class="{{ 'd-block' if aluno.foto else 'd-none' }}">
-                        <input type="hidden" name="foto" id="fotoInput">
-                    </div>
-
-                    <div class="flex-grow-1">
-                        <label class="form-label fw-semibold">Enviar nova foto</label>
-                        <div class="d-flex flex-column flex-md-row gap-2">
-
-                            <button type="button" class="btn btn-primary btn-sm d-flex align-items-center gap-2"
-                                    id="btnAbrirCamera">
-                                <i class="bi bi-camera-fill"></i> Câmera
-                            </button>
-
-                            <input type="file" name="foto_arquivo" id="fotoArquivoEditarAluno" class="form-control" accept="image/*" capture="environment">
-
-                        </div>
-                    </div>
-                </div>
-
-                <!-- ===================================================== -->
-                <!-- Botões finais -->
-                <!-- ===================================================== -->
-
-                <div class="d-flex justify-content-between mt-4 pt-3 border-top">
-                    {% set back_url = back_url or get_back_url_default() %}
-{% include 'components/botao_voltar.html' %}
-
-                    <button type="submit" class="btn btn-success btn-lg">
-                        <i class="bi bi-save me-2"></i> Salvar Alterações
-                    </button>
-                </div>
+                </div></div></div>
+                <!-- fim do passo 8; a foto subiu para o passo 1 -->
 
             </form>
-        </div>
-    </div>
+
+            <!-- ===================================================== -->
+            <!-- Rodapé: navegação e ação destrutiva -->
+            <!-- ===================================================== -->
+            <div class="ed-rodape">
+                <a href="{{ back_url }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Voltar</a>
+                {% if aluno.ativo %}
+                <button type="submit" form="formStatusAluno" class="sh__btn ed-perigo"
+                        onclick="return confirm('Desativar {{ aluno.nome }}? O aluno sai das listagens ativas.');">
+                    Desativar aluno
+                </button>
+                {% else %}
+                <button type="submit" form="formStatusAluno" class="sh__btn"
+                        onclick="return confirm('Reativar {{ aluno.nome }}?');">
+                    Reativar aluno
+                </button>
+                {% endif %}
+            </div>
 </div>
+
+{# Alternar situação fica fora do <form> principal para não salvar o cadastro junto. #}
+<form id="formStatusAluno" method="POST" class="d-none"
+      action="{{ url_for('alunos.alterar_status_aluno', aluno_id=aluno.id) }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="next" value="{{ back_url }}">
+  <input type="hidden" name="ativo_destino" value="{{ 0 if aluno.ativo else 1 }}">
+</form>
 
 {# Formulários dos vínculos de academia: ficam fora do <form> principal, senão o
    navegador aninharia formulários (inválido) e o cadastro seria salvo junto. #}
@@ -1234,6 +1640,96 @@
 </script>
 {% endblock %}
 {% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  var botao = document.getElementById('btnUsarTelefoneAluno');
+  var campo = document.getElementById('responsavel_financeiro_telefone');
+  if (!botao || !campo) return;
+  botao.addEventListener('click', function () {
+    campo.value = botao.dataset.tel || '';
+    campo.dispatchEvent(new Event('input', {bubbles: true}));
+    campo.focus();
+    botao.remove();
+  });
+});
+</script>
+<script>
+// Passos do cadastro: as abas do topo, as setas e o contador operam a mesma
+// lista de blocos. Nada é removido do DOM — os campos escondidos continuam
+// indo no POST.
+document.addEventListener('DOMContentLoaded', function () {
+    var abas = Array.prototype.slice.call(document.querySelectorAll('.ed-aba'));
+    var passos = Array.prototype.slice.call(document.querySelectorAll('.ed-passo'));
+    if (!abas.length || !passos.length) return;
+
+    var contador = document.getElementById('edPassoAtual');
+    var btnAnterior = document.getElementById('edAnterior');
+    var btnProximo = document.getElementById('edProximo');
+    var atual = 1;
+
+    function mostrar(n) {
+        atual = Math.min(Math.max(n, 1), abas.length);
+        abas.forEach(function (a) { a.classList.toggle('is-ativa', Number(a.dataset.passo) === atual); });
+        passos.forEach(function (p) { p.hidden = p.id !== 'ed-passo-' + atual; });
+        if (contador) contador.textContent = atual;
+        if (btnAnterior) btnAnterior.disabled = atual === 1;
+        if (btnProximo) btnProximo.disabled = atual === abas.length;
+        // No celular a fila de abas rola: a aba ativa precisa vir para a vista.
+        var ativa = abas[atual - 1];
+        if (ativa && ativa.scrollIntoView) {
+            ativa.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
+        }
+        try { history.replaceState(null, '', '#passo-' + atual); } catch (e) {}
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    abas.forEach(function (a) {
+        a.addEventListener('click', function () { mostrar(Number(a.dataset.passo)); });
+    });
+    if (btnAnterior) btnAnterior.addEventListener('click', function () { mostrar(atual - 1); });
+    if (btnProximo) btnProximo.addEventListener('click', function () { mostrar(atual + 1); });
+
+    // Campo obrigatório vazio em aba fechada: o navegador não consegue focar o
+    // que está escondido, então abrimos o passo dele antes de reclamar.
+    var form = document.getElementById('formEditarAluno');
+    if (form) {
+        form.addEventListener('invalid', function (e) {
+            var passo = e.target.closest('.ed-passo');
+            if (passo && passo.hidden) mostrar(Number(passo.id.replace('ed-passo-', '')));
+        }, true);
+    }
+
+    var hash = (window.location.hash || '').match(/^#passo-(\d+)$/);
+    mostrar(hash ? Number(hash[1]) : 1);
+
+    // Contagem de turmas marcadas, no topo do cartão.
+    var contagemTurmas = document.getElementById('edTurmasContagem');
+    if (contagemTurmas) {
+        var caixas = Array.prototype.slice.call(document.querySelectorAll('input[name="turmas_ids"][type="checkbox"]'));
+        var atualizarContagem = function () {
+            var n = caixas.filter(function (c) { return c.checked; }).length;
+            contagemTurmas.textContent = n + ' turma' + (n === 1 ? '' : 's') + ' marcada' + (n === 1 ? '' : 's');
+        };
+        caixas.forEach(function (c) { c.addEventListener('change', atualizarContagem); });
+        atualizarContagem();
+    }
+
+    // O input de arquivo fica escondido; quem abre é o botão de upload.
+    var btnEscolher = document.getElementById('btnEscolherFoto');
+    var inputFoto = document.getElementById('fotoArquivoEditarAluno');
+    if (btnEscolher && inputFoto) {
+        btnEscolher.addEventListener('click', function () { inputFoto.click(); });
+    }
+    // Ao chegar uma foto nova, o ícone de vazio sai da caixa.
+    var miniatura = document.getElementById('miniatura');
+    var vazia = document.getElementById('fotoVazia');
+    if (miniatura && vazia) {
+        new MutationObserver(function () {
+            if (miniatura.getAttribute('src')) vazia.style.display = 'none';
+        }).observe(miniatura, { attributes: true, attributeFilter: ['src', 'class'] });
+    }
+});
+</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
 <script src="{{ url_for('static', filename='js/photo-cropper.js') }}"></script>
 <script>

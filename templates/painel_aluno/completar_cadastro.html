@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}Complete o cadastro{% endblock %}
+{% block content %}
+{# Primeiro acesso: só os campos que faltam, de todos os alunos ligados a este
+   login, na mesma tela. Um formulário só, um botão só. #}
+{% set tipos = {
+  'data_nascimento': 'date', 'email': 'email', 'peso': 'number',
+  'cep': 'tel', 'tel_celular': 'tel', 'responsavel_financeiro_telefone': 'tel',
+  'cpf': 'tel', 'responsavel_financeiro_cpf': 'tel', 'numero': 'text'
+} %}
+{% set dicas = {
+  'cpf': 'Só os números.',
+  'responsavel_financeiro_cpf': 'Só os números.',
+  'peso': 'Em quilos, ex.: 62,5.',
+  'estado': 'Sigla com 2 letras, ex.: PE.',
+  'responsavel_financeiro_nome': 'Quem responde pelo pagamento da mensalidade.'
+} %}
+{% set resp = session.get('modo_painel') == 'responsavel' %}
+{% set total = blocos | map(attribute='pendentes') | map('length') | sum %}
+
+<div class="container my-4" style="max-width: 660px;">
+  <div class="card border-0 shadow-sm" style="border-radius:16px;overflow:hidden;">
+    <div class="card-body p-4">
+      <div class="text-center mb-3">
+        <div style="width:54px;height:54px;border-radius:14px;background:#e7f1ff;color:#0d6efd;display:inline-flex;align-items:center;justify-content:center;font-size:1.6rem;margin-bottom:.5rem;">
+          <i class="bi bi-person-vcard"></i>
+        </div>
+        <h4 class="fw-bold mb-1">
+          {{ 'Complete o cadastro' if resp else 'Complete seu cadastro' }}
+        </h4>
+        <p class="text-muted mb-0">
+          {{ total }} informa{{ 'ção' if total == 1 else 'ções' }}
+          {% if blocos|length > 1 %}
+          em {{ blocos|length }} alunos sob sua responsabilidade
+          {% endif %}
+          para a ficha ficar completa.
+        </p>
+      </div>
+
+      <p class="text-muted small">
+        Turma, graduação e academia são preenchidas pela secretaria —
+        aqui ficam só os dados pessoais.
+      </p>
+
+      <form method="POST" action="{{ url_for('painel_aluno.completar_cadastro') }}" autocomplete="off">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        {% for bloco in blocos %}
+        {# Com mais de um aluno, cada bloco precisa de cabeçalho: sem isso o
+           responsável não sabe de quem é o campo que está preenchendo. #}
+        {% if blocos|length > 1 %}
+        <div class="d-flex align-items-center gap-2 mt-4 mb-2 pb-2 border-bottom">
+          <i class="bi bi-person-fill text-primary"></i>
+          <strong>{{ bloco.aluno.nome }}</strong>
+          <span class="badge bg-light text-muted ms-auto">
+            {{ bloco.pendentes|length }} campo{{ 's' if bloco.pendentes|length != 1 }}
+          </span>
+        </div>
+        {% endif %}
+
+        <div class="row g-3">
+          {% for _c, rotulo, coluna in bloco.pendentes %}
+          {% set nome = campo(bloco.aluno.id, coluna) %}
+          <div class="col-sm-6">
+            <label class="form-label small fw-semibold" for="{{ nome }}">{{ rotulo }}</label>
+            {% if coluna == 'sexo' %}
+            <select class="form-select" id="{{ nome }}" name="{{ nome }}" required>
+              <option value="">Selecione…</option>
+              <option value="M" {% if form.get(nome) == 'M' %}selected{% endif %}>Masculino</option>
+              <option value="F" {% if form.get(nome) == 'F' %}selected{% endif %}>Feminino</option>
+              <option value="O" {% if form.get(nome) == 'O' %}selected{% endif %}>Outro</option>
+            </select>
+            {% else %}
+            <input class="form-control" id="{{ nome }}" name="{{ nome }}"
+                   type="{{ tipos.get(coluna, 'text') }}"
+                   {% if coluna == 'peso' %}step="0.1" min="0"{% endif %}
+                   {% if coluna == 'estado' %}maxlength="2"{% endif %}
+                   value="{{ form.get(nome, '') }}" autocomplete="off" required>
+            {% endif %}
+            {% if dicas.get(coluna) %}
+            <div class="form-text">{{ dicas.get(coluna) }}</div>
+            {% endif %}
+          </div>
+          {% endfor %}
+        </div>
+        {% endfor %}
+
+        <button type="submit" class="btn btn-success w-100 mt-4">
+          <i class="bi bi-check2-circle me-1"></i> Salvar e continuar
+        </button>
+      </form>
+
+      <p class="text-muted small text-center mt-3 mb-0">
+        Algum dado está errado na ficha? Fale com a secretaria da academia.
+      </p>
+    </div>
+  </div>
+
+  <div class="text-center mt-3">
+    <a href="{{ url_for('auth.logout') }}" class="btn btn-link btn-sm text-muted">Sair</a>
+  </div>
+</div>
+{% endblock %}

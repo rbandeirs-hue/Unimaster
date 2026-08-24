@@ -1,0 +1,277 @@
+{% extends 'base_um.html' %}
+{% set um_ativo = 'financeiro' %}
+{% block title %}Financeiro{% endblock %}
+
+{% block um_css %}
+  .kpis { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:14px; }
+  .duas { display:grid; grid-template-columns:minmax(0,1.25fr) minmax(0,1fr); gap:16px; align-items:start; }
+  .linfin { display:grid; grid-template-columns:minmax(0,2.4fr) minmax(0,1.1fr) 104px 104px 76px; gap:14px; }
+  .lin5 { display:grid; grid-template-columns:minmax(0,2.2fr) minmax(0,1.2fr) minmax(0,1.1fr) 104px 92px; gap:14px; }
+  .lin4 { display:grid; grid-template-columns:minmax(0,2.2fr) minmax(0,1.3fr) 110px 92px; gap:14px; }
+  .kpi { background:#fff; border:1px solid #e4e4e7; border-radius:10px; padding:18px; display:flex; flex-direction:column; gap:8px; }
+  .kpi-lbl { font:500 11.5px/1 'Inter',sans-serif; color:#a1a1aa; text-transform:uppercase; letter-spacing:.07em; }
+  .kpi-val { font:600 22px/1 'Inter',sans-serif; color:#18181b; letter-spacing:-.02em; }
+  .kpi-nota { font:400 12px/1.4 'Inter',sans-serif; color:#a1a1aa; }
+  @media (max-width: 1180px) {
+    .kpis { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .duas { grid-template-columns:minmax(0,1fr); }
+    .linfin { grid-template-columns:minmax(0,2.4fr) 104px 76px; }
+    .lin5 { grid-template-columns:minmax(0,2.2fr) minmax(0,1.2fr) 92px; }
+    .lin4 { grid-template-columns:minmax(0,2.2fr) minmax(0,1.2fr) 92px; }
+    .col-media { display:none !important; }
+  }
+  @media (max-width: 900px) {
+    .kpis { grid-template-columns:1fr; }
+    .linfin, .lin5, .lin4 { grid-template-columns:1fr 92px !important; gap:8px !important; }
+    .col-esconde { display:none !important; }
+  }
+{% endblock %}
+
+{% block um_conteudo %}
+{% set aba = aba|default('dashboard') %}
+{% set _abas = [
+  ('dashboard','Dashboard'), ('receitas','Receitas'), ('despesas','Despesas'), ('alunos','Alunos'),
+  ('planos','Planos'), ('formas','Formas de Pagto'), ('descontos','Descontos'),
+  ('cobrancas','Gerar Cobranças'), ('mensalidades','Mensalidades'), ('historico','Histórico'),
+  ('fechamento','Fechamento do mês')
+] %}
+
+<div style="display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap">
+  <div style="display:flex; flex-direction:column; gap:6px">
+    <div class="um-h1">Financeiro <span style="font-weight:400; color:#a1a1aa">— {{ academia.nome }}</span></div>
+    <div class="um-sub">Visão geral financeira da academia.</div>
+  </div>
+  <div style="display:flex; align-items:center; gap:8px">
+    <div style="display:flex; align-items:center; gap:4px; border:1px solid #e4e4e7; border-radius:8px; padding:3px; background:#fff">
+      <a href="{{ url_for(request.endpoint, aba=aba, mes=mes_ant, ano=ano_ant) }}" style="width:30px; height:30px; display:flex; align-items:center; justify-content:center; border-radius:6px; color:#52525b"><i class="bi bi-chevron-left" style="font-size:11px"></i></a>
+      <div style="min-width:104px; text-align:center; font:600 13px/1 'Inter',sans-serif; color:#18181b">{{ mes_label }}</div>
+      <a href="{{ url_for(request.endpoint, aba=aba, mes=mes_prox, ano=ano_prox) }}" style="width:30px; height:30px; display:flex; align-items:center; justify-content:center; border-radius:6px; color:#52525b"><i class="bi bi-chevron-right" style="font-size:11px"></i></a>
+    </div>
+  </div>
+</div>
+
+<div class="um-abas">
+  {% for chave, nome in _abas %}
+    <a class="um-aba {% if aba == chave %}ativa{% endif %}"
+       href="{{ url_for(request.endpoint, aba=chave, mes=mes, ano=ano) }}">{{ nome }}</a>
+  {% endfor %}
+</div>
+
+{# ================================ DASHBOARD ================================ #}
+{% if aba == 'dashboard' %}
+<div style="display:flex; flex-direction:column; gap:16px">
+  <div class="kpis">
+    <div class="kpi"><div class="kpi-lbl">Receita do Mês</div><div class="kpi-val">R$ {{ '%.2f'|format(kpi.receita_mes)|replace('.',',') }}</div><div class="kpi-nota">Anterior: R$ {{ '%.2f'|format(kpi.receita_anterior)|replace('.',',') }}</div></div>
+    <div class="kpi"><div class="kpi-lbl">Receita Potencial</div><div class="kpi-val">R$ {{ '%.2f'|format(kpi.receita_potencial)|replace('.',',') }}</div><div class="kpi-nota">Se todos pagarem</div></div>
+    <div class="kpi" style="box-shadow:inset 3px 0 0 #C8102E"><div class="kpi-lbl">Inadimplentes</div><div class="kpi-val" style="color:#C8102E">{{ kpi.inadimplentes }}</div><div class="kpi-nota">Pendentes + Atrasados</div></div>
+    <div class="kpi"><div class="kpi-lbl">Adimplência</div><div class="kpi-val">{{ kpi.adimplencia }}%</div><div class="kpi-nota">{{ kpi.alunos_ativos }} alunos ativos</div></div>
+  </div>
+
+  <div class="um-card" style="padding:16px 18px; display:flex; flex-direction:column; gap:10px">
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:12px">
+      <div style="font:500 12.5px/1 'Inter',sans-serif; color:#3f3f46">Taxa de arrecadação — {{ mes_label }}</div>
+      <div style="font:600 12.5px/1 'Inter',sans-serif; color:#18181b">{{ kpi.pagas }}/{{ kpi.total_cobrancas }}</div>
+    </div>
+    <div style="height:6px; border-radius:999px; background:#f4f4f5; overflow:hidden"><div style="height:100%; width:{{ kpi.adimplencia }}%; background:#15803d"></div></div>
+  </div>
+
+  <div class="duas">
+    <div class="um-card" style="overflow:hidden">
+      <div style="padding:14px 18px; border-bottom:1px solid #f4f4f5; display:flex; align-items:center; justify-content:space-between; gap:12px">
+        <div style="font:600 14px/1 'Inter',sans-serif; color:#18181b">Pendências — {{ mes_label }}</div>
+        <div style="font:400 12px/1 'Inter',sans-serif; color:#a1a1aa">{{ pendencias|length }} registros</div>
+      </div>
+      {% for p in pendencias %}
+      <div style="display:flex; align-items:center; gap:12px; padding:11px 18px; border-bottom:1px solid #f4f4f5; background:{{ loop.cycle('#ffffff','#fafafa') }}">
+        <span style="width:16px; height:7px; border-radius:2px; border:1px solid rgba(0,0,0,.18); background:{{ p.cor_faixa }}; flex-shrink:0"></span>
+        <div style="flex:1; min-width:0; display:flex; flex-direction:column; gap:3px">
+          <div style="font:500 13px/1.2 'Inter',sans-serif; color:#18181b; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">{{ p.nome }}</div>
+          <div style="font:400 11.5px/1.2 'Inter',sans-serif; color:#a1a1aa">{{ p.faixa }}</div>
+        </div>
+        <div style="font:600 12.5px/1 'Inter',sans-serif; color:#18181b">R$ {{ '%.2f'|format(p.valor)|replace('.',',') }}</div>
+        <span class="um-pill" style="background:{% if p.status == 'Atrasado' %}#fef2f2{% elif p.status == 'Pendente' %}#fefce8{% else %}#f4f4f5{% endif %};
+                                     color:{% if p.status == 'Atrasado' %}#991b1b{% elif p.status == 'Pendente' %}#854d0e{% else %}#3f3f46{% endif %}">{{ p.status }}</span>
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="um-card" style="overflow:hidden">
+      <div style="padding:14px 18px; border-bottom:1px solid #f4f4f5; font:600 14px/1 'Inter',sans-serif; color:#18181b">Alunos por Faixa</div>
+      <div style="padding:16px 18px; display:flex; flex-direction:column; gap:12px">
+        {% for f in faixas %}
+        <div style="display:flex; flex-direction:column; gap:6px">
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; font:400 12.5px/1 'Inter',sans-serif; color:#52525b">
+            <span style="display:flex; align-items:center; gap:8px"><span style="width:16px; height:7px; border-radius:2px; border:1px solid rgba(0,0,0,.18); background:{{ f.cor }}"></span>{{ f.nome }}</span>
+            <span style="font-weight:600; color:#18181b">{{ f.qtd }}</span>
+          </div>
+          <div style="height:5px; border-radius:999px; background:#f4f4f5; overflow:hidden"><div style="height:100%; width:{{ f.pct }}%; background:#18181b"></div></div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{# ================================= RECEITAS ================================ #}
+{% if aba == 'receitas' %}
+<div class="um-card" style="overflow:hidden">
+  <div style="padding:14px 18px; border-bottom:1px solid #f4f4f5; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap">
+    <div style="display:flex; flex-direction:column; gap:4px">
+      <div style="font:600 14px/1 'Inter',sans-serif; color:#18181b">Receitas — {{ mes_label }}</div>
+      <div style="font:400 12px/1 'Inter',sans-serif; color:#a1a1aa">Soma dos lançamentos listados: <span style="color:#15803d; font-weight:600">R$ {{ '%.2f'|format(total_receitas)|replace('.',',') }}</span></div>
+    </div>
+    <a class="um-btn-primario" href="{{ url_for('financeiro_receitas.nova') }}"><i class="bi bi-plus-lg" style="font-size:12px"></i>Nova receita</a>
+  </div>
+  <div class="linfin um-th"><div>Descrição</div><div class="col-esconde col-media">Categoria</div><div class="col-esconde">Data</div><div>Valor</div><div style="text-align:right">Ações</div></div>
+  {% for r in receitas %}
+  <div class="linfin um-td" style="background:{{ loop.cycle('#ffffff','#fafafa') }}">
+    <div style="display:flex; align-items:center; gap:8px; min-width:0">
+      <span style="font:500 13px/1.3 'Inter',sans-serif; color:#18181b; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">{{ r.descricao }}</span>
+      {% if r.automatica %}
+      <span class="um-pill" title="Receita gerada automaticamente a partir de pagamento confirmado — não pode ser editada ou excluída"
+            style="flex-shrink:0; font-size:10.5px">Automática</span>
+      {% endif %}
+    </div>
+    <div class="col-esconde col-media"><span class="um-pill">{{ r.categoria or 'Sem categoria' }}</span></div>
+    <div class="col-esconde" style="font:400 12.5px/1.3 'Inter',sans-serif; color:#52525b">{{ r.data.strftime('%d/%m/%Y') }}</div>
+    <div style="font:600 12.5px/1 'Inter',sans-serif; color:#15803d">R$ {{ '%.2f'|format(r.valor)|replace('.',',') }}</div>
+    <div style="display:flex; align-items:center; justify-content:flex-end; gap:5px">
+      {% if not r.automatica %}
+      <a class="um-ico" style="width:28px; height:28px" title="Editar" href="{{ url_for('financeiro_receitas.editar', id=r.id) }}"><i class="bi bi-pencil" style="font-size:11px"></i></a>
+      <form method="POST" action="{{ url_for('financeiro_receitas.excluir', id=r.id) }}" onsubmit="return confirm('Excluir esta receita?')">
+        <button class="um-ico" style="width:28px; height:28px; background:#fff; color:#a1a1aa" title="Excluir"><i class="bi bi-trash" style="font-size:11px"></i></button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{# ================================= DESPESAS ================================ #}
+{% if aba == 'despesas' %}
+<div class="um-card" style="overflow:hidden">
+  <div style="padding:14px 18px; border-bottom:1px solid #f4f4f5; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap">
+    <div style="display:flex; flex-direction:column; gap:4px">
+      <div style="font:600 14px/1 'Inter',sans-serif; color:#18181b">Despesas — {{ mes_label }}</div>
+      <div style="font:400 12px/1 'Inter',sans-serif; color:#a1a1aa">Soma dos lançamentos listados: <span style="color:#991b1b; font-weight:600">R$ {{ '%.2f'|format(total_despesas)|replace('.',',') }}</span></div>
+    </div>
+    <a class="um-btn-primario" href="{{ url_for('financeiro_despesas.nova') }}"><i class="bi bi-plus-lg" style="font-size:12px"></i>Nova despesa</a>
+  </div>
+  <div class="linfin um-th"><div>Descrição</div><div class="col-esconde col-media">Categoria</div><div class="col-esconde">Data</div><div>Valor</div><div style="text-align:right">Ações</div></div>
+  {% for d in despesas %}
+  <div class="linfin um-td" style="background:{{ loop.cycle('#ffffff','#fafafa') }}">
+    <div style="font:500 13px/1.3 'Inter',sans-serif; color:#18181b; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">{{ d.descricao }}</div>
+    <div class="col-esconde col-media"><span class="um-pill">{{ d.categoria or 'Sem categoria' }}</span></div>
+    <div class="col-esconde" style="font:400 12.5px/1.3 'Inter',sans-serif; color:#52525b">{{ d.data.strftime('%d/%m/%Y') }}</div>
+    <div style="font:600 12.5px/1 'Inter',sans-serif; color:#991b1b">R$ {{ '%.2f'|format(d.valor)|replace('.',',') }}</div>
+    <div style="display:flex; align-items:center; justify-content:flex-end; gap:5px">
+      <a class="um-ico" style="width:28px; height:28px" title="Editar" href="{{ url_for('financeiro_despesas.editar', id=d.id) }}"><i class="bi bi-pencil" style="font-size:11px"></i></a>
+      <form method="POST" action="{{ url_for('financeiro_despesas.excluir', id=d.id) }}" onsubmit="return confirm('Excluir esta despesa?')">
+        <button class="um-ico" style="width:28px; height:28px; background:#fff; color:#a1a1aa" title="Excluir"><i class="bi bi-trash" style="font-size:11px"></i></button>
+      </form>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{# ============================ FECHAMENTO DO MÊS ============================ #}
+{% if aba == 'fechamento' %}
+<div style="display:flex; flex-direction:column; gap:16px">
+
+  <div class="um-card" style="padding:16px 18px; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap">
+    <div style="display:flex; flex-direction:column; gap:4px">
+      <div style="font:600 14px/1 'Inter',sans-serif; color:#18181b">Relatórios financeiros — {{ mes_label }}</div>
+      <div style="font:400 12px/1.4 'Inter',sans-serif; color:#a1a1aa">Entradas, saídas e fechamento do mês. Use as setas do mês no topo da tela para trocar o período.</div>
+    </div>
+    <div style="display:flex; gap:8px; flex-wrap:wrap">
+      <button class="um-btn" onclick="window.print()"><i class="bi bi-printer" style="font-size:12px"></i>Imprimir</button>
+      <a class="um-btn" href="{{ url_for('financeiro.relatorio_pdf', mes=mes, ano=ano) }}"><i class="bi bi-file-earmark-pdf" style="font-size:12px"></i>PDF</a>
+      <a class="um-btn" href="{{ url_for('financeiro.relatorio_excel', mes=mes, ano=ano) }}"><i class="bi bi-file-earmark-spreadsheet" style="font-size:12px"></i>Excel</a>
+    </div>
+  </div>
+
+  <div class="kpis">
+    <div class="kpi"><div class="kpi-lbl">Receitas</div><div class="kpi-val" style="color:#15803d">R$ {{ '%.2f'|format(fech.receitas)|replace('.',',') }}</div><div class="kpi-nota">Recebido no mês</div></div>
+    <div class="kpi"><div class="kpi-lbl">Despesas</div><div class="kpi-val" style="color:#991b1b">R$ {{ '%.2f'|format(fech.despesas)|replace('.',',') }}</div><div class="kpi-nota">Despesas pagas no mês</div></div>
+    <div class="kpi" style="box-shadow:inset 3px 0 0 #18181b"><div class="kpi-lbl">Saldo (DRE)</div><div class="kpi-val">R$ {{ '%.2f'|format(fech.saldo)|replace('.',',') }}</div><div class="kpi-nota">Receitas − despesas</div></div>
+    <div class="kpi"><div class="kpi-lbl">Em atraso</div><div class="kpi-val" style="color:#854d0e">R$ {{ '%.2f'|format(fech.em_atraso)|replace('.',',') }}</div><div class="kpi-nota">{{ fech.qtd_atraso }} alunos</div></div>
+  </div>
+
+  <div class="duas">
+    {% for bloco in [
+        {'titulo':'Receitas por categoria','itens':entradas_cat,'cor':'#15803d','total':fech.receitas,'rotulo':'Total de entradas'},
+        {'titulo':'Despesas por categoria','itens':saidas_cat,'cor':'#991b1b','total':fech.despesas,'rotulo':'Total de saídas'}
+      ] %}
+    <div class="um-card" style="overflow:hidden">
+      <div style="padding:14px 18px; border-bottom:1px solid #f4f4f5; display:flex; align-items:center; justify-content:space-between; gap:12px">
+        <div style="font:600 14px/1 'Inter',sans-serif; color:#18181b">{{ bloco.titulo }}</div>
+        <div style="display:flex; gap:5px">
+          <button class="um-ico" style="width:28px; height:28px; background:#fff" title="Imprimir" onclick="window.print()"><i class="bi bi-printer" style="font-size:11px"></i></button>
+          <a class="um-ico" style="width:28px; height:28px" title="Exportar" href="{{ url_for('financeiro.relatorio_excel', mes=mes, ano=ano) }}"><i class="bi bi-download" style="font-size:11px"></i></a>
+        </div>
+      </div>
+      {% for c in bloco.itens %}
+      <div style="display:flex; align-items:center; gap:14px; padding:12px 18px; border-bottom:1px solid #f4f4f5">
+        <div style="flex:1; min-width:0; display:flex; flex-direction:column; gap:6px">
+          <div style="font:500 12.5px/1.3 'Inter',sans-serif; color:#18181b">{{ c.nome or 'Sem categoria' }}</div>
+          <div style="height:4px; border-radius:999px; background:#f4f4f5; overflow:hidden"><div style="height:100%; width:{{ c.pct }}%; background:{{ bloco.cor }}"></div></div>
+        </div>
+        <div style="text-align:right; display:flex; flex-direction:column; gap:4px; flex-shrink:0">
+          <div style="font:600 12.5px/1 'Inter',sans-serif; color:#18181b">R$ {{ '%.2f'|format(c.valor)|replace('.',',') }}</div>
+          <div style="font:400 11px/1 'Inter',sans-serif; color:#a1a1aa">{{ c.pct }}%</div>
+        </div>
+      </div>
+      {% endfor %}
+      <div style="padding:12px 18px; display:flex; align-items:center; justify-content:space-between; gap:12px; background:#fafafa">
+        <span style="font:600 12.5px/1 'Inter',sans-serif; color:#3f3f46">{{ bloco.rotulo }}</span>
+        <span style="font:600 13.5px/1 'Inter',sans-serif; color:{{ bloco.cor }}">R$ {{ '%.2f'|format(bloco.total)|replace('.',',') }}</span>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="um-card" style="overflow:hidden">
+    <div style="padding:14px 18px; border-bottom:1px solid #f4f4f5; display:flex; align-items:center; justify-content:space-between; gap:12px">
+      <div style="font:600 14px/1 'Inter',sans-serif; color:#18181b">Fechamento de {{ mes_label }}</div>
+      <div style="display:flex; gap:5px">
+        <button class="um-ico" style="width:28px; height:28px; background:#fff" title="Imprimir fechamento" onclick="window.print()"><i class="bi bi-printer" style="font-size:11px"></i></button>
+        <a class="um-ico" style="width:28px; height:28px" title="Exportar fechamento" href="{{ url_for('financeiro.relatorio_excel', mes=mes, ano=ano) }}"><i class="bi bi-download" style="font-size:11px"></i></a>
+      </div>
+    </div>
+    <div style="padding:6px 18px 4px">
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding:11px 0; border-bottom:1px solid #f4f4f5; font:400 13px/1.4 'Inter',sans-serif"><span style="color:#71717a">Receitas do mês</span><span style="color:#15803d; font-weight:500">R$ {{ '%.2f'|format(fech.receitas)|replace('.',',') }}</span></div>
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding:11px 0; border-bottom:1px solid #f4f4f5; font:400 13px/1.4 'Inter',sans-serif"><span style="color:#71717a">− Despesas do mês</span><span style="color:#991b1b; font-weight:500">R$ {{ '%.2f'|format(fech.despesas)|replace('.',',') }}</span></div>
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px 0 12px">
+        <span style="font:600 14px/1 'Inter',sans-serif; color:#18181b">Deve fechar o mês com</span>
+        <span style="font:600 20px/1 'Inter',sans-serif; color:#18181b; letter-spacing:-.02em">R$ {{ '%.2f'|format(fech.saldo)|replace('.',',') }}</span>
+      </div>
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding:11px 0 14px; border-top:1px solid #f4f4f5; font:400 13px/1.4 'Inter',sans-serif"><span style="color:#71717a">Se o que está em atraso for quitado</span><span style="color:#18181b; font-weight:500">R$ {{ '%.2f'|format(fech.saldo + fech.em_atraso)|replace('.',',') }}</span></div>
+    </div>
+    <div style="padding:12px 18px; background:#fafafa; border-top:1px solid #f4f4f5; font:400 12px/1.5 'Inter',sans-serif; color:#a1a1aa">
+      Fechamento pelo resultado do mês (DRE). Saldo acumulado do mês anterior não existe hoje no sistema.
+    </div>
+  </div>
+
+  {# --------- Prévia do PDF: é o mesmo bloco que a rota /relatorio.pdf renderiza --------- #}
+  <details class="um-card" style="overflow:hidden">
+    <summary style="padding:14px 18px; cursor:pointer; list-style:none">
+      <div style="font:600 14px/1 'Inter',sans-serif; color:#18181b">Como fica o PDF</div>
+      <div style="font:400 12px/1.4 'Inter',sans-serif; color:#a1a1aa; margin-top:4px">Prévia da folha A4 que sai em Imprimir e em PDF.</div>
+    </summary>
+    <div style="border-top:1px solid #f4f4f5; background:#f4f4f5; padding:24px; display:flex; justify-content:center">
+      {% include 'financeiro/_relatorio_folha.html' %}
+    </div>
+  </details>
+
+</div>
+{% endif %}
+
+{# ==== Abas restantes: mantidas nos templates atuais até serem convertidas ==== #}
+{% if aba in ['alunos','planos','formas','descontos','cobrancas','mensalidades','historico'] %}
+  {% include 'financeiro/_aba_' ~ aba ~ '.html' ignore missing %}
+{% endif %}
+
+{% endblock %}

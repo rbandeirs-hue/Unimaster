@@ -13,6 +13,34 @@ from math import ceil
 bp_usuarios = Blueprint("usuarios", __name__, url_prefix="/usuarios")
 
 
+def _ctx_shell():
+    """Contexto que o `base_academia.html` consome: item ativo da lateral,
+    seletor de academia do topo e nome no rodapé. Sem academia no contexto,
+    a lateral esconde sozinha os itens que dependem dela."""
+    academia_id = (session.get("academia_gerenciamento_id")
+                   or getattr(current_user, "id_academia", None))
+    if not academia_id:
+        return {"academia": None, "academias": [], "academia_id": None}
+    db = get_db_connection()
+    cur = db.cursor(dictionary=True)
+    try:
+        cur.execute("SELECT academia_id FROM usuarios_academias WHERE usuario_id = %s",
+                    (current_user.id,))
+        ids = [r["academia_id"] for r in cur.fetchall()] or []
+        if academia_id not in ids:
+            ids.append(academia_id)
+        cur.execute("SELECT id, nome FROM academias WHERE id IN (%s) ORDER BY nome"
+                    % ",".join(["%s"] * len(ids)), tuple(ids))
+        academias = cur.fetchall()
+    except Exception:
+        academias = []
+    finally:
+        cur.close()
+        db.close()
+    academia = next((a for a in academias if a["id"] == academia_id), None)
+    return {"academia": academia, "academias": academias, "academia_id": academia_id}
+
+
 # ======================================================
 # 🔹 Verificação geral de permissão
 # ======================================================
@@ -308,6 +336,7 @@ def cadastro_usuario():
         roles=roles_filtradas,
         back_url=back_url,
         academias_disponiveis=academias_disponiveis,
+        **_ctx_shell(),
     )
 
 
@@ -394,9 +423,27 @@ def editar_usuario(user_id):
 
     # Contexto academia: gestor/professor editando usuário da sua academia
     contexto_academia = (current_user.has_role("gestor_academia") or current_user.has_role("professor")) and _pode_editar_usuario(usuario)
-    cursor.execute("SELECT academia_id FROM usuarios_academias WHERE usuario_id = %s ORDER BY academia_id LIMIT 1", (user_id,))
-    row_acad = cursor.fetchone()
-    academia_id_editar = row_acad["academia_id"] if row_acad else None
+    # Todas as academias do usuário editado — e não só a primeira por id.
+    # Dependente não tem academia: `responsavel_alunos` é global. Com uma
+    # academia só, um pai que treina numa e tem filho em outra nunca conseguia
+    # marcar esse filho, e pior: salvar apagava o vínculo que já existia.
+    cursor.execute(
+        "SELECT academia_id FROM usuarios_academias WHERE usuario_id = %s ORDER BY academia_id",
+        (user_id,),
+    )
+    academias_editar = [r["academia_id"] for r in cursor.fetchall()]
+    # O gestor só enxerga (e só mexe) no que ele próprio administra.
+    if not (current_user.has_role("admin") or current_user.has_role("gestor_associacao")):
+        cursor.execute(
+            "SELECT academia_id FROM usuarios_academias WHERE usuario_id = %s",
+            (current_user.id,),
+        )
+        minhas = {r["academia_id"] for r in cursor.fetchall()}
+        _atual = session.get("academia_gerenciamento_id") or getattr(current_user, "id_academia", None)
+        if _atual:
+            minhas.add(_atual)
+        academias_editar = [a for a in academias_editar if a in minhas]
+    academia_id_editar = academias_editar[0] if academias_editar else None
     alunos_para_aluno = []
     alunos_para_responsavel = []
     aluno_vinculado_id = None
@@ -409,11 +456,14 @@ def editar_usuario(user_id):
     if visitante_row:
         visitante_dados = visitante_row
     
-    if contexto_academia and academia_id_editar:
+    if contexto_academia and academias_editar:
+        _ph = ", ".join(["%s"] * len(academias_editar))
         cursor.execute(
-            """SELECT id, nome, usuario_id FROM alunos WHERE id_academia = %s AND ativo = 1 AND status = 'ativo'
-               ORDER BY nome""",
-            (academia_id_editar,),
+            f"""SELECT al.id, al.nome, al.usuario_id, al.id_academia, ac.nome AS academia_nome
+                FROM alunos al LEFT JOIN academias ac ON ac.id = al.id_academia
+                WHERE al.id_academia IN ({_ph}) AND al.ativo = 1 AND al.status = 'ativo'
+                ORDER BY al.nome""",
+            tuple(academias_editar),
         )
         todos_alunos = cursor.fetchall()
         alunos_para_aluno = [a for a in todos_alunos if not a.get("usuario_id") or a.get("usuario_id") == user_id]
@@ -660,27 +710,43 @@ def editar_usuario(user_id):
                     cursor.execute("UPDATE visitantes SET id_academia = %s WHERE usuario_id = %s", (acad_row["academia_id"], user_id))
 
         # Vínculo aluno/responsavel (contexto academia)
-        if contexto_academia and academia_id_editar:
+        if contexto_academia and academias_editar:
+            _ph = ", ".join(["%s"] * len(academias_editar))
             cursor.execute("SELECT id FROM roles WHERE chave = 'aluno'")
             r_aluno = cursor.fetchone()
             cursor.execute("SELECT id FROM roles WHERE chave = 'responsavel'")
             r_resp = cursor.fetchone()
             roles_str = [str(x) for x in roles_novas]
-            # Remover vínculos antigos
-            cursor.execute("UPDATE alunos SET usuario_id = NULL WHERE usuario_id = %s", (user_id,))
-            cursor.execute("DELETE FROM responsavel_alunos WHERE usuario_id = %s", (user_id,))
+            # Remover vínculos antigos — só dentro do que esta tela mostra.
+            # Apagar tudo fazia o gestor de uma academia derrubar, sem saber, o
+            # vínculo de um aluno de outra que ele nem via na lista.
+            cursor.execute(
+                f"UPDATE alunos SET usuario_id = NULL "
+                f"WHERE usuario_id = %s AND id_academia IN ({_ph})",
+                (user_id, *academias_editar),
+            )
+            cursor.execute(
+                f"""DELETE ra FROM responsavel_alunos ra
+                    JOIN alunos al ON al.id = ra.aluno_id
+                    WHERE ra.usuario_id = %s AND al.id_academia IN ({_ph})""",
+                (user_id, *academias_editar),
+            )
             if r_aluno and str(r_aluno["id"]) in roles_str:
                 aluno_id = request.form.get("aluno_id", type=int)
                 if aluno_id:
                     cursor.execute(
-                        "UPDATE alunos SET usuario_id = %s WHERE id = %s AND id_academia = %s",
-                        (user_id, aluno_id, academia_id_editar),
+                        f"UPDATE alunos SET usuario_id = %s "
+                        f"WHERE id = %s AND id_academia IN ({_ph})",
+                        (user_id, aluno_id, *academias_editar),
                     )
             if r_resp and str(r_resp.get("id", "")) in roles_str:
                 for x in request.form.getlist("aluno_ids"):
                     try:
                         aid = int(x)
-                        cursor.execute("SELECT 1 FROM alunos WHERE id = %s AND id_academia = %s", (aid, academia_id_editar))
+                        cursor.execute(
+                            f"SELECT 1 FROM alunos WHERE id = %s AND id_academia IN ({_ph})",
+                            (aid, *academias_editar),
+                        )
                         if cursor.fetchone():
                             cursor.execute(
                                 "INSERT IGNORE INTO responsavel_alunos (usuario_id, aluno_id) VALUES (%s, %s)",
@@ -725,6 +791,7 @@ def editar_usuario(user_id):
         aluno_vinculado_id=aluno_vinculado_id,
         responsavel_aluno_ids=responsavel_aluno_ids,
         visitante_dados=visitante_dados,
+        **_ctx_shell(),
     )
 
 

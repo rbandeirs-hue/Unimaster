@@ -11,103 +11,90 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
 
-    <!-- CSS de Login -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/login/style.css') }}">
+    <!-- Design system (tokens) + folha do acesso, a mesma do login -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/base/tokens.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/login/auth.css') }}">
 </head>
 
-<body>
-    <!-- Fundo com gradiente e padrão -->
-    <div class="login-background">
-        <div class="background-pattern"></div>
-        <div class="background-gradient"></div>
-    </div>
+<body class="auth">
+    <main class="auth__card">
 
-    <!-- Container Principal -->
-    <div class="login-wrapper">
-        <div class="container-fluid">
-            <div class="row justify-content-center align-items-center min-vh-100">
-                <div class="col-12 col-sm-10 col-md-8 col-lg-5 col-xl-4">
-                    
-                    <!-- Card -->
-                    <div class="login-card">
-                        
-                        <!-- Cabeçalho -->
-                        <div class="login-header">
-                            <div class="logo-icon-container">
-                                <div class="judo-icon-wrapper">
-                                    <i class="bi bi-key-fill judo-icon"></i>
-                                </div>
-                            </div>
-                            <h1 class="login-title">Esqueci Minha Senha</h1>
-                            <p class="login-subtitle">Informe seu e-mail para receber o link de redefinição</p>
-                        </div>
-
-                        <!-- Mensagens Flash -->
-                        {% with messages = get_flashed_messages(with_categories=true) %}
-                        {% if messages %}
-                            <div class="flash-messages">
-                                {% for category, message in messages %}
-                                    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
-                                        <i class="bi bi-{% if category == 'success' %}check-circle{% elif category == 'danger' %}exclamation-triangle{% elif category == 'warning' %}exclamation-circle{% else %}info-circle{% endif %}-fill me-2"></i>
-                                        {{ message }}
-                                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fechar"></button>
-                                    </div>
-                                {% endfor %}
-                            </div>
-                        {% endif %}
-                        {% endwith %}
-
-                        <!-- Formulário -->
-                        <form method="POST" class="login-form">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <div class="form-group">
-                                <label for="email" class="form-label">
-                                    <i class="bi bi-envelope-fill me-2"></i>E-mail
-                                </label>
-                                <div class="input-wrapper">
-                                    <i class="bi bi-envelope input-icon"></i>
-                                    <input 
-                                        type="email" 
-                                        class="form-control" 
-                                        id="email" 
-                                        name="email" 
-                                        required 
-                                        placeholder="seu@email.com"
-                                        autocomplete="email"
-                                        autofocus
-                                    >
-                                </div>
-                            </div>
-
-                            <button type="submit" class="btn-login">
-                                <span class="btn-text">Enviar Link de Redefinição</span>
-                                <i class="bi bi-send btn-icon"></i>
-                            </button>
-                        </form>
-
-                        <!-- Links -->
-                        <div class="text-center mt-4">
-                            <a href="/auth/login" class="text-decoration-none">
-                                <i class="bi bi-arrow-left me-1"></i>
-                                Voltar para o login
-                            </a>
-                        </div>
-
-                        <!-- Rodapé -->
-                        <div class="login-footer">
-                            <p class="footer-text">
-                                <i class="bi bi-shield-check-fill me-1"></i>
-                                Sistema seguro e confiável
-                            </p>
-                        </div>
-
-                    </div>
-                </div>
-            </div>
+        <div class="auth__marca">
+            <span class="auth__marca-icone"><i class="bi bi-shield-fill-check"></i></span>
+            <span class="auth__marca-texto">Unimaster <em>Judô</em></span>
         </div>
-    </div>
+
+        <h1 class="auth__titulo">Esqueci minha senha</h1>
+        <p class="auth__sub">Informe seu e-mail para receber o link de redefinição.</p>
+
+        <!-- Mensagens Flash -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="auth__flash">
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                        <i class="bi bi-{% if category == 'success' %}check-circle{% elif category == 'danger' %}exclamation-triangle{% elif category == 'warning' %}exclamation-circle{% else %}info-circle{% endif %}-fill me-2"></i>
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fechar"></button>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+        {% endwith %}
+
+        <form method="POST" class="login-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+            <div class="auth__campo">
+                <label for="email" class="auth__label">E-mail</label>
+                <input
+                    type="email"
+                    class="auth__input"
+                    id="email"
+                    name="email"
+                    required
+                    placeholder="seu@email.com"
+                    autocomplete="email"
+                    autofocus
+                >
+                <small class="auth__ajuda">
+                    Enviamos um link de redefinição para o e-mail cadastrado na sua conta.
+                </small>
+            </div>
+
+            <button type="submit" class="auth__botao btn-login">
+                <span class="btn-text">Enviar link</span>
+            </button>
+        </form>
+
+        <a href="{{ url_for('auth.login') }}" class="auth__esqueci">
+            <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Voltar para o login
+        </a>
+
+        <hr class="auth__divisor">
+        <p class="auth__seguro mb-0">
+            <i class="bi bi-lock-fill" aria-hidden="true"></i>
+            Conexão segura e criptografada
+        </p>
+    </main>
+
+    <p class="auth__copy">&copy; {{ current_year }} Unimaster Judô. Todos os direitos reservados.</p>
 
     <!-- JavaScript Bootstrap -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Mesmo retorno visual do login ao enviar.
+        const form = document.querySelector('.login-form');
+        if (form) {
+            form.addEventListener('submit', function () {
+                const btn = this.querySelector('.btn-login');
+                if (btn) {
+                    btn.classList.add('loading');
+                    const t = btn.querySelector('.btn-text');
+                    if (t) t.textContent = 'Enviando...';
+                }
+            });
+        }
+    </script>
 </body>
 </html>

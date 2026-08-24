@@ -1,63 +1,272 @@
-{% extends "base.html" %}
-{% block title %}Mensagens do WhatsApp{% endblock %}
+{% extends "base_academia.html" %}
+{% set menu_ativo = 'whatsapp' %}
+{% block title %}Mensagens automáticas — WhatsApp{% endblock %}
+{% block pagina_titulo %}Mensagens automáticas{% endblock %}
+{% block pagina_subtitulo %}Texto de cada mensagem enviada pelo sistema. Desligue um modelo para parar o envio.{% endblock %}
+{% block pagina_acoes %}
+  <a href="{{ url_for('academia.whatsapp_config', academia_id=academia_id) }}" class="wa-btn wa-btn--ghost">
+    <i class="bi bi-arrow-left"></i> WhatsApp da academia
+  </a>
+{% endblock %}
 {% block content %}
-<div class="container my-4" style="max-width: 760px;">
-  <div class="d-flex align-items-center gap-2 mb-1">
-    <i class="bi bi-chat-left-text-fill text-success fs-3"></i>
-    <h4 class="fw-bold mb-0">Mensagens do WhatsApp</h4>
-  </div>
-  <p class="text-muted">Personalize o texto de cada mensagem automática. Deixe um modelo <strong>desligado</strong> para não enviá-lo.</p>
+<style>
+  .wa{ --fg:#1c1a19; --muted:#8a8681; --muted2:#6f6b66; --line:#ededea; --border:#e7e6e3;
+       --primary:#c1121f; --green:#15803d; color:var(--fg); }
+  .wa a{ text-decoration:none; }
+  .wa .lbl{ font-size:.7rem; letter-spacing:.1em; text-transform:uppercase; font-weight:600; color:var(--muted); }
+  .wa .card2{ background:#fff; border:1px solid var(--border); border-radius:14px; }
+  .wa-btn{ display:inline-flex; align-items:center; gap:7px; border-radius:8px; padding:.5rem .95rem;
+           font-weight:600; font-size:.85rem; cursor:pointer; border:1px solid transparent; }
+  .wa-btn--dark{ background:#1c1a19; color:#fff; } .wa-btn--dark:hover{ color:#fff; filter:brightness(1.15); }
+  .wa-btn--ghost{ background:#fff; border-color:#d8d7d3; color:#2a2724; } .wa-btn--ghost:hover{ background:#f7f6f4; color:#2a2724; }
+  .wa-btn:disabled{ opacity:.5; cursor:default; }
 
-  <div class="mb-3"><a href="{{ url_for('academia.whatsapp_config', academia_id=academia_id) }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> WhatsApp da academia</a></div>
+  .wa .cols{ display:grid; grid-template-columns:260px minmax(0,1fr) 300px; gap:18px; align-items:start; }
+  .wa .sec-topo{ padding:14px 18px; border-bottom:1px solid var(--line); }
 
-  {% with messages = get_flashed_messages(with_categories=true) %}
-    {% for cat, msg in messages %}<div class="alert alert-{{ cat }} py-2">{{ msg }}</div>{% endfor %}
-  {% endwith %}
+  /* lista de modelos */
+  .wa .mdl{ display:flex; align-items:center; gap:10px; padding:14px 18px; border-bottom:1px solid var(--line);
+            cursor:pointer; color:var(--fg); }
+  .wa .mdl:last-child{ border-bottom:0; }
+  .wa .mdl:hover{ background:#faf9f7; }
+  .wa .mdl.is-ativa{ background:#f4f4f2; box-shadow:inset 3px 0 0 var(--primary); }
+  .wa .mdl .dot{ width:8px; height:8px; border-radius:50%; flex:none; background:#15803d; }
+  .wa .mdl.off .dot{ background:#c4c1bc; }
+  .wa .mdl.off .mdl-nome{ color:var(--muted); }
+  .wa .mdl-nome{ font-size:.9rem; font-weight:500; }
 
-  <div class="alert alert-light border small">
-    <strong>Variáveis disponíveis</strong> (são substituídas automaticamente):
-    <code>{nome}</code> primeiro nome,
-    <code>{aluno}</code> nome do aluno,
-    <code>{valor}</code> valor,
-    <code>{vencimento}</code> data,
-    <code>{link}</code> link de pagamento,
-    <code>{academia}</code> nome da academia,
-    <code>{mes}</code> competência.
-  </div>
+  /* editor */
+  .wa .ed-topo{ display:flex; align-items:flex-start; justify-content:space-between; gap:12px; padding:18px 20px 8px; }
+  .wa .ed-nome{ font-size:1.05rem; font-weight:600; }
+  .wa .ed-desc{ font-size:.85rem; color:var(--muted2); padding:0 20px 12px; }
+  .wa .ed-body{ padding:0 20px; }
+  .wa .ta{ width:100%; box-sizing:border-box; border:1px solid #d8d7d3; border-radius:10px; padding:.85rem 1rem;
+           font-size:.95rem; line-height:1.5; color:var(--fg); resize:vertical; min-height:180px; font-family:inherit; }
+  .wa .ta:focus{ outline:none; border-color:var(--primary); box-shadow:0 0 0 3px rgba(193,18,31,.12); }
+  .wa .chips{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; padding:12px 20px; }
+  .wa .chip{ border:1px solid #d8d7d3; background:#fff; border-radius:7px; padding:.28rem .55rem; font-size:.8rem;
+             color:var(--muted2); cursor:pointer; font-family:ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .wa .chip:hover{ border-color:var(--primary); color:var(--primary); }
+  .wa .ed-rodape{ display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px 20px;
+                  border-top:1px solid var(--line); flex-wrap:wrap; }
+  .wa .link-a{ background:none; border:0; color:var(--muted2); font-size:.85rem; cursor:pointer; padding:0; }
+  .wa .link-a:hover{ color:var(--fg); text-decoration:underline; }
 
-  <form method="POST" action="{{ url_for('academia.whatsapp_mensagens', academia_id=academia_id) }}">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    {% for it in itens %}
-    <div class="card border-0 shadow-sm mb-3">
-      <div class="card-body">
-        <div class="d-flex justify-content-between align-items-center mb-2">
-          <h6 class="fw-bold mb-0">{{ it.label }}</h6>
-          <div class="form-check form-switch mb-0">
-            <input class="form-check-input" type="checkbox" role="switch" id="ativo_{{ it.tipo }}" name="ativo_{{ it.tipo }}" value="1" {{ 'checked' if it.ativo }}>
-            <label class="form-check-label small" for="ativo_{{ it.tipo }}">Ativo</label>
-          </div>
+  /* switch */
+  .wa .sw{ width:42px; height:23px; border-radius:999px; background:#d8d7d3; position:relative; flex:none;
+           transition:background .15s; cursor:pointer; display:inline-block; }
+  .wa .sw::after{ content:""; position:absolute; top:3px; left:3px; width:17px; height:17px; border-radius:50%;
+                  background:#fff; box-shadow:0 1px 2px rgba(0,0,0,.2); transition:left .15s; }
+  .wa input:checked + .sw{ background:var(--green); } .wa input:checked + .sw::after{ left:22px; }
+  .wa .sw-inp{ position:absolute; opacity:0; width:0; height:0; }
+  .wa .sw-wrap{ display:inline-flex; align-items:center; gap:8px; font-size:.82rem; color:var(--muted2); white-space:nowrap; }
+
+  /* prévia */
+  .wa .bolha{ background:#e7f7ec; border-radius:12px 12px 12px 4px; padding:12px 14px; font-size:.9rem;
+              line-height:1.5; white-space:pre-wrap; word-break:break-word; color:#123; position:relative; }
+  .wa .bolha .hora{ display:block; text-align:right; font-size:.68rem; color:#7a8a7e; margin-top:6px; }
+  .wa .prev-nota{ font-size:.78rem; color:var(--muted); padding:10px 18px 16px; }
+  .wa .var{ display:flex; gap:10px; padding:11px 18px; border-bottom:1px solid var(--line); font-size:.83rem; align-items:baseline; }
+  .wa .var:last-child{ border-bottom:0; }
+  .wa .var code{ color:var(--primary); font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:.8rem; white-space:nowrap; }
+  .wa .var span{ color:var(--muted2); }
+
+  @media (max-width:1080px){ .wa .cols{ grid-template-columns:220px minmax(0,1fr); } .wa .col-prev{ grid-column:1 / -1; } }
+  @media (max-width:720px){ .wa .cols{ grid-template-columns:1fr; } }
+</style>
+
+{% set descricoes = {
+  'lembrete_vencimento': 'Enviado 3 dias antes do vencimento da mensalidade.',
+  'lembrete_atraso': 'Enviado quando a mensalidade passa do vencimento.',
+  'confirmacao_pagamento': 'Enviado automaticamente quando um pagamento é confirmado.',
+  'matricula': 'Enviado ao confirmar a matrícula de um novo aluno.',
+  'confirmacao_matricula': 'Enviado quando o pagamento da matrícula é confirmado — pelo gateway ou pela baixa manual.',
+  'boas_vindas': 'Mensagem de boas-vindas ao novo aluno.',
+  'aniversario': 'Enviado no dia do aniversário do aluno.'
+} %}
+
+<div class="wa">
+<form method="POST" action="{{ url_for('academia.whatsapp_mensagens', academia_id=academia_id) }}" id="formModelos">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="cols">
+
+    {# ------------------------------------------------ lista de modelos #}
+    <div class="card2">
+      <div class="sec-topo"><span class="lbl">Modelos</span></div>
+      <div id="listaModelos">
+        {% for it in itens %}
+        <div class="mdl {{ 'is-ativa' if loop.first }} {{ '' if it.ativo else 'off' }}" data-tipo="{{ it.tipo }}">
+          <span class="dot"></span>
+          <span class="mdl-nome">{{ it.label }}</span>
         </div>
-        <textarea class="form-control" name="texto_{{ it.tipo }}" rows="4">{{ it.texto }}</textarea>
-        <div class="d-flex justify-content-between mt-1">
-          <span class="form-text mb-0" id="prev_{{ it.tipo }}"></span>
-          <button type="button" class="btn btn-link btn-sm p-0 text-muted js-restaurar" data-tipo="{{ it.tipo }}" data-padrao="{{ it.padrao|e }}">Restaurar padrão</button>
-        </div>
+        {% endfor %}
       </div>
     </div>
-    {% endfor %}
-    <div class="d-flex gap-2">
-      <button type="submit" class="btn btn-success"><i class="bi bi-check-lg me-1"></i> Salvar mensagens</button>
-      <a href="{{ url_for('academia.whatsapp_config', academia_id=academia_id) }}" class="btn btn-outline-secondary">Cancelar</a>
-    </div>
-  </form>
-</div>
 
+    {# ------------------------------------------------------- editor #}
+    <div class="card2">
+      {% for it in itens %}
+      <div class="ed-pane" data-tipo="{{ it.tipo }}" {% if not loop.first %}style="display:none;"{% endif %}>
+        <div class="ed-topo">
+          <span class="ed-nome">{{ it.label }}</span>
+          <label class="sw-wrap">
+            <span class="ativo-txt">{{ 'Ativo' if it.ativo else 'Desligado' }}</span>
+            <span style="position:relative; display:inline-flex;">
+              <input class="sw-inp js-ativo" type="checkbox" name="ativo_{{ it.tipo }}" value="1" {{ 'checked' if it.ativo }}>
+              <span class="sw"></span>
+            </span>
+          </label>
+        </div>
+        <div class="ed-desc">{{ descricoes.get(it.tipo, '') }}</div>
+        <div class="ed-body">
+          <textarea class="ta js-texto" name="texto_{{ it.tipo }}" data-padrao="{{ it.padrao|e }}">{{ it.texto }}</textarea>
+        </div>
+        <div class="chips">
+          <span class="ed-desc" style="padding:0; margin-right:2px;">Inserir:</span>
+          {% for v in ['nome','aluno','valor','vencimento','link','academia','mes'] %}
+          <button type="button" class="chip js-chip">{{ '{' ~ v ~ '}' }}</button>
+          {% endfor %}
+        </div>
+        <div class="ed-rodape">
+          <div style="display:flex; gap:16px; align-items:center;">
+            <span class="ed-desc" style="padding:0; margin:0;"><span class="js-count">0</span> caracteres</span>
+            <button type="button" class="link-a js-restaurar">Restaurar padrão</button>
+          </div>
+          <div style="display:flex; gap:12px; align-items:center;">
+            <span class="ed-desc js-salvo" style="padding:0; margin:0; color:var(--muted);">Salvo</span>
+            <button type="submit" class="wa-btn wa-btn--dark js-salvar" disabled><i class="bi bi-check-lg"></i> Salvar</button>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    {# ------------------------------------------------ prévia + variáveis #}
+    <div class="col-prev">
+      <div class="card2" style="margin-bottom:18px;">
+        <div class="sec-topo"><span class="lbl">Prévia</span></div>
+        <div style="padding:16px 18px;">
+          <div class="bolha"><span id="prevTexto">—</span><span class="hora">09:41</span></div>
+        </div>
+        <div class="prev-nota">Exemplo com os dados de Ana Beatriz Sousa, mensalidade de {{ mes_exemplo }}.</div>
+      </div>
+      <div class="card2">
+        <div class="sec-topo"><span class="lbl">Variáveis disponíveis</span></div>
+        {% set vardesc = [
+          ('nome','Primeiro nome de quem recebe'),
+          ('aluno','Nome completo do aluno'),
+          ('valor','Valor da mensalidade'),
+          ('vencimento','Data de vencimento'),
+          ('link','Link de pagamento'),
+          ('academia','Nome da academia'),
+          ('mes','Mês de competência')
+        ] %}
+        {% for v, d in vardesc %}
+        <div class="var"><code>{{ '{' ~ v ~ '}' }}</code><span>{{ d }}</span></div>
+        {% endfor %}
+      </div>
+    </div>
+
+  </div>
+</form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
 <script>
-document.querySelectorAll('.js-restaurar').forEach(function(b){
-  b.addEventListener('click', function(){
-    var ta = document.querySelector('textarea[name="texto_'+b.getAttribute('data-tipo')+'"]');
-    if(ta){ ta.value = b.getAttribute('data-padrao'); }
+(function(){
+  var EXEMPLO = {
+    nome: 'Ana', aluno: 'Ana Beatriz Sousa', valor: 'R$ 70,00',
+    vencimento: '10/09/2026', link: 'pesv.org.br/pag/8f2c',
+    academia: {{ (academia.nome if academia else '')|tojson }}, mes: {{ mes_exemplo|tojson }}, pix: ''
+  };
+  var root = document.querySelector('.wa');
+  if(!root) return;
+
+  function paneAtiva(){ return root.querySelector('.ed-pane:not([style*="display: none"])') || root.querySelector('.ed-pane'); }
+
+  function render(texto){
+    var t = texto || '';
+    t = t.replace(/\{(\w+)\}/g, function(m, k){ return (k in EXEMPLO) ? EXEMPLO[k] : m; });
+    // limpa linhas que ficaram vazias por variável sem valor (ex.: {pix})
+    return t;
+  }
+  function atualizarPrevia(){
+    var pane = paneAtiva(); if(!pane) return;
+    var ta = pane.querySelector('.js-texto');
+    var alvo = document.getElementById('prevTexto');
+    if(ta && alvo) alvo.textContent = render(ta.value).trim() || '—';
+  }
+  function atualizarContagem(pane){
+    var ta = pane.querySelector('.js-texto'); var c = pane.querySelector('.js-count');
+    if(ta && c) c.textContent = ta.value.length;
+  }
+  function marcarSujo(pane){
+    var salvar = pane.querySelector('.js-salvar'); var salvo = pane.querySelector('.js-salvo');
+    if(salvar) salvar.disabled = false;
+    if(salvo) salvo.style.display = 'none';
+  }
+
+  // Trocar de modelo pela lista
+  root.querySelectorAll('.mdl').forEach(function(item){
+    item.addEventListener('click', function(){
+      var tipo = item.getAttribute('data-tipo');
+      root.querySelectorAll('.mdl').forEach(function(m){ m.classList.remove('is-ativa'); });
+      item.classList.add('is-ativa');
+      root.querySelectorAll('.ed-pane').forEach(function(p){
+        p.style.display = (p.getAttribute('data-tipo') === tipo) ? '' : 'none';
+      });
+      atualizarPrevia();
+    });
   });
-});
+
+  // Editar texto
+  root.querySelectorAll('.js-texto').forEach(function(ta){
+    ta.addEventListener('input', function(){
+      var pane = ta.closest('.ed-pane');
+      atualizarContagem(pane); marcarSujo(pane); atualizarPrevia();
+    });
+  });
+
+  // Toggle ativo
+  root.querySelectorAll('.js-ativo').forEach(function(inp){
+    inp.addEventListener('change', function(){
+      var pane = inp.closest('.ed-pane');
+      var txt = pane.querySelector('.ativo-txt');
+      if(txt) txt.textContent = inp.checked ? 'Ativo' : 'Desligado';
+      var tipo = pane.getAttribute('data-tipo');
+      var item = root.querySelector('.mdl[data-tipo="'+tipo+'"]');
+      if(item) item.classList.toggle('off', !inp.checked);
+      marcarSujo(pane);
+    });
+  });
+
+  // Chips inserem no cursor
+  root.querySelectorAll('.js-chip').forEach(function(chip){
+    chip.addEventListener('click', function(){
+      var pane = chip.closest('.ed-pane');
+      var ta = pane.querySelector('.js-texto');
+      var token = chip.textContent;
+      var ini = ta.selectionStart || 0, fim = ta.selectionEnd || 0;
+      ta.value = ta.value.slice(0, ini) + token + ta.value.slice(fim);
+      ta.focus(); ta.selectionStart = ta.selectionEnd = ini + token.length;
+      atualizarContagem(pane); marcarSujo(pane); atualizarPrevia();
+    });
+  });
+
+  // Restaurar padrão
+  root.querySelectorAll('.js-restaurar').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var pane = btn.closest('.ed-pane');
+      var ta = pane.querySelector('.js-texto');
+      ta.value = ta.getAttribute('data-padrao') || '';
+      atualizarContagem(pane); marcarSujo(pane); atualizarPrevia();
+    });
+  });
+
+  // Inicializa contagens
+  root.querySelectorAll('.ed-pane').forEach(atualizarContagem);
+  atualizarPrevia();
+})();
 </script>
 {% endblock %}

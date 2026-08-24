@@ -1,45 +1,56 @@
-{% extends "base.html" %}
+{% extends "base_academia.html" %}
+{% set menu_ativo = 'configuracoes' %}
 {% block title %}Configurações — {{ academia.nome if academia else 'Academia' }}{% endblock %}
+
+{% block pagina_titulo %}Configurações{% endblock %}
+{% block pagina_subtitulo %}{{ academia.nome if academia else 'Academia' }} — dados, operações e preferências.{% endblock %}
+
+{% block pagina_acoes %}
+  {% set back_url = back_url or get_back_url_default() %}
+  <a href="{{ back_url }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Voltar</a>
+{% endblock %}
+
 {% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/base/listas.css') }}">
 <style>
+  /* A tela tinha paleta própria (índigo, sombras fortes). Os tokens agora vêm
+     do design system; abaixo fica só o que é específico desta tela. */
   :root {
-    --c-surface: #ffffff;
-    --c-bg: #f6f8fc;
-    --c-border: #e8edf5;
-    --c-text: #111827;
-    --c-muted: #6b7280;
-    --c-muted-2: #9ca3af;
-    --c-primary: #4f46e5;
-    --c-primary-2: #6366f1;
-    --c-primary-soft: #eef2ff;
-    --shadow-sm: 0 1px 2px rgba(16,24,40,.05);
-    --shadow-md: 0 4px 16px rgba(16,24,40,.08);
-    --shadow-lg: 0 12px 32px rgba(16,24,40,.12);
+    --c-surface: #fff;
+    --c-border: var(--sh-line);
+    --c-text: var(--sh-ink);
+    --c-muted: var(--sh-ink-soft);
+    --c-muted-2: #a9a6a1;
+    --c-primary: var(--sh-ink);
+    --c-primary-2: var(--sh-ink);
+    --c-primary-soft: #f4f2ee;
+    --shadow-sm: none;
+    --shadow-md: var(--u-shadow-sm);
+    --shadow-lg: var(--u-shadow);
   }
 
-  .cfg-page { width: 100%; max-width: 1500px; margin: 0 auto; padding: 0 .5rem 3rem; }
+  .cfg-page { width: 100%; padding: 0 0 1rem; }
 
   /* ── Abas ───────────────────────────────────────────── */
   .cfg-tabs {
-    display: flex; gap: .4rem; margin-bottom: 1.4rem;
-    background: var(--c-surface); border: 1px solid var(--c-border);
-    border-radius: 14px; padding: .4rem; box-shadow: var(--shadow-sm);
+    display: flex; gap: .1rem; flex-wrap: wrap;
+    border-bottom: 1px solid var(--sh-line);
+    margin-bottom: 1.5rem;
     overflow-x: auto; scrollbar-width: none;
   }
   .cfg-tabs::-webkit-scrollbar { display: none; }
   .cfg-tab {
-    flex: 1 1 auto; min-width: max-content;
-    display: inline-flex; align-items: center; justify-content: center; gap: .5rem;
-    padding: .7rem 1.1rem; border: none; background: transparent; cursor: pointer;
-    font-size: .9rem; font-weight: 700; color: var(--c-muted);
-    border-radius: 10px; white-space: nowrap;
-    transition: background .15s, color .15s, box-shadow .15s;
+    display: inline-flex; align-items: center; gap: .5rem;
+    padding: .75rem 1rem; margin-bottom: -1px;
+    border: 0; border-bottom: 2px solid transparent;
+    background: none; color: var(--sh-ink-soft);
+    font-size: .93rem; white-space: nowrap; cursor: pointer;
   }
   .cfg-tab i { font-size: 1rem; }
   .cfg-tab:hover { color: var(--c-text); background: #f3f4f6; }
   .cfg-tab.is-active {
-    color: #fff; background: linear-gradient(135deg,#4f46e5,#6366f1);
-    box-shadow: 0 4px 12px rgba(79,70,229,.30);
+    color: var(--sh-ink); font-weight: 600;
+    border-bottom-color: var(--sh-ink); background: none;
   }
   .cfg-tab .cfg-tab__count {
     font-size: .68rem; font-weight: 700; background: rgba(0,0,0,.08);
@@ -234,30 +245,10 @@
 </style>
 {% endblock %}
 {% block content %}
-<div class="container-fluid my-4 cfg-page">
+<div class="cfg-page">
 
   <!-- Cabeçalho -->
-  <div class="cfg-head">
-    <div class="cfg-head__top">
-      {% set back_url = back_url or get_back_url_default() %}
-      {% include 'components/botao_voltar.html' %}
-    </div>
-    <div class="cfg-head__info">
-      <h1 class="cfg-head__title"><i class="bi bi-sliders"></i> Configurações</h1>
-      <p class="cfg-head__sub">{{ academia.nome if academia else 'Academia' }} — gerencie os dados, operações e preferências.</p>
-    </div>
-  </div>
-
-  {% if academias|length > 1 %}
-  <form method="GET" class="cfg-academia-select">
-    <label><i class="bi bi-building"></i> Academia</label>
-    <select name="academia_id" class="form-select form-select-sm" onchange="this.form.submit()">
-      {% for ac in academias %}
-      <option value="{{ ac.id }}" {% if ac.id == academia_id %}selected{% endif %}>{{ ac.nome }}</option>
-      {% endfor %}
-    </select>
-  </form>
-  {% endif %}
+  {# O título e o seletor de academia vêm do shell. #}
 
   {% if academia %}
 
@@ -671,6 +662,80 @@
               </div>
             </div>
 
+            {# Chave PIX da academia: fica fora dos blocos de gateway porque não
+               depende de nenhum — é justamente o que sobra quando o gateway
+               falha. Aparece para o aluno como segunda opção de pagamento. #}
+            <div class="cfg-panel" style="margin-top:1.4rem">
+              <div class="cfg-panel__head">
+                <div class="cfg-item__icon cfg-item__icon--teal"><i class="bi bi-qr-code"></i></div>
+                <div class="cfg-item__body">
+                  <p class="cfg-item__name">Chave PIX da academia</p>
+                  <p class="cfg-item__desc">
+                    Mostrada ao aluno na página de pagamento como alternativa ao gateway.
+                    O pagamento cai direto na conta da academia e a baixa é manual, pelo comprovante.
+                  </p>
+                </div>
+                {% if academia.pix_chave %}
+                <span class="cfg-badge cfg-badge--on"><span class="dot"></span> Ativa</span>
+                {% else %}
+                <span class="cfg-badge cfg-badge--off"><span class="dot"></span> Não configurada</span>
+                {% endif %}
+              </div>
+              <div class="cfg-panel__body">
+                <div class="row g-3">
+                  <div class="col-sm-4">
+                    {# O tipo é obrigatório de propósito: CPF e celular têm os
+                       mesmos 11 dígitos, e adivinhar gerava um código que o
+                       banco recusa dizendo que a chave não existe. #}
+                    <label for="pix_tipo" class="cfg-form-label">Tipo da chave</label>
+                    <select class="form-select" id="pix_tipo" name="pix_tipo">
+                      <option value="">Selecione…</option>
+                      {% for _v, _r in [('cpf','CPF'), ('cnpj','CNPJ'), ('telefone','Telefone'),
+                                        ('email','E-mail'), ('aleatoria','Chave aleatória')] %}
+                      <option value="{{ _v }}" {% if academia.pix_tipo == _v %}selected{% endif %}>{{ _r }}</option>
+                      {% endfor %}
+                    </select>
+                  </div>
+                  <div class="col-sm-8">
+                    <label for="pix_chave" class="cfg-form-label">Chave PIX</label>
+                    <input type="text" class="form-control" id="pix_chave" name="pix_chave"
+                           value="{{ academia.pix_chave or '' }}" autocomplete="off"
+                           placeholder="CPF/CNPJ, e-mail, telefone ou chave aleatória">
+                    <div class="form-text">
+                      Deixe em branco para não oferecer o PIX da academia. Pode digitar com
+                      pontuação — o sistema formata conforme o tipo escolhido.
+                      {% if academia.pix_chave and not academia.pix_tipo %}
+                      <span class="text-danger d-block mt-1">
+                        <i class="bi bi-exclamation-triangle"></i>
+                        Esta chave foi salva sem tipo. Escolha o tipo e salve de novo —
+                        sem isso o código PIX pode sair inválido.
+                      </span>
+                      {% elif chave_pix_normalizada %}
+                      <span class="text-success d-block mt-1">
+                        <i class="bi bi-check2"></i> No código PIX sai como:
+                        <code>{{ chave_pix_normalizada }}</code>
+                      </span>
+                      {% endif %}
+                    </div>
+                  </div>
+                  <div class="col-sm-7">
+                    <label for="pix_beneficiario" class="cfg-form-label">Nome do recebedor</label>
+                    <input type="text" class="form-control" id="pix_beneficiario" name="pix_beneficiario"
+                           value="{{ academia.pix_beneficiario or '' }}" maxlength="25" autocomplete="off"
+                           placeholder="Como aparece na conta">
+                    <div class="form-text">Até 25 caracteres — é o limite do padrão do PIX.</div>
+                  </div>
+                  <div class="col-sm-5">
+                    <label for="pix_cidade" class="cfg-form-label">Cidade</label>
+                    <input type="text" class="form-control" id="pix_cidade" name="pix_cidade"
+                           value="{{ academia.pix_cidade or '' }}" maxlength="15" autocomplete="off"
+                           placeholder="Recife">
+                    <div class="form-text">Até 15 caracteres.</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <button type="submit" class="cfg-btn-save"><i class="bi bi-check-lg"></i> Salvar cobrança online</button>
           </form>
         </div>
@@ -819,7 +884,79 @@
     });
   }
 
+  // ---------------------------------------- máscara da chave PIX
+  // A máscara segue o tipo escolhido. Sem ela, o gestor digita o celular sem
+  // pontuação e não tem como perceber que escolheu o tipo errado — foi assim
+  // que uma chave de telefone acabou salva como se fosse CPF.
+  var MASCARAS_PIX = {
+    cpf:       { placeholder: '000.000.000-00',      inputmode: 'numeric' },
+    cnpj:      { placeholder: '00.000.000/0000-00',  inputmode: 'numeric' },
+    telefone:  { placeholder: '(00) 00000-0000',     inputmode: 'tel' },
+    email:     { placeholder: 'contato@academia.com.br', inputmode: 'email' },
+    aleatoria: { placeholder: '00000000-0000-0000-0000-000000000000', inputmode: 'text' },
+    '':        { placeholder: 'Escolha o tipo da chave ao lado', inputmode: 'text' }
+  };
+
+  function mascararChavePix(valor, tipo) {
+    if (tipo === 'email') return valor.trim();
+    if (tipo === 'aleatoria') {
+      var h = valor.toLowerCase().replace(/[^0-9a-f]/g, '').slice(0, 32);
+      return [h.slice(0, 8), h.slice(8, 12), h.slice(12, 16), h.slice(16, 20), h.slice(20)]
+        .filter(function (p) { return p.length; }).join('-');
+    }
+    var d = valor.replace(/\D/g, '');
+    if (tipo === 'cpf') {
+      d = d.slice(0, 11);
+      if (d.length > 9)      return d.slice(0,3) + '.' + d.slice(3,6) + '.' + d.slice(6,9) + '-' + d.slice(9);
+      if (d.length > 6)      return d.slice(0,3) + '.' + d.slice(3,6) + '.' + d.slice(6);
+      if (d.length > 3)      return d.slice(0,3) + '.' + d.slice(3);
+      return d;
+    }
+    if (tipo === 'cnpj') {
+      d = d.slice(0, 14);
+      if (d.length > 12)     return d.slice(0,2) + '.' + d.slice(2,5) + '.' + d.slice(5,8) + '/' + d.slice(8,12) + '-' + d.slice(12);
+      if (d.length > 8)      return d.slice(0,2) + '.' + d.slice(2,5) + '.' + d.slice(5,8) + '/' + d.slice(8);
+      if (d.length > 5)      return d.slice(0,2) + '.' + d.slice(2,5) + '.' + d.slice(5);
+      if (d.length > 2)      return d.slice(0,2) + '.' + d.slice(2);
+      return d;
+    }
+    if (tipo === 'telefone') {
+      // Aceita o +55 colado de outro lugar sem duplicar o país.
+      if (d.length > 11 && d.slice(0, 2) === '55') d = d.slice(2);
+      d = d.slice(0, 11);
+      if (d.length > 10)     return '(' + d.slice(0,2) + ') ' + d.slice(2,7) + '-' + d.slice(7);
+      if (d.length > 6)      return '(' + d.slice(0,2) + ') ' + d.slice(2,6) + '-' + d.slice(6);
+      if (d.length > 2)      return '(' + d.slice(0,2) + ') ' + d.slice(2);
+      return d;
+    }
+    return valor;
+  }
+
+  function ligarMascaraPix() {
+    var sel = document.getElementById('pix_tipo');
+    var campo = document.getElementById('pix_chave');
+    if (!sel || !campo) return;
+    function aplicar(reformatar) {
+      var tipo = sel.value || '';
+      var cfg = MASCARAS_PIX[tipo] || MASCARAS_PIX[''];
+      campo.placeholder = cfg.placeholder;
+      campo.setAttribute('inputmode', cfg.inputmode);
+      if (reformatar && campo.value) campo.value = mascararChavePix(campo.value, tipo);
+    }
+    // Trocar o tipo reformata o que já está digitado: o mesmo número vira
+    // (81) 99587-8180 ou 819.958.781-80 conforme a escolha, e a diferença
+    // aparece na hora.
+    sel.addEventListener('change', function () { aplicar(true); });
+    campo.addEventListener('input', function () {
+      var pos = campo.selectionStart === campo.value.length;
+      campo.value = mascararChavePix(campo.value, sel.value || '');
+      if (pos) campo.setSelectionRange(campo.value.length, campo.value.length);
+    });
+    aplicar(true);
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
+    ligarMascaraPix();
     // Estado inicial do seletor de gateway
     var checked = document.querySelector('input[name="gateway_pagamento"]:checked');
     mostrarBlocoGateway(checked ? checked.value : '');

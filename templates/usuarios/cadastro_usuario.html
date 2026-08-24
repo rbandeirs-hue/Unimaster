@@ -15,7 +15,10 @@
         Preencha os dados abaixo para criar uma nova conta de acesso ao sistema.
       </p>
 
-      <form method="POST" action="{{ url_for('usuarios.cadastro_usuario') }}" class="needs-validation" novalidate>
+      {# autocomplete="off": com e-mail e senha no mesmo formulário, o Chrome
+         trata a tela como cadastro de login, guarda o par e preenche o e-mail
+         de outro usuário na próxima vez. Mesmo ajuste de promover.html. #}
+      <form method="POST" action="{{ url_for('usuarios.cadastro_usuario') }}" class="needs-validation" novalidate autocomplete="off">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
         <!-- Nome -->
@@ -30,7 +33,7 @@
         <div class="mb-3">
           <label for="email" class="form-label fw-semibold">Email</label>
           <input type="email" class="form-control" id="email" name="email"
-                 placeholder="exemplo@academia.com" required>
+                 placeholder="exemplo@academia.com" required autocomplete="off">
           <div class="form-text">Este será o login do usuário.</div>
           <div class="invalid-feedback">Informe um email válido.</div>
         </div>
@@ -39,7 +42,9 @@
         <div class="row g-3 mb-3">
           <div class="col-12 col-md-6">
             <label for="senha" class="form-label fw-semibold">Senha</label>
-            <input type="password" class="form-control" id="senha" name="senha" required>
+            {# "new-password" é o que desarma o preenchimento do par salvo. #}
+            <input type="password" class="form-control" id="senha" name="senha" required
+                   autocomplete="new-password">
             <div class="invalid-feedback">Defina uma senha.</div>
           </div>
 

@@ -1,90 +1,143 @@
-{% extends "financeiro/painel/_layout.html" %}
-{% block title %}Histórico de Pagamentos{% endblock %}
+{% extends "financeiro/painel/_base.html" %}
+{% set fin_aba = 'historico' %}
+{% block title %}Histórico — Financeiro{% endblock %}
 
-{% block conteudo %}
-<div class="fp-page fp-page--narrow">
+{% block pagina_titulo %}Financeiro{% endblock %}
+{% block pagina_subtitulo %}Histórico de pagamentos · {{ lista|length }} registro{{ 's' if lista|length != 1 }}{% endblock %}
 
-  <div class="fp-head">
-    <h1 class="fp-h1">Histórico de Pagamentos</h1>
-    <p class="fp-sub">
-      {{ lista|length }} registros encontrados · Total pago:
-      <span style="font-family:var(--fp-mono);color:var(--fp-green)">{{ fmt_moeda(total_pago) }}</span>
-    </p>
-  </div>
+{% block fin_css %}
+<style>
+  .lin-hist { grid-template-columns: 70px minmax(0,1.8fr) 110px 120px 120px minmax(0,1fr) 120px 120px; }
 
-  <div class="fp-filtros">
-    <div>
-      <div class="fp-filtro__label">Status</div>
-      <div class="fp-filtro__opcoes">
-        {% for s in ['Todos', 'Pago', 'Pendente', 'Atrasado'] %}
-        <a class="fp-pill fp-pill--{{ s|lower }} {% if f_status == s %}is-active{% endif %}"
-           href="{{ url_for('financeiro_painel.historico', academia_id=academia_id, status=s, forma=f_forma, mes=f_mes) }}">{{ s }}</a>
-        {% endfor %}
-      </div>
-    </div>
+  @media (max-width: 1500px) {
+    .lin-hist { grid-template-columns: minmax(0,1.8fr) 110px 120px 120px minmax(0,1fr) 120px 120px; }
+    .col-id { display: none !important; }
+  }
+  @media (max-width: 1320px) {
+    .lin-hist { grid-template-columns: minmax(0,1.8fr) 110px 120px minmax(0,1fr) 120px 120px; }
+    .col-venc { display: none !important; }
+  }
+  @media (max-width: 1120px) {
+    .lin-hist { grid-template-columns: minmax(0,1.8fr) 120px minmax(0,1fr) 120px 120px; }
+    .col-mes { display: none !important; }
+  }
+  @media (max-width: 1024px) {
+    .lin-hist { grid-template-columns: minmax(0,1.8fr) 110px 120px minmax(0,1fr) 120px 120px; }
+    .col-mes, .col-venc { display: block !important; }
+    .col-id { display: none !important; }
+  }
+  @media (max-width: 900px) {
+    .lin-hist { grid-template-columns: minmax(0,1.8fr) 120px 120px 120px; }
+    .col-mes, .col-venc, .col-forma { display: none !important; }
+  }
+  @media (max-width: 620px) {
+    .lin-hist { grid-template-columns: minmax(0,1.6fr) 120px 120px; }
+    .col-pagto { display: none !important; }
+  }
+</style>
+{% endblock %}
 
-    <div>
-      <div class="fp-filtro__label">Forma</div>
-      <div class="fp-filtro__opcoes">
-        <a class="fp-pill {% if f_forma == 'Todos' %}is-active{% endif %}"
-           href="{{ url_for('financeiro_painel.historico', academia_id=academia_id, status=f_status, forma='Todos', mes=f_mes) }}">Todos</a>
-        {% for f in formas_usadas %}
-        <a class="fp-pill {% if f_forma == f %}is-active{% endif %}"
-           href="{{ url_for('financeiro_painel.historico', academia_id=academia_id, status=f_status, forma=f, mes=f_mes) }}">{{ f }}</a>
-        {% endfor %}
-      </div>
-    </div>
+{% block fin_conteudo %}
+{# A situação é o corte principal e tem quatro opções: vira aba, como nas
+   demais listas. Competência e forma são listas longas — em pílulas viravam
+   uma tira de treze itens; como campo de seleção cabem na barra de filtros. #}
+<nav class="lst-abas">
+  {% for s in ['Todos', 'Pago', 'Pendente', 'Atrasado'] %}
+  <a class="lst-aba {% if f_status == s %}is-ativa{% endif %}"
+     href="{{ url_for('financeiro_painel.historico', academia_id=academia_id, status=s, forma=f_forma, mes=f_mes) }}">
+    {{ 'Todas' if s == 'Todos' else s }}<span class="lst-aba__n {% if s == 'Atrasado' and contagens.get('Atrasado') %}is-alerta{% endif %}">{{ contagens.get(s, 0) }}</span>
+  </a>
+  {% endfor %}
+</nav>
 
-    <div>
-      <div class="fp-filtro__label">Mês</div>
-      <div class="fp-filtro__opcoes">
-        <a class="fp-pill {% if f_mes == 'Todos' %}is-active{% endif %}"
-           href="{{ url_for('financeiro_painel.historico', academia_id=academia_id, status=f_status, forma=f_forma, mes='Todos') }}">Todos</a>
-        {% for m in meses %}
-        <a class="fp-pill {% if f_mes == m.chave %}is-active{% endif %}"
-           href="{{ url_for('financeiro_painel.historico', academia_id=academia_id, status=f_status, forma=f_forma, mes=m.chave) }}">{{ m.label }}</a>
-        {% endfor %}
-      </div>
-    </div>
-  </div>
+<form method="GET" class="lst-filtros">
+  {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
+  <input type="hidden" name="status" value="{{ f_status }}">
 
-  <div class="fp-card fp-card--table">
-    <div class="fp-table-wrap">
-      <table class="fp-table">
-        <thead>
-          <tr><th>#</th><th>Aluno</th><th>Mês</th><th>Vencimento</th><th>Pagamento</th><th>Forma</th><th>Valor</th><th>Status</th></tr>
-        </thead>
-        <tbody>
-          {% for r in lista %}
-          <tr>
-            <td class="fp-td-id">{{ '%03d'|format(r.id) }}</td>
-            <td class="fp-td-nome">{{ r.aluno_nome }}</td>
-            <td class="fp-td-sub">{{ r.mes_label }}</td>
-            <td class="fp-td-mono">{{ r.data_vencimento.strftime('%d/%m/%Y') if r.data_vencimento else '—' }}</td>
-            <td class="fp-td-mono">{{ r.data_pagamento.strftime('%d/%m/%Y') if r.data_pagamento else '—' }}</td>
-            <td class="fp-td-muted">{{ r.forma_nome or '—' }}</td>
-            <td class="fp-td-valor" style="font-weight:500">{{ fmt_moeda(r.valor) }}</td>
-            <td><span class="fp-badge fp-badge--{{ r.rotulo|lower }}">{{ r.rotulo }}</span></td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-    {% if not lista %}
-    <div class="fp-empty">Nenhum registro encontrado para os filtros selecionados.</div>
-    {% endif %}
-  </div>
+  <label class="lst-campo lst-campo--curto">
+    <span class="lst-campo__rotulo">Competência</span>
+    <select name="mes" onchange="this.form.submit()">
+      <option value="Todos" {% if f_mes == 'Todos' %}selected{% endif %}>Todas as competências</option>
+      {% for m in meses %}
+      <option value="{{ m.chave }}" {% if f_mes == m.chave %}selected{% endif %}>{{ m.label }}</option>
+      {% endfor %}
+    </select>
+  </label>
 
-  {% if por_forma %}
-  <div style="margin-top:20px;display:flex;gap:12px;flex-wrap:wrap">
-    {% for pf in por_forma %}
-    <div class="fp-card" style="padding:14px 18px;flex:1;min-width:150px">
-      <div class="fp-filtro__label" style="margin-bottom:4px">{{ pf.nome }}</div>
-      <div style="font-family:var(--fp-mono);font-size:16px;font-weight:600;color:var(--fp-green)">{{ fmt_moeda(pf.total) }}</div>
-    </div>
-    {% endfor %}
-  </div>
+  {% if formas_usadas %}
+  <label class="lst-campo lst-campo--curto">
+    <span class="lst-campo__rotulo">Forma de pagamento</span>
+    <select name="forma" onchange="this.form.submit()">
+      <option value="Todos" {% if f_forma == 'Todos' %}selected{% endif %}>Todas as formas</option>
+      {% for f in formas_usadas %}
+      <option value="{{ f }}" {% if f_forma == f %}selected{% endif %}>{{ f }}</option>
+      {% endfor %}
+    </select>
+  </label>
   {% endif %}
 
+  <div class="lst-filtros__acoes">
+    <button type="submit" class="sh__btn sh__btn--forte">Filtrar</button>
+    {% if f_mes != 'Todos' or f_forma != 'Todos' or f_status != 'Todos' %}
+    <a href="{{ url_for('financeiro_painel.historico', academia_id=academia_id) }}" class="sh__btn">Limpar</a>
+    {% endif %}
+  </div>
+</form>
+
+{% if por_forma %}
+<div class="sh__faixa">
+  {% for pf in por_forma %}
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">{{ pf.nome }}</span>
+    <span class="sh__faixa-valor fin-valor fin-valor--entrada">{{ fmt_moeda(pf.total) }}</span>
+    <span class="lst-sub">Recebido no recorte atual</span>
+  </div>
+  {% endfor %}
 </div>
+{% endif %}
+
+<section class="lst-quadro">
+  <header class="lst-quadro__topo">
+    <h2 class="lst-quadro__titulo">
+      Lançamentos{% if f_mes != 'Todos' %} · {{ (meses | selectattr('chave', 'equalto', f_mes) | first).label }}{% endif %}
+    </h2>
+    <span class="lst-quadro__meta">
+      {{ lista|length }} registro{{ 's' if lista|length != 1 }} · total pago {{ fmt_moeda(total_pago) }}
+    </span>
+  </header>
+
+  <div class="lst-rolagem">
+    <div class="lst-largura" style="--lst-min:600px">
+      <div class="lst-linha lin-hist lst-cab">
+        <div class="col-id">#</div>
+        <div>Aluno</div>
+        <div class="col-mes">Mês</div>
+        <div class="col-venc">Vencimento</div>
+        <div class="col-pagto">Pagamento</div>
+        <div class="col-forma">Forma</div>
+        <div class="lst-num">Valor</div>
+        <div>Situação</div>
+      </div>
+
+      {% for r in lista %}
+      <div class="lst-linha lin-hist lst-item">
+        <div class="col-id lst-vazio-celula">{{ '%03d'|format(r.id) }}</div>
+        <div class="lst-corta"><span class="lst-nome">{{ r.aluno_nome }}</span></div>
+        <div class="col-mes">{{ r.mes_label }}</div>
+        <div class="col-venc">{{ r.data_vencimento.strftime('%d/%m/%Y') if r.data_vencimento else '—' }}</div>
+        <div class="col-pagto">{{ r.data_pagamento.strftime('%d/%m/%Y') if r.data_pagamento else '—' }}</div>
+        <div class="col-forma lst-corta">{{ r.forma_nome or '—' }}</div>
+        <div class="lst-num fin-valor">{{ fmt_moeda(r.valor) }}</div>
+        <div>
+          {% if r.rotulo|lower == 'pago' %}<span class="lst-tag lst-tag--ok">{{ r.rotulo }}</span>
+          {% elif r.rotulo|lower == 'atrasado' %}<span class="lst-tag lst-tag--alerta">{{ r.rotulo }}</span>
+          {% else %}<span class="lst-tag">{{ r.rotulo }}</span>{% endif %}
+        </div>
+      </div>
+      {% else %}
+      <p class="lst-vazio">Nenhum registro encontrado para os filtros selecionados.</p>
+      {% endfor %}
+    </div>
+  </div>
+</section>
 {% endblock %}

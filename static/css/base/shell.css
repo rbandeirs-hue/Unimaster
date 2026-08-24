@@ -1,0 +1,607 @@
+/* =======================================================================
+   Shell da área logada — barra lateral escura + topo + conteúdo
+   =======================================================================
+   Usado por base_academia.html. Vive à parte de layout.css (que atende o
+   layout antigo) para as duas estruturas não disputarem regra enquanto a
+   migração acontece tela a tela.
+
+   Consome os tokens de base/tokens.css e define os próprios só para o que é
+   identidade deste shell: a lateral preta e o vermelho da marca.
+   ======================================================================= */
+
+:root {
+  --sh-side-bg:      #141414;
+  --sh-side-bg-2:    #1d1d1d;
+  --sh-side-text:    #b9b7b4;
+  --sh-side-text-on: #ffffff;
+  --sh-side-label:   #6f6d6a;
+  --sh-red:          #e4001b;
+  --sh-page-bg:      #faf9f7;
+  --sh-line:         #e6e4e0;
+  --sh-ink:          #1c1c1c;
+  --sh-ink-soft:     #6b6862;
+  --sh-side-w:       285px;
+}
+
+.sh { background: var(--sh-page-bg); color: var(--sh-ink); min-height: 100vh; }
+
+/* ------------------------------------------------------------- lateral */
+.sh__side {
+  position: fixed;
+  inset: 0 auto 0 0;
+  width: var(--sh-side-w);
+  background: var(--sh-side-bg);
+  display: flex;
+  flex-direction: column;
+  z-index: 1040;
+  /* Quem rola é só `.sh__side-rolagem`. Deixar rolagem também aqui fazia o
+     Firefox desenhar duas barras lado a lado na lateral. */
+  overflow: hidden;
+}
+
+.sh__marca {
+  display: flex;
+  align-items: center;
+  gap: .7rem;
+  padding: 1.35rem 1.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, .07);
+  text-decoration: none;
+}
+.sh__marca-icone {
+  width: 34px; height: 34px;
+  flex: 0 0 34px;
+  display: grid; place-items: center;
+  background: var(--sh-red);
+  color: #fff;
+  border-radius: 8px;
+  font-size: 1rem;
+}
+.sh__marca-texto {
+  color: #fff;
+  font-size: .95rem;
+  font-weight: 700;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+}
+.sh__marca-texto em { font-style: normal; color: var(--sh-red); }
+
+/* Seletor de modo de acesso, logo abaixo da marca. */
+.sh__modo {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  margin: 0 1rem .5rem;
+  padding: .7rem .9rem;
+  background: var(--sh-side-bg-2);
+  border: 1px solid rgba(255, 255, 255, .09);
+  border-radius: var(--u-radius-sm);
+  color: #fff;
+  font-weight: 600;
+  font-size: .95rem;
+  text-decoration: none;
+}
+.sh__modo:hover { background: #262626; color: #fff; }
+.sh__modo .bi-chevron-expand { color: var(--sh-side-label); font-size: .85rem; }
+
+/* Lista de modos do usuário, aberta pelo próprio seletor. */
+.sh__modo-wrap { position: relative; }
+.sh__modo-wrap .sh__modo {
+  width: calc(100% - 2rem);
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+}
+.sh__modo--fixo { cursor: default; }
+.sh__modo-lista {
+  display: none;
+  position: absolute;
+  left: 1rem; right: 1rem;
+  top: calc(100% - .25rem);
+  z-index: 30;
+  padding: .3rem;
+  background: #1f1f1f;
+  border: 1px solid rgba(255, 255, 255, .12);
+  border-radius: var(--u-radius-sm);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, .45);
+}
+.sh__modo-wrap.is-aberto .sh__modo-lista { display: block; }
+.sh__modo-opcao {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  padding: .55rem .7rem;
+  border-radius: 6px;
+  color: #d4d4d8;
+  font-size: .9rem;
+  font-weight: 500;
+  text-decoration: none;
+}
+.sh__modo-opcao:hover { background: #2d2d2d; color: #fff; }
+.sh__modo-opcao.is-atual { color: #fff; font-weight: 600; }
+.sh__modo-opcao .bi-check2 { color: var(--sh-red); }
+
+/* Só a lista de itens rola; marca, modo e usuário ficam fixos. */
+.sh__side-rolagem {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  /* Firefox ignora ::-webkit-scrollbar; sem isto a barra sai larga e clara
+     sobre a lateral escura. */
+  scrollbar-width: thin;
+  scrollbar-color: #3a3a3a transparent;
+}
+.sh__side-rolagem::-webkit-scrollbar { width: 6px; }
+.sh__side-rolagem::-webkit-scrollbar-track { background: transparent; }
+.sh__side-rolagem::-webkit-scrollbar-thumb { background: #3a3a3a; border-radius: 3px; }
+
+/* Usuário no rodapé da lateral. */
+.sh__side-usuario {
+  display: flex;
+  align-items: center;
+  gap: .7rem;
+  padding: .9rem 1.25rem;
+  border-top: 1px solid rgba(255, 255, 255, .08);
+}
+.sh__side-avatar {
+  width: 36px; height: 36px;
+  flex: 0 0 36px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  background: #3a3a3a;
+  color: #d6d4d1;
+  object-fit: cover;
+}
+.sh__side-usuario-txt { min-width: 0; flex: 1; text-decoration: none; display: block; }
+.sh__side-usuario-nome {
+  display: block;
+  color: #fff;
+  font-size: .9rem;
+  font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.sh__side-usuario-link { display: block; color: var(--sh-side-label); font-size: .78rem; }
+.sh__side-usuario-txt:hover .sh__side-usuario-link { color: #fff; }
+.sh__side-sair { color: var(--sh-side-label); font-size: 1.1rem; text-decoration: none; }
+.sh__side-sair:hover { color: var(--sh-red); }
+
+/* Busca no topo. */
+/* `flex: 1` com `min-width: 0` para a busca encolher no celular em vez de
+   empurrar a barra e criar rolagem horizontal na página inteira. */
+.sh__busca {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1 1 260px;
+  min-width: 0;
+}
+.sh__busca .bi-search {
+  position: absolute; left: .8rem;
+  color: var(--sh-ink-soft);
+  font-size: .9rem;
+  pointer-events: none;
+}
+.sh__busca-input {
+  width: 100%;
+  height: 40px;
+  padding: 0 .9rem 0 2.3rem;
+  border: 1px solid var(--sh-line);
+  border-radius: var(--u-radius-sm);
+  background: #fff;
+  font-size: .92rem;
+  color: var(--sh-ink);
+}
+.sh__busca-input:focus {
+  outline: none;
+  border-color: #cfcbc4;
+  box-shadow: 0 0 0 3px rgba(28, 28, 28, .06);
+}
+.sh__seletor-academia { min-width: 200px; }
+
+.sh__side-label {
+  padding: 1.15rem 1.5rem .4rem;
+  color: var(--sh-side-label);
+  font-size: .68rem;
+  font-weight: 600;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+}
+/* O primeiro grupo encosta menos no topo, os seguintes ganham respiro. */
+.sh__side-label + .sh__nav { margin-bottom: .35rem; }
+
+.sh__nav { display: flex; flex-direction: column; }
+.sh__nav:last-of-type { padding-bottom: 1.5rem; }
+.sh__nav-item {
+  display: flex;
+  align-items: center;
+  gap: .8rem;
+  padding: .7rem 1.5rem;
+  color: var(--sh-side-text);
+  text-decoration: none;
+  font-size: .95rem;
+  border-left: 3px solid transparent;
+  transition: background var(--u-transition), color var(--u-transition);
+}
+.sh__nav-item i { font-size: 1.05rem; width: 1.3rem; text-align: center; }
+.sh__nav-item:hover { background: var(--sh-side-bg-2); color: var(--sh-side-text-on); }
+.sh__nav-item.is-ativo {
+  background: var(--sh-side-bg-2);
+  color: var(--sh-side-text-on);
+  border-left-color: var(--sh-red);
+  font-weight: 600;
+}
+.sh__nav-item:focus-visible { outline: 2px solid var(--sh-red); outline-offset: -2px; }
+
+/* --------------------------------------------------------------- topo */
+.sh__main { margin-left: var(--sh-side-w); min-height: 100vh; display: flex; flex-direction: column; }
+
+.sh__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--u-space-3);
+  padding: .9rem 2rem;
+  background: #fff;
+  border-bottom: 1px solid var(--sh-line);
+}
+.sh__top-esq { display: flex; align-items: center; gap: .75rem; flex: 1 1 auto; min-width: 0; }
+.sh__top-label {
+  color: var(--sh-ink-soft);
+  font-size: .7rem;
+  font-weight: 600;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+}
+.sh__top-dir { display: flex; align-items: center; gap: 1.25rem; }
+
+.sh__sino {
+  position: relative;
+  background: none; border: 0;
+  color: var(--sh-ink);
+  font-size: 1.2rem;
+  line-height: 1;
+  padding: .25rem;
+  cursor: pointer;
+}
+.sh__sino-ponto {
+  position: absolute; top: .1rem; right: .05rem;
+  width: 8px; height: 8px;
+  background: var(--sh-red);
+  border-radius: 50%;
+}
+
+.sh__usuario { display: flex; align-items: center; gap: .7rem; background: none; border: 0; cursor: pointer; text-align: left; }
+.sh__avatar {
+  width: 38px; height: 38px;
+  flex: 0 0 38px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  background: var(--sh-ink);
+  color: #fff;
+  font-size: .8rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+  object-fit: cover;
+}
+.sh__usuario-nome { display: block; font-size: .92rem; font-weight: 600; line-height: 1.2; }
+.sh__usuario-papel { font-size: .76rem; color: var(--sh-ink-soft); }
+
+/* ----------------------------------------------------------- conteúdo */
+.sh__conteudo { flex: 1; padding: 2rem; max-width: 1320px; width: 100%; }
+/* Telas de tabela larga (lista de alunos, por exemplo) pedem mais que a
+   largura de leitura. Opt-in pelo bloco `conteudo_classe` do base_academia:
+   quem não pedir continua nos 1320px. */
+.sh__conteudo--largo { max-width: 1600px; }
+
+.sh__cabecalho {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--u-space-3);
+  flex-wrap: wrap;
+  margin-bottom: 2rem;
+}
+.sh__titulo { font-size: 2.1rem; font-weight: 600; letter-spacing: -.02em; margin: 0 0 .25rem; }
+.sh__subtitulo { color: var(--sh-ink-soft); margin: 0; }
+.sh__acoes { display: flex; gap: .6rem; flex-wrap: wrap; }
+
+.sh__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: .5rem;
+  padding: .7rem 1.1rem;
+  border-radius: var(--u-radius-sm);
+  border: 1px solid var(--sh-line);
+  background: #fff;
+  color: var(--sh-ink);
+  font-size: .92rem;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background var(--u-transition), border-color var(--u-transition);
+}
+.sh__btn:hover { background: #f4f2ee; border-color: #d8d5d0; color: var(--sh-ink); }
+/* Ação principal da tela: preta. Uma por tela — quem só navega usa o botão
+   neutro. O vermelho fica reservado ao que comunica estado (turma lotada,
+   mensalidade em atraso, item ativo da lateral), para não competir com ela. */
+.sh__btn--forte { background: var(--sh-ink); border-color: var(--sh-ink); color: #fff; }
+.sh__btn--forte:hover { background: #000; border-color: #000; color: #fff; }
+.sh__btn:disabled, .sh__btn.is-inativo {
+  background: #f4f2ee;
+  border-color: var(--sh-line);
+  color: #a5a29c;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* ------------------------------------------------- faixa de indicadores */
+/* Números da tela em uma tira só, dividindo borda — evita três cartões
+   soltos repetindo sombra e respiro. */
+/* A divisória sai do contorno de cada item (box-shadow, que não ocupa espaço)
+   encontrando o do vizinho no vão de 1px. Assim ela acompanha a quebra de
+   linha nos dois eixos, sem regra por posição — e a sobra da última linha
+   continua branca, em vez de virar um bloco cinza. */
+.sh__faixa {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 1px;
+  background: #fff;
+  border: 1px solid var(--sh-line);
+  border-radius: var(--u-radius);
+  overflow: hidden;
+}
+.sh__faixa-item {
+  padding: 1.1rem 1.5rem;
+  background: #fff;
+  box-shadow: 0 0 0 1px var(--sh-line);
+}
+.sh__faixa-rotulo {
+  display: block;
+  color: var(--sh-ink-soft);
+  font-size: .68rem;
+  font-weight: 600;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+}
+.sh__faixa-valor {
+  display: block;
+  margin-top: .2rem;
+  font-size: 1.7rem;
+  font-weight: 600;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+.sh__faixa-valor--alerta { color: var(--sh-red); }
+
+/* ------------------------------------------------------ seção com régua */
+.sh__secao {
+  display: flex;
+  align-items: center;
+  gap: var(--u-space-3);
+  margin: 2.25rem 0 .9rem;
+  color: var(--sh-ink-soft);
+  font-size: .7rem;
+  font-weight: 600;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+}
+.sh__secao::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--sh-line);
+}
+
+/* ------------------------------------------------- cards de atenção */
+/* Grade encostada: as células dividem a borda, formando um quadro só. */
+.sh__atencao {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--u-space-3);
+}
+.sh__alerta {
+  background: #fff;
+  border: 1px solid var(--sh-line);
+  border-left: 3px solid var(--sh-line);
+  padding: 1.1rem 1.25rem;
+  text-decoration: none;
+  color: inherit;
+  display: block;
+  transition: background var(--u-transition);
+}
+.sh__alerta:hover { background: #fdfcfa; color: inherit; }
+.sh__alerta--urgente { border-left-color: var(--sh-red); }
+.sh__alerta-num {
+  font-size: 1.75rem;
+  font-weight: 600;
+  line-height: 1;
+  margin-right: .45rem;
+}
+.sh__alerta-txt { font-size: .98rem; }
+.sh__alerta-link {
+  display: block;
+  margin-top: .6rem;
+  font-size: .92rem;
+  color: var(--sh-ink-soft);
+}
+.sh__alerta--urgente .sh__alerta-link { color: var(--sh-red); }
+
+/* ---------------------------------------------------- grade de módulos */
+/* Células que dividem borda: o -1px evita a linha dupla entre vizinhas. */
+.sh__grade {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  background: #fff;
+  border: 1px solid var(--sh-line);
+}
+.sh__celula {
+  display: block;
+  padding: 1.4rem 1.5rem;
+  text-decoration: none;
+  color: inherit;
+  border-right: 1px solid var(--sh-line);
+  border-bottom: 1px solid var(--sh-line);
+  margin: 0 -1px -1px 0;
+  transition: background var(--u-transition);
+}
+.sh__celula:hover { background: #fbfaf8; color: inherit; }
+.sh__celula-topo { display: flex; align-items: center; gap: .7rem; margin-bottom: .4rem; }
+.sh__celula-topo i { font-size: 1.15rem; color: var(--sh-ink-soft); }
+.sh__celula-titulo { font-size: 1.05rem; font-weight: 600; }
+.sh__celula-desc { color: var(--sh-ink-soft); font-size: .93rem; margin: 0; max-width: 34ch; }
+.sh__celula-badge {
+  display: inline-block;
+  margin-left: .4rem;
+  padding: .05rem .45rem;
+  border-radius: var(--u-radius-pill);
+  background: var(--sh-red);
+  color: #fff;
+  font-size: .72rem;
+  font-weight: 700;
+}
+
+/* ------------------------------------------------------------- modais */
+/* Vale para qualquer modal dentro do shell: enquanto as telas migram, cada uma
+   herda o mesmo desenho sem precisar mexer na marcação dos modais.
+   O Bootstrap continua cuidando de abrir, fechar e do foco. */
+.sh .modal-content {
+  border: 1px solid var(--sh-line);
+  border-radius: var(--u-radius);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, .18);
+}
+.sh .modal-header,
+.sh .modal-header-accent {
+  padding: 1.1rem 1.4rem;
+  border-bottom: 1px solid var(--sh-line);
+  background: #fff;
+}
+.sh .modal-title,
+.sh .modal-header-accent .mha-title {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--sh-ink);
+}
+.sh .modal-header-accent .mha-sub { color: var(--sh-ink-soft); }
+/* Ícone do cabeçalho sem fundo colorido: fica neutro como o resto. */
+.sh .modal-header-accent .mha-icon {
+  background: var(--sh-page-bg) !important;
+  color: var(--sh-ink-soft) !important;
+  border: 1px solid var(--sh-line);
+}
+.sh .modal-body,
+.sh .modal-body-padded { padding: 1.4rem; }
+.sh .modal-footer,
+.sh .modal-footer-clean {
+  padding: .9rem 1.4rem;
+  border-top: 1px solid var(--sh-line);
+  gap: .5rem;
+}
+
+/* Campos dentro do modal seguem a altura e o traço dos demais. */
+.sh .modal .form-control,
+.sh .modal .form-select,
+.sh .modal .modal-textarea {
+  border: 1px solid var(--sh-line);
+  border-radius: var(--u-radius-sm);
+  color: var(--sh-ink);
+}
+.sh .modal .form-control:focus,
+.sh .modal .form-select:focus,
+.sh .modal .modal-textarea:focus {
+  border-color: #cfcbc4;
+  box-shadow: 0 0 0 3px rgba(28, 28, 28, .06);
+}
+.sh .modal .form-control-lg { height: 52px; font-size: 1rem; }
+
+/* Ação principal e confirmação de gravação: pretas, como o botão de ação das
+   telas. Secundária: contornada. */
+.sh .modal .btn-primary,
+.sh .modal .btn-success {
+  background: var(--sh-ink);
+  border-color: var(--sh-ink);
+  color: #fff;
+}
+.sh .modal .btn-primary:hover,
+.sh .modal .btn-success:hover { background: #000; border-color: #000; }
+.sh .modal .btn-outline-secondary {
+  border-color: var(--sh-line);
+  color: var(--sh-ink);
+}
+.sh .modal .btn-outline-secondary:hover { background: #f4f2ee; color: var(--sh-ink); }
+
+/* ------------------------------------------------------- responsivo */
+/* Tablet: lateral vira gaveta, aberta pelo botão do topo. */
+@media (max-width: 991.98px) {
+  .sh__side {
+    transform: translateX(-100%);
+    transition: transform var(--u-transition);
+    box-shadow: 0 0 40px rgba(0, 0, 0, .35);
+  }
+  .sh__side.is-aberta { transform: none; }
+  .sh__main { margin-left: 0; }
+  .sh__conteudo { padding: 1.5rem; }
+  .sh__menu-botao { display: inline-flex !important; }
+  .sh__overlay {
+    position: fixed; inset: 0;
+    background: rgba(0, 0, 0, .45);
+    z-index: 1035;
+  }
+}
+.sh__menu-botao {
+  display: none;
+  align-items: center;
+  background: none;
+  border: 0;
+  font-size: 1.35rem;
+  color: var(--sh-ink);
+  padding: .1rem .35rem;
+  cursor: pointer;
+}
+
+@media (max-width: 767.98px) {
+  .sh__top { padding: .75rem 1rem; gap: .6rem; }
+  .sh__top-dir { gap: .8rem; }
+  .sh__conteudo { padding: 1.15rem; }
+  .sh__titulo { font-size: 1.6rem; }
+  .sh__cabecalho { margin-bottom: 1.5rem; }
+  .sh__acoes { width: 100%; }
+  .sh__acoes .sh__btn { flex: 1; justify-content: center; }
+  .sh__usuario-nome, .sh__usuario-papel, .sh__top-label { display: none; }
+  /* A academia já é escolhida dentro das telas; no topo ela só espremia a busca. */
+  .sh__seletor-academia, #shFormAcademia { display: none; }
+  .sh__atencao { grid-template-columns: 1fr; }
+  .sh__grade { grid-template-columns: 1fr; }
+  .sh__celula { border-right: 0; }
+  /* Indicadores em duas colunas: quatro blocos empilhados ocupavam a tela toda. */
+  .sh__faixa { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .sh__faixa-item { padding: .9rem 1rem; }
+  .sh__faixa-valor { font-size: 1.45rem; }
+  /* Metade da largura não cabe a legenda numa linha só: aqui ela quebra em
+     vez de virar reticências, que escondiam o sentido do número. */
+  .sh__faixa .lst-sub { white-space: normal; overflow: visible; line-height: 1.35; }
+}
+
+@media (max-width: 379.98px) {
+  .sh__faixa { grid-template-columns: 1fr; }
+}
+
+
+/* Indicação da academia da sessão — substitui o antigo seletor do topo, que
+   permitia trocar de academia no meio do trabalho. */
+.sh__academia-atual {
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  padding: .35rem .7rem;
+  border: 1px solid var(--sh-line);
+  border-radius: var(--u-radius-pill);
+  background: #fff;
+  color: var(--sh-ink);
+  font-size: .85rem;
+  font-weight: 600;
+  white-space: nowrap;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sh__academia-atual i { color: var(--sh-ink-soft); }
+@media (max-width: 767.98px) { .sh__academia-atual { display: none; } }

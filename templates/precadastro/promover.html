@@ -1,161 +1,263 @@
-{% extends "base.html" %}
-{% block title %}Promover Pré-cadastro — {{ precadastro.nome }}{% endblock %}
-{% block content %}
-{# Calcula CPF que será usado como login (mesma regra do backend) #}
-{% set _cpf_aluno_raw = precadastro.cpf or '' %}
-{% set _cpf_resp_raw = precadastro.responsavel_financeiro_cpf or '' %}
-{% set _cpf_aluno = _cpf_aluno_raw | replace('.', '') | replace('-', '') | replace(' ', '') %}
-{% set _cpf_resp = _cpf_resp_raw | replace('.', '') | replace('-', '') | replace(' ', '') %}
-<div class="container my-4 my-md-5">
-  <div class="card shadow-lg border-0 rounded-3 mx-auto" style="max-width: 800px;">
-    <div class="card-header bg-primary text-white text-center py-3 rounded-top-3">
-      <h5 class="mb-0 fw-bold">
-        <i class="bi bi-person-check-fill me-2"></i> Promover Pré-cadastro
-      </h5>
-    </div>
-    <div class="card-body p-4 p-md-5">
-      <div class="alert alert-info mb-4">
-        <strong>{{ precadastro.nome }}</strong><br>
-        <small class="text-muted">
-          E-mail: {{ precadastro.email or 'Não informado' }} |
-          Telefone: {{ precadastro.telefone or 'Não informado' }}
-          {% if precadastro.cpf %} | CPF: {{ precadastro.cpf }}{% endif %}
-          {% if precadastro.responsavel_financeiro_cpf %} | CPF Resp.: {{ precadastro.responsavel_financeiro_cpf }}{% endif %}
-        </small>
-      </div>
+{% extends "base_academia.html" %}
+{% set menu_ativo = 'precadastro' %}
+{% block title %}Promover — {{ precadastro.nome }}{% endblock %}
 
-      <form method="POST" action="{{ url_for('precadastro.promover', precadastro_id=precadastro.id) }}" class="needs-validation" novalidate>
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+{% block pagina_titulo %}Promover pré-cadastro{% endblock %}
+{% block pagina_subtitulo %}
+  Transformar {{ precadastro.nome }} em usuário do sistema, escolhendo os perfis de acesso.
+{% endblock %}
+
+{% block pagina_acoes %}
+  <a class="sh__btn" href="{{ url_for('precadastro.lista', academia_id=academia_id) }}">
+    <i class="bi bi-arrow-left"></i> Voltar
+  </a>
+{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/base/listas.css') }}">
+<style>
+  .pro-colunas { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 1.25rem; align-items: start; }
+  @media (max-width: 1100px) { .pro-colunas { grid-template-columns: minmax(0, 1fr); } }
+
+  .pro-corpo { padding: 1.25rem; }
+  .pro-secao + .pro-secao { margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--sh-line); }
+  .pro-secao__titulo {
+    margin: 0 0 .25rem;
+    font-size: .7rem; font-weight: 600; letter-spacing: .16em;
+    text-transform: uppercase; color: var(--sh-ink-soft);
+  }
+  .pro-secao__nota { margin: 0 0 .9rem; color: var(--sh-ink-soft); font-size: .86rem; }
+
+  /* Perfis como cartões clicáveis: a escolha define o resto do formulário. */
+  .pro-perfis { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: .6rem; }
+  .pro-perfil {
+    display: flex; align-items: center; gap: .6rem;
+    padding: .75rem .9rem;
+    border: 1px solid var(--sh-line); border-radius: var(--u-radius-sm);
+    background: #fff; cursor: pointer;
+    transition: border-color var(--u-transition), background var(--u-transition);
+  }
+  .pro-perfil:hover { border-color: var(--sh-ink); }
+  .pro-perfil:has(input:checked) { border-color: var(--sh-ink); background: var(--u-surface-alt); }
+  .pro-perfil input { width: 1.05rem; height: 1.05rem; flex: none; cursor: pointer; }
+  .pro-perfil span { font-weight: 600; font-size: .93rem; }
+
+  .pro-campo { margin-bottom: 1rem; }
+  .pro-campo label { display: block; font-weight: 600; font-size: .88rem; margin-bottom: .3rem; }
+  .pro-campo input {
+    width: 100%; padding: .55rem .7rem;
+    border: 1px solid var(--sh-line); border-radius: var(--u-radius-sm);
+    font: inherit; color: var(--sh-ink); background: #fff;
+  }
+  .pro-campo input:read-only { background: var(--u-surface-alt); color: var(--sh-ink-soft); }
+  .pro-campo input:focus { outline: none; border-color: var(--sh-ink); box-shadow: 0 0 0 3px rgba(28,28,28,.07); }
+  .pro-ajuda { display: block; margin-top: .3rem; color: var(--sh-ink-soft); font-size: .82rem; }
+
+  .pro-nota {
+    display: flex; gap: .6rem; align-items: flex-start;
+    padding: .8rem .9rem; border-radius: var(--u-radius-sm);
+    background: var(--u-surface-alt); border: 1px solid var(--sh-line);
+    font-size: .88rem; line-height: 1.5;
+  }
+  .pro-nota--atencao { background: #fdf3e3; border-color: #f2e2c2; color: #7a5b18; }
+  .pro-nota--ok { background: #ecfdf5; border-color: #a7f3d0; color: #047857; }
+  .pro-nota i { margin-top: .15rem; }
+
+  .pro-alunos { max-height: 260px; overflow-y: auto; border: 1px solid var(--sh-line); border-radius: var(--u-radius-sm); }
+  .pro-aluno { display: flex; align-items: center; gap: .6rem; padding: .55rem .8rem; border-bottom: 1px solid #f2f0ec; font-size: .92rem; }
+  .pro-aluno:last-child { border-bottom: 0; }
+
+  .pro-ficha__linha { display: flex; justify-content: space-between; gap: 1rem; padding: .6rem 0; border-bottom: 1px solid var(--sh-line); font-size: .9rem; }
+  .pro-ficha__linha:last-child { border-bottom: 0; }
+  .pro-ficha__rot { color: var(--sh-ink-soft); }
+  .pro-ficha__val { font-weight: 600; text-align: right; min-width: 0; overflow-wrap: anywhere; }
+
+  .pro-rodape { display: flex; gap: .6rem; flex-wrap: wrap; padding: 1.25rem; border-top: 1px solid var(--sh-line); }
+</style>
+{% endblock %}
+
+{% block content %}
+{# Mesma regra do backend: o login sai do CPF do aluno ou, na falta, do responsável. #}
+{% set _cpf_aluno = (precadastro.cpf or '') | replace('.', '') | replace('-', '') | replace(' ', '') %}
+{% set _cpf_resp = (precadastro.responsavel_financeiro_cpf or '') | replace('.', '') | replace('-', '') | replace(' ', '') %}
+
+{# autocomplete="off" no formulário inteiro: com um campo de e-mail e um de
+   senha juntos, o Chrome trata a tela como cadastro de login, guarda o par no
+   gerenciador de senhas e, na próxima promoção, preenche o e-mail de OUTRA
+   pessoa por cima do que o servidor mandou. #}
+<form method="POST" action="{{ url_for('precadastro.promover', precadastro_id=precadastro.id) }}" novalidate autocomplete="off">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+  <div class="pro-colunas">
+    <div class="lst-quadro">
+      <div class="pro-corpo">
+
         {% if precadastro.aula_experimental %}
-        <div class="alert alert-primary d-flex align-items-center mb-3">
-          <i class="bi bi-stars me-2"></i>
-          <div>Esta pessoa marcou <strong>interesse em aula experimental</strong>. Sugerimos promover com o perfil <strong>Visitante</strong> (já pré-selecionado).</div>
+        <div class="pro-nota" style="margin-bottom:1.25rem">
+          <i class="bi bi-stars"></i>
+          <div>Esta pessoa marcou <strong>interesse em aula experimental</strong> — sugerimos o perfil
+            <strong>Visitante</strong>, já pré-selecionado.</div>
         </div>
         {% endif %}
-        <div class="mb-4">
-          <label class="form-label fw-semibold">Selecione os perfis a criar <span class="text-danger">*</span></label>
-          <div class="row g-2">
+
+        <div class="pro-secao">
+          <h2 class="pro-secao__titulo">Perfis de acesso</h2>
+          <p class="pro-secao__nota">Marque um ou mais. O que aparece abaixo depende do que escolher aqui.</p>
+          <div class="pro-perfis">
             {% for role in roles_disponiveis %}
-            <div class="col-12 col-md-6">
-              <div class="form-check">
-                <input class="form-check-input role-cb" type="checkbox" name="roles" id="role_{{ role.id }}"
-                       value="{{ role.id }}" data-chave="{{ role.chave or role.nome|lower }}"
-                       {% if precadastro.aula_experimental and (role.chave or '') == 'visitante' %}checked{% endif %}>
-                <label class="form-check-label" for="role_{{ role.id }}">
-                  {{ role.nome }}
-                </label>
-              </div>
-            </div>
+            <label class="pro-perfil" for="role_{{ role.id }}">
+              <input class="role-cb" type="checkbox" name="roles" id="role_{{ role.id }}"
+                     value="{{ role.id }}" data-chave="{{ role.chave or role.nome|lower }}"
+                     {% if precadastro.aula_experimental and (role.chave or '') == 'visitante' %}checked{% endif %}>
+              <span>{{ role.nome }}</span>
+            </label>
             {% endfor %}
           </div>
-          <div class="form-text">Marque um ou mais perfis. Você pode selecionar quantos quiser.</div>
         </div>
 
-        <div id="blocoUsuario" class="mb-3" style="display:none;">
-          <h6 class="fw-semibold mb-3">Dados de Acesso ao Sistema</h6>
-          <div class="alert alert-info mb-3" id="infoUsuario">
-            <i class="bi bi-info-circle me-2"></i>
-            <span id="infoUsuarioTexto">Preencha os dados abaixo para criar acesso ao sistema.</span>
+        <div class="pro-secao" id="blocoUsuario" style="display:none;">
+          <h2 class="pro-secao__titulo">Acesso ao sistema</h2>
+          <p class="pro-secao__nota" id="infoUsuarioTexto">Preencha os dados abaixo para criar acesso ao sistema.</p>
+
+          <div class="pro-campo">
+            <label for="cpfLoginPreview">CPF para login</label>
+            <input type="text" id="cpfLoginPreview" readonly
+                   value="{{ precadastro.cpf or precadastro.responsavel_financeiro_cpf or '— sem CPF cadastrado —' }}">
+            <span class="pro-ajuda" id="cpfLoginHelp">
+              {% if _cpf_aluno %}CPF do aluno, usado como login.
+              {% elif _cpf_resp %}CPF do responsável financeiro, usado como login.
+              {% else %}<strong style="color:var(--sh-red)">Nenhum CPF cadastrado.</strong>
+              Edite o pré-cadastro e informe um CPF antes de promover.{% endif %}
+            </span>
           </div>
 
-          <div class="mb-3">
-            <label class="form-label fw-semibold">CPF para login <span class="text-danger">*</span></label>
-            <div class="input-group">
-              <span class="input-group-text bg-light"><i class="bi bi-person-vcard"></i></span>
-              <input type="text" class="form-control bg-light" id="cpfLoginPreview" readonly
-                     value="{{ precadastro.cpf or precadastro.responsavel_financeiro_cpf or '— sem CPF cadastrado —' }}">
-            </div>
-            <div class="form-text" id="cpfLoginHelp">
-              {% if _cpf_aluno %}
-              CPF do aluno será usado como login.
-              {% elif _cpf_resp %}
-              CPF do responsável financeiro será usado como login.
-              {% else %}
-              <span class="text-danger">Nenhum CPF cadastrado. Edite o pré-cadastro para informar um CPF antes de promover.</span>
-              {% endif %}
-            </div>
-          </div>
-
-          <div class="mb-3">
-            <label for="email_usuario" class="form-label fw-semibold">E-mail <span class="text-muted fw-normal">(recuperação de senha)</span></label>
-            <input type="email" class="form-control" id="email_usuario" name="email_usuario"
+          <div class="pro-campo">
+            <label for="email_usuario">E-mail <span id="email_required" style="display:none">*</span></label>
+            <input type="email" id="email_usuario" name="email_usuario"
                    value="{{ precadastro.email or precadastro.email_acesso or '' }}"
-                   placeholder="exemplo@email.com">
-            <div class="form-text">Usado apenas para recuperação de senha. O login é por CPF.</div>
+                   data-valor-servidor="{{ precadastro.email or precadastro.email_acesso or '' }}"
+                   autocomplete="off" placeholder="exemplo@email.com">
+            <span class="pro-ajuda">Serve para recuperar a senha — o login continua sendo o CPF.</span>
           </div>
-          <div class="mb-3">
-            <label for="senha_usuario" class="form-label fw-semibold">
-              Senha <span class="text-muted fw-normal" id="senha_required">(opcional)</span>
-            </label>
-            <input type="password" class="form-control" id="senha_usuario" name="senha_usuario"
+
+          <div class="pro-campo">
+            <label for="senha_usuario">Senha <span class="pro-ajuda" style="display:inline" id="senha_required">(opcional)</span></label>
+            {# "new-password" é o que realmente desarma o preenchimento do par
+               e-mail+senha salvo. Sem isto o Chrome também injetaria uma senha
+               antiga aqui, e o usuário sairia criado com ela em vez da gerada. #}
+            <input type="password" id="senha_usuario" name="senha_usuario"
+                   autocomplete="new-password"
                    placeholder="Deixe em branco para gerar automaticamente" minlength="6">
-            <div class="form-text">
-              <i class="bi bi-magic me-1"></i>Em branco, o sistema cria uma senha aleatória e
-              envia ao responsável por e-mail e WhatsApp.
-            </div>
+            <span class="pro-ajuda">Em branco, o sistema cria uma senha e envia por e-mail e WhatsApp.</span>
           </div>
-          <div class="form-check mb-3" id="checkCriarUsuario" style="display:none;">
-            <input class="form-check-input" type="checkbox" id="criar_usuario_check" name="criar_usuario" value="1" checked>
-            <label class="form-check-label" for="criar_usuario_check">
-              Criar usuário automaticamente com acesso ao sistema
-            </label>
-          </div>
+
+          <label class="pro-aluno" id="checkCriarUsuario" style="display:none; border:1px solid var(--sh-line); border-radius:var(--u-radius-sm)">
+            <input type="checkbox" id="criar_usuario_check" name="criar_usuario" value="1" checked>
+            <span>Criar usuário com acesso ao sistema</span>
+          </label>
         </div>
 
-        <div id="blocoAluno" class="mb-3" style="display:none;">
-          <div class="alert alert-info mb-0">
-            <i class="bi bi-info-circle me-2"></i>
-            <strong>Aluno será criado automaticamente</strong><br>
-            <small>Um novo registro de aluno será criado a partir dos dados do pré-cadastro e vinculado ao usuário.</small>
+        <div class="pro-secao" id="blocoAluno" style="display:none;">
+          <div class="pro-nota pro-nota--ok">
+            <i class="bi bi-check-circle"></i>
+            <div><strong>O aluno será criado automaticamente</strong><br>
+              A partir dos dados do pré-cadastro, já vinculado ao usuário.</div>
           </div>
           <input type="hidden" name="criar_aluno" value="1">
           <input type="hidden" name="aluno_id" id="aluno_id" value="">
         </div>
 
-        <div id="blocoResponsavelInfo" class="mb-3" style="display:none;">
-          <div class="alert alert-success mb-0">
-            <i class="bi bi-check-circle-fill me-2"></i>
-            <strong>Aluno será criado automaticamente</strong><br>
-            <small>
-              O cadastro do aluno será gerado a partir do pré-cadastro e <strong>vinculado a você como responsável</strong>.
-              O aluno não terá login próprio — quem acessa o sistema é o responsável (CPF acima).
-            </small>
+        <div class="pro-secao" id="blocoResponsavelInfo" style="display:none;">
+          <div class="pro-nota pro-nota--ok">
+            <i class="bi bi-check-circle"></i>
+            <div><strong>O aluno será criado automaticamente</strong><br>
+              Vinculado a esta pessoa como responsável. O aluno não terá login próprio —
+              quem acessa é o responsável, pelo CPF acima.</div>
           </div>
         </div>
 
-        <div id="blocoResponsavel" class="mb-3" style="display:none;">
-          <h6 class="fw-semibold mb-2">Vincular outros alunos a este responsável <span class="text-muted fw-normal small">(opcional)</span></h6>
-          <p class="small text-muted mb-2">
-            Marque outros alunos da academia que também ficarão sob a responsabilidade deste usuário (além do aluno deste pré-cadastro, que já será vinculado automaticamente).
+        <div class="pro-secao" id="blocoResponsavel" style="display:none;">
+          <h2 class="pro-secao__titulo">Outros alunos sob este responsável</h2>
+          <p class="pro-secao__nota">
+            Opcional. O aluno deste pré-cadastro já é vinculado automaticamente.
           </p>
-          <div class="border rounded p-3" style="max-height: 250px; overflow-y: auto; background: #f8fafc;">
+          <div class="pro-alunos">
             {% for a in alunos_para_responsavel %}
-            <div class="form-check mb-2">
-              <input class="form-check-input" type="checkbox" name="aluno_ids" value="{{ a.id }}" id="aluno_resp_{{ a.id }}">
-              <label class="form-check-label" for="aluno_resp_{{ a.id }}">{{ a.nome }}</label>
-            </div>
+            <label class="pro-aluno" for="aluno_resp_{{ a.id }}">
+              <input type="checkbox" name="aluno_ids" value="{{ a.id }}" id="aluno_resp_{{ a.id }}">
+              <span>{{ a.nome }}</span>
+            </label>
+            {% else %}
+            <p class="lst-vazio">Nenhum outro aluno cadastrado nesta academia.</p>
             {% endfor %}
-            {% if not alunos_para_responsavel %}
-            <p class="text-muted small mb-0">Nenhum outro aluno cadastrado na academia.</p>
-            {% endif %}
           </div>
         </div>
 
-        <div class="d-flex flex-column flex-md-row justify-content-center gap-3 mt-4">
-          <button type="submit" class="btn btn-primary btn-lg">
-            <i class="bi bi-check-circle me-2"></i> Promover
-          </button>
-          <a href="{{ url_for('precadastro.lista', academia_id=academia_id) }}" class="btn btn-outline-secondary btn-lg">
-            <i class="bi bi-arrow-left me-2"></i> Cancelar
-          </a>
-        </div>
-              {% set back_url = back_url or get_back_url_default() %}
-{% include 'components/botao_voltar.html' %}
-    </form>
-    </div>
-  </div>
-</div>
+      </div>
 
+      <div class="pro-rodape">
+        <button type="submit" class="sh__btn sh__btn--forte">
+          <i class="bi bi-check-lg"></i> Promover
+        </button>
+        <a href="{{ url_for('precadastro.lista', academia_id=academia_id) }}" class="sh__btn">Cancelar</a>
+      </div>
+    </div>
+
+    {# ------------------------------------------------------- ficha ao lado #}
+    <aside class="lst-quadro">
+      <div class="lst-quadro__topo">
+        <h2 class="lst-quadro__titulo">Dados do pré-cadastro</h2>
+      </div>
+      <div style="padding:.25rem 1.25rem 1.25rem">
+        <div class="pro-ficha__linha">
+          <span class="pro-ficha__rot">Nome</span>
+          <span class="pro-ficha__val">{{ precadastro.nome }}</span>
+        </div>
+        <div class="pro-ficha__linha">
+          <span class="pro-ficha__rot">E-mail</span>
+          <span class="pro-ficha__val">{{ precadastro.email or '—' }}</span>
+        </div>
+        <div class="pro-ficha__linha">
+          <span class="pro-ficha__rot">Telefone</span>
+          <span class="pro-ficha__val">{{ precadastro.telefone or '—' }}</span>
+        </div>
+        <div class="pro-ficha__linha">
+          <span class="pro-ficha__rot">CPF do aluno</span>
+          <span class="pro-ficha__val">{{ precadastro.cpf or '—' }}</span>
+        </div>
+        <div class="pro-ficha__linha">
+          <span class="pro-ficha__rot">CPF do responsável</span>
+          <span class="pro-ficha__val">{{ precadastro.responsavel_financeiro_cpf or '—' }}</span>
+        </div>
+        {% if precadastro.matricula_status %}
+        <div class="pro-ficha__linha">
+          <span class="pro-ficha__rot">Matrícula</span>
+          <span class="pro-ficha__val">
+            {% if precadastro.matricula_status == 'pago' %}
+            <span class="lst-tag lst-tag--ok">Paga</span>
+            {% else %}
+            <span class="lst-tag lst-tag--alerta">Aguardando pagamento</span>
+            {% endif %}
+          </span>
+        </div>
+        {% endif %}
+      </div>
+
+      {% if not _cpf_aluno and not _cpf_resp %}
+      <div style="padding:0 1.25rem 1.25rem">
+        <div class="pro-nota pro-nota--atencao">
+          <i class="bi bi-exclamation-triangle"></i>
+          <div>Sem CPF não é possível criar acesso — o login do sistema é o CPF.
+            <a href="{{ url_for('precadastro.editar', precadastro_id=precadastro.id) }}">Editar o pré-cadastro</a>.</div>
+        </div>
+      </div>
+      {% endif %}
+    </aside>
+  </div>
+</form>
+{% endblock %}
+
+{% block extra_js %}
 <script>
 (function() {
     var blocoUsuario = document.getElementById('blocoUsuario');
@@ -313,6 +415,24 @@
             return false;
         }
     });
+
+    // Rede de segurança do e-mail. O Chrome ignora autocomplete="off" em parte
+    // dos casos e preenche depois que a página carrega — o valor certo já veio
+    // do servidor e some sem ninguém digitar nada. Aqui ele é reposto, a menos
+    // que a pessoa realmente tenha mexido no campo.
+    (function () {
+        var campo = document.getElementById('email_usuario');
+        if (!campo || !campo.hasAttribute('data-valor-servidor')) return;
+        var doServidor = campo.getAttribute('data-valor-servidor');
+        var digitado = false;
+        campo.addEventListener('input', function () { digitado = true; });
+        function repor() {
+            if (digitado) return;
+            if (campo.value !== doServidor) campo.value = doServidor;
+        }
+        // O preenchimento do navegador pode acontecer depois do load; algumas
+        // passadas cobrem a janela sem ficar vigiando o campo para sempre.
+        [0, 120, 400, 1000].forEach(function (ms) { setTimeout(repor, ms); });
+    })();
 })();
-</script>
-{% endblock %}
+</script>{% endblock %}

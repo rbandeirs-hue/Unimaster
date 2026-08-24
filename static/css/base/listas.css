@@ -1,0 +1,330 @@
+/* =======================================================================
+   Listas — abas, filtros e tabela das telas de listagem
+   =======================================================================
+   Complementa base/shell.css: usa os mesmos tokens (--sh-*) e convive com
+   .sh__faixa (indicadores), .sh__btn e o cabeçalho do shell.
+
+   Existe para que visitantes, pré-cadastro, solicitações e as próximas
+   listagens tenham a mesma tabela, em vez de cada tela inventar a sua.
+
+   COLUNAS: cada tela declara o próprio `grid-template-columns` em
+   .lst-linha e esconde colunas nos seus limites. Atenção ao calibrar:
+   os media queries medem a JANELA, mas o conteúdo é ~300px menor (a barra
+   lateral tem 285px). Some isso ao tamanho útil desejado, senão a coluna
+   só some depois de a tabela já não caber e sobra rolagem lateral.
+   ======================================================================= */
+
+/* ------------------------------------------------------------------ abas */
+.lst-abas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.4rem;
+  border-bottom: 1px solid var(--sh-line);
+  margin-bottom: var(--u-space-3);
+}
+
+/* Vale para <a> e para <button> — a aba que troca de painel sem recarregar é
+   um botão, e sem o reset ela vinha com a moldura padrão do navegador. */
+.lst-aba {
+  display: inline-flex;
+  align-items: center;
+  gap: .45rem;
+  padding: .55rem 0 .7rem;
+  margin-bottom: -1px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--sh-ink-soft);
+  font: inherit;
+  font-size: .92rem;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+.lst-aba:hover { color: var(--sh-ink); }
+.lst-aba.is-ativa { color: var(--sh-ink); font-weight: 600; border-bottom-color: var(--sh-ink); }
+
+.lst-aba__n {
+  font-size: .78rem;
+  font-weight: 600;
+  color: var(--sh-ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+.lst-aba__n.is-alerta { color: var(--sh-red); }
+
+/* --------------------------------------------------------------- filtros */
+.lst-filtros {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--u-space-3);
+  background: #fff;
+  border: 1px solid var(--sh-line);
+  border-radius: var(--u-radius);
+  padding: 1rem 1.25rem;
+  margin-bottom: var(--u-space-3);
+}
+
+.lst-campo {
+  display: flex;
+  flex-direction: column;
+  gap: .3rem;
+  flex: 1 1 180px;
+  min-width: 0;
+}
+.lst-campo--largo { flex: 2 1 250px; }
+.lst-campo--curto { flex: 0 1 150px; }
+
+.lst-campo__rotulo {
+  color: var(--sh-ink-soft);
+  font-size: .68rem;
+  font-weight: 600;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+}
+
+.lst-campo input,
+.lst-campo select {
+  width: 100%;
+  padding: .5rem .65rem;
+  border: 1px solid var(--sh-line);
+  border-radius: var(--u-radius-sm);
+  background: #fff;
+  color: var(--sh-ink);
+  font: inherit;
+  font-size: .93rem;
+}
+.lst-campo input:focus,
+.lst-campo select:focus {
+  outline: none;
+  border-color: var(--sh-ink);
+  box-shadow: 0 0 0 3px rgba(28, 28, 28, .07);
+}
+.lst-campo input::placeholder { color: #a9a6a1; }
+
+.lst-filtros__acoes { display: flex; gap: var(--u-space-2); flex: none; }
+
+/* ---------------------------------------------------------------- quadro */
+.lst-quadro {
+  background: #fff;
+  border: 1px solid var(--sh-line);
+  border-radius: var(--u-radius);
+  overflow: hidden;
+  margin-bottom: var(--u-space-3);
+}
+
+.lst-quadro__topo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--u-space-2);
+  padding: .85rem 1.25rem;
+  border-bottom: 1px solid var(--sh-line);
+}
+
+.lst-quadro__titulo {
+  margin: 0;
+  color: var(--sh-ink-soft);
+  font-size: .7rem;
+  font-weight: 600;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+}
+
+.lst-quadro__meta { color: var(--sh-ink-soft); font-size: .85rem; }
+
+/* ---------------------------------------------------------------- tabela */
+.lst-rolagem { overflow-x: auto; }
+
+/* Piso de largura da tabela: mantém as colunas legíveis no desktop e no tablet.
+   O valor vem de --lst-min em cada lista, porque cada tabela tem um mínimo
+   diferente. */
+.lst-largura { min-width: var(--lst-min, 0); }
+
+.lst-linha { display: grid; gap: .9rem; align-items: center; }
+
+.lst-cab {
+  padding: .6rem 1.25rem;
+  background: #fdfcfa;
+  border-bottom: 1px solid var(--sh-line);
+  color: var(--sh-ink-soft);
+  font-size: .68rem;
+  font-weight: 600;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.lst-item {
+  padding: .75rem 1.25rem;
+  border-bottom: 1px solid #f2f0ec;
+  font-size: .93rem;
+}
+.lst-item:last-child { border-bottom: 0; }
+.lst-item:hover { background: #fdfcfa; }
+.lst-item.is-inativo { color: var(--sh-ink-soft); }
+
+.lst-num { text-align: right; font-variant-numeric: tabular-nums; }
+.lst-fim { text-align: right; }
+
+/* --------------------------------------------------------- célula pessoa */
+.lst-pessoa { display: flex; align-items: center; gap: .7rem; min-width: 0; }
+
+.lst-avatar {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid var(--sh-line);
+}
+
+.lst-avatar--iniciais {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #f4f2ee;
+  color: var(--sh-ink-soft);
+  font-size: .72rem;
+  font-weight: 600;
+}
+
+.lst-nome {
+  display: block;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: inherit;
+  text-decoration: none;
+}
+a.lst-nome:hover { text-decoration: underline; }
+
+.lst-sub {
+  display: block;
+  color: var(--sh-ink-soft);
+  font-size: .78rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lst-corta { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lst-vazio-celula { color: #a9a6a1; }
+
+/* ------------------------------------------------------- marcas e status */
+.lst-tag {
+  display: inline-block;
+  padding: .1rem .45rem;
+  border: 1px solid var(--sh-line);
+  border-radius: var(--u-radius-sm);
+  background: #fdfcfa;
+  color: var(--sh-ink-soft);
+  font-size: .78rem;
+  white-space: nowrap;
+}
+.lst-tag--alerta { border-color: #f6cdcd; background: #fef4f4; color: #a4131f; }
+.lst-tag--ok     { border-color: #c8e6d2; background: #f2fbf5; color: #16713c; }
+
+.lst-situacao {
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  color: var(--sh-ink-soft);
+  font-size: .88rem;
+  white-space: nowrap;
+}
+.lst-situacao i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #bfbcb7;
+}
+.lst-situacao.is-ativo { color: var(--sh-ink); }
+.lst-situacao.is-ativo i { background: #1a7f43; }
+
+/* ----------------------------------------------------------------- ações */
+.lst-acoes { display: inline-flex; gap: .35rem; justify-content: flex-end; align-items: center; }
+
+.lst-acao {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--u-radius-sm);
+  background: none;
+  color: var(--sh-ink-soft);
+  cursor: pointer;
+  transition: background var(--u-transition), color var(--u-transition);
+}
+.lst-acao:hover { background: #f4f2ee; border-color: var(--sh-line); color: var(--sh-ink); }
+.lst-acao--perigo:hover { background: #fef4f4; border-color: #f6cdcd; color: #a4131f; }
+
+/* ------------------------------------------------------- estado e rodapé */
+.lst-vazio {
+  padding: 2rem 1.25rem;
+  text-align: center;
+  color: var(--sh-ink-soft);
+  font-size: .93rem;
+}
+
+.lst-rodape {
+  padding-top: var(--u-space-3);
+  border-top: 1px solid #f2f0ec;
+  color: #a9a6a1;
+  font-size: .78rem;
+}
+
+.lst-paginacao {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--u-space-2);
+  flex-wrap: wrap;
+  padding: .8rem 1.25rem;
+  border-top: 1px solid var(--sh-line);
+}
+
+@media (max-width: 640px) {
+  /* No celular as colunas já foram reduzidas pelos media queries de cada
+     lista: manter o piso só obrigava a arrastar a tabela de lado para chegar
+     nos botões de ação. Quem ainda não couber continua rolando (overflow
+     auto) — o que some é a rolagem desnecessária. */
+  .lst-largura { min-width: 0; }
+
+  .lst-abas { gap: 1rem; }
+  .lst-aba { font-size: .88rem; }
+
+  .lst-filtros { padding: .9rem 1rem; }
+  .lst-filtros__acoes { width: 100%; }
+  .lst-filtros__acoes .sh__btn { flex: 1; justify-content: center; }
+}
+
+
+/* ------------------------------------------------------------- celular */
+/* Abaixo de 560px nenhuma tabela cabe em colunas: o nome fica com poucos
+   pixels e vira reticências, e a ação some atrás da rolagem lateral. A linha
+   deixa de ser grade e passa a fluir: a pessoa ocupa a primeira linha, os
+   dados fluem no meio e as ações fecham embaixo, na largura toda. */
+@media (max-width: 560px) {
+  .lst-cab { display: none; }
+
+  .lst-linha.lst-item {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .3rem .8rem;
+    padding: .9rem 1rem;
+  }
+  .lst-linha.lst-item > * { min-width: 0; }
+  .lst-linha.lst-item > .lst-pessoa { flex: 1 1 100%; }
+  .lst-linha.lst-item > .lst-fim,
+  .lst-linha.lst-item > .lst-acoes { flex: 1 1 100%; text-align: left; }
+  .lst-linha.lst-item .lst-acoes { justify-content: flex-start; flex-wrap: wrap; }
+  .lst-linha.lst-item > .lst-num { text-align: left; }
+  /* Célula vazia no celular só abriria buraco entre as informações. */
+  .lst-linha.lst-item .lst-vazio-celula { display: none; }
+}

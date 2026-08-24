@@ -1,0 +1,273 @@
+{% extends 'base_um2.html' %}
+{% set um_ativo = 'indicadores' %}
+{% block title %}Painel da academia{% endblock %}
+
+{% block um_css %}
+  .duas { display:flex; flex-wrap:wrap; gap:16px; align-items:stretch; }
+  .duas > * { flex:1 1 360px; min-width:0; }
+  .lin-inad { display:grid; grid-template-columns:minmax(220px,1fr) 110px 130px 170px; }
+  .grafico { padding:20px 16px 12px; display:grid; grid-template-columns:repeat(6,minmax(0,1fr));
+    align-items:end; gap:10px; height:186px; }
+  @media (max-width: 760px) {
+    .lin-inad { grid-template-columns:minmax(150px,1fr) 110px 130px; }
+    .col-esconde { display:none !important; }
+  }
+{% endblock %}
+
+{% block um_conteudo %}
+{% macro brl(v) %}R$ {{ '%.2f'|format(v or 0)|replace('.', ',') }}{% endmacro %}
+{% macro delta(valor, positivo_bom=True, moeda=False) %}
+  {%- if valor is not none -%}
+    {%- set subiu = valor >= 0 -%}
+    {%- if valor == 0 -%}
+      Igual ao mês anterior
+    {%- else -%}
+      {{ '+' if subiu else '−' }}{% if moeda %}{{ brl(valor|abs) }}{% else %}{{ valor|abs }}{% endif %} vs mês anterior
+    {%- endif -%}
+  {%- endif -%}
+{% endmacro %}
+
+<div style="display:flex; flex-direction:column; gap:7px">
+  <h1 class="um-h1" style="margin:0">Painel da academia</h1>
+  <div class="um-sub">Indicadores de alunos e financeiro · {{ mes_label }}</div>
+</div>
+
+{# ------------------------------- FILTROS ---------------------------------- #}
+<form method="get" class="um-filtros">
+  <div class="um-filtro" style="flex:1 1 210px">
+    <label for="f-academia">Academia</label>
+    <select id="f-academia" name="academia_id">
+      {% for ac in academias %}
+      <option value="{{ ac.id }}" {% if ac.id == academia.id %}selected{% endif %}>{{ ac.nome }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="um-filtro um-filtro-pq" style="flex:0 1 130px">
+    <label for="f-mes">Mês</label>
+    <select id="f-mes" name="mes">
+      {% for n, nome in meses_opcoes %}
+      <option value="{{ n }}" {% if n == mes %}selected{% endif %}>{{ nome }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="um-filtro um-filtro-pq" style="flex:0 1 100px">
+    <label for="f-ano">Ano</label>
+    <select id="f-ano" name="ano">
+      {% for a in anos_opcoes %}
+      <option value="{{ a }}" {% if a == ano %}selected{% endif %}>{{ a }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="um-filtro">
+    <label for="f-turma">Turma</label>
+    <select id="f-turma" name="turma_id">
+      <option value="">Todas as turmas</option>
+      {% for t in turmas %}
+      <option value="{{ t.id }}" {% if t.id|string == (turma_id|default('')|string) %}selected{% endif %}>{{ t.nome }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="um-filtro">
+    <label for="f-modalidade">Modalidade</label>
+    <select id="f-modalidade" name="modalidade_id">
+      <option value="">Todas as modalidades</option>
+      {% for m in modalidades %}
+      <option value="{{ m.id }}" {% if m.id|string == (modalidade_id|default('')|string) %}selected{% endif %}>{{ m.nome }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div style="display:flex; gap:8px; flex:none">
+    <button type="submit" class="um-btn-primario">Aplicar</button>
+    <a href="{{ url_for(request.endpoint) }}" class="um-btn" style="color:#78716c">Limpar</a>
+  </div>
+</form>
+
+{# -------------------------------- ALUNOS ---------------------------------- #}
+<div class="um-card" style="overflow:hidden">
+  <div class="um-cab">
+    <span class="um-secao">Alunos</span>
+    <div style="display:flex; gap:6px; flex-wrap:wrap">
+      {% for nome, valor in situacoes %}
+      <span class="um-tag">{{ nome }} {{ valor }}</span>
+      {% endfor %}
+    </div>
+  </div>
+  <div style="display:flex; flex-wrap:wrap; background:#fff">
+    <div class="um-kpi">
+      <span class="um-kpi-lbl">Alunos ativos</span>
+      <span class="um-kpi-val">{{ al.ativos }}</span>
+      <span class="um-kpi-nota">Matrículas em vigor</span>
+    </div>
+    <div class="um-kpi">
+      <span class="um-kpi-lbl">Novos no mês</span>
+      <span class="um-kpi-val">{{ al.novos }}</span>
+      <span class="um-kpi-nota">{{ delta(al.novos_delta, True) }}</span>
+    </div>
+    <div class="um-kpi">
+      <span class="um-kpi-lbl">Baixas no mês</span>
+      <span class="um-kpi-val">{{ al.baixas }}</span>
+      <span class="um-kpi-nota">{{ delta(al.baixas_delta, False) }}</span>
+    </div>
+    <div class="um-kpi">
+      <span class="um-kpi-lbl">Saldo do mês</span>
+      <span class="um-kpi-val">{{ '+' if al.saldo > 0 else '' }}{{ al.saldo }}</span>
+      <span class="um-kpi-nota">Churn {{ al.churn }}%</span>
+    </div>
+  </div>
+</div>
+
+{# ------------------------------ FINANCEIRO -------------------------------- #}
+<div class="um-card" style="overflow:hidden">
+  <div class="um-cab">
+    <span class="um-secao">Financeiro · {{ mes_label }}</span>
+    <a href="{{ url_for('financeiro_painel.dashboard', aba='mensalidades') }}" style="font:500 12.5px/1 'Public Sans',sans-serif; color:#78716c">Ver mensalidades →</a>
+  </div>
+  <div style="display:flex; flex-wrap:wrap; background:#fff">
+    <div class="um-kpi">
+      <span class="um-kpi-lbl">Receitas</span>
+      <span class="um-kpi-val" style="color:#15803d">{{ brl(fin.receitas) }}</span>
+      <span class="um-kpi-nota">{{ delta(fin.receitas_delta, True, True) }}</span>
+    </div>
+    <div class="um-kpi">
+      <span class="um-kpi-lbl">Despesas</span>
+      <span class="um-kpi-val">{{ brl(fin.despesas) }}</span>
+      <span class="um-kpi-nota">{{ delta(fin.despesas_delta, False, True) }}</span>
+    </div>
+    <div class="um-kpi">
+      <span class="um-kpi-lbl">Saldo</span>
+      <span class="um-kpi-val" style="color:{{ '#15803d' if fin.saldo >= 0 else '#C8102E' }}">{{ brl(fin.saldo) }}</span>
+      <span class="um-kpi-nota">{{ delta(fin.saldo_delta, True, True) }}</span>
+    </div>
+    <div class="um-kpi">
+      <span class="um-kpi-lbl">Ticket médio</span>
+      <span class="um-kpi-val">{{ brl(fin.ticket) }}</span>
+      <span class="um-kpi-nota">Recebido por aluno ativo</span>
+    </div>
+  </div>
+  <div style="display:flex; flex-wrap:wrap; border-top:1px solid #e7e5e4">
+    {% set pct = (100 * fin.recebido / fin.previsto)|round|int if fin.previsto else 0 %}
+    <div style="flex:1 1 300px; min-width:0; padding:18px; display:flex; flex-direction:column; gap:11px; box-shadow:1px 0 0 #e7e5e4">
+      <div style="display:flex; align-items:baseline; justify-content:space-between; gap:12px">
+        <span style="font:600 13px/1 'Public Sans',sans-serif">Mensalidades recebidas</span>
+        <span style="font:400 12.5px/1 'Public Sans',sans-serif; color:#78716c">{{ brl(fin.recebido) }} de {{ brl(fin.previsto) }}</span>
+      </div>
+      <div style="height:8px; border-radius:2px; background:#f5f5f4; overflow:hidden">
+        <div style="width:{{ pct }}%; height:100%; background:#15803d"></div>
+      </div>
+      <span class="um-kpi-nota">{{ pct }}% do previsto. Previsto = mensalidades que vencem no mês.</span>
+    </div>
+    <div style="flex:1 1 300px; min-width:0; padding:18px; display:flex; flex-direction:column; gap:11px">
+      <div style="display:flex; align-items:baseline; justify-content:space-between; gap:12px">
+        <span style="font:600 13px/1 'Public Sans',sans-serif">Inadimplência</span>
+        <span style="font:600 13px/1 'Public Sans',sans-serif; color:#C8102E">{{ brl(fin.total_atraso) }} em atraso</span>
+      </div>
+      <div style="height:8px; border-radius:2px; background:#f5f5f4; overflow:hidden">
+        <div style="width:{{ fin.inadimplencia }}%; height:100%; background:#C8102E"></div>
+      </div>
+      <span class="um-kpi-nota">{{ fin.qtd_atraso }} de {{ al.ativos }} alunos ativos com cobrança vencida.</span>
+    </div>
+  </div>
+</div>
+
+{# ------------------- FINANCEIRO AVANÇADO + GRÁFICO ------------------------ #}
+<div class="duas">
+  <div class="um-card" style="overflow:hidden">
+    <div class="um-cab"><span class="um-secao">Financeiro avançado</span></div>
+    <div style="display:flex; align-items:baseline; justify-content:space-between; gap:16px; padding:13px 16px; border-bottom:1px solid #f5f5f4">
+      <div style="display:flex; flex-direction:column; gap:3px; min-width:0">
+        <span style="font:500 13px/1 'Public Sans',sans-serif">Receita recorrente (MRR)</span>
+        <span class="um-kpi-nota">Mensalidade ativa × alunos ativos</span>
+      </div>
+      <span style="flex:none; font:600 15px/1 'Public Sans',sans-serif">{{ brl(avc.mrr) }}</span>
+    </div>
+    <div style="display:flex; align-items:baseline; justify-content:space-between; gap:16px; padding:13px 16px; border-bottom:1px solid #f5f5f4">
+      <div style="display:flex; flex-direction:column; gap:3px; min-width:0">
+        <span style="font:500 13px/1 'Public Sans',sans-serif">Vencendo em 7 dias</span>
+        <span class="um-kpi-nota">{{ avc.venc7_qtd }} cobrança(s)</span>
+      </div>
+      <span style="flex:none; font:600 15px/1 'Public Sans',sans-serif">{{ brl(avc.venc7_valor) }}</span>
+    </div>
+    <div style="display:flex; align-items:baseline; justify-content:space-between; gap:16px; padding:13px 16px; border-bottom:1px solid #f5f5f4">
+      <div style="display:flex; flex-direction:column; gap:3px; min-width:0">
+        <span style="font:500 13px/1 'Public Sans',sans-serif">Receitas no ano</span>
+        <span class="um-kpi-nota">Despesas no ano: {{ brl(avc.despesas_ano) }}</span>
+      </div>
+      <span style="flex:none; font:600 15px/1 'Public Sans',sans-serif; color:#15803d">{{ brl(avc.receitas_ano) }}</span>
+    </div>
+    <div style="display:flex; align-items:baseline; justify-content:space-between; gap:16px; padding:13px 16px">
+      <div style="display:flex; flex-direction:column; gap:3px; min-width:0">
+        <span style="font:500 13px/1 'Public Sans',sans-serif">Saldo acumulado no ano</span>
+        <span class="um-kpi-nota">Janeiro até {{ mes_label }}</span>
+      </div>
+      <span style="flex:none; font:600 15px/1 'Public Sans',sans-serif; color:{{ '#15803d' if avc.saldo_ano >= 0 else '#C8102E' }}">{{ brl(avc.saldo_ano) }}</span>
+    </div>
+  </div>
+
+  <div class="um-card" style="overflow:hidden">
+    <div class="um-cab">
+      <span class="um-secao">Receitas x despesas</span>
+      <span class="um-kpi-nota">6 meses</span>
+    </div>
+    {% set teto = [serie|map(attribute='receitas')|max, serie|map(attribute='despesas')|max, 1]|max %}
+    <div class="grafico">
+      {% for s in serie %}
+      <div style="min-width:0; height:100%; display:flex; flex-direction:column; justify-content:flex-end; align-items:center; gap:8px">
+        <div style="width:100%; height:100%; display:flex; align-items:flex-end; justify-content:center; gap:3px">
+          <div title="Receitas {{ brl(s.receitas) }}" style="width:13px; border-radius:2px 2px 0 0;
+            height:{% if s.receitas %}{{ (100 * s.receitas / teto)|round(1) }}%{% else %}1px{% endif %};
+            background:{{ '#15803d' if s.receitas else '#d6d3d1' }}"></div>
+          <div title="Despesas {{ brl(s.despesas) }}" style="width:13px; border-radius:2px 2px 0 0;
+            height:{% if s.despesas %}{{ (100 * s.despesas / teto)|round(1) }}%{% else %}1px{% endif %};
+            background:{{ '#e7e5e4' if s.despesas else '#d6d3d1' }}"></div>
+        </div>
+        <span style="font:400 10.5px/1 'Public Sans',sans-serif; color:#a8a29e">{{ s.label }}</span>
+      </div>
+      {% endfor %}
+    </div>
+    <div style="padding:0 16px 16px; display:flex; gap:16px">
+      <span style="display:flex; align-items:center; gap:6px; font:400 11.5px/1 'Public Sans',sans-serif; color:#78716c"><span style="width:9px; height:9px; border-radius:2px; background:#15803d"></span>Receitas</span>
+      <span style="display:flex; align-items:center; gap:6px; font:400 11.5px/1 'Public Sans',sans-serif; color:#78716c"><span style="width:9px; height:9px; border-radius:2px; background:#e7e5e4"></span>Despesas</span>
+    </div>
+  </div>
+</div>
+
+{# ----------------------------- INADIMPLENTES ------------------------------ #}
+<div class="um-card" style="overflow:hidden">
+  <div class="um-cab">
+    <span class="um-secao"><i class="bi bi-exclamation-triangle" style="font-size:12px; color:#C8102E; margin-right:6px"></i>Alunos inadimplentes</span>
+    <div style="display:flex; gap:8px; flex-wrap:wrap">
+      <a href="{{ url_for('academia.whatsapp') }}" class="um-btn" style="padding:8px 13px; font-size:12.5px"><i class="bi bi-whatsapp" style="font-size:12px"></i>Cobrar por WhatsApp</a>
+      <a href="{{ url_for('financeiro_painel.dashboard', aba='mensalidades') }}" class="um-btn" style="padding:8px 13px; font-size:12.5px">Ver mensalidades</a>
+    </div>
+  </div>
+  <div class="um-rolagem">
+    <div style="min-width:640px">
+      <div class="lin-inad um-th">
+        <span>Aluno</span>
+        <span style="text-align:right">Cobranças</span>
+        <span style="text-align:right">Em atraso</span>
+        <span class="col-esconde" style="text-align:right">Vencimento + antigo</span>
+      </div>
+      {% for i in inadimplentes %}
+      <div class="lin-inad um-td">
+        <a href="{{ url_for('alunos.ficha', id=i.aluno_id) }}" style="font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">{{ i.nome }}</a>
+        <span style="text-align:right; color:#57534e">{{ i.qtd_cobrancas }}</span>
+        <span style="text-align:right; font-weight:600; color:{{ '#C8102E' if i.total else '#78716c' }}">{{ brl(i.total) }}</span>
+        <span class="col-esconde" style="text-align:right; color:#78716c">{{ i.vencimento_antigo.strftime('%d/%m/%Y') if i.vencimento_antigo else '—' }}</span>
+      </div>
+      {% else %}
+      <div style="padding:28px 16px; text-align:center; color:#a8a29e; font:400 12.5px/1.5 'Public Sans',sans-serif">Nenhum aluno em atraso.</div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<div style="display:flex; gap:9px; flex-wrap:wrap">
+  <a href="{{ url_for('alunos.lista_alunos') }}" class="um-btn"><i class="bi bi-people" style="color:#78716c"></i>Alunos</a>
+  <a href="{{ url_for('financeiro_painel.dashboard', aba='mensalidades') }}" class="um-btn"><i class="bi bi-receipt" style="color:#78716c"></i>Mensalidades</a>
+  <a href="{{ url_for('financeiro_painel.dashboard', aba='receitas') }}" class="um-btn"><i class="bi bi-arrow-down-circle" style="color:#78716c"></i>Receitas</a>
+  <a href="{{ url_for('financeiro_painel.dashboard', aba='despesas') }}" class="um-btn"><i class="bi bi-arrow-up-circle" style="color:#78716c"></i>Despesas</a>
+</div>
+
+<div style="font:400 11.5px/1 'Public Sans',sans-serif; color:#a8a29e">© {{ ano }} {{ academia.nome }}. Todos os direitos reservados.</div>
+{% endblock %}

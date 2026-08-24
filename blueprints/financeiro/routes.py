@@ -11,7 +11,8 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 import json
 from config import get_db_connection
-from utils.alunos_academias import filtro_alunos_da_academia
+from utils.financeiro_core import registrar_entrada_de_pagamento
+from utils.alunos_academias import filtro_alunos_da_academia, aluno_vinculado_a_academia
 from extensions import csrf
 
 bp_financeiro = Blueprint("financeiro", __name__, url_prefix="/financeiro")
@@ -116,9 +117,116 @@ def _status_efetivo(status, data_venc, status_pagamento=None):
     return status or "pendente"
 
 
-def _valor_com_desconto(ma, aluno_id, id_academia, hoje=None):
+def _desconto_apenas_em_dia(id_desconto):
+    """True se o desconto só vale para pagamento em dia (perde no atraso)."""
+    if not id_desconto:
+        return False
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute(
+            "SELECT COALESCE(aplicar_apenas_pagamento_em_dia, 1) AS f FROM descontos WHERE id = %s",
+            (id_desconto,),
+        )
+        r = cur.fetchone()
+        conn.close()
+        return bool(r and int(r.get("f") or 0))
+    except Exception:
+        return False
+
+
+def _aplicar_perda_desconto_atraso(ma, hoje=None):
+    """Regra: desconto 'apenas para pagamento em dia' materializado na mensalidade,
+    quando ATRASADA, é perdido — o valor volta ao cheio (valor_original) para que o
+    juros/multa incida sobre a mensalidade cheia. Mutação in-place; retorna True se
+    removeu o desconto. Só age sobre descontos já gravados (desconto_aplicado > 0);
+    o desconto por vínculo já é tratado on-the-fly em `_aplicar_desconto`."""
+    hoje = hoje or date.today()
+    try:
+        if ma.get("status") == "pago" or ma.get("status_pagamento") == "pago":
+            return False
+        desc_apl = float(ma.get("desconto_aplicado") or 0)
+        vo = float(ma.get("valor_original") or 0)
+        idd = ma.get("id_desconto")
+        if desc_apl <= 0 or vo <= 0 or not idd:
+            return False
+        venc = ma.get("data_vencimento")
+        venc = venc if isinstance(venc, date) else (date.fromisoformat(str(venc)[:10]) if venc else None)
+        if not (venc and venc < hoje):
+            return False
+        if not _desconto_apenas_em_dia(idd):
+            return False
+        # O proporcional de mudança de vencimento não é desconto: ele fica em
+        # `valor` mas não em `valor_original`, então voltar ao cheio sem somá-lo
+        # de volta apagava os dias extras da cobrança.
+        ma["valor"] = round(vo + float(ma.get("ajuste_proporcional") or 0), 2)
+        ma["desconto_aplicado"] = 0
+        ma["_desconto_perdido_atraso"] = True
+        return True
+    except Exception:
+        return False
+
+
+def carregar_descontos_cache(cur, aluno_ids):
+    """Pré-carrega os descontos de vários alunos de uma vez.
+
+    Passe o retorno como `cache=` de `_valor_com_desconto`/`_ma_enriquecer_exibicao`
+    quando for processar muitas mensalidades (listagens): sem isso cada chamada abre
+    uma conexão MySQL nova só para ler o desconto do aluno.
+    """
+    cache = {"vinculos": {}, "nomes": {}}
+    ids = [i for i in (aluno_ids or []) if i]
+    if not ids:
+        return cache
+    ph = ", ".join(["%s"] * len(ids))
+    try:
+        cur.execute(
+            f"""
+            SELECT ad.aluno_id, ad.data_inicio, ad.data_fim,
+                   d.id AS desconto_id, d.nome, d.tipo, d.valor, d.id_academia,
+                   COALESCE(d.aplicar_apenas_pagamento_em_dia, 1) AS aplicar_apenas_pagamento_em_dia,
+                   COALESCE(ad.aplica_todos_pacotes, 1) AS aplica_todos_pacotes,
+                   ad.pacotes_mensalidade_ids
+            FROM aluno_desconto ad
+            JOIN descontos d ON d.id = ad.desconto_id AND d.ativo = 1
+            WHERE ad.aluno_id IN ({ph}) AND ad.ativo = 1
+            ORDER BY ad.aluno_id, ad.id
+            """,
+            tuple(ids),
+        )
+        for r in cur.fetchall():
+            cache["vinculos"].setdefault(r["aluno_id"], []).append(r)
+    except Exception:
+        return {"vinculos": {}, "nomes": {}}
+    try:
+        cur.execute("SELECT id, nome FROM descontos")
+        cache["nomes"] = {r["id"]: r["nome"] for r in cur.fetchall()}
+    except Exception:
+        cache["nomes"] = {}
+    return cache
+
+
+def _desconto_do_cache(cache, aluno_id, id_academia, data_vigencia):
+    """Mesmo resultado da consulta por aluno de `_valor_com_desconto`, em memória."""
+    for r in (cache.get("vinculos") or {}).get(aluno_id, []):
+        di, df = r.get("data_inicio"), r.get("data_fim")
+        if di is not None and di > data_vigencia:
+            continue
+        if df is not None and df < data_vigencia:
+            continue
+        try:
+            if id_academia is not None and int(r.get("id_academia")) != int(id_academia):
+                continue
+        except (TypeError, ValueError):
+            continue
+        return r
+    return None
+
+
+def _valor_com_desconto(ma, aluno_id, id_academia, hoje=None, cache=None):
     """Retorna (valor_integral, valor_desconto, valor_final, desconto_nome) para exibição.
-    desconto_nome: nome do desconto (ex. 'Família'). Vazio se sem desconto."""
+    desconto_nome: nome do desconto (ex. 'Família'). Vazio se sem desconto.
+    `cache`: retorno de `carregar_descontos_cache` — evita uma conexão por chamada."""
     hoje = hoje or date.today()
     valor_base = float(ma.get("valor") or 0)
     valor_original = float(ma.get("valor_original") or 0) or valor_base
@@ -127,7 +235,9 @@ def _valor_com_desconto(ma, aluno_id, id_academia, hoje=None):
     desconto_nome = ""
     if desconto_aplicado > 0:
         id_desc = ma.get("id_desconto")
-        if id_desc:
+        if id_desc and cache is not None:
+            desconto_nome = str((cache.get("nomes") or {}).get(id_desc) or "").strip()
+        elif id_desc:
             conn = get_db_connection()
             cur = conn.cursor(dictionary=True)
             try:
@@ -144,6 +254,11 @@ def _valor_com_desconto(ma, aluno_id, id_academia, hoje=None):
         data_vigencia = venc if isinstance(venc, date) else (date.fromisoformat(str(venc)[:10]) if venc else hoje)
     except Exception:
         data_vigencia = hoje
+    if cache is not None:
+        d = _desconto_do_cache(cache, aluno_id, id_acad or id_academia, data_vigencia)
+        if not d:
+            return valor_base, 0, valor_base, ""
+        return _aplicar_desconto(ma, d, valor_base, hoje)
     conn = get_db_connection()
     cur = conn.cursor(dictionary=True)
     try:
@@ -181,6 +296,11 @@ def _valor_com_desconto(ma, aluno_id, id_academia, hoje=None):
     conn.close()
     if not d:
         return valor_base, 0, valor_base, ""
+    return _aplicar_desconto(ma, d, valor_base, hoje)
+
+
+def _aplicar_desconto(ma, d, valor_base, hoje):
+    """(integral, desconto, final, nome) para o vínculo de desconto `d` já resolvido."""
     _at_pac = d.get("aplica_todos_pacotes")
     if _at_pac is None:
         _at_pac = 1
@@ -290,12 +410,23 @@ def _quitar_mensalidades_isentas_por_desconto(conn, cur, aluno_id, academia_id, 
     return n
 
 
-def _ma_enriquecer_exibicao(ma, aluno_id, id_academia, hoje=None):
+def _ma_enriquecer_exibicao(ma, aluno_id, id_academia, hoje=None, cache=None):
     """Preenche tem_juros, multa/juros, valores integral/desconto/final (igual lista mensalidades)."""
     hoje = hoje or date.today()
     from blueprints.aluno.painel import _calcular_valor_com_juros_multas
 
-    valor_display, _vo_juros, multa_val, juros_val = _calcular_valor_com_juros_multas(ma, hoje)
+    # Desconto 'apenas em dia' materializado + atrasado → perde o desconto: o valor
+    # volta ao cheio ANTES do cálculo de juros, para os encargos incidirem sobre o cheio.
+    _aplicar_perda_desconto_atraso(ma, hoje)
+
+    # O proporcional paga dias À FRENTE do vencimento; multa e juros do atraso
+    # não incidem sobre ele. Sai da base do cálculo e volta no total — assim o
+    # "R$ X de proporcional" da tela é exatamente o que entra na cobrança.
+    _prop = float(ma.get("ajuste_proporcional") or 0)
+    _ma_juros = dict(ma, valor=round(float(ma.get("valor") or 0) - _prop, 2)) if _prop > 0 else ma
+    valor_display, _vo_juros, multa_val, juros_val = _calcular_valor_com_juros_multas(_ma_juros, hoje)
+    if _prop > 0 and valor_display is not None:
+        valor_display = round(float(valor_display) + _prop, 2)
     ma["multa_val"] = multa_val
     ma["juros_val"] = juros_val
     ma["tem_juros"] = (multa_val or 0) + (juros_val or 0) > 0
@@ -305,7 +436,7 @@ def _ma_enriquecer_exibicao(ma, aluno_id, id_academia, hoje=None):
     ma["status_efetivo"] = _status_efetivo(
         ma.get("status"), ma.get("data_vencimento"), ma.get("status_pagamento")
     )
-    vi, vd, vf, desconto_nome = _valor_com_desconto(ma, aluno_id, id_academia, hoje)
+    vi, vd, vf, desconto_nome = _valor_com_desconto(ma, aluno_id, id_academia, hoje, cache=cache)
     if ma.get("tem_juros"):
         ma["valor"] = ma_orig_val
     ma["valor_integral"] = vi
@@ -313,6 +444,19 @@ def _ma_enriquecer_exibicao(ma, aluno_id, id_academia, hoje=None):
     ma["valor_final"] = vf
     ma["desconto_nome"] = desconto_nome
     ma["tem_desconto"] = vd > 0
+
+    # Já paga: na tela vale o que entrou de verdade. `valor_pago` guarda o total
+    # cobrado no ato, com a multa e os juros do dia do pagamento; recalcular
+    # agora devolve a mensalidade limpa, porque o cálculo de encargos para de
+    # rodar quando a mensalidade vira 'pago'. Era o valor sem juros aparecendo
+    # depois da baixa. Só vale com valor_pago > 0: quitada por desconto
+    # integral grava zero e continua com o caminho normal.
+    _pago = float(ma.get("valor_pago") or 0)
+    if _pago > 0 and (ma.get("status") == "pago" or ma.get("status_pagamento") == "pago"):
+        ma["acrescimo_pago"] = round(max(_pago - float(vf or 0), 0), 2)
+        ma["valor_final"] = _pago
+    else:
+        ma["acrescimo_pago"] = 0.0
     return ma
 
 
@@ -476,10 +620,22 @@ def _parse_valor(val: str):
 
 
 def _get_academias_for_select():
-    """Retorna lista de academias para dropdown (quando usuário tem múltiplas)."""
+    """Academias para dropdown — só a da sessão quando há escolha travada.
+
+    A academia é definida na entrada e não muda por dentro do sistema. Devolver
+    a lista completa aqui recriava o seletor de troca dentro de cada tela.
+    """
     ids = _get_academias_ids()
     if not ids:
         return []
+    try:
+        from blueprints.academia.routes import academia_travada
+
+        travada = academia_travada()
+        if travada and len(ids) > 1:
+            ids = [travada]
+    except Exception:
+        pass
     conn = get_db_connection()
     cur = conn.cursor(dictionary=True)
     placeholders = ",".join(["%s"] * len(ids))
@@ -490,7 +646,16 @@ def _get_academias_for_select():
 
 
 def _get_academias_ids():
-    """Retorna IDs de academias acessíveis pelo usuário (prioridade: usuarios_academias)."""
+    """Academias válidas para esta sessão (respeita a escolha da entrada)."""
+    ids = _academias_ids_financeiro_brutas()
+    if len(ids) <= 1 or session.get("modo_painel") != "academia":
+        return ids
+    escolhida = session.get("academia_gerenciamento_id")
+    return [escolhida] if (escolhida and escolhida in ids) else ids
+
+
+def _academias_ids_financeiro_brutas():
+    """Todas as academias do usuário, sem a trava da sessão."""
     conn = get_db_connection()
     cur = conn.cursor(dictionary=True)
     ids = []
@@ -539,12 +704,15 @@ def _get_academia_id():
         session["finance_academia_id"] = aid
         session["academia_gerenciamento_id"] = aid
         return aid
-    # Prioridade: request > academia_gerenciamento (seleção global) > finance_academia_id
-    aid = (
-        request.args.get("academia_id", type=int)
-        or session.get("academia_gerenciamento_id")
-        or session.get("finance_academia_id")
-    )
+    # Vale a academia escolhida na entrada. O `academia_id` da URL só entra
+    # quando ainda não há escolha — por dentro do sistema ele não troca o
+    # contexto, senão um link antigo mudaria a academia sem aviso.
+    from blueprints.academia.routes import academia_travada
+
+    aid = academia_travada() or session.get("finance_academia_id")
+    if not aid:
+        pedido = request.args.get("academia_id", type=int)
+        aid = pedido if (pedido and pedido in ids) else None
     if aid and aid in ids:
         session["finance_academia_id"] = aid
         session["academia_gerenciamento_id"] = aid
@@ -1369,12 +1537,32 @@ def _gerar_mensalidades_mes(academia_id, ano, mes):
         # gera cobrança em cada academia onde tem plano, sem misturar. Inclui alunos
         # vinculados (alunos_academias), não só os que têm esta como principal.
         _trecho_al, _al_params = filtro_alunos_da_academia(academia_id, alias="a")
+        # O dia salvo no aluno manda (foi escolhido em "alterar vencimento");
+        # sem ele, vale o da última cobrança, como sempre foi.
+        _col_dia = "a.dia_vencimento" if _tem_coluna(cur, "alunos", "dia_vencimento") else "NULL"
+        # O ajuste proporcional é de uma vez só (mudança de vencimento): sai do
+        # valor antes de replicar, senão os dias extras entrariam todo mês.
+        _col_aj = ("COALESCE(ma.ajuste_proporcional, 0)"
+                   if _tem_coluna(cur, "mensalidade_aluno", "ajuste_proporcional") else "0")
+        # Pacote padrão do aluno (trocado no modal de baixa): vale a partir da
+        # próxima geração. Só entra se ainda for um plano ativo desta academia.
+        if _tem_coluna(cur, "alunos", "plano_mensalidade_id"):
+            _join_plano = ("""LEFT JOIN mensalidades mp ON mp.id = a.plano_mensalidade_id
+                                   AND mp.id_academia = m.id_academia
+                                   AND COALESCE(mp.ativo, 1) = 1""")
+            _col_plano = "mp.id AS plano_aluno_id, mp.valor AS plano_aluno_valor"
+        else:
+            _join_plano = ""
+            _col_plano = "NULL AS plano_aluno_id, NULL AS plano_aluno_valor"
         cur.execute(
             f"""
-            SELECT ma.aluno_id, ma.mensalidade_id, ma.turma_id, ma.valor, DAY(ma.data_vencimento) AS dia
+            SELECT ma.aluno_id, ma.mensalidade_id, ma.turma_id, ma.valor,
+                   DAY(ma.data_vencimento) AS dia, {_col_dia} AS dia_aluno,
+                   {_col_aj} AS ajuste_proporcional, {_col_plano}
             FROM mensalidade_aluno ma
             JOIN alunos a ON a.id = ma.aluno_id
             JOIN mensalidades m ON m.id = ma.mensalidade_id
+            {_join_plano}
             WHERE {_trecho_al} AND a.status = 'ativo'
               AND ma.status <> 'cancelado' AND m.id_academia = %s
               AND ma.id = (SELECT ma2.id FROM mensalidade_aluno ma2
@@ -1387,13 +1575,24 @@ def _gerar_mensalidades_mes(academia_id, ano, mes):
         )
         templates = cur.fetchall()
         for t in templates:
-            dia = min(int(t.get("dia") or 1), ultimo_dia)
+            dia = min(int(t.get("dia_aluno") or t.get("dia") or 1), ultimo_dia)
             venc = date(ano, mes, dia)
+            valor_mes = Decimal(str(t["valor"] or 0)) - Decimal(str(t.get("ajuste_proporcional") or 0))
+            if valor_mes < 0:
+                valor_mes = Decimal("0")
+            # Trocou de pacote: daqui pra frente vale o preço do pacote novo, e
+            # não o valor herdado da cobrança anterior (que era do pacote antigo).
+            plano_id = t["mensalidade_id"]
+            if t.get("plano_aluno_id") and t["plano_aluno_id"] != plano_id:
+                plano_id = t["plano_aluno_id"]
+                valor_mes = Decimal(str(t.get("plano_aluno_valor") or 0))
+            # A checagem cobre os dois pacotes: no mês da troca o aluno pode já
+            # ter cobrança pelo antigo, e ela não pode virar uma segunda cobrança.
             cur.execute(
                 """SELECT 1 FROM mensalidade_aluno
-                   WHERE aluno_id=%s AND mensalidade_id=%s AND status<>'cancelado'
+                   WHERE aluno_id=%s AND mensalidade_id IN (%s, %s) AND status<>'cancelado'
                      AND YEAR(data_vencimento)=%s AND MONTH(data_vencimento)=%s LIMIT 1""",
-                (t["aluno_id"], t["mensalidade_id"], ano, mes),
+                (t["aluno_id"], plano_id, t["mensalidade_id"], ano, mes),
             )
             if cur.fetchone():
                 pulados += 1
@@ -1401,8 +1600,8 @@ def _gerar_mensalidades_mes(academia_id, ano, mes):
 
             # Desconto integral (valor final = 0): nada a pagar, já nasce PAGA.
             ma_calc = {
-                "valor": t["valor"],
-                "mensalidade_id": t["mensalidade_id"],
+                "valor": valor_mes,
+                "mensalidade_id": plano_id,
                 "id_academia": academia_id,
                 "data_vencimento": venc,
             }
@@ -1419,13 +1618,13 @@ def _gerar_mensalidades_mes(academia_id, ano, mes):
                 cur.execute(
                     "INSERT INTO mensalidade_aluno (mensalidade_id, aluno_id, turma_id, data_vencimento, valor, status, status_pagamento, data_pagamento, valor_pago) "
                     "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)",
-                    (t["mensalidade_id"], t["aluno_id"], t["turma_id"], venc, t["valor"], status_ins, stpag, dt_pag, valor_pago),
+                    (plano_id, t["aluno_id"], t["turma_id"], venc, valor_mes, status_ins, stpag, dt_pag, valor_pago),
                 )
             else:
                 cur.execute(
                     "INSERT INTO mensalidade_aluno (mensalidade_id, aluno_id, data_vencimento, valor, status, status_pagamento, data_pagamento, valor_pago) "
                     "VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
-                    (t["mensalidade_id"], t["aluno_id"], venc, t["valor"], status_ins, stpag, dt_pag, valor_pago),
+                    (plano_id, t["aluno_id"], venc, valor_mes, status_ins, stpag, dt_pag, valor_pago),
                 )
             geradas += 1
         conn.commit()
@@ -1540,7 +1739,8 @@ def _dados_relatorio(academia_id, ano, mes):
         cur.execute(
             f"""SELECT a.id, a.nome, COUNT(*) qtd, COALESCE(SUM(ma.valor),0) total, MIN(ma.data_vencimento) venc
                 FROM mensalidade_aluno ma JOIN alunos a ON a.id=ma.aluno_id
-                WHERE a.id_academia=%s AND {cond}
+                JOIN mensalidades mp ON mp.id=ma.mensalidade_id
+                WHERE mp.id_academia=%s AND {cond}
                 GROUP BY a.id, a.nome ORDER BY total DESC""",
             (academia_id,),
         )
@@ -2621,9 +2821,6 @@ def assinaturas_recorrentes():
         if academia_id:
             where += " AND s.id_academia = %s"
             params.append(academia_id)
-        if filtro in ("cartao", "pix"):
-            where += " AND s.metodo = %s"
-            params.append(filtro)
         cur.execute(
             f"""SELECT s.*, a.nome AS aluno_nome, ac.nome AS academia_nome
                 FROM assinaturas_recorrentes s
@@ -2634,7 +2831,8 @@ def assinaturas_recorrentes():
             tuple(params),
         )
         assinaturas = cur.fetchall()
-        # Resumo por forma
+        # O resumo conta o conjunto inteiro, não o recorte: os números das abas
+        # precisam continuar valendo depois de clicar num filtro.
         resumo = {"cartao": 0, "pix": 0, "ativas": 0, "pendentes": 0, "canceladas": 0}
         for s in assinaturas:
             if (s.get("metodo") or "cartao") == "pix":
@@ -2643,11 +2841,16 @@ def assinaturas_recorrentes():
                 resumo["cartao"] += 1
             st = s.get("status") or "pendente"
             resumo["ativas" if st == "ativa" else ("canceladas" if st == "cancelada" else "pendentes")] += 1
+        if filtro in ("cartao", "pix"):
+            assinaturas = [s for s in assinaturas
+                           if (s.get("metodo") or "cartao") == filtro]
     finally:
         conn.close()
     return render_template(
         "financeiro/assinaturas_recorrentes.html",
         assinaturas=assinaturas, resumo=resumo, academia_id=academia_id, filtro=filtro,
+        # O shell usa `academias` no seletor do topo e o nome no rodapé.
+        academias=_get_academias_for_select(),
     )
 
 
@@ -2833,7 +3036,7 @@ def _baixar_cobranca_paga(origem, registro_id, valor_pago, gateway_nome):
         if origem == "mensalidade":
             cur.execute(
                 """UPDATE mensalidade_aluno
-                   SET status='pago', status_pagamento='pago', data_pagamento=CURDATE(), valor_pago=%s
+                   SET status='pago', status_pagamento='pago', data_pagamento=CURDATE(), valor_pago=%s, pago_auto=1
                    WHERE id=%s""",
                 (vp, rec["id"]),
             )
@@ -2899,26 +3102,113 @@ def _achar_cobranca_por_payment_id(payment_id, gateway):
         conn.close()
 
 
-def _baixar_matricula_paga(*, precad_id=None, payment_id=None):
-    """Marca a matrícula (pré-cadastro) como paga. Localiza por id direto ou pelo
-    payment_id/txid armazenado em pre_cadastro.matricula_payment_id."""
+def _baixar_matricula_paga(*, precad_id=None, payment_id=None, valor=None,
+                           data_pagamento=None, id_forma_pagamento=None,
+                           manual=False, notificar=True):
+    """Marca a matrícula (pré-cadastro) como paga e lança a receita.
+
+    Antes só o status do pré-cadastro era atualizado: o dinheiro da matrícula
+    entrava na conta mas não aparecia em lugar nenhum do financeiro. A receita
+    é criada aqui, junto da baixa, com trava contra duplicidade — o gateway
+    reenvia o mesmo webhook mais de uma vez.
+
+    Serve tanto para o webhook do gateway quanto para a baixa manual da
+    secretaria (quem pagou por PIX direto, fora da cobrança online): nesse caso
+    `manual=True` e `valor`/`data_pagamento`/`id_forma_pagamento` vêm da tela.
+    """
     conn = get_db_connection()
-    cur = conn.cursor()
+    cur = conn.cursor(dictionary=True)
     try:
         if precad_id:
-            cur.execute("UPDATE pre_cadastro SET matricula_status='pago' WHERE id=%s", (precad_id,))
+            cur.execute(
+                "SELECT id, nome, academia_id, matricula_valor, matricula_status "
+                "FROM pre_cadastro WHERE id=%s",
+                (precad_id,),
+            )
         elif payment_id:
             cur.execute(
-                "UPDATE pre_cadastro SET matricula_status='pago' WHERE matricula_payment_id=%s",
+                "SELECT id, nome, academia_id, matricula_valor, matricula_status "
+                "FROM pre_cadastro WHERE matricula_payment_id=%s",
                 (str(payment_id),),
             )
+        else:
+            return False
+        pre = cur.fetchone()
+        if not pre:
+            return False
+
+        ja_estava_pago = (pre.get("matricula_status") or "") == "pago"
+        cur.execute("UPDATE pre_cadastro SET matricula_status='pago' WHERE id=%s", (pre["id"],))
+
+        # Baixa manual sem valor cadastrado (matrícula criada antes de haver
+        # cobrança online): grava o valor informado, senão a ficha fica sem ele.
+        valor_final = float(valor) if valor is not None else float(pre.get("matricula_valor") or 0)
+        if manual and valor is not None and not pre.get("matricula_valor"):
+            cur.execute("UPDATE pre_cadastro SET matricula_valor=%s WHERE id=%s",
+                        (valor_final, pre["id"]))
+
+        # Reenvio do webhook não pode lançar a receita duas vezes.
+        if not ja_estava_pago:
+            data_rec = data_pagamento or date.today()
+            descricao = f"Matrícula - {(pre.get('nome') or '').strip() or 'aluno'}"
+            observacao = f"Pré-cadastro #{pre['id']}"
+            if manual:
+                observacao += " · baixa manual"
+            try:
+                # A trava olha o prefixo: a baixa manual acrescenta um sufixo à
+                # observação, e sem o LIKE o webhook atrasado lançaria de novo.
+                cur.execute(
+                    """SELECT id FROM receitas
+                       WHERE id_academia = %s AND categoria = 'Matrículas'
+                         AND (observacoes = %s OR observacoes LIKE %s)
+                         AND COALESCE(cancelada, 0) = 0
+                       LIMIT 1""",
+                    (pre.get("academia_id"), f"Pré-cadastro #{pre['id']}",
+                     f"Pré-cadastro #{pre['id']} ·%"),
+                )
+                if not cur.fetchone():
+                    cur.execute(
+                        """INSERT INTO receitas
+                               (descricao, valor, data, categoria, id_academia, observacoes,
+                                id_forma_pagamento, criado_por)
+                           VALUES (%s, %s, %s, 'Matrículas', %s, %s, %s, %s)""",
+                        (descricao, valor_final, data_rec, pre.get("academia_id"), observacao,
+                         id_forma_pagamento, getattr(current_user, "id", None)),
+                    )
+                    # Espelha no razão, como faz a baixa de mensalidade. Em
+                    # academia sem conta ou com o controle desativado a função
+                    # devolve None e nada muda.
+                    registrar_entrada_de_pagamento(
+                        conn, cur, id_academia=pre.get("academia_id"), valor=valor_final,
+                        descricao=descricao, data=data_rec,
+                        id_forma_pagamento=id_forma_pagamento,
+                        origem="matricula", origem_id=pre["id"],
+                        id_receita=cur.lastrowid,
+                        usuario_id=getattr(current_user, "id", None),
+                    )
+            except Exception as exc_rec:
+                # A baixa da matrícula não pode falhar por causa da receita.
+                current_app.logger.error(f"Receita da matrícula {pre['id']} falhou: {exc_rec}")
+
         conn.commit()
-        return cur.rowcount > 0
+
+        # Confirmação no WhatsApp, depois do commit: só avisa o que já está
+        # gravado. Só na primeira baixa — reenvio de webhook não repete a
+        # mensagem. Nunca derruba a baixa se o WhatsApp estiver fora.
+        if notificar and not ja_estava_pago:
+            try:
+                from utils.whatsapp_lembretes import enviar_confirmacao_matricula
+                enviar_confirmacao_matricula(pre["id"], valor=valor_final)
+            except Exception as exc_wpp:
+                current_app.logger.error(
+                    f"WhatsApp da matrícula {pre['id']} falhou: {exc_wpp}")
+        return True
     except Exception as e:
         conn.rollback()
         current_app.logger.error(f"Baixa matrícula falhou: {e}")
         return False
     finally:
+        cur.close()
         conn.close()
 
 
@@ -3683,6 +3973,15 @@ def mensalidades_alunos():
             params["busca"] = busca
         if filtro_status:
             params["status"] = filtro_status
+        # A ficha do aluno chama sem mês/ano e cai aqui: sem repassar o
+        # aluno_id o redirecionamento devolvia a lista de todo mundo.
+        aluno_arg = request.args.get("aluno_id", type=int)
+        if aluno_arg:
+            params["aluno_id"] = aluno_arg
+            # O link se chama "ver todas as mensalidades": prender no mês
+            # corrente mostraria uma lista vazia para quem não tem cobrança
+            # neste mês. O ano continua o atual e é trocável no filtro.
+            params["mes"] = ""
         return redirect(url_for("financeiro.mensalidades_alunos", **params))
     
     busca = (request.args.get("busca") or "").strip()
@@ -3705,6 +4004,18 @@ def mensalidades_alunos():
     if busca:
         where_ma.append("a.nome LIKE %s")
         params_ma.append(f"%{busca}%")
+    # Vindo da ficha do aluno a tela abre só nas mensalidades dele — por id, que
+    # não confunde homônimos como a busca por nome confundiria.
+    aluno_filtro = request.args.get("aluno_id", type=int)
+    aluno_filtro_nome = ""
+    if aluno_filtro:
+        where_ma.append("ma.aluno_id = %s")
+        params_ma.append(aluno_filtro)
+        try:
+            cur.execute("SELECT nome FROM alunos WHERE id = %s", (aluno_filtro,))
+            aluno_filtro_nome = ((cur.fetchone() or {}).get("nome") or "").strip()
+        except Exception:
+            aluno_filtro_nome = ""
 
     try:
         cur.execute(f"""
@@ -3713,6 +4024,8 @@ def mensalidades_alunos():
                    ma.valor_original, ma.desconto_aplicado, ma.id_desconto, ma.turma_id,
                    ma.asaas_boleto_url, ma.asaas_pix_copia_cola, ma.asaas_pix_qrcode, ma.asaas_tipo,
                    COALESCE(ma.remover_juros, 0) AS remover_juros,
+                   COALESCE(ma.ajuste_proporcional, 0) AS ajuste_proporcional,
+                   COALESCE(ma.pago_auto, 0) AS pago_auto,
                    m.nome as plano_nome, m.id_academia, a.id as aluno_id, a.nome as aluno_nome, a.foto as aluno_foto,
                    COALESCE(m.aplicar_juros_multas, 0) AS aplicar_juros_multas,
                    COALESCE(m.percentual_multa_mes, 2) AS percentual_multa_mes,
@@ -3859,6 +4172,12 @@ def mensalidades_alunos():
                 params_av.extend(ids_busca)
             else:
                 where_av.append("1=0")
+        # As avulsas têm WHERE próprio: sem repetir o filtro aqui, a tela
+        # aberta pela ficha mostrava a mensalidade certa e as cobranças
+        # avulsas de todos os outros alunos junto.
+        if aluno_filtro:
+            where_av.append("aluno_id = %s")
+            params_av.append(aluno_filtro)
         cur.execute(f"""
             SELECT id, descricao, valor, data_vencimento, data_pagamento, valor_pago, status, aluno_id,
                    asaas_payment_id, asaas_tipo, asaas_boleto_url, asaas_pix_copia_cola, asaas_pix_qrcode
@@ -3894,6 +4213,18 @@ def mensalidades_alunos():
     except Exception:
         pass
 
+    # Descontos ativos da academia — populam o desconto no modal de pagamento.
+    descontos_lista = []
+    try:
+        cur.execute(
+            """SELECT id, nome, tipo, valor FROM descontos
+               WHERE id_academia = %s AND COALESCE(ativo, 1) = 1 ORDER BY nome""",
+            (academia_id,),
+        )
+        descontos_lista = cur.fetchall()
+    except Exception:
+        descontos_lista = []
+
     # Forma de recorrência por aluno (cartão/PIX recorrente) — para classificação
     forma_recorrencia_por_aluno = {}
     try:
@@ -3918,10 +4249,55 @@ def mensalidades_alunos():
     except Exception:
         forma_recorrencia_por_aluno = {}
 
+    # Saldo de carteira (crédito) por aluno — mostrado na lista e habilita o
+    # botão "Usar carteira" no modal de pagamento.
+    saldos_carteira = {}
+    try:
+        _ids_cart = list({m.get("aluno_id") for m in mensalidades if m.get("aluno_id")}
+                         | {a.get("aluno_id") for a in avulsas if a.get("aluno_id")})
+        from utils.carteira import saldos_por_aluno
+        saldos_carteira = saldos_por_aluno(cur, _ids_cart)
+    except Exception:
+        saldos_carteira = {}
+
+    # Filtrada por um aluno, a tela também deixa mudar o vencimento dele: o dia
+    # vigente é o das cobranças em aberto e, sem nenhuma, o da última lançada.
+    dia_vencimento_atual = None
+    pacote_atual_id, pacote_atual_nome = None, ""
+    if aluno_filtro:
+        try:
+            cur.execute(
+                """SELECT DAY(data_vencimento) AS dia FROM mensalidade_aluno
+                   WHERE aluno_id = %s AND status IN ('pendente', 'atrasado')
+                   ORDER BY data_vencimento ASC LIMIT 1""",
+                (aluno_filtro,),
+            )
+            _dv = cur.fetchone()
+            if not _dv:
+                cur.execute(
+                    """SELECT DAY(data_vencimento) AS dia FROM mensalidade_aluno
+                       WHERE aluno_id = %s AND status <> 'cancelado'
+                       ORDER BY data_vencimento DESC LIMIT 1""",
+                    (aluno_filtro,),
+                )
+                _dv = cur.fetchone()
+            dia_vencimento_atual = (_dv or {}).get("dia")
+        except Exception:
+            dia_vencimento_atual = None
+        try:
+            _pac_id, _pac_nome = _pacote_atual_do_aluno(cur, aluno_filtro, ids)
+            pacote_atual_id, pacote_atual_nome = _pac_id, _pac_nome
+        except Exception:
+            pacote_atual_id, pacote_atual_nome = None, ""
+
     conn.close()
 
     return render_template(
         "financeiro/mensalidades/mensalidades_alunos.html",
+        saldos_carteira=saldos_carteira,
+        dia_vencimento_atual=dia_vencimento_atual,
+        pacote_atual_id=pacote_atual_id, pacote_atual_nome=pacote_atual_nome,
+        descontos=descontos_lista,
         academia_id=academia_id,
         academias=academias,
         mensalidades=mensalidades,
@@ -3932,6 +4308,11 @@ def mensalidades_alunos():
         ano=ano,
         busca=busca,
         filtro_status=filtro_status,
+        aluno_filtro=aluno_filtro,
+        aluno_filtro_nome=aluno_filtro_nome,
+        # Cobrança rápida (só com aluno filtrado) e troca de pacote no modal de
+        # baixa (qualquer linha da lista) saem da mesma lista de planos ativos.
+        planos_cobranca=_planos_ativos_academia(academia_id),
         ano_atual=date.today().year,
         formas_lista=formas_lista,
         asaas_on=_asaas_habilitado_academia(academia_id),
@@ -3982,8 +4363,8 @@ def checar_disponibilidade_mensalidade():
             row = cur.fetchone() or {"total": 0}
             total = row.get("total", 0) or 0
             if total > 0:
-                return jsonify({"disponivel": False, "mensagem": "Este aluno já possui mensalidade para esta competência.", "total": int(total)})
-            return jsonify({"disponivel": True, "mensagem": "", "total": 0})
+                return jsonify({"disponivel": False, "mensagem": "Este aluno já possui mensalidade para esta competência.", "total": int(total), "meses_ocupados": [mes]})
+            return jsonify({"disponivel": True, "mensagem": "", "total": 0, "meses_ocupados": []})
 
         # Anual: período = mes_inicial até 12 (default 1). Bloqueia só se todos os meses do período já têm cobrança.
         mes_ini = (mes_inicial if mes_inicial and 1 <= mes_inicial <= 12 else 1)
@@ -3998,14 +4379,15 @@ def checar_disponibilidade_mensalidade():
         )
         meses_com_cobranca = {r["mes"] for r in cur.fetchall() if r.get("mes")}
         meses_no_periodo = set(range(mes_ini, 13))
+        ocupados = sorted(meses_com_cobranca & meses_no_periodo)
         todos_preenchidos = meses_no_periodo.issubset(meses_com_cobranca)
         if todos_preenchidos:
             return jsonify({
                 "disponivel": False,
                 "mensagem": "Este aluno já possui todas as mensalidades deste período no ano. Nenhum mês faltando para gerar.",
-                "total": len(meses_com_cobranca),
+                "total": len(ocupados), "meses_ocupados": ocupados,
             })
-        return jsonify({"disponivel": True, "mensagem": "", "total": len(meses_com_cobranca)})
+        return jsonify({"disponivel": True, "mensagem": "", "total": len(ocupados), "meses_ocupados": ocupados})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     finally:
@@ -4531,6 +4913,14 @@ def gerar_cobranca():
                     conn.close()
                     return _render_gerar_cobranca(academias, academia_id, id_acad, None, None, None, None)
                 valor_plano = float(plano[2] if isinstance(plano, (list, tuple)) else plano.get("valor", 0))
+                # "Valor por mês" do modal pode sobrescrever o valor do plano.
+                _valor_custom = (request.form.get("valor") or "").strip().replace(".", "").replace(",", ".") \
+                    if ("," in (request.form.get("valor") or "")) else (request.form.get("valor") or "").strip()
+                try:
+                    if _valor_custom and float(_valor_custom) > 0:
+                        valor_plano = float(_valor_custom)
+                except ValueError:
+                    pass
                 dias_por_mes = {1: 31, 2: 28, 3: 31, 4: 30, 5: 31, 6: 30, 7: 31, 8: 31, 9: 30, 10: 31, 11: 30, 12: 31}
                 geradas = 0
                 ja_existentes = 0
@@ -5132,16 +5522,28 @@ def aplicar_desconto():
     )
 
 
-def _registrar_pagamento_e_receita(conn, cur, tipo, registro_id, id_academia, id_forma_pagamento=None):
-    """Atualiza status para pago e cria receita. valor efetivo = valor_final (juros/desconto). id_forma_pagamento opcional."""
+def _registrar_pagamento_e_receita(conn, cur, tipo, registro_id, id_academia, id_forma_pagamento=None,
+                                   data_pagamento=None, remover_juros=False,
+                                   desconto_id=None, desconto_tipo=None, desconto_valor=None):
+    """Atualiza status para pago e cria receita. valor efetivo = valor_final (juros/desconto). id_forma_pagamento opcional.
+    Opcionais (usados no modal da ficha): data_pagamento (dia efetivo), remover_juros (cancela juros/multa),
+    desconto_id (cadastrado) OU desconto_tipo+desconto_valor (avulso) para desconto no ato do pagamento."""
     hoje = date.today().strftime("%Y-%m-%d")
+    data_ref = hoje
+    try:
+        if data_pagamento:
+            data_ref = date.fromisoformat(str(data_pagamento)[:10]).strftime("%Y-%m-%d")
+    except (ValueError, TypeError):
+        data_ref = hoje
     if tipo == "mensalidade_aluno":
+        hoje = data_ref  # a mensalidade usa a data efetiva do pagamento (juros e receita)
         dcur = conn.cursor(dictionary=True)
         dcur.execute(
             """
             SELECT ma.id, ma.aluno_id, ma.valor, ma.data_vencimento, ma.status, ma.status_pagamento,
                    ma.valor_original, ma.desconto_aplicado, ma.id_desconto,
                    COALESCE(ma.remover_juros, 0) AS remover_juros,
+                   COALESCE(ma.ajuste_proporcional, 0) AS ajuste_proporcional,
                    m.nome AS plano_nome, m.id_academia, a.id_academia AS aluno_id_academia, a.nome AS aluno_nome,
                    COALESCE(m.aplicar_juros_multas, 0) AS aplicar_juros_multas,
                    COALESCE(m.percentual_multa_mes, 2) AS percentual_multa_mes,
@@ -5157,9 +5559,58 @@ def _registrar_pagamento_e_receita(conn, cur, tipo, registro_id, id_academia, id
         dcur.close()
         if not ma or ma.get("aluno_nome") is None:
             return False
-        _ma_enriquecer_exibicao(ma, ma["aluno_id"], ma.get("id_academia") or id_academia)
-        valor = float(ma.get("valor_final") or ma.get("valor") or 0)
-        valor = round(valor, 2)
+        if remover_juros:
+            ma["remover_juros"] = 1
+            try:
+                _definir_remover_juros_mensalidade_pagamento(conn, cur, registro_id)
+            except Exception:
+                pass
+        try:
+            _dref = date.fromisoformat(data_ref)
+        except ValueError:
+            _dref = date.today()
+        _ma_enriquecer_exibicao(ma, ma["aluno_id"], ma.get("id_academia") or id_academia, hoje=_dref)
+        valor = round(float(ma.get("valor_final") or ma.get("valor") or 0), 2)
+        # Desconto no ato do pagamento (cadastrado ou avulso) — sobre a base sem juros.
+        _base = round(valor - float(ma.get("juros_val") or 0) - float(ma.get("multa_val") or 0), 2)
+        _dtipo = None
+        _dval = None
+        _did_rec = None
+        if desconto_id:
+            _dc = conn.cursor(dictionary=True)
+            try:
+                _dc.execute("SELECT tipo, valor FROM descontos WHERE id=%s AND id_academia=%s",
+                            (desconto_id, ma.get("id_academia") or id_academia))
+                _r = _dc.fetchone()
+            finally:
+                _dc.close()
+            if _r:
+                _dtipo = _r.get("tipo")
+                _dval = float(_r.get("valor") or 0)
+                _did_rec = int(desconto_id)
+        elif desconto_tipo in ("percentual", "valor_fixo") and desconto_valor:
+            _dtipo = desconto_tipo
+            try:
+                _dval = float(desconto_valor)
+            except (TypeError, ValueError):
+                _dval = 0.0
+        _flat = 0.0
+        if _dtipo and _dval and _dval > 0 and _base > 0:
+            _flat = round(_base * _dval / 100.0, 2) if _dtipo == "percentual" else round(min(_dval, _base), 2)
+            _flat = min(max(_flat, 0.0), valor)
+        if _flat > 0.001:
+            try:
+                cur.execute(
+                    """UPDATE mensalidade_aluno SET valor_original = COALESCE(valor_original, valor),
+                           desconto_aplicado = COALESCE(desconto_aplicado, 0) + %s,
+                           valor = GREATEST(0, ROUND(valor - %s, 2)),
+                           id_desconto = COALESCE(%s, id_desconto)
+                       WHERE id=%s""",
+                    (_flat, _flat, _did_rec, registro_id),
+                )
+            except Exception:
+                pass
+        valor = round(valor - _flat, 2)
         descricao = f"Mensalidade {ma.get('plano_nome')} - {ma.get('aluno_nome')}"
         id_acad = ma.get("id_academia") or id_academia
         ids_fp_check = _ids_academia_mensalidade_para_formas(ma, id_academia)
@@ -5177,6 +5628,9 @@ def _registrar_pagamento_e_receita(conn, cur, tipo, registro_id, id_academia, id
             except Exception:
                 id_fp = None
             vcur.close()
+        # Dados que o razão financeiro precisa (ver utils/financeiro_core).
+        _fin = {"origem": "mensalidade", "origem_id": registro_id,
+                "aluno_id": ma.get("aluno_id"), "forma": id_fp}
         try:
             if id_fp:
                 cur.execute(
@@ -5231,7 +5685,7 @@ def _registrar_pagamento_e_receita(conn, cur, tipo, registro_id, id_academia, id
                 )
     else:
         cur.execute(
-            "SELECT ca.id, ca.valor, ca.descricao, a.nome, ca.id_academia FROM cobranca_avulsa ca JOIN alunos a ON a.id = ca.aluno_id WHERE ca.id = %s",
+            "SELECT ca.id, ca.valor, ca.descricao, a.nome, ca.id_academia, ca.aluno_id FROM cobranca_avulsa ca JOIN alunos a ON a.id = ca.aluno_id WHERE ca.id = %s",
             (registro_id,),
         )
         row = cur.fetchone()
@@ -5240,6 +5694,9 @@ def _registrar_pagamento_e_receita(conn, cur, tipo, registro_id, id_academia, id
         valor = float(row[1])
         descricao = (row[2] or "Cobrança avulsa") + (" - %s" % row[3] if row[3] else "")
         id_acad = row[4] if len(row) > 4 and row[4] else id_academia
+        _fin = {"origem": "cobranca_avulsa", "origem_id": registro_id,
+                "aluno_id": row[5] if len(row) > 5 else None,
+                "forma": id_forma_pagamento}
         cur.execute(
             "UPDATE cobranca_avulsa SET status='pago', data_pagamento=%s, valor_pago=%s WHERE id=%s",
             (hoje, valor, registro_id),
@@ -5254,6 +5711,18 @@ def _registrar_pagamento_e_receita(conn, cur, tipo, registro_id, id_academia, id
                 "INSERT INTO receitas (descricao, valor, data, categoria, id_academia) VALUES (%s, %s, %s, 'Cobrança avulsa', %s)",
                 (descricao, valor, hoje, id_acad),
             )
+
+    # Espelha a entrada no razão financeiro — a fonte central do saldo. A
+    # receita continua sendo gravada como sempre; o lançamento é que diz em
+    # QUAL conta o dinheiro entrou. Em academia sem conta cadastrada ou com o
+    # controle desativado, devolve None e nada muda.
+    registrar_entrada_de_pagamento(
+        conn, cur, id_academia=id_acad, valor=valor, descricao=descricao,
+        data=date.today(), id_forma_pagamento=_fin.get("forma"),
+        id_aluno=_fin.get("aluno_id"), origem=_fin.get("origem"),
+        origem_id=_fin.get("origem_id"), id_receita=cur.lastrowid,
+        usuario_id=getattr(current_user, "id", None),
+    )
     return True
 
 
@@ -5418,12 +5887,146 @@ def _aplicar_desconto_mensalidade_no_pagamento(conn, cur, registro_id, desconto_
         dcur.close()
 
 
-def _preprocessar_mensalidade_quitar_opcional(conn, cur, registro_id, partes, academia_id):
-    """
-    Antes de quitar: aplica desconto vinculado (opcional) e/ou remove multa+juros
-    (manual ou automático quando todas as datas de pagamento são <= vencimento).
+def _trocar_vencimento_e_pacote_no_pagamento(conn, cur, registro_id, academia_id):
+    """Aplica na cobrança o vencimento e/ou o pacote escolhidos no modal de baixa.
+
+    Os dois têm alcance escolhido no balcão, porque as duas conversas existem:
+    corrigir só esta cobrança ou mudar o combinado do aluno daqui pra frente.
+
+    Vencimento — `vencimento_aplicar=apenas` mexe só nesta cobrança (é o caso
+    de "ficou pra semana que vem"); `proximos` grava o dia novo no aluno, joga
+    as outras cobranças em aberto para ele e, se o dia foi adiado, oferece
+    cobrar os dias que passaram a ficar descobertos (`cobrar_proporcional`).
+    Antecipar nunca devolve dinheiro: o valor segue o mesmo.
+
+    Pacote — `plano_aplicar=agora` converte a cobrança que está sendo paga
+    (valor, juros e nome do plano passam a ser os do pacote novo); `proximos`
+    deixa esta como está e o pacote novo só entra na geração do mês seguinte.
+    Nos dois casos o pacote fica gravado como padrão do aluno: a escolha é
+    sobre QUANDO começa, não sobre continuar valendo.
+
     Retorna (True, None) ou (False, mensagem).
     """
+    novo_venc = _venc_do_form("novo_vencimento")
+    venc_aplicar = (request.form.get("vencimento_aplicar") or "apenas").strip().lower()
+    if venc_aplicar not in ("apenas", "proximos"):
+        venc_aplicar = "apenas"
+    cobrar_prop = (request.form.get("cobrar_proporcional") or "").strip() in ("1", "on", "true")
+    plano_id = request.form.get("novo_plano_id", type=int)
+    plano_aplicar = (request.form.get("plano_aplicar") or "agora").strip().lower()
+    if plano_aplicar not in ("agora", "proximos"):
+        plano_aplicar = "agora"
+    if not novo_venc and not plano_id:
+        return True, None
+
+    ids_acad = _get_academias_ids() or ([academia_id] if academia_id else [])
+    dc = conn.cursor(dictionary=True)
+    try:
+        tem_ajuste = _tem_coluna(dc, "mensalidade_aluno", "ajuste_proporcional")
+        col_dias = "COALESCE(ma.ajuste_proporcional_dias, 0)" if tem_ajuste else "0"
+        col_aj = "COALESCE(ma.ajuste_proporcional, 0)" if tem_ajuste else "0"
+        dc.execute(
+            f"""SELECT ma.id, ma.aluno_id, ma.mensalidade_id, ma.valor, ma.valor_original,
+                       ma.desconto_aplicado, ma.data_vencimento,
+                       {col_dias} AS ajuste_proporcional_dias, {col_aj} AS ajuste_proporcional
+                FROM mensalidade_aluno ma WHERE ma.id = %s""",
+            (registro_id,),
+        )
+        ma = dc.fetchone()
+        if not ma:
+            return False, "Mensalidade não encontrada."
+        venc_antigo = ma.get("data_vencimento")
+
+        plano = _plano_para_troca(dc, plano_id, ids_acad) if plano_id else None
+        if plano_id and not plano:
+            return False, "Pacote inválido ou inativo para esta academia."
+        trocar_plano_agora = bool(plano) and plano["id"] != ma.get("mensalidade_id") and plano_aplicar == "agora"
+
+        # Outras cobranças em aberto do aluno: acompanham o dia novo quando a
+        # mudança vale daqui pra frente, senão o aluno ficaria com uma parcela
+        # no dia 10 e outra no 25 sem ninguém ter pedido isso.
+        outras = []
+        if novo_venc and venc_aplicar == "proximos":
+            ph = ",".join(["%s"] * len(ids_acad)) if ids_acad else "NULL"
+            dc.execute(
+                f"""SELECT ma.id, ma.data_vencimento
+                    FROM mensalidade_aluno ma
+                    JOIN mensalidades m ON m.id = ma.mensalidade_id
+                    WHERE ma.aluno_id = %s AND ma.id <> %s
+                      AND ma.status IN ('pendente', 'atrasado')
+                      AND m.id_academia IN ({ph})""",
+                (ma["aluno_id"], registro_id) + tuple(ids_acad),
+            )
+            outras = [r for r in (dc.fetchall() or []) if r.get("data_vencimento")]
+    finally:
+        dc.close()
+
+    # Pacote primeiro: ele redefine o valor mensal em que o proporcional é
+    # calculado. Trocar de plano e adiar o vencimento na mesma baixa tem que
+    # cobrar os dias extras pelo preço do plano novo.
+    if trocar_plano_agora:
+        _aplicar_troca_na_mensalidade(ma, None, plano)
+    if novo_venc:
+        ma["data_vencimento"] = novo_venc
+
+    dias_prop = _dias_de_adiamento(venc_antigo, novo_venc) if (novo_venc and venc_aplicar == "proximos") else 0
+    if dias_prop > 0 and cobrar_prop:
+        _aplicar_proporcional_na_mensalidade(ma, dias_prop)
+
+    campos = []
+    valores = []
+    if trocar_plano_agora:
+        campos += ["mensalidade_id = %s", "valor_original = %s", "desconto_aplicado = %s"]
+        valores += [ma["mensalidade_id"], ma["valor_original"], ma["desconto_aplicado"]]
+    if novo_venc:
+        campos.append("data_vencimento = %s")
+        valores.append(novo_venc)
+    if trocar_plano_agora or (dias_prop > 0 and cobrar_prop):
+        campos.append("valor = %s")
+        valores.append(ma["valor"])
+        if tem_ajuste:
+            campos += ["ajuste_proporcional = %s", "ajuste_proporcional_dias = %s"]
+            valores += [ma.get("ajuste_proporcional") or 0, ma.get("ajuste_proporcional_dias") or 0]
+    if campos:
+        cur.execute(
+            f"UPDATE mensalidade_aluno SET {', '.join(campos)} WHERE id = %s",
+            tuple(valores) + (registro_id,),
+        )
+
+    for r in outras:
+        nova_data = _venc_no_dia(r["data_vencimento"], novo_venc.day)
+        cur.execute(
+            "UPDATE mensalidade_aluno SET data_vencimento = %s, status = %s WHERE id = %s",
+            (nova_data, "atrasado" if nova_data < date.today() else "pendente", r["id"]),
+        )
+
+    # O que passa a valer daqui pra frente vira dado do aluno — é o que a
+    # geração mensal lê. O pacote vale nos dois modos; o dia, só quando a
+    # mudança foi pedida para os próximos meses.
+    if novo_venc and venc_aplicar == "proximos" and _tem_coluna(cur, "alunos", "dia_vencimento"):
+        cur.execute("UPDATE alunos SET dia_vencimento = %s WHERE id = %s",
+                    (novo_venc.day, ma["aluno_id"]))
+    if plano and _tem_coluna(cur, "alunos", "plano_mensalidade_id"):
+        cur.execute("UPDATE alunos SET plano_mensalidade_id = %s WHERE id = %s",
+                    (plano["id"], ma["aluno_id"]))
+    return True, None
+
+
+def _preprocessar_mensalidade_quitar_opcional(conn, cur, registro_id, partes, academia_id):
+    """
+    Antes de quitar: troca vencimento/pacote (se o modal pediu), aplica desconto
+    vinculado (opcional) e/ou remove multa+juros (manual ou automático quando
+    todas as datas de pagamento são <= vencimento).
+    Retorna (True, None) ou (False, mensagem).
+    """
+    # Vencimento e pacote vêm primeiro: mudam o valor devido e a data que decide
+    # se houve atraso, então tudo abaixo precisa já enxergar a cobrança nova.
+    ok_troca, msg_troca = _trocar_vencimento_e_pacote_no_pagamento(
+        conn, cur, registro_id, academia_id
+    )
+    if not ok_troca:
+        return False, msg_troca
+
     desconto_pid = request.form.get("desconto_pagamento_id", type=int)
     if desconto_pid:
         ok_ad, msg_ad = _aplicar_desconto_mensalidade_no_pagamento(
@@ -5480,7 +6083,10 @@ def valor_mensalidade_na_data(registro_id):
     """Total devido de uma mensalidade numa data (juros e multa contados até ela).
 
     A tela de registrar pagamento chama isto quando a data da linha muda, para
-    exibir o valor daquele dia em vez do valor de hoje.
+    exibir o valor daquele dia em vez do valor de hoje. Aceita também
+    `vencimento` e `plano_id`: o modal deixa mudar os dois antes de dar baixa e
+    precisa mostrar o total que o servidor vai cobrar — o mesmo cálculo roda
+    aqui e na gravação.
     """
     ids = _get_academias_ids()
     if not ids:
@@ -5494,10 +6100,16 @@ def valor_mensalidade_na_data(registro_id):
     conn = get_db_connection()
     cur = conn.cursor(dictionary=True)
     try:
+        _tem_aj = _tem_coluna(cur, "mensalidade_aluno", "ajuste_proporcional")
+        _col_dias = "COALESCE(ma.ajuste_proporcional_dias, 0)" if _tem_aj else "0"
+        _col_aj = "COALESCE(ma.ajuste_proporcional, 0)" if _tem_aj else "0"
         cur.execute(
-            f"""SELECT ma.id, ma.aluno_id, ma.valor, ma.data_vencimento, ma.status, ma.status_pagamento,
+            f"""SELECT ma.id, ma.aluno_id, ma.mensalidade_id, ma.valor, ma.data_vencimento,
+                       ma.status, ma.status_pagamento,
                        ma.valor_original, ma.desconto_aplicado, ma.id_desconto,
                        COALESCE(ma.remover_juros, 0) AS remover_juros,
+                       {_col_dias} AS ajuste_proporcional_dias,
+                       {_col_aj} AS ajuste_proporcional,
                        m.id_academia, a.id_academia AS aluno_id_academia,
                        COALESCE(m.aplicar_juros_multas, 0) AS aplicar_juros_multas,
                        COALESCE(m.percentual_multa_mes, 2) AS percentual_multa_mes,
@@ -5509,11 +6121,34 @@ def valor_mensalidade_na_data(registro_id):
             (registro_id,) + tuple(ids) + tuple(ids),
         )
         ma = cur.fetchone()
+        if not ma:
+            return jsonify({"erro": "não encontrada"}), 404
+
+        # Simula o que o modal está pedindo. O pacote só entra quando a troca
+        # vale para ESTA cobrança; "nos próximos" não muda o que se paga agora.
+        venc_antigo = ma.get("data_vencimento")
+        novo_venc = _venc_do_form("vencimento")
+        plano = None
+        if (request.args.get("plano_aplicar") or "agora").strip().lower() == "agora":
+            pedido = request.args.get("plano_id", type=int)
+            if pedido and pedido != ma.get("mensalidade_id"):
+                plano = _plano_para_troca(cur, pedido, ids)
+                if not plano:
+                    return jsonify({"erro": "pacote inválido"}), 400
+        _aplicar_troca_na_mensalidade(ma, novo_venc, plano)
+
+        # Proporcional só existe quando o vencimento novo passa a valer também
+        # nos próximos meses (senão nenhum período foi esticado).
+        dias_prop = 0
+        if novo_venc and (request.args.get("vencimento_aplicar") or "").strip().lower() == "proximos":
+            dias_prop = _dias_de_adiamento(venc_antigo, novo_venc)
+        cobrar_prop = (request.args.get("cobrar_proporcional") or "").strip() in ("1", "on", "true")
+        mensal_base = round(float(ma.get("valor") or 0) - float(ma.get("ajuste_proporcional") or 0), 2)
+        prop_valor = _proporcional(mensal_base, dias_prop)
+        if dias_prop > 0 and cobrar_prop:
+            _aplicar_proporcional_na_mensalidade(ma, dias_prop)
     finally:
         conn.close()
-
-    if not ma:
-        return jsonify({"erro": "não encontrada"}), 404
 
     _ma_enriquecer_exibicao(ma, ma["aluno_id"], ma.get("id_academia"), hoje=data_ref)
     return jsonify({
@@ -5521,23 +6156,41 @@ def valor_mensalidade_na_data(registro_id):
         "multa": float(ma.get("multa_val") or 0),
         "juros": float(ma.get("juros_val") or 0),
         "data": data_ref.isoformat(),
+        "vencimento": ma["data_vencimento"].isoformat() if isinstance(ma.get("data_vencimento"), date) else None,
+        "plano_nome": ma.get("plano_nome"),
+        # `proporcional` é quanto os dias extras valeriam — a tela mostra o
+        # número mesmo com a opção desmarcada, para a escolha ser informada.
+        "dias_proporcionais": dias_prop,
+        "proporcional": prop_valor,
+        "proporcional_cobrado": bool(dias_prop > 0 and cobrar_prop),
+        "valor_mensal": mensal_base,
     })
 
 
-def _registrar_pagamento_mensalidade_partes(conn, cur, registro_id, id_academia, partes):
+def _registrar_pagamento_mensalidade_partes(conn, cur, registro_id, id_academia, partes,
+                                            desconto_flat=0.0, desconto_id=None,
+                                            carteira_valor=0.0):
     """
     Quita mensalidade com uma ou mais linhas (forma, valor, data cada).
     partes: list of dicts forma_pagamento_id (int), valor (float), data_pagamento (str YYYY-MM-DD).
+    desconto_flat: desconto (R$) aplicado no momento do pagamento — reduz o total devido e
+    fica registrado formalmente (valor_original/desconto_aplicado). desconto_id: id do
+    desconto cadastrado escolhido (só para registro), ou None (avulso).
+    carteira_valor: parte do pagamento quitada com o crédito em carteira do aluno — debita
+    a carteira e gera receita normalmente (o crédito veio de um pagamento já recebido).
     Retorna (True, None) ou (False, mensagem_erro).
     """
-    if not partes:
+    carteira_valor = round(max(float(carteira_valor or 0), 0.0), 2)
+    if not partes and carteira_valor <= 0:
         return False, "Informe ao menos uma linha de pagamento."
+    partes = partes or []
     dcur = conn.cursor(dictionary=True)
     dcur.execute(
         """
         SELECT ma.id, ma.aluno_id, ma.valor, ma.data_vencimento, ma.status, ma.status_pagamento,
                ma.valor_original, ma.desconto_aplicado, ma.id_desconto,
                COALESCE(ma.remover_juros, 0) AS remover_juros,
+               COALESCE(ma.ajuste_proporcional, 0) AS ajuste_proporcional,
                m.nome AS plano_nome, m.id_academia, a.id_academia AS aluno_id_academia, a.nome AS aluno_nome,
                COALESCE(m.aplicar_juros_multas, 0) AS aplicar_juros_multas,
                COALESCE(m.percentual_multa_mes, 2) AS percentual_multa_mes,
@@ -5569,7 +6222,24 @@ def _registrar_pagamento_mensalidade_partes(conn, cur, registro_id, id_academia,
 
     _ma_enriquecer_exibicao(ma, ma["aluno_id"], ma.get("id_academia") or id_academia, hoje=data_ref)
     valor_total = round(float(ma.get("valor_final") or ma.get("valor") or 0), 2)
-    total_zero = valor_total <= 0.001
+    # Desconto no momento do pagamento (flat, calculado na tela) reduz o total devido.
+    flat_desc = round(min(max(float(desconto_flat or 0), 0.0), valor_total), 2)
+    expected_total = round(valor_total - flat_desc, 2)
+    total_zero = expected_total <= 0.001
+
+    # Crédito de carteira: não pode passar do total devido nem do saldo do aluno.
+    cart = round(min(carteira_valor, max(expected_total, 0.0)), 2)
+    if cart > 0.001:
+        try:
+            from utils.carteira import saldo_aluno
+            _saldo = saldo_aluno(cur, ma.get("aluno_id"))
+        except Exception:
+            _saldo = 0.0
+        if cart > round(_saldo, 2) + 0.001:
+            return False, (
+                f"Crédito em carteira insuficiente: saldo R$ {_saldo:.2f}, "
+                f"solicitado R$ {cart:.2f}."
+            )
     descricao_base = f"Mensalidade {ma.get('plano_nome')} - {ma.get('aluno_nome')}"
     id_acad = ma.get("id_academia") or id_academia
     ids_acad_formas = _ids_academia_mensalidade_para_formas(ma, id_academia)
@@ -5626,16 +6296,37 @@ def _registrar_pagamento_mensalidade_partes(conn, cur, registro_id, id_academia,
         datas_dt.append(dt)
         linhas.append((fid, val, dt.strftime("%Y-%m-%d"), dt))
 
+    # Crédito de carteira soma junto das parcelas para quitar o total devido.
+    soma_total = round(soma + cart, 2)
     # UI e _ma_enriquecer podem arredondar centavos de forma ligeiramente diferente
     _tol = 0.001 if total_zero else 0.05
-    if abs(soma - valor_total) > _tol:
+    if abs(soma_total - expected_total) > _tol:
         _quando = f" para pagamento em {data_ref.strftime('%d/%m/%Y')}" if data_ref else ""
+        _detalhe = f"R$ {soma_total:.2f}"
+        if cart > 0.001:
+            _detalhe = f"R$ {soma_total:.2f} (R$ {soma:.2f} + R$ {cart:.2f} de carteira)"
         return False, (
-            f"A soma das parcelas (R$ {soma:.2f}) deve igualar o total devido{_quando}: "
-            f"R$ {valor_total:.2f}."
+            f"A soma das parcelas ({_detalhe}) deve igualar o total devido{_quando}: "
+            f"R$ {expected_total:.2f}."
         )
 
-    data_ma = max(datas_dt).strftime("%Y-%m-%d")
+    # Registra o desconto do pagamento na mensalidade (valor cheio + desconto aplicado).
+    if flat_desc > 0.001:
+        try:
+            cur.execute(
+                """UPDATE mensalidade_aluno
+                   SET valor_original = COALESCE(valor_original, valor),
+                       desconto_aplicado = COALESCE(desconto_aplicado, 0) + %s,
+                       valor = GREATEST(0, ROUND(valor - %s, 2)),
+                       id_desconto = COALESCE(%s, id_desconto)
+                   WHERE id = %s""",
+                (flat_desc, flat_desc, desconto_id, registro_id),
+            )
+        except Exception:
+            pass
+
+    # Carteira-só não tem linha de forma: cai na data de referência (ou hoje).
+    data_ma = (max(datas_dt) if datas_dt else (data_ref or date.today())).strftime("%Y-%m-%d")
     _fp0 = linhas[0][0] if linhas else None
     try:
         _fp0_ok = _fp0 is not None and int(_fp0) > 0
@@ -5651,7 +6342,7 @@ def _registrar_pagamento_mensalidade_partes(conn, cur, registro_id, id_academia,
                 SET status='pago', status_pagamento='pago', data_pagamento=%s, valor_pago=%s, id_forma_pagamento=%s
                 WHERE id=%s
                 """,
-                (data_ma, soma, id_fp_unico, registro_id),
+                (data_ma, soma_total, id_fp_unico, registro_id),
             )
         else:
             cur.execute(
@@ -5660,12 +6351,12 @@ def _registrar_pagamento_mensalidade_partes(conn, cur, registro_id, id_academia,
                 SET status='pago', status_pagamento='pago', data_pagamento=%s, valor_pago=%s, id_forma_pagamento=NULL
                 WHERE id=%s
                 """,
-                (data_ma, soma, registro_id),
+                (data_ma, soma_total, registro_id),
             )
     except Exception:
         cur.execute(
             "UPDATE mensalidade_aluno SET status='pago', data_pagamento=%s, valor_pago=%s WHERE id=%s",
-            (data_ma, soma, registro_id),
+            (data_ma, soma_total, registro_id),
         )
 
     sufixo = 0
@@ -5696,6 +6387,35 @@ def _registrar_pagamento_mensalidade_partes(conn, cur, registro_id, id_academia,
                     "INSERT INTO receitas (descricao, valor, data, categoria, id_academia, id_mensalidade_aluno) VALUES (%s, %s, %s, 'Mensalidades', %s, %s)",
                     (desc, val, d_sql, id_acad, registro_id),
                 )
+
+    # Parte quitada com crédito de carteira: debita a carteira e gera receita
+    # (o crédito veio de dinheiro já recebido, então a receita é reconhecida agora).
+    if cart > 0.001:
+        try:
+            from utils.carteira import debitar as _carteira_debitar
+            _carteira_debitar(
+                cur, ma.get("aluno_id"), id_acad, cart,
+                descricao=f"Uso de crédito - {descricao_base}",
+                origem="pagamento", origem_id=registro_id,
+                criado_por=getattr(current_user, "id", None),
+            )
+        except Exception:
+            return False, "Não foi possível debitar o crédito da carteira."
+        _desc_cart = descricao_base + " (carteira)" if linhas else descricao_base
+        try:
+            cur.execute(
+                """INSERT INTO receitas (descricao, valor, data, categoria, id_academia, id_mensalidade_aluno, criado_por)
+                   VALUES (%s, %s, %s, 'Mensalidades', %s, %s, %s)""",
+                (_desc_cart, cart, data_ma, id_acad, registro_id, getattr(current_user, "id", None)),
+            )
+        except Exception:
+            try:
+                cur.execute(
+                    "INSERT INTO receitas (descricao, valor, data, categoria, id_academia, id_mensalidade_aluno) VALUES (%s, %s, %s, 'Mensalidades', %s, %s)",
+                    (_desc_cart, cart, data_ma, id_acad, registro_id),
+                )
+            except Exception:
+                pass
     return True, None
 
 
@@ -5975,6 +6695,897 @@ def api_mensalidades_por_status():
     return jsonify(resultado)
 
 
+def _planos_ativos_academia(academia_id):
+    """Planos ativos da academia, para o modal de cobrança rápida."""
+    if not academia_id:
+        return []
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute(
+            "SELECT id, nome, valor FROM mensalidades WHERE id_academia = %s AND ativo = 1 ORDER BY nome",
+            (academia_id,),
+        )
+        return cur.fetchall() or []
+    except Exception:
+        return []
+    finally:
+        cur.close()
+        conn.close()
+
+
+@bp_financeiro.route("/mensalidades/<int:ma_id>/editar-cobranca", methods=["POST"])
+@login_required
+def editar_cobranca_aluno(ma_id):
+    """Ajusta valor, desconto e vencimento de uma cobrança do aluno.
+
+    É a correção do dia a dia: combinou outro valor, deu um desconto, mudou a
+    data de pagamento. Só mexe no que ainda não foi pago — cobrança quitada é
+    histórico e se corrige cancelando o pagamento antes.
+
+    O valor cheio fica em `valor_original` e o líquido em `valor`, que é o que
+    a cobrança online e os relatórios usam.
+    """
+    academia_id = _get_academia_id()
+    ids = _get_academias_ids()
+    voltar = (request.form.get("voltar") or "").strip()
+    destino = (
+        voltar
+        if voltar.startswith("/") and "//" not in voltar
+        else url_for("financeiro.mensalidades_alunos", academia_id=academia_id)
+    )
+
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        ph = ",".join(["%s"] * len(ids)) if ids else "NULL"
+        cur.execute(
+            f"""SELECT ma.id, ma.valor, ma.valor_original, ma.desconto_aplicado, ma.status,
+                       ma.data_vencimento, m.id_academia
+                FROM mensalidade_aluno ma
+                JOIN mensalidades m ON m.id = ma.mensalidade_id
+                WHERE ma.id = %s AND m.id_academia IN ({ph})""",
+            (ma_id,) + tuple(ids),
+        )
+        registro = cur.fetchone()
+        if not registro:
+            flash("Cobrança não encontrada.", "danger")
+            return redirect(destino)
+        if (registro.get("status") or "") in ("pago", "cancelado"):
+            flash(
+                "Só dá para editar cobrança pendente ou em atraso. "
+                "Para mexer numa já paga, cancele o pagamento antes.",
+                "warning",
+            )
+            return redirect(destino)
+
+        def _num(campo):
+            bruto = (request.form.get(campo) or "").strip().replace(".", "").replace(",", ".")
+            if bruto == "":
+                return None
+            try:
+                return round(float(bruto), 2)
+            except ValueError:
+                return None
+
+        valor_cheio = _num("valor_original")
+        desconto = _num("desconto_aplicado") or 0.0
+        vencimento = (request.form.get("data_vencimento") or "").strip()[:10]
+
+        if valor_cheio is None:
+            valor_cheio = float(registro.get("valor_original") or registro.get("valor") or 0)
+        if valor_cheio <= 0:
+            flash("Informe um valor maior que zero.", "danger")
+            return redirect(destino)
+        if desconto < 0:
+            desconto = 0.0
+        if desconto > valor_cheio:
+            flash("O desconto não pode ser maior que o valor da mensalidade.", "danger")
+            return redirect(destino)
+
+        try:
+            nova_data = datetime.strptime(vencimento, "%Y-%m-%d").date() if vencimento else registro["data_vencimento"]
+        except ValueError:
+            flash("Data de vencimento inválida.", "danger")
+            return redirect(destino)
+
+        valor_liquido = round(valor_cheio - desconto, 2)
+        # Vencimento no futuro tira o registro do atraso; no passado, devolve.
+        novo_status = "atrasado" if nova_data < date.today() else "pendente"
+
+        # Edição manual manda: o valor digitado é o valor da cobrança, então um
+        # proporcional de mudança de vencimento que estivesse embutido é zerado
+        # (senão ele reapareceria como desconto fantasma na geração do mês que vem).
+        # O flash mostra o valor final, então a troca não passa despercebida.
+        if _tem_coluna(cur, "mensalidade_aluno", "ajuste_proporcional"):
+            cur.execute(
+                """UPDATE mensalidade_aluno
+                   SET valor_original = %s, desconto_aplicado = %s, valor = %s,
+                       data_vencimento = %s, status = %s,
+                       ajuste_proporcional = 0, ajuste_proporcional_dias = 0
+                   WHERE id = %s""",
+                (valor_cheio, desconto, valor_liquido, nova_data, novo_status, ma_id),
+            )
+        else:
+            cur.execute(
+                """UPDATE mensalidade_aluno
+                   SET valor_original = %s, desconto_aplicado = %s, valor = %s,
+                       data_vencimento = %s, status = %s
+                   WHERE id = %s""",
+                (valor_cheio, desconto, valor_liquido, nova_data, novo_status, ma_id),
+            )
+        conn.commit()
+        def _reais(v):
+            return f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+        flash(
+            f"Cobrança atualizada: {_reais(valor_liquido)}"
+            + (f" (desconto de {_reais(desconto)})" if desconto else "")
+            + f", vencimento {nova_data.strftime('%d/%m/%Y')}.",
+            "success",
+        )
+    except Exception:
+        conn.rollback()
+        current_app.logger.exception("financeiro.editar_cobranca_aluno")
+        flash("Não foi possível atualizar a cobrança.", "danger")
+    finally:
+        cur.close()
+        conn.close()
+    return redirect(destino)
+
+
+# =====================================================================
+# Mudança do dia de vencimento do aluno (com proporcional do período)
+# =====================================================================
+# Base do proporcional: mês comercial de 30 dias. O valor do dia fica igual o
+# ano inteiro — dividir pelos dias reais faria a mesma mudança custar mais em
+# fevereiro do que em março, e ninguém explica isso no balcão.
+BASE_DIAS_PROPORCIONAL = 30
+
+_COLUNAS_EXISTENTES = {}
+
+
+def _tem_coluna(cur, tabela, coluna):
+    """A coluna existe? Cobre o intervalo entre subir o código e rodar a migração.
+
+    Só o "existe" é memorizado: se a resposta fosse cacheada como False, rodar a
+    migração com os workers de pé deixaria o processo achando para sempre que a
+    coluna não existe.
+    """
+    chave = (tabela, coluna)
+    if _COLUNAS_EXISTENTES.get(chave):
+        return True
+    try:
+        cur.execute(
+            """SELECT 1 FROM information_schema.COLUMNS
+               WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s AND COLUMN_NAME = %s""",
+            (tabela, coluna),
+        )
+        existe = cur.fetchone() is not None
+    except Exception:
+        return False
+    if existe:
+        _COLUNAS_EXISTENTES[chave] = True
+    return existe
+
+
+def _ultimo_dia_do_mes(ano, mes):
+    import calendar
+
+    return calendar.monthrange(ano, mes)[1]
+
+
+def _venc_no_dia(referencia, dia):
+    """Mesma competência da referência, no dia pedido (aparado ao fim do mês)."""
+    return date(referencia.year, referencia.month,
+                min(int(dia), _ultimo_dia_do_mes(referencia.year, referencia.month)))
+
+
+def _proporcional(valor_mensal, dias):
+    """Dias extras a preço de dia (valor ÷ 30). Nunca negativo."""
+    if dias <= 0 or valor_mensal <= 0:
+        return 0.0
+    return round(float(valor_mensal) / BASE_DIAS_PROPORCIONAL * int(dias), 2)
+
+
+def _plano_para_troca(cur, plano_id, ids_acad):
+    """Pacote ativo de uma das academias do usuário, com os parâmetros de juros
+    que ele impõe. Devolve None quando o id não vale para este contexto."""
+    if not plano_id or not ids_acad:
+        return None
+    ph = ",".join(["%s"] * len(ids_acad))
+    cur.execute(
+        f"""SELECT id, nome, valor, id_academia,
+                   COALESCE(aplicar_juros_multas, 0) AS aplicar_juros_multas,
+                   COALESCE(percentual_multa_mes, 2) AS percentual_multa_mes,
+                   COALESCE(percentual_juros_dia, 0.033) AS percentual_juros_dia
+            FROM mensalidades
+            WHERE id = %s AND id_academia IN ({ph}) AND COALESCE(ativo, 1) = 1""",
+        (plano_id,) + tuple(ids_acad),
+    )
+    return cur.fetchone()
+
+
+def _aplicar_troca_na_mensalidade(ma, novo_venc=None, plano=None):
+    """Reescreve a cobrança EM MEMÓRIA com o novo vencimento e/ou o novo pacote.
+
+    Usada pela prévia da tela e pela gravação, para as duas chegarem ao mesmo
+    total. O proporcional de mudança de vencimento é recalculado no preço do
+    pacote novo: os dias já foram concedidos, o que muda é quanto vale cada um.
+    Juros e multa passam a seguir as regras do pacote novo — são dele, não da
+    cobrança.
+    """
+    if novo_venc:
+        ma["data_vencimento"] = novo_venc
+    if plano:
+        novo_cheio = float(plano.get("valor") or 0)
+        # Um desconto em reais maior que o pacote novo deixaria a cobrança
+        # negativa; o teto é o próprio valor do pacote.
+        desconto = min(float(ma.get("desconto_aplicado") or 0), novo_cheio)
+        ajuste = _proporcional(novo_cheio, int(ma.get("ajuste_proporcional_dias") or 0))
+        ma["mensalidade_id"] = plano["id"]
+        ma["plano_nome"] = plano.get("nome")
+        ma["valor_original"] = novo_cheio
+        ma["desconto_aplicado"] = desconto
+        ma["ajuste_proporcional"] = ajuste
+        ma["valor"] = round(novo_cheio - desconto + ajuste, 2)
+        ma["aplicar_juros_multas"] = plano.get("aplicar_juros_multas")
+        ma["percentual_multa_mes"] = plano.get("percentual_multa_mes")
+        ma["percentual_juros_dia"] = plano.get("percentual_juros_dia")
+    return ma
+
+
+def _aplicar_proporcional_na_mensalidade(ma, dias):
+    """Soma (em memória) os dias extras de um adiamento de vencimento.
+
+    Vale só quando o novo vencimento passa a valer também nos próximos meses:
+    aí o aluno ganha dias de aula que nenhuma mensalidade cobriu. Mexer só na
+    data desta cobrança não estica período nenhum — o mês seguinte continua no
+    dia de sempre — e por isso não gera proporcional.
+    """
+    dias = int(dias or 0)
+    mensal = float(ma.get("valor") or 0) - float(ma.get("ajuste_proporcional") or 0)
+    ajuste = _proporcional(mensal, dias)
+    ma["ajuste_proporcional"] = ajuste
+    ma["ajuste_proporcional_dias"] = max(dias, 0)
+    ma["valor"] = round(mensal + ajuste, 2)
+    ma["valor_mensal_sem_proporcional"] = round(mensal, 2)
+    return ma
+
+
+def _dias_de_adiamento(venc_antigo, venc_novo):
+    """Dias a mais até o próximo vencimento quando o dia do mês é empurrado
+    para frente. Antecipar (ou trocar de mês) devolve 0 — quem antecipa não
+    recebe crédito, o valor segue o mesmo."""
+    if not venc_antigo or not venc_novo:
+        return 0
+    return max(venc_novo.day - venc_antigo.day, 0)
+
+
+def _venc_do_form(campo="novo_vencimento"):
+    """Data de vencimento vinda do modal de pagamento. None se ausente/inválida."""
+    bruto = (request.form.get(campo) or request.args.get(campo) or "").strip()[:10]
+    if not bruto:
+        return None
+    try:
+        return date.fromisoformat(bruto)
+    except ValueError:
+        return None
+
+
+def _simular_mudanca_vencimento(cur, aluno_id, ids_acad, novo_dia, cobrar_proporcional):
+    """Monta o que a mudança de vencimento vai fazer, sem gravar nada.
+
+    Serve à prévia do modal e à gravação, para os dois falarem o mesmo número.
+    Retorna dict com: dia_atual, dias_extras, proporcional, `alteradas`
+    (cobranças que mudam de data) e `criar` (mensalidade a lançar quando o
+    aluno está com tudo pago e há proporcional a cobrar).
+    """
+    hoje = date.today()
+    novo_dia = max(1, min(31, int(novo_dia)))
+    tem_ajuste = _tem_coluna(cur, "mensalidade_aluno", "ajuste_proporcional")
+    col_ajuste = "COALESCE(ma.ajuste_proporcional, 0)" if tem_ajuste else "0"
+    ph = ",".join(["%s"] * len(ids_acad))
+
+    cur.execute(
+        f"""SELECT ma.id, ma.mensalidade_id, ma.turma_id, ma.valor, ma.valor_original,
+                   ma.desconto_aplicado, ma.status, ma.data_vencimento,
+                   {col_ajuste} AS ajuste_proporcional,
+                   m.id_academia, m.nome AS plano_nome
+            FROM mensalidade_aluno ma
+            JOIN mensalidades m ON m.id = ma.mensalidade_id
+            WHERE ma.aluno_id = %s AND m.id_academia IN ({ph}) AND ma.status <> 'cancelado'
+            ORDER BY ma.data_vencimento ASC, ma.id ASC""",
+        (aluno_id,) + tuple(ids_acad),
+    )
+    linhas = [r for r in (cur.fetchall() or []) if r.get("data_vencimento")]
+    abertas = [r for r in linhas if (r.get("status") or "").lower() in ("pendente", "atrasado")]
+
+    dia_salvo = None
+    if _tem_coluna(cur, "alunos", "dia_vencimento"):
+        cur.execute("SELECT dia_vencimento FROM alunos WHERE id = %s", (aluno_id,))
+        reg = cur.fetchone() or {}
+        dia_salvo = reg.get("dia_vencimento")
+
+    # O vencimento vigente é o das cobranças, não o que está salvo: é por ele
+    # que o aluno paga hoje. O dia salvo só entra quando não há cobrança alguma.
+    if abertas:
+        dia_atual = abertas[0]["data_vencimento"].day
+    elif linhas:
+        dia_atual = linhas[-1]["data_vencimento"].day
+    else:
+        dia_atual = int(dia_salvo) if dia_salvo else None
+
+    dias_extras = (novo_dia - dia_atual) if dia_atual else 0
+    adiando = dias_extras > 0
+
+    plano = {
+        "dia_atual": dia_atual,
+        "novo_dia": novo_dia,
+        "dias_extras": max(dias_extras, 0),
+        "adiando": adiando,
+        "cobrar_proporcional": bool(cobrar_proporcional) and adiando,
+        "tem_coluna_ajuste": tem_ajuste,
+        "valor_mensal": 0.0,
+        "proporcional": 0.0,
+        "alteradas": [],
+        "criar": None,
+        "aviso": "",
+    }
+
+    # Alvo do proporcional: a primeira cobrança que ainda vai vencer. Jogar os
+    # dias extras numa parcela atrasada de meses atrás só embaralharia a dívida.
+    novas_datas = {r["id"]: _venc_no_dia(r["data_vencimento"], novo_dia) for r in abertas}
+    alvo = next((r for r in abertas if novas_datas[r["id"]] >= hoje), abertas[-1] if abertas else None)
+
+    for r in abertas:
+        nova_data = novas_datas[r["id"]]
+        item = {
+            "id": r["id"],
+            "plano_nome": r.get("plano_nome") or "",
+            "data_antiga": r["data_vencimento"],
+            "data_nova": nova_data,
+            "status": "atrasado" if nova_data < hoje else "pendente",
+            "valor_antigo": float(r.get("valor") or 0),
+            "valor_novo": float(r.get("valor") or 0),
+            "ajuste": None,
+            "dias": 0,
+        }
+        if alvo is not None and r["id"] == alvo["id"] and plano["cobrar_proporcional"]:
+            # Desconta o ajuste anterior antes de recalcular: mudar o vencimento
+            # duas vezes troca o proporcional, não empilha um sobre o outro.
+            mensal = float(r.get("valor") or 0) - float(r.get("ajuste_proporcional") or 0)
+            valor_prop = _proporcional(mensal, dias_extras)
+            item["valor_novo"] = round(mensal + valor_prop, 2)
+            item["ajuste"] = valor_prop
+            item["dias"] = dias_extras
+            plano["valor_mensal"] = round(mensal, 2)
+            plano["proporcional"] = valor_prop
+        plano["alteradas"].append(item)
+
+    # Tudo pago e ainda assim há dias a cobrar: não existe parcela em aberto
+    # para receber o proporcional, então a próxima mensalidade é antecipada já
+    # com o novo vencimento e os dias extras somados.
+    if not abertas and plano["cobrar_proporcional"] and linhas:
+        modelo = linhas[-1]
+        ref = modelo["data_vencimento"]
+        ocupados = {(r["data_vencimento"].year, r["data_vencimento"].month)
+                    for r in linhas if r["mensalidade_id"] == modelo["mensalidade_id"]}
+        ano, mes = ref.year, ref.month
+        alvo_mes = None
+        for _ in range(12):
+            mes += 1
+            if mes > 12:
+                mes, ano = 1, ano + 1
+            if (ano, mes) not in ocupados:
+                alvo_mes = (ano, mes)
+                break
+        if alvo_mes:
+            ano, mes = alvo_mes
+            venc = date(ano, mes, min(novo_dia, _ultimo_dia_do_mes(ano, mes)))
+            mensal = float(modelo.get("valor") or 0) - float(modelo.get("ajuste_proporcional") or 0)
+            valor_prop = _proporcional(mensal, dias_extras)
+            plano["valor_mensal"] = round(mensal, 2)
+            plano["proporcional"] = valor_prop
+            plano["criar"] = {
+                "mensalidade_id": modelo["mensalidade_id"],
+                "turma_id": modelo.get("turma_id"),
+                "id_academia": modelo.get("id_academia"),
+                "plano_nome": modelo.get("plano_nome") or "",
+                "data_vencimento": venc,
+                "valor_mensal": round(mensal, 2),
+                "valor": round(mensal + valor_prop, 2),
+                "ajuste": valor_prop,
+                "dias": dias_extras,
+            }
+    elif not abertas and plano["cobrar_proporcional"] and not linhas:
+        plano["aviso"] = ("Aluno sem nenhuma cobrança lançada: não há proporcional a cobrar. "
+                          "O novo dia passa a valer na próxima geração de mensalidades.")
+    elif not abertas and not plano["cobrar_proporcional"]:
+        plano["aviso"] = ("Nenhuma cobrança em aberto: o novo dia passa a valer "
+                          "na próxima geração de mensalidades.")
+
+    return plano
+
+
+def _reais(v):
+    return f"R$ {float(v or 0):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def _pacote_atual_do_aluno(cur, aluno_id, ids_acad):
+    """Pacote que vale hoje para o aluno: o padrão gravado (escolhido numa troca)
+    e, sem ele, o da última cobrança não cancelada. Devolve (id, nome)."""
+    if not ids_acad:
+        return None, ""
+    ph = ",".join(["%s"] * len(ids_acad))
+    if _tem_coluna(cur, "alunos", "plano_mensalidade_id"):
+        cur.execute(
+            f"""SELECT m.id, m.nome FROM alunos a
+                JOIN mensalidades m ON m.id = a.plano_mensalidade_id
+                WHERE a.id = %s AND m.id_academia IN ({ph})""",
+            (aluno_id,) + tuple(ids_acad),
+        )
+        r = cur.fetchone()
+        if r:
+            return r["id"], r.get("nome") or ""
+    cur.execute(
+        f"""SELECT m.id, m.nome FROM mensalidade_aluno ma
+            JOIN mensalidades m ON m.id = ma.mensalidade_id
+            WHERE ma.aluno_id = %s AND ma.status <> 'cancelado' AND m.id_academia IN ({ph})
+            ORDER BY ma.data_vencimento DESC, ma.id DESC LIMIT 1""",
+        (aluno_id,) + tuple(ids_acad),
+    )
+    r = cur.fetchone()
+    return (r["id"], r.get("nome") or "") if r else (None, "")
+
+
+ESCOPOS_TROCA_PACOTE = ("proximos", "avencer", "todas")
+
+
+def _simular_troca_pacote(cur, aluno_id, ids_acad, plano_id, escopo):
+    """Monta o que a troca de pacote vai fazer, sem gravar nada.
+
+    `escopo` decide o alcance nas cobranças já lançadas:
+      proximos — nenhuma muda; o pacote novo entra na geração do mês seguinte.
+      avencer  — converte as em aberto que ainda não venceram.
+      todas    — converte também as atrasadas, repreçando meses já consumidos.
+    O padrão é `avencer`: mexer no que já venceu reescreve o preço de um mês em
+    que o aluno treinou no plano antigo, e isso tem que ser escolha explícita.
+    Retorna (plano_dict, erro).
+    """
+    if escopo not in ESCOPOS_TROCA_PACOTE:
+        escopo = "avencer"
+    plano = _plano_para_troca(cur, plano_id, ids_acad)
+    if not plano:
+        return None, "Pacote inválido ou inativo para esta academia."
+
+    hoje = date.today()
+    atual_id, atual_nome = _pacote_atual_do_aluno(cur, aluno_id, ids_acad)
+    tem_aj = _tem_coluna(cur, "mensalidade_aluno", "ajuste_proporcional")
+    col_dias = "COALESCE(ma.ajuste_proporcional_dias, 0)" if tem_aj else "0"
+    col_aj = "COALESCE(ma.ajuste_proporcional, 0)" if tem_aj else "0"
+    ph = ",".join(["%s"] * len(ids_acad)) if ids_acad else "NULL"
+    cur.execute(
+        f"""SELECT ma.id, ma.mensalidade_id, ma.valor, ma.valor_original, ma.desconto_aplicado,
+                   ma.data_vencimento, ma.status,
+                   {col_dias} AS ajuste_proporcional_dias, {col_aj} AS ajuste_proporcional,
+                   m.nome AS plano_nome
+            FROM mensalidade_aluno ma
+            JOIN mensalidades m ON m.id = ma.mensalidade_id
+            WHERE ma.aluno_id = %s AND ma.status IN ('pendente', 'atrasado')
+              AND m.id_academia IN ({ph})
+            ORDER BY ma.data_vencimento ASC, ma.id ASC""",
+        (aluno_id,) + tuple(ids_acad),
+    )
+    abertas = [r for r in (cur.fetchall() or []) if r.get("data_vencimento")]
+
+    alteradas = []
+    if escopo != "proximos":
+        for r in abertas:
+            if r["mensalidade_id"] == plano["id"]:
+                continue
+            vencida = r["data_vencimento"] < hoje
+            if escopo == "avencer" and vencida:
+                continue
+            antes = float(r.get("valor") or 0)
+            # O nome do plano é lido antes: a conversão sobrescreve `plano_nome`
+            # com o do pacote novo.
+            antes_nome = r.get("plano_nome") or ""
+            _aplicar_troca_na_mensalidade(r, None, plano)
+            alteradas.append({
+                "id": r["id"],
+                "data_vencimento": r["data_vencimento"],
+                "vencida": vencida,
+                "plano_antigo": antes_nome,
+                "valor_antigo": round(antes, 2),
+                "valor_novo": round(float(r["valor"]), 2),
+                "valor_original": round(float(r["valor_original"]), 2),
+                "desconto": round(float(r["desconto_aplicado"]), 2),
+                "ajuste": round(float(r.get("ajuste_proporcional") or 0), 2),
+                "ajuste_dias": int(r.get("ajuste_proporcional_dias") or 0),
+            })
+
+    plano["_atual_id"] = atual_id
+    plano["_atual_nome"] = atual_nome
+    plano["_escopo"] = escopo
+    plano["_alteradas"] = alteradas
+    plano["_abertas"] = len(abertas)
+    plano["_atrasadas_fora"] = sum(
+        1 for r in abertas
+        if escopo == "avencer" and r["data_vencimento"] < hoje and r["mensalidade_id"] != plano["id"]
+    )
+    plano["_tem_coluna_ajuste"] = tem_aj
+    return plano, None
+
+
+@bp_financeiro.route("/aluno/<int:aluno_id>/pacote/previa", methods=["GET"])
+@login_required
+def previa_trocar_pacote(aluno_id):
+    """Prévia em JSON da troca de pacote (alimenta o modal da ficha)."""
+    ids = _get_academias_ids()
+    if not ids:
+        return jsonify({"ok": False, "msg": "Sem academia no contexto."}), 403
+    plano_id = request.args.get("plano_id", type=int)
+    if not plano_id:
+        return jsonify({"ok": False, "msg": "Escolha o pacote."}), 400
+    escopo = (request.args.get("escopo") or "avencer").strip().lower()
+
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        if not any(aluno_vinculado_a_academia(cur, aluno_id, aid) for aid in ids):
+            return jsonify({"ok": False, "msg": "Aluno fora das suas academias."}), 403
+        p, erro = _simular_troca_pacote(cur, aluno_id, ids, plano_id, escopo)
+        if erro:
+            return jsonify({"ok": False, "msg": erro}), 400
+        return jsonify({
+            "ok": True,
+            "pacote_atual": {"id": p["_atual_id"], "nome": p["_atual_nome"]},
+            "pacote_novo": {"id": p["id"], "nome": p.get("nome"), "valor": float(p.get("valor") or 0)},
+            "escopo": p["_escopo"],
+            "abertas": p["_abertas"],
+            "atrasadas_fora": p["_atrasadas_fora"],
+            "mesmo_pacote": p["_atual_id"] == p["id"],
+            "cobrancas": [
+                {
+                    "vencimento": i["data_vencimento"].strftime("%d/%m/%Y"),
+                    "vencida": i["vencida"],
+                    "valor_antigo": i["valor_antigo"],
+                    "valor_novo": i["valor_novo"],
+                    "ajuste": i["ajuste"],
+                    "ajuste_dias": i["ajuste_dias"],
+                }
+                for i in p["_alteradas"]
+            ],
+        })
+    except Exception:
+        current_app.logger.exception("financeiro.previa_trocar_pacote")
+        return jsonify({"ok": False, "msg": "Não foi possível calcular a prévia."}), 500
+    finally:
+        cur.close()
+        conn.close()
+
+
+@bp_financeiro.route("/aluno/<int:aluno_id>/trocar-pacote", methods=["POST"])
+@login_required
+def trocar_pacote_aluno(aluno_id):
+    """Troca o pacote (plano) do aluno, com alcance escolhido no balcão.
+
+    O pacote novo sempre vira o padrão do aluno — é ele que a geração mensal
+    passa a usar. O que se escolhe é quanto do que já foi lançado acompanha:
+    nada, só o que ainda não venceu, ou tudo (inclusive atrasadas). Cobrança
+    paga é histórico e nunca é tocada.
+    """
+    ids = _get_academias_ids()
+    voltar = (request.form.get("voltar") or "").strip()
+    destino = (
+        voltar
+        if voltar.startswith("/") and "//" not in voltar
+        else url_for("alunos.ficha_aluno", aluno_id=aluno_id)
+    )
+    if not ids:
+        flash("Sem permissão.", "danger")
+        return redirect(destino)
+
+    plano_id = request.form.get("plano_id", type=int)
+    if not plano_id:
+        flash("Escolha o pacote.", "danger")
+        return redirect(destino)
+    escopo = (request.form.get("escopo") or "avencer").strip().lower()
+
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        if not any(aluno_vinculado_a_academia(cur, aluno_id, aid) for aid in ids):
+            flash("Aluno não encontrado nas suas academias.", "danger")
+            return redirect(destino)
+
+        p, erro = _simular_troca_pacote(cur, aluno_id, ids, plano_id, escopo)
+        if erro:
+            flash(erro, "danger")
+            return redirect(destino)
+
+        for i in p["_alteradas"]:
+            if p["_tem_coluna_ajuste"]:
+                cur.execute(
+                    """UPDATE mensalidade_aluno
+                       SET mensalidade_id = %s, valor_original = %s, desconto_aplicado = %s,
+                           valor = %s, ajuste_proporcional = %s
+                       WHERE id = %s""",
+                    (p["id"], i["valor_original"], i["desconto"], i["valor_novo"], i["ajuste"], i["id"]),
+                )
+            else:
+                cur.execute(
+                    """UPDATE mensalidade_aluno
+                       SET mensalidade_id = %s, valor_original = %s, desconto_aplicado = %s, valor = %s
+                       WHERE id = %s""",
+                    (p["id"], i["valor_original"], i["desconto"], i["valor_novo"], i["id"]),
+                )
+
+        if _tem_coluna(cur, "alunos", "plano_mensalidade_id"):
+            cur.execute("UPDATE alunos SET plano_mensalidade_id = %s WHERE id = %s", (p["id"], aluno_id))
+        conn.commit()
+
+        partes = [f'Pacote alterado para "{p.get("nome")}" ({_reais(p.get("valor"))}).']
+        n = len(p["_alteradas"])
+        if n:
+            partes.append(f"{n} cobrança{'s' if n != 1 else ''} em aberto reprecificada{'s' if n != 1 else ''}.")
+        else:
+            partes.append("Nenhuma cobrança já lançada foi alterada.")
+        if p["_atrasadas_fora"]:
+            partes.append(
+                f"{p['_atrasadas_fora']} atrasada(s) mantida(s) no pacote antigo — "
+                "são meses já treinados no plano anterior."
+            )
+        partes.append("As próximas mensalidades já nascem no pacote novo.")
+        flash(" ".join(partes), "success")
+    except Exception:
+        conn.rollback()
+        current_app.logger.exception("financeiro.trocar_pacote_aluno")
+        flash("Não foi possível trocar o pacote.", "danger")
+    finally:
+        cur.close()
+        conn.close()
+    return redirect(destino)
+
+
+@bp_financeiro.route("/aluno/<int:aluno_id>/vencimento/previa", methods=["GET"])
+@login_required
+def previa_alterar_vencimento(aluno_id):
+    """Prévia em JSON do que a mudança de vencimento vai fazer (alimenta o modal)."""
+    ids = _get_academias_ids()
+    if not ids:
+        return jsonify({"ok": False, "msg": "Sem academia no contexto."}), 403
+
+    novo_dia = request.args.get("dia_vencimento", type=int)
+    if not novo_dia or not (1 <= novo_dia <= 31):
+        return jsonify({"ok": False, "msg": "Informe um dia entre 1 e 31."}), 400
+    cobrar = (request.args.get("cobrar_proporcional") or "1") in ("1", "on", "true")
+
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        if not any(aluno_vinculado_a_academia(cur, aluno_id, aid) for aid in ids):
+            return jsonify({"ok": False, "msg": "Aluno fora das suas academias."}), 403
+
+        p = _simular_mudanca_vencimento(cur, aluno_id, ids, novo_dia, cobrar)
+        criar = p.get("criar")
+        return jsonify({
+            "ok": True,
+            "dia_atual": p["dia_atual"],
+            "novo_dia": p["novo_dia"],
+            "adiando": p["adiando"],
+            "dias_extras": p["dias_extras"],
+            "valor_mensal": p["valor_mensal"],
+            "proporcional": p["proporcional"],
+            "aviso": p["aviso"],
+            "cobrancas": [
+                {
+                    "plano": i["plano_nome"],
+                    "de": i["data_antiga"].strftime("%d/%m/%Y"),
+                    "para": i["data_nova"].strftime("%d/%m/%Y"),
+                    "valor_antigo": i["valor_antigo"],
+                    "valor_novo": i["valor_novo"],
+                    "proporcional": i["ajuste"] or 0,
+                }
+                for i in p["alteradas"]
+            ],
+            "criar": ({
+                "plano": criar["plano_nome"],
+                "vencimento": criar["data_vencimento"].strftime("%d/%m/%Y"),
+                "valor_mensal": criar["valor_mensal"],
+                "proporcional": criar["ajuste"],
+                "valor": criar["valor"],
+            } if criar else None),
+        })
+    except Exception:
+        current_app.logger.exception("financeiro.previa_alterar_vencimento")
+        return jsonify({"ok": False, "msg": "Não foi possível calcular a prévia."}), 500
+    finally:
+        cur.close()
+        conn.close()
+
+
+@bp_financeiro.route("/aluno/<int:aluno_id>/alterar-vencimento", methods=["POST"])
+@login_required
+def alterar_vencimento_aluno(aluno_id):
+    """Muda o dia de vencimento do aluno, com opção de cobrar o período proporcional.
+
+    Adiar o vencimento dá dias de aula que ninguém pagou — marcando
+    `cobrar_proporcional`, esses dias entram na própria mensalidade a preço de
+    dia (valor ÷ 30). Antecipar não devolve nada: o valor segue o mesmo, como
+    pediram no balcão. Cobrança paga é histórico e não é tocada.
+    """
+    ids = _get_academias_ids()
+    voltar = (request.form.get("voltar") or "").strip()
+    destino = (
+        voltar
+        if voltar.startswith("/") and "//" not in voltar
+        else url_for("alunos.ficha_aluno", aluno_id=aluno_id)
+    )
+    if not ids:
+        flash("Sem permissão.", "danger")
+        return redirect(destino)
+
+    novo_dia = request.form.get("dia_vencimento", type=int)
+    if not novo_dia or not (1 <= novo_dia <= 31):
+        flash("Informe um dia de vencimento entre 1 e 31.", "danger")
+        return redirect(destino)
+    cobrar = (request.form.get("cobrar_proporcional") or "") in ("1", "on", "true")
+
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        if not any(aluno_vinculado_a_academia(cur, aluno_id, aid) for aid in ids):
+            flash("Aluno não encontrado nas suas academias.", "danger")
+            return redirect(destino)
+
+        p = _simular_mudanca_vencimento(cur, aluno_id, ids, novo_dia, cobrar)
+        if p["dia_atual"] == novo_dia and not p["alteradas"]:
+            flash(f"O vencimento já é no dia {novo_dia}.", "info")
+            return redirect(destino)
+
+        tem_ajuste = p["tem_coluna_ajuste"]
+        for item in p["alteradas"]:
+            if item["ajuste"] is not None and tem_ajuste:
+                cur.execute(
+                    """UPDATE mensalidade_aluno
+                       SET data_vencimento = %s, status = %s, valor = %s,
+                           ajuste_proporcional = %s, ajuste_proporcional_dias = %s
+                       WHERE id = %s""",
+                    (item["data_nova"], item["status"], item["valor_novo"],
+                     item["ajuste"], item["dias"], item["id"]),
+                )
+            elif item["ajuste"] is not None:
+                cur.execute(
+                    "UPDATE mensalidade_aluno SET data_vencimento = %s, status = %s, valor = %s WHERE id = %s",
+                    (item["data_nova"], item["status"], item["valor_novo"], item["id"]),
+                )
+            else:
+                cur.execute(
+                    "UPDATE mensalidade_aluno SET data_vencimento = %s, status = %s WHERE id = %s",
+                    (item["data_nova"], item["status"], item["id"]),
+                )
+
+        criada = p.get("criar")
+        if criada:
+            colunas = ["mensalidade_id", "aluno_id", "data_vencimento", "valor",
+                       "status", "status_pagamento", "observacoes"]
+            valores = [criada["mensalidade_id"], aluno_id, criada["data_vencimento"],
+                       criada["valor"], "pendente", "pendente",
+                       f"Inclui {criada['dias']} dia(s) proporcionais pela mudança do vencimento "
+                       f"do dia {p['dia_atual']} para o dia {novo_dia}."]
+            if criada.get("turma_id"):
+                colunas.insert(2, "turma_id")
+                valores.insert(2, criada["turma_id"])
+            if tem_ajuste:
+                colunas += ["ajuste_proporcional", "ajuste_proporcional_dias"]
+                valores += [criada["ajuste"], criada["dias"]]
+            cur.execute(
+                f"INSERT INTO mensalidade_aluno ({', '.join(colunas)}) "
+                f"VALUES ({', '.join(['%s'] * len(colunas))})",
+                tuple(valores),
+            )
+
+        if _tem_coluna(cur, "alunos", "dia_vencimento"):
+            cur.execute("UPDATE alunos SET dia_vencimento = %s WHERE id = %s", (novo_dia, aluno_id))
+
+        conn.commit()
+
+        partes = [f"Vencimento do aluno alterado para o dia {novo_dia}."]
+        if p["alteradas"]:
+            n = len(p["alteradas"])
+            partes.append(f"{n} cobrança{'s' if n != 1 else ''} em aberto remarcada{'s' if n != 1 else ''}.")
+        if p["proporcional"] > 0:
+            if criada:
+                onde = f"lançado na mensalidade de {criada['data_vencimento'].strftime('%m/%Y')}"
+            else:
+                alvo = next(i for i in p["alteradas"] if i["ajuste"] is not None)
+                onde = f"somado à mensalidade de {alvo['data_nova'].strftime('%d/%m/%Y')}"
+            partes.append(f"Proporcional de {p['dias_extras']} dia(s): {_reais(p['proporcional'])} — {onde}.")
+        elif p["adiando"] and not cobrar:
+            partes.append("Sem cobrança proporcional (opção não marcada).")
+        elif not p["adiando"] and p["dia_atual"]:
+            partes.append("Vencimento antecipado: o valor das cobranças segue o mesmo.")
+        if p["aviso"]:
+            partes.append(p["aviso"])
+        flash(" ".join(partes), "success")
+    except Exception:
+        conn.rollback()
+        current_app.logger.exception("financeiro.alterar_vencimento_aluno")
+        flash("Não foi possível alterar o vencimento.", "danger")
+    finally:
+        cur.close()
+        conn.close()
+    return redirect(destino)
+
+
+@bp_financeiro.route("/aluno/<int:aluno_id>/cancelar-pacote", methods=["POST"])
+@login_required
+def cancelar_pacote_aluno(aluno_id):
+    """Cancela as cobranças em aberto de um plano do aluno, liberando outro.
+
+    O sistema recusa gerar um pacote quando o aluno já tem cobrança na mesma
+    competência. Sem uma forma de desfazer, trocar de plano ficava impossível.
+    Cobranças já pagas não são tocadas: elas são histórico.
+    """
+    academia_id = _get_academia_id()
+    ids = _get_academias_ids()
+    plano_id = request.form.get("plano_id", type=int)
+    voltar = (request.form.get("voltar") or "").strip()
+    destino = (
+        voltar
+        if voltar.startswith("/") and "//" not in voltar
+        else url_for("alunos.ficha_aluno", aluno_id=aluno_id)
+    )
+    if not ids:
+        flash("Sem permissão.", "danger")
+        return redirect(destino)
+
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        ph = ",".join(["%s"] * len(ids))
+        filtro_plano = "AND ma.mensalidade_id = %s" if plano_id else ""
+        params = [aluno_id] + list(ids) + ([plano_id] if plano_id else [])
+        cur.execute(
+            f"""SELECT ma.id, m.nome AS plano_nome
+                FROM mensalidade_aluno ma
+                JOIN mensalidades m ON m.id = ma.mensalidade_id
+                WHERE ma.aluno_id = %s AND m.id_academia IN ({ph}) {filtro_plano}
+                  AND ma.status IN ('pendente', 'atrasado')""",
+            tuple(params),
+        )
+        alvos = cur.fetchall() or []
+        if not alvos:
+            flash("Este aluno não tem cobrança em aberto para cancelar.", "warning")
+            return redirect(destino)
+
+        ids_alvo = [int(r["id"]) for r in alvos]
+        ph_alvo = ",".join(["%s"] * len(ids_alvo))
+        cur.execute(
+            f"UPDATE mensalidade_aluno SET status = 'cancelado' WHERE id IN ({ph_alvo})",
+            tuple(ids_alvo),
+        )
+        conn.commit()
+        nome_plano = (alvos[0].get("plano_nome") or "").strip()
+        flash(
+            f"{len(ids_alvo)} cobrança{'s' if len(ids_alvo) != 1 else ''} em aberto"
+            + (f" do plano {nome_plano}" if plano_id and nome_plano else "")
+            + " cancelada" + ("s" if len(ids_alvo) != 1 else "")
+            + ". Já é possível contratar outro pacote.",
+            "success",
+        )
+    except Exception:
+        conn.rollback()
+        current_app.logger.exception("financeiro.cancelar_pacote_aluno")
+        flash("Não foi possível cancelar o pacote.", "danger")
+    finally:
+        cur.close()
+        conn.close()
+    return redirect(destino)
+
+
 @bp_financeiro.route("/mensalidades/cancelar-cobranca", methods=["POST"])
 @login_required
 def cancelar_cobranca():
@@ -6015,6 +7626,14 @@ def cancelar_cobranca():
         conn.rollback()
         flash("Ocorreu um erro. Tente novamente mais tarde.", "danger")
     conn.close()
+    # Preserva o contexto (aluno/mês/filtros): cancelar não pode jogar o usuário
+    # de volta para "todos os alunos" — isso levava a cancelar a cobrança errada
+    # no clique seguinte.
+    next_url = (request.form.get("next") or "").strip()
+    if next_url.startswith("/") and "//" not in next_url:
+        return redirect(next_url)
+    if request.referrer:
+        return redirect(request.referrer)
     return redirect(url_for("financeiro.mensalidades_alunos", academia_id=academia_id))
 
 
@@ -6076,7 +7695,9 @@ def cancelar_pagamento():
             # cancelar também quando só `status_pagamento` está como pago —
             # estado deixado por cancelamentos que falharam no meio.
             cur.execute(
-                f"""SELECT ma.id FROM mensalidade_aluno ma
+                f"""SELECT ma.id, ma.aluno_id, ma.valor_pago, ma.valor, ma.pago_auto,
+                           a.id_academia
+                    FROM mensalidade_aluno ma
                     JOIN alunos a ON a.id = ma.aluno_id
                     WHERE ma.id = %s AND a.id_academia IN ({ph})
                       AND (ma.status = 'pago' OR ma.status_pagamento = 'pago')""",
@@ -6087,7 +7708,8 @@ def cancelar_pagamento():
                 f"SELECT id FROM cobranca_avulsa WHERE id = %s AND id_academia IN ({ph}) AND status = 'pago'",
                 (registro_id,) + tuple(ids),
             )
-        if not cur.fetchone():
+        _reg = cur.fetchone()
+        if not _reg:
             flash("Cobrança não encontrada ou não está paga.", "warning")
             conn.close()
             return redirect(request.referrer or url_for("financeiro.mensalidades_alunos", academia_id=academia_id))
@@ -6123,11 +7745,44 @@ def cancelar_pagamento():
                   status_pagamento = 'pendente',
                   data_pagamento = NULL,
                   valor_pago = NULL,
-                  id_forma_pagamento = NULL
+                  id_forma_pagamento = NULL,
+                  pago_auto = 0,
+                  -- A isenção de juros costuma vir do próprio ato da baixa
+                  -- ("pagou em dia, informou fora do prazo"). Cancelando o
+                  -- pagamento ela ficava para trás: a cobrança voltava a
+                  -- pendente e nunca mais somava encargo, sem nada na tela
+                  -- explicando. Desfazer a baixa desfaz a isenção junto; para
+                  -- mantê-la, basta o botão de isentar, que é explícito.
+                  remover_juros = 0
                 WHERE id = %s
                 """,
                 (registro_id,),
             )
+
+            # Pagamento confirmado automaticamente pelo gateway (webhook): o dinheiro
+            # já entrou, então cancelar a baixa não "devolve" nada — vira crédito na
+            # carteira do aluno para quitar outras mensalidades.
+            if _reg.get("pago_auto"):
+                _cred_val = _reg.get("valor_pago")
+                if _cred_val in (None, 0):
+                    _cred_val = _reg.get("valor")
+                try:
+                    from utils.carteira import creditar as _carteira_creditar
+                    _carteira_creditar(
+                        cur,
+                        _reg.get("aluno_id"),
+                        _reg.get("id_academia"),
+                        _cred_val,
+                        descricao="Crédito por cancelamento de pagamento automático",
+                        origem="cancelamento",
+                        origem_id=registro_id,
+                        criado_por=getattr(current_user, "id", None),
+                    )
+                except Exception:
+                    current_app.logger.error(
+                        "Falha ao creditar carteira no cancelamento (mensalidade %s)",
+                        registro_id, exc_info=True,
+                    )
         else:
             # Buscar e excluir receita associada
             receita = None
@@ -6145,7 +7800,14 @@ def cancelar_pagamento():
             cur.execute("UPDATE cobranca_avulsa SET status='pendente', data_pagamento=NULL, valor_pago=NULL WHERE id=%s", (registro_id,))
         
         conn.commit()
-        flash("Pagamento cancelado. Status revertido para pendente e receita excluída.", "success")
+        if tipo == "mensalidade_aluno" and _reg.get("pago_auto"):
+            flash(
+                "Pagamento cancelado. Como foi confirmado automaticamente pelo gateway, "
+                "o valor virou crédito na carteira do aluno.",
+                "success",
+            )
+        else:
+            flash("Pagamento cancelado. Status revertido para pendente e receita excluída.", "success")
     except Exception as e:
         conn.rollback()
         current_app.logger.error(
@@ -6156,10 +7818,19 @@ def cancelar_pagamento():
     next_url = (request.form.get("next") or "").strip()
     if next_url.startswith("/") and "//" not in next_url:
         return redirect(next_url)
+    # Sem `next`, volta para a página de origem tal como ela estava: remontar a
+    # URL da lista do zero descartava mês, ano e o filtro por aluno — era o
+    # "cancelei e ele me jogou na lista de todos".
     ref = request.referrer or ""
-    if "mensalidades/alunos" in ref or not ref:
-        return redirect(url_for("financeiro.mensalidades_alunos", academia_id=academia_id))
-    return redirect(ref)
+    if ref:
+        from urllib.parse import urlparse
+
+        partes = urlparse(ref)
+        if not partes.netloc or partes.netloc == urlparse(request.url).netloc:
+            caminho = (partes.path or "") + (("?" + partes.query) if partes.query else "")
+            if caminho.startswith("/") and not caminho.startswith("//"):
+                return redirect(caminho)
+    return redirect(url_for("financeiro.mensalidades_alunos", academia_id=academia_id))
 
 
 @bp_financeiro.route("/mensalidades/remover-juros", methods=["POST"])
@@ -6236,7 +7907,9 @@ def registrar_pagamento():
             return jsonify({"ok": False, "erro": err}), 400
         return redirect_after()
 
-    if tipo == "mensalidade_aluno" and not partes:
+    _cart_valor = round(max(float(_parse_valor(request.form.get("carteira_valor") or "") or 0), 0.0), 2)
+
+    if tipo == "mensalidade_aluno" and not partes and _cart_valor <= 0:
         if not id_fp:
             flash("Selecione a forma de pagamento.", "warning")
             if wants_json:
@@ -6314,9 +7987,9 @@ def registrar_pagamento():
             if wants_json:
                 return jsonify({"ok": False, "erro": msg_nf}), 400
             return redirect(request.referrer or url_for("financeiro.painel_mensalidades"))
-        if tipo == "mensalidade_aluno" and partes:
+        if tipo == "mensalidade_aluno" and (partes or _cart_valor > 0):
             ok_pre, msg_pre = _preprocessar_mensalidade_quitar_opcional(
-                conn, cur, registro_id, partes, academia_id
+                conn, cur, registro_id, partes or [], academia_id
             )
             if not ok_pre:
                 conn.rollback()
@@ -6326,8 +7999,12 @@ def registrar_pagamento():
                 if wants_json:
                     return jsonify({"ok": False, "erro": msg_pre}), 400
                 return redirect_after()
+            _desc_flat = _parse_valor(request.form.get("desconto_flat") or "") or 0
+            _desc_id = request.form.get("desconto_id_pagamento", type=int)
             ok_m, msg_m = _registrar_pagamento_mensalidade_partes(
-                conn, cur, registro_id, academia_id, partes
+                conn, cur, registro_id, academia_id, partes or [],
+                desconto_flat=float(_desc_flat or 0), desconto_id=_desc_id,
+                carteira_valor=_cart_valor,
             )
             if not ok_m:
                 conn.rollback()
@@ -6528,6 +8205,8 @@ def _render_gerar_cobranca(academias, academia_id, academia_sel, turma_id=None, 
         filtro_plano_id=plano_id,
         filtro_ano_ref=ano_ref,
         filtro_mes_inicial=mes_inicial,
+        # Vindo da ficha do aluno a tela já abre com ele marcado.
+        aluno_pre_selecionado=request.args.get("aluno_id", type=int),
     )
 
 
@@ -6798,13 +8477,13 @@ def cadastrar_receita():
 
         if not descricao:
             flash("Informe a descrição.", "danger")
-            return render_template("financeiro/receitas/form_receita.html", receita=None, academias=academias, academia_id=academia_id)
+            return render_template("financeiro/receitas/form_receita.html", receita=None, academias=academias, academia_id=academia_id, categorias_sugeridas=_categorias_lancadas(academia_id, "receitas"), hoje_iso=date.today().isoformat())
         if valor is None or valor <= 0:
             flash("Informe um valor válido.", "danger")
-            return render_template("financeiro/receitas/form_receita.html", receita=None, academias=academias, academia_id=academia_id)
+            return render_template("financeiro/receitas/form_receita.html", receita=None, academias=academias, academia_id=academia_id, categorias_sugeridas=_categorias_lancadas(academia_id, "receitas"), hoje_iso=date.today().isoformat())
         if not data_str:
             flash("Informe a data.", "danger")
-            return render_template("financeiro/receitas/form_receita.html", receita=None, academias=academias, academia_id=academia_id)
+            return render_template("financeiro/receitas/form_receita.html", receita=None, academias=academias, academia_id=academia_id, categorias_sugeridas=_categorias_lancadas(academia_id, "receitas"), hoje_iso=date.today().isoformat())
 
         try:
             conn = get_db_connection()
@@ -6819,9 +8498,9 @@ def cadastrar_receita():
             return redirect(url_for("financeiro.lista_receitas", academia_id=academia_id))
         except Exception:
             flash("Erro ao salvar receita.", "danger")
-            return render_template("financeiro/receitas/form_receita.html", receita=None, academias=academias, academia_id=academia_id)
+            return render_template("financeiro/receitas/form_receita.html", receita=None, academias=academias, academia_id=academia_id, categorias_sugeridas=_categorias_lancadas(academia_id, "receitas"), hoje_iso=date.today().isoformat())
 
-    return render_template("financeiro/receitas/form_receita.html", receita=None, academias=academias, academia_id=academia_id)
+    return render_template("financeiro/receitas/form_receita.html", receita=None, academias=academias, academia_id=academia_id, categorias_sugeridas=_categorias_lancadas(academia_id, "receitas"), hoje_iso=date.today().isoformat())
 
 
 @bp_financeiro.route("/receitas/editar/<int:receita_id>", methods=["GET", "POST"])
@@ -6874,7 +8553,7 @@ def editar_receita(receita_id):
             receita["data"] = request.form.get("data")
             receita["categoria"] = request.form.get("categoria")
             receita["observacoes"] = request.form.get("observacoes")
-            return render_template("financeiro/receitas/form_receita.html", receita=receita, academias=academias, academia_id=academia_id)
+            return render_template("financeiro/receitas/form_receita.html", receita=receita, academias=academias, academia_id=academia_id, categorias_sugeridas=_categorias_lancadas(academia_id, "receitas"), hoje_iso=date.today().isoformat())
         if valor is None or valor <= 0:
             flash("Informe um valor válido.", "danger")
             receita["descricao"] = descricao
@@ -6882,10 +8561,10 @@ def editar_receita(receita_id):
             receita["data"] = data_str
             receita["categoria"] = categoria
             receita["observacoes"] = observacoes
-            return render_template("financeiro/receitas/form_receita.html", receita=receita, academias=academias, academia_id=academia_id)
+            return render_template("financeiro/receitas/form_receita.html", receita=receita, academias=academias, academia_id=academia_id, categorias_sugeridas=_categorias_lancadas(academia_id, "receitas"), hoje_iso=date.today().isoformat())
         if not data_str:
             flash("Informe a data.", "danger")
-            return render_template("financeiro/receitas/form_receita.html", receita=receita, academias=academias, academia_id=academia_id)
+            return render_template("financeiro/receitas/form_receita.html", receita=receita, academias=academias, academia_id=academia_id, categorias_sugeridas=_categorias_lancadas(academia_id, "receitas"), hoje_iso=date.today().isoformat())
 
         try:
             conn = get_db_connection()
@@ -6901,7 +8580,7 @@ def editar_receita(receita_id):
         except Exception:
             flash("Erro ao atualizar receita.", "danger")
 
-    return render_template("financeiro/receitas/form_receita.html", receita=receita, academias=academias, academia_id=academia_id)
+    return render_template("financeiro/receitas/form_receita.html", receita=receita, academias=academias, academia_id=academia_id, categorias_sugeridas=_categorias_lancadas(academia_id, "receitas"), hoje_iso=date.today().isoformat())
 
 
 @bp_financeiro.route("/receitas/excluir/<int:receita_id>", methods=["POST"])
@@ -6961,6 +8640,31 @@ def excluir_receita(receita_id):
     return redirect(url_for("financeiro.lista_receitas", academia_id=academia_id, mes=mes, ano=ano))
 
 
+def _categorias_lancadas(academia_id, tabela):
+    """Categorias já usadas pela academia, para sugerir no formulário.
+
+    Sem sugestão, a mesma categoria acaba escrita de três formas ("Aluguel",
+    "aluguel", "ALUGUEL") e os totais por categoria deixam de fazer sentido.
+    """
+    if tabela not in ("receitas", "despesas") or not academia_id:
+        return []
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute(
+            f"""SELECT DISTINCT categoria FROM {tabela}
+                WHERE id_academia = %s AND categoria IS NOT NULL AND categoria <> ''
+                ORDER BY categoria""",
+            (academia_id,),
+        )
+        return [r["categoria"] for r in cur.fetchall() or []]
+    except Exception:
+        return []
+    finally:
+        cur.close()
+        conn.close()
+
+
 # ---------- DESPESAS: cadastrar, editar, excluir ----------
 @bp_financeiro.route("/despesas/cadastrar", methods=["GET", "POST"])
 @login_required
@@ -6984,13 +8688,13 @@ def cadastrar_despesa():
 
         if not descricao:
             flash("Informe a descrição.", "danger")
-            return render_template("financeiro/despesas/form_despesa.html", despesa=None, academias=academias, academia_id=academia_id)
+            return render_template("financeiro/despesas/form_despesa.html", despesa=None, academias=academias, academia_id=academia_id, categorias_sugeridas=_categorias_lancadas(academia_id, "despesas"), hoje_iso=date.today().isoformat())
         if valor is None or valor <= 0:
             flash("Informe um valor válido.", "danger")
-            return render_template("financeiro/despesas/form_despesa.html", despesa=None, academias=academias, academia_id=academia_id)
+            return render_template("financeiro/despesas/form_despesa.html", despesa=None, academias=academias, academia_id=academia_id, categorias_sugeridas=_categorias_lancadas(academia_id, "despesas"), hoje_iso=date.today().isoformat())
         if not data_str:
             flash("Informe a data.", "danger")
-            return render_template("financeiro/despesas/form_despesa.html", despesa=None, academias=academias, academia_id=academia_id)
+            return render_template("financeiro/despesas/form_despesa.html", despesa=None, academias=academias, academia_id=academia_id, categorias_sugeridas=_categorias_lancadas(academia_id, "despesas"), hoje_iso=date.today().isoformat())
 
         try:
             conn = get_db_connection()
@@ -7005,9 +8709,9 @@ def cadastrar_despesa():
             return redirect(url_for("financeiro.lista_despesas", academia_id=academia_id))
         except Exception:
             flash("Erro ao salvar despesa.", "danger")
-            return render_template("financeiro/despesas/form_despesa.html", despesa=None, academias=academias, academia_id=academia_id)
+            return render_template("financeiro/despesas/form_despesa.html", despesa=None, academias=academias, academia_id=academia_id, categorias_sugeridas=_categorias_lancadas(academia_id, "despesas"), hoje_iso=date.today().isoformat())
 
-    return render_template("financeiro/despesas/form_despesa.html", despesa=None, academias=academias, academia_id=academia_id)
+    return render_template("financeiro/despesas/form_despesa.html", despesa=None, academias=academias, academia_id=academia_id, categorias_sugeridas=_categorias_lancadas(academia_id, "despesas"), hoje_iso=date.today().isoformat())
 
 
 @bp_financeiro.route("/despesas/editar/<int:despesa_id>", methods=["GET", "POST"])
@@ -7050,7 +8754,7 @@ def editar_despesa(despesa_id):
             despesa["data"] = request.form.get("data")
             despesa["categoria"] = request.form.get("categoria")
             despesa["observacoes"] = request.form.get("observacoes")
-            return render_template("financeiro/despesas/form_despesa.html", despesa=despesa, academias=academias, academia_id=academia_id)
+            return render_template("financeiro/despesas/form_despesa.html", despesa=despesa, academias=academias, academia_id=academia_id, categorias_sugeridas=_categorias_lancadas(academia_id, "despesas"), hoje_iso=date.today().isoformat())
         if valor is None or valor <= 0:
             flash("Informe um valor válido.", "danger")
             despesa["descricao"] = descricao
@@ -7058,10 +8762,10 @@ def editar_despesa(despesa_id):
             despesa["data"] = data_str
             despesa["categoria"] = categoria
             despesa["observacoes"] = observacoes
-            return render_template("financeiro/despesas/form_despesa.html", despesa=despesa, academias=academias, academia_id=academia_id)
+            return render_template("financeiro/despesas/form_despesa.html", despesa=despesa, academias=academias, academia_id=academia_id, categorias_sugeridas=_categorias_lancadas(academia_id, "despesas"), hoje_iso=date.today().isoformat())
         if not data_str:
             flash("Informe a data.", "danger")
-            return render_template("financeiro/despesas/form_despesa.html", despesa=despesa, academias=academias, academia_id=academia_id)
+            return render_template("financeiro/despesas/form_despesa.html", despesa=despesa, academias=academias, academia_id=academia_id, categorias_sugeridas=_categorias_lancadas(academia_id, "despesas"), hoje_iso=date.today().isoformat())
 
         try:
             conn = get_db_connection()
@@ -7077,7 +8781,7 @@ def editar_despesa(despesa_id):
         except Exception:
             flash("Erro ao atualizar despesa.", "danger")
 
-    return render_template("financeiro/despesas/form_despesa.html", despesa=despesa, academias=academias, academia_id=academia_id)
+    return render_template("financeiro/despesas/form_despesa.html", despesa=despesa, academias=academias, academia_id=academia_id, categorias_sugeridas=_categorias_lancadas(academia_id, "despesas"), hoje_iso=date.today().isoformat())
 
 
 @bp_financeiro.route("/despesas/excluir/<int:despesa_id>", methods=["POST"])

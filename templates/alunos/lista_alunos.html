@@ -1,5 +1,27 @@
-{% extends "base.html" %}
+{% extends "base_academia.html" %}
+{% set menu_ativo = 'alunos' %}
 {% block title %}Lista de Alunos{% endblock %}
+
+{# A tabela tem seis colunas e centenas de linhas: vale a largura maior. #}
+{% block conteudo_classe %}sh__conteudo--largo{% endblock %}
+
+{% block pagina_titulo %}Alunos{% endblock %}
+{% block pagina_subtitulo %}
+  Cadastro, graduação e situação de cada aluno{% if academia %} da {{ academia.nome }}{% endif %}.
+{% endblock %}
+
+{% block pagina_acoes %}
+  {% set back_url = back_url or get_back_url_default() %}
+  <a href="{{ back_url }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Voltar</a>
+  <button type="button" class="sh__btn" id="alExportar"><i class="bi bi-download"></i> Exportar</button>
+  {% if not modo_associacao %}
+  <a href="{{ url_for('alunos.cadastrar_aluno', academia_id=academia_id, next=request.full_path) if academia_id else url_for('alunos.cadastrar_aluno', next=request.full_path) }}"
+     class="sh__btn sh__btn--forte">
+    <i class="bi bi-person-plus"></i> Novo aluno
+  </a>
+  {% endif %}
+{% endblock %}
+
 {% block content %}
 <script type="application/json" id="js-formas-por-academia-data">{{ (formas_por_academia or {})|tojson }}</script>
 
@@ -31,6 +53,15 @@
     margin-top: 0.25rem;
     color: #6c757d;
   }
+  /* Indicador clicável: continua parecendo um número da faixa, mas responde
+     ao mouse e marca qual recorte está ativo. */
+  .al-ind { text-decoration: none; color: inherit; display: block; transition: background var(--u-transition); }
+  .al-ind:hover { background: #fbfaf8; }
+  /* Só sombra interna: a faixa recorta o que passa da borda, e um contorno
+     externo ficava cortado no último card. */
+  .al-ind.is-ativo { background: #f4f2ee; box-shadow: inset 0 0 0 2px var(--sh-ink); }
+  .al-ind.is-ativo .sh__faixa-rotulo { color: var(--sh-ink); }
+
   .alunos-stats-grid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -619,176 +650,388 @@
   }
 </style>
 
-<div class="container-fluid alunos-page px-3 px-md-4 py-4">
+<style>
+  /* ------------------------------------------------------------- filtros */
+  .alunos-page { max-width: none; }
+  /* `al-faixa` já é a tarja de cor da graduação: os indicadores usam outro nome. */
+  .al-indicadores { margin-bottom: var(--u-space-3); }
+  .al-verde { color: #17803d; }
+  .al-filtros {
+    background: #fff;
+    border: 1px solid var(--sh-line);
+    border-radius: var(--u-radius);
+    padding: 1rem;
+    margin-bottom: var(--u-space-3);
+  }
+  .al-filtros-linha { display: flex; flex-wrap: wrap; gap: .7rem; }
+  .al-busca { position: relative; flex: 1 1 240px; }
+  .al-busca > .bi-search {
+    position: absolute; left: .9rem; top: 50%; transform: translateY(-50%);
+    color: var(--sh-ink-soft); pointer-events: none;
+  }
+  .al-busca input {
+    width: 100%; height: 46px;
+    padding: 0 .9rem 0 2.4rem;
+    border: 1px solid var(--sh-line);
+    border-radius: var(--u-radius-sm);
+    font-size: .95rem; color: var(--sh-ink);
+  }
+  .al-filtros .form-select {
+    width: auto; flex: 0 1 auto;
+    min-width: 172px; height: 46px;
+    border: 1px solid var(--sh-line);
+    border-radius: var(--u-radius-sm);
+    font-size: .95rem; color: var(--sh-ink);
+  }
+  .al-busca input:focus, .al-filtros .form-select:focus, .al-avancado .form-control:focus {
+    outline: none; border-color: #cfcbc4;
+    box-shadow: 0 0 0 3px rgba(28, 28, 28, .06);
+  }
+  .al-mais { margin-right: auto; }
+  .al-mais[aria-expanded="true"] .al-mais-seta { transform: rotate(180deg); }
+  .al-mais-seta { transition: transform var(--u-transition); font-size: .8rem; }
+  .al-avancado[hidden] { display: none; }
+  .al-avancado { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--sh-line); }
+  .al-filtros-acoes { flex-wrap: wrap; align-items: center; }
+  .al-avancado-grade {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1rem;
+  }
+  .al-rotulo {
+    display: block; margin-bottom: .3rem;
+    color: var(--sh-ink-soft);
+    font-size: .68rem; font-weight: 600;
+    letter-spacing: .14em; text-transform: uppercase;
+  }
+  .al-avancado .form-select, .al-avancado .form-control {
+    width: 100%; min-width: 0; height: 46px;
+    border: 1px solid var(--sh-line);
+    border-radius: var(--u-radius-sm);
+    font-size: .95rem;
+  }
+  .al-filtros-acoes { display: flex; justify-content: flex-end; gap: .6rem; margin-top: 1rem; }
 
-  <!-- Header -->
-  <div class="alunos-header d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3">
-    <div>
-      <h1><i class="bi bi-people-fill"></i> Alunos</h1>
-      <p class="subtitle mb-0">Gerencie e visualize os alunos cadastrados</p>
-    </div>
-    <div class="d-flex gap-2 alunos-header-btns">
-      {% set back_url = back_url or get_back_url_default() %}
-      {% include 'components/botao_voltar.html' %}
-      {% if not modo_associacao %}
-      <a href="{{ url_for('alunos.cadastrar_aluno', academia_id=academia_id, next=request.full_path) if academia_id else url_for('alunos.cadastrar_aluno', next=request.full_path) }}" class="btn btn-primary" title="Novo Aluno">
-        <i class="bi bi-plus-lg"></i><span class="aluno-btn-text"> Novo Aluno</span>
-      </a>
+  /* -------------------------------------------------------------- tabela */
+  .al-caixa {
+    background: #fff;
+    border: 1px solid var(--sh-line);
+    border-radius: var(--u-radius);
+    overflow: hidden;
+  }
+  .al-rolagem { overflow-x: auto; }
+  /* min-width acima da soma das colunas fixas (216+196+150+120+118 = 800),
+     senão a coluna do nome ficava com largura negativa e o texto empilhava. */
+  .al-tabela { width: 100%; min-width: 1020px; border-collapse: collapse; table-layout: fixed; }
+  .al-tabela col.al-c-grad   { width: 216px; }
+  .al-tabela col.al-c-turma  { width: 196px; }
+  .al-tabela col.al-c-mod    { width: 150px; }
+  .al-tabela col.al-c-status { width: 120px; }
+  .al-tabela col.al-c-seta   { width: 118px; }
+  .al-tabela th {
+    padding: .8rem 1.1rem;
+    background: #faf9f7;
+    border-bottom: 1px solid var(--sh-line);
+    color: var(--sh-ink-soft);
+    font-size: .68rem; font-weight: 600;
+    letter-spacing: .14em; text-transform: uppercase;
+    text-align: left;
+  }
+  /* Sem corte: graduação e turma têm nomes longos e precisam aparecer
+     inteiros, quebrando em duas linhas quando faltar largura. Só o nome do
+     aluno continua em uma linha só (reticência no próprio .al-nome). */
+  .al-tabela td {
+    padding: .75rem 1.1rem;
+    border-bottom: 1px solid var(--sh-line);
+    font-size: .93rem;
+    color: var(--sh-ink-soft);
+    vertical-align: middle;
+    overflow-wrap: anywhere;
+  }
+  .al-tabela tbody tr:last-child td { border-bottom: 0; }
+  .al-linha { cursor: pointer; transition: background var(--u-transition); }
+  .al-linha:hover { background: var(--sh-page-bg); }
+
+  .al-aluno { display: flex; align-items: center; gap: .75rem; min-width: 0; }
+  .al-avatar {
+    width: 34px; height: 34px; flex: 0 0 34px;
+    display: grid; place-items: center;
+    border-radius: 50%;
+    background: #f1efeb;
+    color: var(--sh-ink-soft);
+    font-size: .7rem; font-weight: 700;
+    object-fit: cover;
+  }
+  .al-aluno-txt { min-width: 0; }
+  .al-nome {
+    display: block; color: var(--sh-ink); font-size: .98rem; font-weight: 500;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .al-meta { display: block; color: var(--sh-ink-soft); font-size: .84rem; }
+
+  .al-grad { display: flex; align-items: flex-start; gap: .6rem; min-width: 0; }
+  .al-grad > span:last-child { min-width: 0; }
+  .al-faixa {
+    width: 30px; height: 11px; flex: 0 0 30px; margin-top: .25rem;
+    border-radius: 2px;
+    border: 1px solid rgba(0, 0, 0, .12);
+    background: var(--al-cor, #e6e4e0);
+  }
+  .al-vazio { color: var(--sh-text-faint, #a5a29c); }
+
+  .al-status { display: inline-flex; align-items: center; gap: .45rem; }
+  .al-status i { width: 8px; height: 8px; border-radius: 50%; background: #b3afa8; display: inline-block; }
+  .al-status.al-verde i { background: #17803d; }
+
+  /* Os ícones de estado convivem com a seta: sem corte nesta coluna. */
+  .al-seta { text-align: right; color: #cfcbc4; overflow: visible; text-overflow: clip; }
+  .al-seta .bi-chevron-right { font-size: .9rem; }
+  .al-rec { color: var(--sh-ink-soft); margin-right: .5rem; text-decoration: none; }
+  /* Botão de ações: a cor conta o estado da mensalidade. */
+  .al-acoes {
+    position: relative;
+    width: 30px; height: 30px;
+    display: inline-grid; place-items: center;
+    margin-right: .5rem;
+    border: 1px solid var(--sh-line);
+    border-radius: var(--u-radius-sm);
+    background: #fff;
+    color: var(--sh-ink-soft);
+    cursor: pointer;
+    vertical-align: middle;
+  }
+  .al-acoes:hover { border-color: #cfcbc4; background: #faf9f7; }
+  .al-acoes.ok { color: #17803d; }
+  .al-acoes.atrasado { color: var(--sh-red); border-color: #f6c9d0; background: #fdeef0; }
+  .al-acoes-n {
+    position: absolute; top: -6px; right: -6px;
+    min-width: 16px; height: 16px;
+    padding: 0 3px;
+    display: grid; place-items: center;
+    border-radius: 8px;
+    background: var(--sh-red);
+    color: #fff;
+    font-size: .62rem; font-weight: 700;
+  }
+  .al-rec.pendente { color: #b45309; }
+  .al-alerta { color: var(--sh-red); margin-right: .5rem; }
+
+  .al-rodape {
+    padding: .9rem 1.1rem;
+    border-top: 1px solid var(--sh-line);
+    color: var(--sh-ink-soft);
+    font-size: .88rem;
+  }
+
+  /* Na tela larga sobrava quase tudo para o nome enquanto a turma quebrava em
+     duas linhas. Só aqui as colunas de apoio crescem: abaixo disso a tabela
+     já está no limite e o espaço extra faz falta no nome. */
+  @media (min-width: 1500px) {
+    .al-tabela col.al-c-grad  { width: 230px; }
+    .al-tabela col.al-c-turma { width: 240px; }
+    .al-tabela col.al-c-mod   { width: 180px; }
+  }
+
+  /* Celular: a tabela tem 1020px de piso e obrigava a arrastar de lado para
+     ver graduação, turma e ações. Aqui ela deixa de ser tabela e cada aluno
+     vira um bloco: nome em cima, dados fluindo abaixo e as ações fechando. */
+  @media (max-width: 560px) {
+    .al-tabela { display: block; min-width: 0; table-layout: auto; }
+    .al-tabela colgroup, .al-tabela thead { display: none; }
+    .al-tabela tbody { display: block; }
+    .al-tabela tr.al-linha {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: .3rem .9rem;
+      padding: .85rem 1rem;
+      border-bottom: 1px solid #f2f0ec;
+    }
+    .al-tabela td { display: block; padding: 0; border: 0; min-width: 0; }
+    .al-tabela td:first-child { flex: 1 1 100%; }
+    .al-tabela td.al-seta { flex: 1 1 100%; text-align: left; }
+    .al-nome { white-space: normal; }
+  }
+
+  @media (max-width: 767.98px) {
+    .al-filtros { padding: .8rem; }
+    .al-busca { flex: 1 1 100%; }
+    .al-filtros .form-select { flex: 1 1 100%; width: 100%; min-width: 0; }
+    .al-mais, .al-filtros-acoes .sh__btn { width: 100%; justify-content: center; margin-right: 0; }
+    .al-filtros-acoes { flex-direction: column-reverse; }
+  }
+</style>
+
+{# Cor da faixa para a barrinha da coluna Graduação. #}
+{% set cores_faixa = {
+  'branca': '#ffffff', 'cinza': '#9ca3af', 'azul': '#2563eb', 'amarela': '#facc15',
+  'laranja': '#ea580c', 'verde': '#16a34a', 'roxa': '#7c3aed', 'marrom': '#78350f',
+  'preta': '#111111', 'vermelha': '#b91c1c'
+} %}
+{% macro cor_da_faixa(nome) %}
+  {%- set n = (nome or '')|lower -%}
+  {%- set ns = namespace(cor='#e6e4e0') -%}
+  {%- for chave, cor in cores_faixa.items() -%}
+    {%- if chave in n and ns.cor == '#e6e4e0' -%}{% set ns.cor = cor %}{%- endif -%}
+  {%- endfor -%}
+  {{- ns.cor -}}
+{% endmacro %}
+
+<div class="alunos-page">
+
+  {# Os números do recorte atual: mudam junto com os filtros, porque saem da
+     mesma lista que a tabela mostra. #}
+  {# Cada indicador é um link que recorta a lista: "sem turma" e "em atraso"
+     usam o parâmetro `recorte`; ativos/inativos reaproveitam o filtro de
+     situação que já existia. Clicar no card ativo desfaz o recorte. #}
+  {% macro url_ind(params) -%}
+    {%- set base = request.args.to_dict() -%}
+    {%- set _ = base.pop('recorte', None) -%}
+    {%- set _ = base.update(params) -%}
+    {{ request.path }}?{{ base|urlencode }}
+  {%- endmacro %}
+  <div class="sh__faixa al-indicadores">
+    <a class="sh__faixa-item al-ind {% if not recorte and filtro_ativo == 'todos' %}is-ativo{% endif %}"
+       href="{{ url_ind({'filtro_ativo': 'todos'}) }}" title="Ver todos os alunos">
+      <span class="sh__faixa-rotulo">Alunos</span>
+      <span class="sh__faixa-valor">{{ stats.total }}</span>
+    </a>
+    <a class="sh__faixa-item al-ind {% if not recorte and filtro_ativo == 'ativo' %}is-ativo{% endif %}"
+       href="{{ url_ind({'filtro_ativo': 'ativo'}) }}" title="Ver só os alunos ativos">
+      <span class="sh__faixa-rotulo">Ativos</span>
+      <span class="sh__faixa-valor al-verde">{{ stats.ativos }}</span>
+    </a>
+    <a class="sh__faixa-item al-ind {% if not recorte and filtro_ativo == 'inativo' %}is-ativo{% endif %}"
+       href="{{ url_ind({'filtro_ativo': 'inativo'}) }}" title="Ver só os alunos inativos">
+      <span class="sh__faixa-rotulo">Inativos</span>
+      <span class="sh__faixa-valor">{{ stats.inativos }}</span>
+    </a>
+    <a class="sh__faixa-item al-ind {% if recorte == 'sem_turma' %}is-ativo{% endif %}"
+       href="{{ url_ind({} if recorte == 'sem_turma' else {'recorte': 'sem_turma'}) }}"
+       title="Ver quem está sem turma">
+      <span class="sh__faixa-rotulo">Sem turma</span>
+      <span class="sh__faixa-valor {% if stats.sem_turma %}sh__faixa-valor--alerta{% endif %}">{{ stats.sem_turma }}</span>
+    </a>
+    {% if session.modo_painel == 'academia' and not modo_associacao %}
+    <a class="sh__faixa-item al-ind {% if recorte == 'atrasados' %}is-ativo{% endif %}"
+       href="{{ url_ind({} if recorte == 'atrasados' else {'recorte': 'atrasados'}) }}"
+       title="Ver quem está com mensalidade em atraso">
+      <span class="sh__faixa-rotulo">Mensalidade em atraso</span>
+      <span class="sh__faixa-valor {% if stats.atrasados %}sh__faixa-valor--alerta{% endif %}">{{ stats.atrasados }}</span>
+    </a>
+    {% endif %}
+  </div>
+
+  <!-- Filtros: a linha principal fica sempre visível; o resto abre em "Mais filtros" -->
+  <form method="GET" action="{{ request.path }}" id="formFiltros" class="al-filtros">
+    <div class="al-filtros-linha">
+      <div class="al-busca">
+        <i class="bi bi-search"></i>
+        <input type="text" name="busca" id="searchInput" placeholder="Buscar por nome"
+               value="{{ busca or '' }}" autocomplete="off">
+      </div>
+
+      {# Com uma só academia na sessão o seletor não tem função: some. #}
+      {% if academias and academias|length > 1 %}
+      <select name="academia_id" class="form-select" onchange="this.form.submit()" aria-label="Academia">
+        <option value="" {% if not academia_id %}selected{% endif %}>Todas as academias</option>
+        {% for ac in academias %}
+        <option value="{{ ac.id }}" {% if academia_id and ac.id == academia_id %}selected{% endif %}>{{ ac.academia_nome or ac.nome }}</option>
+        {% endfor %}
+      </select>
+      {% endif %}
+
+      <select name="filtro_ativo" class="form-select" onchange="this.form.submit()" aria-label="Situação">
+        <option value="todos" {% if filtro_ativo == 'todos' %}selected{% endif %}>Todos</option>
+        <option value="ativo" {% if filtro_ativo == 'ativo' %}selected{% endif %}>Ativos</option>
+        <option value="inativo" {% if filtro_ativo == 'inativo' %}selected{% endif %}>Inativos</option>
+      </select>
+
+      {% if modalidades_filtro %}
+      <select name="modalidade_id" class="form-select" onchange="this.form.submit()" aria-label="Modalidade">
+        <option value="">Todas as modalidades</option>
+        {% for m in modalidades_filtro %}
+        <option value="{{ m.id }}" {% if modalidade_id is not none and m.id == modalidade_id %}selected{% endif %}>{{ m.nome }}</option>
+        {% endfor %}
+        {% if tem_sem_modalidade %}
+        <option value="-1" {% if modalidade_id == -1 %}selected{% endif %}>Sem modalidade</option>
+        {% endif %}
+      </select>
+      {% endif %}
+
+      {% if turmas_filtro %}
+      <select name="turma_id" class="form-select" onchange="this.form.submit()" aria-label="Turma">
+        <option value="">Todas as turmas</option>
+        {% for t in turmas_filtro %}
+        <option value="{{ t.turma_id }}" {% if turma_id is not none and t.turma_id == turma_id %}selected{% endif %}>{{ t.turma_nome }}</option>
+        {% endfor %}
+      </select>
       {% endif %}
     </div>
-  </div>
 
-  <!-- Cards de estatísticas -->
-  {% if stats and mostrar_filtros_avancados %}
-  <div class="row g-3 mb-4">
-    <div class="col-6 col-md-4">
-      <div class="card border-0 shadow-sm h-100 bg-primary bg-opacity-10">
-        <div class="card-body py-3 text-center">
-          <div class="display-6 fw-bold text-primary">{{ stats.total }}</div>
-          <div class="small text-muted">Total de alunos</div>
-          <div class="small mt-1"><span class="text-success">{{ stats.ativos }} ativos</span> · <span class="text-secondary">{{ stats.inativos }} inativos</span></div>
-        </div>
-      </div>
-    </div>
-    <div class="col-6 col-md-4">
-      <div class="card border-0 shadow-sm h-100 bg-success bg-opacity-10">
-        <div class="card-body py-3 text-center">
-          {% if modo_associacao %}
-          <div class="display-6 fw-bold text-success">{{ stats.por_academia|length }}</div>
-          <div class="small text-muted">Academias</div>
-          {% else %}
-          <div class="display-6 fw-bold text-success">{{ stats.por_turma|length }}</div>
-          <div class="small text-muted">Turmas</div>
-          {% endif %}
-        </div>
-      </div>
-    </div>
-    <div class="col-6 col-md-4">
-      <div class="card border-0 shadow-sm h-100 bg-info bg-opacity-10">
-        <div class="card-body py-3 text-center">
-          <div class="display-6 fw-bold text-info">{{ stats.por_graduacao|length }}</div>
-          <div class="small text-muted">Graduações</div>
-        </div>
-      </div>
-    </div>
-  </div>
-  {% endif %}
-
-  <!-- Filtros -->
-  <div class="search-card">
-    <form method="GET" action="{{ request.path }}" id="formFiltros">
-      <div class="row g-3 align-items-end">
-        {% if academias %}
-        <div class="col-12 col-md-6 col-lg-2">
-          <label class="form-label small fw-semibold mb-1">Academia</label>
-          <select name="academia_id" class="form-select form-select-sm" onchange="this.form.submit()">
-            <option value="" {% if not academia_id %}selected{% endif %}>— Todas —</option>
-            {% for ac in academias %}
-            <option value="{{ ac.id }}" {% if academia_id and ac.id == academia_id %}selected{% endif %}>{{ ac.academia_nome or ac.nome }}</option>
-            {% endfor %}
-          </select>
-        </div>
-        {% endif %}
-        <div class="col-12 col-md-6 col-lg-2">
-          <label class="form-label small fw-semibold mb-1">Busca por nome</label>
-          <input type="text" name="busca" class="form-control form-control-sm" placeholder="Nome..." value="{{ busca or '' }}" id="searchInput">
-        </div>
-        <div class="col-6 col-md-4 col-lg-2">
-          <label class="form-label small fw-semibold mb-1">Status</label>
-          <select name="filtro_ativo" class="form-select form-select-sm">
-            <option value="todos" {% if filtro_ativo == 'todos' %}selected{% endif %}>Todos</option>
-            <option value="ativo" {% if filtro_ativo == 'ativo' %}selected{% endif %}>Ativos</option>
-            <option value="inativo" {% if filtro_ativo == 'inativo' %}selected{% endif %}>Inativos</option>
-          </select>
-        </div>
-        {% if modalidades_filtro %}
-        <div class="col-6 col-md-4 col-lg-2">
-          <label class="form-label small fw-semibold mb-1">Modalidade</label>
-          <select name="modalidade_id" class="form-select form-select-sm">
-            <option value="">— Todas —</option>
-            {% for m in modalidades_filtro %}
-            <option value="{{ m.id }}" {% if modalidade_id is not none and m.id == modalidade_id %}selected{% endif %}>{{ m.nome }}</option>
-            {% endfor %}
-            {% if tem_sem_modalidade %}
-            <option value="-1" {% if modalidade_id == -1 %}selected{% endif %}>Sem modalidade</option>
-            {% endif %}
-          </select>
-        </div>
-        {% endif %}
-        {% if session.modo_painel == 'academia' and not modo_associacao %}
-        {% if not mostrar_filtros_avancados %}
-        <div class="col-6 col-md-4 col-lg-2">
-          <label class="form-label small fw-semibold mb-1">Ano nasc. (de)</label>
-          <input type="number" name="ano_nasc_min" class="form-control form-control-sm" placeholder="Ex: 1989" value="{{ ano_nasc_min if ano_nasc_min is not none else '' }}" min="1900" max="2100">
-        </div>
-        <div class="col-6 col-md-4 col-lg-2">
-          <label class="form-label small fw-semibold mb-1">Ano nasc. (até)</label>
-          <input type="number" name="ano_nasc_max" class="form-control form-control-sm" placeholder="Ex: 1992" value="{{ ano_nasc_max if ano_nasc_max is not none else '' }}" min="1900" max="2100">
-        </div>
-        <div class="col-6 col-md-4 col-lg-2">
-          <label class="form-label small fw-semibold mb-1">Graduação</label>
-          <select name="graduacao_id" class="form-select form-select-sm">
-            <option value="">— Todas —</option>
+    {# O painel já nasce aberto quando algum filtro dele está em uso, senão o
+       usuário não veria por que a lista veio filtrada. #}
+    {% set avancado_ativo = graduacao_id is not none or sexo or ano_nasc_min is not none
+                            or ano_nasc_max is not none or peso_min is not none or peso_max is not none %}
+    <div class="al-avancado" id="alAvancado" {% if not avancado_ativo %}hidden{% endif %}>
+      <div class="al-avancado-grade">
+        <div>
+          <label class="al-rotulo">Graduação</label>
+          <select name="graduacao_id" class="form-select">
+            <option value="">Todas</option>
             {% for f in faixas %}
             <option value="{{ f.id }}" {% if graduacao_id is not none and f.id == graduacao_id %}selected{% endif %}>{{ f.faixa }}{% if f.graduacao %} {{ f.graduacao }}{% endif %}</option>
             {% endfor %}
           </select>
         </div>
-        {% endif %}
-        <div class="col-6 col-md-4 col-lg-2">
-          <label class="form-label small fw-semibold mb-1">Turma</label>
-          <select name="turma_id" class="form-select form-select-sm">
-            <option value="">— Todas —</option>
-            {% for t in turmas_filtro %}
-            <option value="{{ t.turma_id }}" {% if turma_id is not none and t.turma_id == turma_id %}selected{% endif %}>{{ t.turma_nome }}</option>
-            {% endfor %}
-          </select>
-        </div>
-        <div class="col-6 col-md-4 col-lg-2">
-          <label class="form-label small fw-semibold mb-1">Sexo</label>
-          <select name="sexo" class="form-select form-select-sm">
-            <option value="">— Todos —</option>
+        <div>
+          <label class="al-rotulo">Sexo</label>
+          <select name="sexo" class="form-select">
+            <option value="">Todos</option>
             <option value="M" {% if sexo == 'M' %}selected{% endif %}>Masculino</option>
             <option value="F" {% if sexo == 'F' %}selected{% endif %}>Feminino</option>
             <option value="O" {% if sexo == 'O' %}selected{% endif %}>Outro</option>
           </select>
         </div>
-        {% endif %}
-        {% if mostrar_filtros_avancados %}
-        <div class="col-6 col-md-4 col-lg-2">
-          <label class="form-label small fw-semibold mb-1">Ano nasc. (de)</label>
-          <input type="number" name="ano_nasc_min" class="form-control form-control-sm" placeholder="Ex: 1989" value="{{ ano_nasc_min if ano_nasc_min is not none else '' }}" min="1900" max="2100">
+        <div>
+          <label class="al-rotulo">Ano nasc. (de)</label>
+          <input type="number" name="ano_nasc_min" class="form-control" placeholder="1989" min="1900" max="2100"
+                 value="{{ ano_nasc_min if ano_nasc_min is not none else '' }}">
         </div>
-        <div class="col-6 col-md-4 col-lg-2">
-          <label class="form-label small fw-semibold mb-1">Ano nasc. (até)</label>
-          <input type="number" name="ano_nasc_max" class="form-control form-control-sm" placeholder="Ex: 1992" value="{{ ano_nasc_max if ano_nasc_max is not none else '' }}" min="1900" max="2100">
+        <div>
+          <label class="al-rotulo">Ano nasc. (até)</label>
+          <input type="number" name="ano_nasc_max" class="form-control" placeholder="1992" min="1900" max="2100"
+                 value="{{ ano_nasc_max if ano_nasc_max is not none else '' }}">
         </div>
-        <div class="col-6 col-md-4 col-lg-2">
-          <label class="form-label small fw-semibold mb-1">Graduação</label>
-          <select name="graduacao_id" class="form-select form-select-sm">
-            <option value="">— Todas —</option>
-            {% for f in faixas %}
-            <option value="{{ f.id }}" {% if graduacao_id is not none and f.id == graduacao_id %}selected{% endif %}>{{ f.faixa }}{% if f.graduacao %} {{ f.graduacao }}{% endif %}</option>
-            {% endfor %}
-          </select>
+        <div>
+          <label class="al-rotulo">Peso mín (kg)</label>
+          <input type="number" name="peso_min" class="form-control" placeholder="—" min="0" step="0.1"
+                 value="{{ peso_min if peso_min is not none else '' }}">
         </div>
-        <div class="col-6 col-md-4 col-lg-2">
-          <label class="form-label small fw-semibold mb-1">Peso mín (kg)</label>
-          <input type="number" name="peso_min" class="form-control form-control-sm" placeholder="Peso mín" value="{{ peso_min if peso_min is not none else '' }}" min="0" step="0.1">
-        </div>
-        <div class="col-6 col-md-4 col-lg-2">
-          <label class="form-label small fw-semibold mb-1">Peso máx (kg)</label>
-          <input type="number" name="peso_max" class="form-control form-control-sm" placeholder="Peso máx" value="{{ peso_max if peso_max is not none else '' }}" min="0" step="0.1">
-        </div>
-        {% endif %}
-        <div class="col-12 col-lg-auto">
-          <button type="submit" class="btn btn-primary btn-sm me-2"><i class="bi bi-funnel me-1"></i> Filtrar</button>
-          <a href="{{ request.path }}?academia_id=" class="btn btn-outline-secondary btn-sm">Limpar</a>
+        <div>
+          <label class="al-rotulo">Peso máx (kg)</label>
+          <input type="number" name="peso_max" class="form-control" placeholder="—" min="0" step="0.1"
+                 value="{{ peso_max if peso_max is not none else '' }}">
         </div>
       </div>
-      {% if academia_id and not academias %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
-    </form>
-  </div>
+    </div>
+
+    {# Aplicar e Limpar ficam fora do painel avançado: os selects se enviam
+       sozinhos, mas a busca por nome não tinha botão nenhum enquanto "Mais
+       filtros" estivesse fechado — só sobrava apertar Enter e adivinhar. #}
+    <div class="al-filtros-acoes">
+      <button type="button" class="sh__btn al-mais" id="alMaisFiltros" aria-expanded="{{ 'true' if avancado_ativo else 'false' }}">
+        <i class="bi bi-sliders"></i> Mais filtros
+        <i class="bi bi-chevron-down al-mais-seta"></i>
+      </button>
+      <a href="{{ request.path }}{% if academia_id %}?academia_id={{ academia_id }}{% endif %}" class="sh__btn">Limpar</a>
+      <button type="submit" class="sh__btn sh__btn--forte">
+        <i class="bi bi-funnel"></i> Aplicar filtros
+      </button>
+    </div>
+
+    {% if academia_id and not academias %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
+  </form>
 
   <!-- Botões de agrupamento (modo associação) -->
   {% if modo_associacao %}
@@ -823,1493 +1066,109 @@
   </div>
   {% endif %}
 
-  {% if stats %}
-  <div class="alunos-stats-grid">
-    <div class="alunos-stat-card total">
-      <span class="label"><i class="bi bi-people-fill me-1"></i>Total</span>
-      <span class="value">{{ stats.total }}</span>
-    </div>
-    <div class="alunos-stat-card ativos">
-      <span class="label"><i class="bi bi-check-circle-fill me-1"></i>Ativos</span>
-      <span class="value">{{ stats.ativos }}</span>
-    </div>
-    <div class="alunos-stat-card inativos">
-      <span class="label"><i class="bi bi-x-circle-fill me-1"></i>Inativos</span>
-      <span class="value">{{ stats.inativos }}</span>
-    </div>
-  </div>
-  {% endif %}
-
   <!-- Lista agrupada por modalidade ou academia -->
-  <div id="listaAlunos">
+  <div id="listaAlunos" class="al-caixa">
+    <div class="al-rolagem">
+    <table class="al-tabela">
+      <colgroup>
+        <col><col class="al-c-grad"><col class="al-c-turma"><col class="al-c-mod"><col class="al-c-status"><col class="al-c-seta">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Aluno</th>
+          <th>Graduação</th>
+          <th>Turma</th>
+          <th>{{ 'Academia' if (modo_associacao and agrupar_por_academia) else 'Modalidade' }}</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
     {% for grupo_nome, alunos_grupo in alunos_agrupados %}
-    <div class="mb-4">
-      <h5 class="text-primary border-bottom pb-2 mb-3">
-        {% if modo_associacao and agrupar_por_academia %}
-        <i class="bi bi-building me-2"></i>{{ grupo_nome }}
-        {% else %}
-        <i class="bi bi-tag-fill me-2"></i>{{ grupo_nome }}
-        {% endif %}
-      </h5>
-      <div class="row g-3">
     {% for aluno in alunos_grupo %}
-    <div class="col-12 col-sm-6 col-xl-4">
-      <div class="card aluno-card" data-nome="{{ aluno.nome|lower }}" data-faixa="{{ ((aluno.faixa or '') ~ ' ' ~ (aluno.graduacao or ''))|trim|lower }}">
-        <div class="aluno-card-inner">
+    {% set partes = (aluno.nome or '?').split() %}
+    <tr class="al-linha" data-nome="{{ aluno.nome|lower }}"
+        data-faixa="{{ ((aluno.faixa or '') ~ ' ' ~ (aluno.graduacao or ''))|trim|lower }}"
+        data-href="{{ url_for('alunos.ficha_aluno', aluno_id=aluno.id, next=request.full_path) }}">
+      <td>
+        <div class="al-aluno">
           {% if aluno.foto %}
-          <img src="{{ url_for('static', filename='uploads/' + aluno.foto) }}" class="foto-aluno" alt="">
+          <img src="{{ url_for('static', filename='uploads/' ~ aluno.foto) }}" class="al-avatar" alt="">
           {% else %}
-          <div class="foto-aluno d-flex align-items-center justify-content-center text-secondary bg-light"><i class="bi bi-person-fill fs-3"></i></div>
+          <span class="al-avatar">{{ partes[0][0] }}{{ partes[-1][0] if partes|length > 1 }}</span>
           {% endif %}
-          <div class="aluno-body">
-          <div class="aluno-info">
-            <p class="nome-aluno">
-              {{ aluno.nome }}
-            </p>
-            <p class="aluno-meta mb-0">
-              {% if aluno.faixa %}{{ aluno.faixa }}{% if aluno.graduacao %} {{ aluno.graduacao }}{% endif %}{% else %}&nbsp;{% endif %}
-            </p>
-            <p class="small mb-0 {% if aluno.ativo %}text-success{% else %}text-danger{% endif %}">
-              <i class="bi {% if aluno.ativo %}bi-check-circle-fill{% else %}bi-x-circle-fill{% endif %} me-1"></i>
-              {% if aluno.ativo %}Ativo{% else %}Inativo{% endif %}
-            </p>
-            {% if aluno.forma_recorrencia %}
-            {% set _fr = aluno.forma_recorrencia %}
-            <p class="mb-0 mt-1">
-              <a href="{{ url_for('financeiro.assinatura_recorrente_link', assinatura_id=_fr.id) }}"
-                 class="rec-badge {{ 'pix' if _fr.metodo == 'pix' else 'cartao' }} {{ 'pendente' if _fr.status != 'ativa' else 'ativa' }} text-decoration-none"
-                 title="{{ 'Aguardando o aluno cadastrar — clique para reabrir/reenviar o link' if _fr.status != 'ativa' else 'Recorrência ativa — clique para ver o link' }}">
-                <i class="bi {{ 'bi-qr-code' if _fr.metodo == 'pix' else 'bi-credit-card' }}"></i>
-                {{ 'PIX recorrente' if _fr.metodo == 'pix' else 'Cartão recorrente' }}{% if _fr.status != 'ativa' %} · aguardando{% endif %}
-              </a>
-            </p>
-            {% endif %}
-            {% if aluno.academia_nome %}
-            <p class="aluno-academia small text-muted mb-0"><i class="bi bi-building me-1"></i>{{ aluno.academia_nome }}</p>
-            {% endif %}
-          </div>
-          <div class="aluno-actions">
-            {# ── Estado financeiro do botão ── #}
-            {% if session.modo_painel == 'academia' and not modo_associacao %}
-              {% if not aluno.mensalidade_tem %}
-                {% set _ab_estado='sem' %} {% set _ab_tooltip='Sem mensalidade cadastrada' %} {% set _ab_icon='bi-cash-coin' %} {% set _ab_n=0 %}
-              {% elif aluno.mensalidade_atrasada %}
-                {% set _ab_estado='atrasado' %} {% set _ab_tooltip='Mensalidade atrasada' %} {% set _ab_icon='bi-exclamation-circle-fill' %} {% set _ab_n=(aluno.n_mensalidades_atraso or 0) %}
-              {% else %}
-                {% set _ab_estado='ok' %} {% set _ab_tooltip='Mensalidade em dia' %} {% set _ab_icon='bi-check-circle-fill' %} {% set _ab_n=0 %}
-              {% endif %}
-              <button type="button"
-                      class="ab-btn {{ _ab_estado }}"
-                      title="{{ _ab_tooltip }}"
-                      data-bs-toggle="modal"
-                      data-bs-target="#modalAcoes{{ aluno.id }}">
-                <i class="bi {{ _ab_icon }}"></i>
-                {% if _ab_n > 0 %}<span class="ab-badge">{{ _ab_n }}</span>{% endif %}
-              </button>
-            {% else %}
-              {% if modo_associacao %}
-              {# Associação: abre a ficha (carrega ao acessar — a lista não pré-renderiza os detalhes) #}
-              <a href="{{ url_for('alunos.ficha_aluno', aluno_id=aluno.id, next=request.full_path) }}" class="btn btn-outline-primary" title="Ver ficha do aluno">
-                <i class="bi bi-eye"></i>
-              </a>
-              {% else %}
-              <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalAluno{{ aluno.id }}" title="Ver detalhes">
-                <i class="bi bi-eye"></i>
-              </button>
-              {% endif %}
-            {% endif %}
-          </div>
-          </div>
+          <span class="al-aluno-txt">
+            <span class="al-nome">{{ aluno.nome }}</span>
+            <span class="al-meta">
+              {%- if aluno.idade is not none %}{{ aluno.idade }} anos · {% endif -%}
+              matrícula {{ '%04d'|format(aluno.id) }}
+            </span>
+          </span>
         </div>
-      </div>
-    </div>
-
-    {% if not modo_associacao and session.modo_painel == 'academia' %}
-    {# ── Modal unificado de ações ── #}
-    {% if 'pret' in (aluno.faixa or '')|lower %}{% set _ug1='#1a1a1a' %}{% set _ug2='#3d3d3d' %}
-    {% elif 'marrom' in (aluno.faixa or '')|lower %}{% set _ug1='#4e2b1e' %}{% set _ug2='#7b4a35' %}
-    {% elif 'roxa' in (aluno.faixa or '')|lower or 'roxo' in (aluno.faixa or '')|lower %}{% set _ug1='#4a148c' %}{% set _ug2='#7b1fa2' %}
-    {% elif 'azul' in (aluno.faixa or '')|lower %}{% set _ug1='#0d47a1' %}{% set _ug2='#1976d2' %}
-    {% elif 'verde' in (aluno.faixa or '')|lower %}{% set _ug1='#1b5e20' %}{% set _ug2='#388e3c' %}
-    {% elif 'laranja' in (aluno.faixa or '')|lower %}{% set _ug1='#bf360c' %}{% set _ug2='#f4511e' %}
-    {% elif 'amarela' in (aluno.faixa or '')|lower or 'amarelo' in (aluno.faixa or '')|lower %}{% set _ug1='#b8860b' %}{% set _ug2='#f9a825' %}
-    {% elif 'cinza' in (aluno.faixa or '')|lower %}{% set _ug1='#455a64' %}{% set _ug2='#78909c' %}
-    {% elif 'vermelha' in (aluno.faixa or '')|lower or 'vermelho' in (aluno.faixa or '')|lower %}{% set _ug1='#7f0000' %}{% set _ug2='#c62828' %}
-    {% else %}{% set _ug1='#1a2e5a' %}{% set _ug2='#0d6efd' %}{% endif %}
-    <div class="modal fade ua-modal" id="modalAcoes{{ aluno.id }}" tabindex="-1" aria-hidden="true">
-      <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
-        <div class="modal-content shadow-lg">
-          <!-- Hero -->
-          <div class="modal-header p-0 border-0">
-            <div class="ua-hero w-100" style="background:linear-gradient(135deg,{{ _ug1 }} 0%,{{ _ug2 }} 100%)">
-              <button type="button" class="ua-close" data-bs-dismiss="modal" aria-label="Fechar"><i class="bi bi-x-lg"></i></button>
-              <div class="ua-hero-foto">
-                {% if aluno.foto %}
-                <img src="{{ url_for('static', filename='uploads/'+aluno.foto) }}" alt="" style="width:60px;height:60px;border-radius:50%;object-fit:cover">
-                {% else %}<i class="bi bi-person-fill" style="font-size:1.8rem;color:rgba(255,255,255,.6)"></i>{% endif %}
-              </div>
-              <div class="ua-hero-info">
-                <h5>{{ aluno.nome }}
-                  <span class="ma-status-badge ms-1 {% if aluno.ativo %}ma-status-ativo{% else %}ma-status-inativo{% endif %}">
-                    {{ 'Ativo' if aluno.ativo else 'Inativo' }}
-                  </span>
-                </h5>
-                <div class="ua-sub">
-                  {% if aluno.faixa %}{{ aluno.faixa }}{% if aluno.graduacao %} {{ aluno.graduacao }}{% endif %}{% endif %}
-                  {% if aluno.turma_nome %} · {{ aluno.turma_nome }}{% endif %}
-                </div>
-              </div>
-            </div>
-          </div>
-          <!-- Tabs: apenas Acadêmico e Financeiro -->
-          <div class="ua-tabs">
-            <button class="ua-tab active" data-ua-pane="academico"><i class="bi bi-mortarboard"></i> Acadêmico</button>
-            <button class="ua-tab" data-ua-pane="financeiro"><i class="bi bi-wallet2"></i> Financeiro</button>
-          </div>
-          <!-- Body -->
-          <div class="ua-body">
-
-            <!-- Pane: Acadêmico -->
-            <div class="ua-pane active" data-ua-pane="academico">
-              {# Dados básicos #}
-              <div class="ma-row"><span class="ma-label">Faixa</span><span class="ma-val">{{ aluno.faixa or '-' }}{% if aluno.graduacao %} {{ aluno.graduacao }}{% endif %}</span></div>
-              <div class="ma-row"><span class="ma-label">Turma</span><span class="ma-val">{{ aluno.turma_nome or '-' }}</span></div>
-              <div class="ma-row"><span class="ma-label">Status</span><span class="ma-val {% if aluno.ativo %}text-success{% else %}text-danger{% endif %} fw-semibold">{{ 'Ativo' if aluno.ativo else 'Inativo' }}</span></div>
-
-              {# Ações #}
-              <div class="ua-divider mt-3">Ações</div>
-              <div class="ua-action-grid">
-                {% if aluno.ativo %}
-                <button type="button" class="ua-action-btn matricular" onclick="uaAbrirSubModal('modalAcoes{{ aluno.id }}','modalMatriculaTurma{{ aluno.id }}')">
-                  <i class="bi bi-mortarboard-fill"></i>Matricular em turma
-                </button>
-                <button type="button" class="ua-action-btn desistencia{% if not aluno.tem_matricula_em_turma|default(false) %} opacity-50{% endif %}"
-                        {% if aluno.tem_matricula_em_turma|default(false) %}onclick="uaAbrirSubModal('modalAcoes{{ aluno.id }}','modalDesistencia{{ aluno.id }}')"{% endif %}
-                        data-aluno-id="{{ aluno.id }}"
-                        {% if not aluno.tem_matricula_em_turma|default(false) %}disabled title="Aluno sem matrícula em turma"{% endif %}>
-                  <i class="bi bi-person-dash-fill"></i>Informar desistência
-                </button>
-                {% else %}
-                <button type="button" class="ua-action-btn reativar" onclick="uaAbrirSubModal('modalAcoes{{ aluno.id }}','modalReativar{{ aluno.id }}')">
-                  <i class="bi bi-person-check-fill"></i>Reativar aluno
-                </button>
-                {% endif %}
-                <a href="{{ url_for('alunos.editar_aluno', aluno_id=aluno.id, next=request.full_path) }}" class="ua-action-btn editar">
-                  <i class="bi bi-pencil-fill"></i>Editar cadastro
-                </a>
-                <button type="button" class="ua-action-btn perfil" onclick="uaAbrirSubModal('modalAcoes{{ aluno.id }}','modalAluno{{ aluno.id }}')">
-                  <i class="bi bi-person-lines-fill"></i>Ver perfil completo
-                </button>
-                <button type="button" class="ua-action-btn frequencia"
-                        onclick="uaAbrirSubModal('modalAcoes{{ aluno.id }}','modalFrequencia{{ aluno.id }}')">
-                  <i class="bi bi-calendar3-range"></i>Ver frequência
-                </button>
-              </div>
-            </div>
-
-            <!-- Pane: Financeiro -->
-            <div class="ua-pane" data-ua-pane="financeiro">
-              {% if aluno.pacotes_mensalidade_ativos %}
-              <div class="ua-fin-pacotes">
-                <div class="ua-fin-pacotes-label"><i class="bi bi-journal-bookmark me-1"></i>Pacotes ativos</div>
-                <div class="ua-fin-pacotes-grid">
-                  {% for p in aluno.pacotes_mensalidade_ativos %}
-                  <div class="ua-fin-pacote-card">
-                    <span class="ua-fin-pacote-nome">{{ p.nome }}</span>
-                    <span class="ua-fin-pacote-valor">R$ {{ "%.2f"|format(p.valor|float) }}</span>
-                  </div>
-                  {% endfor %}
-                </div>
-              </div>
-              {% endif %}
-              {# Status banner #}
-              {% if not aluno.mensalidade_tem %}
-                <div class="ua-fin-widget sem"><div class="ua-fin-icon"><i class="bi bi-dash-circle"></i></div><div><div class="ua-fin-title">Sem mensalidade cadastrada</div><div class="ua-fin-sub">Use o botão abaixo para gerar a primeira.</div></div></div>
-              {% elif not aluno.mensalidade_atrasada %}
-                <div class="ua-fin-widget ok"><div class="ua-fin-icon"><i class="bi bi-check-circle-fill"></i></div><div><div class="ua-fin-title">Em dia</div>{% if aluno.mensalidade_proximo_vencimento %}<div class="ua-fin-sub">Próximo: {{ aluno.mensalidade_proximo_vencimento }}</div>{% endif %}</div></div>
-              {% endif %}
-
-              {# Ações financeiras #}
-              {% set _n_atraso = aluno.n_mensalidades_atraso or 0 %}
-              <div class="ua-action-grid">
-                {% if aluno.mensalidade_tem %}
-                  {% if aluno.mensalidade_atrasada %}
-                  <button type="button" class="ua-action-btn fin-atraso"
-                          onclick="uaAbrirSubModal('modalAcoes{{ aluno.id }}','modalStatusMensalidade{{ aluno.id }}')">
-                    <i class="bi bi-exclamation-triangle-fill"></i>
-                    {{ _n_atraso }} em atraso
-                    <span class="ab-sub">Ver detalhes</span>
-                  </button>
-                  {% else %}
-                  <button type="button" class="ua-action-btn fin-ok"
-                          onclick="uaAbrirSubModal('modalAcoes{{ aluno.id }}','modalStatusMensalidade{{ aluno.id }}')">
-                    <i class="bi bi-check-circle-fill"></i>
-                    Em dia
-                    <span class="ab-sub">Ver detalhes</span>
-                  </button>
-                  {% endif %}
-                {% else %}
-                  <button type="button" class="ua-action-btn fin-sem"
-                          onclick="uaAbrirSubModal('modalAcoes{{ aluno.id }}','modalFinanceiro{{ aluno.id }}')">
-                    <i class="bi bi-dash-circle"></i>
-                    Sem cobrança
-                    <span class="ab-sub">Gerar primeira</span>
-                  </button>
-                {% endif %}
-                <button type="button" class="ua-action-btn financeiro"
-                        onclick="uaAbrirSubModal('modalAcoes{{ aluno.id }}','modalFinanceiro{{ aluno.id }}')">
-                  <i class="bi bi-plus-circle-fill"></i>Gerar cobrança
-                </button>
-                {% set _rec_gw = (recorrencia_por_academia or {}).get(aluno.id_academia) %}
-                {% if _rec_gw %}
-                <button type="button" class="ua-action-btn status-fin"
-                        onclick="uaAbrirSubModal('modalAcoes{{ aluno.id }}','modalRecorrente{{ aluno.id }}')">
-                  <i class="bi bi-arrow-repeat"></i>Mensalidade recorrente
-                </button>
-                {% endif %}
-              </div>
-            </div>
-
-          </div>
-          <div class="modal-footer border-0 bg-light py-2">
-            <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Fechar</button>
-          </div>
-        </div>
-      </div>
-    </div>
-    {% endif %}{# fim if not modo_associacao and academia #}
-
-    {# Modal de frequência detalhada #}
-    {% if not modo_associacao and session.modo_painel == 'academia' %}
-    <div class="modal fade sm-modal" id="modalFrequencia{{ aluno.id }}" tabindex="-1" aria-hidden="true"
-         data-url-hist="{{ url_for('alunos.historico_aulas', aluno_id=aluno.id) }}">
-      <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
-        <div class="modal-content shadow-lg">
-          <div class="modal-header p-0">
-            <div class="sm-hero w-100" style="background:linear-gradient(135deg,#1e3a5f 0%,#1976d2 100%)">
-              <button type="button" class="sm-close" data-bs-dismiss="modal" aria-label="Fechar"><i class="bi bi-x-lg"></i></button>
-              <div class="sm-icon"><i class="bi bi-calendar3-range"></i></div>
-              <div class="sm-title">Frequência</div>
-              <div class="sm-sub">{{ aluno.nome }}</div>
-            </div>
-          </div>
-          <div class="modal-body px-4 py-3" id="freqModalBody{{ aluno.id }}">
-            <div class="ua-freq-periodo mb-2">
-              <button type="button" class="ua-freq-per-btn" data-per="mes">Por mês</button>
-              <button type="button" class="ua-freq-per-btn active" data-per="ano">Ano inteiro</button>
-            </div>
-            <div class="ua-freq-nav">
-              <button type="button" class="btn btn-sm btn-outline-secondary ua-freq-prev"><i class="bi bi-chevron-left"></i></button>
-              <span class="ua-freq-label-text fw-semibold">—</span>
-              <button type="button" class="btn btn-sm btn-outline-secondary ua-freq-next"><i class="bi bi-chevron-right"></i></button>
-            </div>
-            <div class="ua-freq-stats d-none mt-2">
-              <div class="ua-freq-stat"><div class="fsv ua-fv-total">—</div><div class="fsl">Total</div></div>
-              <div class="ua-freq-stat fp"><div class="fsv ua-fv-pres">—</div><div class="fsl">Presenças</div></div>
-              <div class="ua-freq-stat ff"><div class="fsv ua-fv-falt">—</div><div class="fsl">Faltas</div></div>
-              <div class="ua-freq-stat fc"><div class="fsv ua-fv-pct">—</div><div class="fsl">Freq.</div></div>
-            </div>
-            <div class="ua-freq-list-container mt-2"></div>
-          </div>
-          <div class="modal-footer border-0 bg-light py-2">
-            <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Fechar</button>
-          </div>
-        </div>
-      </div>
-    </div>
-    {% endif %}
-
-    {% if not modo_associacao and not aluno.ativo %}
-    {% set turmas_re = (turmas_por_academia or {}).get(aluno.id_academia, []) %}
-    {% set planos_re = (planos_por_academia or {}).get(aluno.id_academia, []) %}
-    <div class="modal fade sm-modal" id="modalReativar{{ aluno.id }}" tabindex="-1" aria-hidden="true">
-      <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
-        <div class="modal-content shadow-lg">
-          <div class="modal-header">
-            <div class="sm-hero w-100" style="background:linear-gradient(135deg,#064e3b 0%,#059669 100%)">
-              <button type="button" class="sm-close" data-bs-dismiss="modal" aria-label="Fechar"><i class="bi bi-x-lg"></i></button>
-              <div class="sm-icon"><i class="bi bi-person-check-fill"></i></div>
-              <div class="sm-title">Reativar aluno</div>
-              <div class="sm-sub">{{ aluno.nome }}</div>
-            </div>
-          </div>
-          <form method="POST" action="{{ url_for('alunos.alterar_status_aluno', aluno_id=aluno.id) }}" class="form-reativar-aluno">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <input type="hidden" name="ativo_destino" value="1">
-            <input type="hidden" name="next" value="{{ request.full_path }}">
-            <div class="modal-body px-4 py-3">
-              {% if not turmas_re %}
-              <div class="alert alert-warning">
-                <i class="bi bi-exclamation-triangle-fill me-2"></i>
-                <strong>Sem turmas disponíveis.</strong> Cadastre uma turma antes de reativar este aluno.
-              </div>
-              {% else %}
-              <div class="sm-section">
-                <div class="sm-section-label"><i class="bi bi-people-fill"></i> Turma de destino</div>
-                <div class="sm-card">
-                  <label class="form-label small fw-semibold mb-1">Turma <span class="text-danger">*</span></label>
-                  <select name="turma_id" class="form-select" required>
-                    <option value="">Selecione a turma…</option>
-                    {% for t in turmas_re %}
-                    <option value="{{ t.turma_id }}">{{ t.turma_nome }}</option>
-                    {% endfor %}
-                  </select>
-                  <div class="form-text">Define a matrícula principal ao reativar.</div>
-                </div>
-              </div>
-              {% if planos_re %}
-              <div class="sm-section">
-                <div class="sm-section-label"><i class="bi bi-cash-coin"></i> Mensalidade (opcional)</div>
-                <div class="sm-card">
-                  <div class="form-check form-switch mb-0">
-                    <input class="form-check-input js-ck-gerar-mensal-reativar" type="checkbox" name="gerar_mensalidade" value="1" id="gerarMensReativar{{ aluno.id }}" role="switch">
-                    <label class="form-check-label fw-semibold" for="gerarMensReativar{{ aluno.id }}">Gerar mensalidade ao reativar</label>
-                  </div>
-                  <div class="js-bloco-mensal-reativar d-none mt-3 pt-2 border-top">
-                    <div class="row g-2">
-                      <div class="col-12">
-                        <label class="form-label small fw-semibold mb-1">Plano</label>
-                        <select name="mensalidade_id" class="form-select form-select-sm js-mensalidade-reativar-select">
-                          <option value="">Selecione o plano</option>
-                          {% for p in planos_re %}
-                          <option value="{{ p.id }}">{{ p.nome }} — R$ {{ "%.2f"|format(p.valor or 0) }}</option>
-                          {% endfor %}
-                        </select>
-                      </div>
-                      <div class="col-4">
-                        <label class="form-label small fw-semibold mb-1">Mês</label>
-                        <select name="mes_inicial" class="form-select form-select-sm">
-                          {% for m in range(1,13) %}
-                          <option value="{{ m }}" {% if m == hoje.month %}selected{% endif %}>{{ ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][m-1] }}</option>
-                          {% endfor %}
-                        </select>
-                      </div>
-                      <div class="col-4">
-                        <label class="form-label small fw-semibold mb-1">Ano</label>
-                        <input type="number" name="ano_ref" class="form-control form-control-sm" value="{{ hoje.year }}" min="{{ hoje.year }}" max="{{ hoje.year + 4 }}">
-                      </div>
-                      <div class="col-4">
-                        <label class="form-label small fw-semibold mb-1">Dia venc.</label>
-                        <input type="number" name="dia_vencimento" class="form-control form-control-sm" min="1" max="28" value="10">
-                      </div>
-                    </div>
-                    <div class="form-text mt-1">Cobrança criada na competência escolhida (se ainda não existir).</div>
-                  </div>
-                </div>
-              </div>
-              {% endif %}
-              {% endif %}
-            </div>
-            <div class="modal-footer">
-              <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
-              {% if turmas_re %}
-              <button type="submit" class="btn btn-success px-4">
-                <i class="bi bi-check-lg me-1"></i>Reativar aluno
-              </button>
-              {% endif %}
-            </div>
-          </form>
-        </div>
-      </div>
-    </div>
-    {% endif %}
-
-    {% if not modo_associacao and session.modo_painel == 'academia' and aluno.ativo %}
-    <div class="modal fade sm-modal modal-matricula-root" id="modalMatriculaTurma{{ aluno.id }}" tabindex="-1" aria-hidden="true"
-         data-url-get="{{ url_for('alunos.turmas_matricula_json', aluno_id=aluno.id) }}"
-         data-url-post="{{ url_for('alunos.matricular_turma_post', aluno_id=aluno.id) }}">
-      <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
-        <div class="modal-content shadow-lg">
-          <div class="modal-header">
-            <div class="sm-hero w-100" style="background:linear-gradient(135deg,#1e3a5f 0%,#1976d2 100%)">
-              <button type="button" class="sm-close" data-bs-dismiss="modal" aria-label="Fechar"><i class="bi bi-x-lg"></i></button>
-              <div class="sm-icon"><i class="bi bi-mortarboard-fill"></i></div>
-              <div class="sm-title">Matrícula em turma</div>
-              <div class="sm-sub mat-turma-nome-aluno">{{ aluno.nome }}</div>
-            </div>
-          </div>
-          <div class="modal-body px-4 py-3">
-            <div class="mat-turma-loading text-center py-5">
-              <div class="spinner-border text-primary" role="status"></div>
-              <p class="small text-muted mt-2 mb-0">Carregando turmas…</p>
-            </div>
-            <div class="mat-turma-body d-none">
-              <div class="sm-section">
-                <div class="sm-section-label"><i class="bi bi-check2-circle"></i> Matrículas atuais</div>
-                <div class="sm-card">
-                  <p class="small text-muted mat-turma-idade mb-2"></p>
-                  <ul class="list-unstyled small mat-turma-matriculadas mb-0 text-body-secondary"></ul>
-                </div>
-              </div>
-              <div class="sm-section">
-                <div class="sm-section-label"><i class="bi bi-plus-circle"></i> Nova matrícula</div>
-                <div class="sm-card">
-                  <label class="form-label small fw-semibold mb-1">Turma</label>
-                  <select class="form-select mat-turma-select"></select>
-                  <div class="form-check mt-2 d-none mat-turma-excecao-wrap">
-                    <input type="checkbox" class="form-check-input mat-turma-excecao" id="matExc{{ aluno.id }}">
-                    <label class="form-check-label small" for="matExc{{ aluno.id }}">Confirmar matrícula fora da faixa etária (exceção)</label>
-                  </div>
-                </div>
-              </div>
-              <div class="sm-section mat-turma-plano-wrap">
-                <div class="sm-section-label"><i class="bi bi-cash-coin"></i> Mensalidade (opcional)</div>
-                <div class="sm-card">
-                  <div class="form-check form-switch mb-0">
-                    <input type="checkbox" class="form-check-input mat-turma-gerar-mensal" id="matGm{{ aluno.id }}" role="switch">
-                    <label class="form-check-label fw-semibold" for="matGm{{ aluno.id }}">Gerar mensalidade com esta matrícula</label>
-                  </div>
-                  <div class="row g-2 mt-3 pt-2 border-top mat-turma-mensal-fields d-none">
-                    <div class="col-12">
-                      <label class="form-label small fw-semibold mb-1">Plano</label>
-                      <select class="form-select form-select-sm mat-turma-plano"></select>
-                    </div>
-                    <div class="col-4">
-                      <label class="form-label small fw-semibold mb-1">Mês</label>
-                      <select class="form-select form-select-sm mat-turma-mes"></select>
-                    </div>
-                    <div class="col-4">
-                      <label class="form-label small fw-semibold mb-1">Ano</label>
-                      <input type="number" class="form-control form-control-sm mat-turma-ano" min="2020" max="2035">
-                    </div>
-                    <div class="col-4">
-                      <label class="form-label small fw-semibold mb-1">Dia venc.</label>
-                      <input type="number" class="form-control form-control-sm mat-turma-dia" min="1" max="28" value="10">
-                    </div>
-                    <div class="col-12"><div class="form-text">Cobrança pendente criada na competência escolhida, se ainda não existir.</div></div>
-                  </div>
-                </div>
-              </div>
-              <div class="alert alert-danger d-none mat-turma-erro"></div>
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
-            <button type="button" class="btn btn-primary px-4 mat-turma-submit">
-              <i class="bi bi-check-lg me-1"></i>Matricular
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-    {% endif %}
-
-    <!-- Modal Detalhes -->
-    {% if not modo_associacao %}
-    <div class="modal fade modal-aluno" id="modalAluno{{ aluno.id }}" tabindex="-1"
-         data-url-hist="{{ url_for('alunos.historico_aulas', aluno_id=aluno.id) }}"
-         data-historico-modal-id="modalHistoricoAulas{{ aluno.id }}">
-      <div class="modal-dialog modal-dialog-centered modal-xl modal-dialog-scrollable">
-        <div class="modal-content shadow-lg">
-
-          <!-- Hero header -->
-          {% set _faixa = (aluno.faixa or '')|lower %}
-          {% if 'pret' in _faixa %}
-            {% set _g1='#1a1a1a' %} {% set _g2='#3d3d3d' %} {% set _tc='#fff' %}
-          {% elif 'marrom' in _faixa %}
-            {% set _g1='#4e2b1e' %} {% set _g2='#7b4a35' %} {% set _tc='#fff' %}
-          {% elif 'roxa' in _faixa or 'roxo' in _faixa %}
-            {% set _g1='#4a148c' %} {% set _g2='#7b1fa2' %} {% set _tc='#fff' %}
-          {% elif 'azul' in _faixa %}
-            {% set _g1='#0d47a1' %} {% set _g2='#1976d2' %} {% set _tc='#fff' %}
-          {% elif 'verde' in _faixa %}
-            {% set _g1='#1b5e20' %} {% set _g2='#388e3c' %} {% set _tc='#fff' %}
-          {% elif 'laranja' in _faixa %}
-            {% set _g1='#bf360c' %} {% set _g2='#f4511e' %} {% set _tc='#fff' %}
-          {% elif 'amarela' in _faixa or 'amarelo' in _faixa %}
-            {% set _g1='#b8860b' %} {% set _g2='#f9a825' %} {% set _tc='#fff' %}
-          {% elif 'cinza' in _faixa %}
-            {% set _g1='#455a64' %} {% set _g2='#78909c' %} {% set _tc='#fff' %}
-          {% elif 'vermelha' in _faixa or 'vermelho' in _faixa %}
-            {% set _g1='#7f0000' %} {% set _g2='#c62828' %} {% set _tc='#fff' %}
+      </td>
+      <td>
+        {% if aluno.faixa %}
+        <span class="al-grad">
+          <span class="al-faixa" style="--al-cor: {{ cor_da_faixa(aluno.faixa)|trim }};"></span>
+          <span>{{ aluno.faixa|capitalize }}{% if aluno.graduacao %} {{ aluno.graduacao }}{% endif %}</span>
+        </span>
+        {% else %}<span class="al-vazio">—</span>{% endif %}
+      </td>
+      <td>{{ aluno.turma_nome or '—' }}</td>
+      <td>{{ grupo_nome }}</td>
+      <td>
+        {% if aluno.ativo %}
+        <span class="al-status al-verde"><i></i>Ativo</span>
+        {% else %}
+        <span class="al-status"><i></i>Inativo</span>
+        {% endif %}
+      </td>
+      <td class="al-seta">
+        {% if aluno.forma_recorrencia %}
+        {% set _fr = aluno.forma_recorrencia %}
+        <a href="{{ url_for('financeiro.assinatura_recorrente_link', assinatura_id=_fr.id) }}"
+           class="al-rec {{ 'pendente' if _fr.status != 'ativa' else '' }}" onclick="event.stopPropagation();"
+           title="{{ 'Recorrência aguardando o aluno cadastrar' if _fr.status != 'ativa' else 'Recorrência ativa' }}">
+          <i class="bi {{ 'bi-qr-code' if _fr.metodo == 'pix' else 'bi-credit-card' }}"></i>
+        </a>
+        {% endif %}
+        {# A linha leva à ficha; as ações financeiras ficam neste botão, que
+           abre o mesmo modal de sempre sem disparar o clique da linha. #}
+        {% if session.modo_painel == 'academia' and not modo_associacao %}
+          {% if not aluno.mensalidade_tem %}
+            {% set _es, _ic, _tt = 'sem', 'bi-cash-coin', 'Sem mensalidade cadastrada' %}
+          {% elif aluno.mensalidade_atrasada %}
+            {% set _es, _ic, _tt = 'atrasado', 'bi-exclamation-circle-fill', 'Mensalidade atrasada' %}
           {% else %}
-            {% set _g1='#1a2e5a' %} {% set _g2='#0d6efd' %} {% set _tc='#fff' %}
+            {% set _es, _ic, _tt = 'ok', 'bi-check-circle-fill', 'Mensalidade em dia' %}
           {% endif %}
-          <div class="modal-header">
-            <div class="ma-hero w-100" style="background: linear-gradient(135deg, {{ _g1 }} 0%, {{ _g2 }} 100%); color: {{ _tc }}">
-              <button type="button" class="ma-close" data-bs-dismiss="modal" aria-label="Fechar">
-                <i class="bi bi-x-lg"></i>
-              </button>
-              <div class="ma-hero-inner">
-                {% if aluno.foto %}
-                <img src="{{ url_for('static', filename='uploads/' ~ aluno.foto) }}"
-                     class="ma-foto" alt="{{ aluno.nome }}">
-                {% else %}
-                <div class="ma-foto d-flex align-items-center justify-content-center">
-                  <i class="bi bi-person-fill" style="font-size:2rem;color:rgba(255,255,255,0.6)"></i>
-                </div>
-                {% endif %}
-                <div class="ma-hero-info">
-                  <h5>{{ aluno.nome }}
-                    <span class="ma-status-badge ms-1 {% if aluno.ativo %}ma-status-ativo{% else %}ma-status-inativo{% endif %}">
-                      {{ 'Ativo' if aluno.ativo else 'Inativo' }}
-                    </span>
-                  </h5>
-                  <div class="ma-sub">
-                    {% if aluno.academia_nome %}<span><i class="bi bi-building"></i> {{ aluno.academia_nome }}</span>{% endif %}
-                    {% if aluno.turma_nome %}<span><i class="bi bi-people"></i> {{ aluno.turma_nome }}</span>{% endif %}
-                    {% if aluno.faixa %}<span><i class="bi bi-award"></i> {{ aluno.faixa }}{% if aluno.graduacao %} {{ aluno.graduacao }}{% endif %}</span>{% endif %}
-                  </div>
-                </div>
-              </div>
-              <!-- Tabs strip colado ao fundo do hero -->
-              <div class="ma-tabs">
-                <button class="ma-tab active" data-pane="pessoal"><i class="bi bi-person-vcard"></i> Pessoal</button>
-                <button class="ma-tab" data-pane="academico"><i class="bi bi-award"></i> Acadêmico</button>
-                <button class="ma-tab" data-pane="peso"><i class="bi bi-bar-chart-line"></i> Peso</button>
-                <button class="ma-tab" data-pane="frequencia"><i class="bi bi-graph-up-arrow"></i> Frequência</button>
-                <button class="ma-tab" data-pane="aptidao"><i class="bi bi-clipboard-check"></i> Aptidão</button>
-                {% if aluno.observacoes %}
-                <button class="ma-tab" data-pane="obs"><i class="bi bi-journal-text"></i> Obs.</button>
-                {% endif %}
-              </div>
-            </div>
-          </div>
-
-          <!-- Panes -->
-          <div class="modal-body p-0">
-            <div class="ma-body">
-
-              <!-- Pessoal -->
-              <div class="ma-pane active" data-pane="pessoal">
-                <div class="ma-row"><span class="ma-label">Nascimento</span><span class="ma-val">{{ aluno.data_nascimento_formatada or '-' }}{% if aluno.idade_real %} <span class="text-muted fw-normal">({{ aluno.idade_real }} anos)</span>{% endif %}</span></div>
-                <div class="ma-row"><span class="ma-label">CPF</span><span class="ma-val">{{ aluno.cpf or '-' }}</span></div>
-                <div class="ma-row"><span class="ma-label">Telefone</span><span class="ma-val">{{ aluno.telefone or '-' }}</span></div>
-                <div class="ma-row"><span class="ma-label">E-mail</span><span class="ma-val">{{ aluno.email or '-' }}</span></div>
-                <div class="ma-row"><span class="ma-label">Responsável</span><span class="ma-val">{{ aluno.responsavel or '-' }}</span></div>
-              </div>
-
-              <!-- Acadêmico -->
-              <div class="ma-pane" data-pane="academico">
-                <div class="ma-row"><span class="ma-label">Faixa</span><span class="ma-val">{{ aluno.faixa or '-' }}{% if aluno.graduacao %} {{ aluno.graduacao }}{% endif %}</span></div>
-                <div class="ma-row"><span class="ma-label">Próxima faixa</span><span class="ma-val">{{ aluno.proxima_faixa or '-' }}</span></div>
-                <div class="ma-row"><span class="ma-label">Último exame</span><span class="ma-val">{{ aluno.ultimo_exame_faixa_formatada or '-' }}</span></div>
-                <div class="ma-row"><span class="ma-label">Elegível em</span><span class="ma-val">{{ aluno.data_elegivel or '-' }}</span></div>
-                <div class="ma-row"><span class="ma-label">Academia</span><span class="ma-val">{{ aluno.academia_nome or '-' }}</span></div>
-                <div class="ma-row"><span class="ma-label">Turma principal</span><span class="ma-val">{{ aluno.turma_nome or '-' }}</span></div>
-                <div class="ma-row"><span class="ma-label">Modalidades</span><span class="ma-val">{{ aluno.modalidades_nomes or '-' }}</span></div>
-                <div class="ma-row"><span class="ma-label">Zempo</span><span class="ma-val">{{ aluno.zempo or '-' }}</span></div>
-              </div>
-
-              <!-- Peso & Categoria -->
-              <div class="ma-pane" data-pane="peso">
-                <div class="ma-peso-hero">
-                  <div class="pv">{{ aluno.peso or '-' }}{% if aluno.peso %}<span style="font-size:1.2rem;font-weight:400"> kg</span>{% endif %}</div>
-                  <div class="pl">Peso atual</div>
-                </div>
-                <div class="small text-muted fw-semibold mb-2 mt-1">Categorias disponíveis</div>
-                {% if aluno.categorias_disponiveis and aluno.categorias_disponiveis|length > 0 %}
-                  <div>
-                    {% for cat in aluno.categorias_disponiveis %}
-                      <span class="ma-cat-badge">
-                        {% if cat.get('id_classe') or cat.id_classe %}<strong>{{ cat.get('id_classe') or cat.id_classe }}</strong> – {% endif %}
-                        {{ cat.get('nome_categoria') or cat.nome_categoria or cat.get('categoria') or cat.categoria or '-' }}
-                      </span>
-                    {% endfor %}
-                  </div>
-                {% else %}
-                  <p class="text-muted small mb-0"><i class="bi bi-info-circle me-1"></i>{{ aluno.categorias_texto or 'Não disponível' }}</p>
-                {% endif %}
-              </div>
-
-              <!-- Frequência -->
-              <div class="ma-pane" data-pane="frequencia">
-                <div class="ma-stats">
-                  <div class="ma-stat-card {% if aluno.frequencia_ano is not none %}{% if aluno.frequencia_ano >= 70 %}ok{% else %}danger{% endif %}{% endif %}">
-                    <div class="sv">{{ aluno.frequencia_ano if aluno.frequencia_ano is not none else '—' }}{% if aluno.frequencia_ano is not none %}%{% endif %}</div>
-                    <div class="sl">Ano atual</div>
-                  </div>
-                  <div class="ma-stat-card {% if aluno.frequencia_mes is not none %}{% if aluno.frequencia_mes >= 70 %}ok{% else %}warn{% endif %}{% endif %}">
-                    <div class="sv">{{ aluno.frequencia_mes if aluno.frequencia_mes is not none else '—' }}{% if aluno.frequencia_mes is not none %}%{% endif %}</div>
-                    <div class="sl">Mês atual</div>
-                  </div>
-                  <div class="ma-stat-card {% if aluno.frequencia_desde_exame is not none %}{% if aluno.frequencia_desde_exame >= 70 %}ok{% else %}danger{% endif %}{% endif %}">
-                    <div class="sv">{{ aluno.frequencia_desde_exame if aluno.frequencia_desde_exame is not none else '—' }}{% if aluno.frequencia_desde_exame is not none %}%{% endif %}</div>
-                    <div class="sl">Desde exame</div>
-                  </div>
-                </div>
-                {% if aluno.total_aulas_desde and aluno.total_aulas_desde > 0 %}
-                <div class="ma-row"><span class="ma-label">Presenças desde exame</span><span class="ma-val">{{ aluno.presentes_desde or 0 }} / {{ aluno.total_aulas_desde }} aulas</span></div>
-                {% endif %}
-                <p class="small text-muted mt-2 mb-0"><i class="bi bi-info-circle me-1"></i>Mínimo 70% desde o último exame para aptidão.</p>
-                <button type="button"
-                        class="btn btn-outline-primary btn-sm mt-3 js-abrir-historico-frequencia">
-                  <i class="bi bi-calendar3-range me-1"></i>Ver histórico de aulas
-                </button>
-              </div>
-
-              <!-- Aptidão -->
-              <div class="ma-pane" data-pane="aptidao">
-                <div class="text-center mb-3">
-                  <span class="ma-apto {% if aluno.aptidao_status == 'Apto' %}apto{% elif aluno.aptidao_status == 'Inapto' %}inapto{% else %}nd{% endif %}">
-                    {% if aluno.aptidao_status == 'Apto' %}<i class="bi bi-check-circle-fill"></i> APTO PARA EXAME
-                    {% elif aluno.aptidao_status == 'Inapto' %}<i class="bi bi-x-circle-fill"></i> INAPTO PARA EXAME
-                    {% else %}<i class="bi bi-dash-circle"></i> {{ aluno.aptidao_status or 'NÃO CALCULADO' }}{% endif %}
-                  </span>
-                </div>
-                {% if aluno.proxima_faixa and aluno.proxima_faixa != '-' %}
-                <div class="alert alert-success py-2 small"><i class="bi bi-trophy me-1"></i><strong>Próxima faixa:</strong> {{ aluno.proxima_faixa }}</div>
-                {% endif %}
-                {% if aluno.data_elegivel and aluno.data_elegivel != '-' %}
-                <div class="alert alert-info py-2 small"><i class="bi bi-calendar3 me-1"></i><strong>Elegível em:</strong> {{ aluno.data_elegivel }}</div>
-                {% endif %}
-                {% if aluno.motivo and aluno.motivo.strip() %}
-                <div class="alert alert-warning py-2 small">
-                  <i class="bi bi-exclamation-triangle me-1"></i><strong>Motivo da inaptidão:</strong>
-                  <ul class="mb-0 mt-1 ps-3">{% for m in aluno.motivo.split('; ') %}<li>{{ m }}</li>{% endfor %}</ul>
-                </div>
-                {% endif %}
-                {% if aluno.frequencia_desde_exame is not none %}
-                <div class="alert alert-light border py-2 small">
-                  <i class="bi bi-graph-up-arrow me-1"></i>Freq. desde último exame: <strong>{{ aluno.frequencia_desde_exame }}%</strong>
-                  {% if aluno.frequencia_desde_exame < 70 %}<span class="badge bg-danger ms-1">Abaixo do mínimo</span>{% else %}<span class="badge bg-success ms-1">OK</span>{% endif %}
-                </div>
-                {% endif %}
-              </div>
-
-              <!-- Observações -->
-              {% if aluno.observacoes %}
-              <div class="ma-pane" data-pane="obs">
-                <p class="text-muted mb-0" style="white-space:pre-line">{{ aluno.observacoes }}</p>
-              </div>
-              {% endif %}
-
-            </div>
-          </div>
-
-          <div class="modal-footer border-0 bg-light py-2 flex-column align-items-stretch">
-            {% if modo_associacao and academias_por_associacao is defined %}
-            {% set _assoc_id = aluno.id_associacao %}
-            {% set _opts = (academias_por_associacao.get(_assoc_id) or academias_por_associacao.get(_assoc_id|int) if _assoc_id is not none else []) %}
-            {% set _destinos = (_opts|rejectattr('id', 'equalto', aluno.id_academia)|list) if _opts and aluno.id_academia else [] %}
-            {% if _destinos|length > 0 and aluno.id_academia %}
-            <div class="w-100 text-start border-bottom pb-3 mb-2">
-              <div class="small fw-semibold text-warning mb-1"><i class="bi bi-arrow-left-right me-1"></i>Transferir para outra academia</div>
-              <p class="small text-muted mb-2">O aluno sai de todas as turmas da academia atual, as mensalidades da <strong>academia de origem</strong> com vencimento <strong>a partir de hoje</strong> (ainda não vencidas) são canceladas automaticamente, e o cadastro passa para a academia escolhida. Na nova academia, o gestor deve matricular em turma e configurar mensalidade.</p>
-              <form method="POST" action="{{ url_for('alunos.transferir_aluno_academia_associacao', aluno_id=aluno.id) }}" class="row g-2 align-items-end" onsubmit="return confirm('Confirmar transferência? Turmas na academia atual serão removidas e cobranças futuras de mensalidade na origem serão canceladas.');">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <input type="hidden" name="next" value="{{ request.full_path }}">
-                <div class="col-12 col-md-8">
-                  <label class="form-label small mb-0">Academia destino</label>
-                  <select name="id_academia_destino" class="form-select form-select-sm" required>
-                    <option value="">Selecione…</option>
-                    {% for ac in _destinos %}
-                    <option value="{{ ac.id }}">{{ ac.nome }}</option>
-                    {% endfor %}
-                  </select>
-                </div>
-                <div class="col-12 col-md-4">
-                  <button type="submit" class="btn btn-warning btn-sm w-100"><i class="bi bi-box-arrow-right me-1"></i>Transferir</button>
-                </div>
-              </form>
-            </div>
+          {# Os modais deste aluno são buscados em alunos.modais_aluno no primeiro
+             clique (ver alCarregarModais no script da página); por isso aqui não
+             há data-bs-target: quem abre o modal é o JS, depois de injetá-lo. #}
+          <button type="button" class="al-acoes {{ _es }}" title="{{ _tt }} — abrir ações"
+                  data-aluno-modais="{{ aluno.id }}"
+                  onclick="event.stopPropagation();">
+            <i class="bi {{ _ic }}"></i>
+            {% if aluno.mensalidade_atrasada and (aluno.n_mensalidades_atraso or 0) > 0 %}
+            <span class="al-acoes-n">{{ aluno.n_mensalidades_atraso }}</span>
             {% endif %}
-            {% endif %}
-            <div class="d-flex flex-wrap gap-2 justify-content-end w-100">
-            {% if not modo_associacao %}
-            <a href="{{ url_for('alunos.editar_aluno', aluno_id=aluno.id, next=request.full_path) }}" class="btn btn-warning btn-sm"><i class="bi bi-pencil me-1"></i> Editar</a>
-            {% endif %}
-            <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Fechar</button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+          </button>
+        {% endif %}
+        <i class="bi bi-chevron-right"></i>
+      </td>
+    </tr>
 
-    <!-- Histórico de aulas (modal sobre o modal do aluno — fecha e volta ao perfil) -->
-    <div class="modal fade ma-modal-historico" id="modalHistoricoAulas{{ aluno.id }}" tabindex="-1" aria-hidden="true">
-      <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
-        <div class="modal-content shadow-lg">
-          <div class="modal-header border-0 pb-0">
-            <h5 class="modal-title fw-semibold"><i class="bi bi-calendar3 me-2"></i>Histórico de aulas — {{ aluno.nome }}</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
-          </div>
-          <div class="modal-body pt-2">
-            <div class="ma-periodo-toggle btn-group btn-group-sm mb-2" role="group" aria-label="Período do histórico">
-              <button type="button" class="btn btn-outline-secondary" data-periodo="mes">Por mês</button>
-              <button type="button" class="btn btn-outline-secondary active" data-periodo="ano">Ano inteiro</button>
-            </div>
-            <div class="ma-cal-nav">
-              <button type="button" class="btn btn-sm btn-outline-secondary ma-cal-prev-modal"><i class="bi bi-chevron-left"></i></button>
-              <span class="ma-cal-label">Carregando…</span>
-              <button type="button" class="btn btn-sm btn-outline-secondary ma-cal-next-modal"><i class="bi bi-chevron-right"></i></button>
-            </div>
-            <div class="ma-cal-stats d-none">
-              <div class="ma-cal-stat"><div class="csv ma-cv-total">—</div><div class="csl">Total</div></div>
-              <div class="ma-cal-stat c-pres"><div class="csv ma-cv-pres">—</div><div class="csl">Presenças</div></div>
-              <div class="ma-cal-stat c-falt"><div class="csv ma-cv-falt">—</div><div class="csl">Faltas</div></div>
-              <div class="ma-cal-stat c-pct"><div class="csv ma-cv-pct">—</div><div class="csl">Freq.</div></div>
-            </div>
-            <div class="ma-aula-list ma-aula-list-container"></div>
-          </div>
-          <div class="modal-footer border-0 bg-light py-2">
-            <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal"><i class="bi bi-arrow-left me-1"></i>Voltar ao perfil</button>
-          </div>
-        </div>
-      </div>
-    </div>
-    {% endif %}{# fim modais de detalhe (modalAluno + histórico) — ocultos no modo associação #}
-
-    {% if session.modo_painel == 'academia' and aluno.mensalidade_tem %}
-    <div class="modal fade sm-modal" id="modalStatusMensalidade{{ aluno.id }}" tabindex="-1">
-      <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
-        <div class="modal-content shadow-lg">
-          <div class="modal-header">
-            <div class="sm-hero w-100" style="background:{% if aluno.mensalidade_atrasada %}linear-gradient(135deg,#7f1d1d 0%,#dc2626 100%){% else %}linear-gradient(135deg,#064e3b 0%,#059669 100%){% endif %}">
-              <button type="button" class="sm-close" data-bs-dismiss="modal" aria-label="Fechar"><i class="bi bi-x-lg"></i></button>
-              <div class="sm-icon">{% if aluno.mensalidade_atrasada %}<i class="bi bi-exclamation-triangle-fill"></i>{% else %}<i class="bi bi-wallet2"></i>{% endif %}</div>
-              <div class="sm-title">{{ aluno.nome }}</div>
-              <div class="sm-sub">{% if aluno.mensalidade_atrasada %}Mensalidade em atraso{% else %}Situação financeira{% endif %}</div>
-            </div>
-          </div>
-          <div class="modal-body px-4 py-3 js-status-mensalidade-body">
-            <!-- Banner de status -->
-            <div class="ms-status-banner {% if aluno.mensalidade_atrasada %}atrasado{% else %}ok{% endif %}">
-              <div class="ms-icon">
-                {% if aluno.mensalidade_atrasada %}<i class="bi bi-exclamation-triangle-fill"></i>
-                {% else %}<i class="bi bi-check-circle-fill"></i>{% endif %}
-              </div>
-              <div>
-                <div class="ms-msg-title">
-                  {% if aluno.mensalidade_atrasada %}Há mensalidades em atraso ou pendentes
-                  {% else %}Mensalidade em dia{% endif %}
-                </div>
-                {% if not aluno.mensalidade_atrasada and aluno.mensalidade_proximo_vencimento %}
-                <div class="ms-msg-sub">Próximo vencimento: <strong>{{ aluno.mensalidade_proximo_vencimento }}</strong></div>
-                {% endif %}
-              </div>
-            </div>
-
-            <!-- Mensalidades do plano (abertas e pagas, por plano) -->
-            {% if aluno.mensalidades_abertos_grupos %}
-            <div class="ms-secao-titulo">Mensalidades</div>
-            {% if aluno.mensalidades_abertos_grupos|length > 1 %}
-            <div class="ms-plano-pag-nav mb-3 js-ms-plano-nav" data-aluno-modal="{{ aluno.id }}">
-              <button type="button" class="btn btn-sm btn-outline-secondary js-ms-plano-prev" disabled aria-label="Plano anterior">
-                <i class="bi bi-chevron-left"></i>
-              </button>
-              <div class="js-ms-plano-label small fw-semibold text-center flex-grow-1 text-break px-1"></div>
-              <button type="button" class="btn btn-sm btn-outline-secondary js-ms-plano-next" aria-label="Próximo plano">
-                <i class="bi bi-chevron-right"></i>
-              </button>
-            </div>
-            {% elif aluno.mensalidades_abertos_grupos|length == 1 %}
-            <div class="ms-plano-page-titulo text-secondary">
-              <i class="bi bi-journal-text me-1"></i>Plano: {{ aluno.mensalidades_abertos_grupos[0].plano_nome or 'Mensalidade' }}
-            </div>
-            {% endif %}
-            {% for grp in aluno.mensalidades_abertos_grupos %}
-            <div class="js-ms-plano-page {% if aluno.mensalidades_abertos_grupos|length > 1 and not loop.first %}d-none{% endif %}"
-                 data-plano-nome="{{ grp.plano_nome|e }}" data-plano-idx="{{ loop.index0 }}">
-              {% if aluno.mensalidades_abertos_grupos|length > 1 %}
-              <div class="ms-plano-page-titulo">
-                <i class="bi bi-journal-text me-1"></i>{{ grp.plano_nome or 'Mensalidade' }}
-              </div>
-              {% endif %}
-              {% for ma in grp.itens %}
-              {% set _acad_fp = ma.id_academia_plano if ma.id_academia_plano is not none else aluno.id_academia %}
-              {% set formas_plano = (formas_por_academia or {}).get(_acad_fp, []) %}
-              <div class="ms-item{% if ma.is_pago %} ms-item-pagas{% endif %}">
-                <div class="ms-item-info">
-                  <div class="ms-item-tipo">Competência {{ ma.competencia or '-' }}</div>
-                  <div class="ms-item-comp">
-                    {% if aluno.mensalidades_abertos_grupos|length > 1 %}
-                    <div class="small text-muted">Plano: {{ ma.tipo or 'Mensalidade' }}</div>
-                    {% endif %}
-                    {% if ma.is_pago %}
-                    {% if ma.pago_por_desconto_integral %}
-                    {% if ma.data_vencimento %}
-                    <div class="{% if aluno.mensalidades_abertos_grupos|length > 1 %}mt-1{% endif %} small text-muted">Vencimento: {{ ma.data_vencimento }}</div>
-                    {% endif %}
-                    <div class="small text-muted mt-1">Nada a pagar — desconto integral no período.</div>
-                    {% else %}
-                    {% if ma.data_vencimento %}
-                    <div class="{% if aluno.mensalidades_abertos_grupos|length > 1 %}mt-1{% endif %} small text-muted">Vencimento: {{ ma.data_vencimento }}</div>
-                    {% endif %}
-                    {% if ma.data_pagamento %}
-                    <div class="mt-1">Pago em <strong>{{ ma.data_pagamento }}</strong></div>
-                    {% endif %}
-                    <div class="small text-muted mt-1">Forma: {{ ma.forma_pagamento or '—' }}</div>
-                    {% endif %}
-                    {% else %}
-                    {% if ma.data_vencimento %}
-                    <div class="{% if aluno.mensalidades_abertos_grupos|length > 1 %}mt-1{% endif %}">Vencimento: <strong>{{ ma.data_vencimento }}</strong></div>
-                    {% endif %}
-                    {% if ma.dias_atraso %}
-                    <div class="small text-danger fw-semibold mt-1">{{ ma.dias_atraso }} dia{% if ma.dias_atraso != 1 %}s{% endif %} em atraso</div>
-                    {% endif %}
-                    {% endif %}
-                  </div>
-                </div>
-                <div class="ms-item-right{% if ma.is_pago and ma.id and not ma.pago_por_desconto_integral %} ms-item-right--pago-toolbar{% endif %}">
-                  {% if ma.is_pago %}
-                  {% if ma.pago_por_desconto_integral %}
-                  <span class="ms-item-valor text-success">R$ 0,00</span>
-                  <span class="ms-badge pago">Pago</span>
-                  {% else %}
-                  <span class="ms-item-valor text-success">R$ {{ "%.2f"|format(ma.valor_pago|float) }}</span>
-                  <span class="ms-badge pago">Pago</span>
-                  {% if ma.id %}
-                  <div class="ms-pago-acoes">
-                    {% if not ma.pago_por_desconto_integral %}
-                    <button type="button" class="btn btn-outline-secondary btn-sm ms-btn-icon js-fin-detalhe-pagamento"
-                            data-url-detalhes="{{ url_for('alunos.pagamento_detalhes_mensalidade', ma_id=ma.id) }}"
-                            title="Detalhes do pagamento" aria-label="Detalhes do pagamento">
-                      <i class="bi bi-receipt" aria-hidden="true"></i>
-                    </button>
-                    {% endif %}
-                  <form method="post" action="{{ url_for('financeiro.cancelar_pagamento') }}" class="m-0 js-status-fin-form d-inline" data-aluno-id="{{ aluno.id }}">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <input type="hidden" name="tipo" value="mensalidade_aluno">
-                    <input type="hidden" name="registro_id" value="{{ ma.id }}">
-                    <input type="hidden" name="next" value="{{ request.full_path }}">
-                    <button type="submit" class="btn btn-outline-danger btn-sm ms-btn-icon js-fin-btn-estornar"
-                            title="Estornar pagamento" aria-label="Estornar pagamento">
-                      <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i>
-                    </button>
-                  </form>
-                  </div>
-                  {% endif %}
-                  {% endif %}
-                  {% else %}
-                  <div class="ms-valor-stack text-end">
-                    {% set vf = ma.valor_final if ma.valor_final is not none else ma.valor %}
-                    {% set vi = ma.valor_integral if ma.valor_integral is not none else ma.valor %}
-                    <div class="small text-muted">Integral: R$ {{ "%.2f"|format(vi|float) }}</div>
-                    {% if ma.tem_desconto and (ma.valor_desconto or 0) > 0 %}
-                    <div class="small text-success">Desc.{% if ma.desconto_nome %} ({{ ma.desconto_nome }}){% endif %}: −R$ {{ "%.2f"|format(ma.valor_desconto|float) }}</div>
-                    {% endif %}
-                    {% if ma.multa_val is not none and (ma.multa_val|float) > 0 %}
-                    <div class="small text-danger">Multa: R$ {{ "%.2f"|format(ma.multa_val|float) }}</div>
-                    {% endif %}
-                    {% if ma.juros_val is not none and (ma.juros_val|float) > 0 %}
-                    <div class="small text-danger">Juros: R$ {{ "%.2f"|format(ma.juros_val|float) }}</div>
-                    {% endif %}
-                    <span class="ms-item-valor d-block">Total: R$ {{ "%.2f"|format(vf|float) }}</span>
-                  </div>
-                  {% set st = ma.status|lower if ma.status else '' %}
-                  <span class="ms-badge {% if 'atras' in st %}atrasado{% elif 'aguard' in st %}aguard{% else %}pendente{% endif %}">
-                    {{ ma.status }}
-                  </span>
-                  {% if ma.id %}
-                    {% if ma.acao_pagamento == 'confirmar' %}
-                      {% if formas_plano %}
-                      <button type="button" class="btn btn-success btn-sm ms-btn-icon js-fin-open-modal-pagamento"
-                              data-post-url="{{ url_for('financeiro.confirmar_pagamento_mensalidade', registro_id=ma.id) }}"
-                              data-fluxo="confirmar"
-                              data-registro-id="{{ ma.id }}"
-                              data-id-academia-plano="{{ _acad_fp }}"
-                              data-competencia="{{ ma.competencia or '' }}"
-                              data-valor-total="{{ '%.2f'|format(vf|float) }}"
-                              data-valor-com-juros="{{ '%.2f'|format(vf|float) }}"
-                              data-valor-sem-juros-multa="{{ '%.2f'|format(ma.valor_sem_juros_multa|float) }}"
-                              data-vencimento-iso="{{ ma.data_vencimento_iso|default('', true) }}"
-                              data-tem-juros="{% if ma.tem_juros %}1{% else %}0{% endif %}"
-                              data-descontos-json='{{ (ma.descontos_opcao or [])|tojson }}'
-                              title="Confirmar pagamento" aria-label="Confirmar pagamento">
-                        <i class="bi bi-check-circle" aria-hidden="true"></i>
-                      </button>
-                      {% else %}
-                      {% if session.get('modo_painel') == 'associacao' %}<span class="small text-danger text-end" style="max-width:12rem">Cadastre em <a href="{{ url_for('financeiro.formas_pagamento', academia_id=_acad_fp) }}">Formas de pagamento</a>.</span>{% elif session.get('modo_painel') == 'academia' and (current_user.has_role('gestor_academia') or current_user.has_role('admin')) %}<span class="small text-danger text-end" style="max-width:12rem">Ative em <a href="{{ url_for('financeiro.formas_pagamento', academia_id=_acad_fp) }}">Formas de pagamento</a> (Configurações da academia).</span>{% else %}<span class="small text-danger text-end" style="max-width:12rem">A associação cadastra as formas (modo Associação); a academia ativa as aceitas (Configurações → Formas de pagamento).</span>{% endif %}
-                      <button type="button" class="btn btn-success btn-sm ms-btn-icon" disabled title="Confirmar pagamento" aria-label="Confirmar pagamento"><i class="bi bi-check-circle" aria-hidden="true"></i></button>
-                      {% endif %}
-                    {% elif ma.acao_pagamento == 'registrar' %}
-                      {% if formas_plano %}
-                      <button type="button" class="btn btn-success btn-sm ms-btn-icon js-fin-open-modal-pagamento"
-                              data-post-url="{{ url_for('financeiro.registrar_pagamento') }}"
-                              data-fluxo="registrar"
-                              data-registro-id="{{ ma.id }}"
-                              data-id-academia-plano="{{ _acad_fp }}"
-                              data-competencia="{{ ma.competencia or '' }}"
-                              data-valor-total="{{ '%.2f'|format(vf|float) }}"
-                              data-valor-com-juros="{{ '%.2f'|format(vf|float) }}"
-                              data-valor-sem-juros-multa="{{ '%.2f'|format(ma.valor_sem_juros_multa|float) }}"
-                              data-vencimento-iso="{{ ma.data_vencimento_iso|default('', true) }}"
-                              data-tem-juros="{% if ma.tem_juros %}1{% else %}0{% endif %}"
-                              data-descontos-json='{{ (ma.descontos_opcao or [])|tojson }}'
-                              title="Registrar pagamento" aria-label="Registrar pagamento">
-                        <i class="bi bi-cash-stack" aria-hidden="true"></i>
-                      </button>
-                      {% else %}
-                      {% if session.get('modo_painel') == 'associacao' %}<span class="small text-danger text-end" style="max-width:12rem">Cadastre em <a href="{{ url_for('financeiro.formas_pagamento', academia_id=_acad_fp) }}">Formas de pagamento</a>.</span>{% elif session.get('modo_painel') == 'academia' and (current_user.has_role('gestor_academia') or current_user.has_role('admin')) %}<span class="small text-danger text-end" style="max-width:12rem">Ative em <a href="{{ url_for('financeiro.formas_pagamento', academia_id=_acad_fp) }}">Formas de pagamento</a> (Configurações da academia).</span>{% else %}<span class="small text-danger text-end" style="max-width:12rem">A associação cadastra as formas (modo Associação); a academia ativa as aceitas (Configurações → Formas de pagamento).</span>{% endif %}
-                      <button type="button" class="btn btn-success btn-sm ms-btn-icon" disabled title="Registrar pagamento" aria-label="Registrar pagamento"><i class="bi bi-cash-stack" aria-hidden="true"></i></button>
-                      {% endif %}
-                    {% endif %}
-                  {% endif %}
-                  {% endif %}
-                </div>
-              </div>
-              {% endfor %}
-            </div>
-            {% endfor %}
-            {% elif aluno.mensalidades_em_aberto %}
-            <div class="ms-secao-titulo">Mensalidades</div>
-            {% for ma in aluno.mensalidades_em_aberto %}
-            {% set _acad_fp = ma.id_academia_plano if ma.id_academia_plano is not none else aluno.id_academia %}
-            {% set formas_plano = (formas_por_academia or {}).get(_acad_fp, []) %}
-            <div class="ms-item{% if ma.is_pago %} ms-item-pagas{% endif %}">
-              <div class="ms-item-info">
-                <div class="ms-item-tipo">{% if ma.is_pago %}Competência {{ ma.competencia or '-' }}{% else %}{{ ma.tipo or 'Mensalidade' }}{% endif %}</div>
-                <div class="ms-item-comp">
-                  {% if ma.is_pago %}
-                  {% if ma.pago_por_desconto_integral %}
-                  <div class="small text-muted">Plano: {{ ma.tipo or 'Mensalidade' }}</div>
-                  {% if ma.data_vencimento %}<div class="small text-muted mt-1">Vencimento: {{ ma.data_vencimento }}</div>{% endif %}
-                  <div class="small text-muted mt-1">Nada a pagar — desconto integral no período.</div>
-                  {% else %}
-                  <div class="small text-muted">Plano: {{ ma.tipo or 'Mensalidade' }}</div>
-                  {% if ma.data_vencimento %}<div class="small text-muted mt-1">Vencimento: {{ ma.data_vencimento }}</div>{% endif %}
-                  {% if ma.data_pagamento %}<div class="mt-1">Pago em <strong>{{ ma.data_pagamento }}</strong></div>{% endif %}
-                  <div class="small text-muted mt-1">Forma: {{ ma.forma_pagamento or '—' }}</div>
-                  {% endif %}
-                  {% else %}
-                  <div>Plano: <strong>{{ ma.tipo or 'Mensalidade' }}</strong></div>
-                  <div>Competência: <strong>{{ ma.competencia or '-' }}</strong></div>
-                  {% if ma.data_vencimento %}
-                  <div class="mt-1">Vencimento: <strong>{{ ma.data_vencimento }}</strong></div>
-                  {% endif %}
-                  {% if ma.dias_atraso %}
-                  <div class="small text-danger fw-semibold mt-1">{{ ma.dias_atraso }} dia{% if ma.dias_atraso != 1 %}s{% endif %} em atraso</div>
-                  {% endif %}
-                  {% endif %}
-                </div>
-              </div>
-              <div class="ms-item-right{% if ma.is_pago and ma.id and not ma.pago_por_desconto_integral %} ms-item-right--pago-toolbar{% endif %}">
-                {% if ma.is_pago %}
-                {% if ma.pago_por_desconto_integral %}
-                <span class="ms-item-valor text-success">R$ 0,00</span>
-                <span class="ms-badge pago">Pago</span>
-                {% else %}
-                <span class="ms-item-valor text-success">R$ {{ "%.2f"|format(ma.valor_pago|float) }}</span>
-                <span class="ms-badge pago">Pago</span>
-                {% if ma.id %}
-                <div class="ms-pago-acoes">
-                  {% if not ma.pago_por_desconto_integral %}
-                  <button type="button" class="btn btn-outline-secondary btn-sm ms-btn-icon js-fin-detalhe-pagamento"
-                          data-url-detalhes="{{ url_for('alunos.pagamento_detalhes_mensalidade', ma_id=ma.id) }}"
-                          title="Detalhes do pagamento" aria-label="Detalhes do pagamento">
-                    <i class="bi bi-receipt" aria-hidden="true"></i>
-                  </button>
-                  {% endif %}
-                <form method="post" action="{{ url_for('financeiro.cancelar_pagamento') }}" class="m-0 js-status-fin-form d-inline" data-aluno-id="{{ aluno.id }}">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                  <input type="hidden" name="tipo" value="mensalidade_aluno">
-                  <input type="hidden" name="registro_id" value="{{ ma.id }}">
-                  <input type="hidden" name="next" value="{{ request.full_path }}">
-                  <button type="submit" class="btn btn-outline-danger btn-sm ms-btn-icon js-fin-btn-estornar"
-                          title="Estornar pagamento" aria-label="Estornar pagamento">
-                    <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i>
-                  </button>
-                </form>
-                </div>
-                {% endif %}
-                {% endif %}
-                {% else %}
-                <div class="ms-valor-stack text-end">
-                  {% set vf = ma.valor_final if ma.valor_final is not none else ma.valor %}
-                  {% set vi = ma.valor_integral if ma.valor_integral is not none else ma.valor %}
-                  <div class="small text-muted">Integral: R$ {{ "%.2f"|format(vi|float) }}</div>
-                  {% if ma.tem_desconto and (ma.valor_desconto or 0) > 0 %}
-                  <div class="small text-success">Desc.{% if ma.desconto_nome %} ({{ ma.desconto_nome }}){% endif %}: −R$ {{ "%.2f"|format(ma.valor_desconto|float) }}</div>
-                  {% endif %}
-                  {% if ma.multa_val is not none and (ma.multa_val|float) > 0 %}
-                  <div class="small text-danger">Multa: R$ {{ "%.2f"|format(ma.multa_val|float) }}</div>
-                  {% endif %}
-                  {% if ma.juros_val is not none and (ma.juros_val|float) > 0 %}
-                  <div class="small text-danger">Juros: R$ {{ "%.2f"|format(ma.juros_val|float) }}</div>
-                  {% endif %}
-                  <span class="ms-item-valor d-block">Total: R$ {{ "%.2f"|format(vf|float) }}</span>
-                </div>
-                {% set st = ma.status|lower if ma.status else '' %}
-                <span class="ms-badge {% if 'atras' in st %}atrasado{% elif 'aguard' in st %}aguard{% else %}pendente{% endif %}">
-                  {{ ma.status }}
-                </span>
-                {% if ma.id %}
-                  {% if ma.acao_pagamento == 'confirmar' %}
-                    {% if formas_plano %}
-                    <button type="button" class="btn btn-success btn-sm ms-btn-icon js-fin-open-modal-pagamento"
-                            data-post-url="{{ url_for('financeiro.confirmar_pagamento_mensalidade', registro_id=ma.id) }}"
-                            data-fluxo="confirmar"
-                            data-registro-id="{{ ma.id }}"
-                            data-id-academia-plano="{{ _acad_fp }}"
-                            data-competencia="{{ ma.competencia or '' }}"
-                            data-valor-total="{{ '%.2f'|format(vf|float) }}"
-                            data-valor-com-juros="{{ '%.2f'|format(vf|float) }}"
-                            data-valor-sem-juros-multa="{{ '%.2f'|format(ma.valor_sem_juros_multa|float) }}"
-                            data-vencimento-iso="{{ ma.data_vencimento_iso|default('', true) }}"
-                            data-tem-juros="{% if ma.tem_juros %}1{% else %}0{% endif %}"
-                            data-descontos-json='{{ (ma.descontos_opcao or [])|tojson }}'
-                            title="Confirmar pagamento" aria-label="Confirmar pagamento">
-                      <i class="bi bi-check-circle" aria-hidden="true"></i>
-                    </button>
-                    {% else %}
-                    {% if session.get('modo_painel') == 'associacao' %}<span class="small text-danger text-end" style="max-width:12rem">Cadastre em <a href="{{ url_for('financeiro.formas_pagamento', academia_id=_acad_fp) }}">Formas de pagamento</a>.</span>{% elif session.get('modo_painel') == 'academia' and (current_user.has_role('gestor_academia') or current_user.has_role('admin')) %}<span class="small text-danger text-end" style="max-width:12rem">Ative em <a href="{{ url_for('financeiro.formas_pagamento', academia_id=_acad_fp) }}">Formas de pagamento</a> (Configurações da academia).</span>{% else %}<span class="small text-danger text-end" style="max-width:12rem">A associação cadastra as formas (modo Associação); a academia ativa as aceitas (Configurações → Formas de pagamento).</span>{% endif %}
-                    <button type="button" class="btn btn-success btn-sm ms-btn-icon" disabled title="Confirmar pagamento" aria-label="Confirmar pagamento"><i class="bi bi-check-circle" aria-hidden="true"></i></button>
-                    {% endif %}
-                  {% elif ma.acao_pagamento == 'registrar' %}
-                    {% if formas_plano %}
-                    <button type="button" class="btn btn-success btn-sm ms-btn-icon js-fin-open-modal-pagamento"
-                            data-post-url="{{ url_for('financeiro.registrar_pagamento') }}"
-                            data-fluxo="registrar"
-                            data-registro-id="{{ ma.id }}"
-                            data-id-academia-plano="{{ _acad_fp }}"
-                            data-competencia="{{ ma.competencia or '' }}"
-                            data-valor-total="{{ '%.2f'|format(vf|float) }}"
-                            data-valor-com-juros="{{ '%.2f'|format(vf|float) }}"
-                            data-valor-sem-juros-multa="{{ '%.2f'|format(ma.valor_sem_juros_multa|float) }}"
-                            data-vencimento-iso="{{ ma.data_vencimento_iso|default('', true) }}"
-                            data-tem-juros="{% if ma.tem_juros %}1{% else %}0{% endif %}"
-                            data-descontos-json='{{ (ma.descontos_opcao or [])|tojson }}'
-                            title="Registrar pagamento" aria-label="Registrar pagamento">
-                      <i class="bi bi-cash-stack" aria-hidden="true"></i>
-                    </button>
-                    {% else %}
-                    {% if session.get('modo_painel') == 'associacao' %}<span class="small text-danger text-end" style="max-width:12rem">Cadastre em <a href="{{ url_for('financeiro.formas_pagamento', academia_id=_acad_fp) }}">Formas de pagamento</a>.</span>{% elif session.get('modo_painel') == 'academia' and (current_user.has_role('gestor_academia') or current_user.has_role('admin')) %}<span class="small text-danger text-end" style="max-width:12rem">Ative em <a href="{{ url_for('financeiro.formas_pagamento', academia_id=_acad_fp) }}">Formas de pagamento</a> (Configurações da academia).</span>{% else %}<span class="small text-danger text-end" style="max-width:12rem">A associação cadastra as formas (modo Associação); a academia ativa as aceitas (Configurações → Formas de pagamento).</span>{% endif %}
-                    <button type="button" class="btn btn-success btn-sm ms-btn-icon" disabled title="Registrar pagamento" aria-label="Registrar pagamento"><i class="bi bi-cash-stack" aria-hidden="true"></i></button>
-                    {% endif %}
-                  {% endif %}
-                {% endif %}
-                {% endif %}
-              </div>
-            </div>
-            {% endfor %}
-            {% endif %}
-
-          </div>
-          <div class="modal-footer border-0 bg-light py-2">
-            <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Fechar</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    {% set formas_aluno_modal = (formas_por_academia or {}).get(aluno.id_academia, []) %}
-    <div class="modal fade" id="modalPagamentoMensalidade{{ aluno.id }}" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
-      <div class="modal-dialog modal-dialog-centered modal-lg">
-        <div class="modal-content overflow-hidden" style="border:none;border-radius:16px;box-shadow:0 12px 40px rgba(0,0,0,.18)">
-          <div class="fin-pag-hero position-relative">
-            <button type="button" class="fin-pag-hero-close" data-bs-dismiss="modal" aria-label="Fechar"><i class="bi bi-x-lg"></i></button>
-            <div class="fin-pag-hero-icon"><i class="bi bi-cash-stack"></i></div>
-            <div class="fin-pag-hero-title js-fin-pag-titulo">Registrar pagamento</div>
-            <div class="fin-pag-hero-sub js-fin-pag-sub"></div>
-          </div>
-          <form class="js-modal-pagamento-mensal-form" method="post" action="#" data-aluno-id="{{ aluno.id }}" novalidate>
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <div class="modal-body p-4">
-              <script type="application/json" class="js-formas-json-src">{{ formas_aluno_modal | tojson }}</script>
-              <div class="fin-pag-info-bar js-fin-pag-info-bar">
-                <div class="fin-pag-info-card">
-                  <div class="fic-label">Aluno</div>
-                  <div class="fic-value" style="font-size:.85rem">{{ aluno.nome }}</div>
-                </div>
-                <div class="fin-pag-info-card">
-                  <div class="fic-label">Competência</div>
-                  <div class="fic-value js-fin-pag-competencia-val">—</div>
-                </div>
-                <div class="fin-pag-info-card destaque">
-                  <div class="fic-label">Total a pagar</div>
-                  <div class="fic-value">R$ <span class="js-fin-pag-total">0,00</span></div>
-                </div>
-              </div>
-              <div class="fin-pag-dica"><i class="bi bi-info-circle-fill text-primary mt-1" style="flex-shrink:0"></i><span class="js-fin-pag-dica">Para dividir em duas formas, altere o valor da primeira linha; a segunda abre automaticamente com o restante.</span></div>
-              <div class="fin-pag-opcoes-ext border rounded px-3 py-2 mb-3 bg-light js-fin-pag-opcoes-ext">
-                <div class="form-check mb-2 js-fin-wrap-remover-juros d-none">
-                  <input class="form-check-input js-fin-chk-remover-juros" type="checkbox" id="finRemoverJuros{{ aluno.id }}" name="remover_juros_manual" value="1">
-                  <label class="form-check-label small" for="finRemoverJuros{{ aluno.id }}">Remover multa e juros deste pagamento</label>
-                </div>
-                <div class="small text-muted mb-2 js-fin-hint-juros-auto d-none">Com data de pagamento até o vencimento, multa e juros são desconsiderados automaticamente.</div>
-                <div class="js-fin-wrap-desconto d-none">
-                  <label class="form-label small mb-1">Aplicar desconto da academia neste pagamento (opcional)</label>
-                  <select class="form-select form-select-sm js-fin-sel-desconto-pagamento" id="finDescontoPag{{ aluno.id }}"></select>
-                </div>
-              </div>
-              <div class="js-fin-pag-linhas js-fin-pag-linhas-wrap"></div>
-              <div class="fin-pag-soma-bar mt-2">
-                <span>Soma: <span class="fsb-soma js-fin-pag-soma">0,00</span></span>
-                <span class="fsb-total">Total devido: R$ <span class="js-fin-pag-total-bar">0,00</span></span>
-              </div>
-              <div class="alert alert-danger py-2 mt-2 mb-0 d-none js-fin-pag-erro-soma" role="alert"><i class="bi bi-exclamation-triangle-fill me-1"></i>A soma dos valores deve igualar o total devido.</div>
-              <input type="hidden" name="next" value="{{ request.full_path }}" class="js-fin-pag-next-hidden">
-              <input type="hidden" name="pagamentos_json" value="" class="js-fin-pag-json-inp">
-              <input type="hidden" name="tipo" value="mensalidade_aluno" class="js-fin-pag-tipo-inp" disabled>
-              <input type="hidden" name="registro_id" value="" class="js-fin-pag-reg-inp" disabled>
-            </div>
-            <div class="modal-footer border-0 bg-light px-4 py-3">
-              <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
-              <button type="submit" class="btn btn-success js-fin-pag-submit">
-                <i class="bi bi-check-circle-fill me-1"></i>Confirmar pagamento
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </div>
-    {% endif %}
-
-    {% if not modo_associacao and aluno.ativo %}
-    <div class="modal fade sm-modal" id="modalDesistencia{{ aluno.id }}" tabindex="-1"
-         data-aluno-id="{{ aluno.id }}"
-         data-url-dados="{{ url_for('alunos.desistencia_dados', aluno_id=aluno.id) }}"
-         data-url-submit="{{ url_for('alunos.registrar_desistencia', aluno_id=aluno.id) }}"
-         data-csrf-token="{{ csrf_token() }}">
-      <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
-        <div class="modal-content shadow-lg">
-          <div class="modal-header">
-            <div class="sm-hero w-100" style="background:linear-gradient(135deg,#78350f 0%,#d97706 100%)">
-              <button type="button" class="sm-close" data-bs-dismiss="modal" aria-label="Fechar"><i class="bi bi-x-lg"></i></button>
-              <div class="sm-icon"><i class="bi bi-person-dash-fill"></i></div>
-              <div class="sm-title">Registrar desistência</div>
-              <div class="sm-sub">{{ aluno.nome }}</div>
-            </div>
-          </div>
-          <div class="modal-body desistencia-body">
-            <div class="text-center py-4 desistencia-loading">
-              <div class="spinner-border text-warning" role="status"></div>
-              <div class="mt-2 small text-muted">Carregando dados...</div>
-            </div>
-            <div class="desistencia-conteudo d-none">
-              <!-- paginação de turmas (uma turma por "página" quando há várias) -->
-              <div class="desistencia-turmas-nav d-none mb-3">
-                <div class="desistencia-turmas-toolbar d-none mb-2 d-flex flex-wrap align-items-center gap-2 justify-content-between">
-                  <span class="small text-muted">Escolha em qual turma deseja registrar a desistência:</span>
-                  <div class="btn-group btn-group-sm" role="group">
-                    <button type="button" class="btn btn-outline-secondary js-des-marcar-todas-turmas">
-                      <i class="bi bi-check2-all me-1"></i>Marcar todas
-                    </button>
-                    <button type="button" class="btn btn-outline-secondary js-des-desmarcar-todas-turmas">
-                      <i class="bi bi-x-lg me-1"></i>Desmarcar todas
-                    </button>
-                  </div>
-                </div>
-                <div class="desistencia-turma-uma d-none alert alert-light py-2 px-3 small mb-2">
-                  <i class="bi bi-people-fill me-1 text-warning"></i><span class="desistencia-turma-uma-texto"></span>
-                </div>
-                <div class="desistencia-turmas-paginacao d-none">
-                  <div class="d-flex align-items-center justify-content-between gap-2 mb-2">
-                    <button type="button" class="btn btn-sm btn-outline-secondary btn-turma-prev flex-shrink-0" disabled title="Turma anterior">
-                      <i class="bi bi-chevron-left"></i>
-                    </button>
-                    <div class="text-center flex-grow-1 px-1">
-                      <div class="small fw-semibold desistencia-turma-indicador text-break"></div>
-                      <div class="small text-muted desistencia-turma-subtitulo"></div>
-                    </div>
-                    <button type="button" class="btn btn-sm btn-outline-secondary btn-turma-next flex-shrink-0" title="Próxima turma">
-                      <i class="bi bi-chevron-right"></i>
-                    </button>
-                  </div>
-                  <div class="d-flex justify-content-center gap-1 flex-wrap mb-2 desistencia-turmas-dots" aria-label="Ir para turma"></div>
-                </div>
-                <div class="desistencia-turmas-slides"></div>
-              </div>
-              <!-- mensagem sem turmas -->
-              <div class="desistencia-sem-turmas d-none">
-                <div class="alert alert-info py-2 small">
-                  <i class="bi bi-info-circle me-1"></i> Aluno não está matriculado em nenhuma turma.
-                </div>
-              </div>
-              <!-- opções globais -->
-              <hr class="my-3">
-              <div class="mb-2">
-                <div class="form-check">
-                  <input class="form-check-input js-des-cancelar-periodo" type="checkbox"
-                         id="desCancelarPeriodo{{ aluno.id }}" name="cancelar_mensalidades_periodo" value="1">
-                  <label class="form-check-label small fw-semibold" for="desCancelarPeriodo{{ aluno.id }}">
-                    Cancelar mensalidades a partir do mês
-                  </label>
-                </div>
-                <div class="js-des-periodo-campos d-none mt-1">
-                  <div class="row g-2">
-                    <div class="col-6">
-                      <label class="form-label small">Mês</label>
-                      <select name="mes_cancelamento" class="form-select form-select-sm">
-                        {% for m in range(1,13) %}
-                        <option value="{{ m }}" {% if m == hoje.month %}selected{% endif %}>{{ ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][m-1] }}</option>
-                        {% endfor %}
-                      </select>
-                    </div>
-                    <div class="col-6">
-                      <label class="form-label small">Ano</label>
-                      <input type="number" name="ano_cancelamento" class="form-control form-control-sm"
-                             value="{{ hoje.year }}" min="{{ hoje.year - 1 }}" max="{{ hoje.year + 5 }}">
-                    </div>
-                  </div>
-                  <p class="small text-muted mb-0 mt-2">
-                    Mensalidades em aberto com vencimento a partir deste mês serão canceladas em lote.
-                  </p>
-                </div>
-              </div>
-              <div class="des-aviso-inativacao alert alert-warning py-2 small d-none">
-                <i class="bi bi-exclamation-triangle-fill me-1"></i>
-                Todas as turmas serão removidas — o aluno será marcado como <strong>inativo</strong> automaticamente.
-              </div>
-              <div class="des-aviso-parcial alert alert-info py-2 small d-none">
-                <i class="bi bi-info-circle-fill me-1"></i>
-                O aluno permanecerá <strong>ativo</strong> nas turmas não selecionadas.
-              </div>
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Voltar</button>
-            <button type="button" class="btn btn-warning btn-sm btn-confirmar-desistencia d-none">
-              <i class="bi bi-check-lg me-1"></i> Confirmar desistência
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-    {% endif %}
-
-    {% if not modo_associacao and session.modo_painel == 'academia' %}
-    <!-- Modal Financeiro / Mensalidades -->
-    <div class="modal fade sm-modal" id="modalFinanceiro{{ aluno.id }}" tabindex="-1">
-      <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
-        <div class="modal-content shadow-lg">
-          <div class="modal-header">
-            <div class="sm-hero w-100" style="background:linear-gradient(135deg,#064e3b 0%,#0d9488 100%)">
-              <button type="button" class="sm-close" data-bs-dismiss="modal" aria-label="Fechar"><i class="bi bi-x-lg"></i></button>
-              <div class="sm-icon"><i class="bi bi-receipt"></i></div>
-              <div class="sm-title">Gerar cobrança</div>
-              <div class="sm-sub">{{ aluno.nome }}</div>
-            </div>
-          </div>
-          <div class="modal-body px-4 py-3">
-            <form class="form-financeiro-aluno"
-                  data-aluno-id="{{ aluno.id }}"
-                  data-academia-id="{{ academia_id or '' }}"
-                  data-turma-id="{{ aluno.TurmaID or '' }}">
-
-              <!-- Seletor de tipo como cards -->
-              <div class="mf-tipo-grid mb-3">
-                <label class="mf-tipo-card active" for="tipo_avulsa_{{ aluno.id }}">
-                  <input type="radio" name="tipo_{{ aluno.id }}" value="avulsa" id="tipo_avulsa_{{ aluno.id }}" checked>
-                  <span class="mf-tipo-icon"><i class="bi bi-lightning-charge-fill text-warning"></i></span>
-                  <span class="mf-tipo-label">Avulsa</span>
-                </label>
-                <label class="mf-tipo-card" for="tipo_mensal_{{ aluno.id }}">
-                  <input type="radio" name="tipo_{{ aluno.id }}" value="mensal" id="tipo_mensal_{{ aluno.id }}">
-                  <span class="mf-tipo-icon"><i class="bi bi-calendar-month text-primary"></i></span>
-                  <span class="mf-tipo-label">Mensal</span>
-                </label>
-                <label class="mf-tipo-card" for="tipo_anual_{{ aluno.id }}">
-                  <input type="radio" name="tipo_{{ aluno.id }}" value="anual" id="tipo_anual_{{ aluno.id }}">
-                  <span class="mf-tipo-icon"><i class="bi bi-calendar-range text-success"></i></span>
-                  <span class="mf-tipo-label">Anual</span>
-                </label>
-              </div>
-
-              {% set gw_aluno = (gateway_por_academia or {}).get(aluno.id_academia) %}
-              {% if gw_aluno %}
-              <!-- Cobrança online -->
-              <div class="mf-section mb-3 bloco-asaas">
-                <div class="mf-section-title"><i class="bi bi-qr-code me-1"></i> Cobrança online
-                  <span class="text-muted small">({{ {'asaas':'Asaas','mercadopago':'Mercado Pago','infinitepay':'InfinitePay','efi':'EFÍ','sumup':'SumUp'}.get(gw_aluno, gw_aluno) }})</span>
-                </div>
-                <select name="asaas_metodo_{{ aluno.id }}" class="form-select form-select-sm mf-asaas-metodo">
-                  {% if gw_aluno == 'infinitepay' %}
-                  <option value="LINK" selected>Gerar link de pagamento (PIX/cartão)</option>
-                  {% elif gw_aluno == 'efi' %}
-                  <option value="PIX" selected>PIX — gera QR Code para o aluno pagar</option>
-                  {% else %}
-                  <option value="PIX" selected>PIX — gera QR Code para o aluno pagar</option>
-                  <option value="BOLETO">Boleto — gera o link do boleto</option>
-                  {% endif %}
-                  <option value="">Não gerar cobrança online</option>
-                </select>
-                <small class="text-muted d-block mt-1">A cobrança fica disponível no painel do aluno. Valores abaixo de R$ 5,00 são ignorados.</small>
-              </div>
-              {% endif %}
-
-              <!-- Avulsa -->
-              <div class="bloco-avulsa mf-section mb-3">
-                <div class="mf-section-title"><i class="bi bi-lightning-charge me-1"></i> Cobrança avulsa</div>
-                <div class="row g-2">
-                  <div class="col-12">
-                    <label class="form-label small fw-semibold">Descrição <span class="text-danger">*</span></label>
-                    <input type="text" class="form-control form-control-sm" name="descricao" placeholder="Ex: Material, evento, taxa de competição...">
-                  </div>
-                  <div class="col-6">
-                    <label class="form-label small fw-semibold">Valor</label>
-                    <div class="mf-input-prefix">
-                      <span class="mf-prefix">R$</span>
-                      <input type="text" class="form-control form-control-sm" name="valor" placeholder="0,00">
-                    </div>
-                  </div>
-                  <div class="col-6">
-                    <label class="form-label small fw-semibold">Vencimento</label>
-                    <input type="date" class="form-control form-control-sm" name="data_vencimento">
-                  </div>
-                </div>
-              </div>
-
-              <!-- Recorrente (mensal / anual) -->
-              <div class="bloco-recorrente mf-section mb-3 d-none">
-                <div class="mf-section-title bloco-mensal-titulo d-none"><i class="bi bi-calendar-month me-1"></i> Cobrança mensal</div>
-                <div class="mf-section-title bloco-anual-titulo d-none"><i class="bi bi-calendar-range me-1"></i> Cobrança anual</div>
-                <div class="row g-2">
-                  <div class="col-12">
-                    <label class="form-label small fw-semibold">Plano de mensalidade <span class="text-danger">*</span></label>
-                    <select name="plano_id" class="form-select form-select-sm">
-                      <option value="">Selecione o plano</option>
-                      {% for p in planos_mensalidades %}
-                      <option value="{{ p.id }}" data-valor="{{ "%.2f"|format(p.valor or 0) }}">{{ p.nome }} — R$ {{ "%.2f"|format(p.valor or 0) }}</option>
-                      {% endfor %}
-                    </select>
-                  </div>
-
-                  <!-- Ano e mês para mensal -->
-                  <div class="col-6">
-                    <label class="form-label small fw-semibold">Ano</label>
-                    <input type="number" name="ano" class="form-control form-control-sm" value="{{ hoje.year }}" min="{{ hoje.year }}" max="{{ hoje.year + 4 }}">
-                  </div>
-                  <div class="col-6 bloco-mes">
-                    <label class="form-label small fw-semibold">Mês</label>
-                    <select name="mes" class="form-select form-select-sm">
-                      <option value="">Selecione</option>
-                      {% for m in range(1,13) %}
-                      <option value="{{ m }}" {% if m == hoje.month %}selected{% endif %}>{{ ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][m-1] }}</option>
-                      {% endfor %}
-                    </select>
-                  </div>
-
-                  <!-- Opções anuais -->
-                  <div class="col-12 bloco-anual-opcoes d-none">
-                    <label class="form-label small fw-semibold">Período</label>
-                    <div class="d-flex flex-wrap gap-3">
-                      <div class="form-check">
-                        <input class="form-check-input" type="radio" name="anual_opcao_{{ aluno.id }}" value="todos" id="anual_todos_{{ aluno.id }}" checked>
-                        <label class="form-check-label small" for="anual_todos_{{ aluno.id }}">Todos os 12 meses</label>
-                      </div>
-                      <div class="form-check d-flex align-items-center gap-2">
-                        <input class="form-check-input" type="radio" name="anual_opcao_{{ aluno.id }}" value="a_partir" id="anual_a_partir_{{ aluno.id }}">
-                        <label class="form-check-label small mb-0" for="anual_a_partir_{{ aluno.id }}">A partir de</label>
-                        <select name="mes_ini_anual" class="form-select form-select-sm" style="width:auto">
-                          {% for m in range(1,13) %}
-                          <option value="{{ m }}" {% if m == hoje.month %}selected{% endif %}>{{ ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][m-1] }}</option>
-                          {% endfor %}
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div class="col-6">
-                    <label class="form-label small fw-semibold">Dia do vencimento</label>
-                    <input type="number" name="dia_vencimento" class="form-control form-control-sm" min="1" max="28" value="10" placeholder="10">
-                  </div>
-                </div>
-                <div class="mt-2 mf-aviso-disponibilidade">
-                  <small class="text-muted aviso-disponibilidade d-block"></small>
-                </div>
-              </div>
-
-              <!-- Desconto (aplica-se a avulsa, mensal e anual) -->
-              {% set descontos_aluno = (descontos_por_academia or {}).get(aluno.id_academia) or descontos_academia %}
-              <div class="mf-section mb-1">
-                <div class="mf-section-title"><i class="bi bi-percent me-1"></i> Desconto <span class="fw-normal text-muted">(opcional)</span></div>
-                <div class="row g-2">
-                  <div class="col-12">
-                    <select class="form-select form-select-sm mf-desconto" name="desconto_id">
-                      <option value="">Sem desconto</option>
-                      {% for d in (descontos_aluno or []) %}
-                      <option value="{{ d.id }}"
-                              data-tipo="{{ d.tipo }}"
-                              data-valor="{{ '%.2f'|format(d.valor or 0) }}">
-                        {{ d.nome }} — {% if d.tipo == 'percentual' %}{{ '%g'|format(d.valor or 0) }}%{% else %}R$ {{ '%.2f'|format(d.valor or 0) }}{% endif %}
-                      </option>
-                      {% endfor %}
-                      <option value="avulso">➕ Desconto avulso (informar manualmente)</option>
-                    </select>
-                  </div>
-                  <div class="col-12 mf-desconto-manual d-none">
-                    <div class="input-group input-group-sm">
-                      <select class="form-select mf-desconto-manual-tipo" name="desconto_manual_tipo" style="max-width:130px">
-                        <option value="percentual">%</option>
-                        <option value="valor_fixo">R$</option>
-                      </select>
-                      <input type="text" class="form-control mf-desconto-manual-valor" name="desconto_manual_valor" placeholder="Valor do desconto" inputmode="decimal">
-                    </div>
-                  </div>
-                  <div class="col-12">
-                    <small class="text-muted d-block mf-desconto-preview"></small>
-                  </div>
-                </div>
-              </div>
-
-            </form>
-          </div>
-          <div class="modal-footer border-0 bg-light py-2 d-flex justify-content-between align-items-center">
-            <small class="text-danger msg-erro-financeiro"></small>
-            <div class="d-flex gap-2">
-              {% if academia_id %}
-              <button type="button"
-                      class="btn btn-outline-secondary btn-sm btn-ver-cobrancas-modal"
-                      data-bs-toggle="modal"
-                      data-bs-target="#modalCobrancasAluno"
-                      data-aluno-id="{{ aluno.id }}"
-                      data-aluno-nome="{{ aluno.nome|e }}">
-                <i class="bi bi-list-ul me-1"></i> Ver cobranças
-              </button>
-              {% endif %}
-              <button type="button" class="btn btn-primary btn-sm btn-gerar-cobranca" data-aluno-id="{{ aluno.id }}">
-                <i class="bi bi-plus-circle me-1"></i> Gerar cobrança
-              </button>
-              <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    {# Sub-modal: Mensalidade recorrente (cartão/PIX automático) #}
-    {% set _rec_gw = (recorrencia_por_academia or {}).get(aluno.id_academia) %}
-    {% if _rec_gw %}
-    <div class="modal fade sm-modal" id="modalRecorrente{{ aluno.id }}" tabindex="-1" aria-hidden="true">
-      <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content shadow-lg">
-          <div class="modal-header p-0">
-            <div class="sm-hero w-100" style="background:linear-gradient(135deg,#3730a3 0%,#6366f1 100%)">
-              <button type="button" class="sm-close" data-bs-dismiss="modal" aria-label="Fechar"><i class="bi bi-x-lg"></i></button>
-              <div class="sm-icon"><i class="bi bi-arrow-repeat"></i></div>
-              <div class="sm-title">Mensalidade recorrente</div>
-              <div class="sm-sub">{{ aluno.nome }}</div>
-            </div>
-          </div>
-          <div class="modal-body px-4 py-3">
-            <form method="POST" action="{{ url_for('financeiro.criar_assinatura_recorrente', aluno_id=aluno.id) }}">
-              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-              <div class="mb-3">
-                <label class="form-label small fw-semibold">Valor mensal <span class="text-danger">*</span></label>
-                <div class="mf-input-prefix"><span class="mf-prefix">R$</span>
-                  <input type="text" class="form-control form-control-sm" name="valor" placeholder="0,00" required></div>
-              </div>
-              {% set _rec_ops = (recorrencia_opcoes_por_academia or {}).get(aluno.id_academia) or [] %}
-              <div class="mb-2">
-                <label class="form-label small fw-semibold d-block">Forma de recorrência</label>
-                <div class="d-flex flex-column gap-2">
-                  {% for op in _rec_ops %}
-                  <div class="form-check">
-                    <input class="form-check-input" type="radio" name="opcao_recorrencia" value="{{ op.val }}" id="rec_{{ aluno.id }}_{{ loop.index }}" {% if loop.first %}checked{% endif %}>
-                    <label class="form-check-label small" for="rec_{{ aluno.id }}_{{ loop.index }}">
-                      {% if 'pix' in op.val %}<i class="bi bi-qr-code me-1 text-info"></i>{% else %}<i class="bi bi-credit-card me-1 text-primary"></i>{% endif %}{{ op.label }}
-                    </label>
-                  </div>
-                  {% endfor %}
-                </div>
-              </div>
-              <small class="text-muted d-block mb-3">
-                <i class="bi bi-info-circle"></i> Gera um link; o aluno cadastra cartão/PIX uma vez e passa a ser cobrado automaticamente todo mês. A baixa no sistema é automática.
-              </small>
-              <button type="submit" class="btn btn-primary w-100"><i class="bi bi-arrow-repeat me-1"></i> Gerar link de recorrência</button>
-            </form>
-          </div>
-        </div>
-      </div>
-    </div>
-    {% endif %}
-    {% endif %}
     {% endfor %}
-      </div>
-    </div>
     {% endfor %}
+      </tbody>
+    </table>
+    </div>
+
+    {% if alunos %}
+    <div class="al-rodape">
+      Mostrando {{ stats.total }} de {{ stats.total }} aluno{{ 's' if stats.total != 1 }}
+    </div>
+    {% endif %}
   </div>
 
   <div class="modal fade fin-det-modal" id="modalDetalhePagamentoMensalidade" tabindex="-1" aria-labelledby="modalDetalhePagamentoMensalidadeTitulo" aria-hidden="true">
@@ -2356,6 +1215,143 @@
     </div>
   </div>
   {% endif %}
+
+  {# Onde os modais do aluno clicado são injetados. Fica fora de #listaAlunos
+     para não entrar nos seletores da tabela. #}
+  <div id="alModaisHost"></div>
+
+  <script>
+  /* =====================================================================
+     Modais por aluno — carregamento sob demanda
+     =====================================================================
+     A lista manda só as linhas da tabela. Ao abrir as ações de um aluno,
+     buscamos os modais dele em alunos.modais_aluno, injetamos em
+     #alModaisHost e só então mandamos o Bootstrap abrir.
+
+     Como os modais passam a nascer depois do DOMContentLoaded, todo bloco
+     que fazia `document.querySelectorAll(...).forEach(...)` sobre eles
+     virou um inicializador registrado aqui: ele roda uma vez para cada
+     conjunto de modais injetado, recebendo a raiz do trecho novo.
+     ===================================================================== */
+  window.alInicializadores = [];
+  function alRegistrar(fn) {
+    window.alInicializadores.push(fn);
+  }
+
+  /* Açúcar para o padrão que dominava este arquivo:
+     `document.querySelectorAll(sel).forEach(fn)` sobre elementos de modal.
+     Agora roda a cada trecho injetado, com a raiz do trecho. */
+  function alPorElemento(sel, fn) {
+    alRegistrar(function (raiz) { raiz.querySelectorAll(sel).forEach(fn); });
+  }
+
+  var alModaisCarregados = null;   // id do aluno cujos modais estão no host
+
+  function alHost() {
+    return document.getElementById('alModaisHost');
+  }
+
+  function alCarregarModais(alunoId) {
+    alunoId = String(alunoId);
+    if (alModaisCarregados === alunoId) return Promise.resolve(alHost());
+    // A URL termina em /modais, não no id: âncora o 0 no trecho certo, senão
+    // toda busca ia para o aluno 0 e voltava 404.
+    var url = "{{ url_for('alunos.modais_aluno', aluno_id=0) }}".replace(/\/0\/modais$/, '/' + alunoId + '/modais');
+    return fetch(url, { credentials: 'same-origin', headers: { 'X-Requested-With': 'fetch' } })
+      .then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.text();
+      })
+      .then(function (html) {
+        var host = alHost();
+        // Um aluno por vez: trocar o conteúdo evita id duplicado no documento.
+        host.innerHTML = html;
+        alModaisCarregados = alunoId;
+        window.alInicializadores.forEach(function (fn) {
+          try { fn(host); } catch (e) { console.error('inicializador de modal falhou', e); }
+        });
+        return host;
+      });
+  }
+
+  /* Abre um modal do aluno, carregando o trecho antes se preciso. */
+  function alAbrirModalAluno(alunoId, modalId) {
+    return alCarregarModais(alunoId).then(function () {
+      var el = document.getElementById(modalId);
+      if (!el) return null;
+      var m = bootstrap.Modal.getOrCreateInstance(el);
+      m.show();
+      return m;
+    }).catch(function (e) {
+      console.error(e);
+      alert('Não foi possível carregar as ações deste aluno. Recarregue a página e tente de novo.');
+    });
+  }
+
+  document.addEventListener('click', function (ev) {
+    var botao = ev.target.closest('[data-aluno-modais]');
+    if (!botao) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    var id = botao.getAttribute('data-aluno-modais');
+    botao.classList.add('is-carregando');
+    alAbrirModalAluno(id, 'modalAcoes' + id).finally(function () {
+      botao.classList.remove('is-carregando');
+    });
+  });
+
+  document.addEventListener('DOMContentLoaded', function () {
+    // "Mais filtros": abre e fecha o painel avançado.
+    var botaoMais = document.getElementById('alMaisFiltros');
+    var painel = document.getElementById('alAvancado');
+    if (botaoMais && painel) {
+      botaoMais.addEventListener('click', function () {
+        var aberto = painel.hidden;
+        painel.hidden = !aberto;
+        botaoMais.setAttribute('aria-expanded', aberto ? 'true' : 'false');
+      });
+    }
+
+    // Linha inteira clicável quando ela leva a uma página (modo associação);
+    // no modo academia a própria linha já abre o modal via data-bs-toggle.
+    document.querySelectorAll('.al-linha[data-href]').forEach(function (tr) {
+      tr.addEventListener('click', function (ev) {
+        if (ev.target.closest('a, button')) return;
+        window.location = tr.dataset.href;
+      });
+    });
+
+    // Exportar: leva o que está na tela, com os filtros aplicados.
+    var btnExportar = document.getElementById('alExportar');
+    if (btnExportar) {
+      btnExportar.addEventListener('click', function () {
+        var linhas = [['Aluno', 'Idade/Matricula', 'Graduacao', 'Turma', 'Modalidade', 'Status']];
+        document.querySelectorAll('.al-linha').forEach(function (tr) {
+          var td = tr.querySelectorAll('td');
+          linhas.push([
+            (tr.querySelector('.al-nome') || {}).textContent || '',
+            (tr.querySelector('.al-meta') || {}).textContent || '',
+            td[1] ? td[1].textContent : '',
+            td[2] ? td[2].textContent : '',
+            td[3] ? td[3].textContent : '',
+            td[4] ? td[4].textContent : ''
+          ].map(function (c) { return String(c).replace(/\\s+/g, ' ').trim(); }));
+        });
+        var csv = linhas.map(function (l) {
+          return l.map(function (c) { return '"' + c.replace(/"/g, '""') + '"'; }).join(';');
+        }).join('\\n');
+        var url = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' }));
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = 'alunos.csv';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      });
+    }
+  });
+  </script>
 
   {% if not alunos %}
   <div class="empty-state">
@@ -2741,7 +1737,7 @@ document.addEventListener('DOMContentLoaded', function () {
     return d.innerHTML;
   }
 
-  document.querySelectorAll('.modal-aluno').forEach(function (modal) {
+  alPorElemento('.modal-aluno', function (modal) {
     var tabs  = modal.querySelectorAll('.ma-tab');
     var panes = modal.querySelectorAll('.ma-pane');
     var histPane = modal.querySelector('[data-pane="historico"]');
@@ -3033,20 +2029,19 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   function abrirModalStatusViaQuery() {
+    // Volta de um POST (registrar/estornar pagamento) com ?modal_status_aluno=ID:
+    // os modais desse aluno ainda não estão no DOM, então carregamos antes de abrir.
     const params = new URLSearchParams(window.location.search);
     const alunoId = params.get('modal_status_aluno');
     if (!alunoId) return;
-    const modalEl = document.getElementById(`modalStatusMensalidade${alunoId}`);
-    if (!modalEl) return;
-    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
-    modal.show();
+    alAbrirModalAluno(alunoId, `modalStatusMensalidade${alunoId}`);
     params.delete('modal_status_aluno');
     params.delete('_cb');
     const limpa = window.location.pathname + (params.toString() ? `?${params.toString()}` : '') + window.location.hash;
     window.history.replaceState({}, '', limpa);
   }
 
-  document.querySelectorAll('form.js-status-fin-form[data-aluno-id]').forEach(function (form) {
+  alPorElemento('form.js-status-fin-form[data-aluno-id]', function (form) {
     form.addEventListener('submit', function () {
       const alunoId = form.getAttribute('data-aluno-id') || '';
       let nextInput = form.querySelector('input[name="next"]');
@@ -3063,7 +2058,7 @@ document.addEventListener('DOMContentLoaded', function() {
   abrirModalStatusViaQuery();
 
   /* Paginação entre planos no modal Situação financeira */
-  document.querySelectorAll('.js-ms-plano-nav').forEach(function (nav) {
+  alPorElemento('.js-ms-plano-nav', function (nav) {
     var modal = nav.closest('.modal');
     if (!modal) return;
     var pages = modal.querySelectorAll('.js-ms-plano-page');
@@ -3092,7 +2087,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   });
 
-  document.querySelectorAll('#listaAlunos .form-reativar-aluno').forEach(function(form) {
+  alPorElemento('.form-reativar-aluno', function(form) {
     var modal = form.closest('.modal');
     if (!modal) return;
     var ck = modal.querySelector('.js-ck-gerar-mensal-reativar');
@@ -3257,7 +2252,7 @@ document.addEventListener('DOMContentLoaded', function() {
                        + (final <= 0 ? ' (registrada como isenta/paga)' : '');
   }
 
-  document.querySelectorAll('.form-financeiro-aluno').forEach(function(form) {
+  alPorElemento('.form-financeiro-aluno', function(form) {
     form.addEventListener('change', function() {
       atualizaBlocosFinanceiro(form);
       checarDisponibilidade(form);
@@ -3273,7 +2268,7 @@ document.addEventListener('DOMContentLoaded', function() {
     atualizaPreviewDesconto(form);
   });
 
-  document.querySelectorAll('#listaAlunos .modal').forEach(function(modalEl) {
+  alPorElemento('.modal', function(modalEl) {
     modalEl.querySelectorAll('.js-cancelar-mensalidades').forEach(function(ck) {
       const bloco = modalEl.querySelector('.js-cancelamento-periodo');
       if (!bloco) return;
@@ -3285,7 +2280,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   });
 
-  document.querySelectorAll('.btn-gerar-cobranca').forEach(function(btn) {
+  alPorElemento('.btn-gerar-cobranca', function(btn) {
     btn.addEventListener('click', function() {
       const modalContent = btn.closest('.modal-content');
       const form = modalContent.querySelector('.form-financeiro-aluno');
@@ -4240,7 +3235,7 @@ document.addEventListener('DOMContentLoaded', function() {
       if (avisoParcial) avisoParcial.classList.toggle('d-none', !algunsMarcados);
     }
 
-    document.querySelectorAll('[id^="modalDesistencia"]').forEach(function (modalEl) {
+    alPorElemento('[id^="modalDesistencia"]', function (modalEl) {
       var turmasData = [];
       var turmaIdx = 0;
 
@@ -4450,7 +3445,7 @@ document.addEventListener('DOMContentLoaded', function() {
   })();
 
   /* Modal matrícula em turma (modo academia) */
-  document.querySelectorAll('.modal-matricula-root').forEach(function (modal) {
+  alPorElemento('.modal-matricula-root', function (modal) {
     var urlGet = modal.getAttribute('data-url-get');
     var urlPost = modal.getAttribute('data-url-post');
     var loading = modal.querySelector('.mat-turma-loading');
