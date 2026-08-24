@@ -1,21 +1,28 @@
 {% extends "base_app.html" %}
-{% block title %}Meu currículo — Judô{% endblock %}
-{% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/curriculo.css') }}?v=3">
+{% from 'components/ui.html' import voltar with context %}
+{% set menu_ativo = 'curriculo' %}
+{% block title %}Currículo do atleta{% endblock %}
+
+{% block pagina_titulo %}Currículo do atleta{% endblock %}
+{% block pagina_subtitulo %}Dados, graduações e resultados — pronto para imprimir.{% endblock %}
+
+{# As ações da tela sobem para o cabeçalho do shell: antes o "Voltar" e o
+   "Exportar PDF" ficavam soltos numa barra dentro do conteúdo. #}
+{% block pagina_acoes %}
+  {% if not somente_leitura %}
+  <a href="{{ url_for('painel_aluno.curriculo_impressao') }}" class="sh__btn" target="_blank" rel="noopener">
+    <i class="bi bi-file-pdf"></i> Exportar PDF
+  </a>
+  {% endif %}
+  {{ voltar(back_url) }}
 {% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ asset('css/curriculo.css') }}">
+{% endblock %}
+
 {% block content %}
-<div class="container mt-4 pb-4 px-2 px-sm-3 px-md-4">
-  <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3 curriculo-top-actions">
-    {% set back_url = back_url or get_back_url_default() %}
-{% include 'components/botao_voltar.html' %}
-    {% if not somente_leitura %}
-    <div class="d-flex flex-wrap gap-2">
-      <a href="{{ url_for('painel_aluno.curriculo_impressao') }}" class="btn btn-danger btn-sm" target="_blank">
-        <i class="bi bi-file-pdf me-1"></i> Exportar PDF
-      </a>
-    </div>
-    {% endif %}
-  </div>
+<div>
 
   <div class="curriculo-cv shadow-sm rounded p-3 p-md-4 bg-white" id="curriculo-cv">
     <header class="cv-header">

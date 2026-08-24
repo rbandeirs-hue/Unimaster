@@ -1,158 +1,169 @@
 {% extends "base_app.html" %}
-{% block title %}Minhas Presenças — Aluno{% endblock %}
+{% from 'components/ui.html' import voltar, vazio with context %}
+{% set menu_ativo = 'presencas' %}
+{% block title %}Minhas presenças{% endblock %}
+
+{% block pagina_titulo %}Minhas presenças{% endblock %}
+{% block pagina_subtitulo %}Histórico de presença e o que foi dado em cada aula.{% endblock %}
+{% block pagina_acoes %}{{ voltar(voltar_url | default(url_for('painel_aluno.meu_perfil'))) }}{% endblock %}
+
+{% block extra_css %}
+<style>
+  .lin-pres { grid-template-columns: minmax(0, 1fr) 110px 90px; }
+  @media (max-width: 575.98px) { .lin-pres { grid-template-columns: minmax(0, 1fr) 90px 80px; } }
+
+  /* Atalhos de período: mesma altura e mesmo alvo de toque dos demais botões
+     do shell; o selecionado ganha o preenchimento escuro. */
+  .pres-atalhos { display: flex; flex-wrap: wrap; gap: var(--u-space-2); align-items: center; }
+
+  .pres-detalhe { padding: .9rem 1.25rem 1.1rem; background: #fdfcfa; border-bottom: 1px solid var(--sh-line); }
+  .pres-detalhe h3 {
+    font-size: .78rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--sh-ink-soft); margin: 0 0 .3rem;
+  }
+  .pres-detalhe p { margin: 0 0 .9rem; font-size: .9rem; white-space: pre-line; }
+  .pres-detalhe p:last-child { margin-bottom: 0; }
+  .pres-detalhe__privado { border-left: 3px solid var(--sh-ink); padding-left: .9rem; margin-bottom: 1rem; }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="container mt-4">
-    {% set back_url = voltar_url|default(url_for('painel_aluno.meu_perfil')) %}
-    <div class="mb-3">
-        {% include 'components/botao_voltar.html' %}
-    </div>
-    <h2 class="h4 fw-bold mb-3">Minhas Presenças</h2>
+<form method="get" id="form-presencas" class="lst-filtros">
+  {% if voltar_url and aluno %}<input type="hidden" name="aluno_id" value="{{ aluno.id }}">{% endif %}
 
-    <form method="get" class="mb-4" id="form-presencas">
-        {% if voltar_url and aluno %}<input type="hidden" name="aluno_id" value="{{ aluno.id }}">{% endif %}
-        <div class="row g-3 align-items-end">
-            {% if turmas_do_aluno %}
-            <div class="col-auto">
-                <label class="form-label small mb-0 fw-semibold">Turma</label>
-                <select name="turma_id" class="form-select form-select-sm" required onchange="this.form.submit()">
-                    {% for t in turmas_do_aluno %}
-                    <option value="{{ t.TurmaID }}" {% if turma_filtro_id == t.TurmaID %}selected{% endif %}>{{ t.Nome }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            {% endif %}
-            <div class="col-auto">
-                <label class="form-label small mb-0 fw-semibold">Ano</label>
-                <select name="ano" class="form-select form-select-sm" onchange="document.getElementById('form-presencas').submit()">
-                    {% for y in range(2024, 2031) %}
-                    <option value="{{ y }}" {% if ano == y %}selected{% endif %}>{{ y }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="col-12">
-                <label class="form-label small mb-1 fw-semibold">Período</label>
-                <div class="d-flex flex-wrap gap-2 align-items-center">
-                    <a href="?turma_id={{ turma_filtro_id }}&ano={{ ano }}&atalho=ano" class="btn btn-sm {% if atalho == 'ano' or (not atalho and not mes_de and not mes_ate) %}btn-primary{% else %}btn-outline-secondary{% endif %}">Ano inteiro</a>
-                    <a href="?turma_id={{ turma_filtro_id }}&ano={{ ano_atual }}&atalho=este_mes" class="btn btn-sm {% if atalho == 'este_mes' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Este mês</a>
-                    <a href="?turma_id={{ turma_filtro_id }}&ano={{ ano_atual }}&atalho=ultimos_3" class="btn btn-sm {% if atalho == 'ultimos_3' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Últimos 3 meses</a>
-                    <a href="?turma_id={{ turma_filtro_id }}&ano={{ ano_atual }}&atalho=trimestre" class="btn btn-sm {% if atalho == 'trimestre' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Trimestre atual</a>
-                    <span class="text-muted mx-1">|</span>
-                    <span class="small text-muted">ou intervalo:</span>
-                    <select name="mes_de" class="form-select form-select-sm" style="width:auto" onchange="document.getElementById('form-presencas').submit()">
-                        <option value="">De</option>
-                        {% for m in range(1, 13) %}<option value="{{ m }}" {% if mes_de == m %}selected{% endif %}>{{ ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][m-1] }}</option>{% endfor %}
-                    </select>
-                    <select name="mes_ate" class="form-select form-select-sm" style="width:auto" onchange="document.getElementById('form-presencas').submit()">
-                        <option value="">Até</option>
-                        {% for m in range(1, 13) %}<option value="{{ m }}" {% if mes_ate == m %}selected{% endif %}>{{ ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][m-1] }}</option>{% endfor %}
-                    </select>
-                </div>
-            </div>
-        </div>
-    </form>
+  {% if turmas_do_aluno %}
+  <div class="lst-campo">
+    <label class="lst-campo__rotulo" for="turma_id">Turma</label>
+    <select name="turma_id" id="turma_id" required onchange="this.form.submit()">
+      {% for t in turmas_do_aluno %}
+      <option value="{{ t.TurmaID }}" {% if turma_filtro_id == t.TurmaID %}selected{% endif %}>{{ t.Nome }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
 
-    <div class="row g-3 mb-4">
-        <div class="col-md-4">
-            <div class="card border-0 shadow-sm">
-                <div class="card-body">
-                    <h6 class="text-muted">Total de aulas</h6>
-                    <p class="h4 mb-0">{{ total }}</p>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-4">
-            <div class="card border-0 shadow-sm">
-                <div class="card-body">
-                    <h6 class="text-muted">Presenças</h6>
-                    <p class="h4 mb-0 text-success">{{ presentes }}</p>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-4">
-            <div class="card border-0 shadow-sm">
-                <div class="card-body">
-                    <h6 class="text-muted">Percentual</h6>
-                    <p class="h4 mb-0">{{ "%.0f"|format((presentes / total * 100) if total > 0 else 0) }}%</p>
-                </div>
-            </div>
-        </div>
-    </div>
+  <div class="lst-campo lst-campo--curto">
+    <label class="lst-campo__rotulo" for="ano">Ano</label>
+    <select name="ano" id="ano" onchange="this.form.submit()">
+      {% for y in range(2024, 2031) %}
+      <option value="{{ y }}" {% if ano == y %}selected{% endif %}>{{ y }}</option>
+      {% endfor %}
+    </select>
+  </div>
 
-    {% if presencas %}
-    <div class="card border-0 shadow-sm">
-        <div class="card-body p-0">
-            <div class="table-responsive">
-                <table class="table table-hover mb-0">
-                    <thead class="table-light">
-                        <tr>
-                            <th>Data</th>
-                            <th>Status</th>
-                            <th class="text-end" style="min-width:7rem">Aula</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for p in presencas %}
-                        {% set tem_msg_prof = p.mensagem_professor_para_aluno and p.mensagem_professor_para_aluno.strip() %}
-                        {% set tem_aula_info = p.presente and (p.aula_observacao or p.aula_plano_texto or p.aula_plano_arquivo) %}
-                        {% set tem_detalhe = tem_aula_info or tem_msg_prof %}
-                        <tr>
-                            <td>
-                                <span class="fw-medium">{{ p.data_presenca|data_br }}</span>
-                                {% if p.horario_exibir %}
-                                <div class="small text-muted">{{ p.horario_exibir }}</div>
-                                {% endif %}
-                            </td>
-                            <td>
-                                <span class="badge {{ 'bg-success' if p.presente else 'bg-secondary' }}">
-                                    {{ 'Presente' if p.presente else 'Falta' }}
-                                </span>
-                            </td>
-                            <td class="text-end">
-                                {% if tem_detalhe %}
-                                <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="collapse" data-bs-target="#aula-detalhe-{{ loop.index }}" aria-expanded="false" aria-controls="aula-detalhe-{{ loop.index }}">
-                                    <i class="bi bi-journal-richtext"></i> Ver
-                                </button>
-                                {% else %}
-                                <span class="text-muted small">—</span>
-                                {% endif %}
-                            </td>
-                        </tr>
-                        {% if tem_detalhe %}
-                        <tr class="collapse table-light" id="aula-detalhe-{{ loop.index }}">
-                            <td colspan="3" class="small border-top-0 pt-0 pb-3">
-                                {% if tem_msg_prof %}
-                                <div class="alert alert-light border-primary border-opacity-25 py-2 mb-3">
-                                    <h6 class="fw-semibold text-primary mb-1"><i class="bi bi-person-lock me-1"></i>Mensagem do professor (só você vê)</h6>
-                                    <p class="mb-0" style="white-space: pre-line;">{{ p.mensagem_professor_para_aluno }}</p>
-                                </div>
-                                {% endif %}
-                                {% if p.aula_observacao %}
-                                <h6 class="fw-semibold text-secondary mb-1 mt-2"><i class="bi bi-chat-left-text me-1"></i>Observação</h6>
-                                <p class="mb-3" style="white-space: pre-line;">{{ p.aula_observacao }}</p>
-                                {% endif %}
-                                {% if p.aula_plano_texto %}
-                                <h6 class="fw-semibold text-secondary mb-1"><i class="bi bi-book me-1"></i>Plano de aula</h6>
-                                <p class="mb-3" style="white-space: pre-line;">{{ p.aula_plano_texto }}</p>
-                                {% endif %}
-                                {% if p.aula_plano_arquivo %}
-                                <h6 class="fw-semibold text-secondary mb-1"><i class="bi bi-paperclip me-1"></i>Arquivo do plano</h6>
-                                <a href="{{ url_for('static', filename='uploads/planos_aula/' + p.aula_plano_arquivo) }}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-secondary">
-                                    {{ p.aula_plano_arquivo_original or p.aula_plano_arquivo }}
-                                </a>
-                                {% endif %}
-                            </td>
-                        </tr>
-                        {% endif %}
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-    {% else %}
-    <div class="alert alert-info">
-        <i class="bi bi-info-circle me-2"></i>Nenhum registro de presença para o período selecionado.
-    </div>
-    {% endif %}
+  <div class="lst-campo lst-campo--curto">
+    <label class="lst-campo__rotulo" for="mes_de">De</label>
+    <select name="mes_de" id="mes_de" onchange="this.form.submit()">
+      <option value="">—</option>
+      {% for m in range(1, 13) %}
+      <option value="{{ m }}" {% if mes_de == m %}selected{% endif %}>{{ ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][m-1] }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="lst-campo lst-campo--curto">
+    <label class="lst-campo__rotulo" for="mes_ate">Até</label>
+    <select name="mes_ate" id="mes_ate" onchange="this.form.submit()">
+      <option value="">—</option>
+      {% for m in range(1, 13) %}
+      <option value="{{ m }}" {% if mes_ate == m %}selected{% endif %}>{{ ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][m-1] }}</option>
+      {% endfor %}
+    </select>
+  </div>
+</form>
+
+{% set _base = '?turma_id=' ~ (turma_filtro_id or '') %}
+<div class="pres-atalhos">
+  <a href="{{ _base }}&ano={{ ano }}&atalho=ano"
+     class="sh__btn {% if atalho == 'ano' or (not atalho and not mes_de and not mes_ate) %}sh__btn--forte{% endif %}">Ano inteiro</a>
+  <a href="{{ _base }}&ano={{ ano_atual }}&atalho=este_mes"
+     class="sh__btn {% if atalho == 'este_mes' %}sh__btn--forte{% endif %}">Este mês</a>
+  <a href="{{ _base }}&ano={{ ano_atual }}&atalho=ultimos_3"
+     class="sh__btn {% if atalho == 'ultimos_3' %}sh__btn--forte{% endif %}">Últimos 3 meses</a>
+  <a href="{{ _base }}&ano={{ ano_atual }}&atalho=trimestre"
+     class="sh__btn {% if atalho == 'trimestre' %}sh__btn--forte{% endif %}">Trimestre atual</a>
 </div>
+
+<div class="sh__faixa">
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Aulas no período</span>
+    <span class="sh__faixa-valor">{{ total }}</span>
+  </div>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Presenças</span>
+    <span class="sh__faixa-valor">{{ presentes }}</span>
+  </div>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Aproveitamento</span>
+    <span class="sh__faixa-valor">{{ "%.0f" | format((presentes / total * 100) if total > 0 else 0) }}%</span>
+  </div>
+</div>
+
+{% if presencas %}
+<div class="lst-quadro">
+  <div class="lst-quadro__topo">
+    <span class="lst-quadro__titulo">Aulas</span>
+    <span class="lst-quadro__meta">{{ presencas | length }} registro{{ 's' if presencas | length != 1 }}</span>
+  </div>
+  <div class="lst-linha lst-cab lin-pres">
+    <div>Data</div>
+    <div>Situação</div>
+    <div class="lst-fim">Aula</div>
+  </div>
+  {% for p in presencas %}
+  {% set tem_msg_prof = p.mensagem_professor_para_aluno and p.mensagem_professor_para_aluno.strip() %}
+  {% set tem_aula_info = p.presente and (p.aula_observacao or p.aula_plano_texto or p.aula_plano_arquivo) %}
+  {% set tem_detalhe = tem_aula_info or tem_msg_prof %}
+  <div class="lst-linha lst-item lin-pres">
+    <div>
+      <span class="lst-nome">{{ p.data_presenca | data_br }}</span>
+      {% if p.horario_exibir %}<span class="lst-sub">{{ p.horario_exibir }}</span>{% endif %}
+    </div>
+    <div>
+      <span class="lst-tag {{ 'lst-tag--ok' if p.presente else '' }}">{{ 'Presente' if p.presente else 'Falta' }}</span>
+    </div>
+    <div class="lst-fim">
+      {% if tem_detalhe %}
+      <button type="button" class="sh__btn" data-bs-toggle="collapse"
+              data-bs-target="#aula-detalhe-{{ loop.index }}" aria-expanded="false"
+              aria-controls="aula-detalhe-{{ loop.index }}">
+        <i class="bi bi-journal-richtext"></i> Ver
+      </button>
+      {% else %}<span class="lst-vazio-celula">—</span>{% endif %}
+    </div>
+  </div>
+  {% if tem_detalhe %}
+  <div class="collapse" id="aula-detalhe-{{ loop.index }}">
+    <div class="pres-detalhe">
+      {% if tem_msg_prof %}
+      <div class="pres-detalhe__privado">
+        <h3><i class="bi bi-person-lock"></i> Mensagem do professor — só você vê</h3>
+        <p>{{ p.mensagem_professor_para_aluno }}</p>
+      </div>
+      {% endif %}
+      {% if p.aula_observacao %}
+      <h3><i class="bi bi-chat-left-text"></i> Observação</h3>
+      <p>{{ p.aula_observacao }}</p>
+      {% endif %}
+      {% if p.aula_plano_texto %}
+      <h3><i class="bi bi-book"></i> Plano de aula</h3>
+      <p>{{ p.aula_plano_texto }}</p>
+      {% endif %}
+      {% if p.aula_plano_arquivo %}
+      <h3><i class="bi bi-paperclip"></i> Arquivo do plano</h3>
+      <p>
+        <a href="{{ url_for('static', filename='uploads/planos_aula/' + p.aula_plano_arquivo) }}"
+           target="_blank" rel="noopener" class="sh__btn">
+          {{ p.aula_plano_arquivo_original or p.aula_plano_arquivo }}
+        </a>
+      </p>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+  {% endfor %}
+</div>
+{% else %}
+{{ vazio('Nenhum registro de presença no período escolhido.', none, none, 'bi-clipboard-check') }}
+{% endif %}
 {% endblock %}
