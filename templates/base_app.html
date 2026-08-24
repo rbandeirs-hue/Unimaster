@@ -1,0 +1,271 @@
+{# =======================================================================
+   base_app.html — shell único do sistema logado
+   =======================================================================
+   Barra lateral + topo, para TODOS os modos de acesso (academia, admin,
+   federação, associação, professor, aluno, responsável e visitante).
+
+   Era o `base_academia.html`, que servia só o modo academia porque o menu
+   estava cravado no template. Agora a lateral vem de `utils/menu.py` pelo
+   context processor `injetar_shell`, e adicionar um modo é adicionar uma
+   lista em Python — não editar este arquivo.
+
+   Blocos: title, extra_css, topo, cabecalho, pagina_titulo,
+           pagina_subtitulo, pagina_acoes, conteudo_classe, content, extra_js
+
+   Vem do context processor (a view não precisa passar):
+     menu_grupos, menu_ativo, modo_shell, academia, academias, academia_id
+
+   Os cinco subsistemas do layout antigo (CSRF, tema escuro, formulários,
+   notificações e push) entram por components/_base_scripts.html — o MESMO
+   include do base.html. É o que impede a tela migrada de perder função.
+   ======================================================================= #}
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Academia — Unimaster Judô{% endblock %}</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%23C8102E'/%3E%3Cpath d='M50 20 L60 40 L50 50 L40 40 Z' fill='white'/%3E%3Cpath d='M30 60 L50 50 L70 60 L50 80 Z' fill='white'/%3E%3C/svg%3E">
+
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
+
+  <link rel="stylesheet" href="{{ asset('css/base/tokens.css') }}">
+  <link rel="stylesheet" href="{{ asset('css/base/ui.css') }}">
+  <link rel="stylesheet" href="{{ asset('css/base/shell.css') }}">
+  <link rel="stylesheet" href="{{ asset('css/base/theme.css') }}">
+  <link rel="stylesheet" href="{{ asset('css/components/botao_voltar.css') }}">
+  {% block extra_css %}{% endblock %}
+  <meta name="csrf-token" content="{{ csrf_token() }}">
+  <style>body { font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; }</style>
+</head>
+
+<body class="sh {% if layout_embed %}layout-embed{% endif %}">
+{% from 'components/_notificacoes_menu.html' import caixa_notificacoes with context %}
+
+  {# ------------------------------------------------------------ lateral #}
+  <aside class="sh__side" id="shSide">
+    <a class="sh__marca" href="{{ url_for('academia.painel_academia', academia_id=academia_id) }}">
+      <span class="sh__marca-icone"><i class="bi bi-shield-fill-check"></i></span>
+      <span class="sh__marca-texto">Unimaster <em>Judô</em></span>
+    </a>
+
+    {# A lateral vem pronta de utils/menu.py: lista de (rótulo do grupo, itens),
+       já sem os itens que o usuário não pode ver. O template só desenha. #}
+    {% set _modos = modos_disponiveis() %}
+    {% set _modo_atual = session.get('modo_painel') or 'academia' %}
+    {% set _icone_modo = {'admin':'bi-shield-lock','federacao':'bi-flag','associacao':'bi-diagram-3',
+                          'academia':'bi-house-door','professor':'bi-person-badge',
+                          'aluno':'bi-mortarboard','responsavel':'bi-people',
+                          'visitante':'bi-person'} %}
+    <div class="sh__side-label">Modo de acesso</div>
+    {% if _modos|length > 1 %}
+    <div class="sh__modo-wrap">
+      <button type="button" class="sh__modo" id="shModoBtn" aria-haspopup="true" aria-expanded="false"
+              title="Trocar modo de acesso">
+        <i class="bi {{ _icone_modo.get(_modo_atual, 'bi-house-door') }}"></i>
+        <span>{{ modo_atual_nome() or _modo_atual|capitalize }}</span>
+        <i class="bi bi-chevron-expand ms-auto"></i>
+      </button>
+      <div class="sh__modo-lista" id="shModoLista" role="menu">
+        {% for _id, _nome in _modos %}
+        <a role="menuitem" class="sh__modo-opcao {% if _id == _modo_atual %}is-atual{% endif %}"
+           href="{{ url_for('painel.escolher_modo', modo=_id) }}">
+          <i class="bi {{ _icone_modo.get(_id, 'bi-circle') }}"></i>
+          <span>{{ _nome }}</span>
+          {% if _id == _modo_atual %}<i class="bi bi-check2 ms-auto"></i>{% endif %}
+        </a>
+        {% endfor %}
+      </div>
+    </div>
+    {% else %}
+    {# Um modo só: nada a trocar, então não finge ser um seletor. #}
+    <div class="sh__modo sh__modo--fixo">
+      <i class="bi {{ _icone_modo.get(_modo_atual, 'bi-house-door') }}"></i>
+      <span>{{ modo_atual_nome() or _modo_atual|capitalize }}</span>
+    </div>
+    {% endif %}
+
+    <div class="sh__side-rolagem">
+    {% for rotulo_grupo, itens in (menu_grupos or []) %}
+      {% if rotulo_grupo %}<div class="sh__side-label">{{ rotulo_grupo }}</div>{% endif %}
+      <nav class="sh__nav">
+        {% for it in itens %}
+        <a href="{{ it.href }}" class="sh__nav-item {% if menu_ativo == it.chave %}is-ativo{% endif %}"
+           {% if menu_ativo == it.chave %}aria-current="page"{% endif %}>
+          <i class="bi {{ it.icone }}"></i>{{ it.rotulo }}
+        </a>
+        {% endfor %}
+      </nav>
+    {% endfor %}
+    </div>
+
+    {# Usuário no rodapé da lateral, com atalho para o cadastro e para sair. #}
+    <div class="sh__side-usuario">
+      {% if current_user.foto %}
+      <img src="{{ url_for('static', filename='uploads/' ~ current_user.foto) }}" alt="" class="sh__side-avatar">
+      {% else %}
+      <span class="sh__side-avatar"><i class="bi bi-person-fill"></i></span>
+      {% endif %}
+      <a href="{{ url_for('usuarios.meu_perfil') }}" class="sh__side-usuario-txt">
+        <span class="sh__side-usuario-nome">{{ current_user.nome }}</span>
+        <span class="sh__side-usuario-link">Editar cadastro</span>
+      </a>
+      <a href="{{ url_for('auth.logout') }}" class="sh__side-sair" title="Sair" aria-label="Sair">
+        <i class="bi bi-box-arrow-right"></i>
+      </a>
+    </div>
+  </aside>
+  <div class="sh__overlay d-none" id="shOverlay"></div>
+
+  <div class="sh__main">
+
+    {# --------------------------------------------------------------- topo #}
+    {# Telas de edição trocam a barra do topo pela barra de contexto delas. #}
+    {% block topo %}
+    <header class="sh__top">
+      <div class="sh__top-esq">
+        <button class="sh__menu-botao" id="shMenuBotao" type="button" aria-label="Abrir menu">
+          <i class="bi bi-list"></i>
+        </button>
+        {# Busca leva à lista de alunos filtrada — a rota já aceita `busca`.
+           Só aparece para quem administra alunos: aluno, responsável e
+           visitante não têm lista para buscar, e a caixa ficaria decorativa. #}
+        {% if modo_shell in ('academia', 'admin', 'federacao', 'associacao', 'professor') %}
+        <form method="GET" action="{{ url_for('alunos.lista_alunos') }}" class="sh__busca" role="search">
+          {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
+          <i class="bi bi-search"></i>
+          <input type="search" name="busca" class="sh__busca-input"
+                 placeholder="Buscar aluno" aria-label="Buscar aluno">
+        </form>
+        {% endif %}
+        {% if academias and academias|length > 1 %}
+        {# Indica onde o usuário está trabalhando e leva à troca de academia,
+           em vez de pedir que ele saia e entre de novo. #}
+        <a class="sh__academia-atual" href="{{ url_for('academia.escolher_academia') }}"
+           title="Trocar a academia desta sessão">
+          <i class="bi bi-shield"></i>
+          {{ (academias | selectattr('id', 'equalto', academia_id) | map(attribute='nome') | first)
+             or (academia.nome if academia else '') }}
+          <i class="bi bi-chevron-expand"></i>
+        </a>
+        {% endif %}
+      </div>
+
+      <div class="sh__top-dir">
+        {{ caixa_notificacoes('Shell', 'sh__sino') }}
+
+        {# Alternar tema: o shell não tinha o botão, e as telas já migradas
+           haviam perdido o modo noturno sem que isso fosse decidido. #}
+        <button class="sh__sino" type="button" id="btnDarkModeDesktop"
+                onclick="toggleDarkMode()" aria-label="Alternar modo noturno" title="Modo noturno">
+          <i class="bi bi-moon-fill" id="iconDarkModeDesktop"></i>
+        </button>
+
+        <div class="dropdown">
+          <button class="sh__usuario" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+            {% if current_user.foto %}
+            <img src="{{ url_for('static', filename='uploads/' ~ current_user.foto) }}" alt="" class="sh__avatar">
+            {% else %}
+            <span class="sh__avatar">
+              {{ (current_user.nome or '?').split()[0][0] }}{{ (current_user.nome or ' ').split()[-1][0] if (current_user.nome or '').split()|length > 1 else '' }}
+            </span>
+            {% endif %}
+            <span>
+              {# Sem `d-block`: ele é !important e impedia esconder o nome no celular. #}
+              <span class="sh__usuario-nome">{{ current_user.nome }}</span>
+              <span class="sh__usuario-papel">
+                {{ current_user.perfil }}{% if academia %} · {{ academia.nome }}{% endif %}
+              </span>
+            </span>
+            <i class="bi bi-chevron-down sh__usuario-papel"></i>
+          </button>
+          <ul class="dropdown-menu dropdown-menu-end">
+            <li><a class="dropdown-item" href="{{ url_for('painel.home') }}"><i class="bi bi-house me-2"></i>Início</a></li>
+            <li><a class="dropdown-item" href="{{ url_for('usuarios.meu_perfil') }}"><i class="bi bi-person me-2"></i>Meu perfil</a></li>
+            <li><hr class="dropdown-divider"></li>
+            <li><a class="dropdown-item text-danger" href="{{ url_for('auth.logout') }}"><i class="bi bi-box-arrow-right me-2"></i>Sair</a></li>
+          </ul>
+        </div>
+      </div>
+    </header>
+    {% endblock %}
+
+    {# ----------------------------------------------------------- conteúdo #}
+    <main class="sh__conteudo {% block conteudo_classe %}{% endblock %}">
+      {% block cabecalho %}
+      <div class="sh__cabecalho">
+        <div>
+          <h1 class="sh__titulo">{% block pagina_titulo %}{% endblock %}</h1>
+          <p class="sh__subtitulo">{% block pagina_subtitulo %}{% endblock %}</p>
+        </div>
+        <div class="sh__acoes">{% block pagina_acoes %}{% endblock %}</div>
+      </div>
+      {% endblock %}
+
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+
+  {# Mensagens do sistema seguem como toast, igual ao layout antigo. #}
+  <div class="toast-container position-fixed top-0 end-0 p-3" style="z-index:1100" id="toast-container">
+    {% with messages = get_flashed_messages(with_categories=True) %}
+      {% for category, message in messages %}
+        {% set bg = 'text-bg-info' %}
+        {% if category == 'success' %}{% set bg = 'text-bg-success' %}
+        {% elif category == 'danger' %}{% set bg = 'text-bg-danger' %}
+        {% elif category == 'warning' %}{% set bg = 'text-bg-warning' %}{% endif %}
+        <div class="toast align-items-center {{ bg }} border-0 mb-2" role="alert" data-bs-delay="5000">
+          <div class="d-flex">
+            <div class="toast-body">{{ message }}</div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Fechar"></button>
+          </div>
+        </div>
+      {% endfor %}
+    {% endwith %}
+  </div>
+
+  {# Os MESMOS scripts do base.html: CSRF, tema escuro, formulários,
+     notificações e push. O toast é iniciado por tema.js — iniciar aqui de
+     novo mostraria a mensagem duas vezes. #}
+  {% include 'components/_base_scripts.html' %}
+
+  <script>
+    // Gaveta da lateral no celular/tablet
+    (function () {
+      var botao = document.getElementById('shMenuBotao');
+      var side = document.getElementById('shSide');
+      var overlay = document.getElementById('shOverlay');
+      if (!botao || !side || !overlay) return;
+      function fechar() { side.classList.remove('is-aberta'); overlay.classList.add('d-none'); }
+      botao.addEventListener('click', function () {
+        side.classList.toggle('is-aberta');
+        overlay.classList.toggle('d-none', !side.classList.contains('is-aberta'));
+      });
+      overlay.addEventListener('click', fechar);
+      document.addEventListener('keydown', function (e) { if (e.key === 'Escape') fechar(); });
+    })();
+
+    // Seletor de modo de acesso na lateral
+    (function () {
+      var botao = document.getElementById('shModoBtn');
+      if (!botao) return;                 // usuário com um modo só
+      var caixa = botao.parentElement;
+      function fechar() {
+        caixa.classList.remove('is-aberto');
+        botao.setAttribute('aria-expanded', 'false');
+      }
+      botao.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var abrindo = !caixa.classList.contains('is-aberto');
+        caixa.classList.toggle('is-aberto', abrindo);
+        botao.setAttribute('aria-expanded', abrindo ? 'true' : 'false');
+      });
+      document.addEventListener('click', function (e) { if (!caixa.contains(e.target)) fechar(); });
+      document.addEventListener('keydown', function (e) { if (e.key === 'Escape') fechar(); });
+    })();
+  </script>
+  {% block extra_js %}{% endblock %}
+</body>
+</html>

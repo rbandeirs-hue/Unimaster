@@ -1,0 +1,44 @@
+{# =======================================================================
+   Caixa de notificações — usada pelas duas bases
+   =======================================================================
+   O JS que a alimenta é static/js/base/notificacoes-push.js, que procura os
+   atributos `data-notif-*`. Como o markup é o mesmo nos dois layouts, a tela
+   migrada para o shell mantém badge, listagem e push funcionando.
+
+   Uso:  {{ caixa_notificacoes('Desktop') }}   — o sufixo só diferencia os
+   ids quando o mesmo layout desenha a caixa duas vezes (celular e desktop).
+   ======================================================================= #}
+
+{% macro caixa_notificacoes(sufixo='', classe_botao='sh__sino', largura='22rem') %}
+<div class="dropdown" data-notif-root>
+  <button class="{{ classe_botao }} position-relative" type="button"
+          id="dropdownNotif{{ sufixo }}" data-bs-toggle="dropdown"
+          data-bs-auto-close="outside" aria-expanded="false" title="Notificações">
+    <i class="bi bi-bell"></i>
+    <span class="notif-inbox-badge d-none" data-notif-badge>0</span>
+  </button>
+  <div class="dropdown-menu dropdown-menu-end shadow notif-inbox-menu p-0"
+       aria-labelledby="dropdownNotif{{ sufixo }}"
+       style="width: {{ largura }}; max-width: 92vw;">
+    <div class="d-flex align-items-center justify-content-between gap-2 px-3 py-2 border-bottom small fw-semibold text-start">
+      <span>Notificações</span>
+      <a class="small text-decoration-none fw-normal text-nowrap" href="{{ url_for('painel.home') }}">Ir ao painel</a>
+    </div>
+    <div class="notif-inbox-body text-start" data-notif-list-container
+         style="min-height: 7rem; max-height: 20rem; overflow-y: auto;">
+      <p class="text-muted small text-center py-3 px-3 mb-0">Abra para carregar.</p>
+    </div>
+    <div class="border-top px-2 py-2 d-grid gap-1" data-notif-toolbar>
+      <button type="button" class="btn btn-sm btn-outline-primary js-notif-marcar-todas">Marcar todas como lidas</button>
+      <button type="button" class="btn btn-sm btn-outline-secondary js-notif-limpar-lidas"
+              title="Remove da lista só as que já estão lidas">Limpar lidas da lista</button>
+    </div>
+    <div class="border-top px-2 py-2">
+      <button type="button" class="btn btn-sm btn-outline-secondary w-100 btn-ativar-push"
+              onclick="window.ativarPush && window.ativarPush()">
+        <i class="bi bi-bell me-1"></i> Notificações no aparelho
+      </button>
+    </div>
+  </div>
+</div>
+{% endmacro %}

@@ -349,6 +349,31 @@ def load_user(user_id):
 
 
 # ============================================================
+# 🔹 asset(): link de estático com versão, para o cache não servir CSS velho
+# ============================================================
+_ASSET_VERSAO = {}
+
+
+@app.template_global()
+def asset(filename):
+    """`url_for('static', ...)` com `?v=<mtime>` no fim.
+
+    Em produção rodam 3 workers gunicorn com template em cache: sem isto, o
+    navegador segue servindo o CSS/JS anterior depois do deploy e a tela
+    aparece meio nova, meio velha. O mtime é lido uma vez por processo — em
+    DEBUG relê sempre, senão o desenvolvedor edita e não vê.
+    """
+    versao = _ASSET_VERSAO.get(filename)
+    if versao is None or app.debug:
+        try:
+            versao = str(int(os.path.getmtime(os.path.join(app.static_folder, filename))))
+        except OSError:
+            versao = "0"
+        _ASSET_VERSAO[filename] = versao
+    return url_for("static", filename=filename) + "?v=" + versao
+
+
+# ============================================================
 # 🔹 Context processor: múltiplos modos (para botão Trocar modo)
 # ============================================================
 @app.context_processor
@@ -433,45 +458,101 @@ def injetar_modos_e_contexto():
 
 
 # ============================================================
-# 🔹 Context processor: contexto do shell da academia
+# 🔹 Context processor: shell (lateral, escopo e item ativo do menu)
 # ============================================================
+
+# Mapa blueprint → chave do menu. Existe para não precisar escrever
+# `{% set menu_ativo = '...' %}` nas ~180 telas: na esmagadora maioria o
+# blueprint já identifica sozinho onde o usuário está. A tela sobrescreve
+# quando o blueprint atende mais de um item da lateral.
+MENU_POR_BLUEPRINT = {
+    "academia": "gerenciamento",
+    "alunos": "alunos",
+    "aniversariante_live": "aniversariantes",
+    "associacao": "gerenciamento",
+    "cadastros": "cadastros",
+    "calendario": "calendario",
+    "competicoes": "competicoes",
+    "configuracoes": "configuracoes",
+    "eventos_competicoes": "eventos",
+    "federacao": "gerenciamento",
+    "financeiro": "financeiro",
+    "formularios": "formularios",
+    "painel": "gerenciamento",
+    "painel_aluno": "gerenciamento",
+    "painel_responsavel": "gerenciamento",
+    "precadastro": "precadastro",
+    "presencas": "presencas",
+    "professor": "gerenciamento",
+    "professores": "professores",
+    "solicitacoes": "solicitacoes",
+    "turmas": "turmas",
+    "usuarios": "usuarios",
+    "visitante": "gerenciamento",
+    "zempo": "zempo",
+}
+
+
 @app.context_processor
-def injetar_contexto_academia():
-    """Garante `academia`, `academias` e `academia_id` no shell da academia.
+def injetar_shell():
+    """Monta o que a barra lateral precisa, em qualquer modo de acesso.
 
-    O `base_academia.html` monta a lateral e o seletor de academia com estas
-    três variáveis. Nem toda tela que usa o shell as passa no render_template
-    (calendário, usuários, presença…) e, sem elas, a lateral perdia o item
-    Professores e o seletor de academia sumia — era possível entrar na tela mas
-    não navegar a partir dela.
+    Substitui o antigo `injetar_contexto_academia`, que devolvia {} fora do
+    modo academia — motivo pelo qual o shell só servia a um modo. Agora:
 
-    Só custa consulta para quem está no modo academia; e o que a view passa no
-    render_template continua tendo prioridade sobre o que sai daqui.
+      * `modo_shell`   — modo de acesso corrente;
+      * `menu_grupos`  — a lateral já resolvida por utils.menu;
+      * `menu_ativo`   — deduzido do blueprint (a tela pode sobrescrever);
+      * `academia`, `academias`, `academia_id` — escopo, para os modos que
+        trabalham dentro de uma academia.
+
+    O que a view passa no render_template continua tendo prioridade sobre o
+    que sai daqui.
     """
-    from flask import has_request_context, session, g
+    from flask import has_request_context, session, g, request
     from flask_login import current_user
 
     if not has_request_context():
         return {}
     if not getattr(current_user, "is_authenticated", False):
         return {}
-    if session.get("modo_painel") != "academia":
-        return {}
 
-    cache = getattr(g, "_shell_academia", None)
-    if cache is None:
-        cache = {"academia": None, "academias": [], "academia_id": None}
+    cache = getattr(g, "_shell_ctx", None)
+    if cache is not None:
+        return dict(cache)
+
+    from utils.contexto_logo import _modo_efetivo
+    modo = session.get("modo_painel") or _modo_efetivo(current_user) or "academia"
+
+    ctx = {"academia": None, "academias": [], "academia_id": None}
+
+    # O escopo de academia só é consultado por quem trabalha dentro de uma —
+    # para aluno, responsável e visitante seria consulta jogada fora.
+    if modo in ("academia", "professor"):
         try:
             from blueprints.academia.routes import _get_academia_gerenciamento
             academia_id, academias = _get_academia_gerenciamento()
-            cache["academia_id"] = academia_id
-            cache["academias"] = academias
-            cache["academia"] = next(
+            ctx["academia_id"] = academia_id
+            ctx["academias"] = academias
+            ctx["academia"] = next(
                 (a for a in academias if a.get("id") == academia_id), None)
         except Exception as e:
-            app.logger.info("Contexto do shell da academia indisponível (%s)", e)
-        g._shell_academia = cache
-    return dict(cache)
+            app.logger.info("Escopo de academia indisponível (%s)", e)
+
+    try:
+        from utils.menu import menu_do_modo
+        menu_grupos = menu_do_modo(modo, ctx)
+    except Exception as e:
+        # Lateral vazia é ruim; página em erro 500 é pior.
+        app.logger.warning("Menu lateral indisponível (%s)", e)
+        menu_grupos = []
+
+    ctx["modo_shell"] = modo
+    ctx["menu_grupos"] = menu_grupos
+    ctx["menu_ativo"] = MENU_POR_BLUEPRINT.get(request.blueprint or "", "")
+
+    g._shell_ctx = ctx
+    return dict(ctx)
 
 
 # ============================================================
