@@ -1,7 +1,14 @@
 {% extends "base_app.html" %}
-{% block title %}Minhas Mensalidades — Aluno{% endblock %}
+{% from 'components/ui.html' import voltar with context %}
+{% set menu_ativo = 'financeiro' %}
+{% block title %}Minhas mensalidades{% endblock %}
+
+{% block pagina_titulo %}Minhas mensalidades{% endblock %}
+{% block pagina_subtitulo %}Situação de cada mês, segunda via e pagamento por PIX.{% endblock %}
+{% block pagina_acoes %}{{ voltar(voltar_url | default(url_for('painel_aluno.meu_perfil'))) }}{% endblock %}
+
 {% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/financeiro/responsive.css') }}?v=1">
+<link rel="stylesheet" href="{{ asset('css/financeiro/responsive.css') }}">
 {% endblock %}
 {% block content %}
 {% macro modal_pix(uid, copia, qrcode, valor) %}
@@ -21,7 +28,7 @@
         <label class="form-label small text-muted d-block text-start">PIX copia e cola</label>
         <div class="input-group mb-2">
           <input type="text" class="form-control" id="pixcopia{{ uid }}" value="{{ copia }}" readonly>
-          <button class="btn btn-outline-primary" type="button" onclick="copiarPix('pixcopia{{ uid }}', this)"><i class="bi bi-clipboard"></i></button>
+          <button class="sh__btn" type="button" onclick="copiarPix('pixcopia{{ uid }}', this)"><i class="bi bi-clipboard"></i></button>
         </div>
         {% endif %}
         <div class="alert alert-success py-2 px-3 mb-0 text-start small" role="status">
@@ -55,7 +62,7 @@
         </p>
         {% endif %}
         {% if link %}
-        <a href="{{ link }}" target="_blank" rel="noopener" class="btn btn-success w-100 mb-2">
+        <a href="{{ link }}" target="_blank" rel="noopener" class="sh__btn sh__btn--forte w-100 mb-2">
           <i class="bi bi-credit-card me-1"></i> Pagar online
         </a>
         {% endif %}
@@ -80,7 +87,7 @@
         <div class="input-group mb-2">
           <input type="text" class="form-control" id="pixacad{{ uid }}"
                  value="{{ pix_academia.codigo }}" readonly>
-          <button class="btn btn-outline-primary" type="button"
+          <button class="sh__btn" type="button"
                   onclick="copiarPix('pixacad{{ uid }}', this)"><i class="bi bi-clipboard"></i></button>
         </div>
         <div class="alert alert-warning py-2 px-3 mb-0 text-start small" role="status">
@@ -94,86 +101,56 @@
   </div>
 </div>
 {% endmacro %}
-<div class="container mt-4 px-2 px-sm-3">
-    {% set back_url = voltar_url|default(url_for('painel_aluno.meu_perfil')) %}
-    <div class="mb-3">
-        {% include 'components/botao_voltar.html' %}
-    </div>
-    <h2 class="h4 fw-bold mb-3">Minhas Mensalidades</h2>
-
-    {# Dashboard cards #}
-    <div class="row g-3 mb-4">
-        <div class="col-6 col-md-3">
-            <div class="card border-0 shadow-sm h-100">
-                <div class="card-body py-3">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <span class="text-muted small">Pagas</span>
-                        <span class="badge bg-success fs-6">{{ contagens.get('pago', 0) }}</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="card border-0 shadow-sm h-100">
-                <div class="card-body py-3">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <span class="text-muted small">Pendentes</span>
-                        <span class="badge bg-warning text-dark fs-6">{{ contagens.get('pendente', 0) }}</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="card border-0 shadow-sm h-100">
-                <div class="card-body py-3">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <span class="text-muted small">Atrasadas</span>
-                        <span class="badge bg-danger fs-6">{{ contagens.get('atrasado', 0) }}</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="card border-0 shadow-sm h-100">
-                <div class="card-body py-3">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <span class="text-muted small">Aguardando</span>
-                        <span class="badge bg-info fs-6">{{ contagens.get('aguardando_confirmacao', 0) }}</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
+{# A contagem por situação vira a faixa de indicadores do shell: uma linha
+   no topo, no lugar de quatro cartões com badge colorido dentro. #}
+<div class="sh__faixa">
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Pagas</span>
+    <span class="sh__faixa-valor">{{ contagens.get('pago', 0) }}</span>
+  </div>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Pendentes</span>
+    <span class="sh__faixa-valor">{{ contagens.get('pendente', 0) }}</span>
+  </div>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Atrasadas</span>
+    <span class="sh__faixa-valor sh__faixa-valor--alerta">{{ contagens.get('atrasado', 0) }}</span>
+  </div>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Aguardando</span>
+    <span class="sh__faixa-valor">{{ contagens.get('aguardando_confirmacao', 0) }}</span>
+  </div>
+</div>
 
     {# Filtros — ano atual já selecionado, mas pode trocar; todos os meses disponível #}
-    <form method="GET" class="row g-2 mb-3">
-        {% if voltar_url and aluno %}<input type="hidden" name="aluno_id" value="{{ aluno.id }}">{% endif %}
-        <div class="col-auto">
-            <select name="mes" class="form-select form-select-sm" style="width:auto;" onchange="this.form.submit()">
-                <option value="" {% if not mes %}selected{% endif %}>Todos os meses</option>
-                {% for i in range(1, 13) %}
-                <option value="{{ i }}" {% if mes == i %}selected{% endif %}>{{ ['','Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][i] }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="col-auto">
-            <select name="ano" class="form-select form-select-sm" style="width:auto;" onchange="this.form.submit()">
-                {% for a in range(ano_atual, ano_atual - 5, -1) %}
-                <option value="{{ a }}" {% if ano == a %}selected{% endif %}>{{ a }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="col-auto">
-            <button type="submit" class="btn btn-sm btn-outline-secondary">Filtrar</button>
-        </div>
-    </form>
+<form method="GET" class="lst-filtros">
+  {% if voltar_url and aluno %}<input type="hidden" name="aluno_id" value="{{ aluno.id }}">{% endif %}
+  <div class="lst-campo lst-campo--curto">
+    <label class="lst-campo__rotulo" for="f-mes">Mês</label>
+    <select name="mes" id="f-mes" onchange="this.form.submit()">
+      <option value="" {% if not mes %}selected{% endif %}>Todos</option>
+      {% for i in range(1, 13) %}
+      <option value="{{ i }}" {% if mes == i %}selected{% endif %}>{{ ['','Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][i] }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="lst-campo lst-campo--curto">
+    <label class="lst-campo__rotulo" for="f-ano">Ano</label>
+    <select name="ano" id="f-ano" onchange="this.form.submit()">
+      {% for a in range(ano_atual, ano_atual - 5, -1) %}
+      <option value="{{ a }}" {% if ano == a %}selected{% endif %}>{{ a }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="lst-filtros__acoes"><button type="submit" class="sh__btn">Filtrar</button></div>
+</form>
 
     {% if mensalidades or avulsas %}
-    <div class="card border-0 shadow-sm mb-4">
-        <div class="card-header bg-light">
-            <h6 class="mb-0"><i class="bi bi-calendar-check me-2"></i>Mensalidades</h6>
+    <div class="lst-quadro">
+        <div class="lst-quadro__topo">
+            <span class="lst-quadro__titulo"><i class="bi bi-calendar-check"></i> Mensalidades</span>
         </div>
-        <div class="card-body p-0">
+        <div>
             {% if mensalidades %}
             <div class="table-responsive">
                 <table class="table table-hover mb-0 mensalidades-table">
@@ -214,20 +191,20 @@
                             <td data-label="Ação">
                                 {% if m.status_efetivo in ['pendente','atrasado'] and m.status != 'aguardando_confirmacao' %}
                                 {% if m.asaas_tipo == 'PIX' and (m.asaas_pix_copia_cola or m.asaas_pix_qrcode) %}
-                                <button type="button" class="btn btn-sm btn-success mb-1" data-bs-toggle="modal" data-bs-target="#modalPix{{ m.id }}">
+                                <button type="button" class="sh__btn btn-success mb-1" data-bs-toggle="modal" data-bs-target="#modalPix{{ m.id }}">
                                     <i class="bi bi-qr-code me-1"></i> Pagar PIX
                                 </button>
                                 {% elif m.asaas_tipo == 'BOLETO' and m.asaas_boleto_url %}
-                                <a href="{{ m.asaas_boleto_url }}" target="_blank" rel="noopener" class="btn btn-sm btn-success mb-1">
+                                <a href="{{ m.asaas_boleto_url }}" target="_blank" rel="noopener" class="sh__btn btn-success mb-1">
                                     <i class="bi bi-upc-scan me-1"></i> Pagar Boleto
                                 </a>
                                 {% elif m.asaas_tipo == 'LINK' and m.asaas_boleto_url %}
                                 {% if m.asaas_pix_qrcode %}
-                                <button type="button" class="btn btn-sm btn-success mb-1" data-bs-toggle="modal" data-bs-target="#modalLink{{ m.id }}">
+                                <button type="button" class="sh__btn btn-success mb-1" data-bs-toggle="modal" data-bs-target="#modalLink{{ m.id }}">
                                     <i class="bi bi-credit-card me-1"></i> Pagar online
                                 </button>
                                 {% else %}
-                                <a href="{{ m.asaas_boleto_url }}" target="_blank" rel="noopener" class="btn btn-sm btn-success mb-1">
+                                <a href="{{ m.asaas_boleto_url }}" target="_blank" rel="noopener" class="sh__btn btn-success mb-1">
                                     <i class="bi bi-credit-card me-1"></i> Pagar online
                                 </a>
                                 {% endif %}
@@ -236,16 +213,16 @@
                                    nenhum e o aluno ficava sem como pagar. O link emite
                                    na hora do clique. #}
                                 <a href="{{ url_for('painel_aluno.pagar_mensalidade', registro_id=m.id) }}"
-                                   class="btn btn-sm btn-success mb-1">
+                                   class="sh__btn btn-success mb-1">
                                     <i class="bi bi-credit-card me-1"></i> Pagar
                                 </a>
                                 {% endif %}
-                                <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalInformar{{ m.id }}">
+                                <button type="button" class="sh__btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalInformar{{ m.id }}">
                                     <i class="bi bi-upload me-1"></i> Informar
                                 </button>
                                 {% elif m.status_efetivo == 'pago' %}
                                 {% if m.comprovante_url %}
-                                <a href="{{ url_for('static', filename='uploads/' + m.comprovante_url) }}" target="_blank" class="btn btn-sm btn-outline-secondary" title="Ver comprovante">
+                                <a href="{{ url_for('static', filename='uploads/' + m.comprovante_url) }}" target="_blank" class="sh__btn btn-outline-secondary" title="Ver comprovante">
                                     <i class="bi bi-file-earmark-image"></i>
                                 </a>
                                 {% endif %}
@@ -265,11 +242,11 @@
         </div>
     </div>
 
-    <div class="card border-0 shadow-sm">
-        <div class="card-header bg-light">
-            <h6 class="mb-0"><i class="bi bi-receipt me-2"></i>Cobranças avulsas</h6>
+    <div class="lst-quadro">
+        <div class="lst-quadro__topo">
+            <span class="lst-quadro__titulo"><i class="bi bi-receipt"></i> Cobranças avulsas</span>
         </div>
-        <div class="card-body p-0">
+        <div>
             {% if avulsas %}
             <div class="table-responsive">
                 <table class="table table-hover mb-0">
@@ -296,20 +273,20 @@
                             <td>
                                 {% if a.status in ['pendente','atrasado'] %}
                                     {% if a.asaas_tipo == 'PIX' and (a.asaas_pix_copia_cola or a.asaas_pix_qrcode) %}
-                                    <button type="button" class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#modalPixAv{{ a.id }}">
+                                    <button type="button" class="sh__btn btn-success" data-bs-toggle="modal" data-bs-target="#modalPixAv{{ a.id }}">
                                         <i class="bi bi-qr-code me-1"></i> Pagar PIX
                                     </button>
                                     {% elif a.asaas_tipo == 'BOLETO' and a.asaas_boleto_url %}
-                                    <a href="{{ a.asaas_boleto_url }}" target="_blank" rel="noopener" class="btn btn-sm btn-success">
+                                    <a href="{{ a.asaas_boleto_url }}" target="_blank" rel="noopener" class="sh__btn btn-success">
                                         <i class="bi bi-upc-scan me-1"></i> Pagar Boleto
                                     </a>
                                     {% elif a.asaas_tipo == 'LINK' and a.asaas_boleto_url %}
                                     {% if a.asaas_pix_qrcode %}
-                                    <button type="button" class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#modalLinkAv{{ a.id }}">
+                                    <button type="button" class="sh__btn btn-success" data-bs-toggle="modal" data-bs-target="#modalLinkAv{{ a.id }}">
                                         <i class="bi bi-credit-card me-1"></i> Pagar online
                                     </button>
                                     {% else %}
-                                    <a href="{{ a.asaas_boleto_url }}" target="_blank" rel="noopener" class="btn btn-sm btn-success">
+                                    <a href="{{ a.asaas_boleto_url }}" target="_blank" rel="noopener" class="sh__btn btn-success">
                                         <i class="bi bi-credit-card me-1"></i> Pagar online
                                     </a>
                                     {% endif %}
@@ -331,13 +308,11 @@
         </div>
     </div>
     {% else %}
-    <div class="card border-0 shadow-sm">
-        <div class="card-body">
-            <p class="text-muted mb-0">Nenhuma cobrança registrada para este período.</p>
-        </div>
+    <div class="lst-vazio">
+      <i class="bi bi-receipt"></i>
+      <p>Nenhuma cobrança registrada para este período.</p>
     </div>
     {% endif %}
-</div>
 
 {% for m in mensalidades %}
 {% if m.status_efetivo in ['pendente','atrasado'] and m.status != 'aguardando_confirmacao' %}
@@ -363,8 +338,8 @@
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-primary">Enviar</button>
+                    <button type="button" class="sh__btn" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="sh__btn sh__btn--forte">Enviar</button>
                 </div>
             </form>
         </div>
@@ -420,7 +395,7 @@ function copiarPix(inputId, btn) {
 </script>
 
 <style>
-@media (max-width: 767px) {
+@media (max-width: 767.98px) {
     .mensalidades-thead { display: none; }
     .mensalidades-table { display: block; }
     .mensalidades-table tbody { display: block; }

@@ -1,25 +1,24 @@
 {% extends "base_app.html" %}
-{% block title %}Associação — Academias{% endblock %}
+{% from 'components/ui.html' import voltar with context %}
+{% set menu_ativo = 'associacao' %}
+{% block title %}Treinar em outra academia{% endblock %}
+
+{% block pagina_titulo %}Treinar em outra academia{% endblock %}
+{% block pagina_subtitulo %}
+  {% if associacao_nome %}Academias vinculadas à {{ associacao_nome }}{% if associacao_endereco %} · {{ associacao_endereco }}{% endif %}
+  {% else %}Academias da sua associação onde você pode pedir para treinar.{% endif %}
+{% endblock %}
+{% block pagina_acoes %}{{ voltar(back_url) }}{% endblock %}
+
 {% block content %}
-<div class="container mt-4 px-2 px-sm-3">
-    {% set back_url = back_url or get_back_url_default() %}
-{% include 'components/botao_voltar.html' %}
-    <h2 class="h5 fw-bold mb-3">Associação</h2>
+<div>
     {% if associacao_nome %}
-    <div class="mb-4">
-        <p class="text-muted small mb-1">Academias vinculadas à <strong>{{ associacao_nome }}</strong></p>
-        {% if associacao_endereco %}
-        <p class="text-muted small mb-0">
-            <i class="bi bi-geo-alt me-1"></i> {{ associacao_endereco }}
-        </p>
-        {% endif %}
-    </div>
     {% endif %}
 
     {% if academias %}
     <!-- Botão para escolher academia e solicitar visita -->
     <div class="mb-3">
-        <button type="button" class="btn btn-primary w-100" data-bs-toggle="modal" data-bs-target="#modalEscolherAcademia">
+        <button type="button" class="sh__btn sh__btn--forte w-100" data-bs-toggle="modal" data-bs-target="#modalEscolherAcademia">
             <i class="bi bi-search me-2"></i> Escolher Academia e Solicitar Visita
         </button>
     </div>
@@ -66,7 +65,7 @@
                     <!-- Turmas com dias e horários -->
                     {% if acad.turmas and acad.turmas|length > 0 %}
                     <div class="w-100 mb-2">
-                        <button type="button" class="btn btn-sm btn-outline-primary w-100" data-bs-toggle="modal" data-bs-target="#modalHorarios{{ acad.id }}">
+                        <button type="button" class="sh__btn btn-outline-primary w-100" data-bs-toggle="modal" data-bs-target="#modalHorarios{{ acad.id }}">
                             <i class="bi bi-eye me-1"></i> Ver Horários de Treino ({{ acad.turmas|length }})
                         </button>
                     </div>
@@ -74,13 +73,13 @@
                     
                     <div class="w-100 mb-2">
                         {% set solicitacoes_url = url_for('painel_aluno.solicitacoes_academia', academia_destino_id=acad.id) if not voltar_url or 'painel_responsavel' not in (voltar_url|string) else '#' %}
-                        <a href="{{ solicitacoes_url }}" class="btn btn-sm btn-outline-info w-100">
+                        <a href="{{ solicitacoes_url }}" class="sh__btn btn-outline-info w-100">
                             <i class="bi bi-info-circle me-1"></i> Ver solicitações{% if acad.solicitacoes and acad.solicitacoes|length > 0 %} ({{ acad.solicitacoes|length }}){% endif %}
                         </a>
                     </div>
                     
                     {% set solicitar_url = url_for('painel_aluno.solicitar_visita', academia_destino_id=acad.id) if not voltar_url or 'painel_responsavel' not in (voltar_url|string) else '#' %}
-                    <a href="{{ solicitar_url }}" class="btn btn-primary btn-sm w-100 mt-auto" title="Solicitar visita nesta academia">
+                    <a href="{{ solicitar_url }}" class="sh__btn sh__btn--forte w-100 mt-auto" title="Solicitar visita nesta academia">
                         <i class="bi bi-geo-alt me-1"></i> Solicitar visita
                     </a>
                 </div>
@@ -181,7 +180,7 @@
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+                <button type="button" class="sh__btn" data-bs-dismiss="modal">Fechar</button>
             </div>
         </div>
     </div>
@@ -255,23 +254,28 @@
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+                <button type="button" class="sh__btn" data-bs-dismiss="modal">Fechar</button>
             </div>
         </div>
     </div>
 </div>
 
 <style>
-.academia-card { border-color: var(--dark-bg, #212529) !important; border-width: 2px; }
-.academia-item { transition: opacity 0.3s ease; }
+/* O cartão de academia usava borda preta de 2px com !important; passa a
+   seguir o desenho do shell — moldura fina, e o destaque só no hover. */
+.academia-card {
+  border: 1px solid var(--sh-line) !important;
+  border-radius: var(--u-radius);
+  transition: border-color var(--u-transition), transform var(--u-transition);
+}
+.academia-card:hover { border-color: var(--sh-ink) !important; transform: translateY(-2px); }
+.academia-item { transition: opacity .3s ease; }
 .academia-item.hidden { display: none; }
-.modal-body .card { transition: transform 0.2s ease, box-shadow 0.2s ease; }
-.modal-body .card:hover { transform: translateY(-4px); box-shadow: 0 8px 20px rgba(0,0,0,0.15) !important; }
-.modal-body .card.border-primary { border-color: #0d6efd; }
-.modal-body .card.border-info { border-color: #0dcaf0; }
-.modal-body .card.border-success { border-color: #198754; }
-.modal-body .card.border-warning { border-color: #ffc107; }
-.modal-body .card.border-secondary { border-color: #6c757d; }
+
+/* Dentro do modal a cor deixa de diferenciar item: todas as molduras iguais,
+   como no resto do sistema. */
+.modal-body .card { border-color: var(--sh-line) !important; transition: border-color var(--u-transition); }
+.modal-body .card:hover { border-color: var(--sh-ink) !important; }
 </style>
 <script>
 document.addEventListener('DOMContentLoaded', function() {

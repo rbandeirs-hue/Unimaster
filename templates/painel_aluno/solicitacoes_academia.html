@@ -1,70 +1,81 @@
 {% extends "base_app.html" %}
-{% block title %}Solicitações de Visita — {{ academia.nome }}{% endblock %}
+{% from 'components/ui.html' import voltar with context %}
+{% set menu_ativo = 'associacao' %}
+{% block title %}Solicitações de visita — {{ academia.nome }}{% endblock %}
+
+{% block pagina_titulo %}Solicitações de visita{% endblock %}
+{% block pagina_subtitulo %}{{ academia.nome }}{% endblock %}
+{% block pagina_acoes %}
+  <a href="{{ url_for('painel_aluno.solicitar_visita', academia_destino_id=academia.id) }}" class="sh__btn sh__btn--forte">
+    <i class="bi bi-plus-lg"></i> Nova solicitação
+  </a>
+  {{ voltar(url_for('painel_aluno.associacao')) }}
+{% endblock %}
+
+{% block extra_css %}
+<style>
+  /* Situação vira faixa lateral, no lugar de uma borda inteira colorida:
+     o olho encontra o estado sem a cor tomar o cartão. */
+  .sol-cartao {
+    background: #fff;
+    border: 1px solid var(--sh-line);
+    border-left: 3px solid var(--sh-line);
+    border-radius: var(--u-radius);
+    padding: 1.15rem 1.35rem;
+  }
+  .sol-cartao.is-ok { border-left-color: #16713c; }
+  .sol-cartao.is-erro { border-left-color: #a4131f; }
+  .sol-cartao.is-espera { border-left-color: #d19a1e; }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="container mt-4 px-2 px-sm-3">
-    {% set back_url = url_for('painel_aluno.associacao') %}
-    {% include 'components/botao_voltar.html' %}
+<div>
     
-    <h2 class="h5 fw-bold mb-3">Solicitações de Visita</h2>
-    
-    <!-- Card da Academia -->
-    <div class="card shadow-sm mb-4">
-        <div class="card-body">
-            <div class="row align-items-center">
-                <div class="col-md-8">
-                    <h5 class="card-title mb-2">{{ academia.nome }}</h5>
-                    {% if academia.endereco_completo %}
-                    <p class="text-muted small mb-1">
-                        <i class="bi bi-geo-alt me-1"></i> {{ academia.endereco_completo }}
-                    </p>
-                    {% endif %}
-                    {% if gestor_destino %}
-                    <p class="text-muted small mb-0">
-                        <i class="bi bi-person me-1"></i> <strong>Professor Responsável:</strong> {{ gestor_destino.nome }}
-                        {% if gestor_destino.email %}<small>({{ gestor_destino.email }})</small>{% endif %}
-                    </p>
-                    {% endif %}
-                </div>
-                <div class="col-md-4 text-md-end mt-3 mt-md-0">
-                    <a href="{{ url_for('painel_aluno.solicitar_visita', academia_destino_id=academia.id) }}" class="btn btn-primary">
-                        <i class="bi bi-plus-circle me-1"></i> Nova Solicitação
-                    </a>
-                </div>
-            </div>
-        </div>
+    {# Academia de destino e associação eram dois cartões empilhados só para
+       mostrar endereço; viram a faixa do shell, que já é o lugar do contexto
+       da tela. A ação principal sobe para o cabeçalho. #}
+    <div class="sh__faixa">
+      <div class="sh__faixa-item">
+        <span class="sh__faixa-rotulo">Academia de destino</span>
+        <span class="sh__faixa-valor" style="font-size:1.05rem">{{ academia.nome }}</span>
+        {% if academia.endereco_completo %}<span class="lst-sub">{{ academia.endereco_completo }}</span>{% endif %}
+      </div>
+      {% if gestor_destino %}
+      <div class="sh__faixa-item">
+        <span class="sh__faixa-rotulo">Professor responsável</span>
+        <span class="sh__faixa-valor" style="font-size:1.05rem">{{ gestor_destino.nome }}</span>
+        {% if gestor_destino.email %}<span class="lst-sub">{{ gestor_destino.email }}</span>{% endif %}
+      </div>
+      {% endif %}
+      {% if associacao_endereco %}
+      <div class="sh__faixa-item">
+        <span class="sh__faixa-rotulo">Associação</span>
+        <span class="sh__faixa-valor" style="font-size:1.05rem">{{ academia.associacao_nome }}</span>
+        <span class="lst-sub">{{ associacao_endereco }}</span>
+      </div>
+      {% endif %}
     </div>
-    
-    <!-- Card da Associação -->
-    {% if associacao_endereco %}
-    <div class="card shadow-sm mb-4 border-info">
-        <div class="card-body">
-            <h6 class="card-title mb-2"><i class="bi bi-building me-1"></i> Associação: {{ academia.associacao_nome }}</h6>
-            <p class="text-muted small mb-0">
-                <i class="bi bi-geo-alt me-1"></i> {{ associacao_endereco }}
-            </p>
-        </div>
-    </div>
-    {% endif %}
-    
+
     <!-- Lista de Solicitações -->
     {% if solicitacoes %}
     <div class="row g-3">
         {% for sol in solicitacoes %}
         <div class="col-12">
-            <div class="card shadow-sm h-100 {% if sol.status == 'aprovado_destino' %}border-success{% elif sol.status in ['rejeitado_origem', 'rejeitado_destino'] %}border-danger{% elif sol.status == 'pendente_origem' %}border-warning{% elif sol.status == 'pendente_destino' %}border-info{% endif %}">
-                <div class="card-body">
+            <div class="sol-cartao {% if sol.status == 'aprovado_destino' %}is-ok{% elif sol.status in ['rejeitado_origem', 'rejeitado_destino'] %}is-erro{% else %}is-espera{% endif %}">
+                <div>
                     <div class="d-flex justify-content-between align-items-start mb-3">
                         <div>
                             {% if sol.status == 'aprovado_destino' %}
-                            <span class="badge bg-success fs-6"><i class="bi bi-check-circle me-1"></i> Visita Agendada</span>
+                            <span class="lst-tag lst-tag--ok"><i class="bi bi-check-circle me-1"></i> Visita Agendada</span>
                             {% elif sol.status == 'pendente_origem' %}
-                            <span class="badge bg-warning text-dark fs-6"><i class="bi bi-clock me-1"></i> Aguardando Aprovação da Sua Academia</span>
+                            <span class="lst-tag"><i class="bi bi-clock me-1"></i> Aguardando Aprovação da Sua Academia</span>
                             {% elif sol.status == 'pendente_destino' %}
-                            <span class="badge bg-info fs-6"><i class="bi bi-clock me-1"></i> Aguardando Aprovação da Academia Destino</span>
+                            <span class="lst-tag"><i class="bi bi-clock me-1"></i> Aguardando Aprovação da Academia Destino</span>
                             {% elif sol.status == 'rejeitado_origem' %}
-                            <span class="badge bg-danger fs-6"><i class="bi bi-x-circle me-1"></i> Rejeitada pela Sua Academia</span>
+                            <span class="lst-tag lst-tag--alerta"><i class="bi bi-x-circle me-1"></i> Rejeitada pela Sua Academia</span>
                             {% elif sol.status == 'rejeitado_destino' %}
-                            <span class="badge bg-danger fs-6"><i class="bi bi-x-circle me-1"></i> Rejeitada pela Academia Destino</span>
+                            <span class="lst-tag lst-tag--alerta"><i class="bi bi-x-circle me-1"></i> Rejeitada pela Academia Destino</span>
                             {% endif %}
                         </div>
                         <small class="text-muted">{{ sol.criado_em.strftime('%d/%m/%Y %H:%M') if sol.criado_em else '' }}</small>

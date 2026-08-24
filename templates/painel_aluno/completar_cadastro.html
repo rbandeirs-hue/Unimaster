@@ -1,5 +1,10 @@
 {% extends "base_app.html" %}
+{% set menu_ativo = 'gerenciamento' %}
 {% block title %}Complete o cadastro{% endblock %}
+
+{% block pagina_titulo %}Complete o cadastro{% endblock %}
+{% block pagina_subtitulo %}Só o que falta para a ficha ficar completa.{% endblock %}
+
 {% block content %}
 {# Primeiro acesso: só os campos que faltam, de todos os alunos ligados a este
    login, na mesma tela. Um formulário só, um botão só. #}
@@ -18,29 +23,17 @@
 {% set resp = session.get('modo_painel') == 'responsavel' %}
 {% set total = blocos | map(attribute='pendentes') | map('length') | sum %}
 
-<div class="container my-4" style="max-width: 660px;">
-  <div class="card border-0 shadow-sm" style="border-radius:16px;overflow:hidden;">
-    <div class="card-body p-4">
-      <div class="text-center mb-3">
-        <div style="width:54px;height:54px;border-radius:14px;background:#e7f1ff;color:#0d6efd;display:inline-flex;align-items:center;justify-content:center;font-size:1.6rem;margin-bottom:.5rem;">
-          <i class="bi bi-person-vcard"></i>
-        </div>
-        <h4 class="fw-bold mb-1">
-          {{ 'Complete o cadastro' if resp else 'Complete seu cadastro' }}
-        </h4>
-        <p class="text-muted mb-0">
-          {{ total }} informa{{ 'ção' if total == 1 else 'ções' }}
-          {% if blocos|length > 1 %}
-          em {{ blocos|length }} alunos sob sua responsabilidade
-          {% endif %}
-          para a ficha ficar completa.
-        </p>
-      </div>
-
-      <p class="text-muted small">
-        Turma, graduação e academia são preenchidas pela secretaria —
-        aqui ficam só os dados pessoais.
-      </p>
+<div class="frm" style="max-width: 660px">
+  <div class="frm__secao">
+    <div class="frm__titulo"><i class="bi bi-person-vcard"></i>
+      {{ 'Complete o cadastro' if resp else 'Complete seu cadastro' }}
+    </div>
+    <p class="frm__ajuda">
+      {{ total }} informa{{ 'ção' if total == 1 else 'ções' }}
+      {%- if blocos | length > 1 %} em {{ blocos | length }} alunos sob sua responsabilidade{% endif %}
+      para a ficha ficar completa. Turma, graduação e academia são preenchidas
+      pela secretaria — aqui ficam só os dados pessoais.
+    </p>
 
       <form method="POST" action="{{ url_for('painel_aluno.completar_cadastro') }}" autocomplete="off">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -85,19 +78,18 @@
         </div>
         {% endfor %}
 
-        <button type="submit" class="btn btn-success w-100 mt-4">
+        <button type="submit" class="sh__btn sh__btn--forte w-100 mt-4">
           <i class="bi bi-check2-circle me-1"></i> Salvar e continuar
         </button>
       </form>
 
-      <p class="text-muted small text-center mt-3 mb-0">
+      <p class="lst-sub text-center mt-3 mb-0" style="white-space: normal">
         Algum dado está errado na ficha? Fale com a secretaria da academia.
       </p>
-    </div>
   </div>
 
-  <div class="text-center mt-3">
-    <a href="{{ url_for('auth.logout') }}" class="btn btn-link btn-sm text-muted">Sair</a>
+  <div class="text-center">
+    <a href="{{ url_for('auth.logout') }}" class="sh__btn">Sair</a>
   </div>
 </div>
 {% endblock %}

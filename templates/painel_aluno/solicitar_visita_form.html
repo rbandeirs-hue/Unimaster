@@ -1,14 +1,16 @@
 {% extends "base_app.html" %}
+{% from 'components/ui.html' import voltar with context %}
+{% set menu_ativo = 'associacao' %}
 {% block title %}Solicitar visita — {{ academia_destino.nome }}{% endblock %}
+
+{% block pagina_titulo %}Solicitar visita{% endblock %}
+{% block pagina_subtitulo %}{{ academia_destino.nome }}{% endblock %}
+{% block pagina_acoes %}{{ voltar(back_url) }}{% endblock %}
+
 {% block content %}
-<div class="container mt-4 px-2 px-sm-3" style="max-width: 560px;">
-    {% set back_url = back_url or get_back_url_default() %}
-{% include 'components/botao_voltar.html' %}
-    <div class="card shadow-sm">
-        <div class="card-header bg-primary text-white">
-            <h5 class="mb-0"><i class="bi bi-geo-alt me-2"></i> Solicitar visita</h5>
-        </div>
-        <div class="card-body p-4">
+<div class="frm" style="max-width: 620px">
+    <div class="frm__secao">
+        <div class="frm__titulo"><i class="bi bi-geo-alt"></i> Dados da visita</div>
             <p class="mb-3">Solicitar visita em <strong>{{ academia_destino.nome }}</strong>. Escolha a turma e a data em que pretende frequentar. Após aprovação, você aparecerá na lista de chamada.</p>
             {% if turmas %}
             <form method="post">
@@ -41,8 +43,8 @@
                 </div>
                 <input type="hidden" name="datas_visita" id="datas_visita_submit" value="">
                 <div class="d-flex gap-2">
-                    <button type="submit" class="btn btn-primary" id="btn-submit"><i class="bi bi-send me-1"></i> Enviar solicitação</button>
-                    <a href="{{ url_for('painel_aluno.associacao') }}" class="btn btn-outline-secondary">Cancelar</a>
+                    <button type="submit" class="sh__btn sh__btn--forte" id="btn-submit"><i class="bi bi-send me-1"></i> Enviar solicitação</button>
+                    <a href="{{ url_for('painel_aluno.associacao') }}" class="sh__btn">Cancelar</a>
                 </div>
             </form>
             {% else %}

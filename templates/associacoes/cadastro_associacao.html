@@ -1,17 +1,16 @@
 {% extends "base_app.html" %}
+{% from 'components/ui.html' import voltar with context %}
+{% set menu_ativo = 'associacoes' %}
 {% block title %}Cadastro de Associação{% endblock %}
-{% block content %}
-<div class="container mt-5">
-    <div class="mb-4 text-center">
-        <h2 class="display-6 fw-bold text-primary">Cadastrar Associação</h2>
-        <p class="lead text-muted">Preencha os dados para registrar uma nova associação.</p>
-    </div>
 
-    <div class="card shadow-lg mx-auto" style="max-width: 850px; border-radius: 1rem;">
-        <div class="card-header bg-primary text-white" style="border-radius: 1rem 1rem 0 0;">
-            <h5 class="mb-0"><i class="bi bi-diagram-3 me-2"></i> Dados da Associação</h5>
-        </div>
-        <div class="card-body p-4">
+{% block pagina_titulo %}Cadastrar Associação{% endblock %}
+{% block pagina_subtitulo %}Preencha os dados para registrar uma nova associação.{% endblock %}
+{% block pagina_acoes %}{{ voltar(back_url) }}{% endblock %}
+
+{% block content %}
+<div class="frm">
+    <div class="frm__secao">
+        <div class="frm__titulo"><i class="bi bi-diagram-3"></i> Dados da Associação</div>
             <form method="POST" enctype="multipart/form-data">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="next" value="{{ back_url }}">
@@ -53,7 +52,7 @@
                         <label for="cep" class="form-label fw-semibold">CEP</label>
                         <div class="input-group">
                             <input type="text" id="cep" name="cep" class="form-control" placeholder="00000-000" maxlength="10">
-                            <button type="button" class="btn btn-outline-secondary" id="btnBuscarCEP" title="Buscar endereço pelo CEP">
+                            <button type="button" class="sh__btn" id="btnBuscarCEP" title="Buscar endereço pelo CEP">
                                 <i class="bi bi-search"></i>
                             </button>
                         </div>
@@ -120,15 +119,14 @@
                     {% if not modalidades %}<small class="text-muted">Nenhuma modalidade cadastrada. Cadastre em Configurações.</small>{% endif %}
                 </div>
 
-                <div class="d-flex justify-content-between pt-2">
-                    {% set back_url = back_url or get_back_url_default() %}
-{% include 'components/botao_voltar.html' %}
-                    <button type="submit" class="btn btn-success btn-lg">
-                        <i class="bi bi-save-fill me-2"></i> Salvar Associação
+                {# O "Voltar" subiu para o cabeçalho do shell; aqui fica só a
+                   ação que conclui o formulário. #}
+                <div class="frm__acoes">
+                    <button type="submit" class="sh__btn sh__btn--forte">
+                        <i class="bi bi-save"></i> Salvar associação
                     </button>
                 </div>
             </form>
-        </div>
     </div>
 </div>
 <script>
