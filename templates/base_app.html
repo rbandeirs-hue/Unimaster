@@ -45,6 +45,11 @@
 {% from 'components/_notificacoes_menu.html' import caixa_notificacoes with context %}
 
   {# ------------------------------------------------------------ lateral #}
+  {# Telas de portão (escolher academia, escolher modo, sem vínculo) pedem uma
+     decisão antes de o usuário entrar: oferecer a lateral ali só levaria de
+     volta para a própria tela. Elas fazem `{% set shell_sem_lateral = true %}`
+     e ficam com o shell sem menu — mantendo tema, CSRF e notificações. #}
+  {% if not shell_sem_lateral %}
   <aside class="sh__side" id="shSide">
     <a class="sh__marca" href="{{ url_for('academia.painel_academia', academia_id=academia_id) }}">
       <span class="sh__marca-icone"><i class="bi bi-shield-fill-check"></i></span>
@@ -118,17 +123,20 @@
     </div>
   </aside>
   <div class="sh__overlay d-none" id="shOverlay"></div>
+  {% endif %}
 
-  <div class="sh__main">
+  <div class="sh__main {% if shell_sem_lateral %}sh__main--sem-lateral{% endif %}">
 
     {# --------------------------------------------------------------- topo #}
     {# Telas de edição trocam a barra do topo pela barra de contexto delas. #}
     {% block topo %}
     <header class="sh__top">
       <div class="sh__top-esq">
+        {% if not shell_sem_lateral %}
         <button class="sh__menu-botao" id="shMenuBotao" type="button" aria-label="Abrir menu">
           <i class="bi bi-list"></i>
         </button>
+        {% endif %}
         {# Busca leva à lista de alunos filtrada — a rota já aceita `busca`.
            Só aparece para quem administra alunos: aluno, responsável e
            visitante não têm lista para buscar, e a caixa ficaria decorativa. #}
