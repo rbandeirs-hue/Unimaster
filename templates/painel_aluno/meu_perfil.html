@@ -1,177 +1,108 @@
 {% extends "base_app.html" %}
-{% block title %}Meu Perfil – Aluno{% endblock %}
+{% from 'components/ui.html' import celula %}
+{% set menu_ativo = 'gerenciamento' %}
+{% block title %}{% block perfil_title %}Meu perfil{% endblock %}{% endblock %}
+
+{% block pagina_titulo %}{% block perfil_titulo %}Meu perfil{% endblock %}{% endblock %}
+{% block pagina_subtitulo %}{% block perfil_sub %}Seus dados, seu treino e seus atalhos.{% endblock %}{% endblock %}
+
+{# O modo responsável reaproveita esta tela inteira: ele estende este arquivo,
+   preenche os blocos `perfil_*` e redefine as rotas abaixo. Antes eram dois
+   arquivos de 604 linhas com 85% de conteúdo igual, e corrigir um significava
+   lembrar de corrigir o outro.
+
+   O `{% raw %}{% set %}{% endraw %}` do filho roda antes do corpo desta base, então basta ele
+   declarar as rotas que mudam; as demais caem no padrão do modo aluno. #}
+{% set rota_perfil        = rota_perfil        | default('painel_aluno.meu_perfil') %}
+{% set rota_turma         = rota_turma         | default('painel_aluno.minha_turma') %}
+{% set rota_presencas     = rota_presencas     | default('painel_aluno.minhas_presencas') %}
+{% set rota_curriculo     = rota_curriculo     | default('painel_aluno.curriculo') %}
+{% set rota_mensalidades  = rota_mensalidades  | default('painel_aluno.minhas_mensalidades') %}
+{% set rota_calendario    = rota_calendario    | default('calendario.aluno') %}
+{% set rota_sim_graduacao = rota_sim_graduacao | default('painel_aluno.simular_graduacao_prevista') %}
+{% set rota_sim_categoria = rota_sim_categoria | default('painel_aluno.simular_categorias') %}
+{% set rota_associacao    = rota_associacao    | default('painel_aluno.associacao') %}
+{# O modo responsável navega sempre com `aluno_id` na URL, porque ele pode ter
+   mais de um aluno. No modo aluno o dicionário é vazio e nada muda. #}
+{% set rota_args          = rota_args          | default({}) %}
+{% set perfil_next        = perfil_next        | default(url_for(rota_perfil, **rota_args)) %}
 
 {% block content %}
-<div class="container mt-4">
-    <div class="mb-4">
-        <h2 class="fw-bold text-primary mb-1">Meu Perfil</h2>
-        <p class="text-muted mb-0">Informações pessoais e atalhos rápidos</p>
+{% block perfil_seletor %}{% endblock %}
+
+<div class="perfil-grade">
+
+  {# ------------------------------------------------------- cartão do aluno #}
+  <aside class="perfil-cartao">
+    <div class="perfil-foto-wrap">
+      {% if aluno and aluno.foto %}
+      <img src="{{ url_for('static', filename='uploads/' + aluno.foto) }}" alt="Foto do aluno" class="perfil-foto">
+      {% else %}
+      <div class="perfil-foto-placeholder"><i class="bi bi-person-fill"></i></div>
+      {% endif %}
+    </div>
+    <h2 class="perfil-nome">{{ aluno.nome }}</h2>
+
+    <div class="perfil-dados">
+      <div class="perfil-item"><span class="perfil-label">Academia</span><span class="perfil-valor">{{ aluno.academia_nome or '—' }}</span></div>
+      <div class="perfil-item"><span class="perfil-label">Turma</span><span class="perfil-valor">{{ aluno.turma_nome or '—' }}</span></div>
+      <div class="perfil-item"><span class="perfil-label">Modalidades</span><span class="perfil-valor">
+        {%- if aluno.modalidades_nomes and aluno.modalidades_nomes != '-' -%}
+          {{ aluno.modalidades_nomes }}
+        {%- elif aluno.modalidades -%}
+          {%- if aluno.modalidades[0] is mapping -%}
+            {{ aluno.modalidades | map(attribute='nome') | join(', ') }}
+          {%- else -%}
+            {{ aluno.modalidades | join(', ') }}
+          {%- endif -%}
+        {%- else -%}—{%- endif -%}
+      </span></div>
+      <div class="perfil-item"><span class="perfil-label">Faixa</span><span class="perfil-valor">
+        {%- if aluno.faixa_nome or aluno.graduacao_nome -%}
+          {{ aluno.faixa_nome or '' }}
+          {%- if aluno.faixa_nome and aluno.graduacao_nome %} ({{ aluno.graduacao_nome }}){% elif aluno.graduacao_nome %}{{ aluno.graduacao_nome }}{% endif -%}
+        {%- else -%}—{%- endif -%}
+      </span></div>
+      <div class="perfil-item"><span class="perfil-label">Próxima faixa</span><span class="perfil-valor">{{ aluno.proxima_faixa | default('—') }}</span></div>
     </div>
 
-    <div class="row g-4">
-        <!-- Coluna esquerda: Perfil do Aluno -->
-        <div class="col-lg-4 col-md-5">
-            <div class="card shadow-sm border-primary painel-perfil-card">
-                <div class="card-body p-4">
-                    <div class="perfil-card-content">
-                        <div class="perfil-foto-wrap">
-                            {% if aluno and aluno.foto %}
-                            <img src="{{ url_for('static', filename='uploads/' + aluno.foto) }}" alt="Foto do aluno" class="perfil-foto">
-                            {% else %}
-                            <div class="perfil-foto-placeholder"><i class="bi bi-person-fill"></i></div>
-                            {% endif %}
-                        </div>
-                        <h5 class="fw-bold text-center mb-3 mt-2">Perfil do aluno</h5>
-                        <div class="perfil-dados">
-                            <div class="perfil-item"><span class="perfil-label">Academia</span><span class="perfil-valor">{{ aluno.academia_nome or '—' }}</span></div>
-                            <div class="perfil-item"><span class="perfil-label">Turma</span><span class="perfil-valor">{{ aluno.turma_nome or '—' }}</span></div>
-                            <div class="perfil-item"><span class="perfil-label">Modalidades</span><span class="perfil-valor">{{ aluno.modalidades_nomes if (aluno.modalidades_nomes and aluno.modalidades_nomes != '-') else '—' }}</span></div>
-                            <div class="perfil-item"><span class="perfil-label">Faixa</span><span class="perfil-valor">{% if aluno.faixa_nome or aluno.graduacao_nome %}{{ aluno.faixa_nome or '' }}{% if aluno.faixa_nome and aluno.graduacao_nome %} ({{ aluno.graduacao_nome }}){% elif aluno.graduacao_nome %}{{ aluno.graduacao_nome }}{% endif %}{% else %}—{% endif %}</span></div>
-                            <div class="perfil-item"><span class="perfil-label">Próxima faixa</span><span class="perfil-valor">{{ aluno.proxima_faixa|default('—') }}</span></div>
-                        </div>
-                        <div class="perfil-card-actions d-flex gap-2 mt-3 w-100 justify-content-center">
-                            <a href="{{ url_for('alunos.editar_aluno', aluno_id=aluno.id, next=url_for('painel_aluno.meu_perfil')) }}" class="btn btn-outline-warning btn-sm" title="Editar dados">
-                                <i class="bi bi-pencil-fill"></i> Editar
-                            </a>
-                            <button type="button" class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalVerAluno" title="Ver dados completos">
-                                <i class="bi bi-eye-fill"></i> Ver
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
+    <div class="perfil-acoes">
+      <a href="{{ url_for('alunos.editar_aluno', aluno_id=aluno.id, next=perfil_next) }}" class="sh__btn">
+        <i class="bi bi-pencil"></i> Editar
+      </a>
+      <button type="button" class="sh__btn" data-bs-toggle="modal" data-bs-target="#modalVerAluno">
+        <i class="bi bi-eye"></i> Ver tudo
+      </button>
+    </div>
+  </aside>
 
-        <!-- Coluna direita: atalhos -->
-        <div class="col-lg-8 col-md-7">
-            <div class="row g-2">
-                <div class="col-sm-6 col-12">
-                    <a href="{{ url_for('calendario.aluno') }}" class="text-decoration-none">
-                        <div class="card shadow-sm border-info card-hover painel-atalho-card">
-                            <div class="card-body text-center py-3 px-3 d-flex flex-column align-items-center">
-                                <i class="bi bi-calendar-event fs-3 mb-2 text-info"></i>
-                                <h6 class="fw-bold text-dark mb-0">Calendário</h6>
-                                <small class="text-muted">Eventos e aulas</small>
-                            </div>
-                        </div>
-                    </a>
-                </div>
-                <div class="col-sm-6 col-12">
-                    <a href="{{ url_for('painel_aluno.minhas_mensalidades') }}" class="text-decoration-none">
-                        <div class="card shadow-sm border-success card-hover painel-atalho-card">
-                            <div class="card-body text-center py-3 px-3 d-flex flex-column align-items-center">
-                                <i class="bi bi-calendar-check fs-3 mb-2 text-success"></i>
-                                <h6 class="fw-bold mb-1">Minhas Mensalidades</h6>
-                                <p class="text-muted small mb-2">Vencimentos e pagamentos</p>
-                                <span class="btn btn-success btn-sm px-3">Acessar</span>
-                            </div>
-                        </div>
-                    </a>
-                </div>
-                <div class="col-sm-6 col-12">
-                    <a href="{{ url_for('painel_aluno.minha_turma') }}" class="text-decoration-none">
-                        <div class="card shadow-sm border-info card-hover painel-atalho-card">
-                            <div class="card-body text-center py-3 px-3 d-flex flex-column align-items-center">
-                                <i class="bi bi-collection fs-3 mb-2 text-info"></i>
-                                <h6 class="fw-bold mb-1">Minha Turma</h6>
-                                <p class="text-muted small mb-2">Horários e informações</p>
-                                <span class="btn btn-info btn-sm text-white px-3">Acessar</span>
-                            </div>
-                        </div>
-                    </a>
-                </div>
-                <div class="col-sm-6 col-12">
-                    <a href="{{ url_for('painel_aluno.minhas_presencas') }}" class="text-decoration-none">
-                        <div class="card shadow-sm border-warning card-hover painel-atalho-card">
-                            <div class="card-body text-center py-3 px-3 d-flex flex-column align-items-center">
-                                <i class="bi bi-clipboard-check fs-3 mb-2 text-warning"></i>
-                                <h6 class="fw-bold mb-1">Minhas Presenças</h6>
-                                <p class="text-muted small mb-2">Histórico de presença</p>
-                                <span class="btn btn-warning btn-sm text-dark px-3">Acessar</span>
-                            </div>
-                        </div>
-                    </a>
-                </div>
-                <div class="col-sm-6 col-12">
-                    <a href="{{ url_for('painel_aluno.curriculo') }}" class="text-decoration-none">
-                        <div class="card shadow-sm border-secondary card-hover painel-atalho-card">
-                            <div class="card-body text-center py-3 px-3 d-flex flex-column align-items-center">
-                                <i class="bi bi-file-earmark-person fs-3 mb-2 text-secondary"></i>
-                                <h6 class="fw-bold mb-1">Meu currículo</h6>
-                                <p class="text-muted small mb-2">Dados do atleta e PDF</p>
-                                <span class="btn btn-secondary btn-sm px-3">Acessar</span>
-                            </div>
-                        </div>
-                    </a>
-                </div>
-                <div class="col-sm-6 col-12">
-                    <a href="{{ url_for('eventos_competicoes.disponiveis') }}" class="text-decoration-none">
-                        <div class="card shadow-sm border-danger card-hover painel-atalho-card">
-                            <div class="card-body text-center py-3 px-3 d-flex flex-column align-items-center">
-                                <i class="bi bi-trophy fs-3 mb-2 text-danger"></i>
-                                <h6 class="fw-bold mb-1">Eventos e Competições</h6>
-                                <p class="text-muted small mb-2">Realizar inscrições</p>
-                                <span class="btn btn-danger btn-sm px-3">Acessar</span>
-                            </div>
-                        </div>
-                    </a>
-                </div>
-                <div class="col-sm-6 col-12">
-                    <a href="{{ url_for('painel_aluno.associacao') }}" class="text-decoration-none">
-                        <div class="card shadow-sm border-dark card-hover painel-atalho-card">
-                            <div class="card-body text-center py-3 px-3 d-flex flex-column align-items-center">
-                                <i class="bi bi-building fs-3 mb-2 text-dark"></i>
-                                <h6 class="fw-bold mb-1">Associação</h6>
-                                <p class="text-muted small mb-2">Academias vinculadas</p>
-                                <span class="btn btn-dark btn-sm px-3">Acessar</span>
-                            </div>
-                        </div>
-                    </a>
-                </div>
-                <div class="col-sm-6 col-12">
-                    <a href="{{ url_for('painel_aluno.simular_categorias') }}" class="text-decoration-none">
-                        <div class="card shadow-sm border-primary card-hover painel-atalho-card">
-                            <div class="card-body text-center py-3 px-3 d-flex flex-column align-items-center">
-                                <i class="bi bi-trophy fs-3 mb-2 text-primary"></i>
-                                <h6 class="fw-bold mb-1">Simular Categorias</h6>
-                                <p class="text-muted small mb-2">Ver categorias disponíveis</p>
-                                <span class="btn btn-primary btn-sm px-3">Acessar</span>
-                            </div>
-                        </div>
-                    </a>
-                </div>
-                <div class="col-sm-6 col-12">
-                    <a href="{{ url_for('painel_aluno.simular_graduacao_prevista') }}" class="text-decoration-none">
-                        <div class="card shadow-sm border-info card-hover painel-atalho-card">
-                            <div class="card-body text-center py-3 px-3 d-flex flex-column align-items-center">
-                                <i class="bi bi-calendar-check fs-3 mb-2 text-info"></i>
-                                <h6 class="fw-bold mb-1">Graduação Prevista</h6>
-                                <p class="text-muted small mb-2">Linha do tempo de graduações</p>
-                                <span class="btn btn-info btn-sm px-3">Acessar</span>
-                            </div>
-                        </div>
-                    </a>
-                </div>
-                <div class="col-sm-6 col-12">
-                    <a href="{{ url_for('presencas.ranking_frequencia_pagina') }}" class="text-decoration-none">
-                        <div class="card shadow-sm border-warning card-hover painel-atalho-card">
-                            <div class="card-body text-center py-3 px-3 d-flex flex-column align-items-center">
-                                <i class="bi bi-trophy-fill fs-3 mb-2 text-warning"></i>
-                                <h6 class="fw-bold mb-1">Ranking de Frequência</h6>
-                                <p class="text-muted small mb-2">Pódio por turma — mês e ano</p>
-                                <span class="btn btn-warning btn-sm text-dark px-3">Acessar</span>
-                            </div>
-                        </div>
-                    </a>
-                </div>
-                <div class="col-sm-6 col-12">
-                    {% include 'components/card_aniversariantes.html' %}
-                </div>
-            </div>
-        </div>
+  {# ------------------------------------------------------------- atalhos #}
+  <div>
+    <div class="sh__secao">Meu treino</div>
+    <div class="sh__grade">
+      {{ celula(url_for(rota_turma, **rota_args), 'bi-collection', 'Minha turma', 'Horários, local e professor.') }}
+      {{ celula(url_for(rota_presencas, **rota_args), 'bi-clipboard-check', 'Minhas presenças', 'Histórico de presença nas aulas.') }}
+      {{ celula(url_for('presencas.ranking_frequencia_pagina'), 'bi-trophy', 'Ranking de frequência', 'Pódio da turma, por mês e por ano.') }}
+      {{ celula(url_for(rota_curriculo, **rota_args), 'bi-award', 'Currículo do atleta', 'Graduações, competições e PDF.') }}
     </div>
 
+    <div class="sh__secao">Financeiro e eventos</div>
+    <div class="sh__grade">
+      {{ celula(url_for(rota_mensalidades, **rota_args), 'bi-cash-coin', 'Mensalidades', 'Vencimentos, pagamentos e segunda via.') }}
+      {{ celula(url_for('eventos_competicoes.disponiveis', **rota_args), 'bi-calendar-event', 'Eventos e competições', 'Inscrições abertas.') }}
+      {{ celula(url_for(rota_calendario, **rota_args), 'bi-calendar3', 'Calendário', 'Eventos e aulas da academia.') }}
+      {{ celula(url_for('aniversariante_live.pagina'), 'bi-balloon', 'Aniversariantes', 'Painel ao vivo do mês.') }}
+    </div>
+
+    <div class="sh__secao">Simuladores</div>
+    <div class="sh__grade">
+      {{ celula(url_for(rota_sim_graduacao, **rota_args), 'bi-graph-up', 'Graduação prevista', 'Linha do tempo até a próxima faixa.') }}
+      {{ celula(url_for(rota_sim_categoria, **rota_args), 'bi-tags', 'Categoria de competição', 'Em que categoria o atleta cai.') }}
+      {{ celula(url_for(rota_associacao, **rota_args), 'bi-diagram-3', 'Treinar em outra academia', 'Academias da associação.') }}
+    </div>
+  </div>
 </div>
+
 
 <!-- Modal Ver dados do aluno -->
 <div class="modal fade" id="modalVerAluno" tabindex="-1">
@@ -396,19 +327,19 @@
 
 <style>
 .modal-section-perfil {
-  border-radius: 12px;
+  border-radius: var(--u-radius);
   padding: 1rem 1.25rem;
-  background: #f8f9fa;
-  border: 1px solid #e9ecef;
+  background: #fdfcfa;
+  border: 1px solid var(--sh-line);
   height: 100%;
 }
 .modal-section-perfil h6 {
   font-size: 0.8rem;
   font-weight: 700;
-  color: #0d6efd;
+  color: var(--sh-ink);
   margin-bottom: 1rem;
   padding-bottom: 0.5rem;
-  border-bottom: 1px solid #dee2e6;
+  border-bottom: 1px solid var(--sh-line);
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -420,39 +351,65 @@
   gap: 1rem;
   font-size: 0.9rem;
   padding: 0.5rem 0;
-  border-bottom: 1px solid #e9ecef;
+  border-bottom: 1px solid var(--sh-line);
 }
 .modal-section-perfil .modal-info-item:last-child { border-bottom: none; }
-.modal-section-perfil .modal-info-item span { color: #6c757d; font-weight: 500; }
-.modal-section-perfil .modal-info-item strong { color: #212529; text-align: right; word-break: break-word; }
-.perfil-card-actions .btn { min-width: 90px; }
-.perfil-card-content { display: flex; flex-direction: column; align-items: center; }
-.painel-perfil-card { align-self: flex-start; }
-.painel-atalho-card { transition: 0.2s ease; min-height: 100%; }
-.painel-atalho-card .card-body { min-height: 100%; display: flex; flex-direction: column; justify-content: center; }
-.card { border-radius: 0.75rem; transition: 0.2s ease; }
-.card:hover, .card-hover:hover { transform: translateY(-5px); box-shadow: 0 0.6rem 1.2rem rgba(0,0,0,0.15) !important; }
+.modal-section-perfil .modal-info-item span { color: var(--sh-ink-soft); font-weight: 500; }
+.modal-section-perfil .modal-info-item strong { color: var(--sh-ink); text-align: right; word-break: break-word; }
+/* Cartão do aluno à esquerda, atalhos à direita; no tablet e no celular
+   viram uma coluna só, com o cartão em cima. */
+.perfil-grade {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  gap: var(--u-space-4);
+  align-items: start;
+}
+@media (max-width: 1100px) { .perfil-grade { grid-template-columns: 1fr; } }
+
+.perfil-cartao {
+  background: #fff;
+  border: 1px solid var(--sh-line);
+  border-radius: var(--u-radius);
+  padding: 1.5rem 1.35rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: sticky;
+  top: var(--u-space-3);
+}
+@media (max-width: 1100px) { .perfil-cartao { position: static; } }
+
+.perfil-nome {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--sh-ink);
+  text-align: center;
+  margin: .9rem 0 1.1rem;
+}
+.perfil-acoes { display: flex; gap: var(--u-space-2); margin-top: 1.1rem; width: 100%; }
+.perfil-acoes .sh__btn { flex: 1; justify-content: center; }
+
 .perfil-foto-wrap {
     width: 100px; height: 100px; border-radius: 50%; overflow: hidden;
-    background: #e9ecef; display: flex; align-items: center; justify-content: center;
-    border: 3px solid rgba(13, 110, 253, 0.3);
+    background: #f4f2ee; display: flex; align-items: center; justify-content: center;
+    border: 1px solid var(--sh-line);
 }
 .perfil-foto { width: 100%; height: 100%; object-fit: cover; }
-.perfil-foto-placeholder { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 2.5rem; color: #6c757d; }
+.perfil-foto-placeholder { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 2.5rem; color: var(--sh-ink-soft); }
 .perfil-dados { width: 100%; }
 .perfil-item { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.75rem; padding: 0.35rem 0; border-bottom: 1px solid rgba(0,0,0,0.06); font-size: 0.875rem; }
 .perfil-item:last-of-type { border-bottom: none; }
-.perfil-label { font-weight: 600; color: #495057; flex-shrink: 0; }
-.perfil-valor { color: #212529; text-align: right; word-break: break-word; }
+.perfil-label { font-weight: 600; color: var(--sh-ink-soft); flex-shrink: 0; }
+.perfil-valor { color: var(--sh-ink); text-align: right; word-break: break-word; }
 /* Sistema de Slides */
 .modal-slide-indicators { flex-wrap: wrap; padding: 0.5rem 0; }
 .slide-indicator {
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  border: 2px solid #dee2e6;
+  border: 2px solid var(--sh-line);
   background: #fff;
-  color: #6c757d;
+  color: var(--sh-ink-soft);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -461,13 +418,13 @@
   font-size: 1.1rem;
 }
 .slide-indicator:hover {
-  border-color: #0d6efd;
-  color: #0d6efd;
+  border-color: var(--sh-ink);
+  color: var(--sh-ink);
   transform: scale(1.1);
 }
 .slide-indicator.active {
-  background: #0d6efd;
-  border-color: #0d6efd;
+  background: var(--sh-ink);
+  border-color: var(--sh-ink);
   color: #fff;
 }
 .modal-slides-container {
@@ -494,11 +451,11 @@
 }
 .modal-slide-controls {
   padding: 1rem 0;
-  border-top: 1px solid #dee2e6;
+  border-top: 1px solid var(--sh-line);
 }
 .slide-counter {
   font-weight: 600;
-  color: #495057;
+  color: var(--sh-ink-soft);
 }
 .slide-btn-prev, .slide-btn-next {
   min-width: 120px;
