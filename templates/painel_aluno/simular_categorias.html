@@ -1,175 +1,147 @@
 {% extends "base_app.html" %}
-{% block title %}Simular Categorias{% endblock %}
+{% from 'components/ui.html' import voltar, vazio with context %}
+{% set menu_ativo = 'sim_categoria' %}
+{% block title %}Simular categorias{% endblock %}
+
+{% block pagina_titulo %}Categoria de competição{% endblock %}
+{% block pagina_subtitulo %}Informe peso, data de nascimento e sexo para ver em que categorias o atleta se encaixa.{% endblock %}
+{% block pagina_acoes %}{{ voltar(back_url) }}{% endblock %}
+
+{% block extra_css %}
+<style>
+  /* Uma marcação só para a tabela: no celular cada linha vira um bloco
+     rótulo/valor, com `data-rotulo` na célula. Antes eram duas marcações
+     (tabela + cards) renderizando os mesmos dados. */
+  .lin-cat { grid-template-columns: 90px 90px minmax(0,1.4fr) 90px 90px 84px 84px minmax(0,1.6fr); }
+  @media (max-width: 1400px) {
+    .lin-cat { grid-template-columns: 90px minmax(0,1.4fr) 90px 90px 84px 84px minmax(0,1.4fr); }
+    .lin-cat .col-classe { display: none; }
+  }
+  @media (max-width: 1180px) {
+    .lin-cat { grid-template-columns: 90px minmax(0,1.4fr) 90px 90px 84px 84px; }
+    .lin-cat .col-desc { display: none; }
+  }
+  @media (max-width: 767.98px) {
+    /* Bloco por categoria: o cabeçalho some e cada célula mostra o próprio
+       rótulo, vindo de `data-rotulo`. */
+    .lin-cat.lst-cab { display: none; }
+    .lin-cat.lst-item { display: block; padding: .9rem 1.1rem; }
+    .lin-cat .col-classe, .lin-cat .col-desc { display: block; }
+    .lin-cat > div { display: flex; justify-content: space-between; gap: 1rem; padding: .2rem 0; }
+    .lin-cat > div::before {
+      content: attr(data-rotulo);
+      color: var(--sh-ink-soft); font-size: .8rem; flex: none;
+    }
+    .lin-cat > div:first-child { border-bottom: 1px solid var(--sh-line); padding-bottom: .5rem; margin-bottom: .35rem; }
+  }
+</style>
+{% endblock %}
+
 {% block content %}
+{% block sim_seletor %}{% endblock %}
 
-<div class="container mt-3 mt-md-4 px-2 px-md-3">
-    <div class="mb-3 mb-md-4">
-        {% set back_url = back_url or get_back_url_default() %}
-{% include 'components/botao_voltar.html' %}
-        <h2 class="h5 h4-md fw-bold text-primary mb-2">Simular Categorias</h2>
-        <p class="text-muted mb-0 small">Informe peso, data de nascimento e sexo para ver as categorias disponíveis.</p>
-    </div>
-
-    <div class="card shadow-sm">
-        <div class="card-body p-3 p-md-4">
-            <form method="POST">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <div class="row g-3">
-                    <div class="col-12 col-md-4">
-                        <label for="peso" class="form-label fw-semibold">Peso (kg) <span class="text-danger">*</span></label>
-                        <input type="number" step="0.1" id="peso" name="peso" class="form-control form-control-lg" 
-                               value="{{ peso or (aluno.get('peso') if aluno else '') }}" 
-                               required placeholder="Ex: 65.5">
-                    </div>
-                    <div class="col-12 col-md-4">
-                        <label for="data_nascimento" class="form-label fw-semibold">Data de Nascimento <span class="text-danger">*</span></label>
-                        <input type="date" id="data_nascimento" name="data_nascimento" class="form-control form-control-lg" 
-                               value="{{ data_nascimento or '' }}" 
-                               required>
-                    </div>
-                    <div class="col-12 col-md-4">
-                        <label for="sexo" class="form-label fw-semibold">Sexo <span class="text-danger">*</span></label>
-                        <select id="sexo" name="sexo" class="form-select form-select-lg" required>
-                            <option value="">Selecione</option>
-                            <option value="M" {% if sexo == 'M' or (sexo is none and aluno and aluno.get('sexo') == 'M') %}selected{% endif %}>Masculino</option>
-                            <option value="F" {% if sexo == 'F' or (sexo is none and aluno and aluno.get('sexo') == 'F') %}selected{% endif %}>Feminino</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="mt-3">
-                    <button type="submit" class="btn btn-primary btn-lg w-100 w-md-auto">
-                        <i class="bi bi-search me-1"></i> Buscar Categorias
-                    </button>
-                </div>
-            </form>
+<div class="frm">
+  <div class="frm__secao">
+    <div class="frm__titulo"><i class="bi bi-sliders"></i> Dados do atleta</div>
+    <form method="POST">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      {% block sim_campos_extra %}{% endblock %}
+      <div class="row g-3">
+        <div class="col-12 col-md-4">
+          <label for="peso" class="form-label">Peso (kg) <span class="text-danger">*</span></label>
+          <input type="number" step="0.1" id="peso" name="peso" class="form-control"
+                 value="{{ peso or (aluno.get('peso') if aluno else '') }}" required placeholder="Ex.: 65.5">
         </div>
-    </div>
-
-    {% if idade_calculada is defined and idade_calculada is not none %}
-    <div class="card shadow-sm mt-3 mt-md-4">
-        <div class="card-header bg-info text-white">
-            <h5 class="mb-0 h6"><i class="bi bi-info-circle me-2"></i> Informações Calculadas</h5>
+        <div class="col-12 col-md-4">
+          <label for="data_nascimento" class="form-label">Data de nascimento <span class="text-danger">*</span></label>
+          <input type="date" id="data_nascimento" name="data_nascimento" class="form-control"
+                 value="{{ data_nascimento or '' }}" required>
         </div>
-        <div class="card-body p-3 p-md-4">
-            <div class="row g-2 g-md-3">
-                <div class="col-6 col-md-3">
-                    <div class="small text-muted">Peso</div>
-                    <strong>{{ peso }} kg</strong>
-                </div>
-                <div class="col-6 col-md-3">
-                    <div class="small text-muted">Idade (ano civil)</div>
-                    <strong>{{ idade_calculada }} anos</strong>
-                </div>
-                <div class="col-6 col-md-3">
-                    <div class="small text-muted">Sexo</div>
-                    <strong>{{ 'Masculino' if sexo == 'M' else 'Feminino' }}</strong>
-                </div>
-                <div class="col-6 col-md-3">
-                    <div class="small text-muted">Categorias encontradas</div>
-                    <strong>{{ categorias_disponiveis|length if categorias_disponiveis else 0 }}</strong>
-                </div>
-            </div>
+        <div class="col-12 col-md-4">
+          <label for="sexo" class="form-label">Sexo <span class="text-danger">*</span></label>
+          <select id="sexo" name="sexo" class="form-select" required>
+            <option value="">Selecione</option>
+            <option value="M" {% if sexo == 'M' or (sexo is none and aluno and aluno.get('sexo') == 'M') %}selected{% endif %}>Masculino</option>
+            <option value="F" {% if sexo == 'F' or (sexo is none and aluno and aluno.get('sexo') == 'F') %}selected{% endif %}>Feminino</option>
+          </select>
         </div>
-    </div>
-    {% endif %}
-
-    {% if categorias_disponiveis is defined and categorias_disponiveis and categorias_disponiveis|length > 0 %}
-    <div class="card shadow-sm mt-3 mt-md-4">
-        <div class="card-header bg-success text-white">
-            <h5 class="mb-0 h6"><i class="bi bi-trophy-fill me-2"></i> Categorias Disponíveis</h5>
-        </div>
-        <div class="card-body p-0 p-md-3">
-            <!-- Tabela Desktop -->
-            <div class="table-responsive d-none d-md-block">
-                <table class="table table-hover mb-0">
-                    <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>Gênero</th>
-                            <th>Classe</th>
-                            <th>Categoria</th>
-                            <th>Nome Categoria</th>
-                            <th>Peso Mín</th>
-                            <th>Peso Máx</th>
-                            <th>Idade Mín</th>
-                            <th>Idade Máx</th>
-                            <th>Descrição</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for cat in categorias_disponiveis %}
-                        <tr>
-                            <td>{{ cat.get('id', '-') }}</td>
-                            <td>{{ cat.get('genero', '-') }}</td>
-                            <td>{{ cat.get('id_classe') or '-' }}</td>
-                            <td>{{ cat.get('categoria') or '-' }}</td>
-                            <td><strong>{{ cat.get('nome_categoria', '-') }}</strong></td>
-                            <td>{{ cat.get('peso_min') if cat.get('peso_min') else '-' }}</td>
-                            <td>{{ cat.get('peso_max') if cat.get('peso_max') else '-' }}</td>
-                            <td>{{ cat.get('idade_min') if cat.get('idade_min') else '-' }}</td>
-                            <td>{{ cat.get('idade_max') if cat.get('idade_max') else '-' }}</td>
-                            <td>{{ cat.get('descricao') or '-' }}</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-            <!-- Cards Mobile -->
-            <div class="d-md-none">
-                {% for cat in categorias_disponiveis %}
-                <div class="card border-0 border-bottom rounded-0">
-                    <div class="card-body p-3">
-                        <h6 class="fw-bold text-success mb-2">{{ cat.get('nome_categoria', '-') }}</h6>
-                        <div class="row g-2 small">
-                            <div class="col-6"><strong>ID:</strong> {{ cat.get('id', '-') }}</div>
-                            <div class="col-6"><strong>Gênero:</strong> {{ cat.get('genero', '-') }}</div>
-                            <div class="col-6"><strong>Classe:</strong> {{ cat.get('id_classe') or '-' }}</div>
-                            <div class="col-6"><strong>Categoria:</strong> {{ cat.get('categoria') or '-' }}</div>
-                            <div class="col-6"><strong>Peso Mín:</strong> {{ cat.get('peso_min') if cat.get('peso_min') else '-' }}</div>
-                            <div class="col-6"><strong>Peso Máx:</strong> {{ cat.get('peso_max') if cat.get('peso_max') else '-' }}</div>
-                            <div class="col-6"><strong>Idade Mín:</strong> {{ cat.get('idade_min') if cat.get('idade_min') else '-' }}</div>
-                            <div class="col-6"><strong>Idade Máx:</strong> {{ cat.get('idade_max') if cat.get('idade_max') else '-' }}</div>
-                            {% if cat.get('descricao') %}
-                            <div class="col-12">
-                                <strong>Descrição:</strong> {{ cat.get('descricao') }}
-                            </div>
-                            {% endif %}
-                        </div>
-                    </div>
-                </div>
-                {% endfor %}
-            </div>
-        </div>
-    </div>
-    {% elif idade_calculada is defined and idade_calculada is not none %}
-    <div class="alert alert-warning mt-3 mt-md-4">
-        <i class="bi bi-exclamation-triangle me-2"></i>
-        <strong>Nenhuma categoria encontrada</strong> para os dados informados. Verifique se:
-        <ul class="mb-0 mt-2 small">
-            <li>O peso está dentro da faixa permitida</li>
-            <li>A idade está dentro da faixa permitida</li>
-            <li>O sexo está correto (M ou F)</li>
-            <li>Existem categorias cadastradas na tabela <code>categorias</code></li>
-        </ul>
-    </div>
-    {% endif %}
+      </div>
+      <div class="frm__acoes mt-3">
+        <button type="submit" class="sh__btn sh__btn--forte">
+          <i class="bi bi-search"></i> Buscar categorias
+        </button>
+      </div>
+    </form>
+  </div>
 </div>
 
-<style>
-@media (max-width: 767.98px) {
-    .form-control-lg, .form-select-lg {
-        font-size: 16px; /* Evita zoom no iOS */
-        padding: 0.75rem;
-    }
-    .btn-lg {
-        padding: 0.75rem 1.5rem;
-        font-size: 1rem;
-        min-height: 44px; /* Tamanho mínimo para touch */
-    }
-    .card-body {
-        font-size: 0.9rem;
-    }
-}
-</style>
+{% if idade_calculada is defined and idade_calculada is not none %}
+<div class="sh__faixa">
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Peso</span>
+    <span class="sh__faixa-valor" style="font-size:1.25rem">{{ peso }} kg</span>
+  </div>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Idade (ano civil)</span>
+    <span class="sh__faixa-valor" style="font-size:1.25rem">{{ idade_calculada }} anos</span>
+  </div>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Sexo</span>
+    <span class="sh__faixa-valor" style="font-size:1.25rem">{{ 'Masculino' if sexo == 'M' else 'Feminino' }}</span>
+  </div>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Categorias</span>
+    <span class="sh__faixa-valor" style="font-size:1.25rem">{{ categorias_disponiveis | length if categorias_disponiveis else 0 }}</span>
+  </div>
+</div>
+{% endif %}
 
+{% if categorias_disponiveis %}
+<div class="lst-quadro">
+  <div class="lst-quadro__topo">
+    <span class="lst-quadro__titulo">Categorias disponíveis</span>
+    <span class="lst-quadro__meta">{{ categorias_disponiveis | length }} encontrada{{ 's' if categorias_disponiveis | length != 1 }}</span>
+  </div>
+  <div class="lst-rolagem">
+    <div class="lst-largura" style="--lst-min: 940px">
+      <div class="lst-linha lst-cab lin-cat">
+        <div>ID</div>
+        <div class="col-classe">Classe</div>
+        <div>Categoria</div>
+        <div>Peso mín</div>
+        <div>Peso máx</div>
+        <div>Idade mín</div>
+        <div>Idade máx</div>
+        <div class="col-desc">Descrição</div>
+      </div>
+      {% for cat in categorias_disponiveis %}
+      <div class="lst-linha lst-item lin-cat">
+        <div data-rotulo="Categoria"><strong class="lst-nome">{{ cat.get('nome_categoria', '—') }}</strong></div>
+        <div data-rotulo="Classe" class="col-classe">{{ cat.get('id_classe') or '—' }}</div>
+        <div data-rotulo="Grupo">{{ cat.get('categoria') or '—' }}</div>
+        <div data-rotulo="Peso mín" class="lst-num">{{ cat.get('peso_min') or '—' }}</div>
+        <div data-rotulo="Peso máx" class="lst-num">{{ cat.get('peso_max') or '—' }}</div>
+        <div data-rotulo="Idade mín" class="lst-num">{{ cat.get('idade_min') or '—' }}</div>
+        <div data-rotulo="Idade máx" class="lst-num">{{ cat.get('idade_max') or '—' }}</div>
+        <div data-rotulo="Descrição" class="col-desc lst-corta">{{ cat.get('descricao') or '—' }}</div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+{% elif idade_calculada is defined and idade_calculada is not none %}
+<div class="frm">
+  <div class="frm__secao">
+    <div class="frm__titulo"><i class="bi bi-exclamation-triangle"></i> Nenhuma categoria encontrada</div>
+    <p class="frm__ajuda">Para os dados informados, confira se:</p>
+    <ul class="lst-sub" style="white-space: normal; padding-left: 1.1rem; margin: 0">
+      <li>o peso está dentro de alguma faixa cadastrada;</li>
+      <li>a idade está dentro de alguma faixa cadastrada;</li>
+      <li>o sexo informado está correto;</li>
+      <li>existem categorias cadastradas para esta associação.</li>
+    </ul>
+  </div>
+</div>
+{% endif %}
 {% endblock %}
