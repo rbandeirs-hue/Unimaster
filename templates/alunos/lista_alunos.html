@@ -3649,10 +3649,17 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         setErr('');
         btnGo.disabled = true;
+        // O corpo vai em JSON, então o CSRF não pode viajar como campo de
+        // formulário: tem de ir no cabeçalho, lido da <meta> da página.
+        var _metaCsrf = document.querySelector('meta[name="csrf-token"]');
         fetch(urlPost, {
           method: 'POST',
           credentials: 'same-origin',
-          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'X-CSRFToken': _metaCsrf ? _metaCsrf.getAttribute('content') : ''
+          },
           body: JSON.stringify(payload)
         })
           .then(function (r) {
