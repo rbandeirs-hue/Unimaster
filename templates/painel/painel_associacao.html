@@ -1,52 +1,58 @@
 {% extends "base_app.html" %}
+{% from 'components/ui.html' import celula %}
+{% set menu_ativo = 'indicadores' %}
 {% block title %}Painel — Associação{% endblock %}
-{% block content %}
-<div class="container mt-4 painel-academia-dash">
 
-    <div class="row g-4">
-        <div class="col-12 col-sm-6 col-lg-4 col-xl-3">
-            {% include 'components/aniversariantes_menu_card.html' %}
-        </div>
-        <div class="col-12 col-sm-6 col-lg-4 col-xl-3">
-            <div class="card shadow-sm border-success card-hover painel-atalho-card h-100">
-                <div class="card-body text-center py-4 px-4 d-flex flex-column align-items-center justify-content-center">
-                    <i class="bi bi-building fs-1 mb-2 text-success"></i>
-                    <h6 class="fw-bold mb-2">Academias</h6>
-                    <span class="display-4 fw-bold text-success">{{ stats.get('academias', 0) if stats else 0 }}</span>
-                </div>
-            </div>
-        </div>
-        <div class="col-12 col-sm-6 col-lg-4 col-xl-3">
-            <div class="card shadow-sm border-info card-hover painel-atalho-card h-100">
-                <div class="card-body text-center py-4 px-4 d-flex flex-column align-items-center justify-content-center">
-                    <i class="bi bi-people-fill fs-1 mb-2 text-info"></i>
-                    <h6 class="fw-bold mb-2">Alunos</h6>
-                    <span class="display-4 fw-bold text-info">{{ stats.get('alunos', 0) if stats else 0 }}</span>
-                </div>
-            </div>
-        </div>
-        <div class="col-12 col-sm-6 col-lg-4 col-xl-3">
-            {% set zempo_pendentes = stats.get('zempo_pendentes', 0) if stats else 0 %}
-            <a href="{{ url_for('zempo.migracoes') }}" class="text-decoration-none">
-                <div class="card shadow-sm border-primary card-hover painel-atalho-card h-100">
-                    <div class="card-body text-center py-4 px-4 d-flex flex-column align-items-center justify-content-center">
-                        <i class="bi bi-cloud-upload-fill fs-1 mb-2 text-primary"></i>
-                        <h6 class="fw-bold mb-2 text-body">Cadastro no Zempo</h6>
-                        {% if zempo_pendentes %}
-                            <span class="display-4 fw-bold text-primary">{{ zempo_pendentes }}</span>
-                            <small class="text-muted">aguardando migração</small>
-                        {% else %}
-                            <small class="text-muted">Nenhuma solicitação pendente</small>
-                        {% endif %}
-                    </div>
-                </div>
-            </a>
-        </div>
-    </div>
+{% block pagina_titulo %}Painel da associação{% endblock %}
+{% block pagina_subtitulo %}Números das academias vinculadas.{% endblock %}
+
+{% block content %}
+{# Os números viram faixa de indicadores, como no painel da academia: linha
+   única no topo, em vez de quatro cartões coloridos disputando atenção. #}
+{% set zempo_pendentes = stats.get('zempo_pendentes', 0) if stats else 0 %}
+<div class="sh__faixa">
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Academias</span>
+    <span class="sh__faixa-valor">{{ stats.get('academias', 0) if stats else 0 }}</span>
+    <span class="lst-sub">Vinculadas à associação</span>
+  </div>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Alunos</span>
+    <span class="sh__faixa-valor">{{ stats.get('alunos', 0) if stats else 0 }}</span>
+    <span class="lst-sub">Somando todas as academias</span>
+  </div>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Zempo</span>
+    <span class="sh__faixa-valor {% if zempo_pendentes %}sh__faixa-valor--alerta{% endif %}">{{ zempo_pendentes }}</span>
+    <span class="lst-sub">
+      {% if zempo_pendentes %}Aguardando migração para a CBJ{% else %}Nada aguardando migração{% endif %}
+    </span>
+  </div>
 </div>
-<style>
-.painel-atalho-card { transition: 0.2s ease; min-height: 140px; }
-.painel-academia-dash .card { border-radius: 0.85rem; border-width: 2px; transition: 0.2s ease; }
-.painel-academia-dash .card:hover, .painel-academia-dash .card-hover:hover { transform: translateY(-6px); box-shadow: 0 0.75rem 1.5rem rgba(0,0,0,0.18) !important; }
-</style>
+
+{% if zempo_pendentes %}
+{# Só aparece quando há o que resolver — mesma regra do "Precisa da sua
+   atenção" do painel da academia. #}
+<div class="sh__atencao">
+  <a href="{{ url_for('zempo.migracoes') }}" class="sh__alerta sh__alerta--urgente">
+    <span class="sh__alerta-num">{{ zempo_pendentes }}</span>
+    <span class="sh__alerta-txt">
+      atleta{{ 's' if zempo_pendentes != 1 }} aguardando migração para a CBJ
+    </span>
+    <span class="sh__alerta-link">Migrar &rarr;</span>
+  </a>
+</div>
+{% endif %}
+
+<div class="sh__secao">Atalhos</div>
+<div class="sh__grade">
+  {{ celula(url_for('associacao.lista_academias'), 'bi-house-door', 'Academias',
+            'Lista e gestão das academias da associação.') }}
+  {{ celula(url_for('alunos.lista_alunos'), 'bi-people', 'Alunos',
+            'Alunos das academias, por modalidade ofertada.') }}
+  {{ celula(url_for('zempo.migracoes'), 'bi-person-vcard', 'Cadastro no Zempo',
+            'Aprovar e migrar atletas para a CBJ.', zempo_pendentes or None) }}
+  {{ celula(url_for('aniversariante_live.pagina'), 'bi-balloon', 'Aniversariantes',
+            'Painel ao vivo dos aniversariantes do mês.') }}
+</div>
 {% endblock %}

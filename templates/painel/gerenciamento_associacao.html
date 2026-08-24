@@ -1,174 +1,56 @@
 {% extends "base_app.html" %}
+{% from 'components/ui.html' import celula %}
+{% set menu_ativo = 'gerenciamento' %}
 {% block title %}Gerenciamento — Associação{% endblock %}
+
+{% block pagina_titulo %}{{ contexto_nome or 'Associação' }}{% endblock %}
+{% block pagina_subtitulo %}Módulos da associação, agrupados pelo que você faz com eles.{% endblock %}
+
 {% block content %}
-<div class="container mt-5">
-    <div class="mb-4">
-        <h2 class="h4 fw-bold text-primary">Gerenciamento — Associação</h2>
-        <p class="text-muted mb-0">Acesse os módulos da associação.</p>
-    </div>
+{# Mesma grade do painel da academia: os módulos em seções, não 12 cartões
+   coloridos em fila. A cor deixou de diferenciar item (era decorativa e
+   competia com o vermelho da marca); quem separa agora é o agrupamento. #}
 
-    <div class="row g-4 u-menu-cards">
-        <!-- Eventos (gerais) -->
-        <div class="col-xl-3 col-lg-4 col-md-6">
-            <a href="{{ url_for('eventos_competicoes.lista_eventos') }}" class="card-action-link text-decoration-none">
-                <div class="card h-100 shadow-sm border-info">
-                    <div class="card-body text-center p-4">
-                        <i class="bi bi-calendar-event display-5 mb-3 text-info"></i>
-                        <h5 class="card-title fw-bold">Eventos</h5>
-                        <p class="card-text small text-muted mb-0">Cursos, seminários e eventos gerais: formulário de inscrição e calendário, sem placar de lutas.</p>
-                    </div>
-                </div>
-            </a>
-        </div>
-
-        <!-- Competições (judô — cadastro) -->
-        <div class="col-xl-3 col-lg-4 col-md-6">
-            <a href="{{ url_for('eventos_competicoes.lista_competicoes') }}" class="card-action-link text-decoration-none">
-                <div class="card h-100 shadow-sm border-danger">
-                    <div class="card-body text-center p-4">
-                        <i class="bi bi-trophy display-5 mb-3 text-danger"></i>
-                        <h5 class="card-title fw-bold">Competições</h5>
-                        <p class="card-text small text-muted mb-0">Campeonatos com placar de judô, categorias e inscrições por academia.</p>
-                    </div>
-                </div>
-            </a>
-        </div>
-
-        <!-- Formulários -->
-        <div class="col-xl-3 col-lg-4 col-md-6">
-            <a href="{{ url_for('formularios.lista') }}" class="card-action-link text-decoration-none">
-                <div class="card h-100 shadow-sm border-warning">
-                    <div class="card-body text-center p-4">
-                        <i class="bi bi-file-earmark-text display-5 mb-3 text-warning"></i>
-                        <h5 class="card-title fw-bold">Formulários</h5>
-                        <p class="card-text small text-muted mb-0">Cadastre formulários baseados nos campos do cadastro de aluno.</p>
-                    </div>
-                </div>
-            </a>
-        </div>
-
-        <!-- Calendário -->
-        <div class="col-xl-3 col-lg-4 col-md-6">
-            <a href="{{ url_for('calendario.index') }}" class="card-action-link text-decoration-none">
-                <div class="card h-100 shadow-sm border-info">
-                    <div class="card-body text-center p-4">
-                        <i class="bi bi-calendar-event display-5 mb-3 text-info"></i>
-                        <h5 class="card-title fw-bold">Calendário</h5>
-                        <p class="card-text small text-muted mb-0">Eventos, feriados e gestão do calendário da associação.</p>
-                    </div>
-                </div>
-            </a>
-        </div>
-
-        <!-- Alunos -->
-        <div class="col-xl-3 col-lg-4 col-md-6">
-            <a href="{{ url_for('alunos.lista_alunos') }}" class="card-action-link text-decoration-none">
-                <div class="card h-100 shadow-sm border-info">
-                    <div class="card-body text-center p-4">
-                        <i class="bi bi-people-fill display-5 mb-3 text-info"></i>
-                        <h5 class="card-title fw-bold">Alunos</h5>
-                        <p class="card-text small text-muted mb-0">Lista de alunos das academias (por modalidade ofertada).</p>
-                    </div>
-                </div>
-            </a>
-        </div>
-
-        <!-- Usuários -->
-        <div class="col-xl-3 col-lg-4 col-md-6">
-            <a href="{{ url_for('academia.lista_usuarios', origem='associacao') }}" class="card-action-link text-decoration-none">
-                <div class="card h-100 shadow-sm border-primary">
-                    <div class="card-body text-center p-4">
-                        <i class="bi bi-person-lines-fill display-5 mb-3 text-primary"></i>
-                        <h5 class="card-title fw-bold">Usuários</h5>
-                        <p class="card-text small text-muted mb-0">Gerencie usuários e vincule a qualquer academia da associação.</p>
-                    </div>
-                </div>
-            </a>
-        </div>
-
-        <!-- Academias -->
-        <div class="col-xl-3 col-lg-4 col-md-6">
-            <a href="{{ url_for('associacao.lista_academias') }}" class="card-action-link text-decoration-none">
-                <div class="card h-100 shadow-sm border-success">
-                    <div class="card-body text-center p-4">
-                        <i class="bi bi-building display-5 mb-3 text-success"></i>
-                        <h5 class="card-title fw-bold">Academias</h5>
-                        <p class="card-text small text-muted mb-0">Lista e gestão de academias da associação.</p>
-                    </div>
-                </div>
-            </a>
-        </div>
-
-        <!-- Professores -->
-        <div class="col-xl-3 col-lg-4 col-md-6">
-            <a href="{{ url_for('associacao.lista_professores') }}" class="card-action-link text-decoration-none">
-                <div class="card h-100 shadow-sm border-warning">
-                    <div class="card-body text-center p-4">
-                        <i class="bi bi-person-badge display-5 mb-3 text-warning"></i>
-                        <h5 class="card-title fw-bold">Professores</h5>
-                        <p class="card-text small text-muted mb-0">Lista de professores vinculados às academias da associação.</p>
-                    </div>
-                </div>
-            </a>
-        </div>
-
-        <!-- Pré-cadastro -->
-        <div class="col-xl-3 col-lg-4 col-md-6">
-            <a href="{{ url_for('associacao.precadastro') }}" class="card-action-link text-decoration-none">
-                <div class="card h-100 shadow-sm border-info">
-                    <div class="card-body text-center p-4">
-                        <i class="bi bi-person-plus display-5 mb-3 text-info"></i>
-                        <h5 class="card-title fw-bold">Pré-cadastro</h5>
-                        <p class="card-text small text-muted mb-0">Gere links de pré-cadastro por academia.</p>
-                    </div>
-                </div>
-            </a>
-        </div>
-
-        <!-- Cadastro no Zempo (CBJ) -->
-        <div class="col-xl-3 col-lg-4 col-md-6">
-            <a href="{{ url_for('zempo.migracoes') }}" class="card-action-link text-decoration-none">
-                <div class="card h-100 shadow-sm border-primary">
-                    <div class="card-body text-center p-4">
-                        <i class="bi bi-cloud-upload-fill display-5 mb-3 text-primary"></i>
-                        <h5 class="card-title fw-bold">Cadastro no Zempo</h5>
-                        <p class="card-text small text-muted mb-0">
-                            Aprovar e migrar atletas para a CBJ. Só a associação faz o cadastro.
-                        </p>
-                    </div>
-                </div>
-            </a>
-        </div>
-
-        <!-- Configurações -->
-        <div class="col-xl-3 col-lg-4 col-md-6">
-            <a href="{{ url_for('associacao.configuracoes_associacao', associacao_id=current_user.id_associacao) if current_user.id_associacao else url_for('associacao.configuracoes_associacao') }}" class="card-action-link text-decoration-none">
-                <div class="card h-100 shadow-sm border-secondary">
-                    <div class="card-body text-center p-4">
-                        <i class="bi bi-sliders display-5 mb-3 text-secondary"></i>
-                        <h5 class="card-title fw-bold">Configurações</h5>
-                        <p class="card-text small text-muted mb-0">Editar dados da associação.</p>
-                    </div>
-                </div>
-            </a>
-        </div>
-
-        <!-- Formas de pagamento (financeiro por academia) -->
-        <div class="col-xl-3 col-lg-4 col-md-6">
-            <a href="{{ url_for('financeiro.formas_pagamento') }}" class="card-action-link text-decoration-none">
-                <div class="card h-100 shadow-sm border-dark">
-                    <div class="card-body text-center p-4">
-                        <i class="bi bi-wallet2 display-5 mb-3 text-dark"></i>
-                        <h5 class="card-title fw-bold">Formas de pagamento</h5>
-                        <p class="card-text small text-muted mb-0">Dinheiro, PIX, boleto e outras formas por academia da associação.</p>
-                    </div>
-                </div>
-            </a>
-        </div>
-    </div>
+<div class="sh__secao">Estrutura</div>
+<div class="sh__grade">
+  {{ celula(url_for('associacao.lista_academias'), 'bi-house-door', 'Academias',
+            'Lista e gestão das academias da associação.') }}
+  {{ celula(url_for('associacao.lista_professores'), 'bi-person-badge', 'Professores',
+            'Professores vinculados às academias da associação.') }}
 </div>
-<style>
-.card-action-link .card { transition: transform 0.2s, box-shadow 0.2s; }
-.card-action-link:hover .card { transform: translateY(-4px); box-shadow: 0 0.5rem 1rem rgba(0,0,0,0.1) !important; }
-</style>
+
+<div class="sh__secao">Pessoas</div>
+<div class="sh__grade">
+  {{ celula(url_for('alunos.lista_alunos'), 'bi-people', 'Alunos',
+            'Alunos das academias, por modalidade ofertada.') }}
+  {{ celula(url_for('associacao.precadastro'), 'bi-person-plus', 'Pré-cadastro',
+            'Gere os links de pré-cadastro por academia.') }}
+  {{ celula(url_for('academia.lista_usuarios', origem='associacao'), 'bi-person-gear', 'Usuários',
+            'Usuários e vínculo com qualquer academia da associação.') }}
+  {{ celula(url_for('zempo.migracoes'), 'bi-person-vcard', 'Cadastro no Zempo',
+            'Aprovar e migrar atletas para a CBJ.') }}
+</div>
+
+<div class="sh__secao">Eventos</div>
+<div class="sh__grade">
+  {{ celula(url_for('eventos_competicoes.lista_eventos'), 'bi-calendar-event', 'Eventos',
+            'Cursos e seminários: inscrição e calendário, sem placar.') }}
+  {{ celula(url_for('eventos_competicoes.lista_competicoes'), 'bi-trophy', 'Competições',
+            'Campeonatos com placar, categorias e inscrição por academia.') }}
+  {{ celula(url_for('calendario.index'), 'bi-calendar3', 'Calendário',
+            'Eventos, feriados e o calendário da associação.') }}
+</div>
+
+<div class="sh__secao">Associação</div>
+<div class="sh__grade">
+  {{ celula(url_for('associacao.gerenciar_categorias'), 'bi-tags', 'Categorias',
+            'Faixas de idade e peso usadas nas competições.') }}
+  {{ celula(url_for('financeiro.formas_pagamento'), 'bi-wallet2', 'Formas de pagamento',
+            'Dinheiro, PIX, boleto e outras formas, por academia.') }}
+  {{ celula(url_for('formularios.lista'), 'bi-ui-checks', 'Formulários',
+            'Formulários montados sobre os campos do cadastro de aluno.') }}
+  {{ celula(url_for('associacao.configuracoes_associacao', associacao_id=current_user.id_associacao)
+            if current_user.id_associacao else url_for('associacao.configuracoes_associacao'),
+            'bi-gear', 'Configurações', 'Dados e preferências da associação.') }}
+</div>
 {% endblock %}

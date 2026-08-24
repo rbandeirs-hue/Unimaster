@@ -1,115 +1,50 @@
 {% extends "base_app.html" %}
-{% block title %}Painel Professor — Minha Turma{% endblock %}
+{% from 'components/ui.html' import celula, vazio %}
+{% set menu_ativo = 'gerenciamento' %}
+{% block title %}Painel do professor{% endblock %}
+
+{% block pagina_titulo %}Painel do professor{% endblock %}
+{% block pagina_subtitulo %}
+  {% if academia_nome %}{{ academia_nome }} · {% endif %}
+  Presença, relatório e histórico das suas turmas.
+{% endblock %}
+
 {% block content %}
-<div class="container mt-5">
-    <div class="mb-4">
-        <h2 class="h4 fw-bold text-primary">
-            <i class="bi bi-person-badge-fill me-2"></i> Painel Professor
-        </h2>
-        <p class="text-muted mb-0">
-            {% if academia_nome %}
-                {{ academia_nome }} — Acesso à presença, relatório e histórico da sua turma.
-            {% else %}
-                Acesso à presença, relatório e histórico da sua turma.
-            {% endif %}
-        </p>
-    </div>
+{% if turmas %}
 
-    <div class="row g-4 u-menu-cards">
-        {% if turmas %}
-        <div class="col-xl-4 col-lg-4 col-md-6">
-            <a href="{{ url_for('professor.minha_turma') }}" class="card-action-link text-decoration-none">
-                <div class="card h-100 shadow-sm border-primary">
-                    <div class="card-body text-center p-4">
-                        <i class="bi bi-people-fill display-5 mb-3 text-primary"></i>
-                        <h5 class="card-title fw-bold text-dark">Minha Turma</h5>
-                        <p class="card-text small text-muted mb-0">Alunos das turmas em que você leciona{% if turmas|length > 1 %} — escolha a turma na página{% endif %}.</p>
-                    </div>
-                </div>
-            </a>
-        </div>
-        {% endif %}
-        <div class="col-xl-4 col-lg-4 col-md-6">
-            {% include 'components/aniversariantes_menu_card.html' %}
-        </div>
-        <!-- Ranking de frequência -->
-        <div class="col-xl-4 col-lg-4 col-md-6">
-            <a href="{{ url_for('presencas.ranking_frequencia_pagina') }}" class="card-action-link text-decoration-none">
-                <div class="card h-100 shadow-sm border-warning">
-                    <div class="card-body text-center p-4">
-                        <i class="bi bi-trophy-fill display-5 mb-3 text-warning"></i>
-                        <h5 class="card-title fw-bold">Ranking de frequência</h5>
-                        <p class="card-text small text-muted mb-0">Pódio das suas turmas — mês e ano.</p>
-                    </div>
-                </div>
-            </a>
-        </div>
-
-        {% if turmas %}
-        <!-- Calendário -->
-        <div class="col-xl-4 col-lg-4 col-md-6">
-            <a href="{{ url_for('calendario.index') }}" class="card-action-link text-decoration-none">
-                <div class="card h-100 shadow-sm border-info">
-                    <div class="card-body text-center p-4">
-                        <i class="bi bi-calendar-event display-5 mb-3 text-info"></i>
-                        <h5 class="card-title fw-bold">Calendário</h5>
-                        <p class="card-text small text-muted mb-0">Eventos e aulas da academia.</p>
-                    </div>
-                </div>
-            </a>
-        </div>
-        
-        <!-- Registrar Presença -->
-        <div class="col-xl-4 col-lg-4 col-md-6">
-            <a href="{{ url_for('presencas.registro_presenca', academia_id=academia_id) if academia_id else url_for('presencas.registro_presenca') }}" class="card-action-link text-decoration-none">
-                <div class="card h-100 shadow-sm border-secondary">
-                    <div class="card-body text-center p-4">
-                        <i class="bi bi-clipboard-check-fill display-5 mb-3 text-secondary"></i>
-                        <h5 class="card-title fw-bold">Registrar Presença</h5>
-                        <p class="card-text small text-muted mb-0">Registro de chamada da sua turma.</p>
-                    </div>
-                </div>
-            </a>
-        </div>
-
-        <!-- Relatório de Frequência -->
-        <div class="col-xl-4 col-lg-4 col-md-6">
-            <a href="{{ url_for('presencas.ata_presenca', academia_id=academia_id) if academia_id else url_for('presencas.ata_presenca') }}" class="card-action-link text-decoration-none">
-                <div class="card h-100 shadow-sm border-info">
-                    <div class="card-body text-center p-4">
-                        <i class="bi bi-file-text display-5 mb-3 text-info"></i>
-                        <h5 class="card-title fw-bold">Relatório de Frequência</h5>
-                        <p class="card-text small text-muted mb-0">Ata e relatório de presenças da turma.</p>
-                    </div>
-                </div>
-            </a>
-        </div>
-
-        <!-- Histórico de Frequência -->
-        <div class="col-xl-4 col-lg-4 col-md-6">
-            <a href="{{ url_for('presencas.historico_presenca_lista', academia_id=academia_id) if academia_id else url_for('presencas.historico_presenca_lista') }}" class="card-action-link text-decoration-none">
-                <div class="card h-100 shadow-sm border-primary">
-                    <div class="card-body text-center p-4">
-                        <i class="bi bi-clock-history display-5 mb-3 text-primary"></i>
-                        <h5 class="card-title fw-bold">Histórico de Frequência</h5>
-                        <p class="card-text small text-muted mb-0">Histórico de presença por aluno da turma.</p>
-                    </div>
-                </div>
-            </a>
-        </div>
-        {% endif %}
-    </div>
-    {% if not turmas %}
-    <div class="alert alert-warning mt-3">
-        <i class="bi bi-exclamation-triangle-fill me-2"></i>
-        Nenhuma turma vinculada. Entre em contato com o gestor da academia para ser vinculado a uma turma.
-    </div>
-    {% set back_url = back_url or get_back_url_default() %}
-{% include 'components/botao_voltar.html' %}
-    {% endif %}
+<div class="sh__secao">Dia a dia</div>
+<div class="sh__grade">
+  {{ celula(url_for('presencas.registro_presenca', academia_id=academia_id) if academia_id
+            else url_for('presencas.registro_presenca'),
+            'bi-clipboard-check', 'Registrar presença',
+            'Chamada da sua turma, aula a aula.') }}
+  {{ celula(url_for('professor.minha_turma'), 'bi-people', 'Minhas turmas',
+            'Alunos das turmas em que você leciona' ~
+            (' — escolha a turma na página.' if turmas | length > 1 else '.')) }}
+  {{ celula(url_for('calendario.index'), 'bi-calendar3', 'Calendário',
+            'Eventos e aulas da academia.') }}
 </div>
-<style>
-.card-action-link .card { transition: transform 0.2s, box-shadow 0.2s; }
-.card-action-link:hover .card { transform: translateY(-4px); box-shadow: 0 0.5rem 1rem rgba(0,0,0,0.1) !important; }
-</style>
+
+<div class="sh__secao">Acompanhamento</div>
+<div class="sh__grade">
+  {{ celula(url_for('presencas.ata_presenca', academia_id=academia_id) if academia_id
+            else url_for('presencas.ata_presenca'),
+            'bi-file-text', 'Relatório de frequência',
+            'Ata e relatório de presenças da turma.') }}
+  {{ celula(url_for('presencas.historico_presenca_lista', academia_id=academia_id) if academia_id
+            else url_for('presencas.historico_presenca_lista'),
+            'bi-clock-history', 'Histórico de frequência',
+            'Presenças por aluno, ao longo do tempo.') }}
+  {{ celula(url_for('presencas.ranking_frequencia_pagina'), 'bi-trophy', 'Ranking de frequência',
+            'Pódio das suas turmas, por mês e por ano.') }}
+  {{ celula(url_for('aniversariante_live.pagina'), 'bi-balloon', 'Aniversariantes',
+            'Painel ao vivo dos aniversariantes do mês.') }}
+</div>
+
+{% else %}
+{# Sem turma vinculada não há o que fazer aqui: em vez de uma grade de
+   atalhos que não levam a lugar nenhum, a tela diz o que falta. #}
+{{ vazio('Nenhuma turma vinculada a você. Fale com o gestor da academia para ser vinculado a uma turma.',
+         url_for('painel.home'), 'Voltar ao início', 'bi-people') }}
+{% endif %}
 {% endblock %}

@@ -1,69 +1,64 @@
 {% extends "base_app.html" %}
-{% block title %}Painel – Aluno{% endblock %}
+{% from 'components/ui.html' import celula %}
+{% set menu_ativo = 'gerenciamento' %}
+{% block title %}Painel do aluno{% endblock %}
+
+{% block pagina_titulo %}Meu painel{% endblock %}
+{% block pagina_subtitulo %}Seu treino, suas presenças e suas mensalidades.{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
-    <!-- Cards do painel -->
-    {% if stats %}
-    <div class="row g-4">
-        <div class="col-12 col-sm-6 col-md-4">
-            <div class="card shadow-sm border-success card-hover painel-atalho-card h-100">
-                <div class="card-body text-center py-3 px-3 d-flex flex-column align-items-center justify-content-center">
-                    <i class="bi bi-clipboard-check fs-3 mb-2 text-success"></i>
-                    <h6 class="fw-bold mb-1">Presenças (mês)</h6>
-                    <p class="text-muted small mb-2">Registros no mês atual</p>
-                    <span class="display-6 fw-bold text-success">{{ stats.get('presencas_mes', 0) }}</span>
-                </div>
-            </div>
-        </div>
-        <div class="col-12 col-sm-6 col-md-4">
-            <div class="card shadow-sm border-info card-hover painel-atalho-card h-100">
-                <div class="card-body text-center py-3 px-3 d-flex flex-column align-items-center justify-content-center">
-                    <i class="bi bi-collection fs-3 mb-2 text-info"></i>
-                    <h6 class="fw-bold mb-1">Turmas</h6>
-                    <p class="text-muted small mb-2">Turmas vinculadas</p>
-                    <span class="display-6 fw-bold text-info">{{ stats.get('turmas_count', 0) }}</span>
-                </div>
-            </div>
-        </div>
-        <div class="col-12 col-sm-6 col-md-4">
-            <div class="card shadow-sm {{ 'border-warning' if stats.get('mensalidades_pendentes', 0) > 0 else 'border-secondary' }} card-hover painel-atalho-card h-100">
-                <div class="card-body text-center py-3 px-3 d-flex flex-column align-items-center justify-content-center">
-                    <i class="bi bi-calendar-x fs-3 mb-2 {{ 'text-warning' if stats.get('mensalidades_pendentes', 0) > 0 else 'text-secondary' }}"></i>
-                    <h6 class="fw-bold mb-1">Mensalidades em aberto</h6>
-                    <p class="text-muted small mb-2">Pagamentos pendentes</p>
-                    <span class="display-6 fw-bold {{ 'text-warning' if stats.get('mensalidades_pendentes', 0) > 0 else 'text-secondary' }}">{{ stats.get('mensalidades_pendentes', 0) }}</span>
-                </div>
-            </div>
-        </div>
-    </div>
-    {% endif %}
-
-    <div class="row g-4 mt-1">
-        <div class="col-12 col-md-6 col-lg-4">
-            <a href="{{ url_for('presencas.ranking_frequencia_pagina') }}" class="text-decoration-none">
-                <div class="card shadow-sm border-warning card-hover painel-atalho-card h-100">
-                    <div class="card-body text-center py-3 px-3 d-flex flex-column align-items-center justify-content-center">
-                        <i class="bi bi-trophy-fill fs-3 mb-2 text-warning"></i>
-                        <h6 class="fw-bold mb-1 text-dark">Ranking de frequência</h6>
-                        <p class="text-muted small mb-2">Pódio por turma — mês e ano</p>
-                        <span class="btn btn-warning btn-sm text-dark px-3">Abrir ranking</span>
-                    </div>
-                </div>
-            </a>
-        </div>
-        <div class="col-12 col-md-6 col-lg-4">
-            {% include 'components/card_aniversariantes.html' %}
-        </div>
-    </div>
+{% if stats %}
+{% set pendentes = stats.get('mensalidades_pendentes', 0) %}
+<div class="sh__faixa">
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Presenças no mês</span>
+    <span class="sh__faixa-valor">{{ stats.get('presencas_mes', 0) }}</span>
+    <span class="lst-sub">Registros no mês atual</span>
+  </div>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Turmas</span>
+    <span class="sh__faixa-valor">{{ stats.get('turmas_count', 0) }}</span>
+    <span class="lst-sub">Em que você está matriculado</span>
+  </div>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Mensalidades em aberto</span>
+    <span class="sh__faixa-valor {% if pendentes %}sh__faixa-valor--alerta{% endif %}">{{ pendentes }}</span>
+    <span class="lst-sub">
+      {% if pendentes %}Aguardando pagamento{% else %}Nada em aberto{% endif %}
+    </span>
+  </div>
 </div>
 
-<style>
-.painel-atalho-card { transition: 0.2s ease; }
-.card { border-radius: 0.75rem; transition: 0.2s ease; }
-.card:hover, .card-hover:hover { transform: translateY(-5px); box-shadow: 0 0.6rem 1.2rem rgba(0,0,0,0.15) !important; }
-@media (max-width: 575.98px) {
-    .row.g-4 > [class*="col-"] { margin-bottom: 0.5rem; }
-}
-</style>
+{% if pendentes %}
+<div class="sh__atencao">
+  <a href="{{ url_for('painel_aluno.minhas_mensalidades') }}" class="sh__alerta sh__alerta--urgente">
+    <span class="sh__alerta-num">{{ pendentes }}</span>
+    <span class="sh__alerta-txt">mensalidade{{ 's' if pendentes != 1 }} em aberto</span>
+    <span class="sh__alerta-link">Ver mensalidades &rarr;</span>
+  </a>
+</div>
+{% endif %}
+{% endif %}
+
+<div class="sh__secao">Meu treino</div>
+<div class="sh__grade">
+  {{ celula(url_for('painel_aluno.minha_turma'), 'bi-collection', 'Minha turma',
+            'Horários, local e professor responsável.') }}
+  {{ celula(url_for('painel_aluno.minhas_presencas'), 'bi-clipboard-check', 'Minhas presenças',
+            'Histórico de presença nas suas aulas.') }}
+  {{ celula(url_for('presencas.ranking_frequencia_pagina'), 'bi-trophy', 'Ranking de frequência',
+            'Pódio da sua turma, por mês e por ano.') }}
+  {{ celula(url_for('painel_aluno.curriculo'), 'bi-award', 'Meu currículo',
+            'Graduações, competições e resultados.') }}
+</div>
+
+<div class="sh__secao">Financeiro e eventos</div>
+<div class="sh__grade">
+  {{ celula(url_for('painel_aluno.minhas_mensalidades'), 'bi-cash-coin', 'Minhas mensalidades',
+            'Situação de pagamento e segunda via.', pendentes or None) }}
+  {{ celula(url_for('eventos_competicoes.disponiveis'), 'bi-calendar-event', 'Eventos disponíveis',
+            'Cursos, seminários e competições abertos.') }}
+  {{ celula(url_for('aniversariante_live.pagina'), 'bi-balloon', 'Aniversariantes',
+            'Painel ao vivo dos aniversariantes do mês.') }}
+</div>
 {% endblock %}

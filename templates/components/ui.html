@@ -85,3 +85,80 @@
   {% endif %}
   <span class="u-pill {% if tom %}u-pill--{{ tom }}{% endif %} {{ extra }}">{{ texto }}</span>
 {% endmacro %}
+
+
+{# =======================================================================
+   Vocabulário do shell — macros que faltavam
+   =======================================================================
+   Nasceram do modo academia, onde o markup já estava padronizado mas
+   copiado tela a tela. Viram macro para que associação, professor, aluno e
+   responsável tenham o mesmo desenho sem reescrever HTML.
+   ======================================================================= #}
+
+{# Botão de voltar do cabeçalho. Com a lateral fixa, o voltar deixa de ser
+   navegação e vira só o retorno do fluxo — por isso mora em `pagina_acoes`,
+   secundário, e não solto no meio do conteúdo.
+
+   ATENÇÃO: `get_back_url_default` vem de context processor, não é global do
+   Jinja. Quem usar esta macro precisa importar COM contexto:
+
+       {% from 'components/ui.html' import voltar with context %}
+
+   Sem o `with context` a macro estoura com 'get_back_url_default' is
+   undefined — ou passe o destino explicitamente em `href`. #}
+{% macro voltar(href=None, texto='Voltar') %}
+<a href="{{ href or get_back_url_default() }}" class="sh__btn">
+  <i class="bi bi-arrow-left"></i> {{ texto }}
+</a>
+{% endmacro %}
+
+
+{# Faixa de indicadores do topo da tela.
+   itens: lista de dicts {rotulo, valor, nota (opcional), alerta (opcional)} #}
+{% macro faixa(itens) %}
+<div class="sh__faixa">
+  {% for i in itens %}
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">{{ i.rotulo }}</span>
+    <span class="sh__faixa-valor {% if i.alerta and i.valor %}sh__faixa-valor--alerta{% endif %}">{{ i.valor }}</span>
+    {% if i.nota %}<span class="lst-sub">{{ i.nota }}</span>{% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% endmacro %}
+
+
+{# Cabeçalho de bloco dentro do conteúdo ("Alunos e turmas"). #}
+{% macro secao_shell(titulo) %}
+<div class="sh__secao">{{ titulo }}</div>
+{% endmacro %}
+
+
+{# Estado vazio: uma frase, opcionalmente com uma ação. Substitui os "nenhum
+   registro" que cada tela escrevia com marcação própria. #}
+{% macro vazio(texto, href=None, acao=None, icone='bi-inbox') %}
+<div class="lst-vazio">
+  <i class="bi {{ icone }}"></i>
+  <p>{{ texto }}</p>
+  {% if href and acao %}<a href="{{ href }}" class="sh__btn">{{ acao }}</a>{% endif %}
+</div>
+{% endmacro %}
+
+
+{# Quadro de lista: moldura branca com título e rolagem horizontal própria.
+   Uso:
+     {% call quadro('Professores', meta='12 ativos') %} ...linhas... {% endcall %}
+#}
+{% macro quadro(titulo, meta=None, min_largura=None) %}
+<div class="lst-quadro">
+  <div class="lst-quadro__topo">
+    <span class="lst-quadro__titulo">{{ titulo }}</span>
+    {% if meta %}<span class="lst-quadro__meta">{{ meta }}</span>{% endif %}
+  </div>
+  <div class="lst-rolagem">
+    <div class="lst-largura" {% if min_largura %}style="--lst-min: {{ min_largura }}px"{% endif %}>
+      {{ caller() }}
+    </div>
+  </div>
+</div>
+{% endmacro %}

@@ -1,0 +1,150 @@
+/* =======================================================================
+   Formulários — o mesmo desenho em todos os modos
+   =======================================================================
+   O padrão nasceu nas telas do modo academia (`usuarios/criar_usuario.html`
+   e irmãs), mas vivia copiado dentro de cada template — com resíduo do
+   dialeto antigo (azul Bootstrap cravado no foco, raio próprio). Aqui ele
+   vira camada, consome os tokens do shell e passa a valer para associação,
+   professor, aluno e responsável.
+
+   Vocabulário:
+     .frm            largura de leitura do formulário
+     .frm__secao     bloco branco com título
+     .frm__titulo    cabeçalho do bloco
+     .frm__ajuda     linha de apoio abaixo do título
+     .frm__acoes     barra de botões no fim
+     .frm__opcoes    grade de caixas selecionáveis (papéis, academias…)
+     .frm__opcao     uma caixa selecionável
+   ======================================================================= */
+
+.frm { max-width: 920px; }
+
+/* ------------------------------------------------------------ bloco */
+.frm__secao {
+  background: #fff;
+  border: 1px solid var(--sh-line);
+  border-radius: var(--u-radius);
+  padding: 1.35rem 1.5rem;
+  margin-bottom: 1.1rem;
+}
+
+.frm__titulo {
+  display: flex;
+  align-items: center;
+  gap: .55rem;
+  font-size: .82rem;
+  font-weight: 700;
+  color: var(--sh-ink);
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  margin-bottom: 1rem;
+  padding-bottom: .65rem;
+  border-bottom: 1px solid var(--sh-line);
+}
+.frm__titulo i { color: var(--sh-ink-soft); font-size: 1rem; }
+
+.frm__ajuda {
+  font-size: .82rem;
+  color: var(--sh-ink-soft);
+  margin: -.4rem 0 .9rem;
+}
+
+/* ------------------------------------------------------------ campos */
+/* Alcança os campos do Bootstrap sem exigir que o template troque classe:
+   as telas seguem usando form-label / form-control / form-select. */
+.frm .form-label {
+  color: var(--sh-ink);
+  font-weight: 600;
+  font-size: .85rem;
+  margin-bottom: .35rem;
+}
+
+.frm .form-control,
+.frm .form-select {
+  border-radius: var(--u-radius-sm);
+  border: 1px solid var(--sh-line);
+  padding: .6rem .85rem;
+  background: #fdfcfa;
+  color: var(--sh-ink);
+  transition: border-color var(--u-transition), box-shadow var(--u-transition), background var(--u-transition);
+}
+.frm .form-control:focus,
+.frm .form-select:focus {
+  border-color: var(--sh-ink);
+  box-shadow: 0 0 0 3px rgba(28, 28, 28, .08);
+  background: #fff;
+}
+.frm .form-control::placeholder { color: #a9a6a1; }
+.frm .form-control:disabled,
+.frm .form-select:disabled { background: #f4f2ee; color: var(--sh-ink-soft); }
+
+.frm .form-text { color: var(--sh-ink-soft); font-size: .78rem; }
+.frm .invalid-feedback { font-size: .78rem; }
+
+/* Campo com ícone à esquerda. */
+.frm__campo-ico { position: relative; }
+.frm__campo-ico > i {
+  position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+  color: var(--sh-ink-soft); pointer-events: none; font-size: 1rem;
+}
+.frm__campo-ico > .form-control { padding-left: 2.4rem; }
+
+/* ------------------------------------------------ caixas selecionáveis */
+.frm__opcoes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: .55rem;
+}
+
+.frm__opcao {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  padding: .65rem .85rem;
+  background: #fdfcfa;
+  border: 1px solid var(--sh-line);
+  border-radius: var(--u-radius-sm);
+  cursor: pointer;
+  user-select: none;
+  font-size: .88rem;
+  font-weight: 500;
+  color: var(--sh-ink);
+  transition: border-color var(--u-transition), background var(--u-transition);
+}
+.frm__opcao:hover { border-color: #d8d5d0; background: #f7f5f1; }
+.frm__opcao input { position: absolute; opacity: 0; pointer-events: none; }
+
+.frm__opcao-marca {
+  width: 20px; height: 20px;
+  flex: none;
+  border-radius: 50%;
+  border: 1.5px solid #cfcbc4;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: .72rem;
+  color: transparent;
+  transition: all var(--u-transition);
+}
+.frm__opcao.is-marcada { border-color: var(--sh-ink); background: #f4f2ee; }
+.frm__opcao.is-marcada .frm__opcao-marca {
+  background: var(--sh-ink); border-color: var(--sh-ink); color: #fff;
+}
+
+/* -------------------------------------------------------------- ações */
+.frm__acoes {
+  display: flex;
+  gap: var(--u-space-2);
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  padding-top: .25rem;
+}
+
+/* ------------------------------------------------------------ celular */
+@media (max-width: 767.98px) {
+  .frm__secao { padding: 1.1rem 1rem; }
+  /* 16px evita o zoom automático do iOS ao focar o campo. */
+  .frm .form-control, .frm .form-select { font-size: 16px; }
+  .frm__acoes { justify-content: stretch; }
+  .frm__acoes .sh__btn { flex: 1; justify-content: center; }
+  .frm__opcoes { grid-template-columns: 1fr; }
+}
