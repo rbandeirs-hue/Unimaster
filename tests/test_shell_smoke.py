@@ -123,6 +123,42 @@ def test_menu_de_todo_modo_tem_itens():
             assert all(i.href for i in itens), "item sem rota no modo %s" % modo
 
 
+# Prefixo de classe -> folha de estilo que precisa estar ligada na página.
+# Existe porque isto já quebrou: ao remover os <link> duplicados de
+# listas.css dos templates, o script apagou também o do base_app.html.
+# Todas as telas de lista ficaram sem folha, e nenhum teste percebeu — os
+# GETs seguiam respondendo 200, só que sem desenho.
+CSS_POR_CLASSE = {
+    "lst-": "css/base/listas.css",
+    "frm__": "css/base/formularios.css",
+    "sh__": "css/base/shell.css",
+}
+
+
+def test_toda_pagina_carrega_o_css_que_usa():
+    from app import app
+    app.config["WTF_CSRF_ENABLED"] = False
+    faltando = []
+    for modo in USUARIO_POR_MODO:
+        if modo in MODOS_SEM_USUARIO_COMPLETO:
+            continue
+        c = _cliente(app, modo)
+        for endpoint, rule in _rotas_visitaveis(app):
+            resp = c.get(rule, follow_redirects=True)
+            if resp.status_code != 200:
+                continue
+            if "text/html" not in (resp.headers.get("Content-Type") or ""):
+                continue
+            html = resp.get_data(as_text=True)
+            if "<html" not in html:
+                continue
+            for classe, folha in CSS_POR_CLASSE.items():
+                if 'class="' in html and classe in html and folha not in html:
+                    faltando.append((modo, rule, classe, folha))
+    resumo = "\n".join("  [%s] %s usa %s mas não carrega %s" % f for f in faltando[:20])
+    assert not faltando, "%d página(s) sem o CSS que usam:\n%s" % (len(faltando), resumo)
+
+
 if __name__ == "__main__":
     visitadas, falhas = coletar_falhas()
     print("visitas: %d   falhas: %d" % (visitadas, len(falhas)))
