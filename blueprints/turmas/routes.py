@@ -8,7 +8,13 @@ from flask_login import login_required, current_user
 from config import get_db_connection
 from utils.modalidades import filtro_visibilidade_sql
 
+from utils.permissoes import somente_gestao
 bp_turmas = Blueprint("turmas", __name__)
+
+
+# Aluno, responsável e visitante não entram aqui nem digitando a URL:
+# a maioria destas rotas tinha só `@login_required`.
+bp_turmas.before_request(somente_gestao())
 
 # ======================================================
 # 🔹 Academias disponíveis conforme o perfil
@@ -134,6 +140,18 @@ def lista_turmas():
     if busca:
         filters.append("(Nome LIKE %s OR Professor LIKE %s OR DiasHorario LIKE %s)")
         params.extend(['%' + busca + '%', '%' + busca + '%', '%' + busca + '%'])
+    # Contexto de modalidade: com o judô em foco, a lista para de trazer as
+    # turmas de ginástica. Turma sem modalidade cadastrada não some sem aviso —
+    # ela é contada em `multimodalidade.pendencias`.
+    try:
+        from utils.multimodalidade import filtro_turmas_sql
+        _trecho, _ps = filtro_turmas_sql("turmas", academia_filtro)
+        if _trecho:
+            # `filters` são unidos com AND; o trecho já vem com o seu.
+            filters.append(_trecho.strip().removeprefix("AND ").strip())
+            params.extend(_ps)
+    except Exception:
+        pass
     if filters:
         query += " WHERE " + " AND ".join(filters)
     query += " ORDER BY Nome"

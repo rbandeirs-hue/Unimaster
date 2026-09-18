@@ -320,6 +320,18 @@
   transition: background var(--u-transition), border-color var(--u-transition);
 }
 .sh__btn:hover { background: #f4f2ee; border-color: #d8d5d0; color: var(--sh-ink); }
+/* Nome de pessoa dentro do botão ("Voltar para Ana Beatriz"): trunca em vez de
+   esticar. Sem isto, um nome comprido faz o botão empurrar os vizinhos para a
+   linha de baixo e a barra de ações vira duas fileiras desalinhadas. */
+.sh__btn__nome {
+  display: inline-block;
+  max-width: 11rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+@media (max-width: 640px) { .sh__btn__nome { max-width: 7rem; } }
 /* Ação principal da tela: preta. Uma por tela — quem só navega usa o botão
    neutro. O vermelho fica reservado ao que comunica estado (turma lotada,
    mensalidade em atraso, item ativo da lateral), para não competir com ela. */
@@ -631,3 +643,59 @@ body.sh.layout-embed .sh__conteudo { padding: var(--u-space-3); }
    vínculo). Mantêm o topo, o tema e os scripts; só não oferecem navegação
    para dentro do sistema antes de a escolha ser feita. */
 .sh__main--sem-lateral { margin-left: 0; }
+
+/* Contexto de modalidade — mesma pastilha do indicador de academia, mas com
+   um <select> dentro: aqui o gestor não vai a outra tela, ele troca o recorte
+   e continua onde está. Só aparece em academia com mais de uma modalidade. */
+.sh__modalidade {
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  padding: .35rem .7rem;
+  border: 1px solid var(--sh-line);
+  border-radius: var(--u-radius-pill);
+  background: #fff;
+  color: var(--sh-ink);
+  font-size: .85rem;
+  font-weight: 600;
+  white-space: nowrap;
+  max-width: 260px;
+  transition: border-color var(--u-transition);
+}
+.sh__modalidade:hover { border-color: var(--sh-ink-soft); }
+.sh__modalidade i { color: var(--sh-ink-soft); }
+.sh__modalidade select {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  padding: 0 .2rem;
+  max-width: 190px;
+  cursor: pointer;
+}
+.sh__modalidade select:focus { outline: none; }
+/* Contexto ligado: a pastilha fica marcada, para o gestor não estranhar uma
+   lista curta sem lembrar que filtrou. */
+.sh__modalidade.is-ativo { border-color: var(--sh-red); }
+/* A pastilha do seletor também usa a cor da modalidade: o gestor vê onde está
+   sem precisar ler o nome. */
+.sh__modalidade.is-ativo i,
+.sh__modalidade.is-ativo select { color: var(--sh-red); }
+@media (max-width: 767.98px) { .sh__modalidade { display: none; } }
+
+/* Aviso do recorte por modalidade: informa sem assustar — o que está fora não
+   sumiu, só não pertence à modalidade em foco. */
+.sh__aviso-contexto {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  margin: 0 0 1rem;
+  padding: .55rem .8rem;
+  border: 1px solid var(--sh-line);
+  border-left: 3px solid var(--u-cor-primaria, #2563eb);
+  border-radius: var(--u-radius-sm, 8px);
+  background: var(--sh-fundo-suave, #f8fafc);
+  color: var(--sh-ink-soft);
+  font-size: .85rem;
+}
+.sh__aviso-contexto i { color: var(--u-cor-primaria, #2563eb); }

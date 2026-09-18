@@ -1,12 +1,18 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Envio diário de lembretes de mensalidade via WhatsApp.
+"""Envio de cobranças de mensalidade via WhatsApp (régua) e aniversários.
 
-Roda 1x/dia (systemd timer). Para cada academia com a automação ligada
-(whatsapp_lembrete_mensalidade=1) e com WhatsApp conectado, envia lembrete
-das mensalidades pendentes/atrasadas com vencimento até hoje + DIAS_ANTES.
+Roda de hora em hora (systemd timer) e não envia nada fora da hora configurada
+por academia (`cobranca_regua_config.hora_envio`, padrão 9h). Rodar mais vezes
+é inofensivo: quem decide se sai mensagem é a régua de cobrança, e a trava em
+`whatsapp_envios` impede a mesma etapa de sair duas vezes no mesmo dia.
+
+Para cada academia com a automação ligada (whatsapp_lembrete_mensalidade=1) e
+WhatsApp conectado, aplica a régua: só fala nos dias configurados (D-5, D-1,
+D0, D+3, D+7, ...) em vez de cobrar todo vencido todo dia.
 
 Uso: .venv/bin/python scripts/enviar_lembretes_whatsapp.py
+     .venv/bin/python scripts/enviar_lembretes_whatsapp.py --agora   (ignora a hora)
 """
 import os
 import sys
@@ -17,11 +23,17 @@ from app import app
 from config import get_db_connection
 from utils import whatsapp as wpp
 from utils import whatsapp_lembretes as lem
+from utils import regua_cobranca as regua
 
+# Mantida por compatibilidade: só é usada se a régua estiver indisponível.
 DIAS_ANTES = int(os.environ.get("WPP_DIAS_ANTES", "3"))
+# `--agora` roda a régua independentemente da hora configurada (teste manual).
+IGNORAR_HORA = "--agora" in sys.argv
 
 
 def main():
+    from datetime import datetime
+    hora_atual = datetime.now().hour
     with app.app_context():
         if not wpp.disponivel():
             print("[lembretes] microserviço WhatsApp offline — abortando.")
@@ -54,12 +66,25 @@ def main():
                 print(f"[lembretes] academia {aid} ({ac['nome']}): WhatsApp não conectado — pulando.")
                 continue
 
+            # A academia escolhe a hora do disparo; o timer é de hora em hora.
+            # Fora dela, nada sai — nem cobrança nem parabéns.
+            cfg = regua.carregar(aid)
+            na_hora = IGNORAR_HORA or int(cfg.get("hora_envio", 9)) == hora_atual
+            if not na_hora:
+                continue
+
             if ac.get("lembretes"):
-                resumo = lem.enviar_lote(aid, dias_antes=DIAS_ANTES, somente_ativadas=True)
+                resumo = lem.processar_regua(aid, somente_ativadas=True)
                 total_geral += resumo.get("enviados", 0)
-                print(f"[lembretes] academia {aid} ({ac['nome']}): "
-                      f"{resumo.get('enviados',0)} enviados, {resumo.get('falhas',0)} falhas, "
-                      f"{resumo.get('sem_telefone',0)} sem telefone (de {resumo.get('total',0)}).")
+                print(f"[régua] academia {aid} ({ac['nome']}): "
+                      f"{resumo.get('enviados',0)} enviados "
+                      f"({resumo.get('consolidados',0)} consolidados), "
+                      f"{resumo.get('falhas',0)} falhas, "
+                      f"{resumo.get('sem_telefone',0)} sem telefone, "
+                      f"{resumo.get('repetidos',0)} já enviados hoje, "
+                      f"{resumo.get('tratativa',0)} para tratativa, "
+                      f"{resumo.get('suspensos',0)} suspensos "
+                      f"(de {resumo.get('total',0)} em aberto).")
 
             if ac.get("aniversario"):
                 ra = lem.enviar_aniversariantes(aid, somente_ativadas=True)
@@ -70,7 +95,7 @@ def main():
                           f"{ra.get('sem_telefone',0)} sem telefone, "
                           f"{ra.get('repetidos',0)} já enviados hoje (de {ra.get('total',0)}).")
 
-        print(f"[lembretes] concluído. Mensalidades: {total_geral} · Aniversários: {total_aniv}.")
+        print(f"[lembretes] concluído. Cobranças: {total_geral} · Aniversários: {total_aniv}.")
 
 
 if __name__ == "__main__":

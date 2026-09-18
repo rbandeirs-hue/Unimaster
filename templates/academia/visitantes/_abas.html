@@ -1,0 +1,28 @@
+{# Barra de abas das quatro telas de visitante.
+
+   Vivia solta dentro da lista; as outras três telas estendiam `base_app.html`
+   com um `container` do Bootstrap e ficavam sem aba nenhuma — o gestor entrava
+   numa aba e perdia a navegação para voltar às outras.
+
+   Uso:  {% set aba_ativa = 'solicitacoes' %}
+         {% include 'academia/visitantes/_abas.html' %}
+   Chaves: visitantes · solicitacoes · diarias · matriculas #}
+<nav class="lst-abas">
+  {% set _abas = abas if abas is defined else {} %}
+  {% for chave, nome, href, qtd in [
+      ('visitantes',   'Visitantes',
+       url_for('academia.lista_visitantes', academia_id=academia_id),
+       (stats.total_visitantes if stats is defined else _abas.get('visitantes'))),
+      ('solicitacoes', 'Solicitações de aulas',
+       url_for('academia.solicitacoes_aulas', academia_id=academia_id), _abas.get('solicitacoes')),
+      ('diarias',      'Pagamentos de diária',
+       url_for('academia.pagamentos_diaria', academia_id=academia_id), _abas.get('diarias')),
+      ('matriculas',   'Matrículas realizadas',
+       url_for('academia.solicitacoes_mensalidade', academia_id=academia_id), _abas.get('matriculas'))
+    ] %}
+  {% set ativa = (aba_ativa | default('visitantes')) == chave %}
+  <a href="{{ href }}" class="lst-aba {% if ativa %}is-ativa{% endif %}">
+    {{ nome }}<span class="lst-aba__n {% if qtd and not ativa %}is-alerta{% endif %}">{{ qtd or 0 }}</span>
+  </a>
+  {% endfor %}
+</nav>

@@ -717,6 +717,8 @@ def simular_graduacao_prevista(aluno):
         
         return render_template(
             "painel_responsavel/simular_graduacao_prevista.html",
+            # Volta para o painel DO FILHO aberto, não para a escolha de filho.
+            voltar_url=url_for("painel_responsavel.meu_perfil", aluno_id=aluno["id"]),
             aluno=aluno,
             graduacoes_previstas=graduacoes_previstas,
             previsao_proximo_exame_input=previsao_input,
@@ -811,6 +813,8 @@ def simular_categorias(alunos):
     
     return render_template(
         "painel_responsavel/simular_categorias.html",
+            # Volta para o painel DO FILHO aberto, não para a escolha de filho.
+            voltar_url=url_for("painel_responsavel.meu_perfil", aluno_id=aluno["id"] if aluno else None),
         alunos=alunos,
         aluno=aluno,
         categorias_disponiveis=categorias_disponiveis,

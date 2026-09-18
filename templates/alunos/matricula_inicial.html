@@ -1,0 +1,367 @@
+{% extends "base_app.html" %}
+{% set menu_ativo = 'alunos' %}
+{% block title %}Matrícula — {{ aluno.nome }}{% endblock %}
+
+{% block pagina_titulo %}Matrícula de {{ aluno.nome }}{% endblock %}
+{% block pagina_subtitulo %}
+  Defina a turma, as modalidades e a primeira mensalidade. Tudo aqui pode ser ajustado depois na ficha do aluno.
+{% endblock %}
+
+{% block pagina_acoes %}
+  <a class="sh__btn" href="{{ voltar_url }}"><i class="bi bi-arrow-left"></i> Voltar</a>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+  .mat-cartoes { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: .6rem; }
+
+  .mat-cartao {
+    position: relative;
+    display: flex; align-items: flex-start; gap: .65rem;
+    padding: .75rem .85rem;
+    background: #fdfcfa;
+    border: 1px solid var(--sh-line); border-radius: var(--u-radius-sm);
+    cursor: pointer; user-select: none;
+    transition: border-color var(--u-transition), background var(--u-transition);
+  }
+  .mat-cartao:hover { border-color: #d8d5d0; background: #f7f5f1; }
+  .mat-cartao input { position: absolute; opacity: 0; pointer-events: none; }
+  .mat-cartao.is-marcada { border-color: var(--sh-ink); background: #f4f2ee; }
+
+  .mat-marca {
+    width: 20px; height: 20px; flex: none; margin-top: .1rem;
+    border-radius: var(--u-radius-sm); border: 1.5px solid #cfcbc4;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: .72rem; color: transparent;
+    transition: all var(--u-transition);
+  }
+  .mat-cartao.is-marcada .mat-marca { background: var(--sh-ink); border-color: var(--sh-ink); color: #fff; }
+
+  .mat-cartao__corpo { min-width: 0; }
+  .mat-cartao__nome { font-weight: 600; font-size: .92rem; line-height: 1.25; }
+  .mat-cartao__meta { display: block; margin-top: .2rem; color: var(--sh-ink-soft); font-size: .8rem; line-height: 1.45; }
+
+  .mat-selo {
+    display: inline-block; margin-top: .35rem; padding: .1rem .4rem;
+    border-radius: 999px; font-size: .72rem; font-weight: 600;
+    border: 1px solid #f2e2c2; background: #fdf3e3; color: #7a5b18;
+  }
+  .mat-selo--cheia { border-color: #f6cdcd; background: #fef4f4; color: #a4131f; }
+
+  /* Modalidade é uma etiqueta curta: cabe mais por linha que a turma. */
+  .mat-chips { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: .5rem; }
+  .mat-chips .mat-cartao { align-items: center; padding: .6rem .8rem; }
+  .mat-chips .mat-marca { margin-top: 0; }
+
+  .mat-aviso {
+    display: flex; gap: .6rem; align-items: flex-start;
+    margin-top: .9rem; padding: .75rem .9rem;
+    border-radius: var(--u-radius-sm);
+    background: #fdf3e3; border: 1px solid #f2e2c2; color: #7a5b18;
+    font-size: .86rem; line-height: 1.5;
+  }
+  .mat-aviso i { margin-top: .1rem; }
+  .mat-aviso label { display: flex; align-items: center; gap: .45rem; margin: .5rem 0 0; font-weight: 600; cursor: pointer; }
+
+  .mat-liga { display: flex; align-items: center; gap: .6rem; font-weight: 600; font-size: .92rem; cursor: pointer; }
+  .mat-liga input { width: 1.05rem; height: 1.05rem; flex: none; cursor: pointer; }
+
+  .mat-grade { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: .9rem; margin-top: 1rem; }
+  .mat-total { margin-top: .9rem; font-size: .88rem; color: var(--sh-ink-soft); }
+  .mat-total strong { color: var(--sh-ink); }
+</style>
+{% endblock %}
+
+{% block content %}
+<form class="frm" method="POST"
+      action="{{ url_for('alunos.matricula_inicial', aluno_id=aluno.id) }}" novalidate>
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="next" value="{{ voltar_url }}">
+
+  {# ----------------------------------------------------------------- turmas #}
+  <div class="frm__secao">
+    <div class="frm__titulo"><i class="bi bi-people"></i> Turmas</div>
+    <p class="frm__ajuda">
+      Em quais turmas este aluno treina.
+      {% if idade is not none %}Ele tem <strong>{{ idade }} anos</strong> — turmas fora da faixa etária vêm marcadas.{% endif %}
+    </p>
+
+    {% if turmas %}
+    <div class="mat-cartoes">
+      {% for t in turmas %}
+      <label class="mat-cartao {% if t.TurmaID in turmas_sel %}is-marcada{% endif %}">
+        <input type="checkbox" name="turma_ids" value="{{ t.TurmaID }}"
+               data-fora="{{ 1 if t.fora_da_faixa else 0 }}"
+               data-modalidades="{{ t.modalidade_ids | join(',') }}"
+               {% if t.TurmaID in turmas_sel %}checked{% endif %}>
+        <span class="mat-marca"><i class="bi bi-check-lg"></i></span>
+        <span class="mat-cartao__corpo">
+          <span class="mat-cartao__nome">{{ t.Nome }}</span>
+          {% if t.horario %}<span class="mat-cartao__meta">{{ t.horario }}</span>{% endif %}
+          <span class="mat-cartao__meta">
+            {{ t.faixa or 'Sem faixa etária' }}{% if t.ocupacao %} · {{ t.ocupacao }} vagas{% endif %}
+            {%- if t.modalidades %} · {{ t.modalidades | map(attribute='nome') | join(', ') }}{% endif %}
+          </span>
+          {% if t.fora_da_faixa %}<span class="mat-selo">Fora da faixa etária</span>{% endif %}
+          {% if t.lotada %}<span class="mat-selo mat-selo--cheia">Turma lotada</span>{% endif %}
+        </span>
+      </label>
+      {% endfor %}
+    </div>
+
+    <div class="mat-aviso" id="avisoIdade" hidden>
+      <i class="bi bi-exclamation-triangle"></i>
+      <div>
+        A idade do aluno está fora da faixa de alguma turma marcada. Isso acontece em
+        casos legítimos (irmão que treina junto, aluno adiantado), mas precisa ser assumido.
+        <label>
+          <input type="checkbox" name="excecao_idade" value="1" id="excecaoIdade">
+          Matricular mesmo assim
+        </label>
+      </div>
+    </div>
+    {% else %}
+    <p class="lst-vazio">
+      Esta academia ainda não tem turmas cadastradas.
+      <a href="{{ url_for('turmas.lista_turmas') }}">Cadastre uma turma</a> para matricular o aluno.
+    </p>
+    {% endif %}
+  </div>
+
+  {# ----------------------------------------------------------- modalidades #}
+  <div class="frm__secao">
+    <div class="frm__titulo"><i class="bi bi-award"></i> Modalidades</div>
+    <p class="frm__ajuda">
+      O que o aluno pratica. Ao marcar uma turma, as modalidades dela já vêm marcadas aqui.
+    </p>
+
+    {% if modalidades %}
+    <div class="mat-chips">
+      {% for m in modalidades %}
+      <label class="mat-cartao {% if m.id in modalidades_sel %}is-marcada{% endif %}">
+        <input type="checkbox" name="modalidade_ids" value="{{ m.id }}"
+               {% if m.id in modalidades_sel %}checked{% endif %}>
+        <span class="mat-marca"><i class="bi bi-check-lg"></i></span>
+        <span class="mat-cartao__corpo"><span class="mat-cartao__nome">{{ m.nome }}</span></span>
+      </label>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="lst-vazio">Nenhuma modalidade vinculada a esta academia.</p>
+    {% endif %}
+  </div>
+
+  {# ----------------------------------------------------------- mensalidade #}
+  <div class="frm__secao">
+    <div class="frm__titulo"><i class="bi bi-cash-coin"></i> Mensalidade</div>
+
+    {% if planos %}
+      {% if ja_tem_mensalidade %}
+      <p class="frm__ajuda">
+        <i class="bi bi-info-circle"></i>
+        Este aluno já tem cobranças lançadas — gere de novo só se faltar alguma competência.
+        Meses que já existem são ignorados, nada é duplicado.
+      </p>
+      {% endif %}
+
+      <label class="mat-liga">
+        <input type="checkbox" name="gerar_mensalidade" value="1" id="ligaMensalidade"
+               {% if not ja_tem_mensalidade %}checked{% endif %}>
+        <span>Gerar cobrança de mensalidade agora</span>
+      </label>
+
+      <div id="camposMensalidade">
+        <div class="mat-grade">
+          <div>
+            <label class="form-label" for="mensalidade_id">Plano</label>
+            <select class="form-select" name="mensalidade_id" id="mensalidade_id">
+              {% for p in planos %}
+              <option value="{{ p.id }}" data-valor="{{ '%.2f'|format(p.valor or 0) }}">
+                {{ p.nome }} — R$ {{ '%.2f'|format(p.valor or 0) | replace('.', ',') }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="form-label" for="escopo_mensalidade">Período</label>
+            <select class="form-select" name="escopo_mensalidade" id="escopo_mensalidade">
+              <option value="mes">Só o mês inicial</option>
+              <option value="ano">Do mês inicial até dezembro</option>
+            </select>
+          </div>
+          <div>
+            <label class="form-label" for="mes_inicial">Mês inicial</label>
+            <select class="form-select" name="mes_inicial" id="mes_inicial">
+              {% for n, rot in meses %}
+              <option value="{{ n }}" {% if n == mes_atual %}selected{% endif %}>{{ rot }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="form-label" for="ano_ref">Ano</label>
+            <input class="form-control" type="number" name="ano_ref" id="ano_ref"
+                   value="{{ ano_atual }}" min="2000" max="2100">
+          </div>
+          <div>
+            <label class="form-label" for="dia_vencimento">Dia do vencimento</label>
+            <input class="form-control" type="number" name="dia_vencimento" id="dia_vencimento"
+                   value="10" min="1" max="31">
+          </div>
+        </div>
+
+        {% if descontos %}
+        {# Bolsa/desconto na matrícula: sem este campo a primeira mensalidade
+           saía pelo valor cheio, porque o desconto só valia com vínculo já
+           criado — e aluno recém-promovido nunca tem. #}
+        <div style="margin-top:.75rem">
+          <label class="form-label" for="desconto_id">Desconto / bolsa</label>
+          <select class="form-select" name="desconto_id" id="desconto_id">
+            <option value="">Sem desconto</option>
+            {% for d in descontos %}
+            <option value="{{ d.id }}"
+                    data-tipo="{{ d.tipo }}" data-valor="{{ '%.2f'|format(d.valor|float) }}"
+                    {% if desconto_atual == d.id %}selected{% endif %}>
+              {{ d.nome }}
+              ({% if d.tipo == 'percentual' %}{{ '%g'|format(d.valor|float) }}%{% else %}R$ {{ '%.2f'|format(d.valor|float) }}{% endif %})
+              {%- if d.so_em_dia %} — só pagando em dia{% endif %}
+            </option>
+            {% endfor %}
+          </select>
+          <small class="text-muted">
+            Fica vinculado ao aluno e vale para as próximas mensalidades também.
+            {% if desconto_atual %}Este aluno já tem um desconto vinculado — ele vem marcado.{% endif %}
+          </small>
+        </div>
+        {% endif %}
+
+        <p class="mat-total" id="resumoMensalidade"></p>
+      </div>
+    {% else %}
+      <p class="lst-vazio">
+        Nenhum plano de mensalidade ativo nesta academia.
+        <a href="{{ url_for('financeiro.lista_planos_mensalidades') }}">Cadastre um plano</a>
+        para poder cobrar este aluno.
+      </p>
+    {% endif %}
+  </div>
+
+  <div class="frm__acoes">
+    <a class="sh__btn" href="{{ voltar_url }}">Fazer depois</a>
+    <button type="submit" class="sh__btn sh__btn--forte">
+      <i class="bi bi-check-lg"></i> Concluir matrícula
+    </button>
+  </div>
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  var form = document.querySelector('form.frm');
+  if (!form) return;
+
+  // Marcação visual das caixas (o input de verdade fica escondido).
+  form.addEventListener('change', function (e) {
+    var input = e.target;
+    if (input.type !== 'checkbox') return;
+    var cartao = input.closest('.mat-cartao');
+    if (cartao) cartao.classList.toggle('is-marcada', input.checked);
+  });
+
+  // ------------------------------------------------------ turma → idade
+  var avisoIdade = document.getElementById('avisoIdade');
+  var excecao = document.getElementById('excecaoIdade');
+  var turmas = form.querySelectorAll('input[name="turma_ids"]');
+
+  function revisarIdade() {
+    if (!avisoIdade) return;
+    var precisa = false;
+    turmas.forEach(function (t) {
+      if (t.checked && t.dataset.fora === '1') precisa = true;
+    });
+    avisoIdade.hidden = !precisa;
+    if (!precisa && excecao) excecao.checked = false;
+  }
+
+  // ------------------------------------------------- turma → modalidade
+  // Marcar a turma já marca a modalidade que ela ensina; desmarcar não
+  // desfaz nada, porque o aluno pode praticar mais do que a turma cobre.
+  function propagarModalidades(turma) {
+    if (!turma.checked) return;
+    (turma.dataset.modalidades || '').split(',').forEach(function (id) {
+      if (!id) return;
+      var alvo = form.querySelector('input[name="modalidade_ids"][value="' + id + '"]');
+      if (alvo && !alvo.checked) {
+        alvo.checked = true;
+        var cartao = alvo.closest('.mat-cartao');
+        if (cartao) cartao.classList.add('is-marcada');
+      }
+    });
+  }
+
+  turmas.forEach(function (t) {
+    t.addEventListener('change', function () {
+      propagarModalidades(t);
+      revisarIdade();
+    });
+  });
+  revisarIdade();
+
+  // ------------------------------------------------------- mensalidade
+  var liga = document.getElementById('ligaMensalidade');
+  var campos = document.getElementById('camposMensalidade');
+  var plano = document.getElementById('mensalidade_id');
+  var escopo = document.getElementById('escopo_mensalidade');
+  var mes = document.getElementById('mes_inicial');
+  var resumo = document.getElementById('resumoMensalidade');
+  var desconto = document.getElementById('desconto_id');
+
+  function moeda(v) {
+    return 'R$ ' + v.toFixed(2).replace('.', ',');
+  }
+
+  function revisarMensalidade() {
+    if (!campos) return;
+    var ativo = !liga || liga.checked;
+    campos.hidden = !ativo;
+    campos.querySelectorAll('select, input').forEach(function (c) { c.disabled = !ativo; });
+    if (!ativo || !resumo || !plano || !plano.options.length) { if (resumo) resumo.textContent = ''; return; }
+    var cheio = parseFloat(plano.options[plano.selectedIndex].dataset.valor || '0') || 0;
+    var parcelas = (escopo && escopo.value === 'ano') ? (13 - parseInt(mes.value || '1', 10)) : 1;
+    if (parcelas < 1) parcelas = 1;
+
+    // O resumo mostra o que o aluno REALMENTE vai pagar. Exibir o valor cheio
+    // com um desconto escolhido logo acima faria o gestor confirmar uma conta
+    // que o sistema não vai gerar.
+    var valor = cheio, abatido = 0;
+    if (desconto && desconto.value) {
+      var op = desconto.options[desconto.selectedIndex];
+      var dv = parseFloat(op.dataset.valor || '0') || 0;
+      abatido = (op.dataset.tipo === 'percentual') ? (cheio * dv / 100) : dv;
+      if (abatido > cheio) abatido = cheio;
+      valor = cheio - abatido;
+    }
+
+    var texto = parcelas === 1
+      ? 'Será gerada <strong>1 cobrança</strong> de ' + moeda(valor)
+      : 'Serão geradas <strong>' + parcelas + ' cobranças</strong> de ' + moeda(valor) +
+        ' — total <strong>' + moeda(valor * parcelas) + '</strong>';
+    if (abatido > 0) {
+      texto += ' <span class="text-muted">(de ' + moeda(cheio) +
+               ', com ' + moeda(abatido) + ' de desconto)</span>';
+    }
+    if (valor <= 0) {
+      texto += '<br><span class="text-muted">Valor zerado pelo desconto: ' +
+               (parcelas === 1 ? 'a cobrança nasce' : 'as cobranças nascem') +
+               ' quitada' + (parcelas === 1 ? '' : 's') + ', sem nada a pagar.</span>';
+    }
+    resumo.innerHTML = texto + (parcelas === 1 && abatido <= 0 ? '.' : '');
+  }
+
+  [liga, plano, escopo, mes, desconto].forEach(function (el) {
+    if (el) el.addEventListener('change', revisarMensalidade);
+  });
+  revisarMensalidade();
+})();
+</script>
+{% endblock %}

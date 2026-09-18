@@ -10,7 +10,13 @@ texto salvo, usa o padrão (DEFAULTS). Placeholders disponíveis:
   {link}       -> link de pagamento (gerado na hora quando faltar; ver whatsapp_lembretes)
   {pix}        -> PIX copia e cola, quando o gateway devolver (Cora, Asaas, EFÍ)
   {academia}   -> nome da academia
-  {mes}        -> competência (mm/aaaa)
+  {mes}        -> competência (mm/aaaa); {competencia} é o mesmo
+  {responsavel}-> nome completo de quem recebe (responsável financeiro ou aluno)
+
+Só na cobrança consolidada (várias mensalidades vencidas do mesmo responsável):
+  {lista}                  -> uma linha por mensalidade em aberto
+  {quantidade_pendencias}  -> quantas estão em aberto
+  {valor_total}            -> soma das mensalidades em aberto
 
 Quando {link} ou {pix} ficam vazios, a linha é removida da mensagem junto com o
 rótulo acima dela — para não sair "Pague pelo link:" seguido de nada.
@@ -30,6 +36,14 @@ TIPOS = {
         "default": ("Olá {nome}! 🔔 A mensalidade de *{aluno}* está em atraso "
                     "(venceu em {vencimento}).\n\n💰 Valor: {valor}\n"
                     "🔗 Regularize pelo link:\n{link}\n\n_{academia}_"),
+    },
+    "cobranca_consolidada": {
+        "label": "Cobrança consolidada (várias mensalidades vencidas)",
+        "default": ("Olá {nome}! Passando para organizar as mensalidades em aberto "
+                    "de *{aluno}*.\n\n{lista}\n\n💰 Total em aberto: {valor_total}\n"
+                    "🔗 Comece por aqui:\n{link}\n\n"
+                    "Se preferir combinar um parcelamento, é só responder esta mensagem. "
+                    "_{academia}_"),
     },
     "confirmacao_pagamento": {
         "label": "Confirmação de pagamento",
@@ -62,7 +76,7 @@ TIPOS = {
     },
 }
 
-ORDEM = ["lembrete_vencimento", "lembrete_atraso", "confirmacao_pagamento",
+ORDEM = ["lembrete_vencimento", "lembrete_atraso", "cobranca_consolidada", "confirmacao_pagamento",
          "matricula", "confirmacao_matricula", "boas_vindas", "aniversario"]
 
 
@@ -118,7 +132,9 @@ def salvar(academia_id, tipo, texto, ativo):
 def render(texto, ctx):
     """Substitui os placeholders {chave} pelos valores do ctx (faltantes viram '')."""
     out = texto or ""
-    for k in ["nome", "aluno", "valor", "vencimento", "link", "pix", "academia", "mes"]:
+    for k in ["nome", "responsavel", "aluno", "valor", "vencimento", "link", "pix",
+              "academia", "mes", "competencia", "lista", "quantidade_pendencias",
+              "valor_total"]:
         out = out.replace("{" + k + "}", str(ctx.get(k, "") or ""))
     # remove linhas que ficaram com 'link' vazio (ex.: "🔗 ...\n{link}")
     linhas = [ln for ln in out.split("\n") if ln.strip() not in ("🔗 Pague pelo link:", "🔗 Regularize pelo link:")

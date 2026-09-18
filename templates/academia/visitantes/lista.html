@@ -51,20 +51,8 @@
 {% endblock %}
 
 {% block content %}
-{# As quatro telas de visitante viram abas; o número é o que espera decisão. #}
-<nav class="lst-abas">
-  {% set abas_itens = [
-    ('Visitantes', url_for('academia.lista_visitantes', academia_id=academia_id), stats.total_visitantes, true),
-    ('Solicitações de aulas', url_for('academia.solicitacoes_aulas', academia_id=academia_id), abas.solicitacoes, false),
-    ('Pagamentos de diária', url_for('academia.pagamentos_diaria', academia_id=academia_id), abas.diarias, false),
-    ('Matrículas realizadas', url_for('academia.solicitacoes_mensalidade', academia_id=academia_id), abas.matriculas, false)
-  ] %}
-  {% for nome, href, qtd, ativa in abas_itens %}
-  <a href="{{ href }}" class="lst-aba {% if ativa %}is-ativa{% endif %}">
-    {{ nome }}<span class="lst-aba__n {% if qtd and not ativa %}is-alerta{% endif %}">{{ qtd or 0 }}</span>
-  </a>
-  {% endfor %}
-</nav>
+{% set aba_ativa = 'visitantes' %}
+{% include 'academia/visitantes/_abas.html' %}
 
 <div class="sh__faixa">
   <div class="sh__faixa-item">

@@ -12,8 +12,14 @@ try:
 except Exception:
     _TABLE_ERROR = (Exception,)
 
+from utils.permissoes import somente_gestao
 bp_solicitacoes = Blueprint("solicitacoes", __name__, url_prefix="/solicitacoes")
 
+
+
+# Aluno, responsável e visitante não entram aqui nem digitando a URL:
+# a maioria destas rotas tinha só `@login_required`.
+bp_solicitacoes.before_request(somente_gestao())
 
 def _get_academias_ids():
     """IDs de academias acessíveis pelo usuário."""

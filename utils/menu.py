@@ -58,8 +58,16 @@ def _tem(*papeis):
 # ---------------------------------------------------------------- academia
 def _menu_academia(ctx):
     aid = ctx.get("academia_id")
-    pode_financeiro = _tem("gestor_academia", "admin", "professor",
-                           "gestor_federacao", "gestor_associacao")
+    # Duas condições diferentes: o PAPEL do usuário permite ver financeiro, e a
+    # ACADEMIA usa o módulo. Academia que só faz o acadêmico não mostra a seção
+    # nem para o admin.
+    try:
+        from utils.modulos import tem_financeiro
+        academia_usa_financeiro = tem_financeiro(aid)
+    except Exception:
+        academia_usa_financeiro = True
+    pode_financeiro = academia_usa_financeiro and _tem(
+        "gestor_academia", "admin", "professor", "gestor_federacao", "gestor_associacao")
     return [
         ("", [
             Item("gerenciamento", "bi-grid-1x2", "Gerenciamento",
@@ -94,7 +102,7 @@ def _menu_academia(ctx):
         ("Financeiro", [
             Item("financeiro", "bi-cash-coin", "Financeiro",
                  _rota("financeiro.dashboard", academia_id=aid) if pode_financeiro else None),
-        ]),
+        ] if academia_usa_financeiro else []),
         ("Eventos", [
             Item("eventos", "bi-calendar-event", "Eventos",
                  _rota("eventos_competicoes.lista_eventos", academia_id=aid)),

@@ -76,8 +76,9 @@
 </style>
 
 {% set descricoes = {
-  'lembrete_vencimento': 'Enviado 3 dias antes do vencimento da mensalidade.',
-  'lembrete_atraso': 'Enviado quando a mensalidade passa do vencimento.',
+  'lembrete_vencimento': 'Enviado nos dias antes do vencimento configurados na régua de cobrança.',
+  'lembrete_atraso': 'Enviado nos dias de atraso configurados na régua de cobrança.',
+  'cobranca_consolidada': 'Uma mensagem com todas as mensalidades em aberto, quando o responsável acumula pendências.',
   'confirmacao_pagamento': 'Enviado automaticamente quando um pagamento é confirmado.',
   'matricula': 'Enviado ao confirmar a matrícula de um novo aluno.',
   'confirmacao_matricula': 'Enviado quando o pagamento da matrícula é confirmado — pelo gateway ou pela baixa manual.',
@@ -123,7 +124,11 @@
         </div>
         <div class="chips">
           <span class="ed-desc" style="padding:0; margin-right:2px;">Inserir:</span>
-          {% for v in ['nome','aluno','valor','vencimento','link','academia','mes'] %}
+          {% set _vars = ['nome','aluno','valor','vencimento','link','academia','mes'] %}
+          {% if it.tipo == 'cobranca_consolidada' %}
+            {% set _vars = _vars + ['lista','quantidade_pendencias','valor_total'] %}
+          {% endif %}
+          {% for v in _vars %}
           <button type="button" class="chip js-chip">{{ '{' ~ v ~ '}' }}</button>
           {% endfor %}
         </div>

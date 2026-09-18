@@ -538,6 +538,12 @@ def url_voltar(explicito=None):
     # 2. destino explícito, se disser algo além da home do modo
     if explicito and _caminho(explicito) != _caminho(home):
         return explicito
+    # Mesmo caminho da home, mas com parâmetros que a home não tem: continua
+    # sendo mais específico. É o caso do responsável com mais de um filho —
+    # `meu-perfil?aluno_id=8` é o painel DAQUELE filho, e descartá-lo por ter o
+    # mesmo caminho jogava o Voltar na tela de escolher o filho, toda vez.
+    if explicito and "?" in explicito and explicito != home:
+        return explicito
 
     # 3. o item da lateral correspondente a esta tela
     try:
@@ -614,6 +620,60 @@ def injetar_shell():
     ctx["modo_shell"] = modo
     ctx["menu_grupos"] = menu_grupos
     ctx["menu_ativo"] = MENU_POR_BLUEPRINT.get(request.blueprint or "", "")
+
+    # Academia que só faz o acadêmico: os templates usam isto para não mostrar
+    # mensalidade, cobrança e afins. A trava de verdade está no before_request
+    # dos blueprints financeiros; aqui é só para a tela não oferecer o que a rota
+    # vai recusar.
+    try:
+        from utils.modulos import tem_financeiro
+        # `ctx["academia_id"]` só é resolvido nos modos academia/professor. Admin e
+        # gestor de associação abrem a mesma ficha com o escopo vindo da sessão —
+        # sem este fallback, para eles o financeiro voltava a aparecer.
+        _aid_mod = (ctx.get("academia_id")
+                    or session.get("academia_gerenciamento_id")
+                    or session.get("finance_academia_id"))
+        ctx["academia_usa_financeiro"] = tem_financeiro(_aid_mod)
+    except Exception:
+        ctx["academia_usa_financeiro"] = True
+
+    # Contexto de modalidade: só faz sentido para quem trabalha dentro de uma
+    # academia, e só aparece quando a academia tem mais de uma modalidade.
+    ctx["modalidades_contexto"] = []
+    ctx["modalidade_contexto_id"] = None
+    ctx["modalidade_contexto_nome"] = ""
+    # Marca e cor do shell seguem a modalidade em foco. Fora dos modos que
+    # trabalham dentro de uma academia, ficam no padrão.
+    ctx["marca_modalidade"] = "Judô"
+    ctx["marca_cor"] = "#e4001b"
+    if modo in ("academia", "professor"):
+        try:
+            from utils import multimodalidade as mm
+            _aid_ctx = (ctx.get("academia_id")
+                        or session.get("academia_gerenciamento_id")
+                        or session.get("finance_academia_id"))
+            if modo == "professor":
+                # O professor só escolhe entre o que leciona. Sem vínculo
+                # cadastrado, continua vendo tudo — a tabela ainda está sendo
+                # preenchida e ninguém pode perder acesso por causa disso.
+                modalidades = mm.modalidades_do_professor(
+                    getattr(current_user, "id", None), _aid_ctx)
+            else:
+                modalidades = mm.modalidades_da_academia(_aid_ctx)
+            if len(modalidades) > 1:
+                ctx["modalidades_contexto"] = modalidades
+                ctx["modalidade_contexto_id"] = mm.contexto_id(_aid_ctx)
+                ctx["modalidade_contexto_nome"] = mm.nome_contexto(_aid_ctx)
+                # Com o recorte ligado, a tela avisa quantos registros não
+                # pertencem a modalidade nenhuma — para o gestor não achar que
+                # sumiu aluno.
+                if ctx["modalidade_contexto_id"]:
+                    ctx["modalidade_pendencias"] = mm.pendencias(_aid_ctx)
+            rotulo, cor = mm.identidade(_aid_ctx)
+            ctx["marca_modalidade"] = rotulo
+            ctx["marca_cor"] = cor
+        except Exception as e:
+            app.logger.info("Contexto de modalidade indisponível (%s)", e)
 
     g._shell_ctx = ctx
     return dict(ctx)

@@ -145,7 +145,7 @@
 
     <label class="lst-campo">
       <span class="lst-campo__rotulo">Vencimento</span>
-      <input name="dia_vencimento" type="number" min="1" max="28" value="10">
+      <input name="dia_vencimento" type="number" min="1" max="31" value="10">
     </label>
 
     <label class="lst-campo fin-gerar-larga">
@@ -221,10 +221,20 @@
         <div class="lst-pessoa">
           <span class="fin-faixa" style="--fin-faixa-cor: {{ cor_faixa(c.faixa) }}"></span>
           <span style="min-width:0">
-            <span class="lst-nome">{{ c.aluno_nome }}{% if c.tipo == 'avulsa' %} <span class="lst-tag">Avulsa</span>{% endif %}</span>
+            <span class="lst-nome">{{ c.aluno_nome }}{% if c.tipo == 'avulsa' %} <span class="lst-tag">Avulsa</span>{% endif %}
+              {%- if c.familia_grupo_id %} <span class="lst-tag lst-tag--alerta"
+                    title="Dar baixa aqui quita a cobrança da família inteira">Família</span>{% endif %}</span>
             <span class="fin-grad">
               {% if c.tipo == 'avulsa' %}{{ c.descricao or 'Cobrança avulsa' }}{% else %}{{ c.faixa or 'Sem graduação' }}{% endif %}
             </span>
+            {% if c.familia_grupo_id %}
+            {# A baixa de uma linha quita o grupo todo; dizer de quem são as
+               outras evita o gestor achar que baixou o irmão errado. #}
+            <span class="fin-grad">
+              Cobrança única de {{ fmt_moeda(c.familia_total) }} —
+              a baixa vale para {{ c.familia_alunos|join(' e ') }}.
+            </span>
+            {% endif %}
           </span>
         </div>
 

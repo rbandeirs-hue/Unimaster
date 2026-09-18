@@ -8,8 +8,14 @@ from functools import wraps
 from config import get_db_connection
 from utils.modalidades import filtro_visibilidade_sql
 
+from utils.permissoes import somente_gestao
 bp_configuracoes = Blueprint("configuracoes", __name__, url_prefix="/configuracoes")
 
+
+
+# Aluno, responsável e visitante não entram aqui nem digitando a URL:
+# a maioria destas rotas tinha só `@login_required`.
+bp_configuracoes.before_request(somente_gestao())
 
 def admin_required(f):
     @wraps(f)

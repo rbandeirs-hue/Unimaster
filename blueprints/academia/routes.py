@@ -7,8 +7,14 @@ from werkzeug.security import generate_password_hash
 from math import ceil
 from blueprints.auth.user_model import Usuario
 
+from utils.permissoes import somente_gestao
 academia_bp = Blueprint("academia", __name__, url_prefix="/academia")
 
+
+
+# Aluno, responsável e visitante não entram aqui nem digitando a URL:
+# a maioria destas rotas tinha só `@login_required`.
+academia_bp.before_request(somente_gestao())
 
 def _calcular_idade_visitante(data_nascimento):
     """Calcula idade a partir da data de nascimento."""
@@ -85,6 +91,35 @@ def escolher_academia():
         academias=academias,
         proximo=destino,
     )
+
+
+def _contar_abas_visitantes(cur, academia_id):
+    """Quantidade que espera decisão em cada aba de visitantes.
+
+    Ficava embutido na lista; as outras três telas não tinham as contagens e por
+    isso nem podiam mostrar a barra de abas. Tolerante a falha por consulta: uma
+    tabela que ainda não existe zera aquela aba em vez de derrubar a tela.
+    """
+    abas = {"solicitacoes": 0, "diarias": 0, "matriculas": 0}
+    consultas = (
+        ("solicitacoes", """SELECT COUNT(*) c FROM aulas_experimentais ae
+                            JOIN visitantes v ON v.id = ae.visitante_id
+                            WHERE v.id_academia = %s AND ae.status = 'pendente'"""),
+        ("diarias", """SELECT COUNT(*) c FROM pagamentos_diaria p
+                       JOIN visitantes v ON v.id = p.visitante_id
+                       WHERE v.id_academia = %s AND p.status = 'pendente'"""),
+        ("matriculas", """SELECT COUNT(*) c FROM solicitacoes_mensalidade s
+                          JOIN visitantes v ON v.id = s.visitante_id
+                          WHERE v.id_academia = %s AND s.status = 'pendente'"""),
+    )
+    for chave, sql in consultas:
+        try:
+            cur.execute(sql, (academia_id,))
+            linha = cur.fetchone() or {}
+            abas[chave] = (linha.get("c") if isinstance(linha, dict) else linha[0]) or 0
+        except Exception:
+            pass
+    return abas
 
 
 @academia_bp.route("/visitantes")
@@ -172,28 +207,7 @@ def lista_visitantes():
                  "visitantes_com_aulas": 0, "convertidos": 0}
 
     # Contadores das abas (as outras três telas de visitantes).
-    abas = {"solicitacoes": 0, "diarias": 0, "matriculas": 0}
-    try:
-        cur.execute("""SELECT COUNT(*) c FROM aulas_experimentais ae
-                       JOIN visitantes v ON v.id = ae.visitante_id
-                       WHERE v.id_academia = %s AND ae.status = 'pendente'""", (academia_id,))
-        abas["solicitacoes"] = cur.fetchone().get("c", 0) or 0
-    except Exception:
-        pass
-    try:
-        cur.execute("""SELECT COUNT(*) c FROM pagamentos_diaria p
-                       JOIN visitantes v ON v.id = p.visitante_id
-                       WHERE v.id_academia = %s AND p.status = 'pendente'""", (academia_id,))
-        abas["diarias"] = cur.fetchone().get("c", 0) or 0
-    except Exception:
-        pass
-    try:
-        cur.execute("""SELECT COUNT(*) c FROM solicitacoes_mensalidade s
-                       JOIN visitantes v ON v.id = s.visitante_id
-                       WHERE v.id_academia = %s AND s.status = 'pendente'""", (academia_id,))
-        abas["matriculas"] = cur.fetchone().get("c", 0) or 0
-    except Exception:
-        pass
+    abas = _contar_abas_visitantes(cur, academia_id)
 
     try:
         cur.close()
@@ -513,11 +527,15 @@ def solicitacoes_aulas():
         hoje = []
         realizadas = []
     finally:
+        # As abas precisam das contagens ANTES do fechamento: `_consulta` engole
+        # exceção e devolveria zero em todas, sem erro nenhum.
+        abas = _contar_abas_visitantes(cur, academia_id)
         cur.close()
         conn.close()
     
     return render_template(
         "academia/visitantes/solicitacoes.html",
+        abas=abas,
         pendentes=pendentes,
         hoje=hoje,
         realizadas=realizadas,
@@ -681,10 +699,14 @@ def pagamentos_diaria():
         flash(f"Erro ao carregar pagamentos: {e}", "danger")
         pagamentos = []
     finally:
+        # As abas precisam das contagens ANTES do fechamento: `_consulta` engole
+        # exceção e devolveria zero em todas, sem erro nenhum.
+        abas = _contar_abas_visitantes(cur, academia_id)
         cur.close()
         conn.close()
     
     return render_template("academia/visitantes/pagamentos_diaria.html",
+                         abas=abas,
                          pagamentos=pagamentos, academias=academias, academia_id=academia_id)
 
 
@@ -798,10 +820,14 @@ def solicitacoes_mensalidade():
         flash(f"Erro ao carregar matrículas: {e}", "danger")
         solicitacoes = []
     finally:
+        # As abas precisam das contagens ANTES do fechamento: `_consulta` engole
+        # exceção e devolveria zero em todas, sem erro nenhum.
+        abas = _contar_abas_visitantes(cur, academia_id)
         cur.close()
         conn.close()
     
     return render_template("academia/visitantes/solicitacoes_mensalidade.html",
+                         abas=abas,
                          solicitacoes=solicitacoes, academias=academias, academia_id=academia_id)
 
 
@@ -1089,13 +1115,33 @@ def _painel_academia_resumo(academia_id):
     if not academia_id:
         return r
 
+    # Contexto de modalidade: com o jiu-jitsu em foco, o painel tem de contar o
+    # jiu-jitsu. Sem isso os números do topo continuavam os da academia inteira e
+    # contradiziam as listas logo abaixo, que já vinham recortadas.
+    try:
+        from utils import multimodalidade as _mm
+        _ctx_mod = _mm.contexto_id(academia_id)
+        _f_alunos, _p_alunos = _mm.filtro_alunos_sql("alunos", academia_id)
+        _f_turmas, _p_turmas = _mm.filtro_turmas_sql("turmas", academia_id)
+        _f_cobr, _p_cobr = _mm.filtro_cobrancas_sql("ma", academia_id)
+        _f_pre, _p_pre = _mm.filtro_precadastro_sql("pre_cadastro", academia_id)
+    except Exception:
+        _ctx_mod = None
+        _f_alunos = _f_turmas = _f_cobr = _f_pre = ""
+        _p_alunos = _p_turmas = _p_cobr = _p_pre = ()
+
     consultas = {
         "alunos_ativos": (
-            "SELECT COUNT(*) c FROM alunos WHERE id_academia=%s AND status='ativo'", (academia_id,)),
+            "SELECT COUNT(*) c FROM alunos WHERE id_academia=%s AND status='ativo'"
+            + _f_alunos, (academia_id,) + tuple(_p_alunos)),
         "turmas": (
-            "SELECT COUNT(*) c FROM turmas WHERE id_academia=%s", (academia_id,)),
+            "SELECT COUNT(*) c FROM turmas WHERE id_academia=%s" + _f_turmas,
+            (academia_id,) + tuple(_p_turmas)),
+        # Em foco, a conta é uma: a modalidade que o gestor escolheu.
         "modalidades": (
-            "SELECT COUNT(*) c FROM academia_modalidades WHERE academia_id=%s", (academia_id,)),
+            ("SELECT 1 c" if _ctx_mod else
+             "SELECT COUNT(*) c FROM academia_modalidades WHERE academia_id=%s"),
+            () if _ctx_mod else (academia_id,)),
         # Pendente em qualquer ponta: a academia pode ser origem ou destino.
         "solicitacoes_pendentes": (
             """SELECT COUNT(*) c FROM solicitacoes_aprovacao
@@ -1109,15 +1155,16 @@ def _painel_academia_resumo(academia_id):
             """SELECT COUNT(*) c FROM mensalidade_aluno ma
                JOIN mensalidades mp ON mp.id = ma.mensalidade_id
                WHERE mp.id_academia=%s
-                 AND (ma.status='atrasado' OR (ma.status='pendente' AND ma.data_vencimento < CURDATE()))""",
-            (academia_id,)),
+                 AND (ma.status='atrasado' OR (ma.status='pendente' AND ma.data_vencimento < CURDATE()))"""
+            + _f_cobr, (academia_id,) + tuple(_p_cobr)),
         # Ao promover, o pré-cadastro é apagado: o que resta é o que falta converter.
         "precadastros": (
-            "SELECT COUNT(*) c FROM pre_cadastro WHERE academia_id=%s", (academia_id,)),
+            "SELECT COUNT(*) c FROM pre_cadastro WHERE academia_id=%s" + _f_pre,
+            (academia_id,) + tuple(_p_pre)),
         "aniversariantes": (
             """SELECT COUNT(*) c FROM alunos
-               WHERE id_academia=%s AND status='ativo' AND MONTH(data_nascimento)=MONTH(CURDATE())""",
-            (academia_id,)),
+               WHERE id_academia=%s AND status='ativo' AND MONTH(data_nascimento)=MONTH(CURDATE())"""
+            + _f_alunos, (academia_id,) + tuple(_p_alunos)),
     }
 
     conn = get_db_connection()
@@ -2238,11 +2285,22 @@ def configuracoes_academia():
                     except ValueError:
                         valor_diaria = None
 
+                # Módulo financeiro: checkbox ausente no POST = desmarcado.
+                usa_financeiro = 1 if request.form.get("modulo_financeiro") == "1" else 0
+
                 cur.execute("""
                     UPDATE academias
-                    SET aulas_experimentais_permitidas = %s, valor_diaria_visitante = %s
+                    SET aulas_experimentais_permitidas = %s, valor_diaria_visitante = %s,
+                        modulo_financeiro = %s
                     WHERE id = %s
-                """, (aulas_permitidas, valor_diaria, academia_id))
+                """, (aulas_permitidas, valor_diaria, usa_financeiro, academia_id))
+                # O menu e a trava das rotas leem isso em cache; sem invalidar,
+                # a mudança só apareceria alguns minutos depois.
+                try:
+                    from utils.modulos import invalidar
+                    invalidar(academia_id)
+                except Exception:
+                    pass
                 # Propaga o novo limite para os visitantes da academia (mantém em sincronia)
                 cur.execute(
                     "UPDATE visitantes SET aulas_experimentais_permitidas = %s WHERE id_academia = %s",
@@ -3027,3 +3085,30 @@ def locais_treino():
     return render_template("academia/locais_treino.html", locais=locais,
                            professores=professores, academia_id=academia_id,
                            academias=academias)
+
+
+@academia_bp.route("/contexto-modalidade", methods=["POST"])
+@login_required
+def trocar_contexto_modalidade():
+    """Troca a modalidade que o gestor está enxergando.
+
+    O contexto é operacional, não é permissão: ele recorta o que aparece, sem
+    dar nem tirar acesso. Por isso basta guardar na sessão e voltar para a
+    mesma tela — quem não pode ver a academia continua não podendo,
+    independentemente da modalidade escolhida.
+    """
+    from utils.multimodalidade import definir_contexto
+
+    academia_id = session.get("academia_gerenciamento_id") or session.get("finance_academia_id")
+    definir_contexto(request.form.get("modalidade_id"), academia_id)
+
+    # Volta para a mesma tela. `referrer` é dado do navegador: só é aceito
+    # quando aponta para dentro do próprio sistema, senão vira um
+    # redirecionamento aberto.
+    from urllib.parse import urlparse
+    destino = request.form.get("voltar") or request.referrer or ""
+    if not destino.startswith("/"):
+        partes = urlparse(destino)
+        mesmo_host = partes.netloc == urlparse(request.host_url).netloc
+        destino = (partes.path or "/") if (destino and mesmo_host) else "/"
+    return redirect(destino)

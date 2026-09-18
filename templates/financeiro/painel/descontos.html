@@ -72,6 +72,18 @@
       <input name="descricao" maxlength="255" value="{{ em_edicao.descricao or '' if em_edicao else '' }}"
              placeholder="Descreva o motivo do desconto">
     </label>
+    {# Existia na tela antiga e sumiu no redesenho, mas a regra continuou valendo
+       no cálculo — e o padrão do banco é 1, então todo desconto novo nascia
+       "só em dia" sem ninguém saber. #}
+    <label class="lst-campo lst-campo--largo" style="display:flex; align-items:flex-start; gap:.5rem">
+      <input type="checkbox" name="aplicar_apenas_pagamento_em_dia" value="1" style="margin-top:.2rem"
+             {% if not em_edicao or em_edicao.aplicar_apenas_pagamento_em_dia %}checked{% endif %}>
+      <span>
+        <span class="lst-campo__rotulo" style="display:block">Só para pagamento em dia</span>
+        <small class="lst-quadro__meta">Marcado, o desconto é perdido quando a mensalidade vence.
+        Desmarcado, ele vale mesmo em atraso.</small>
+      </span>
+    </label>
     <div class="lst-filtros__acoes">
       <button type="submit" class="sh__btn sh__btn--forte">{{ 'Salvar' if em_edicao else 'Cadastrar' }}</button>
       <a class="sh__btn" href="{{ url_for('financeiro_painel.descontos', academia_id=academia_id) }}">Cancelar</a>
@@ -112,7 +124,10 @@
         <div class="lst-num fin-valor">
           {% if d.tipo == 'percentual' %}{{ '%g'|format(d.valor|float) }}%{% else %}{{ fmt_moeda(d.valor) }}{% endif %}
         </div>
-        <div class="col-motivo lst-corta">{{ d.descricao or '—' }}</div>
+        <div class="col-motivo lst-corta">
+          {% if d.aplicar_apenas_pagamento_em_dia %}<span class="lst-tag">Só em dia</span> {% endif %}
+          {{ d.descricao or '—' }}
+        </div>
         <div class="col-situacao">
           <span class="lst-situacao {% if d.ativo %}is-ativo{% endif %}"><i></i>{{ 'Ativo' if d.ativo else 'Inativo' }}</span>
         </div>

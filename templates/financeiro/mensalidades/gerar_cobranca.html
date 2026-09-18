@@ -231,7 +231,7 @@
                             </div>
                             <div class="col-12 col-md-4">
                                 <label for="dia_vencimento" class="form-label fw-semibold small mb-1">Dia do vencimento</label>
-                                <input type="number" class="form-control" id="dia_vencimento" name="dia_vencimento" min="1" max="28" value="10" style="max-width: 100px;">
+                                <input type="number" class="form-control" id="dia_vencimento" name="dia_vencimento" min="1" max="31" value="10" style="max-width: 100px;">
                             </div>
                         </div>
                         <p class="text-muted small mb-0 mt-2">Gera cobranças do mês escolhido até dezembro. Anos futuros disponíveis conforme calendário.</p>
@@ -393,6 +393,40 @@
                     </div>
                 </div>
 
+                {# Desconto na hora de gerar: a rota já aceitava `desconto_id`
+                   (o modal do aluno filtrado mandava), mas esta tela não
+                   oferecia a escolha — quem gerava por aqui tinha de lançar o
+                   desconto depois, cobrança por cobrança. #}
+                <div class="gc-section-title mt-3">Desconto (opcional)</div>
+                <div class="row g-3">
+                    <div class="col-12 col-md-6">
+                        <label for="desconto_id" class="form-label fw-semibold small mb-1">Desconto cadastrado</label>
+                        <select class="form-select" id="desconto_id" name="desconto_id">
+                            <option value="">Sem desconto</option>
+                            {% for d in descontos or [] %}
+                            <option value="{{ d.id }}">{{ d.nome }} — {% if d.tipo == 'percentual' %}{{ '%.0f'|format(d.valor|float) }}%{% else %}R$ {{ '%.2f'|format(d.valor|float) }}{% endif %}</option>
+                            {% endfor %}
+                            <option value="avulso">Desconto avulso…</option>
+                        </select>
+                        <div class="form-text">
+                            Vale para todas as cobranças geradas agora. Cadastre em
+                            <a href="{{ url_for('financeiro_painel.descontos', academia_id=academia_sel or academia_id) }}">Financeiro → Descontos</a>.
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-2 gc-desc-avulso" style="display:none;">
+                        <label for="desconto_manual_tipo" class="form-label fw-semibold small mb-1">Tipo</label>
+                        <select class="form-select" id="desconto_manual_tipo" name="desconto_manual_tipo">
+                            <option value="percentual">%</option>
+                            <option value="valor_fixo">R$</option>
+                        </select>
+                    </div>
+                    <div class="col-6 col-md-4 gc-desc-avulso" style="display:none;">
+                        <label for="desconto_manual_valor" class="form-label fw-semibold small mb-1">Valor do desconto</label>
+                        <input type="text" class="form-control" id="desconto_manual_valor" name="desconto_manual_valor"
+                               placeholder="Ex.: 20" inputmode="decimal">
+                    </div>
+                </div>
+
                 <div class="gc-submit-bar">
                     <span class="text-muted small d-none d-md-inline">Revise o tipo, o período e os alunos antes de confirmar.</span>
                     <button type="submit" class="sh__btn sh__btn--forte btn-gerar-cobranca">
@@ -441,6 +475,15 @@
         }
         window.location.href = url;
     }
+
+    var descSel = document.getElementById('desconto_id');
+    function toggleDescontoAvulso() {
+        var mostrar = descSel && descSel.value === 'avulso';
+        document.querySelectorAll('.gc-desc-avulso').forEach(function (el) {
+            el.style.display = mostrar ? '' : 'none';
+        });
+    }
+    if (descSel) descSel.addEventListener('change', toggleDescontoAvulso);
 
     function toggleBlocos() {
         var isAvulso = tipoAvulso && tipoAvulso.checked;

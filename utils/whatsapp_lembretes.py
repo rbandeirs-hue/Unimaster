@@ -4,6 +4,7 @@
 Usado pelo botão manual (financeiro) e pelo script diário (cron).
 Tolerante a falhas: nunca levanta exceção para o chamador.
 """
+import logging
 from datetime import date
 from config import get_db_connection
 from utils import whatsapp as wpp
@@ -67,6 +68,12 @@ def garantir_cobranca_online(row, academia_id, forcar=False):
     reaproveita o mesmo link em vez de emitir outra. Tolerante a falha: se não
     houver gateway ativo ou a emissão der erro, devolve o que já existia.
     """
+    # Só mensalidade: a emissão grava o link em `mensalidade_aluno` pelo `id` da
+    # linha. Com a régua lendo também avulsa, matrícula e cobrança familiar, um
+    # registro de outra tabela com o mesmo id sobrescreveria o link da
+    # mensalidade alheia — cobrando o aluno errado pelo valor errado.
+    if (row.get("origem") or "mensalidade") != "mensalidade":
+        return row
     if _link_gateway(row) and not forcar:
         return row
     ma_id = row.get("id")
@@ -181,34 +188,118 @@ def _limpar_placeholders_vazios(texto):
     return txt.strip()
 
 
-def montar_mensagem(row, academia_nome, academia_id=None):
-    """Monta a mensagem usando o template configurável da academia.
-    Retorna o texto, ou None se o template daquele tipo estiver desativado."""
-    from utils import whatsapp_templates as tpl
-    tipo = "lembrete_atraso" if (row.get("data_vencimento")
-                                 and row["data_vencimento"] < date.today()) else "lembrete_vencimento"
-    texto, ativo = tpl.obter(academia_id, tipo)
-    if not ativo:
-        return None
+def _reais(v):
+    return f"R$ {float(v or 0):.2f}".replace(".", ",")
 
-    # Emite a cobrança agora se ainda não houver link — é o que garante que a
-    # mensagem automática saia com um link de pagamento válido.
-    if academia_id:
-        row = garantir_cobranca_online(row, academia_id)
 
+def _ctx_mensagem(row, academia_nome, academia_id=None, extra=None):
+    """Placeholders de uma cobrança. `extra` acrescenta os da consolidada.
+
+    `responsavel` e `competencia` são apelidos de `nome`/`mes`: os modelos
+    antigos continuam válidos e os novos podem usar o nome que faz sentido.
+    """
     venc = row.get("data_vencimento")
-    valor = float(row.get("valor") or 0)
     ctx = {
         "nome": _PRIMEIRO_NOME(_destinatario(row)),
+        "responsavel": _destinatario(row) or "",
         "aluno": row.get("nome") or "",
-        "valor": f"R$ {valor:.2f}".replace(".", ","),
+        "valor": _reais(row.get("valor")),
         "vencimento": venc.strftime("%d/%m/%Y") if venc else "",
         "link": _link(row, academia_id) or "",
         "pix": _pix(row) or "",
         "academia": academia_nome or "",
         "mes": venc.strftime("%m/%Y") if venc else "",
+        "competencia": venc.strftime("%m/%Y") if venc else "",
+        "quantidade_pendencias": "1",
+        "valor_total": _reais(row.get("valor")),
+        "lista": "",
     }
-    return _limpar_placeholders_vazios(tpl.render(texto, ctx))
+    if extra:
+        ctx.update(extra)
+    return ctx
+
+
+def montar_mensagem(row, academia_nome, academia_id=None, texto_custom=None):
+    """Monta a mensagem usando o template configurável da academia.
+    Retorna o texto, ou None se o template daquele tipo estiver desativado.
+
+    `texto_custom` é a mensagem da etapa da régua: quando o gestor escreve um
+    texto para o D+7, é ele que vale ali; sem isso, segue o modelo de sempre.
+    """
+    from utils import whatsapp_templates as tpl
+    tipo = "lembrete_atraso" if (row.get("data_vencimento")
+                                 and row["data_vencimento"] < date.today()) else "lembrete_vencimento"
+    if texto_custom:
+        texto = texto_custom
+    else:
+        texto, ativo = tpl.obter(academia_id, tipo)
+        if not ativo:
+            return None
+
+    # Emite a cobrança agora se ainda não houver link — é o que garante que a
+    # mensagem automática saia com um link de pagamento válido.
+    if academia_id:
+        if (row.get("origem") or "") == "grupo":
+            # A cobrança familiar tem emissão própria: um link só, com a soma
+            # dos irmãos. Sem isto a mensagem do grupo saía sem forma de pagar.
+            if not _link_gateway(row):
+                try:
+                    from utils.cobranca_familia import gerar_link, carregar_grupo
+                    ok, _msg = gerar_link(row["id"])
+                    if ok:
+                        g = carregar_grupo(row["id"]) or {}
+                        row = dict(row,
+                                   asaas_boleto_url=g.get("link"),
+                                   asaas_pix_copia_cola=g.get("copia_cola"))
+                except Exception:
+                    logging.getLogger(__name__).exception(
+                        "Régua: falha ao emitir a cobrança do grupo %s", row.get("id"))
+        else:
+            row = garantir_cobranca_online(row, academia_id)
+
+    return _limpar_placeholders_vazios(tpl.render(texto, _ctx_mensagem(row, academia_nome, academia_id)))
+
+
+def montar_mensagem_consolidada(rows, academia_nome, academia_id=None, texto_custom=None):
+    """Uma mensagem para várias mensalidades vencidas do mesmo responsável.
+
+    O link é o da mais antiga (é por ela que a negociação começa); a lista e o
+    total vão nos placeholders novos.
+    """
+    from utils import whatsapp_templates as tpl
+    if texto_custom:
+        texto = texto_custom
+    else:
+        texto, ativo = tpl.obter(academia_id, "cobranca_consolidada")
+        if not ativo:
+            return None
+
+    ordenadas = sorted(rows, key=lambda r: r.get("data_vencimento") or date.today())
+    principal = ordenadas[0]
+    if academia_id:
+        principal = garantir_cobranca_online(principal, academia_id)
+    total = sum(float(r.get("valor") or 0) for r in ordenadas)
+    linhas = []
+    for r in ordenadas:
+        v = r.get("data_vencimento")
+        etiqueta = v.strftime("%m/%Y") if v else "—"
+        quem = _PRIMEIRO_NOME(r.get("nome"))
+        linhas.append(f"• {etiqueta}{' (' + quem + ')' if quem else ''} — {_reais(r.get('valor'))}")
+    # Com irmãos no mesmo grupo, citar só o primeiro aluno soa como cobrança
+    # errada ("mas o Pedro eu paguei"). Nomeia todos.
+    nomes_alunos = []
+    for r in ordenadas:
+        n = _PRIMEIRO_NOME(r.get("nome"))
+        if n and n not in nomes_alunos:
+            nomes_alunos.append(n)
+    extra = {
+        "aluno": " e ".join(nomes_alunos) if len(nomes_alunos) > 1 else (ordenadas[0].get("nome") or ""),
+        "quantidade_pendencias": str(len(ordenadas)),
+        "valor_total": _reais(total),
+        "lista": "\n".join(linhas),
+    }
+    return _limpar_placeholders_vazios(
+        tpl.render(texto, _ctx_mensagem(principal, academia_nome, academia_id, extra)))
 
 
 def _nome_academia(cur, academia_id):
@@ -217,15 +308,48 @@ def _nome_academia(cur, academia_id):
     return (r or {})
 
 
+def _fora_de_grupo_sql(cur, origem="mensalidade", alias="ma"):
+    """Fragmento que tira do lembrete o que já está numa cobrança familiar.
+
+    A cobrança de quem paga junto com os irmãos sai uma vez só, no link do grupo;
+    mandar o lembrete individual também faria a mãe receber duas cobranças do que
+    ela paga numa. Vale para as duas origens que o grupo aceita — mensalidade e
+    avulsa —, por isso a origem e o alias são parâmetros. Devolve "" onde a
+    migração ainda não rodou.
+    """
+    try:
+        cur.execute("SHOW TABLES LIKE 'cobranca_grupo_item'")
+        if not cur.fetchone():
+            return ""
+        cur.execute("SHOW COLUMNS FROM cobranca_grupo_item LIKE 'registro_id'")
+        if not cur.fetchone():
+            # Esquema antigo, só com mensalidade_aluno_id.
+            if origem != "mensalidade":
+                return ""
+            return ("""
+          AND NOT EXISTS (SELECT 1 FROM cobranca_grupo_item gi
+                          JOIN cobranca_grupo g ON g.id = gi.grupo_id
+                          WHERE gi.mensalidade_aluno_id = %s.id
+                            AND g.status IN ('pendente','atrasado'))""" % alias)
+    except Exception:
+        return ""
+    return ("""
+          AND NOT EXISTS (SELECT 1 FROM cobranca_grupo_item gi
+                          JOIN cobranca_grupo g ON g.id = gi.grupo_id
+                          WHERE gi.origem = '%s' AND gi.registro_id = %s.id
+                            AND g.status IN ('pendente','atrasado'))""" % (origem, alias))
+
+
 def buscar_pendentes(cur, academia_id, dias_antes=3, somente_atrasadas=False):
     """Mensalidades pendentes/atrasadas com vencimento até hoje+dias_antes.
 
     Com `somente_atrasadas`, traz só o que já venceu — é o que alimenta o botão
     "Notificar atrasados" do painel.
     """
+    _sem_grupo = _fora_de_grupo_sql(cur)
     if somente_atrasadas:
         cur.execute(
-            """
+            f"""
             SELECT ma.id, ma.aluno_id, ma.data_vencimento, ma.valor, ma.status,
                    ma.valor_original, ma.desconto_aplicado, ma.id_desconto,
                    ma.asaas_boleto_url, ma.cora_boleto_url, ma.inter_boleto_url,
@@ -238,14 +362,14 @@ def buscar_pendentes(cur, academia_id, dias_antes=3, somente_atrasadas=False):
               AND ma.status IN ('pendente','atrasado')
               AND ma.data_vencimento IS NOT NULL
               AND ma.data_vencimento < CURDATE()
-              AND ma.valor > 0
+              AND ma.valor > 0{_sem_grupo}
             ORDER BY ma.data_vencimento
             """,
             (academia_id,),
         )
         return cur.fetchall()
     cur.execute(
-        """
+        f"""
         SELECT ma.id, ma.aluno_id, ma.data_vencimento, ma.valor, ma.status,
                ma.valor_original, ma.desconto_aplicado, ma.id_desconto,
                ma.asaas_boleto_url, ma.cora_boleto_url, ma.inter_boleto_url,
@@ -258,7 +382,7 @@ def buscar_pendentes(cur, academia_id, dias_antes=3, somente_atrasadas=False):
           AND ma.status IN ('pendente','atrasado')
           AND ma.data_vencimento IS NOT NULL
           AND ma.data_vencimento <= DATE_ADD(CURDATE(), INTERVAL %s DAY)
-          AND ma.valor > 0
+          AND ma.valor > 0{_sem_grupo}
         ORDER BY ma.data_vencimento
         """,
         (academia_id, dias_antes),
@@ -288,6 +412,14 @@ def enviar_um(academia_id, ma_id):
         return False, "Mensalidade não encontrada."
     if float(row.get("valor") or 0) <= 0:
         return False, "Mensalidade sem valor a cobrar (isenta ou 100% de desconto)."
+    try:
+        from utils.cobranca_familia import grupo_da_mensalidade
+        if grupo_da_mensalidade(row["id"]):
+            return False, ("Esta mensalidade está numa cobrança familiar — envie o link "
+                           "do grupo em Financeiro › Famílias, senão a família recebe "
+                           "duas cobranças do mesmo valor.")
+    except ImportError:
+        pass
     tel = _telefone(row)
     if not tel:
         return False, "Aluno sem telefone cadastrado."
@@ -711,3 +843,403 @@ def enviar_lote(academia_id, dias_antes=3, somente_ativadas=True, somente_atrasa
     finally:
         cur.close(); conn.close()
     return resumo
+
+
+# =====================================================================
+# Régua de cobrança (job diário)
+# =====================================================================
+# O job roda todo dia; a régua decide se hoje é dia de falar. Antes, todo
+# vencido recebia mensagem em toda execução — o cliente que atrasou uma semana
+# levava sete cobranças. Ver `utils/regua_cobranca.py`.
+
+def _colunas_suspensao(cur):
+    """Trecho do SELECT com as colunas de suspensão, ou constantes quando a
+    migração ainda não rodou — assim o job funciona antes e depois dela."""
+    try:
+        cur.execute("SHOW COLUMNS FROM alunos LIKE 'cobranca_suspensa'")
+        if cur.fetchone():
+            return (", a.cobranca_suspensa, a.cobranca_suspensa_ate, "
+                    "a.cobranca_suspensa_motivo")
+    except Exception:
+        pass
+    return (", 0 AS cobranca_suspensa, NULL AS cobranca_suspensa_ate, "
+            "NULL AS cobranca_suspensa_motivo")
+
+
+def buscar_em_aberto(cur, academia_id):
+    """Mensalidades que ainda podem ser cobradas, sem recorte de data.
+
+    Diferente de `buscar_pendentes` (usada pelos botões manuais), aqui não há
+    janela: a régua é que escolhe o dia. Ficam de fora as que estão em cobrança
+    familiar (o grupo cobra por elas) e as que têm pagamento em conferência —
+    cobrar quem acabou de enviar o comprovante é o pior tipo de mensagem.
+    """
+    _sem_grupo = _fora_de_grupo_sql(cur)
+    _susp = _colunas_suspensao(cur)
+    cur.execute(
+        f"""
+        SELECT 'mensalidade' AS origem,
+               ma.id, ma.aluno_id, ma.data_vencimento, ma.valor, ma.status,
+               ma.status_pagamento, ma.valor_original, ma.desconto_aplicado, ma.id_desconto,
+               ma.asaas_boleto_url, ma.cora_boleto_url, ma.inter_boleto_url,
+               ma.asaas_pix_copia_cola, ma.cora_pix_copia_cola, ma.inter_pix_copia_cola,
+               a.nome, a.telefone, a.tel_celular,
+               a.responsavel_financeiro_nome, a.responsavel_financeiro_telefone{_susp}
+        FROM mensalidade_aluno ma
+        JOIN alunos a ON a.id = ma.aluno_id
+        WHERE a.id_academia = %s
+          AND ma.status IN ('pendente','atrasado')
+          AND COALESCE(ma.status_pagamento, '') <> 'pendente_aprovacao'
+          AND ma.data_vencimento IS NOT NULL
+          AND ma.valor > 0{_sem_grupo}
+        ORDER BY ma.data_vencimento
+        """,
+        (academia_id,),
+    )
+    linhas = cur.fetchall() or []
+
+    # Cobrança avulsa: qualquer valor lançado para o aluno (taxa, uniforme,
+    # exame de faixa) segue a MESMA régua da mensalidade. Antes só a mensalidade
+    # era cobrada e o resto ficava sem aviso nenhum.
+    _sem_grupo_av = _fora_de_grupo_sql(cur, "avulsa", "ca")
+    try:
+        cur.execute(
+            f"""
+            SELECT 'avulsa' AS origem,
+                   ca.id, ca.aluno_id, ca.data_vencimento, ca.valor, ca.status,
+                   NULL AS status_pagamento, NULL AS valor_original,
+                   0 AS desconto_aplicado, NULL AS id_desconto,
+                   ca.asaas_boleto_url, NULL AS cora_boleto_url, NULL AS inter_boleto_url,
+                   ca.asaas_pix_copia_cola, NULL AS cora_pix_copia_cola,
+                   NULL AS inter_pix_copia_cola,
+                   a.nome, a.telefone, a.tel_celular,
+                   a.responsavel_financeiro_nome, a.responsavel_financeiro_telefone{_susp}
+            FROM cobranca_avulsa ca
+            JOIN alunos a ON a.id = ca.aluno_id
+            WHERE ca.id_academia = %s
+              AND ca.status IN ('pendente','atrasado')
+              AND ca.data_vencimento IS NOT NULL
+              AND ca.valor > 0{_sem_grupo_av}
+            ORDER BY ca.data_vencimento
+            """,
+            (academia_id,),
+        )
+        linhas += cur.fetchall() or []
+    except Exception:
+        logging.getLogger(__name__).exception("Régua: falha ao ler cobranças avulsas")
+
+    # Matrícula em aberto: vive em `pre_cadastro`, ainda sem aluno criado. Não
+    # tem `aluno_id`, então entra com id negativo — o suficiente para agrupar
+    # por destinatário sem colidir com aluno de verdade.
+    try:
+        cur.execute(
+            """
+            SELECT 'matricula' AS origem,
+                   p.id, -p.id AS aluno_id, p.matricula_vencimento AS data_vencimento,
+                   p.matricula_valor AS valor, COALESCE(p.matricula_status,'pendente') AS status,
+                   NULL AS status_pagamento, p.matricula_valor_original AS valor_original,
+                   COALESCE(p.matricula_desconto,0) AS desconto_aplicado, NULL AS id_desconto,
+                   p.matricula_link AS asaas_boleto_url, NULL AS cora_boleto_url,
+                   NULL AS inter_boleto_url,
+                   p.matricula_copia_cola AS asaas_pix_copia_cola, NULL AS cora_pix_copia_cola,
+                   NULL AS inter_pix_copia_cola,
+                   p.nome, p.telefone, p.tel_celular,
+                   p.responsavel_financeiro_nome,
+                   -- `pre_cadastro` não tem telefone próprio do responsável:
+                   -- o contato informado na inscrição já é o de quem paga.
+                   NULL AS responsavel_financeiro_telefone,
+                   0 AS cobranca_suspensa, NULL AS cobranca_suspensa_ate,
+                   NULL AS cobranca_suspensa_motivo
+            FROM pre_cadastro p
+            WHERE p.academia_id = %s
+              AND COALESCE(p.matricula_status,'') NOT IN ('pago','cancelado')
+              AND p.matricula_valor > 0
+              AND p.matricula_vencimento IS NOT NULL
+            ORDER BY p.matricula_vencimento
+            """,
+            (academia_id,),
+        )
+        linhas += cur.fetchall() or []
+    except Exception:
+        logging.getLogger(__name__).exception("Régua: falha ao ler matrículas em aberto")
+
+    # Cobrança familiar: as mensalidades dos irmãos saem da régua individual
+    # (o `_fora_de_grupo_sql` acima as remove) e voltam aqui como UMA linha, com
+    # a soma e os nomes de quem ela cobre. Sem isto a família ficava em silêncio:
+    # a mensalidade some do lembrete individual e nada ocupava o lugar dela.
+    try:
+        cur.execute(
+            """
+            SELECT 'grupo' AS origem,
+                   g.id, MIN(i.aluno_id) AS aluno_id, g.data_vencimento,
+                   g.valor_total AS valor, g.status,
+                   NULL AS status_pagamento, NULL AS valor_original,
+                   0 AS desconto_aplicado, NULL AS id_desconto,
+                   g.link AS asaas_boleto_url, NULL AS cora_boleto_url,
+                   NULL AS inter_boleto_url,
+                   g.copia_cola AS asaas_pix_copia_cola, NULL AS cora_pix_copia_cola,
+                   NULL AS inter_pix_copia_cola,
+                   GROUP_CONCAT(a.nome ORDER BY a.nome SEPARATOR ', ') AS nome,
+                   f.responsavel_telefone AS telefone, NULL AS tel_celular,
+                   f.responsavel_nome AS responsavel_financeiro_nome,
+                   f.responsavel_telefone AS responsavel_financeiro_telefone,
+                   0 AS cobranca_suspensa, NULL AS cobranca_suspensa_ate,
+                   NULL AS cobranca_suspensa_motivo
+            FROM cobranca_grupo g
+            JOIN familia_cobranca f ON f.id = g.familia_id
+            JOIN cobranca_grupo_item i ON i.grupo_id = g.id
+            JOIN alunos a ON a.id = i.aluno_id
+            WHERE g.id_academia = %s
+              AND g.status IN ('pendente','atrasado')
+              AND g.data_vencimento IS NOT NULL
+              AND g.valor_total > 0
+            GROUP BY g.id, g.data_vencimento, g.valor_total, g.status, g.link,
+                     g.copia_cola, f.responsavel_telefone, f.responsavel_nome
+            ORDER BY g.data_vencimento
+            """,
+            (academia_id,),
+        )
+        linhas += cur.fetchall() or []
+    except Exception:
+        logging.getLogger(__name__).exception("Régua: falha ao ler cobranças familiares")
+
+    return linhas
+
+
+def _ainda_cobravel(cur, registro_id, origem="mensalidade"):
+    """Reconsulta o status agora, imediatamente antes de enviar.
+
+    Entre montar a lista e disparar a mensagem o pagamento pode ter entrado
+    (baixa na secretaria, webhook do gateway, comprovante enviado). Confiar na
+    consulta do começo do lote é o que faz o sistema cobrar quem já pagou.
+
+    Vale para as três origens da régua — mensalidade, cobrança avulsa e
+    matrícula —, cada uma com o seu jeito de dizer "já foi paga".
+    """
+    try:
+        if origem == "grupo":
+            cur.execute(
+                "SELECT status, NULL AS status_pagamento, valor_total AS valor "
+                "FROM cobranca_grupo WHERE id = %s", (registro_id,))
+        elif origem == "avulsa":
+            cur.execute(
+                "SELECT status, NULL AS status_pagamento, valor "
+                "FROM cobranca_avulsa WHERE id = %s", (registro_id,))
+        elif origem == "matricula":
+            cur.execute(
+                "SELECT COALESCE(matricula_status,'pendente') AS status, "
+                "       NULL AS status_pagamento, matricula_valor AS valor "
+                "FROM pre_cadastro WHERE id = %s", (registro_id,))
+        else:
+            cur.execute(
+                "SELECT status, status_pagamento, valor "
+                "FROM mensalidade_aluno WHERE id = %s", (registro_id,))
+        r = cur.fetchone()
+    except Exception:
+        return False
+    if not r:
+        return False
+    if (r.get("status") or "") not in ("pendente", "atrasado"):
+        return False
+    if (r.get("status_pagamento") or "") in ("pago", "pendente_aprovacao"):
+        return False
+    return float(r.get("valor") or 0) > 0
+
+
+def _chave_destinatario(row):
+    """Agrupa por quem RECEBE, não por aluno.
+
+    A mãe de dois alunos com o mesmo telefone é um destinatário só — senão ela
+    recebe duas cobranças seguidas no mesmo minuto. Sem telefone, cada aluno
+    fica no seu grupo (o envio vai falhar de qualquer forma, mas a contagem
+    fica correta).
+    """
+    tel = _telefone(row)
+    if tel:
+        return "tel:" + "".join(ch for ch in tel if ch.isdigit())
+    return "aluno:%s" % row.get("aluno_id")
+
+
+def processar_regua(academia_id, hoje=None, somente_ativadas=True):
+    """Aplica a régua do dia na academia. Retorna um resumo do que aconteceu.
+
+    Percorre os destinatários (não as mensalidades) e, para cada um, decide
+    entre régua individual, cobrança consolidada e tratativa administrativa a
+    partir de quantas mensalidades vencidas ele tem AGORA — é isso que faz o
+    pagamento de uma das duas devolver o responsável para a régua simples, sem
+    guardar "nível de cobrança" nenhum.
+    """
+    from utils import regua_cobranca as regua
+    try:
+        from utils import whatsapp_log as wlog
+    except Exception:
+        wlog = None
+    import uuid
+
+    hoje = hoje or date.today()
+    lote_id = "regua-" + uuid.uuid4().hex[:12]
+    resumo = {"total": 0, "enviados": 0, "falhas": 0, "sem_telefone": 0,
+              "consolidados": 0, "tratativa": 0, "suspensos": 0,
+              "repetidos": 0, "sem_etapa": 0, "desativado": 0}
+
+    conn = get_db_connection(); cur = conn.cursor(dictionary=True)
+    try:
+        acad = _nome_academia(cur, academia_id)
+        if somente_ativadas and not acad.get("whatsapp_lembrete_mensalidade"):
+            resumo["motivo"] = "automacao_desligada"
+            return resumo
+        nome_acad = acad.get("nome") or ""
+        cfg = regua.carregar(academia_id, cur)
+
+        linhas = buscar_em_aberto(cur, academia_id)
+        resumo["total"] = len(linhas)
+
+        grupos = {}
+        for row in linhas:
+            grupos.setdefault(_chave_destinatario(row), []).append(row)
+
+        for chave, rows in grupos.items():
+            # Suspensão é por aluno: o irmão suspenso sai da conta, o outro
+            # continua sendo cobrado normalmente.
+            rows = [r for r in rows if not regua.suspenso(r, hoje)]
+            if not rows:
+                resumo["suspensos"] += 1
+                continue
+
+            vencidas = [r for r in rows if regua.dias_ate(r["data_vencimento"], hoje) > 0]
+
+            # Acumulou demais: para de insistir no automático e fica para a
+            # secretaria tratar (ligar, negociar, suspender).
+            if cfg["tratativa_apos"] and len(vencidas) >= cfg["tratativa_apos"]:
+                resumo["tratativa"] += 1
+                continue
+
+            if len(vencidas) >= cfg["consolidar_apos"]:
+                enviou = _regua_consolidada(conn, cur, academia_id, nome_acad, cfg,
+                                            vencidas, hoje, resumo, wlog, lote_id)
+            else:
+                enviou = _regua_individual(conn, cur, academia_id, nome_acad, cfg,
+                                           rows, hoje, resumo, wlog, lote_id)
+            del enviou
+    finally:
+        cur.close(); conn.close()
+    return resumo
+
+
+def _regua_individual(conn, cur, academia_id, nome_acad, cfg, rows, hoje, resumo, wlog, lote_id):
+    """Cobra UMA mensalidade do destinatário hoje, se alguma bater etapa.
+
+    Com uma parcela vencida e outra a vencer, as duas poderiam cair no mesmo
+    dia da régua; fica a mais atrasada — receber duas cobranças seguidas do
+    mesmo remetente é o que o ajuste veio evitar.
+    """
+    from utils import regua_cobranca as regua
+    alvo, etapa, dias_alvo = None, None, None
+    limite = getattr(regua, "LIMITE_DIAS", 90)
+    for r in rows:
+        d = regua.dias_ate(r["data_vencimento"], hoje)
+        # Passou de três meses: sai da cobrança automática. Insistir por robô
+        # depois disso não recupera e desgasta — o caso é de tratativa humana.
+        if d > limite:
+            continue
+        e = regua.etapa_do_dia(cfg["individual"], d)
+        if not e:
+            continue
+        # Uma mensagem por destinatário por dia: fica a mais atrasada.
+        if alvo is None or d > dias_alvo:
+            alvo, etapa, dias_alvo = r, e, d
+    if alvo is None:
+        resumo["sem_etapa"] += 1
+        return False
+
+    # A marca separa as origens: `mensalidade_aluno` 100 e `cobranca_avulsa` 100
+    # são registros distintos e dividiriam a mesma trava de duplicidade.
+    marca = "regua:%s:%d" % (alvo.get("origem") or "mensalidade", dias_alvo)
+    if _ja_enviado(cur, academia_id, marca, alvo["id"], hoje):
+        resumo["repetidos"] += 1
+        return False
+
+    tel = _telefone(alvo)
+    if not tel:
+        resumo["sem_telefone"] += 1
+        if wlog:
+            wlog.registrar(academia_id, "lembrete_atraso" if dias_alvo > 0 else "lembrete_vencimento",
+                           "sem_numero", aluno_id=alvo.get("aluno_id"), lote_id=lote_id)
+        return False
+
+    if not _ainda_cobravel(cur, alvo["id"], alvo.get("origem") or "mensalidade"):
+        return False
+
+    texto = montar_mensagem(alvo, nome_acad, academia_id, etapa.get("mensagem"))
+    if texto is None:
+        resumo["desativado"] += 1
+        return False
+
+    ok, _info = wpp.enviar(academia_id, tel, texto)
+    resumo["enviados" if ok else "falhas"] += 1
+    if ok:
+        _marcar_enviado(conn, cur, academia_id, marca, alvo["id"], hoje)
+    if wlog:
+        wlog.registrar(academia_id, "lembrete_atraso" if dias_alvo > 0 else "lembrete_vencimento",
+                       "entregue" if ok else "falha", aluno_id=alvo.get("aluno_id"),
+                       telefone=tel, lote_id=lote_id)
+    return ok
+
+
+def _regua_consolidada(conn, cur, academia_id, nome_acad, cfg, vencidas, hoje, resumo, wlog, lote_id):
+    """Uma mensagem só, com todas as pendências.
+
+    A âncora é o vencimento da N-ésima mais antiga (N = limiar de consolidação):
+    é o dia em que o responsável passou a dever N mensalidades. Fixá-la aí é o
+    que impede a mensalidade nova de reiniciar a régua — quem já foi cobrado
+    três vezes não volta para a estaca zero porque virou o mês.
+    """
+    from utils import regua_cobranca as regua
+    ordenadas = sorted(vencidas, key=lambda r: r["data_vencimento"])
+    ancora = ordenadas[cfg["consolidar_apos"] - 1]["data_vencimento"]
+    # A etapa 0 é o primeiro dia em que o responsável REALMENTE deve N
+    # mensalidades — o dia seguinte ao vencimento da N-ésima. Sem o -1, a etapa
+    # 0 cairia no próprio vencimento, quando ele ainda não está em atraso, e
+    # portanto nunca dispararia.
+    dias = regua.dias_ate(ancora, hoje) - 1
+    etapa = regua.etapa_do_dia(cfg["consolidada"], dias)
+    if not etapa:
+        resumo["sem_etapa"] += 1
+        return False
+
+    ref = min(int(r.get("aluno_id") or 0) for r in ordenadas)
+    marca = "regua_cons:%d" % dias
+    if _ja_enviado(cur, academia_id, marca, ref, hoje):
+        resumo["repetidos"] += 1
+        return False
+
+    tel = _telefone(ordenadas[0])
+    if not tel:
+        resumo["sem_telefone"] += 1
+        if wlog:
+            wlog.registrar(academia_id, "cobranca_consolidada", "sem_numero",
+                           aluno_id=ordenadas[0].get("aluno_id"), lote_id=lote_id)
+        return False
+
+    # Revalida uma a uma: quem pagou no meio do caminho sai da lista, e se
+    # sobrar menos que o limiar a consolidada perde o sentido e nada é enviado
+    # hoje (amanhã o responsável cai na régua individual).
+    vivas = [r for r in ordenadas
+             if _ainda_cobravel(cur, r["id"], r.get("origem") or "mensalidade")]
+    if len(vivas) < cfg["consolidar_apos"]:
+        return False
+
+    texto = montar_mensagem_consolidada(vivas, nome_acad, academia_id, etapa.get("mensagem"))
+    if texto is None:
+        resumo["desativado"] += 1
+        return False
+
+    ok, _info = wpp.enviar(academia_id, tel, texto)
+    resumo["enviados" if ok else "falhas"] += 1
+    if ok:
+        resumo["consolidados"] += 1
+        _marcar_enviado(conn, cur, academia_id, marca, ref, hoje)
+    if wlog:
+        wlog.registrar(academia_id, "cobranca_consolidada", "entregue" if ok else "falha",
+                       aluno_id=ordenadas[0].get("aluno_id"), telefone=tel, lote_id=lote_id)
+    return ok

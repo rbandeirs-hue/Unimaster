@@ -244,6 +244,20 @@
                     aria-label="{{ 'Inativar' if u.ativo else 'Reativar' }} {{ u.nome }}">
               <i class="bi bi-{{ 'pause-circle' if u.ativo else 'play-circle' }}"></i>
             </button>
+            {# Excluir é irreversível e some com o login para sempre: só admin, e
+               nunca em si mesmo. Para tirar alguém de circulação mantendo o
+               histórico, o botão do lado (Inativar) é o caminho certo. #}
+            {% if current_user.has_role('admin') and u.id != current_user.id %}
+            <form method="POST" action="{{ url_for('usuarios.excluir_usuario', user_id=u.id) }}"
+                  style="display:inline"
+                  onsubmit="return confirm('Excluir definitivamente o usuário {{ u.nome|e }}?\n\nO login some e não volta. As fichas de aluno continuam cadastradas, mas ficam sem acesso, e os vínculos de responsável são desfeitos.\n\nSe a ideia é só tirar de circulação, cancele e use Inativar.');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="lst-acao lst-acao--perigo"
+                      title="Excluir {{ u.nome }}" aria-label="Excluir {{ u.nome }}">
+                <i class="bi bi-trash"></i>
+              </button>
+            </form>
+            {% endif %}
           </div>
         </div>
         {% else %}

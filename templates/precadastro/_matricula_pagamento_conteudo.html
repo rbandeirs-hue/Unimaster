@@ -16,6 +16,13 @@
   <div class="badge bg-warning text-dark mb-3">Pagamento pendente</div>
   {% endif %}
 
+  {% if not p.matricula_link and not p.matricula_qrcode %}
+  <div class="alert alert-warning small text-start py-2">
+    Sem cobrança online emitida no momento. Aplique o cupom abaixo para gerar de novo,
+    ou registre o pagamento recebido por fora.
+  </div>
+  {% endif %}
+
   {% if p.matricula_qrcode %}
   <div><img src="data:image/png;base64,{{ p.matricula_qrcode }}" alt="QR Code" style="width:200px;height:200px;border:1px solid #e9ecef;border-radius:12px;padding:6px;background:#fff;"></div>
   <p class="text-muted small mt-2">Escaneie o QR Code para pagar</p>
@@ -44,6 +51,40 @@
      class="btn btn-outline-dark w-100 mb-2 js-abre-baixa">
     <i class="bi bi-cash-coin me-1"></i> Registrar pagamento recebido por fora
   </a>
+
+  {# O cupom é digitado pela pessoa no formulário público: errar o código é comum.
+     Enquanto a matrícula não foi paga, dá para corrigir aqui — o valor é
+     recalculado e o link de pagamento reemitido. #}
+  <div class="border rounded-3 p-3 mb-2 text-start" style="background:#f8f9fa;">
+    <div class="fw-semibold small mb-2"><i class="bi bi-ticket-perforated me-1"></i> Cupom de desconto</div>
+    <div class="small text-muted mb-2">
+      Valor cheio: R$ {{ "%.2f"|format((p.matricula_valor_original or p.matricula_valor or 0)|float) }}
+      {% if p.matricula_cupom %}
+        · Cupom atual: <span class="fw-semibold">{{ p.matricula_cupom }}</span>
+        (−R$ {{ "%.2f"|format((p.matricula_desconto or 0)|float) }})
+      {% else %}
+        · Sem cupom aplicado
+      {% endif %}
+    </div>
+    <form method="POST" action="{{ url_for('precadastro.matricula_trocar_cupom', precad_id=p.id) }}"
+          onsubmit="return confirm('Trocar o cupom e reemitir o link de pagamento com o novo valor?');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="input-group">
+        <select name="cupom" class="form-select">
+          <option value="">Sem cupom (valor cheio)</option>
+          {% for c in (cupons_disp or []) %}
+          <option value="{{ c.codigo }}" {{ 'selected' if p.matricula_cupom and c.codigo|upper == p.matricula_cupom|upper }}>
+            {{ c.codigo }} —
+            {% if c.tipo == 'percentual' %}{{ "%.0f"|format(c.valor|float) }}% de desconto
+            {% else %}−R$ {{ "%.2f"|format(c.valor|float) }}{% endif %}
+          </option>
+          {% endfor %}
+        </select>
+        <button type="submit" class="btn btn-primary"><i class="bi bi-check2 me-1"></i> Aplicar</button>
+      </div>
+      <div class="form-text">O link e o QR são gerados de novo com o valor corrigido. O link antigo deixa de valer.</div>
+    </form>
+  </div>
   {% endif %}
 
   <div class="d-flex gap-2">

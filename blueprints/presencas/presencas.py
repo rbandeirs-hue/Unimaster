@@ -5,6 +5,7 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session, jsonify, current_app
 from flask_login import login_required, current_user
 from config import get_db_connection
+from utils.multimodalidade import sql_turmas_da_academia
 from utils.ranking_frequencia import SQL_MATRICULADO_NA_TURMA_DA_PRESENCA
 from utils.alunos_academias import filtro_alunos_da_academia
 from datetime import date, datetime, timedelta
@@ -14,7 +15,13 @@ import uuid
 import re # Necessário para o histórico/ajax se mantiver a lógica original
 
 # ⚠️ O nome 'presencas' será usado para referenciar as rotas: url_for('presencas.registro_presenca')
+from utils.permissoes import somente_gestao
 bp_presencas = Blueprint("presencas", __name__)
+
+# Aluno, responsável e visitante não entram aqui nem digitando a URL:
+# a maioria destas rotas tinha só `@login_required`.
+bp_presencas.before_request(somente_gestao(livres=("ranking_frequencia_pagina",)))
+
 ALLOWED_PLANO_AULA_EXTENSIONS = {
     "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx",
     "jpg", "jpeg", "png", "gif", "txt", "zip", "rar"
@@ -903,10 +910,8 @@ def ranking_frequencia_pagina():
     db = get_db_connection()
     cur = db.cursor(dictionary=True)
     try:
-        cur.execute(
-            "SELECT TurmaID, Nome FROM turmas WHERE id_academia = %s ORDER BY Nome",
-            (academia_id,),
-        )
+        _sql_t, _pr_t = sql_turmas_da_academia(academia_id)
+        cur.execute(_sql_t, _pr_t)
         turmas_info_full = cur.fetchall()
         allowed_turma_ids = {t["TurmaID"] for t in turmas_info_full}
 
@@ -1097,10 +1102,8 @@ def ranking_frequencia_detalhe():
     db = get_db_connection()
     cur = db.cursor(dictionary=True)
     try:
-        cur.execute(
-            "SELECT TurmaID, Nome FROM turmas WHERE id_academia = %s ORDER BY Nome",
-            (academia_id,),
-        )
+        _sql_t, _pr_t = sql_turmas_da_academia(academia_id)
+        cur.execute(_sql_t, _pr_t)
         turmas_info_full = cur.fetchall()
         allowed_turma_ids = {t["TurmaID"] for t in turmas_info_full}
 
@@ -1189,10 +1192,9 @@ def registro_presenca():
 
     try:
         if academia_id:
-            cursor.execute(
-                "SELECT TurmaID, Nome, hora_inicio, hora_fim FROM turmas WHERE id_academia = %s ORDER BY Nome",
-                (academia_id,),
-            )
+            _sql_t, _pr_t = sql_turmas_da_academia(
+                academia_id, "TurmaID, Nome, hora_inicio, hora_fim")
+            cursor.execute(_sql_t, _pr_t)
         else:
             cursor.execute("SELECT TurmaID, Nome, hora_inicio, hora_fim FROM turmas ORDER BY Nome")
         turmas = cursor.fetchall()
@@ -2404,7 +2406,8 @@ def ata_presenca():
     try:
         if academia_id:
             try:
-                cursor.execute("SELECT TurmaID, Nome FROM turmas WHERE id_academia = %s ORDER BY Nome", (academia_id,))
+                _sql_t, _pr_t = sql_turmas_da_academia(academia_id)
+                cursor.execute(_sql_t, _pr_t)
             except Exception:
                 cursor.execute("SELECT TurmaID, Nome FROM turmas ORDER BY Nome")
         else:

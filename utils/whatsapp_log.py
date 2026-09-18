@@ -18,6 +18,7 @@ except Exception:  # pragma: no cover
 LABELS = {
     "lembrete_vencimento": "Lembrete de mensalidade",
     "lembrete_atraso": "Mensalidade em atraso",
+    "cobranca_consolidada": "Cobrança consolidada",
     "confirmacao_pagamento": "Confirmação de pagamento",
     "aniversario": "Parabéns de aniversário",
     "boas_vindas": "Boas-vindas",

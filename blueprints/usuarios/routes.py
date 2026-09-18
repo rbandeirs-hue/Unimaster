@@ -1068,26 +1068,62 @@ def toggle_ativo(user_id):
 @bp_usuarios.route("/excluir/<int:user_id>", methods=["POST"])
 @login_required
 def excluir_usuario(user_id):
+    """Exclui o usuário de verdade — o login some e não volta.
+
+    Só admin, e é irreversível: para tirar alguém do sistema mantendo o histórico,
+    o certo é "Inativar" na própria lista. O que a exclusão desfaz vem das foreign
+    keys, e elas já estão certas no banco: os vínculos (roles, academias, filhos do
+    responsável, assinaturas de push) somem em CASCADE, e as marcas de autoria
+    (quem lançou a receita, quem aprovou a mensalidade, o usuario_id do aluno e do
+    professor) viram NULL em vez de arrastar o registro junto. Ou seja: some o
+    acesso, não some o histórico nem a ficha do aluno.
+
+    Volta para a tela de onde veio, para não jogar o gestor de academia numa lista
+    que ele não estava usando.
+    """
+    destino = request.referrer or url_for("usuarios.lista_usuarios")
 
     if not require_admin():
-        return redirect(url_for("usuarios.lista_usuarios"))
+        return redirect(destino)
 
     if user_id == current_user.id:
         flash("Você não pode excluir a si mesmo.", "danger")
-        return redirect(url_for("usuarios.lista_usuarios"))
+        return redirect(destino)
 
     db = get_db_connection()
-    cursor = db.cursor()
+    cursor = db.cursor(dictionary=True)
+    try:
+        cursor.execute("SELECT id, nome FROM usuarios WHERE id = %s", (user_id,))
+        usuario = cursor.fetchone()
+        if not usuario:
+            flash("Usuário não encontrado.", "danger")
+            return redirect(destino)
 
-    cursor.execute("DELETE FROM roles_usuario WHERE usuario_id=%s", (user_id,))
-    cursor.execute("DELETE FROM usuarios WHERE id=%s", (user_id,))
-    db.commit()
+        # O que o gestor precisa saber que vai perder junto com o login.
+        cursor.execute("SELECT COUNT(*) c FROM alunos WHERE usuario_id = %s", (user_id,))
+        n_alunos = (cursor.fetchone() or {}).get("c") or 0
+        cursor.execute("SELECT COUNT(*) c FROM responsavel_alunos WHERE usuario_id = %s", (user_id,))
+        n_filhos = (cursor.fetchone() or {}).get("c") or 0
 
-    cursor.close()
-    db.close()
+        cursor.execute("DELETE FROM usuarios WHERE id=%s", (user_id,))
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        current_app.logger.error(f"Erro ao excluir usuário {user_id}: {e}", exc_info=True)
+        flash(f"Não foi possível excluir o usuário: {e}", "danger")
+        return redirect(destino)
+    finally:
+        cursor.close()
+        db.close()
 
-    flash("Usuário removido com sucesso!", "success")
-    return redirect(url_for("usuarios.lista_usuarios"))
+    detalhes = []
+    if n_alunos:
+        detalhes.append(f"{n_alunos} ficha(s) de aluno continuam cadastradas, agora sem login")
+    if n_filhos:
+        detalhes.append(f"{n_filhos} vínculo(s) de responsável foram desfeitos")
+    flash(f'Usuário "{usuario["nome"]}" excluído.'
+          + (" " + "; ".join(detalhes) + "." if detalhes else ""), "success")
+    return redirect(destino)
 
 
 # ======================================================

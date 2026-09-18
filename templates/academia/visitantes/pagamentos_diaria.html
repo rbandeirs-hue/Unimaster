@@ -1,127 +1,138 @@
-{% extends "base_app.html" %}
-{% block title %}Pagamentos de Diária{% endblock %}
+{% extends "base_academia.html" %}
+{% set menu_ativo = 'visitantes' %}
+{% block title %}Pagamentos de diária{% endblock %}
+
+{% block pagina_titulo %}Visitantes{% endblock %}
+{% block pagina_subtitulo %}Confirme os pagamentos de diária dos visitantes.{% endblock %}
+
+{% block extra_css %}
+<style>
+  /* Sete colunas; as menos essenciais saem primeiro conforme a janela encolhe.
+     Os limites medem a JANELA e o conteúdo é ~300px menor (barra lateral). */
+  .lin-diaria { grid-template-columns: minmax(0,1.6fr) minmax(0,1fr) 110px 110px 150px 96px 116px; }
+
+  @media (max-width: 1400px) {
+    .lin-diaria { grid-template-columns: minmax(0,1.6fr) minmax(0,1fr) 110px 150px 96px 116px; }
+    .col-data { display: none !important; }
+  }
+  @media (max-width: 1240px) {
+    .lin-diaria { grid-template-columns: minmax(0,1.6fr) 110px 150px 96px 116px; }
+    .col-turma { display: none !important; }
+  }
+  @media (max-width: 1024px) {                      /* barra lateral recolhe */
+    .lin-diaria { grid-template-columns: minmax(0,1.6fr) minmax(0,1fr) 110px 150px 96px 116px; }
+    .col-turma { display: block !important; }
+  }
+  @media (max-width: 900px) {
+    .lin-diaria { grid-template-columns: minmax(0,1.6fr) 110px 150px 116px; }
+    .col-turma, .col-comprovante { display: none !important; }
+  }
+  @media (max-width: 620px) {
+    .lin-diaria { grid-template-columns: minmax(0,1.4fr) 110px 116px; }
+    .col-situacao { display: none !important; }
+  }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="container mt-4">
-    <div class="mb-4">
-        {% if academias|length > 1 %}
-        <form method="GET" class="mb-3">
-            <label class="form-label small fw-semibold">Academia:</label>
-            <select name="academia_id" class="form-select form-select-sm d-inline-block w-auto" onchange="this.form.submit()">
-                {% for ac in academias %}
-                <option value="{{ ac.id }}" {% if ac.id == academia_id %}selected{% endif %}>{{ ac.nome }}</option>
-                {% endfor %}
-            </select>
-        </form>
-        {% endif %}
-        {% set back_url = url_for('academia.lista_visitantes', academia_id=academia_id) %}
-        {% include 'components/botao_voltar.html' %}
-        <div class="d-flex justify-content-between align-items-center">
-            <div>
-                <h2 class="h4 fw-bold text-primary mb-1">Pagamentos de Diária</h2>
-                <p class="text-muted mb-0">Confirme os pagamentos de diária dos visitantes.</p>
-            </div>
-        </div>
-    </div>
+{% set aba_ativa = 'diarias' %}
+{% include 'academia/visitantes/_abas.html' %}
 
-    {% if pagamentos %}
-    <div class="card shadow-sm border-0">
-        <div class="card-body">
-            <div class="table-responsive">
-                <table class="table table-hover">
-                    <thead>
-                        <tr>
-                            <th>Visitante</th>
-                            <th>Turma</th>
-                            <th>Data da Aula</th>
-                            <th>Valor</th>
-                            <th>Status</th>
-                            <th>Comprovante</th>
-                            <th>Ações</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for pag in pagamentos %}
-                        <tr>
-                            <td>
-                                <strong>{{ pag.visitante_nome }}</strong><br>
-                                <small class="text-muted">{{ pag.visitante_email }}</small>
-                            </td>
-                            <td>{{ pag.turma_nome }}</td>
-                            <td>{{ pag.data_aula|data_br }}</td>
-                            <td><strong>R$ {{ "%.2f"|format(pag.valor) }}</strong></td>
-                            <td>
-                                {% if pag.status == 'confirmado' %}
-                                <span class="badge bg-success">Confirmado</span>
-                                {% elif pag.status == 'pago' %}
-                                <span class="badge bg-info">Aguardando Confirmação</span>
-                                {% else %}
-                                <span class="badge bg-warning text-dark">Pendente</span>
-                                {% endif %}
-                            </td>
-                            <td>
-                                {% if pag.comprovante %}
-                                <a href="{{ url_for('static', filename=pag.comprovante) }}" target="_blank" 
-                                   class="btn btn-sm btn-outline-primary">
-                                    <i class="bi bi-eye me-1"></i>Ver
-                                </a>
-                                {% else %}
-                                <span class="text-muted">-</span>
-                                {% endif %}
-                            </td>
-                            <td>
-                                {% if pag.status == 'pago' %}
-                                <button type="button" class="btn btn-sm btn-success" 
-                                        onclick="confirmarPagamento({{ pag.id }})">
-                                    <i class="bi bi-check-circle me-1"></i>Confirmar
-                                </button>
-                                {% else %}
-                                <span class="text-muted small">-</span>
-                                {% endif %}
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-    {% else %}
-    <div class="card shadow-sm border-0">
-        <div class="card-body text-center py-5">
-            <i class="bi bi-wallet2 display-1 text-muted mb-3"></i>
-            <h5 class="text-muted">Nenhum pagamento encontrado</h5>
-            <p class="text-muted mb-0">Não há pagamentos de diária no momento.</p>
-        </div>
-    </div>
-    {% endif %}
-</div>
+{% if academias and academias|length > 1 %}
+<form method="GET" class="lst-filtros">
+  <label class="lst-campo lst-campo--curto">
+    <span class="lst-campo__rotulo">Academia</span>
+    <select name="academia_id" onchange="this.form.submit()">
+      {% for ac in academias %}
+      <option value="{{ ac.id }}" {% if ac.id == academia_id %}selected{% endif %}>{{ ac.nome }}</option>
+      {% endfor %}
+    </select>
+  </label>
+</form>
+{% endif %}
 
+<section class="lst-quadro">
+  <header class="lst-quadro__topo">
+    <h2 class="lst-quadro__titulo">Pagamentos de diária</h2>
+    <span class="lst-quadro__meta">
+      {{ pagamentos|length }} pagamento{{ 's' if pagamentos|length != 1 }}
+    </span>
+  </header>
+
+  <div class="lst-rolagem">
+    <div class="lst-largura" style="--lst-min:560px">
+      <div class="lst-linha lin-diaria lst-cab">
+        <div>Visitante</div>
+        <div class="col-turma">Turma</div>
+        <div class="col-data">Data da aula</div>
+        <div class="lst-num">Valor</div>
+        <div class="col-situacao">Situação</div>
+        <div class="col-comprovante">Comprovante</div>
+        <div class="lst-fim">Ações</div>
+      </div>
+
+      {% for pag in pagamentos %}
+      <div class="lst-linha lin-diaria lst-item">
+        <div class="lst-corta">
+          <span class="lst-nome">{{ pag.visitante_nome }}</span>
+          {% if pag.visitante_email %}<span class="lst-sub">{{ pag.visitante_email }}</span>{% endif %}
+        </div>
+        <div class="col-turma lst-corta">{{ pag.turma_nome or '—' }}</div>
+        <div class="col-data">{{ pag.data_aula|data_br if pag.data_aula else '—' }}</div>
+        <div class="lst-num fin-valor">R$ {{ "%.2f"|format(pag.valor or 0) }}</div>
+        <div class="col-situacao">
+          {% if pag.status == 'confirmado' %}
+          <span class="lst-situacao is-ativo"><i></i>Confirmado</span>
+          {% elif pag.status == 'pago' %}
+          <span class="lst-tag lst-tag--alerta">Aguardando confirmação</span>
+          {% else %}
+          <span class="lst-tag">Pendente</span>
+          {% endif %}
+        </div>
+        <div class="col-comprovante">
+          {% if pag.comprovante %}
+          <a class="lst-acao" target="_blank" rel="noopener"
+             href="{{ url_for('static', filename=pag.comprovante) }}"
+             title="Ver comprovante de {{ pag.visitante_nome }}"
+             aria-label="Ver comprovante de {{ pag.visitante_nome }}">
+            <i class="bi bi-eye"></i>
+          </a>
+          {% else %}<span class="lst-vazio-celula">—</span>{% endif %}
+        </div>
+        <div class="lst-acoes">
+          {% if pag.status == 'pago' %}
+          <button type="button" class="sh__btn sh__btn--forte js-confirmar-diaria"
+                  data-id="{{ pag.id }}">Confirmar</button>
+          {% else %}<span class="lst-vazio-celula">—</span>{% endif %}
+        </div>
+      </div>
+      {% else %}
+      <p class="lst-vazio">Nenhum pagamento de diária no momento.</p>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
 <script>
-function confirmarPagamento(pagamentoId) {
-    if (!confirm('Deseja realmente confirmar este pagamento? Uma receita será gerada automaticamente.')) {
-        return;
-    }
-    
-    fetch(`{{ url_for('academia.confirmar_pagamento_diaria', pagamento_id=0, academia_id=academia_id) }}`.replace('0', pagamentoId), {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': '{{ csrf_token() }}',
-        }
+  // A rota é montada com id 0 e o número real entra na hora do clique.
+  var URL_CONFIRMAR = "{{ url_for('academia.confirmar_pagamento_diaria', pagamento_id=0, academia_id=academia_id) }}";
+  document.addEventListener('click', function (ev) {
+    var botao = ev.target.closest('.js-confirmar-diaria');
+    if (!botao) return;
+    if (!confirm('Confirmar este pagamento? Uma receita será gerada automaticamente.')) return;
+    botao.disabled = true;
+    fetch(URL_CONFIRMAR.replace('/0/', '/' + botao.dataset.id + '/'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token() }}' }
     })
-    .then(response => response.json())
-    .then(data => {
-        if (data.ok) {
-            alert(data.msg);
-            location.reload();
-        } else {
-            alert('Erro: ' + data.msg);
-        }
-    })
-    .catch(error => {
-        console.error('Erro:', error);
-        alert('Erro ao confirmar pagamento');
-    });
-}
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (d.ok) { location.reload(); }
+        else { alert('Erro: ' + (d.msg || 'não foi possível confirmar')); botao.disabled = false; }
+      })
+      .catch(function () { alert('Erro ao confirmar o pagamento.'); botao.disabled = false; });
+  });
 </script>
 {% endblock %}

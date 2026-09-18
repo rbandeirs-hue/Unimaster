@@ -26,6 +26,10 @@
       ('planos',       'Planos',              'financeiro_painel.planos'),
       ('formas',       'Formas de pagamento', 'financeiro_painel.formas'),
       ('descontos',    'Descontos',           'financeiro_painel.descontos'),
+      ('contratos',    'Contratos',           'financeiro_painel.contratos'),
+      ('familias',     'Famílias',            'financeiro_painel.familias'),
+      ('regua',        'Cobrança automática', 'financeiro_painel.regua'),
+      ('monitor',      'Monitor de cobrança', 'financeiro_painel.monitor'),
       ('cobrancas',    'Gerar cobranças',     'financeiro_painel.cobrancas'),
       ('receitas',     'Receitas',            'financeiro.lista_receitas'),
       ('despesas',     'Despesas',            'financeiro.lista_despesas'),
@@ -39,6 +43,18 @@
      class="lst-aba {% if (fin_aba or ativo) == chave %}is-ativa{% endif %}">{{ rotulo }}</a>
   {% endfor %}
 </nav>
+
+{% if gateway_erro %}
+{# Recusa do gateway é silenciosa em todos os caminhos de cobrança: sem este
+   aviso, o gestor só percebe pela inadimplência. #}
+<div class="alert alert-danger" style="margin:1rem 0">
+  <strong>O gateway de cobrança está recusando as emissões.</strong>
+  Matrículas caem em pagamento avulso e os lembretes saem sem link de pagamento
+  até isto ser resolvido.
+  {% if gateway_erro_em %}<br><small>Última tentativa: {{ gateway_erro_em.strftime('%d/%m/%Y às %H:%M') }}</small>{% endif %}
+  <br><small style="opacity:.85">Resposta do gateway: {{ gateway_erro }}</small>
+</div>
+{% endif %}
 
 {% block fin_conteudo %}{% endblock %}
 

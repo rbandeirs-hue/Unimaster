@@ -1,0 +1,332 @@
+{% extends "financeiro/painel/_base.html" %}
+{% set fin_aba = 'contratos' %}
+{% block title %}Contratos — Financeiro{% endblock %}
+
+{% block pagina_titulo %}Financeiro{% endblock %}
+{% block pagina_subtitulo %}O acordo que liga aluno, pacote e cobrança{% endblock %}
+
+{% block pagina_acoes %}
+  <a class="sh__btn sh__btn--forte"
+     href="{{ url_for('financeiro_painel.contratos', academia_id=academia_id, novo=1) }}">
+    <i class="bi bi-plus-lg"></i> Novo contrato
+  </a>
+{% endblock %}
+
+{% block fin_css %}
+<style>
+  .ct-card { border:1px solid var(--lst-borda, #e5e7eb); border-radius:14px;
+             padding:1rem 1.1rem; margin-bottom:.85rem; }
+  .ct-card.is-encerrado, .ct-card.is-cancelado { opacity:.62; }
+  .ct-topo { display:flex; flex-wrap:wrap; gap:.75rem; align-items:flex-start;
+             justify-content:space-between; }
+  .ct-nome { font-weight:600; }
+  .ct-sub { font-size:.86rem; opacity:.75; margin-top:.15rem; }
+  .ct-valor { font-weight:600; white-space:nowrap; }
+  .ct-alunos { margin:.7rem 0 0; padding:.6rem .8rem; border-radius:10px;
+               background:rgba(127,127,127,.08); }
+  .ct-aluno { display:flex; justify-content:space-between; gap:1rem;
+              font-size:.9rem; padding:.15rem 0; }
+  .ct-acoes { display:flex; flex-wrap:wrap; gap:.4rem; margin-top:.75rem; }
+  .ct-tags { display:flex; flex-wrap:wrap; gap:.35rem; margin-top:.4rem; }
+  .ct-tag { font-size:.76rem; padding:.1rem .5rem; border-radius:999px;
+            background:rgba(127,127,127,.14); }
+  /* Linhas de aluno do formulário: a tela monta e o servidor revalida. */
+  .ct-linhas { width:100%; margin:.5rem 0 0; }
+  .ct-linhas th { font-size:.78rem; text-align:left; opacity:.7; font-weight:600;
+                  padding:.2rem .4rem; }
+  .ct-linhas td { padding:.2rem .4rem; }
+  .ct-linhas input[type=number] { width:120px; }
+  .ct-vazio-linhas { font-size:.86rem; opacity:.7; padding:.4rem 0; }
+</style>
+{% endblock %}
+
+{% block fin_conteudo %}
+
+{% if em_edicao or request.args.get('novo') %}
+<section class="lst-quadro">
+  <header class="lst-quadro__topo">
+    <h2 class="lst-quadro__titulo">{{ 'Editar contrato' if em_edicao else 'Novo contrato' }}</h2>
+    <span class="lst-quadro__meta">
+      Um contrato pode cobrir mais de um aluno — é assim que a família paga junto.
+    </span>
+  </header>
+
+  <form method="POST" action="{{ url_for('financeiro_painel.contratos_salvar') }}"
+        class="lst-filtros" style="border:0; margin:0; flex-wrap:wrap">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
+    {% if em_edicao %}<input type="hidden" name="id" value="{{ em_edicao.id }}">{% endif %}
+
+    <label class="lst-campo lst-campo--largo">
+      <span class="lst-campo__rotulo">Plano *</span>
+      <select name="mensalidade_id" id="ctPlano" required>
+        <option value="">Selecione…</option>
+        {% for p in planos %}
+        <option value="{{ p.id }}" data-valor="{{ '%.2f'|format(p.valor|float) }}"
+                {% if em_edicao and em_edicao.mensalidade_id == p.id %}selected{% endif %}>
+          {{ p.nome }} — R$ {{ '%.2f'|format(p.valor|float) }}{% if p.modalidades %} ({{ p.modalidades }}){% endif %}
+        </option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label class="lst-campo lst-campo--curto">
+      <span class="lst-campo__rotulo">Dia do vencimento</span>
+      <input name="dia_vencimento" type="number" min="1" max="31"
+             value="{{ em_edicao.dia_vencimento or '' if em_edicao else '' }}" placeholder="1 a 31">
+    </label>
+    <label class="lst-campo lst-campo--curto">
+      <span class="lst-campo__rotulo">Início</span>
+      <input name="data_inicio" type="date"
+             value="{{ em_edicao.data_inicio if em_edicao and em_edicao.data_inicio else '' }}">
+    </label>
+    <label class="lst-campo lst-campo--curto">
+      <span class="lst-campo__rotulo">Fim (opcional)</span>
+      <input name="data_fim" type="date"
+             value="{{ em_edicao.data_fim if em_edicao and em_edicao.data_fim else '' }}">
+    </label>
+    <label class="lst-campo lst-campo--curto">
+      <span class="lst-campo__rotulo">Situação</span>
+      <select name="status">
+        {% for chave, rotulo in [('ativo','Ativo'), ('suspenso','Suspenso'),
+                                 ('encerrado','Encerrado'), ('cancelado','Cancelado')] %}
+        <option value="{{ chave }}"
+                {% if (em_edicao and em_edicao.status == chave) or (not em_edicao and chave == 'ativo') %}selected{% endif %}>
+          {{ rotulo }}
+        </option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label class="lst-campo lst-campo--largo">
+      <span class="lst-campo__rotulo">Responsável pelo pagamento</span>
+      <input name="responsavel_nome" maxlength="150" placeholder="Quem paga (opcional)"
+             value="{{ em_edicao.responsavel_nome or '' if em_edicao else '' }}">
+    </label>
+    <label class="lst-campo lst-campo--curto">
+      <span class="lst-campo__rotulo">CPF do responsável</span>
+      <input name="responsavel_cpf" maxlength="20" placeholder="Só números"
+             value="{{ em_edicao.responsavel_cpf or '' if em_edicao else '' }}">
+    </label>
+
+    {# Com dois ou mais alunos o contrato já é de família por definição; a marca
+       serve para o contrato de um aluno só que mesmo assim é pago pelo
+       responsável, sem titular. #}
+    <label class="lst-campo lst-campo--curto">
+      <span class="lst-campo__rotulo">Tipo</span>
+      <select name="familia">
+        <option value="0" {% if em_edicao and not em_edicao.familia %}selected{% endif %}>Individual</option>
+        <option value="1" {% if em_edicao and em_edicao.familia %}selected{% endif %}>Família (do responsável)</option>
+      </select>
+    </label>
+
+    <label class="lst-campo lst-campo--largo">
+      <span class="lst-campo__rotulo">Observações</span>
+      <input name="observacoes" maxlength="255"
+             value="{{ em_edicao.observacoes or '' if em_edicao else '' }}">
+    </label>
+
+    <div class="lst-campo lst-campo--largo" style="flex:1 1 100%">
+      <span class="lst-campo__rotulo">Alunos do contrato *</span>
+      <div style="display:flex; gap:.5rem; flex-wrap:wrap; align-items:center">
+        <select id="ctAlunoNovo" style="flex:1; min-width:220px">
+          <option value="">Escolha um aluno para incluir…</option>
+          {% for a in alunos %}
+          <option value="{{ a.id }}" data-nome="{{ a.nome }}"
+                  data-modalidades="{{ a.modalidades or 'sem modalidade' }}">
+            {{ a.nome }}{% if a.modalidades %} — {{ a.modalidades }}{% endif %}
+          </option>
+          {% endfor %}
+        </select>
+        <button type="button" class="sh__btn" id="ctIncluir">
+          <i class="bi bi-plus-lg"></i> Incluir
+        </button>
+      </div>
+
+      <table class="ct-linhas">
+        <thead>
+          <tr><th>Aluno</th><th>Modalidades</th><th>Valor (R$)</th><th></th></tr>
+        </thead>
+        <tbody id="ctCorpo">
+          {% if em_edicao %}
+          {% for al in em_edicao.alunos %}
+          <tr>
+            <td>{{ al.nome }}<input type="hidden" name="aluno_id[]" value="{{ al.id }}"></td>
+            <td class="ct-sub">—</td>
+            <td><input type="number" name="valor[]" step="0.01" min="0"
+                       value="{{ '%.2f'|format(al.valor|float) }}"></td>
+            <td><button type="button" class="lst-acao lst-acao--perigo js-remover"
+                        aria-label="Remover {{ al.nome }}"><i class="bi bi-x-lg"></i></button></td>
+          </tr>
+          {% endfor %}
+          {% endif %}
+        </tbody>
+      </table>
+      <p class="ct-vazio-linhas" id="ctVazio">Nenhum aluno incluído ainda.</p>
+      <p class="ct-sub">Total do contrato: <strong id="ctTotal">R$ 0,00</strong></p>
+    </div>
+
+    <div style="flex:1 1 100%; display:flex; gap:.5rem; margin-top:.5rem">
+      <button class="sh__btn sh__btn--forte" type="submit">
+        {{ 'Salvar contrato' if em_edicao else 'Criar contrato' }}
+      </button>
+      <a class="sh__btn" href="{{ url_for('financeiro_painel.contratos', academia_id=academia_id) }}">Cancelar</a>
+    </div>
+  </form>
+</section>
+{% endif %}
+
+<form method="GET" class="lst-filtros">
+  {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
+  <label class="lst-campo lst-campo--curto">
+    <span class="lst-campo__rotulo">Situação</span>
+    <select name="status" onchange="this.form.submit()">
+      {% for chave, rotulo in [('ativo','Ativos'), ('suspenso','Suspensos'),
+                               ('encerrado','Encerrados'), ('cancelado','Cancelados'),
+                               ('todos','Todos')] %}
+      <option value="{{ chave }}" {% if status == chave %}selected{% endif %}>{{ rotulo }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label class="lst-campo lst-campo--largo">
+    <span class="lst-campo__rotulo">Buscar</span>
+    <input name="busca" value="{{ busca }}" placeholder="Aluno ou responsável">
+  </label>
+  <button class="sh__btn" type="submit">Filtrar</button>
+</form>
+
+<section class="lst-quadro">
+  <header class="lst-quadro__topo">
+    <h2 class="lst-quadro__titulo">Contratos</h2>
+    <span class="lst-quadro__meta">
+      {{ lista|length }} contrato{{ 's' if lista|length != 1 }}
+      {%- if modalidade_contexto_nome %} · recorte: {{ modalidade_contexto_nome }}{% endif %}
+    </span>
+  </header>
+
+  <div style="padding:1rem 1.1rem">
+    {% if not lista %}
+    <p class="lst-vazio">
+      Nenhum contrato nesta situação. Os contratos existentes vieram da migração e da
+      geração automática; use <strong>Novo contrato</strong> para criar um à mão.
+    </p>
+    {% endif %}
+
+    {% for c in lista %}
+    <article class="ct-card is-{{ c.status }}">
+      <div class="ct-topo">
+        <div>
+          <div class="ct-nome">
+            {% if c.familia %}
+            <i class="bi bi-people"></i> Família — {{ c.responsavel_nome or 'responsável sem nome' }}
+            {% else %}
+            <i class="bi bi-person"></i> {{ c.titular_nome or 'sem titular' }}
+            {% endif %}
+          </div>
+          <div class="ct-sub">
+            {{ c.plano_nome or 'sem plano' }}
+            {%- if c.dia_vencimento %} · vence dia {{ c.dia_vencimento }}{% endif %}
+            {%- if c.cobrancas %} · {{ c.cobrancas }} cobrança{{ 's' if c.cobrancas != 1 }} ligada{{ 's' if c.cobrancas != 1 }}{% endif %}
+          </div>
+          <div class="ct-tags">
+            <span class="ct-tag">{{ c.status }}</span>
+            {% for m in c.modalidades %}<span class="ct-tag">{{ m }}</span>{% endfor %}
+          </div>
+        </div>
+        <div class="ct-valor">R$ {{ '%.2f'|format(c.valor|float) }}</div>
+      </div>
+
+      {% if c.alunos %}
+      <div class="ct-alunos">
+        {% for al in c.alunos %}
+        <div class="ct-aluno">
+          <span>{{ al.nome }}</span>
+          <span>R$ {{ '%.2f'|format(al.valor|float) }}</span>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      <div class="ct-acoes">
+        <a class="sh__btn" href="{{ url_for('financeiro_painel.contratos',
+                                            academia_id=academia_id, editar=c.id) }}">Editar</a>
+        {% for chave, rotulo, pergunta in [
+             ('suspenso', 'Suspender', 'Suspender este contrato? As cobranças já emitidas não mudam.'),
+             ('encerrado', 'Encerrar', 'Encerrar este contrato? As cobranças já emitidas não mudam.'),
+             ('ativo', 'Reativar', 'Reativar este contrato?')] %}
+        {% if c.status != chave %}
+        <form method="POST" style="display:inline"
+              action="{{ url_for('financeiro_painel.contratos_status', contrato_id=c.id, academia_id=academia_id) }}"
+              onsubmit="return confirm('{{ pergunta }}')">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="status" value="{{ chave }}">
+          <input type="hidden" name="voltar_status" value="{{ status }}">
+          <button class="sh__btn" type="submit">{{ rotulo }}</button>
+        </form>
+        {% endif %}
+        {% endfor %}
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  // As linhas de aluno são montadas aqui, mas quem decide é o servidor: ele
+  // revalida academia, duplicidade e valores ao salvar.
+  (function () {
+    var corpo = document.getElementById('ctCorpo');
+    if (!corpo) return;
+    var seletor = document.getElementById('ctAlunoNovo');
+    var plano = document.getElementById('ctPlano');
+
+    function valorDoPlano() {
+      var op = plano && plano.options[plano.selectedIndex];
+      return (op && op.dataset.valor) ? op.dataset.valor : '0.00';
+    }
+
+    function atualizarTotal() {
+      var total = 0;
+      corpo.querySelectorAll('input[name="valor[]"]').forEach(function (i) {
+        total += parseFloat(i.value || '0') || 0;
+      });
+      document.getElementById('ctTotal').textContent =
+        'R$ ' + total.toFixed(2).replace('.', ',');
+      document.getElementById('ctVazio').style.display =
+        corpo.children.length ? 'none' : '';
+    }
+
+    function incluir() {
+      var op = seletor.options[seletor.selectedIndex];
+      if (!op || !op.value) return;
+      var jaTem = corpo.querySelector('input[name="aluno_id[]"][value="' + op.value + '"]');
+      if (jaTem) { alert('Este aluno já está no contrato.'); return; }
+
+      var tr = document.createElement('tr');
+      tr.innerHTML =
+        '<td>' + op.dataset.nome +
+        '<input type="hidden" name="aluno_id[]" value="' + op.value + '"></td>' +
+        '<td class="ct-sub">' + (op.dataset.modalidades || '') + '</td>' +
+        '<td><input type="number" name="valor[]" step="0.01" min="0" value="' +
+        valorDoPlano() + '"></td>' +
+        '<td><button type="button" class="lst-acao lst-acao--perigo js-remover" ' +
+        'aria-label="Remover ' + op.dataset.nome + '"><i class="bi bi-x-lg"></i></button></td>';
+      corpo.appendChild(tr);
+      seletor.selectedIndex = 0;
+      atualizarTotal();
+    }
+
+    document.getElementById('ctIncluir').addEventListener('click', incluir);
+    corpo.addEventListener('click', function (ev) {
+      var botao = ev.target.closest('.js-remover');
+      if (!botao) return;
+      botao.closest('tr').remove();
+      atualizarTotal();
+    });
+    corpo.addEventListener('input', atualizarTotal);
+    atualizarTotal();
+  })();
+</script>
+{% endblock %}

@@ -4,14 +4,16 @@
    aluno fixo e retorno via `next`. Ids com prefixo `nc` (nova cobrança).
    ===================================================================== #}
 {% macro modal_gerar_cobranca(aluno_id, aluno_nome, academia_id, planos, voltar,
-                              mes_padrao=None, ano_padrao=None, descontos=None) %}
+                              mes_padrao=None, ano_padrao=None, descontos=None,
+                              valor_matricula=None) %}
 {% set mes_padrao = mes_padrao or 1 %}
 {% set ano_padrao = ano_padrao or 2026 %}
 <div class="modal fade" id="modalNovaCobranca" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered" style="max-width:620px;">
     <form class="modal-content ncm" method="POST" action="{{ url_for('financeiro.gerar_cobranca') }}"
           data-checar-url="{{ url_for('financeiro.checar_disponibilidade_mensalidade') }}"
-          data-academia="{{ academia_id }}" data-aluno="{{ aluno_id }}">
+          data-academia="{{ academia_id }}" data-aluno="{{ aluno_id }}"
+          data-valor-matricula="{{ '%.2f'|format(valor_matricula|float) if valor_matricula else '' }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="aluno_id" value="{{ aluno_id }}">
       <input type="hidden" name="id_academia" value="{{ academia_id }}">
@@ -27,10 +29,33 @@
         .ncm .flbl{ font-size:.68rem; letter-spacing:.06em; text-transform:uppercase; font-weight:600; color:var(--muted); margin-bottom:.32rem; display:block; }
         .ncm .fld{ width:100%; box-sizing:border-box; background:#fff; border:1px solid #d8d7d3; border-radius:8px; padding:.55rem .7rem; font-size:.92rem; color:var(--fg); }
         .ncm .fld:focus{ outline:none; border-color:var(--primary); box-shadow:0 0 0 3px rgba(193,18,31,.12); }
-        .ncm .pills{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
-        .ncm .pill{ text-align:center; padding:.55rem .6rem; border:1px solid #d8d7d3; border-radius:9px; background:#fff; font-size:.9rem; font-weight:600; color:#2a2724; cursor:pointer; }
+        /* Quatro tipos não cabem em três colunas sem apertar o rótulo. A grade
+           se ajusta e quebra a linha quando precisa, e o botão cresce em altura
+           em vez de estourar a largura: rótulo comprido ("Cobrança avulsa") fica
+           em duas linhas e todos os botões da fileira mantêm o mesmo tamanho. */
+        .ncm .pills{ display:grid; grid-template-columns:repeat(auto-fit, minmax(104px, 1fr)); gap:8px; align-items:stretch; }
+        .ncm .pill{ display:flex; align-items:center; justify-content:center; text-align:center;
+                    min-height:40px; padding:.45rem .5rem; line-height:1.15; overflow-wrap:anywhere;
+                    border:1px solid #d8d7d3; border-radius:9px; background:#fff; font-size:.86rem;
+                    font-weight:600; color:#2a2724; cursor:pointer; }
         .ncm .pill input{ position:absolute; opacity:0; width:0; height:0; }
         .ncm .pill.on{ background:#1c1a19; border-color:#1c1a19; color:#fff; }
+        /* Descontos: um menu que adiciona e a lista do que foi escolhido. A altura
+           acompanha o que o aluno realmente tem, não o tamanho do catálogo da
+           academia — com 5 ou 50 descontos cadastrados o modal fica igual. */
+        .ncm .desc-itens{ margin-top:8px; display:flex; flex-direction:column; }
+        .ncm .desc-item{ display:flex; align-items:center; gap:10px; padding:.45rem .1rem;
+                         border-bottom:1px solid #ecebe8; font-size:.9rem; }
+        .ncm .desc-item:last-of-type{ border-bottom:0; }
+        .ncm .desc-nome{ flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .ncm .desc-val{ font-variant-numeric:tabular-nums; color:#2a2724; }
+        .ncm .desc-x{ border:0; background:none; color:var(--muted); cursor:pointer;
+                      font-size:1.05rem; line-height:1; padding:0 2px; }
+        .ncm .desc-x:hover{ color:#b42318; }
+        .ncm .desc-total{ display:flex; justify-content:space-between; gap:10px;
+                          border-top:1px solid #d8d7d3; margin-top:2px; padding-top:.5rem;
+                          font-size:.9rem; font-weight:600; }
+        .ncm .desc-vazio{ font-size:.82rem; color:var(--muted); margin-top:6px; }
         .ncm .warn{ background:#fdf6e3; border:1px solid #f0e0b0; border-left:4px solid var(--amber); border-radius:8px; padding:11px 14px; font-size:.85rem; color:#7a5a12; }
         .ncm .prev{ border:1px solid var(--border); border-radius:10px; overflow:hidden; }
         .ncm .prev-h{ padding:9px 16px; border-bottom:1px solid var(--line); }
@@ -60,6 +85,9 @@
             <label class="pill on"><input type="radio" name="tipo" value="mensal" id="ncTipoMensal" checked> Um mês</label>
             <label class="pill"><input type="radio" name="tipo" value="ano" id="ncTipoAno"> Ano inteiro</label>
             <label class="pill"><input type="radio" name="tipo" value="avulso" id="ncTipoAvulso"> Cobrança avulsa</label>
+            {# Matrícula: mesma cobrança avulsa, marcada — a receita vai para
+               "Matrículas" e o pagamento aparece no bloco Matrícula do aluno. #}
+            <label class="pill"><input type="radio" name="tipo" value="matricula" id="ncTipoMatricula"> Matrícula</label>
           </div>
         </div>
 
@@ -100,21 +128,57 @@
             </div>
             <div class="col-3">
               <label class="flbl" for="ncDia">Dia venc.</label>
-              <select class="fld" id="ncDia" name="dia_vencimento">
-                {% for d in [5,10,15,20,25,28] %}<option value="{{ d }}" {% if d==10 %}selected{% endif %}>{{ d }}</option>{% endfor %}
-              </select>
+              {# Era um select com 5,10,15,20,25,28: quem cobra no dia 3 ou no 30
+                 não tinha opção. Digitável de 1 a 31; mês curto cai no último dia. #}
+              <input class="fld" id="ncDia" name="dia_vencimento" type="number"
+                     min="1" max="31" step="1" value="10" inputmode="numeric">
             </div>
           </div>
 
+        </div>
+
+        {# ------------------------------------------------- cobrança avulsa #}
+        <div id="ncBlocoAvulso" hidden>
           <div class="mb-3">
-            <label class="flbl" for="ncDescSel">Desconto <span style="text-transform:none; letter-spacing:0; font-weight:400; color:var(--muted);">— se o aluno tiver direito</span></label>
-            <select class="fld" id="ncDescSel" name="desconto_id">
-              <option value="">Sem desconto</option>
+            <label class="flbl" for="ncDescricao">Descrição</label>
+            <input type="text" class="fld" id="ncDescricao" name="descricao" placeholder="Ex.: uniforme, exame de faixa, inscrição">
+          </div>
+          <div class="row g-3 mb-3">
+            <div class="col-6">
+              <label class="flbl" for="ncValor">Valor</label>
+              <div class="ig"><span>R$</span><input type="text" class="fld" id="ncValor" name="valor" inputmode="decimal"></div>
+            </div>
+            <div class="col-6">
+              <label class="flbl" for="ncVenc">Vencimento</label>
+              <input type="date" class="fld" id="ncVenc" name="data_vencimento">
+            </div>
+          </div>
+        </div>
+
+        {# ---------------------------------------------------------- descontos #}
+        {# Fora do bloco da mensalidade: matrícula e cobrança avulsa também
+           aceitam desconto — o servidor já resolvia `desconto_id` nos dois
+           casos, era a tela que só oferecia na mensalidade. #}
+        <div id="ncBlocoDescontos">
+          <div class="mb-3">
+            <label class="flbl" for="ncDescAdd">Descontos <span style="text-transform:none; letter-spacing:0; font-weight:400; color:var(--muted);">— some quantos o aluno tiver direito</span></label>
+            {# Era um menu de escolha única: quem tem Família e Pontualidade só
+               conseguia aplicar um dos dois. Aqui o menu só ADICIONA, e o que foi
+               escolhido vira lista — os percentuais incidem sobre o valor cheio e
+               os fixos somam, limitados ao valor da cobrança. #}
+            <select class="fld" id="ncDescAdd">
+              <option value="">+ Adicionar desconto</option>
               {% for d in descontos or [] %}
-              <option value="{{ d.id }}" data-tipo="{{ d.tipo }}" data-valor="{{ '%.2f'|format(d.valor or 0) }}">{{ d.nome }} — {% if d.tipo == 'percentual' %}{{ '%.0f'|format(d.valor|float) }}%{% else %}R$ {{ '%.2f'|format(d.valor|float) }}{% endif %}</option>
+              <option value="{{ d.id }}" data-tipo="{{ d.tipo }}" data-valor="{{ '%.2f'|format(d.valor or 0) }}"
+                      data-nome="{{ d.nome }}">{{ d.nome }} — {% if d.tipo == 'percentual' %}{{ '%.0f'|format(d.valor|float) }}%{% else %}R$ {{ '%.2f'|format(d.valor|float) }}{% endif %}</option>
               {% endfor %}
-              <option value="avulso" data-tipo="avulso">Desconto avulso…</option>
+              <option value="avulso" data-tipo="avulso" data-valor="0" data-nome="Desconto avulso">Desconto avulso…</option>
             </select>
+            <div class="desc-itens" id="ncDescItens"></div>
+            <div class="desc-vazio" id="ncDescVazio">Nenhum desconto aplicado.</div>
+            <div class="desc-vazio" id="ncDescLimite" style="display:none; color:#b42318;">
+              A cobrança já está zerada — remova um desconto para trocar por outro.
+            </div>
             <div class="row g-2 mt-2" id="ncDescAvulso" style="display:none;">
               <div class="col-5">
                 <select class="fld" id="ncDescTipo" name="desconto_manual_tipo">
@@ -127,7 +191,10 @@
               </div>
             </div>
           </div>
+        </div>
 
+        {# ------------------------------------------------------------- prévia #}
+        <div id="ncBlocoPrevia">
           <div class="warn mb-3" id="ncWarn" style="display:none;"></div>
 
           <div class="prev mb-2" id="ncPrev">
@@ -138,26 +205,9 @@
               <div class="prev-c"><div class="flbl">Total</div><div class="n" id="ncPrevTotal">—</div></div>
             </div>
           </div>
-          <p class="form-text mb-0" id="ncHelp">Gera a mensalidade do mês escolhido, com vencimento no dia selecionado.</p>
         </div>
 
-        {# ------------------------------------------------- cobrança avulsa #}
-        <div id="ncBlocoAvulso" hidden>
-          <div class="mb-3">
-            <label class="flbl" for="ncDescricao">Descrição</label>
-            <input type="text" class="fld" id="ncDescricao" name="descricao" placeholder="Ex.: uniforme, exame de faixa, inscrição">
-          </div>
-          <div class="row g-3">
-            <div class="col-6">
-              <label class="flbl" for="ncValor">Valor</label>
-              <div class="ig"><span>R$</span><input type="text" class="fld" id="ncValor" name="valor" inputmode="decimal"></div>
-            </div>
-            <div class="col-6">
-              <label class="flbl" for="ncVenc">Vencimento</label>
-              <input type="date" class="fld" id="ncVenc" name="data_vencimento">
-            </div>
-          </div>
-        </div>
+        <p class="form-text mb-0" id="ncHelp">Gera a mensalidade do mês escolhido, com vencimento no dia selecionado.</p>
       </div>
 
       <div class="ncm-foot">
@@ -178,11 +228,18 @@ document.addEventListener('DOMContentLoaded', function () {
   var MESES = ['','Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
   var ABREV = ['','jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
   var mensal = form.querySelector('#ncTipoMensal'), ano = form.querySelector('#ncTipoAno'), avulso = form.querySelector('#ncTipoAvulso');
+  var matricula = form.querySelector('#ncTipoMatricula');
+  var valorMatricula = form.getAttribute('data-valor-matricula') || '';
+  function ehCobrancaUnica(){ return avulso.checked || (matricula && matricula.checked); }
+  function hojeISO(){ var d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset()*60000).toISOString().slice(0,10); }
   var blocoMensal = form.querySelector('#ncBlocoMensal'), blocoAvulso = form.querySelector('#ncBlocoAvulso');
+  var blocoPrevia = form.querySelector('#ncBlocoPrevia');
   var plano = form.querySelector('#ncPlano'), valorMes = form.querySelector('#ncValorMes');
   var mes = form.querySelector('#ncMes'), anoRef = form.querySelector('#ncAno'), dia = form.querySelector('#ncDia');
   var descricao = form.querySelector('#ncDescricao'), valorAv = form.querySelector('#ncValor'), venc = form.querySelector('#ncVenc');
-  var descSel = form.querySelector('#ncDescSel'), descAvulso = form.querySelector('#ncDescAvulso'), descTipo = form.querySelector('#ncDescTipo'), descValor = form.querySelector('#ncDescValor');
+  var descAdd = form.querySelector('#ncDescAdd'), descItens = form.querySelector('#ncDescItens'),
+      descVazio = form.querySelector('#ncDescVazio'), descAvulso = form.querySelector('#ncDescAvulso'),
+      descTipo = form.querySelector('#ncDescTipo'), descValor = form.querySelector('#ncDescValor');
   var warn = form.querySelector('#ncWarn'), prev = form.querySelector('#ncPrev');
   var mesLabel = form.querySelector('#ncMesLabel'), help = form.querySelector('#ncHelp');
   var qtdEl = form.querySelector('#ncPrevQtd'), perEl = form.querySelector('#ncPrevPeriodo'), totEl = form.querySelector('#ncPrevTotal');
@@ -192,17 +249,38 @@ document.addEventListener('DOMContentLoaded', function () {
   function fmt(v){ return 'R$ ' + Number(v || 0).toFixed(2).replace('.', ','); }
   function valorPlano(){ var o = plano.options[plano.selectedIndex]; return o ? parseFloat(o.getAttribute('data-valor') || '0') : 0; }
   function valorMesNum(){ var v = (valorMes.value || '').replace(/\./g,'').replace(',', '.'); var n = parseFloat(v); return isNaN(n) ? valorPlano() : n; }
+  function valorUnicoNum(){ var v = (valorAv.value || '').replace(/\./g,'').replace(',', '.'); var n = parseFloat(v); return isNaN(n) ? 0 : n; }
+  // Sobre o que o desconto incide: o valor do mês na mensalidade, o valor
+  // digitado na matrícula ou na avulsa.
+  function valorBase(){ return ehCobrancaUnica() ? valorUnicoNum() : valorMesNum(); }
+  function descMarcados(){
+    // Cada desconto escolhido virou uma linha com um input escondido; é dele que
+    // sai tanto a prévia quanto o POST.
+    return Array.prototype.slice.call(form.querySelectorAll('.nc-desc'));
+  }
   function descInfo(){
-    if (!descSel) return null;
-    var v = descSel.value; if (!v) return null;
-    if (v === 'avulso'){ var dv = parseFloat((descValor.value||'').replace(/\./g,'').replace(',', '.')); if (isNaN(dv) || dv <= 0) return null; return { tipo: descTipo.value, valor: dv }; }
-    var o = descSel.options[descSel.selectedIndex];
-    return { tipo: o.getAttribute('data-tipo'), valor: parseFloat(o.getAttribute('data-valor') || '0') };
+    // Mantida para o resto do modal: diz apenas se há algum desconto marcado.
+    return descMarcados().length ? {} : null;
+  }
+  function descTotal(vpm){
+    // Percentuais sobre o valor cheio, fixos somados, teto no valor — a mesma
+    // regra do servidor, para a prévia não mentir.
+    var total = 0;
+    descMarcados().forEach(function(c){
+      var tipo = c.getAttribute('data-tipo'), val;
+      if (tipo === 'avulso'){
+        val = parseFloat((descValor.value||'').replace(/\./g,'').replace(',', '.'));
+        if (isNaN(val) || val <= 0) return;
+        tipo = descTipo.value;
+      } else {
+        val = parseFloat(c.getAttribute('data-valor') || '0');
+      }
+      total += (tipo === 'percentual') ? vpm * (val / 100) : val;
+    });
+    return Math.min(total, vpm);
   }
   function valorComDesc(vpm){
-    var d = descInfo(); if (!d) return vpm;
-    var desc = d.tipo === 'percentual' ? vpm * (d.valor / 100) : Math.min(d.valor, vpm);
-    return Math.max(0, vpm - desc);
+    return Math.max(0, vpm - descTotal(vpm));
   }
 
   function marcarPills(){
@@ -210,10 +288,20 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function alternar(){
-    var ehAvulso = avulso.checked, ehAno = ano.checked, ehPlano = !ehAvulso;
+    var ehAvulso = ehCobrancaUnica(), ehAno = ano.checked, ehPlano = !ehAvulso;
+    // Matrícula abre o mesmo bloco da avulsa, já preenchido com o valor da
+    // academia e o vencimento de hoje — é uma cobrança de entrada, não uma
+    // negociação: quem quiser muda ali mesmo.
+    if (matricula && matricula.checked) {
+      if (!descricao.value || descricao.value === 'Matrícula') descricao.value = 'Matrícula';
+      if (!valorAv.value && valorMatricula) valorAv.value = valorMatricula.replace('.', ',');
+      if (!venc.value) venc.value = hojeISO();
+    }
     blocoMensal.hidden = !ehPlano; blocoAvulso.hidden = ehPlano;
     // Só o bloco visível envia (evita conflito do name="valor").
-    [plano, valorMes, mes, anoRef, dia, descSel, descTipo, descValor].forEach(function(el){ if (el) el.disabled = !ehPlano; });
+    [plano, valorMes, mes, anoRef, dia].forEach(function(el){ if (el) el.disabled = !ehPlano; });
+    if (blocoPrevia) blocoPrevia.hidden = !ehPlano;
+    pintarDescontos();   // o menu de adicionar depende do tipo E do valor já zerado
     [descricao, valorAv, venc].forEach(function(el){ el.disabled = ehPlano; });
     if (mesLabel) mesLabel.textContent = ehAno ? 'A partir do mês' : 'Mês';
     marcarPills();
@@ -221,13 +309,24 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function setSubmit(qtd, isAvulso){
-    if (isAvulso){ submitLbl.textContent = 'Gerar cobrança'; submit.disabled = false; footTot.textContent = valorAv.value ? (fmt(valorMesNum()) + ' no total') : ''; return; }
+    if (isAvulso){
+      submitLbl.textContent = 'Gerar cobrança'; submit.disabled = false;
+      // Mostra o que será cobrado de fato — o valor já com os descontos.
+      footTot.textContent = valorAv.value ? (fmt(valorComDesc(valorUnicoNum())) + ' no total') : '';
+      return;
+    }
     submit.disabled = qtd <= 0;
     submitLbl.textContent = qtd <= 0 ? 'Nada a gerar' : ('Gerar ' + qtd + (qtd === 1 ? ' cobrança' : ' cobranças'));
   }
 
   function atualizarPrevia(){
-    if (avulso.checked){ warn.style.display = 'none'; prev.style.display = 'none'; help.textContent = 'Cobrança única para este aluno.'; setSubmit(0, true); return; }
+    if (ehCobrancaUnica()){
+      warn.style.display = 'none'; prev.style.display = 'none';
+      help.textContent = (matricula && matricula.checked)
+        ? 'Cobrança da matrícula deste aluno. Ao ser paga, entra em Matrículas e aparece na ficha financeira dele.'
+        : 'Cobrança única para este aluno.';
+      setSubmit(0, true); return;
+    }
     prev.style.display = '';
     var vpm = valorMesNum();
     help.textContent = ano.checked
@@ -256,15 +355,112 @@ document.addEventListener('DOMContentLoaded', function () {
     }).catch(function(){ warn.style.display='none'; setSubmit(periodo ? periodo.length : 1); });
   }
 
-  plano.addEventListener('change', function(){ valorMes.value = valorPlano().toFixed(2).replace('.', ','); atualizarPrevia(); });
+  plano.addEventListener('change', function(){ valorMes.value = valorPlano().toFixed(2).replace('.', ','); pintarDescontos(); atualizarPrevia(); });
   [mes, anoRef, dia, valorMes].forEach(function(el){ el.addEventListener('change', atualizarPrevia); });
+  // Na matrícula/avulsa o desconto acompanha o valor digitado.
+  if (valorAv) valorAv.addEventListener('input', function(){ pintarDescontos(); atualizarPrevia(); });
   valorMes.addEventListener('input', function(){ clearTimeout(window._ncT); window._ncT = setTimeout(atualizarPrevia, 350); });
-  if (descSel) descSel.addEventListener('change', function(){ if (descAvulso) descAvulso.style.display = (descSel.value === 'avulso') ? '' : 'none'; atualizarPrevia(); });
+  function valorDeUmDesconto(inp, vpm){
+    var tipo = inp.getAttribute('data-tipo'), val;
+    if (tipo === 'avulso'){
+      val = parseFloat((descValor.value||'').replace(/\./g,'').replace(',', '.'));
+      if (isNaN(val) || val <= 0) return 0;
+      tipo = descTipo.value;
+    } else {
+      val = parseFloat(inp.getAttribute('data-valor') || '0');
+    }
+    return (tipo === 'percentual') ? vpm * (val / 100) : val;
+  }
+
+  function pintarDescontos(){
+    var itens = descMarcados(), vpm = valorBase();
+    // Redesenha os valores das linhas: eles mudam quando o plano ou o valor
+    // por mês muda, e um percentual precisa acompanhar.
+    var soma = 0;
+    itens.forEach(function(inp){
+      var v = valorDeUmDesconto(inp, vpm);
+      soma += v;
+      var cel = inp.parentNode.querySelector('.desc-val');
+      if (cel) cel.textContent = '\u2212' + fmt(v);
+    });
+    soma = Math.min(soma, vpm);
+    var totalEl = form.querySelector('#ncDescTotalLinha');
+    if (itens.length > 1){
+      if (!totalEl){
+        totalEl = document.createElement('div');
+        totalEl.className = 'desc-total';
+        totalEl.id = 'ncDescTotalLinha';
+        totalEl.innerHTML = '<span>Total de desconto</span><span class="desc-val"></span>';
+        descItens.appendChild(totalEl);
+      }
+      totalEl.querySelector('.desc-val').textContent = '\u2212' + fmt(soma);
+    } else if (totalEl){
+      totalEl.remove();
+    }
+    if (descVazio) descVazio.style.display = itens.length ? 'none' : '';
+    if (descAvulso){
+      var temAvulso = itens.some(function(i){ return i.getAttribute('data-tipo') === 'avulso'; });
+      descAvulso.style.display = temAvulso ? '' : 'none';
+    }
+    // Zerou a cobrança: somar mais desconto não abateria nada (o servidor limita
+    // ao valor), então o menu fecha em vez de aceitar um item que não faz efeito.
+    var zerado = itens.length > 0 && vpm > 0 && soma >= vpm - 0.005;
+    if (descAdd) descAdd.disabled = zerado;
+    var limite = form.querySelector('#ncDescLimite');
+    if (limite) limite.style.display = zerado ? '' : 'none';
+    if (descVazio && zerado) descVazio.style.display = 'none';
+  }
+
+  function removerDesconto(valor){
+    var inp = form.querySelector('.nc-desc[value="' + valor + '"]');
+    if (inp) inp.parentNode.remove();
+    // Devolve a opção ao menu, para poder escolher de novo.
+    var op = descAdd && descAdd.querySelector('option[value="' + valor + '"]');
+    if (op) op.hidden = false;
+    if (valor === 'avulso' && descValor) descValor.value = '';
+    pintarDescontos();
+    atualizarPrevia();
+  }
+
+  function adicionarDesconto(op){
+    if (!op || !op.value || !descItens) return;
+    var vpm = valorBase();
+    if (vpm > 0 && descTotal(vpm) >= vpm - 0.005) return;   // já zerado
+    var linha = document.createElement('div');
+    linha.className = 'desc-item';
+    var nome = op.getAttribute('data-nome') || op.textContent;
+    linha.innerHTML =
+      '<span class="desc-nome"></span><span class="desc-val"></span>' +
+      '<button type="button" class="desc-x" aria-label="Remover">&times;</button>' +
+      '<input type="hidden" class="nc-desc" name="desconto_id">';
+    linha.querySelector('.desc-nome').textContent = nome;
+    var inp = linha.querySelector('input');
+    inp.value = op.value;
+    inp.setAttribute('data-tipo', op.getAttribute('data-tipo') || '');
+    inp.setAttribute('data-valor', op.getAttribute('data-valor') || '0');
+    inp.setAttribute('data-nome', nome);
+    linha.querySelector('.desc-x').addEventListener('click', function(){ removerDesconto(op.value); });
+    var totalEl = form.querySelector('#ncDescTotalLinha');
+    descItens.insertBefore(linha, totalEl || null);
+    op.hidden = true;               // some do menu enquanto estiver na lista
+    pintarDescontos();
+    atualizarPrevia();
+  }
+
+  if (descAdd) descAdd.addEventListener('change', function(){
+    var op = descAdd.options[descAdd.selectedIndex];
+    adicionarDesconto(op);
+    descAdd.value = '';             // volta para "+ Adicionar desconto"
+  });
+  if (descValor) descValor.addEventListener('input', function(){ pintarDescontos(); atualizarPrevia(); });
+  if (descTipo) descTipo.addEventListener('change', function(){ pintarDescontos(); atualizarPrevia(); });
   if (descTipo) descTipo.addEventListener('change', atualizarPrevia);
   if (descValor) descValor.addEventListener('input', function(){ clearTimeout(window._ncD); window._ncD = setTimeout(atualizarPrevia, 300); });
-  [mensal, ano, avulso].forEach(function(r){ r.addEventListener('change', alternar); });
+  [mensal, ano, avulso, matricula].forEach(function(r){ if (r) r.addEventListener('change', alternar); });
   // valor por mês inicia com o valor do plano
   if (plano.value) valorMes.value = valorPlano().toFixed(2).replace('.', ',');
+  if (valorMes) valorMes.addEventListener('input', pintarDescontos);
+  pintarDescontos();
   alternar();
 });
 </script>

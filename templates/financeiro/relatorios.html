@@ -1,5 +1,28 @@
 {% extends "base_app.html" %}
 {% block title %}Relatórios financeiros{% endblock %}
+{% block extra_css %}
+<style>
+  .so-imprime { display: none; }
+  @page { size: A4 portrait; margin: 12mm; }
+  @media print {
+    /* Some tudo que é navegação: sobra o relatório. */
+    .sh__lateral, .sh__topo, .sh__rodape, .lst-rodape, nav, footer,
+    .nao-imprime, form, .btn { display: none !important; }
+    .so-imprime { display: block !important; }
+    body, .sh__conteudo, .container { background: #fff !important; margin: 0 !important; padding: 0 !important; width: auto !important; max-width: none !important; }
+    /* Cartão vira caixa simples: sombra e cor de fundo gastam tinta e somem
+       na impressão em preto e branco. */
+    .card { border: 1px solid #999 !important; box-shadow: none !important; }
+    .card-body { padding: .4rem !important; }
+    .text-primary, .text-success, .text-danger, .text-warning { color: #000 !important; }
+    table { font-size: 11px; }
+    thead { display: table-header-group; }   /* repete o cabeçalho a cada página */
+    tr, .card { break-inside: avoid; }
+    a[href]:after { content: ""; }           /* sem URL entre parênteses */
+  }
+</style>
+{% endblock %}
+
 {% block content %}
 {% set meses_nomes = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'] %}
 <div class="container mt-4">
@@ -31,7 +54,24 @@
         <input type="number" name="ano" class="form-control form-control-sm" value="{{ ano }}" min="2000" max="2100" style="width:100px;">
       </div>
       <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-funnel me-1"></i>Aplicar</button>
+      <button type="button" class="btn btn-outline-secondary btn-sm nao-imprime" onclick="window.print()">
+        <i class="bi bi-printer me-1"></i>Imprimir
+      </button>
     </form>
+  </div>
+
+  {# Cabeçalho do papel: na tela essas informações já estão no topo e na barra
+     lateral, mas a folha sai sem nenhuma delas — e um relatório financeiro
+     impresso sem academia e competência não serve para arquivar. #}
+  <div class="so-imprime mb-3">
+    <div class="d-flex justify-content-between align-items-end">
+      <div>
+        <div class="fw-bold">{{ academia_nome or 'Relatório financeiro' }}</div>
+        <div>Relatório financeiro · {{ meses_nomes[mes-1] }}/{{ ano }}</div>
+      </div>
+      <div class="small">Emitido em {{ hoje_br }}</div>
+    </div>
+    <hr class="mt-2 mb-0">
   </div>
 
   <!-- Resumo (DRE simplificado) -->
@@ -105,6 +145,29 @@
       </div></div>
     </div>
   </div>
+
+  <!-- Recebido por modalidade -->
+  {% if rel.por_modalidade %}
+  <div class="card shadow-sm border-0 mt-3"><div class="card-body">
+    <h6 class="fw-bold mb-3"><i class="bi bi-diagram-3 me-1"></i>Recebido por modalidade</h6>
+    <table class="table table-sm align-middle mb-0">
+      <thead><tr><th>Modalidade</th><th class="text-center">Cobranças</th><th class="text-end">Recebido</th></tr></thead>
+      <tbody>
+        {% for m in rel.por_modalidade %}
+        <tr>
+          <td>{{ m.modalidade }}</td>
+          <td class="text-center">{{ m.qtd }}</td>
+          <td class="text-end text-success fw-semibold">R$ {{ "%.2f"|format(m.total) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p class="text-muted small mb-0 mt-2">
+      O pacote que cobre mais de uma modalidade aparece em linha própria: o preço
+      é único e dividi-lo entre as modalidades seria inventar um valor.
+    </p>
+  </div></div>
+  {% endif %}
 
   <!-- Inadimplentes -->
   <div class="card shadow-sm border-0 mt-3 mb-4"><div class="card-body">

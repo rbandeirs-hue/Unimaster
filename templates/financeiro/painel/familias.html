@@ -1,0 +1,171 @@
+{% extends "financeiro/painel/_base.html" %}
+{% set fin_aba = 'familias' %}
+{% block title %}Famílias — Financeiro{% endblock %}
+
+{% block pagina_titulo %}Financeiro{% endblock %}
+{% block pagina_subtitulo %}Cobrança única para irmãos, com o desconto família de cada um{% endblock %}
+
+{% block fin_css %}
+<style>
+  .fam-card { border:1px solid var(--lst-borda, #e5e7eb); border-radius:14px; padding:1rem 1.1rem; margin-bottom:.85rem; }
+  .fam-card.is-ativa { border-color:#0d6efd33; background:#0d6efd08; }
+  .fam-topo { display:flex; flex-wrap:wrap; gap:.75rem; align-items:flex-start; justify-content:space-between; }
+  .fam-nome { font-weight:600; }
+  .fam-alunos { font-size:.86rem; opacity:.75; margin-top:.15rem; }
+  .fam-itens { margin:.75rem 0 0; padding:.6rem .8rem; border-radius:10px; background:rgba(127,127,127,.08); }
+  .fam-item { display:flex; justify-content:space-between; gap:1rem; font-size:.9rem; padding:.15rem 0; }
+  .fam-total { display:flex; justify-content:space-between; gap:1rem; font-weight:600;
+               border-top:1px solid rgba(127,127,127,.25); margin-top:.4rem; padding-top:.4rem; }
+  .fam-acoes { display:flex; flex-wrap:wrap; gap:.4rem; margin-top:.75rem; }
+  .fam-link { display:flex; gap:.4rem; margin-top:.6rem; }
+  .fam-link input { flex:1; min-width:0; }
+</style>
+{% endblock %}
+
+{% block fin_conteudo %}
+
+<div class="lst-campo" style="flex:0 1 auto; margin-bottom:1rem">
+  <span class="lst-campo__rotulo">Competência</span>
+  <div class="fin-meses">
+    {% for m in meses %}
+    <a class="fin-mes {% if m.chave == mes_chave %}is-atual{% endif %}"
+       href="{{ url_for('financeiro_painel.familias', academia_id=academia_id, mes=m.chave) }}">{{ m.label }}</a>
+    {% endfor %}
+  </div>
+</div>
+
+{% if not gateway_ok %}
+<div class="alert alert-warning">
+  Esta academia não tem gateway de cobrança online configurado, então a cobrança única
+  não pode ser emitida. Dá para montar o grupo e dar baixa manual, mas o link só sai
+  depois de configurar o gateway em Configurações da academia › Financeiro.
+</div>
+{% endif %}
+
+<section class="lst-quadro">
+  <header class="lst-quadro__topo">
+    <h2 class="lst-quadro__titulo">Famílias — {{ mes_label }}</h2>
+    <span class="lst-quadro__meta">
+      {{ lista|length }} família{{ 's' if lista|length != 1 }} com 2+ alunos ativos ·
+      {{ n_ativas }} cobrando junto
+    </span>
+  </header>
+
+  <div style="padding:1rem 1.1rem">
+    {% if not lista %}
+      <p class="lst-vazio">Nenhum responsável financeiro com dois ou mais alunos ativos nesta academia.
+      A família é reconhecida pelo CPF do responsável financeiro na ficha do aluno — se os irmãos
+      estão com CPFs diferentes, eles não aparecem aqui.</p>
+    {% endif %}
+
+    {% for f in lista %}
+    {% set g = f.grupo %}
+    <article class="fam-card {% if f.ativo %}is-ativa{% endif %}">
+      <div class="fam-topo">
+        <div style="min-width:0">
+          <div class="fam-nome">{{ f.responsavel or 'Responsável sem nome' }}</div>
+          <div class="fam-alunos">{{ f.qtd }} alunos · {{ f.alunos }}</div>
+        </div>
+        <div>
+          {% if f.ativo %}
+            <span class="lst-situacao is-ativo"><i></i>Cobrança única</span>
+          {% else %}
+            <span class="lst-situacao"><i></i>Cobrança individual</span>
+          {% endif %}
+        </div>
+      </div>
+
+      {% if f.ativo and g and g.itens %}
+      <div class="fam-itens">
+        {% for i in g.itens %}
+        <div class="fam-item">
+          <span class="lst-corta">{{ i.aluno_nome }}{% if i.ma_status == 'pago' %} · pago{% endif %}</span>
+          <span class="fin-valor">{{ fmt_moeda(i.valor) }}</span>
+        </div>
+        {% endfor %}
+        <div class="fam-total">
+          <span>Total de {{ mes_label }}{% if g.data_vencimento %} · vence {{ g.data_vencimento.strftime('%d/%m') }}{% endif %}</span>
+          <span class="fin-valor">{{ fmt_moeda(g.valor_total) }}</span>
+        </div>
+      </div>
+
+      {% if g.status == 'pago' %}
+      <p class="lst-quadro__meta" style="margin-top:.5rem">
+        Paga{% if g.data_pagamento %} em {{ g.data_pagamento.strftime('%d/%m/%Y') }}{% endif %}
+        {% if g.valor_pago %} · {{ fmt_moeda(g.valor_pago) }}{% endif %}.
+      </p>
+      {% elif g.link %}
+      <div class="fam-link">
+        <input type="text" class="form-control" id="link{{ g.id }}" value="{{ g.link }}" readonly>
+        <button type="button" class="sh__btn" onclick="copiarFam('link{{ g.id }}', this)">Copiar</button>
+        <a class="sh__btn" href="{{ g.link }}" target="_blank" rel="noopener">Abrir</a>
+      </div>
+      {% endif %}
+      {% elif f.ativo %}
+      <p class="lst-quadro__meta" style="margin-top:.5rem">
+        Sem cobrança montada em {{ mes_label }} — ou as mensalidades ainda não foram geradas,
+        ou sobrou menos de duas em aberto.
+      </p>
+      {% endif %}
+
+      <div class="fam-acoes">
+        {% if not f.ativo %}
+        <form method="POST" action="{{ url_for('financeiro_painel.familias_ativar') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
+          <input type="hidden" name="mes" value="{{ mes_chave }}">
+          <input type="hidden" name="cpf" value="{{ f.cpf_resp }}">
+          <button type="submit" class="sh__btn sh__btn--forte">Cobrar junto</button>
+        </form>
+        {% else %}
+          <form method="POST" action="{{ url_for('financeiro_painel.familias_montar', familia_id=f.familia_id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
+            <input type="hidden" name="mes" value="{{ mes_chave }}">
+            <button type="submit" class="sh__btn">Recalcular {{ mes_label }}</button>
+          </form>
+
+          {% if g and g.status != 'pago' and g.itens %}
+          <form method="POST" action="{{ url_for('financeiro_painel.familias_gerar_link', grupo_id=g.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
+            <input type="hidden" name="mes" value="{{ mes_chave }}">
+            {% if g.link %}<input type="hidden" name="forcar" value="1">{% endif %}
+            <button type="submit" class="sh__btn {% if not g.link %}sh__btn--forte{% endif %}" {{ 'disabled' if not gateway_ok }}>
+              {{ 'Reemitir cobrança' if g.link else 'Emitir cobrança única' }}
+            </button>
+          </form>
+
+          <form method="POST" action="{{ url_for('financeiro_painel.familias_baixar', grupo_id=g.id) }}"
+                onsubmit="return confirm('Marcar como paga a cobrança de {{ fmt_moeda(g.valor_total) }} e dar baixa nas {{ g.itens|length }} mensalidades?');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
+            <input type="hidden" name="mes" value="{{ mes_chave }}">
+            <button type="submit" class="sh__btn">Registrar pagamento recebido</button>
+          </form>
+          {% endif %}
+
+          <form method="POST" action="{{ url_for('financeiro_painel.familias_desativar', familia_id=f.familia_id) }}"
+                onsubmit="return confirm('Voltar esta família para cobrança individual? A cobrança única em aberto será cancelada.');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
+            <input type="hidden" name="mes" value="{{ mes_chave }}">
+            <button type="submit" class="sh__btn">Voltar a cobrar separado</button>
+          </form>
+        {% endif %}
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+</section>
+
+<script>
+  function copiarFam(id, btn) {
+    var i = document.getElementById(id); i.select();
+    var ok = function () { var o = btn.textContent; btn.textContent = 'Copiado'; setTimeout(function () { btn.textContent = o; }, 1500); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(i.value).then(ok).catch(function () { try { document.execCommand('copy'); } catch (e) {} ok(); });
+    } else { try { document.execCommand('copy'); } catch (e) {} ok(); }
+  }
+</script>
+{% endblock %}

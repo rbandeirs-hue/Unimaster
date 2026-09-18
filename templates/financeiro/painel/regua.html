@@ -1,0 +1,324 @@
+{% extends "financeiro/painel/_base.html" %}
+{% set fin_aba = 'regua' %}
+{% block title %}Régua de cobrança — Financeiro{% endblock %}
+
+{% block pagina_titulo %}Financeiro{% endblock %}
+{% block pagina_subtitulo %}Em que dias a cobrança automática fala com o responsável{% endblock %}
+
+{% block fin_css %}
+<style>
+  .rg-etapa { display: grid; grid-template-columns: 86px 1fr 120px 36px; gap: .6rem;
+              align-items: center; padding: .5rem 0; border-bottom: 1px solid var(--sh-line, #ededea); }
+  .rg-etapa:last-child { border-bottom: 0; }
+  .rg-etapa input[type=number] { width: 100%; padding: .45rem .6rem; border: 1px solid #d8d7d3;
+                                 border-radius: 8px; font: inherit; }
+  .rg-etapa textarea { width: 100%; padding: .45rem .6rem; border: 1px solid #d8d7d3;
+                       border-radius: 8px; font: inherit; min-height: 38px; resize: vertical; }
+  .rg-etapa.is-inativa { opacity: .55; }
+  .rg-rotulo { font-weight: 600; font-size: .9rem; }
+  .rg-cab { display: grid; grid-template-columns: 86px 1fr 120px 36px; gap: .6rem;
+            font-size: .7rem; text-transform: uppercase; letter-spacing: .06em;
+            color: var(--sh-ink-soft, #6f6b66); font-weight: 700; padding-bottom: .3rem; }
+  .rg-sim { display: grid; grid-template-columns: 110px 1fr; gap: .4rem .8rem; font-size: .9rem; }
+  .rg-sim__data { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .rg-num { width: 74px; padding: .45rem .6rem; border: 1px solid #d8d7d3; border-radius: 8px; font: inherit; }
+  @media (max-width: 720px) {
+    .rg-etapa, .rg-cab { grid-template-columns: 74px 1fr 36px; }
+    .rg-etapa .rg-col-msg, .rg-cab .rg-col-msg { display: none; }
+  }
+</style>
+{% endblock %}
+
+{% block pagina_acoes %}
+  <a class="sh__btn" href="{{ url_for('academia.whatsapp_mensagens', academia_id=academia_id) }}">
+    <i class="bi bi-chat-square-text"></i> Modelos de mensagem
+  </a>
+  <button type="submit" form="formRegua" class="sh__btn sh__btn--forte">
+    <i class="bi bi-check-lg"></i> Salvar régua
+  </button>
+{% endblock %}
+
+{% block fin_conteudo %}
+
+{% if not cfg.personalizada %}
+<div class="alert alert-light border" style="margin-bottom:1rem">
+  Esta academia ainda usa a <strong>régua padrão</strong> (5 e 1 dia antes, no vencimento,
+  e depois D+3, D+7, D+15 e D+25). Salvando, ela passa a ser sua e pode ser ajustada à vontade.
+</div>
+{% endif %}
+
+<form method="POST" action="{{ url_for('financeiro_painel.regua_salvar') }}" id="formRegua">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
+
+  <section class="lst-quadro">
+    <header class="lst-quadro__topo">
+      <h2 class="lst-quadro__titulo">Cobrança automática</h2>
+      <span class="lst-quadro__meta">O robô roda todo dia; a régua decide se fala</span>
+    </header>
+    <div class="lst-filtros" style="border:0; margin:0">
+      <label class="lst-campo lst-campo--curto">
+        <span class="lst-campo__rotulo">Situação</span>
+        <select name="automacao">
+          <option value="1" {% if automacao %}selected{% endif %}>Ativa</option>
+          <option value="0" {% if not automacao %}selected{% endif %}>Inativa</option>
+        </select>
+      </label>
+      <label class="lst-campo lst-campo--curto">
+        <span class="lst-campo__rotulo">Horário de envio</span>
+        <select name="hora_envio">
+          {% for h in range(0, 24) %}
+          <option value="{{ h }}" {% if cfg.hora_envio == h %}selected{% endif %}>{{ '%02d:00'|format(h) }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="lst-campo lst-campo--curto">
+        <span class="lst-campo__rotulo">Cobrança consolidada após</span>
+        <input type="number" name="consolidar_apos" min="2" max="12" value="{{ cfg.consolidar_apos }}">
+        <small class="lst-quadro__meta">mensalidades vencidas</small>
+      </label>
+      <label class="lst-campo lst-campo--curto">
+        <span class="lst-campo__rotulo">Tratativa administrativa após</span>
+        <input type="number" name="tratativa_apos" min="0" max="24" value="{{ cfg.tratativa_apos }}">
+        <small class="lst-quadro__meta">daí o robô para e a secretaria assume (0 = sem limite)</small>
+      </label>
+    </div>
+  </section>
+
+  {# ---------------------------------------------------------------- individual #}
+  <section class="lst-quadro mt-3">
+    <header class="lst-quadro__topo">
+      <h2 class="lst-quadro__titulo">Régua da mensalidade</h2>
+      <span class="lst-quadro__meta">Dias contados do vencimento — negativo é antes</span>
+    </header>
+    <div style="padding:.25rem 1rem 1rem">
+      <div class="rg-cab">
+        <div>Dias</div>
+        <div>Momento</div>
+        <div class="rg-col-msg">Mensagem própria</div>
+        <div></div>
+      </div>
+      <div id="listaInd">
+        {% for e in cfg.individual %}
+        <div class="rg-etapa {% if not e.ativo %}is-inativa{% endif %}">
+          <input type="number" name="ind_dias" value="{{ e.dias }}" min="-365" max="365" step="1">
+          <div>
+            <label style="display:flex; align-items:center; gap:8px; cursor:pointer">
+              <input type="checkbox" class="form-check-input mt-0 js-rg-ativo" {% if e.ativo %}checked{% endif %}>
+              <span class="rg-rotulo">{{ rotulo(e.dias) }}</span>
+            </label>
+            <input type="hidden" name="ind_ativo" value="{{ 1 if e.ativo else 0 }}">
+          </div>
+          <textarea class="rg-col-msg" name="ind_msg" rows="1"
+                    placeholder="Usa o modelo padrão">{{ e.mensagem or '' }}</textarea>
+          <button type="button" class="lst-acao lst-acao--perigo js-rg-remover" title="Excluir etapa"
+                  aria-label="Excluir etapa"><i class="bi bi-trash"></i></button>
+        </div>
+        {% endfor %}
+      </div>
+      <button type="button" class="sh__btn mt-2 js-rg-add" data-alvo="listaInd" data-prefixo="ind">
+        <i class="bi bi-plus-lg"></i> Adicionar etapa
+      </button>
+    </div>
+  </section>
+
+  {# --------------------------------------------------------------- consolidada #}
+  <section class="lst-quadro mt-3">
+    <header class="lst-quadro__topo">
+      <h2 class="lst-quadro__titulo">Régua consolidada</h2>
+      <span class="lst-quadro__meta">
+        Vale quando o responsável acumula {{ cfg.consolidar_apos }} mensalidades vencidas —
+        uma mensagem só, com todas. Dias contados do dia em que ele atingiu esse número.
+      </span>
+    </header>
+    <div style="padding:.25rem 1rem 1rem">
+      <div class="rg-cab">
+        <div>Dias</div>
+        <div>Momento</div>
+        <div class="rg-col-msg">Mensagem própria</div>
+        <div></div>
+      </div>
+      <div id="listaCons">
+        {% for e in cfg.consolidada %}
+        <div class="rg-etapa {% if not e.ativo %}is-inativa{% endif %}">
+          <input type="number" name="cons_dias" value="{{ e.dias }}" min="0" max="365" step="1">
+          <div>
+            <label style="display:flex; align-items:center; gap:8px; cursor:pointer">
+              <input type="checkbox" class="form-check-input mt-0 js-rg-ativo" {% if e.ativo %}checked{% endif %}>
+              <span class="rg-rotulo">{{ rotulo_consolidada(e.dias) }}</span>
+            </label>
+            <input type="hidden" name="cons_ativo" value="{{ 1 if e.ativo else 0 }}">
+          </div>
+          <textarea class="rg-col-msg" name="cons_msg" rows="1"
+                    placeholder="Usa o modelo “Cobrança consolidada”">{{ e.mensagem or '' }}</textarea>
+          <button type="button" class="lst-acao lst-acao--perigo js-rg-remover" title="Excluir etapa"
+                  aria-label="Excluir etapa"><i class="bi bi-trash"></i></button>
+        </div>
+        {% endfor %}
+      </div>
+      <button type="button" class="sh__btn mt-2 js-rg-add" data-alvo="listaCons" data-prefixo="cons">
+        <i class="bi bi-plus-lg"></i> Adicionar etapa
+      </button>
+      <p class="lst-sub mt-2" style="margin-bottom:0">
+        Na mensagem consolidada valem também <code>{lista}</code>,
+        <code>{quantidade_pendencias}</code> e <code>{valor_total}</code>.
+      </p>
+    </div>
+  </section>
+</form>
+
+{# ------------------------------------------------------------------ simulador #}
+<section class="lst-quadro mt-3">
+  <header class="lst-quadro__topo">
+    <h2 class="lst-quadro__titulo">Simulador</h2>
+    <span class="lst-quadro__meta">Confere a régua salva antes de descobrir no cliente</span>
+  </header>
+  <div style="padding:.25rem 1rem 1rem">
+    <form method="GET" class="lst-filtros" style="border:0; margin:0 0 .8rem">
+      {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
+      <label class="lst-campo lst-campo--curto">
+        <span class="lst-campo__rotulo">Vencimento</span>
+        <input type="date" name="venc" value="{{ venc_sim.strftime('%Y-%m-%d') }}">
+      </label>
+      <button type="submit" class="sh__btn">Simular</button>
+    </form>
+    <div class="rg-sim">
+      {% for s in simulacao %}
+      <div class="rg-sim__data">{{ s.data.strftime('%d/%m/%Y') }}</div>
+      <div>{{ s.acao }} <span class="lst-sub" style="display:inline">· {{ s.rotulo }}</span></div>
+      {% else %}
+      <div class="lst-vazio">Nenhuma etapa ativa: com esta régua o sistema não envia nada.</div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+{# ------------------------------------------------------------------- suspensão #}
+{% if tem_suspensao %}
+<section class="lst-quadro mt-3">
+  <header class="lst-quadro__topo">
+    <h2 class="lst-quadro__titulo">Cobrança suspensa</h2>
+    <span class="lst-quadro__meta">{{ suspensos|length }} aluno{{ 's' if suspensos|length != 1 }} fora da cobrança automática</span>
+  </header>
+  <div style="padding:.25rem 1rem 1rem">
+    <form method="POST" action="{{ url_for('financeiro_painel.regua_suspensao') }}" class="lst-filtros" style="border:0; margin:0">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
+      <input type="hidden" name="acao" value="suspender">
+      <label class="lst-campo lst-campo--largo">
+        <span class="lst-campo__rotulo">Aluno</span>
+        <select name="aluno_id" required>
+          <option value="">Selecione…</option>
+          {% for a in alunos_lista %}
+          <option value="{{ a.id }}">{{ a.nome }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="lst-campo lst-campo--largo">
+        <span class="lst-campo__rotulo">Motivo</span>
+        <input name="motivo" maxlength="255" placeholder="Acordo em andamento, bolsa temporária…">
+      </label>
+      <label class="lst-campo lst-campo--curto">
+        <span class="lst-campo__rotulo">Não cobrar até</span>
+        <input type="date" name="ate">
+      </label>
+      <label class="lst-campo lst-campo--curto">
+        <span class="lst-campo__rotulo">Sem prazo</span>
+        <label style="display:flex; align-items:center; gap:8px; cursor:pointer">
+          <input type="checkbox" name="indeterminado" value="1" class="form-check-input mt-0">
+          <span class="lst-sub" style="margin:0">Tempo indeterminado</span>
+        </label>
+      </label>
+      <button type="submit" class="sh__btn">Suspender</button>
+    </form>
+
+    {% if suspensos %}
+    <div class="lst-rolagem mt-3">
+      <div class="lst-largura" style="--lst-min:420px">
+        <div class="lst-linha lst-cab" style="grid-template-columns:minmax(0,1.4fr) 140px minmax(0,1.4fr) 90px">
+          <div>Aluno</div><div>Até</div><div>Motivo</div><div class="lst-fim">Ações</div>
+        </div>
+        {% for a in suspensos %}
+        <div class="lst-linha lst-item" style="grid-template-columns:minmax(0,1.4fr) 140px minmax(0,1.4fr) 90px">
+          <div class="lst-corta"><span class="lst-nome">{{ a.nome }}</span></div>
+          <div>{{ 'Indeterminado' if a.cobranca_suspensa else (a.cobranca_suspensa_ate.strftime('%d/%m/%Y') if a.cobranca_suspensa_ate else '—') }}</div>
+          <div class="lst-corta">{{ a.cobranca_suspensa_motivo or '—' }}</div>
+          <div class="lst-acoes">
+            <form method="POST" action="{{ url_for('financeiro_painel.regua_suspensao') }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
+              <input type="hidden" name="acao" value="retomar">
+              <input type="hidden" name="aluno_id" value="{{ a.id }}">
+              <button type="submit" class="lst-acao" title="Retomar a cobrança de {{ a.nome }}"
+                      aria-label="Retomar cobrança de {{ a.nome }}"><i class="bi bi-play-circle"></i></button>
+            </form>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</section>
+{% endif %}
+
+<script>
+(function () {
+  // O checkbox é só visual: quem viaja no POST é o hidden ao lado. Checkbox
+  // desmarcado não é enviado, e a lista de "ativo" sairia desalinhada da de
+  // "dias" — a etapa errada acabaria desligada.
+  function sincronizar(linha) {
+    var cb = linha.querySelector('.js-rg-ativo');
+    var hid = linha.querySelector('input[type=hidden]');
+    if (!cb || !hid) return;
+    hid.value = cb.checked ? '1' : '0';
+    linha.classList.toggle('is-inativa', !cb.checked);
+  }
+
+  function rotulo(dias, consolidada) {
+    var d = parseInt(dias, 10);
+    if (isNaN(d)) return '—';
+    if (consolidada) return d <= 0 ? 'Ao atingir o limite' : d + (d > 1 ? ' dias depois' : ' dia depois');
+    if (d < 0) { var n = -d; return n + (n > 1 ? ' dias antes' : ' dia antes'); }
+    if (d === 0) return 'No vencimento';
+    return d + (d > 1 ? ' dias depois' : ' dia depois');
+  }
+
+  document.addEventListener('change', function (ev) {
+    var linha = ev.target.closest && ev.target.closest('.rg-etapa');
+    if (!linha) return;
+    if (ev.target.classList.contains('js-rg-ativo')) sincronizar(linha);
+  });
+
+  document.addEventListener('input', function (ev) {
+    var linha = ev.target.closest && ev.target.closest('.rg-etapa');
+    if (!linha || ev.target.type !== 'number') return;
+    var alvo = linha.querySelector('.rg-rotulo');
+    if (alvo) alvo.textContent = rotulo(ev.target.value, ev.target.name === 'cons_dias');
+  });
+
+  document.addEventListener('click', function (ev) {
+    var rm = ev.target.closest && ev.target.closest('.js-rg-remover');
+    if (rm) { var l = rm.closest('.rg-etapa'); if (l) l.remove(); return; }
+
+    var add = ev.target.closest && ev.target.closest('.js-rg-add');
+    if (!add) return;
+    var lista = document.getElementById(add.dataset.alvo);
+    var p = add.dataset.prefixo;
+    var div = document.createElement('div');
+    div.className = 'rg-etapa';
+    div.innerHTML =
+      '<input type="number" name="' + p + '_dias" value="" min="' + (p === 'cons' ? 0 : -365) + '" max="365" step="1">' +
+      '<div><label style="display:flex;align-items:center;gap:8px;cursor:pointer">' +
+      '<input type="checkbox" class="form-check-input mt-0 js-rg-ativo" checked>' +
+      '<span class="rg-rotulo">—</span></label>' +
+      '<input type="hidden" name="' + p + '_ativo" value="1"></div>' +
+      '<textarea class="rg-col-msg" name="' + p + '_msg" rows="1" placeholder="Usa o modelo padrão"></textarea>' +
+      '<button type="button" class="lst-acao lst-acao--perigo js-rg-remover" title="Excluir etapa">' +
+      '<i class="bi bi-trash"></i></button>';
+    lista.appendChild(div);
+    div.querySelector('input[type=number]').focus();
+  });
+})();
+</script>
+{% endblock %}

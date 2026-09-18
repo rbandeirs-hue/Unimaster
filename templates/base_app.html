@@ -24,7 +24,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}Academia — Unimaster Judô{% endblock %}</title>
+  <title>{% block title %}Academia — Unimaster {{ marca_modalidade or '' }}{% endblock %}</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%23C8102E'/%3E%3Cpath d='M50 20 L60 40 L50 50 L40 40 Z' fill='white'/%3E%3Cpath d='M30 60 L50 50 L70 60 L50 80 Z' fill='white'/%3E%3C/svg%3E">
 
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -43,7 +43,11 @@
   <style>body { font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; }</style>
 </head>
 
-<body class="sh {% if layout_embed %}layout-embed{% endif %}">
+{# `--sh-red` é o destaque de todo o shell: ícone da marca, item ativo da
+   lateral, marcador de modo. Redefinindo aqui, a modalidade em foco colore a
+   barra inteira sem que nenhuma regra de CSS precise saber que ela existe. #}
+<body class="sh {% if layout_embed %}layout-embed{% endif %}"
+      {% if marca_cor %}style="--sh-red: {{ marca_cor }}"{% endif %}>
 {% from 'components/_notificacoes_menu.html' import caixa_notificacoes with context %}
 
   {# ------------------------------------------------------------ lateral #}
@@ -53,9 +57,19 @@
      e ficam com o shell sem menu — mantendo tema, CSRF e notificações. #}
   {% if not shell_sem_lateral %}
   <aside class="sh__side" id="shSide">
-    <a class="sh__marca" href="{{ url_for('academia.painel_academia', academia_id=academia_id) }}">
+    {# O logo levava ao painel da academia em QUALQUER modo — inclusive aluno e
+       responsável, que agora nem entram lá. Em modo próprio ele aponta para o
+       painel da pessoa. #}
+    {% set _marca_href = url_for('academia.painel_academia', academia_id=academia_id)
+       if modo_shell in ('academia','admin','federacao','associacao','professor')
+       else url_for('painel.home') %}
+    <a class="sh__marca" href="{{ _marca_href }}">
       <span class="sh__marca-icone"><i class="bi bi-shield-fill-check"></i></span>
-      <span class="sh__marca-texto">Unimaster <em>Judô</em></span>
+      {# A marca acompanha a modalidade em foco: trocar o recorte tem de ser
+         visível antes de ler qualquer número. Academia de modalidade única
+         mostra a dela; só quem tem várias e não escolheu fica sem o sufixo. #}
+      <span class="sh__marca-texto">Unimaster
+        {%- if marca_modalidade %} <em>{{ marca_modalidade }}</em>{% endif %}</span>
     </a>
 
     {# A lateral vem pronta de utils/menu.py: lista de (rótulo do grupo, itens),
@@ -161,6 +175,26 @@
           <i class="bi bi-chevron-expand"></i>
         </a>
         {% endif %}
+        {# Contexto de modalidade: só existe quando a academia tem mais de uma.
+           Recorta o que aparece nas telas; não dá nem tira permissão. #}
+        {% if modalidades_contexto and modalidades_contexto|length > 1 %}
+        <form method="POST" action="{{ url_for('academia.trocar_contexto_modalidade') }}"
+              class="sh__modalidade {% if modalidade_contexto_id %}is-ativo{% endif %}"
+              title="Ver só uma modalidade">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="voltar" value="{{ request.full_path }}">
+          <i class="bi bi-diagram-3"></i>
+          <select name="modalidade_id" onchange="this.form.submit()"
+                  aria-label="Modalidade em foco">
+            <option value="">Todas as modalidades</option>
+            {% for m in modalidades_contexto %}
+            <option value="{{ m.id }}" {% if m.id == modalidade_contexto_id %}selected{% endif %}>
+              {{ m.nome }}
+            </option>
+            {% endfor %}
+          </select>
+        </form>
+        {% endif %}
       </div>
 
       <div class="sh__top-dir">
@@ -230,6 +264,25 @@
       </div>
       {% endif %}
       {% endblock %}
+
+      {# Com uma modalidade em foco, o que não pertence a nenhuma some da lista.
+         Dizer quantos são evita que a tela pareça ter perdido cadastro. #}
+      {% if modalidade_contexto_id and modalidade_pendencias
+            and (modalidade_pendencias.alunos or modalidade_pendencias.turmas) %}
+      <p class="sh__aviso-contexto">
+        <i class="bi bi-info-circle"></i>
+        Vendo só <strong>{{ modalidade_contexto_nome }}</strong>.
+        Fora deste recorte:
+        {% if modalidade_pendencias.alunos %}
+        {{ modalidade_pendencias.alunos }} aluno{{ 's' if modalidade_pendencias.alunos != 1 }}
+        {%- endif %}
+        {%- if modalidade_pendencias.alunos and modalidade_pendencias.turmas %} e{% endif %}
+        {% if modalidade_pendencias.turmas %}
+        {{ modalidade_pendencias.turmas }} turma{{ 's' if modalidade_pendencias.turmas != 1 }}
+        {%- endif %}
+        sem modalidade cadastrada.
+      </p>
+      {% endif %}
 
       {% block content %}{% endblock %}
     </main>

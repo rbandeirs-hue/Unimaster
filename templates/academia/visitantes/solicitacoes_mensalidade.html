@@ -1,94 +1,116 @@
-{% extends "base_app.html" %}
-{% block title %}Matrículas Realizadas{% endblock %}
+{% extends "base_academia.html" %}
+{% set menu_ativo = 'visitantes' %}
+{% block title %}Matrículas realizadas{% endblock %}
+
+{% block pagina_titulo %}Visitantes{% endblock %}
+{% block pagina_subtitulo %}Aprove as solicitações de visitantes para se tornarem alunos.{% endblock %}
+
+{% block extra_css %}
+<style>
+  .lin-matr { grid-template-columns: minmax(0,1.6fr) minmax(0,1.2fr) 110px 120px 150px; }
+
+  @media (max-width: 1300px) {
+    .lin-matr { grid-template-columns: minmax(0,1.6fr) minmax(0,1.2fr) 110px 150px; }
+    .col-solicitado { display: none !important; }
+  }
+  @media (max-width: 1024px) {                      /* barra lateral recolhe */
+    .lin-matr { grid-template-columns: minmax(0,1.6fr) minmax(0,1.2fr) 110px 120px 150px; }
+    .col-solicitado { display: block !important; }
+  }
+  @media (max-width: 900px) {
+    .lin-matr { grid-template-columns: minmax(0,1.6fr) 110px 150px; }
+    .col-plano, .col-solicitado { display: none !important; }
+  }
+  @media (max-width: 560px) {
+    .lin-matr { grid-template-columns: minmax(0,1.4fr) 150px; }
+    .col-valor { display: none !important; }
+  }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="container mt-4">
-    <div class="mb-4">
-        {% if academias|length > 1 %}
-        <form method="GET" class="mb-3">
-            <label class="form-label small fw-semibold">Academia:</label>
-            <select name="academia_id" class="form-select form-select-sm d-inline-block w-auto" onchange="this.form.submit()">
-                {% for ac in academias %}
-                <option value="{{ ac.id }}" {% if ac.id == academia_id %}selected{% endif %}>{{ ac.nome }}</option>
-                {% endfor %}
-            </select>
-        </form>
-        {% endif %}
-        {% set back_url = url_for('academia.lista_visitantes', academia_id=academia_id) %}
-        {% include 'components/botao_voltar.html' %}
-        <div class="d-flex justify-content-between align-items-center">
-            <div>
-                <h2 class="h4 fw-bold text-primary mb-1">Solicitações de Mensalidade</h2>
-                <p class="text-muted mb-0">Aprove solicitações de visitantes para se tornarem alunos.</p>
-            </div>
-        </div>
-    </div>
+{% set aba_ativa = 'matriculas' %}
+{% include 'academia/visitantes/_abas.html' %}
 
-    {% if solicitacoes %}
-    <div class="card shadow-sm border-0">
-        <div class="card-body">
-            <div class="row g-3">
-                {% for sol in solicitacoes %}
-                <div class="col-md-6">
-                    <div class="card border-primary">
-                        <div class="card-body">
-                            <h5 class="card-title">{{ sol.visitante_nome }}</h5>
-                            <p class="mb-1"><strong>Email:</strong> {{ sol.visitante_email }}</p>
-                            <p class="mb-1"><strong>Mensalidade:</strong> {{ sol.mensalidade_nome }}</p>
-                            <p class="mb-1"><strong>Valor:</strong> R$ {{ "%.2f"|format(sol.mensalidade_valor) }}</p>
-                            <p class="mb-2"><strong>Solicitado em:</strong> {{ sol.solicitado_em|data_br }}</p>
-                            {% if sol.observacoes %}
-                            <p class="mb-2"><strong>Observações:</strong> {{ sol.observacoes }}</p>
-                            {% endif %}
-                            <div class="d-grid gap-2">
-                                <button type="button" class="btn btn-success" 
-                                        onclick="aprovarMensalidade({{ sol.id }})">
-                                    <i class="bi bi-check-circle me-1"></i>Aprovar e Promover a Aluno
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                {% endfor %}
-            </div>
-        </div>
-    </div>
-    {% else %}
-    <div class="card shadow-sm border-0">
-        <div class="card-body text-center py-5">
-            <i class="bi bi-calendar-x display-1 text-muted mb-3"></i>
-            <h5 class="text-muted">Nenhuma matrícula encontrada</h5>
-            <p class="text-muted mb-0">Não há matrículas pendentes no momento.</p>
-        </div>
-    </div>
-    {% endif %}
-</div>
+{% if academias and academias|length > 1 %}
+<form method="GET" class="lst-filtros">
+  <label class="lst-campo lst-campo--curto">
+    <span class="lst-campo__rotulo">Academia</span>
+    <select name="academia_id" onchange="this.form.submit()">
+      {% for ac in academias %}
+      <option value="{{ ac.id }}" {% if ac.id == academia_id %}selected{% endif %}>{{ ac.nome }}</option>
+      {% endfor %}
+    </select>
+  </label>
+</form>
+{% endif %}
 
+<section class="lst-quadro">
+  <header class="lst-quadro__topo">
+    <h2 class="lst-quadro__titulo">Matrículas realizadas</h2>
+    <span class="lst-quadro__meta">
+      {{ solicitacoes|length }} solicitação{{ 'ões' if solicitacoes|length != 1 else '' }}
+    </span>
+  </header>
+
+  <div class="lst-rolagem">
+    <div class="lst-largura" style="--lst-min:520px">
+      <div class="lst-linha lin-matr lst-cab">
+        <div>Visitante</div>
+        <div class="col-plano">Plano</div>
+        <div class="col-valor lst-num">Valor</div>
+        <div class="col-solicitado">Solicitado em</div>
+        <div class="lst-fim">Ações</div>
+      </div>
+
+      {% for sol in solicitacoes %}
+      <div class="lst-linha lin-matr lst-item">
+        <div class="lst-corta">
+          <span class="lst-nome">{{ sol.visitante_nome }}</span>
+          <span class="lst-sub">
+            {%- if sol.visitante_email %}{{ sol.visitante_email }}{% endif -%}
+            {%- if sol.observacoes %} · {{ sol.observacoes }}{% endif -%}
+          </span>
+        </div>
+        <div class="col-plano lst-corta">{{ sol.mensalidade_nome or '—' }}</div>
+        <div class="col-valor lst-num fin-valor">R$ {{ "%.2f"|format(sol.mensalidade_valor or 0) }}</div>
+        <div class="col-solicitado">{{ sol.solicitado_em|data_br if sol.solicitado_em else '—' }}</div>
+        <div class="lst-acoes">
+          <button type="button" class="sh__btn sh__btn--forte js-aprovar-matricula"
+                  data-id="{{ sol.id }}" data-nome="{{ sol.visitante_nome }}">
+            Aprovar e promover
+          </button>
+        </div>
+      </div>
+      {% else %}
+      <p class="lst-vazio">Nenhuma matrícula pendente no momento.</p>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
 <script>
-function aprovarMensalidade(solicitacaoId) {
-    if (!confirm('Deseja realmente aprovar esta solicitação? O visitante será promovido a aluno e terá mensalidades geradas até o final do ano.')) {
-        return;
-    }
-    
-    fetch(`{{ url_for('academia.aprovar_solicitacao_mensalidade', solicitacao_id=0, academia_id=academia_id) }}`.replace('0', solicitacaoId), {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': '{{ csrf_token() }}',
-        }
+  // A rota é montada com id 0 e o número real entra na hora do clique.
+  var URL_APROVAR = "{{ url_for('academia.aprovar_solicitacao_mensalidade', solicitacao_id=0, academia_id=academia_id) }}";
+  document.addEventListener('click', function (ev) {
+    var botao = ev.target.closest('.js-aprovar-matricula');
+    if (!botao) return;
+    var nome = botao.dataset.nome || 'este visitante';
+    if (!confirm('Aprovar a solicitação de ' + nome + '?\n\n' +
+                 'Ele será promovido a aluno e terá mensalidades geradas até o fim do ano.')) return;
+    botao.disabled = true;
+    fetch(URL_APROVAR.replace('/0/', '/' + botao.dataset.id + '/'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token() }}' }
     })
-    .then(response => response.json())
-    .then(data => {
-        if (data.ok) {
-            alert(data.msg);
-            location.reload();
-        } else {
-            alert('Erro: ' + data.msg);
-        }
-    })
-    .catch(error => {
-        console.error('Erro:', error);
-        alert('Erro ao aprovar solicitação');
-    });
-}
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (d.ok) { location.reload(); }
+        else { alert('Erro: ' + (d.msg || 'não foi possível aprovar')); botao.disabled = false; }
+      })
+      .catch(function () { alert('Erro ao aprovar a solicitação.'); botao.disabled = false; });
+  });
 </script>
 {% endblock %}

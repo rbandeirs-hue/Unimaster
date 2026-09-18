@@ -6,8 +6,14 @@ from flask_login import login_required, current_user
 from config import get_db_connection
 from utils.modalidades import filtro_visibilidade_sql
 
+from utils.permissoes import somente_gestao
 bp_professores = Blueprint("professores", __name__, url_prefix="/professores")
 
+
+
+# Aluno, responsável e visitante não entram aqui nem digitando a URL:
+# a maioria destas rotas tinha só `@login_required`.
+bp_professores.before_request(somente_gestao())
 
 def _academia_permitida(academia_id):
     """Verifica se o usuário pode acessar essa academia."""

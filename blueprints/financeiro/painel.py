@@ -27,6 +27,35 @@ bp_financeiro_painel = Blueprint(
     "financeiro_painel", __name__, url_prefix="/financeiro/painel"
 )
 
+
+
+@bp_financeiro_painel.before_request
+def _exige_modo_academia_painel():
+    """Gestão financeira é do modo academia — a mesma regra do outro blueprint.
+
+    O painel nasceu sem esta trava, então a regra valia ou não conforme a URL:
+    `/financeiro/relatorios` recusava fora do modo academia e
+    `/financeiro/painel/dashboard` abria — sendo que `financeiro.dashboard` só
+    redireciona para cá.
+    """
+    from blueprints.financeiro.routes import _financeiro_exige_modo_academia
+    return _financeiro_exige_modo_academia()
+
+
+@bp_financeiro_painel.before_request
+def _exige_modulo_financeiro_painel():
+    """Mesma trava do blueprint financeiro — ver `_exige_modulo_financeiro`."""
+    try:
+        from utils.modulos import tem_financeiro
+        academia_id = _get_academia_id()
+        if academia_id and not tem_financeiro(academia_id):
+            flash("Esta academia não usa o módulo financeiro. "
+                  "Para ativar, vá em Configurações da academia.", "warning")
+            return redirect(url_for("painel.home"))
+    except Exception:
+        return None
+    return None
+
 # Blueprint sem prefixo: o link curto precisa ser curto mesmo (/p/<token>).
 bp_link_pagamento = Blueprint("link_pagamento", __name__)
 
@@ -332,6 +361,15 @@ def _ctx_base(academia_id):
         ctx["academia_logo"] = buscar_logo_url("academia", academia_id)
     except Exception:
         ctx["academia_logo"] = None
+
+    # Gateway recusando: o aviso vai em todas as telas do financeiro, porque a
+    # falha é silenciosa em cada caminho (matrícula vira avulsa, lembrete sai sem
+    # link) e o gestor só descobria pela inadimplência semanas depois.
+    try:
+        from blueprints.financeiro.routes import _erro_gateway_academia
+        ctx["gateway_erro"], ctx["gateway_erro_em"] = _erro_gateway_academia(academia_id)
+    except Exception:
+        ctx["gateway_erro"], ctx["gateway_erro_em"] = None, None
     return ctx
 
 
@@ -746,7 +784,8 @@ def descontos():
     cur = conn.cursor(dictionary=True)
     try:
         cur.execute(
-            """SELECT id, nome, descricao, tipo, valor, COALESCE(ativo,0) AS ativo, criado_em
+            """SELECT id, nome, descricao, tipo, valor, COALESCE(ativo,0) AS ativo, criado_em,
+                      COALESCE(aplicar_apenas_pagamento_em_dia, 1) AS aplicar_apenas_pagamento_em_dia
                FROM descontos WHERE id_academia = %s ORDER BY ativo DESC, nome""",
             (academia_id,),
         )
@@ -788,6 +827,9 @@ def descontos_salvar():
     valor = _dec(request.form.get("valor"))
     descricao = (request.form.get("descricao") or "").strip()
     ativo = 1 if (request.form.get("ativo") or "ativo") == "ativo" else 0
+    # Checkbox: ausente no POST significa desmarcado, e aí o desconto vale
+    # também em atraso. O cálculo já respeitava a coluna; faltava a tela.
+    apenas_em_dia = 1 if request.form.get("aplicar_apenas_pagamento_em_dia") == "1" else 0
 
     if not nome or valor <= 0:
         flash("Informe o nome do desconto e um valor maior que zero.", "danger")
@@ -801,16 +843,18 @@ def descontos_salvar():
     try:
         if desconto_id:
             cur.execute(
-                """UPDATE descontos SET nome=%s, tipo=%s, valor=%s, descricao=%s, ativo=%s
+                """UPDATE descontos SET nome=%s, tipo=%s, valor=%s, descricao=%s, ativo=%s,
+                          aplicar_apenas_pagamento_em_dia=%s
                    WHERE id=%s AND id_academia=%s""",
-                (nome, tipo, valor, descricao, ativo, desconto_id, academia_id),
+                (nome, tipo, valor, descricao, ativo, apenas_em_dia, desconto_id, academia_id),
             )
             flash("Desconto atualizado.", "success")
         else:
             cur.execute(
-                """INSERT INTO descontos (nome, descricao, tipo, valor, id_academia, ativo)
-                   VALUES (%s, %s, %s, %s, %s, %s)""",
-                (nome, descricao, tipo, valor, academia_id, ativo),
+                """INSERT INTO descontos (nome, descricao, tipo, valor, id_academia, ativo,
+                                         aplicar_apenas_pagamento_em_dia)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+                (nome, descricao, tipo, valor, academia_id, ativo, apenas_em_dia),
             )
             flash("Desconto cadastrado.", "success")
         conn.commit()
@@ -1138,6 +1182,14 @@ def cobrancas():
     ano, mes = _mes_ref()
     filtro = (request.args.get("filtro") or "Todos")
 
+    # Contexto de modalidade: a lista do mês acompanha o recorte escolhido no
+    # topo. Cobrança avulsa não tem plano e por isso não entra no recorte.
+    try:
+        from utils.multimodalidade import filtro_cobrancas_sql
+        _trecho_mod, _params_mod = filtro_cobrancas_sql("ma", academia_id)
+    except Exception:
+        _trecho_mod, _params_mod = "", ()
+
     conn = get_db_connection()
     cur = conn.cursor(dictionary=True)
     try:
@@ -1152,8 +1204,9 @@ def cobrancas():
                LEFT JOIN descontos d ON d.id = ma.id_desconto
                WHERE a.id_academia = %s
                  AND YEAR(ma.data_vencimento) = %s AND MONTH(ma.data_vencimento) = %s
-               ORDER BY a.nome""",
-            (academia_id, ano, mes),
+                 {trecho_modalidade}
+               ORDER BY a.nome""".format(trecho_modalidade=_trecho_mod),
+            (academia_id, ano, mes) + tuple(_params_mod),
         )
         do_mes = cur.fetchall()
         for r in do_mes:
@@ -1180,6 +1233,39 @@ def cobrancas():
             r["status_pagamento"] = None
             r["id_desconto"] = None
         do_mes = sorted(do_mes + avulsas, key=lambda r: (r.get("aluno_nome") or "").lower())
+
+        # Marca o que está dentro de uma cobrança familiar aberta. A baixa de
+        # qualquer uma dessas linhas quita o grupo inteiro — o gestor precisa
+        # saber disso ANTES de clicar, senão parece que baixou o irmão errado.
+        try:
+            from utils.cobranca_familia import itens_do_grupo
+            cur.execute(
+                """SELECT i.origem, i.registro_id, i.grupo_id, g.valor_total
+                   FROM cobranca_grupo_item i
+                   JOIN cobranca_grupo g ON g.id = i.grupo_id
+                   WHERE g.id_academia = %s AND g.status IN ('pendente','atrasado')""",
+                (academia_id,))
+            por_registro, grupos_vistos = {}, {}
+            for r in cur.fetchall() or []:
+                por_registro[(r["origem"], r["registro_id"])] = r
+            for r in do_mes:
+                chave = ("avulsa" if r.get("tipo") == "avulsa" else "mensalidade", r["id"])
+                info = por_registro.get(chave)
+                if not info:
+                    continue
+                gid = info["grupo_id"]
+                if gid not in grupos_vistos:
+                    grupos_vistos[gid] = itens_do_grupo(gid)
+                nomes = []
+                for it in grupos_vistos[gid]:
+                    nome = (it.get("nome") or "").split()[0] if it.get("nome") else None
+                    if nome and nome not in nomes:
+                        nomes.append(nome)
+                r["familia_grupo_id"] = gid
+                r["familia_total"] = info["valor_total"]
+                r["familia_alunos"] = nomes
+        except Exception as e:
+            current_app.logger.info("Marcação de cobrança familiar indisponível (%s)", e)
 
         cur.execute(
             """SELECT a.id, a.nome, g.faixa
@@ -1262,8 +1348,11 @@ def cobrancas_gerar():
     alunos_ids = [int(x) for x in request.form.getlist("aluno_id") if str(x).isdigit()]
     plano_id = request.form.get("plano_id", type=int)
     desconto_id = request.form.get("desconto_id", type=int)
+    # O dia é digitado (1 a 31) e encaixado no mês: quem cobra no dia 30 não
+    # perdia só fevereiro, perdia sempre — o limite de 28 valia o ano inteiro.
+    import calendar as _calendario
     dia_venc = request.form.get("dia_vencimento", type=int) or 10
-    dia_venc = min(max(dia_venc, 1), 28)
+    dia_venc = min(max(dia_venc, 1), _calendario.monthrange(ano, mes)[1])
     observacao = (request.form.get("observacao") or "").strip() or None
 
     if not alunos_ids:
@@ -1530,6 +1619,16 @@ def mensalidades_pagar(registro_id):
     _desc_id = request.form.get("desconto_id_pagamento", type=int)
     _desc_tipo = (request.form.get("desconto_manual_tipo") or "").strip() or None
     _desc_valor = (request.form.get("desconto_manual_valor") or "").strip() or None
+
+    # Cobrança familiar: um pagamento cobre as mensalidades de todos os irmãos,
+    # então a baixa vale para o grupo inteiro (mesmo caminho do webhook).
+    from blueprints.financeiro.routes import _quitar_familia_se_grupo, _data_do_form
+    _fam = _quitar_familia_se_grupo(registro_id, _data_do_form(_data_pag))
+    if _fam:
+        flash(f"Cobrança da família quitada: {_fam['n']} mensalidade"
+              f"{'s' if _fam['n'] != 1 else ''} baixada"
+              f"{'s' if _fam['n'] != 1 else ''} de uma vez.", "success")
+        return _voltar_da_baixa(academia_id, mes_chave)
 
     conn = get_db_connection()
     cur = conn.cursor(dictionary=True)
@@ -1992,8 +2091,27 @@ def extrato():
     cur = conn.cursor(dictionary=True)
     try:
         lista_contas = fin.saldos_por_conta(cur, academia_id)
+        # Quantos lançamentos cada conta teve NO MÊS. Sem isso, quem abre numa
+        # conta parada vê "nenhuma movimentação" e conclui que o extrato está
+        # quebrado — quando o dinheiro está na conta ao lado.
+        try:
+            cur.execute(
+                """SELECT id_conta, COUNT(*) AS n FROM fin_lancamentos
+                   WHERE id_academia = %s AND status = 'efetivado'
+                     AND COALESCE(data_efetivacao, data_competencia) BETWEEN %s AND %s
+                   GROUP BY id_conta""",
+                (academia_id, inicio, fim),
+            )
+            _mov = {r["id_conta"]: r["n"] for r in cur.fetchall() or []}
+        except Exception:
+            _mov = {}
+        for _c in lista_contas:
+            _c["movimentos_mes"] = _mov.get(_c["id"], 0)
+        # Abre numa conta que teve movimento no mês; só cai na primeira se
+        # nenhuma teve.
         if not id_conta and lista_contas:
-            id_conta = lista_contas[0]["id"]
+            _com_mov = [c for c in lista_contas if c["movimentos_mes"]]
+            id_conta = (_com_mov or lista_contas)[0]["id"]
         dados = (fin.extrato(cur, academia_id, id_conta=id_conta, inicio=inicio, fim=fim)
                  if id_conta else
                  {"linhas": [], "saldo_inicial": Decimal("0"), "entradas": Decimal("0"),
@@ -2114,3 +2232,556 @@ def extrato_reatribuir(lanc_id):
         conn.close()
     return redirect(request.referrer
                     or url_for("financeiro_painel.extrato", academia_id=academia_id))
+
+
+# =====================================================================
+# Cobrança familiar — uma cobrança única para as mensalidades de irmãos
+# =====================================================================
+def _familias_view(academia_id, ano, mes):
+    """Famílias candidatas da academia, cada uma com a cobrança do mês em foco.
+
+    "Candidata" é todo responsável financeiro com 2+ alunos ativos; a academia
+    escolhe quais realmente cobram junto. A cobrança do mês só existe para as
+    ativadas — e pode não existir mesmo assim, quando os irmãos já pagaram ou
+    ainda não há mensalidade gerada no mês.
+    """
+    from utils import cobranca_familia as cf
+
+    familias = cf.familias_candidatas(academia_id)
+    if not familias:
+        return []
+    ids = [f["familia_id"] for f in familias if f.get("familia_id")]
+    grupos = {}
+    if ids:
+        conn = get_db_connection()
+        cur = conn.cursor(dictionary=True)
+        try:
+            _ph = ",".join(["%s"] * len(ids))
+            cur.execute(
+                f"""SELECT g.* FROM cobranca_grupo g
+                    WHERE g.familia_id IN ({_ph}) AND g.competencia = %s""",
+                (*ids, date(ano, mes, 1)),
+            )
+            for g in cur.fetchall() or []:
+                grupos[g["familia_id"]] = g
+            if grupos:
+                gids = list({g["id"] for g in grupos.values()})
+                _ph2 = ",".join(["%s"] * len(gids))
+                cur.execute(
+                    f"""SELECT i.grupo_id, i.valor, a.nome AS aluno_nome, ma.status AS ma_status
+                        FROM cobranca_grupo_item i
+                        JOIN alunos a ON a.id = i.aluno_id
+                        JOIN mensalidade_aluno ma ON ma.id = i.mensalidade_aluno_id
+                        WHERE i.grupo_id IN ({_ph2}) ORDER BY a.nome""",
+                    tuple(gids),
+                )
+                por_grupo = {}
+                for it in cur.fetchall() or []:
+                    por_grupo.setdefault(it["grupo_id"], []).append(it)
+                for g in grupos.values():
+                    g["itens"] = por_grupo.get(g["id"], [])
+        finally:
+            cur.close()
+            conn.close()
+    for f in familias:
+        f["grupo"] = grupos.get(f.get("familia_id"))
+    return familias
+
+
+@bp_financeiro_painel.route("/familias")
+@login_required
+def familias():
+    academia_id = _get_academia_id()
+    if not academia_id:
+        return _sem_academia()
+    ano, mes = _mes_ref()
+    lista = _familias_view(academia_id, ano, mes)
+    ctx = _ctx_base(academia_id)
+    ctx.update(
+        ativo="familias", fin_aba="familias",
+        lista=lista, ano=ano, mes=mes,
+        mes_label=fmt_mes(ano, mes),
+        mes_chave=f"{ano:04d}-{mes:02d}",
+        meses=_meses_disponiveis(date.today().year, date.today().month, 6),
+        n_ativas=sum(1 for f in lista if f.get("ativo")),
+        gateway_ok=_gateway_ativo(_gateway_config_academia(academia_id)),
+    )
+    return render_template("financeiro/painel/familias.html", **ctx)
+
+
+@bp_financeiro_painel.route("/familias/ativar", methods=["POST"])
+@login_required
+def familias_ativar():
+    """Passa a cobrar aquela família junto e já monta a cobrança do mês em foco."""
+    academia_id = _get_academia_id()
+    if not academia_id:
+        return _sem_academia()
+    from utils import cobranca_familia as cf
+
+    cpf = (request.form.get("cpf") or "").strip()
+    ano, mes = _mes_ref()
+    fid = cf.ativar_familia(academia_id, cpf)
+    if not fid:
+        flash("Não foi possível ativar: a família precisa de pelo menos dois alunos ativos.", "warning")
+        return _volta("financeiro_painel.familias", academia_id, mes=f"{ano:04d}-{mes:02d}")
+    r = cf.montar_grupo(fid, ano, mes)
+    if r.get("grupo_id"):
+        flash(f"Cobrança familiar ativada. {len(r['itens'])} mensalidades de "
+              f"{fmt_mes(ano, mes)} somam R$ {r['valor_total']:.2f}".replace(".", ",") + ".", "success")
+    else:
+        flash("Cobrança familiar ativada. Ainda não há mensalidades em aberto suficientes "
+              "neste mês — o grupo é montado sozinho na próxima geração.", "info")
+    return _volta("financeiro_painel.familias", academia_id, mes=f"{ano:04d}-{mes:02d}")
+
+
+@bp_financeiro_painel.route("/familias/<int:familia_id>/desativar", methods=["POST"])
+@login_required
+def familias_desativar(familia_id):
+    """Volta a família para cobrança individual, soltando o grupo ainda em aberto."""
+    academia_id = _get_academia_id()
+    if not academia_id:
+        return _sem_academia()
+    from utils import cobranca_familia as cf
+
+    ano, mes = _mes_ref()
+    cf.desativar_familia(familia_id)
+    flash("Família voltou para cobrança individual. As mensalidades em aberto "
+          "voltam a ser cobradas uma a uma.", "success")
+    return _volta("financeiro_painel.familias", academia_id, mes=f"{ano:04d}-{mes:02d}")
+
+
+@bp_financeiro_painel.route("/familias/<int:familia_id>/montar", methods=["POST"])
+@login_required
+def familias_montar(familia_id):
+    """Remonta a cobrança do mês — depois de mudar valor, desconto ou vencimento."""
+    academia_id = _get_academia_id()
+    if not academia_id:
+        return _sem_academia()
+    from utils import cobranca_familia as cf
+
+    ano, mes = _mes_ref()
+    try:
+        r = cf.montar_grupo(familia_id, ano, mes)
+    except Exception as e:
+        current_app.logger.error(f"Remontar grupo {familia_id}: {e}", exc_info=True)
+        flash(f"Erro ao montar a cobrança: {e}", "danger")
+        return _volta("financeiro_painel.familias", academia_id, mes=f"{ano:04d}-{mes:02d}")
+    motivo = r.get("motivo")
+    if r.get("grupo_id") and not motivo:
+        flash(f"Cobrança de {fmt_mes(ano, mes)} montada: {len(r['itens'])} mensalidades, "
+              f"R$ {r['valor_total']:.2f}".replace(".", ",") + ".", "success")
+    elif motivo == "grupo_pago":
+        flash("A cobrança deste mês já foi paga.", "info")
+    elif motivo == "itens_insuficientes":
+        flash("Sobrou menos de duas mensalidades em aberto neste mês — as que restaram "
+              "voltam para a cobrança individual.", "info")
+    else:
+        flash("Nada a montar neste mês.", "info")
+    return _volta("financeiro_painel.familias", academia_id, mes=f"{ano:04d}-{mes:02d}")
+
+
+@bp_financeiro_painel.route("/familias/grupo/<int:grupo_id>/link", methods=["POST"])
+@login_required
+def familias_gerar_link(grupo_id):
+    """Emite (ou reemite) a cobrança única no gateway."""
+    academia_id = _get_academia_id()
+    if not academia_id:
+        return _sem_academia()
+    from utils import cobranca_familia as cf
+
+    ano, mes = _mes_ref()
+    ok, msg = cf.gerar_link(grupo_id, forcar=request.form.get("forcar") == "1")
+    flash(msg, "success" if ok else "danger")
+    return _volta("financeiro_painel.familias", academia_id, mes=f"{ano:04d}-{mes:02d}")
+
+
+@bp_financeiro_painel.route("/familias/grupo/<int:grupo_id>/baixar", methods=["POST"])
+@login_required
+def familias_baixar(grupo_id):
+    """Baixa manual: a família pagou por fora (PIX direto na chave, dinheiro)."""
+    academia_id = _get_academia_id()
+    if not academia_id:
+        return _sem_academia()
+    from utils import cobranca_familia as cf
+
+    ano, mes = _mes_ref()
+    valor = request.form.get("valor")
+    valor = float(_dec(valor)) if valor else None
+    if cf.baixar_grupo(grupo_id, valor, "manual"):
+        flash("Cobrança familiar baixada. Todas as mensalidades do grupo foram "
+              "marcadas como pagas e as receitas lançadas por aluno.", "success")
+    else:
+        flash("Não foi possível baixar esta cobrança.", "danger")
+    return _volta("financeiro_painel.familias", academia_id, mes=f"{ano:04d}-{mes:02d}")
+
+
+# =====================================================================
+# Régua de cobrança  (tabelas `cobranca_regua_etapa` / `cobranca_regua_config`)
+# =====================================================================
+# A cobrança automática mandava mensagem todo dia enquanto a mensalidade
+# estivesse vencida. Aqui o gestor diz EM QUE DIAS o sistema fala — e o job
+# diário passa a consultar essa régua antes de enviar qualquer coisa.
+@bp_financeiro_painel.route("/regua")
+@login_required
+def regua():
+    academia_id = _get_academia_id()
+    if not academia_id:
+        return _sem_academia()
+
+    from utils import regua_cobranca as rc
+
+    cfg = rc.carregar(academia_id)
+
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    automacao = 0
+    suspensos, alunos_lista = [], []
+    try:
+        cur.execute(
+            "SELECT COALESCE(whatsapp_lembrete_mensalidade, 0) AS on_off "
+            "FROM academias WHERE id = %s",
+            (academia_id,),
+        )
+        automacao = int((cur.fetchone() or {}).get("on_off") or 0)
+    except Exception:
+        pass
+    try:
+        cur.execute(
+            """SELECT id, nome, cobranca_suspensa, cobranca_suspensa_ate,
+                      cobranca_suspensa_motivo
+               FROM alunos
+               WHERE id_academia = %s AND COALESCE(ativo, 1) = 1
+               ORDER BY nome""",
+            (academia_id,),
+        )
+        alunos_lista = cur.fetchall()
+        suspensos = [a for a in alunos_lista if rc.suspenso(a)]
+    except Exception:
+        # Migração ainda não rodou: a tela abre igual, só sem o bloco de pausa.
+        alunos_lista, suspensos = [], []
+    finally:
+        cur.close(); conn.close()
+
+    # Simulador: com um vencimento, mostra as datas em que a régua falaria.
+    venc_txt = (request.args.get("venc") or "").strip()
+    try:
+        venc_sim = date.fromisoformat(venc_txt) if venc_txt else date.today().replace(day=10)
+    except ValueError:
+        venc_sim = date.today().replace(day=10)
+    simulacao = rc.simular(cfg["individual"], venc_sim)
+
+    ctx = _ctx_base(academia_id)
+    ctx.update(
+        ativo="regua", fin_aba="regua",
+        cfg=cfg, automacao=automacao,
+        rotulo=rc.rotulo, rotulo_consolidada=rc.rotulo_consolidada,
+        simulacao=simulacao, venc_sim=venc_sim,
+        alunos_lista=alunos_lista, suspensos=suspensos,
+        tem_suspensao=bool(alunos_lista),
+    )
+    return render_template("financeiro/painel/regua.html", **ctx)
+
+
+def _etapas_do_form(prefixo):
+    """Lê as linhas repetidas do formulário da régua (dias/ativo/mensagem).
+
+    O ativo vai num hidden espelhado pelo checkbox: checkbox desmarcado não é
+    enviado, e a lista sairia desalinhada das outras.
+    """
+    dias = request.form.getlist(prefixo + "_dias")
+    ativos = request.form.getlist(prefixo + "_ativo")
+    msgs = request.form.getlist(prefixo + "_msg")
+    etapas = []
+    for i, d in enumerate(dias):
+        if str(d).strip() == "":
+            continue
+        etapas.append({
+            "dias": d,
+            "ativo": (ativos[i] if i < len(ativos) else "1") == "1",
+            "mensagem": msgs[i] if i < len(msgs) else None,
+        })
+    return etapas
+
+
+@bp_financeiro_painel.route("/regua/salvar", methods=["POST"])
+@login_required
+def regua_salvar():
+    academia_id = _get_academia_id()
+    if not academia_id:
+        return _sem_academia()
+
+    from utils import regua_cobranca as rc
+
+    # O liga/desliga é o mesmo interruptor da tela do WhatsApp — não existe um
+    # segundo estado de "cobrança automática" para desencontrar do primeiro.
+    automacao = 1 if request.form.get("automacao") == "1" else 0
+    try:
+        conn = get_db_connection(); cur = conn.cursor()
+        cur.execute("UPDATE academias SET whatsapp_lembrete_mensalidade = %s WHERE id = %s",
+                    (automacao, academia_id))
+        conn.commit(); cur.close(); conn.close()
+    except Exception:
+        pass
+
+    hora = request.form.get("hora_envio", type=int)
+    hora = hora if hora is not None and 0 <= hora <= 23 else 9
+    consolidar = request.form.get("consolidar_apos", type=int) or 2
+    tratativa = request.form.get("tratativa_apos", type=int) or 0
+    consolidar = max(2, min(12, consolidar))
+    # 0 desliga a tratativa: a régua consolidada segue cobrando sem teto.
+    tratativa = max(0, min(24, tratativa))
+    if tratativa and tratativa <= consolidar:
+        tratativa = consolidar + 1
+
+    ok_cfg = rc.salvar_config(academia_id, hora, consolidar, tratativa)
+    ok_ind = rc.salvar_etapas(academia_id, "individual", _etapas_do_form("ind"))
+    ok_con = rc.salvar_etapas(academia_id, "consolidada", _etapas_do_form("cons"))
+
+    if ok_cfg and ok_ind and ok_con:
+        flash("Régua de cobrança salva.", "success")
+    else:
+        flash("Não foi possível salvar a régua. Rode a migração "
+              "`migrations/executar_regua_cobranca.py` e tente de novo.", "danger")
+    return _volta("financeiro_painel.regua", academia_id)
+
+
+@bp_financeiro_painel.route("/regua/suspensao", methods=["POST"])
+@login_required
+def regua_suspensao():
+    """Pausa (ou retoma) a cobrança automática de um aluno.
+
+    O job continua processando o aluno; ele só não recebe mensagem. Serve para
+    acordo em andamento, bolsa temporária, luto — situações em que a cobrança
+    automática faz estrago.
+    """
+    academia_id = _get_academia_id()
+    if not academia_id:
+        return _sem_academia()
+
+    aluno_id = request.form.get("aluno_id", type=int)
+    acao = (request.form.get("acao") or "suspender").strip()
+    motivo = (request.form.get("motivo") or "").strip()[:255] or None
+    ate_txt = (request.form.get("ate") or "").strip()
+    indeterminado = request.form.get("indeterminado") == "1"
+
+    if not aluno_id:
+        flash("Selecione um aluno.", "danger")
+        return _volta("financeiro_painel.regua", academia_id)
+
+    ate = None
+    if not indeterminado and ate_txt:
+        try:
+            ate = date.fromisoformat(ate_txt[:10])
+        except ValueError:
+            flash("Data inválida para a suspensão.", "danger")
+            return _volta("financeiro_painel.regua", academia_id)
+    if acao == "suspender" and not indeterminado and not ate:
+        flash("Informe até quando suspender, ou marque tempo indeterminado.", "warning")
+        return _volta("financeiro_painel.regua", academia_id)
+
+    conn = get_db_connection(); cur = conn.cursor()
+    try:
+        if acao == "retomar":
+            cur.execute(
+                """UPDATE alunos SET cobranca_suspensa = 0, cobranca_suspensa_ate = NULL,
+                          cobranca_suspensa_motivo = NULL
+                   WHERE id = %s AND id_academia = %s""",
+                (aluno_id, academia_id),
+            )
+            flash("Cobrança automática retomada.", "success")
+        else:
+            cur.execute(
+                """UPDATE alunos SET cobranca_suspensa = %s, cobranca_suspensa_ate = %s,
+                          cobranca_suspensa_motivo = %s
+                   WHERE id = %s AND id_academia = %s""",
+                (1 if indeterminado else 0, ate, motivo, aluno_id, academia_id),
+            )
+            flash("Cobrança suspensa para este aluno.", "success")
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        flash("Não foi possível salvar a suspensão. A migração da régua já rodou?", "danger")
+    finally:
+        cur.close(); conn.close()
+    return _volta("financeiro_painel.regua", academia_id)
+
+
+# =====================================================================
+# Contratos
+# =====================================================================
+@bp_financeiro_painel.route("/contratos")
+@login_required
+def contratos():
+    """Os contratos da academia: quem paga o quê, por qual pacote e por quem.
+
+    Até aqui os contratos só nasciam da migração e da geração automática. Esta
+    tela é onde o gestor cria o contrato de um aluno novo, junta irmãos num
+    contrato de família ou encerra o de quem saiu.
+    """
+    from utils import contratos as ct
+    from utils.multimodalidade import contexto_id
+
+    academia_id = _get_academia_id()
+    if not academia_id:
+        return _sem_academia()
+
+    status = (request.args.get("status") or "ativo").strip().lower()
+    if status not in ct.STATUS_VALIDOS + ("todos",):
+        status = "ativo"
+    busca = (request.args.get("busca") or "").strip()
+
+    lista = ct.listar(academia_id, status=status,
+                      modalidade_id=contexto_id(academia_id), busca=busca or None)
+
+    # Edição abre o mesmo formulário do "novo", já preenchido — o padrão das
+    # outras telas do painel (?novo=1 / ?editar=<id>).
+    em_edicao = None
+    editar_id = request.args.get("editar", type=int)
+    if editar_id:
+        em_edicao = next((c for c in ct.listar(academia_id, status="todos")
+                          if c["id"] == editar_id), None)
+        if not em_edicao:
+            flash("Contrato não encontrado nesta academia.", "warning")
+
+    ctx = _ctx_base(academia_id)
+    ctx.update(
+        ativo="contratos", fin_aba="contratos",
+        lista=lista, status=status, busca=busca, em_edicao=em_edicao,
+        alunos=ct.alunos_para_contrato(academia_id),
+        planos=ct.planos_da_academia(academia_id),
+        total_ativos=sum(1 for c in lista if c.get("status") == "ativo"),
+    )
+    return render_template("financeiro/painel/contratos.html", **ctx)
+
+
+def _alunos_do_formulario():
+    """Lê as linhas de aluno do formulário.
+
+    Os campos chegam como listas paralelas (`aluno_id[]` e `valor[]`) porque a
+    tela monta as linhas no navegador. Linha sem aluno é descartada aqui, não no
+    JavaScript: o formulário pode ser enviado sem ele.
+    """
+    ids = request.form.getlist("aluno_id[]")
+    valores = request.form.getlist("valor[]")
+    alunos = []
+    for pos, bruto in enumerate(ids):
+        try:
+            aluno_id = int(bruto)
+        except (TypeError, ValueError):
+            continue
+        alunos.append({"aluno_id": aluno_id,
+                       "valor": valores[pos] if pos < len(valores) else "0"})
+    return alunos
+
+
+@bp_financeiro_painel.route("/contratos/salvar", methods=["POST"])
+@login_required
+def contratos_salvar():
+    from utils import contratos as ct
+
+    academia_id = _get_academia_id()
+    if not academia_id:
+        return _sem_academia()
+
+    dados = {
+        "id": request.form.get("id", type=int) or None,
+        "mensalidade_id": request.form.get("mensalidade_id", type=int) or None,
+        "familia": request.form.get("familia") == "1",
+        "responsavel_cpf": request.form.get("responsavel_cpf"),
+        "responsavel_nome": request.form.get("responsavel_nome"),
+        "dia_vencimento": request.form.get("dia_vencimento"),
+        "data_inicio": request.form.get("data_inicio"),
+        "data_fim": request.form.get("data_fim"),
+        "status": request.form.get("status"),
+        "observacoes": request.form.get("observacoes"),
+        "alunos": _alunos_do_formulario(),
+    }
+    contrato_id, erro = ct.salvar(
+        academia_id, dados,
+        usuario_id=getattr(current_user, "id", None),
+        ip=request.headers.get("X-Forwarded-For") or request.remote_addr)
+    if erro:
+        flash(erro, "danger")
+    else:
+        flash("Contrato salvo." if dados["id"] else "Contrato criado.", "success")
+    return _volta("financeiro_painel.contratos", academia_id)
+
+
+@bp_financeiro_painel.route("/contratos/<int:contrato_id>/status", methods=["POST"])
+@login_required
+def contratos_status(contrato_id):
+    from utils import contratos as ct
+
+    academia_id = _get_academia_id()
+    if not academia_id:
+        return _sem_academia()
+
+    novo = (request.form.get("status") or "").strip().lower()
+    ok, erro = ct.alterar_status(
+        contrato_id, academia_id, novo,
+        usuario_id=getattr(current_user, "id", None),
+        ip=request.headers.get("X-Forwarded-For") or request.remote_addr,
+        motivo=request.form.get("motivo"))
+    if erro:
+        flash(erro, "danger")
+    elif ok:
+        rotulos = {"ativo": "reativado", "suspenso": "suspenso",
+                   "encerrado": "encerrado", "cancelado": "cancelado"}
+        flash(f"Contrato {rotulos.get(novo, 'atualizado')}. "
+              "As cobranças já emitidas não foram alteradas.", "success")
+    return _volta("financeiro_painel.contratos", academia_id,
+                  status=request.form.get("voltar_status") or "ativo")
+
+
+# =====================================================================
+# Monitor da cobrança automática
+# =====================================================================
+@bp_financeiro_painel.route("/monitor")
+@login_required
+def monitor():
+    """O que a régua está cobrando de quem, e o que já falou.
+
+    A cobrança automática funcionava às cegas: quando um responsável reclamava
+    de estar sendo cobrado, não havia tela para conferir. Aqui cada
+    destinatário aparece com o que deve, o que já recebeu e quando será o
+    próximo aviso — tudo lido das mesmas funções que decidem o envio.
+    """
+    from utils import monitor_cobranca as mon
+
+    academia_id = _get_academia_id()
+    if not academia_id:
+        return _sem_academia()
+
+    situacao = (request.args.get("situacao") or "").strip()
+    busca = (request.args.get("busca") or "").strip().lower()
+
+    dados = mon.panorama(academia_id)
+    lista = dados["destinatarios"]
+    if situacao:
+        lista = [d for d in lista if d["situacao"] == situacao]
+    if busca:
+        def bate(d):
+            if busca in (d["responsavel"] or "").lower():
+                return True
+            return any(busca in (a["nome"] or "").lower() for a in d["alunos"])
+        lista = [d for d in lista if bate(d)]
+
+    automacao = 0
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT COALESCE(whatsapp_lembrete_mensalidade, 0) AS on_off "
+                    "FROM academias WHERE id = %s", (academia_id,))
+        automacao = int((cur.fetchone() or {}).get("on_off") or 0)
+        cur.close(); conn.close()
+    except Exception:
+        pass
+
+    ctx = _ctx_base(academia_id)
+    ctx.update(
+        ativo="monitor", fin_aba="monitor",
+        lista=lista, resumo=mon.resumo(dados), cfg=dados["cfg"],
+        hoje=dados["hoje"], situacao=situacao, busca=busca,
+        automacao=automacao,
+    )
+    return render_template("financeiro/painel/monitor.html", **ctx)

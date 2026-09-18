@@ -1,0 +1,225 @@
+{% extends "financeiro/painel/_base.html" %}
+{% set fin_aba = 'monitor' %}
+{% block title %}Monitor de cobrança — Financeiro{% endblock %}
+
+{% block pagina_titulo %}Financeiro{% endblock %}
+{% block pagina_subtitulo %}Quem a cobrança automática está cobrando, e o que já foi dito{% endblock %}
+
+{% block fin_css %}
+<style>
+  .mon-cartoes { display:grid; gap:.7rem; grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+                 margin-bottom:1rem; }
+  .mon-cartao { border:1px solid var(--lst-borda,#e5e7eb); border-radius:12px; padding:.7rem .85rem; }
+  .mon-cartao b { display:block; font-size:1.35rem; line-height:1.1; }
+  .mon-cartao span { font-size:.78rem; opacity:.72; }
+  .mon-cartao.is-alerta { border-color:#dc354533; background:#dc354508; }
+
+  .mon-linha { border:1px solid var(--lst-borda,#e5e7eb); border-radius:14px;
+               padding:.9rem 1rem; margin-bottom:.8rem; }
+  .mon-topo { display:flex; flex-wrap:wrap; gap:.75rem; justify-content:space-between;
+              align-items:flex-start; }
+  .mon-quem { font-weight:600; }
+  .mon-sub { font-size:.85rem; opacity:.75; margin-top:.15rem; }
+  .mon-valor { text-align:right; white-space:nowrap; }
+  .mon-valor b { font-size:1.05rem; }
+  .mon-valor span { display:block; font-size:.78rem; opacity:.72; }
+
+  .mon-tag { font-size:.75rem; padding:.12rem .55rem; border-radius:999px;
+             background:rgba(127,127,127,.14); white-space:nowrap; }
+  .mon-tag.is-tratativa { background:#dc354522; color:#b02a37; }
+  .mon-tag.is-consolidada { background:#fd7e1422; color:#ad5700; }
+  .mon-tag.is-individual { background:#0d6efd1f; color:#0a58ca; }
+  .mon-tag.is-sem_telefone { background:#6c757d22; }
+  .mon-tag.is-a_vencer { background:#19875422; color:#146c43; }
+
+  .mon-grade { display:grid; gap:1rem; grid-template-columns:1.3fr 1fr; margin-top:.8rem; }
+  @media (max-width: 900px) { .mon-grade { grid-template-columns:1fr; } }
+  .mon-bloco h4 { font-size:.78rem; text-transform:uppercase; letter-spacing:.04em;
+                  opacity:.6; margin:0 0 .4rem; }
+  .mon-tabela { width:100%; font-size:.87rem; }
+  .mon-tabela th { text-align:left; font-weight:600; opacity:.65; font-size:.76rem;
+                   padding:.15rem .35rem; }
+  .mon-tabela td { padding:.2rem .35rem; border-top:1px solid rgba(127,127,127,.14); }
+  .mon-atraso { color:#b02a37; font-weight:600; }
+  .mon-avencer { opacity:.7; }
+
+  .mon-hist { list-style:none; margin:0; padding:0; font-size:.85rem; }
+  .mon-hist li { padding:.22rem 0; border-top:1px solid rgba(127,127,127,.14);
+                 display:flex; gap:.5rem; align-items:baseline; }
+  .mon-hist li:first-child { border-top:0; }
+  .mon-hist time { opacity:.65; font-size:.8rem; white-space:nowrap; }
+  .mon-falha { color:#b02a37; }
+  .mon-vazio { font-size:.85rem; opacity:.6; }
+  .mon-prox { font-size:.85rem; margin-top:.5rem; opacity:.8; }
+</style>
+{% endblock %}
+
+{% block fin_conteudo %}
+
+{% if not automacao %}
+<div class="alert alert-warning">
+  A cobrança automática está <strong>desligada</strong> nesta academia — nada é enviado.
+  A tela continua mostrando o que seria cobrado. Para ligar, vá em
+  <a href="{{ url_for('financeiro_painel.regua', academia_id=academia_id) }}">Cobrança automática</a>.
+</div>
+{% endif %}
+
+<div class="mon-cartoes">
+  <div class="mon-cartao">
+    <b>{{ resumo.destinatarios }}</b><span>responsáveis com algo em aberto</span>
+  </div>
+  <div class="mon-cartao">
+    <b>{{ fmt_moeda(resumo.total_aberto) }}</b><span>total em aberto</span>
+  </div>
+  <div class="mon-cartao {% if resumo.total_vencido %}is-alerta{% endif %}">
+    <b>{{ fmt_moeda(resumo.total_vencido) }}</b><span>já vencido</span>
+  </div>
+  <div class="mon-cartao">
+    <b>{{ resumo.avisos_hoje }}</b><span>avisos enviados hoje</span>
+  </div>
+  {% if resumo.em_tratativa %}
+  <div class="mon-cartao is-alerta">
+    <b>{{ resumo.em_tratativa }}</b><span>em tratativa humana</span>
+  </div>
+  {% endif %}
+  {% if resumo.sem_telefone %}
+  <div class="mon-cartao is-alerta">
+    <b>{{ resumo.sem_telefone }}</b><span>sem telefone</span>
+  </div>
+  {% endif %}
+</div>
+
+<form method="GET" class="lst-filtros">
+  {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
+  <label class="lst-campo lst-campo--curto">
+    <span class="lst-campo__rotulo">Situação</span>
+    <select name="situacao" onchange="this.form.submit()">
+      <option value="">Todas</option>
+      {% for chave, rotulo in [('individual','Cobrança individual'),
+                               ('consolidada','Cobrança consolidada'),
+                               ('tratativa','Tratativa humana'),
+                               ('a_vencer','Só a vencer'),
+                               ('sem_telefone','Sem telefone'),
+                               ('suspenso','Suspensa')] %}
+      <option value="{{ chave }}" {% if situacao == chave %}selected{% endif %}>{{ rotulo }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label class="lst-campo lst-campo--largo">
+    <span class="lst-campo__rotulo">Buscar</span>
+    <input name="busca" value="{{ busca }}" placeholder="Responsável ou aluno">
+  </label>
+  <button class="sh__btn" type="submit">Filtrar</button>
+</form>
+
+<section class="lst-quadro">
+  <header class="lst-quadro__topo">
+    <h2 class="lst-quadro__titulo">Destinatários</h2>
+    <span class="lst-quadro__meta">
+      {{ lista|length }} responsáve{{ 'is' if lista|length != 1 else 'l' }} ·
+      consolida a partir de {{ cfg.consolidar_apos }} vencidas ·
+      para o automático em {{ cfg.tratativa_apos }}
+    </span>
+  </header>
+
+  <div style="padding:1rem 1.1rem">
+    {% if not lista %}
+    <p class="lst-vazio">Nada em aberto com este filtro. Quando houver cobrança
+      pendente, o responsável aparece aqui com o histórico do que já foi enviado.</p>
+    {% endif %}
+
+    {% for d in lista %}
+    <article class="mon-linha">
+      <div class="mon-topo">
+        <div>
+          <div class="mon-quem">
+            {{ d.responsavel }}
+            <span class="mon-tag is-{{ d.situacao }}">{{ d.situacao_rotulo }}</span>
+          </div>
+          <div class="mon-sub">
+            {{ d.telefone or 'sem telefone' }}
+            {%- if d.alunos %} · {{ d.alunos | map(attribute='nome') | join(', ') }}{% endif %}
+          </div>
+          <div class="mon-sub">
+            {% if d.ultimo_aviso %}
+              Último aviso em {{ d.ultimo_aviso.strftime('%d/%m/%Y às %H:%M') }}
+            {% else %}
+              Nenhum aviso enviado nos últimos 90 dias
+            {% endif %}
+          </div>
+        </div>
+        <div class="mon-valor">
+          <b>{{ fmt_moeda(d.total) }}</b>
+          {% if d.total_vencido %}<span class="mon-atraso">{{ fmt_moeda(d.total_vencido) }} vencido</span>
+          {% else %}<span>nada vencido</span>{% endif %}
+        </div>
+      </div>
+
+      <div class="mon-grade">
+        <div class="mon-bloco">
+          <h4>Em aberto</h4>
+          <table class="mon-tabela">
+            <thead>
+              <tr><th>Aluno</th><th>Vencimento</th><th>Valor</th><th>Situação</th><th>Avisos</th></tr>
+            </thead>
+            <tbody>
+              {% for c in d.cobrancas %}
+              <tr>
+                <td>{{ c.aluno }}{% if c.origem != 'mensalidade' %}
+                    <span class="mon-tag">{{ c.origem }}</span>{% endif %}</td>
+                <td>{{ c.vencimento.strftime('%d/%m/%Y') if c.vencimento else '—' }}</td>
+                <td>{{ fmt_moeda(c.valor) }}</td>
+                <td>
+                  {% if c.suspensa %}<span class="mon-tag">suspensa</span>
+                  {% elif c.atraso > 0 %}<span class="mon-atraso">{{ c.atraso }} dia{{ 's' if c.atraso != 1 }} de atraso</span>
+                  {% else %}<span class="mon-avencer">vence em {{ -c.atraso }} dia{{ 's' if c.atraso != -1 }}</span>{% endif %}
+                </td>
+                <td>{{ c.avisos }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+
+          {% if d.proximos %}
+          <p class="mon-prox">
+            Próximo aviso:
+            {% for p in d.proximos %}
+            <strong>{{ p.data.strftime('%d/%m') }}</strong>
+            ({% if p.dias > 0 %}D+{{ p.dias }}{% elif p.dias < 0 %}D{{ p.dias }}{% else %}no vencimento{% endif %}){% if not loop.last %}, {% endif %}
+            {% endfor %}
+          </p>
+          {% elif d.situacao == 'tratativa' %}
+          <p class="mon-prox">O automático parou aqui. A régua não envia mais —
+            este caso é de contato humano.</p>
+          {% else %}
+          <p class="mon-prox">Nenhum aviso programado.</p>
+          {% endif %}
+        </div>
+
+        <div class="mon-bloco">
+          <h4>Histórico (90 dias)</h4>
+          {% if d.historico %}
+          <ul class="mon-hist">
+            {% for h in d.historico[:8] %}
+            <li>
+              <time>{{ h.criado_em.strftime('%d/%m %H:%M') }}</time>
+              <span>{{ h.tipo|replace('_',' ') }}</span>
+              {% if h.status != 'entregue' %}
+              <span class="mon-falha">— {{ h.status }}{% if h.erro %}: {{ h.erro[:40] }}{% endif %}</span>
+              {% endif %}
+            </li>
+            {% endfor %}
+          </ul>
+          {% if d.historico|length > 8 %}
+          <p class="mon-vazio">e mais {{ d.historico|length - 8 }} aviso(s) no período.</p>
+          {% endif %}
+          {% else %}
+          <p class="mon-vazio">Nenhuma mensagem enviada a este responsável no período.</p>
+          {% endif %}
+        </div>
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

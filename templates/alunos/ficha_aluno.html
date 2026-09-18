@@ -293,6 +293,7 @@
       {%- elif aluno.graduacao %}{{ aluno.graduacao }}{% else %}sem exame registrado{% endif -%}
     </span>
   </div>
+  {% if academia_usa_financeiro %}
   <div class="sh__faixa-item">
     <span class="sh__faixa-rotulo">Mensalidade</span>
     {% if financeiro.atrasadas %}
@@ -305,6 +306,7 @@
       {%- else %}nenhuma em aberto{% endif -%}
     </span>
   </div>
+  {% endif %}
   <div class="sh__faixa-item">
     <span class="sh__faixa-rotulo">Tempo de casa</span>
     <span class="sh__faixa-valor" style="font-size: 1.4rem;">{{ tempo_casa or '—' }}</span>
@@ -364,16 +366,24 @@
       <section class="fa-bloco">
         <div class="fa-bloco-topo">
           <span class="fa-bloco-titulo">Graduações</span>
-          <a class="fa-bloco-link" href="{{ url_for('alunos.editar_aluno', aluno_id=aluno.id, next=request.full_path) }}">Registrar graduação</a>
+          <button type="button" class="fa-bloco-link" style="border:0;background:none;cursor:pointer;padding:0"
+                  data-bs-toggle="modal" data-bs-target="#modalGraduacao{{ aluno.id }}">Registrar graduação</button>
         </div>
         <div class="fa-bloco-corpo">
           {% if graduacoes %}
             {% for g in graduacoes %}
+            {# O marco de matrícula não afirma faixa: quem entrou já graduado não
+               tinha faixa branca, e antes a ficha inventava uma. #}
             <div class="fa-grad">
+              {% if g.marco %}
+              <span class="fa-faixa" style="--fa-cor: transparent; border:1px dashed #b9b7b2;"></span>
+              <span class="fa-grad-nome">Entrada na academia</span>
+              {% else %}
               <span class="fa-faixa" style="--fa-cor: {{ cor_da_faixa(g.faixa)|trim }};"></span>
-              <span class="fa-grad-nome">Faixa {{ (g.faixa or '—')|lower }}</span>
+              <span class="fa-grad-nome">Faixa {{ (g.faixa or '—')|lower }}{% if g.grau %} · {{ g.grau }}{% endif %}</span>
+              {% endif %}
               <span class="fa-grad-data">{{ g.data.strftime('%d/%m/%Y') if g.data else '—' }}</span>
-              <span class="fa-grad-origem">{{ g.origem }}</span>
+              <span class="fa-grad-origem" {% if g.observacao %}title="{{ g.observacao }}"{% endif %}>{{ g.origem }}</span>
             </div>
             {% endfor %}
           {% else %}
@@ -406,6 +416,8 @@
         </div>
       </section>
 
+      {# Academia só acadêmica não mostra mensalidade nem cobrança na ficha. #}
+      {% if academia_usa_financeiro %}
       <section class="fa-bloco">
         <div class="fa-bloco-topo"><span class="fa-bloco-titulo">Financeiro</span></div>
         {% if financeiro.saldo_carteira and financeiro.saldo_carteira > 0 %}
@@ -471,6 +483,7 @@
           <a class="fa-bloco-link" href="{{ url_for('financeiro.mensalidades_alunos', academia_id=academia_id, aluno_id=aluno.id) }}">Ver todas as mensalidades →</a>
         </div>
       </section>
+      {% endif %}
 
       <section class="fa-bloco">
         <div class="fa-bloco-topo">
@@ -662,14 +675,15 @@ document.addEventListener('DOMContentLoaded', function () {
 </script>
 
 {# Baixa da mensalidade sem sair da ficha; volta para cá pelo campo `voltar`. #}
-{% if pode_baixar %}
+{% if pode_baixar and academia_usa_financeiro %}
   {% set formas_lista = formas %}
   {% include "financeiro/_modal_pagamento_mensalidade.html" %}
 {% endif %}
 
-{% if pode_baixar %}
+{% if pode_baixar and academia_usa_financeiro %}
 {{ modal_gerar_cobranca(aluno.id, aluno.nome, academia_id, planos_cobranca,
-                        request.full_path, mes_ref, ano_ref, descontos) }}
+                        request.full_path, mes_ref, ano_ref, descontos,
+                        valor_matricula) }}
 
 {# Editar a cobrança: valor combinado, desconto e vencimento, sem sair da ficha. #}
 <div class="modal fade" id="modalEditarCobranca" tabindex="-1" aria-hidden="true">
@@ -740,9 +754,69 @@ document.addEventListener('DOMContentLoaded', function () {
 </script>
 {{ modal_alterar_vencimento(aluno.id, aluno.nome, dia_vencimento_atual, request.full_path) }}
 
+
 {% if planos_cobranca and planos_cobranca|length > 1 %}
 {{ modal_trocar_pacote(aluno.id, aluno.nome, planos_cobranca, pacote_atual_id,
                        pacote_atual_nome, request.full_path) }}
 {% endif %}
 {% endif %}
+
+{# Registrar graduação não depende de permissão financeira: o modal fica FORA
+   do `if pode_baixar`. Dentro dele, o botão da ficha não abria nada para quem
+   não pode dar baixa em mensalidade — que é justamente quem mais lança faixa. #}
+<div class="modal fade" id="modalGraduacao{{ aluno.id }}" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <form method="POST" action="{{ url_for('alunos.registrar_graduacao', aluno_id=aluno.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="modal-header">
+          <h5 class="modal-title">Registrar graduação</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+        </div>
+        <div class="modal-body">
+          <p class="text-muted small">{{ aluno.nome }}</p>
+          <div class="mb-3">
+            <label class="form-label small fw-semibold" for="gradFaixa{{ aluno.id }}">Faixa <span class="text-danger">*</span></label>
+            <select class="form-select" id="gradFaixa{{ aluno.id }}" name="graduacao_id" required>
+              <option value="">Selecione a faixa</option>
+              {% for f in faixas_catalogo or [] %}
+              {# Parte do catálogo usa "." como grau vazio; sem isto a lista vira
+                 "Branca — .", "Cinza — ." e por aí. #}
+              {% set _grau = (f.graduacao or '')|trim %}
+              <option value="{{ f.id }}" {% if aluno.graduacao_id == f.id %}selected{% endif %}>
+                {{ f.faixa|capitalize }}{% if _grau and _grau != '.' %} — {{ _grau }}{% endif %}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label small fw-semibold" for="gradData{{ aluno.id }}">Data da graduação <span class="text-danger">*</span></label>
+            <input type="date" class="form-control" id="gradData{{ aluno.id }}" name="data"
+                   max="{{ hoje_iso }}" required>
+            <div class="form-text">Se o aluno chegou já graduado, use a data em que ele recebeu a faixa —
+            não a da matrícula.</div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label small fw-semibold" for="gradOrigem{{ aluno.id }}">Como foi</label>
+            <select class="form-select" id="gradOrigem{{ aluno.id }}" name="origem">
+              <option value="Exame de faixa">Exame de faixa</option>
+              <option value="Graduação anterior">Graduação anterior (veio de outra academia)</option>
+              <option value="Registro manual" selected>Registro manual</option>
+            </select>
+          </div>
+          <div class="mb-1">
+            <label class="form-label small fw-semibold" for="gradObs{{ aluno.id }}">Observação</label>
+            <input type="text" class="form-control" id="gradObs{{ aluno.id }}" name="observacao"
+                   maxlength="255" placeholder="Ex.: avaliador, federação, nº do certificado">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Registrar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
 {% endblock %}

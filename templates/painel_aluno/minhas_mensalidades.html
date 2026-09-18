@@ -42,6 +42,52 @@
 </div>
 {% endmacro %}
 
+{# Cobrança única da família: um pagamento, várias mensalidades. O modal diz
+   quais são, para o responsável não pagar de novo cada uma separada. #}
+{% macro modal_familia(g) %}
+<div class="modal fade" id="modalFamilia{{ g.id }}" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-people me-2"></i>Cobrança da família</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body text-center">
+        <p class="mb-1">Total da família</p>
+        <h4 class="fw-bold mb-3">R$ {{ "%.2f"|format(g.valor_total or 0) }}</h4>
+        <ul class="list-unstyled text-start small text-muted mb-3">
+          {% for i in g.itens %}
+          <li class="d-flex justify-content-between border-bottom py-1">
+            <span>{{ i.aluno_nome }}</span><span>R$ {{ "%.2f"|format(i.valor or 0) }}</span>
+          </li>
+          {% endfor %}
+        </ul>
+        {% if g.qrcode %}
+        <img src="data:image/png;base64,{{ g.qrcode }}" alt="QR Code do pagamento" class="img-fluid mb-3" style="max-width:240px;">
+        {% endif %}
+        {% if g.copia_cola %}
+        <p class="text-muted small mb-1">PIX copia e cola</p>
+        <div class="input-group mb-2">
+          <input type="text" class="form-control" id="pixfam{{ g.id }}" value="{{ g.copia_cola }}" readonly>
+          <button class="sh__btn" type="button" onclick="copiarPix('pixfam{{ g.id }}', this)"><i class="bi bi-clipboard"></i></button>
+        </div>
+        {% endif %}
+        {% if g.link %}
+        <a href="{{ g.link }}" target="_blank" rel="noopener" class="sh__btn btn-success mb-2">
+          <i class="bi bi-credit-card me-1"></i> Abrir página de pagamento
+        </a>
+        {% endif %}
+        <p class="text-muted small mb-0">
+          É um pagamento só: assim que ele cair, as mensalidades de
+          {% for i in g.itens %}{{ i.aluno_nome }}{% if not loop.last %}{{ ', ' if loop.revindex0 > 1 else ' e ' }}{% endif %}{% endfor %}
+          são baixadas automaticamente — não precisa pagar uma por uma nem enviar comprovante.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endmacro %}
+
 {% macro modal_link(uid, link, qrcode, valor, pix_academia) %}
 <div class="modal fade" id="modalLink{{ uid }}" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered">
@@ -169,7 +215,22 @@
                             <td data-label="Plano">{{ m.plano_nome or '-' }}</td>
                             <td data-label="Vencimento">{{ m.data_vencimento|data_br or '-' }}</td>
                             <td data-label="Valor">
-                                {% if m.tem_desconto %}
+                                {% if m.grupo %}
+                                {# Cobrança familiar: o que importa é o total do
+                                   link único e de quem ele é. Mostrar só a parte
+                                   deste aluno fazia o responsável achar que
+                                   pagaria três vezes esse valor. #}
+                                <div class="d-flex flex-column gap-1">
+                                  <span class="fw-bold text-dark">
+                                    <strong>Total da família:</strong> R$ {{ "%.2f"|format(m.grupo.valor_total or 0) }}
+                                  </span>
+                                  <span class="text-muted small">Sua parte: R$ {{ "%.2f"|format(m.valor_final or m.valor or 0) }}</span>
+                                  <span class="text-muted small">
+                                    Cobrança única de {{ m.grupo.itens|length }} mensalidade{{ 's' if (m.grupo.itens|length) != 1 }}:
+                                    {% for i in m.grupo.itens %}{{ i.aluno_nome }} (R$ {{ "%.2f"|format(i.valor or 0) }}){% if not loop.last %}, {% endif %}{% endfor %}
+                                  </span>
+                                </div>
+                                {% elif m.tem_desconto %}
                                 <div class="d-flex flex-column gap-1 valor-desconto-discriminado">
                                     <span class="text-muted small"><strong>Valor integral:</strong> R$ {{ "%.2f"|format(m.valor_integral or 0) }}</span>
                                     <span class="text-success small"><strong>Desconto{% if m.desconto_nome %} {{ m.desconto_nome }}{% endif %}:</strong> -R$ {{ "%.2f"|format(m.valor_desconto or 0) }}</span>
@@ -190,7 +251,26 @@
                             </td>
                             <td data-label="Ação">
                                 {% if m.status_efetivo in ['pendente','atrasado'] and m.status != 'aguardando_confirmacao' %}
-                                {% if m.asaas_tipo == 'PIX' and (m.asaas_pix_copia_cola or m.asaas_pix_qrcode) %}
+                                {% if m.grupo %}
+                                {# Um pagamento só quita a família inteira — por
+                                   isso o botão aponta para a cobrança do grupo,
+                                   e não para esta linha. #}
+                                {% if m.grupo.copia_cola or m.grupo.qrcode %}
+                                <button type="button" class="sh__btn btn-success mb-1"
+                                        data-bs-toggle="modal" data-bs-target="#modalFamilia{{ m.grupo.id }}">
+                                    <i class="bi bi-people me-1"></i> Pagar da família
+                                </button>
+                                {% elif m.grupo.link %}
+                                <a href="{{ m.grupo.link }}" target="_blank" rel="noopener" class="sh__btn btn-success mb-1">
+                                    <i class="bi bi-people me-1"></i> Pagar da família
+                                </a>
+                                {% else %}
+                                <a href="{{ url_for('painel_aluno.pagar_cobranca_familia', grupo_id=m.grupo.id) }}"
+                                   class="sh__btn btn-success mb-1">
+                                    <i class="bi bi-people me-1"></i> Pagar da família
+                                </a>
+                                {% endif %}
+                                {% elif m.asaas_tipo == 'PIX' and (m.asaas_pix_copia_cola or m.asaas_pix_qrcode) %}
                                 <button type="button" class="sh__btn btn-success mb-1" data-bs-toggle="modal" data-bs-target="#modalPix{{ m.id }}">
                                     <i class="bi bi-qr-code me-1"></i> Pagar PIX
                                 </button>
@@ -249,8 +329,10 @@
         <div>
             {% if avulsas %}
             <div class="table-responsive">
-                <table class="table table-hover mb-0">
-                    <thead class="table-light">
+                {# Mesma classe da tabela de mensalidades: no celular as linhas
+                   viram cartões com rótulo, em vez de rolar para o lado. #}
+                <table class="table table-hover mb-0 mensalidades-table">
+                    <thead class="table-light mensalidades-thead">
                         <tr>
                             <th>Descrição</th>
                             <th>Vencimento</th>
@@ -262,15 +344,15 @@
                     <tbody>
                         {% for a in avulsas %}
                         <tr>
-                            <td>{{ a.descricao or '-' }}</td>
-                            <td>{{ a.data_vencimento|data_br if a.data_vencimento else '-' }}</td>
-                            <td>R$ {{ "%.2f"|format(a.valor or 0) }}</td>
-                            <td>
+                            <td data-label="Descrição">{{ a.descricao or '-' }}</td>
+                            <td data-label="Vencimento">{{ a.data_vencimento|data_br if a.data_vencimento else '-' }}</td>
+                            <td data-label="Valor">R$ {{ "%.2f"|format(a.valor or 0) }}</td>
+                            <td data-label="Status">
                                 <span class="badge {% if a.status == 'pago' %}bg-success{% elif a.status == 'atrasado' %}bg-danger{% else %}bg-warning text-dark{% endif %}">
                                     {{ a.status|capitalize }}
                                 </span>
                             </td>
-                            <td>
+                            <td data-label="Pagamento">
                                 {% if a.status in ['pendente','atrasado'] %}
                                     {% if a.asaas_tipo == 'PIX' and (a.asaas_pix_copia_cola or a.asaas_pix_qrcode) %}
                                     <button type="button" class="sh__btn btn-success" data-bs-toggle="modal" data-bs-target="#modalPixAv{{ a.id }}">
@@ -328,6 +410,12 @@
                 </div>
                 <div class="modal-body">
                     <p class="text-muted small">Envie o comprovante de pagamento. O status ficará como <strong>Aguardando Confirmação</strong> até o gestor validar.</p>
+                    {% if m.grupo %}
+                    <p class="text-muted small">
+                      Esta é a cobrança única da família (R$ {{ "%.2f"|format(m.grupo.valor_total or 0) }}).
+                      O comprovante vale para as {{ m.grupo.itens|length }} mensalidades do grupo.
+                    </p>
+                    {% endif %}
                     <div class="mb-3">
                         <label class="form-label">Comprovante (imagem ou PDF)</label>
                         <input type="file" name="comprovante" class="form-control" accept=".png,.jpg,.jpeg,.gif,.pdf">
@@ -345,6 +433,16 @@
         </div>
     </div>
 </div>
+{% endif %}
+{% endfor %}
+
+{# Um modal por família, não por linha: as três mensalidades apontam para a
+   mesma cobrança. #}
+{% set _fam_vistas = [] %}
+{% for m in mensalidades %}
+{% if m.grupo and m.status_efetivo in ['pendente','atrasado'] and m.grupo.id not in _fam_vistas %}
+{% set _ = _fam_vistas.append(m.grupo.id) %}
+{{ modal_familia(m.grupo) }}
 {% endif %}
 {% endfor %}
 

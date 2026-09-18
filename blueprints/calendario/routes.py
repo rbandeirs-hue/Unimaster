@@ -506,6 +506,14 @@ def visualizar():
     else:
         data_fim_mes = date(ano, mes + 1, 1) - timedelta(days=1)
     
+    # Contexto de modalidade: aula de outra modalidade sai do calendário; feriado
+    # e evento sem turma continuam para todo mundo.
+    try:
+        from utils.multimodalidade import filtro_eventos_sql
+        _trecho_ev, _params_ev = filtro_eventos_sql("e")
+    except Exception:
+        _trecho_ev, _params_ev = "", ()
+
     try:
         # Busca eventos normais (não recorrentes)
         cur.execute("""
@@ -520,8 +528,10 @@ def visualizar():
               AND e.status = 'ativo'
               AND ((e.data_inicio BETWEEN %s AND %s) 
                    OR (e.data_fim IS NOT NULL AND e.data_fim >= %s AND e.data_inicio <= %s))
+              """ + _trecho_ev + """
             ORDER BY e.data_inicio, e.hora_inicio
-        """, (nivel, nivel_id, data_inicio_mes, data_fim_mes, data_inicio_mes, data_fim_mes))
+        """, (nivel, nivel_id, data_inicio_mes, data_fim_mes,
+              data_inicio_mes, data_fim_mes) + tuple(_params_ev))
         eventos_normais = cur.fetchall()
         
         # Busca eventos recorrentes (aulas)
@@ -535,8 +545,9 @@ def visualizar():
             WHERE e.nivel = %s AND e.nivel_id = %s
               AND e.recorrente = 1
               AND e.status = 'ativo'
+              """ + _trecho_ev + """
             ORDER BY e.hora_inicio
-        """, (nivel, nivel_id))
+        """, (nivel, nivel_id) + tuple(_params_ev))
         eventos_recorrentes = cur.fetchall()
         
         # Busca exceções de eventos recorrentes
@@ -675,11 +686,32 @@ def visualizar():
     # (weekday + 1) % 7.
     vazias_inicio = (primeiro.weekday() + 1) % 7
 
+    def _sem_repetidos(itens):
+        """Tira do dia o que é o mesmo lançamento repetido.
+
+        O calendário recebe uma linha por nível (associação + cada academia) e,
+        quando a mesma competição é cadastrada duas vezes, uma linha por
+        cadastro. Como a célula mostra no máximo dois itens, o dia inteiro
+        ficava ocupado pelo mesmo evento repetido — foi o que aconteceu com o
+        Festival de Judô, que apareceu duas vezes em todos os dias de agosto.
+        Compara por nome + horário + tipo, não por id: os ids são diferentes
+        justamente por serem cópias.
+        """
+        vistos, saida = set(), []
+        for it in itens:
+            chave = ((it.get('nome') or '').strip().lower(),
+                     it.get('horario'), it.get('tipo'))
+            if chave in vistos:
+                continue
+            vistos.add(chave)
+            saida.append(it)
+        return saida
+
     celulas = [{'dia': None, 'hoje': False, 'itens': []} for _ in range(vazias_inicio)]
     for dia in range(1, ultimo_dia + 1):
         data_str = '%04d-%02d-%02d' % (ano, mes, dia)
-        itens = [_item(ev) for ev in eventos_por_data.get(data_str, [])
-                 if not tipo_filtro or (ev.get('tipo') or 'evento') == tipo_filtro]
+        itens = _sem_repetidos([_item(ev) for ev in eventos_por_data.get(data_str, [])
+                                if not tipo_filtro or (ev.get('tipo') or 'evento') == tipo_filtro])
         celulas.append({'dia': dia, 'hoje': data_str == hoje_str, 'itens': itens})
     while len(celulas) % 7:
         celulas.append({'dia': None, 'hoje': False, 'itens': []})

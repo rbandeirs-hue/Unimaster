@@ -125,6 +125,13 @@
   .sh__faixa-item.is-filtrando { background: #fdf6f6; box-shadow: inset 0 -2px 0 #C8102E; }
 
   .lst-acoes--larga { flex-wrap: wrap; gap: .3rem; }
+
+  /* Matrícula: é registro, não cobrança — nenhuma coluna de ação. */
+  .lin-matricula { grid-template-columns: minmax(0,1.6fr) 130px 140px 130px 110px; }
+  @media (max-width: 820px) {
+    .lin-matricula { grid-template-columns: minmax(0,1.4fr) 130px 110px; }
+    .lin-matricula .col-forma { display: none !important; }
+  }
 </style>
 {% endblock %}
 
@@ -167,8 +174,10 @@
   {# Aberta pela ficha do aluno, a volta é para a ficha; caso contrário, para o
      painel do financeiro, que é de onde a tela é acessada normalmente. #}
   {% if aluno_filtro %}
-  <a href="{{ url_for('alunos.ficha_aluno', aluno_id=aluno_filtro) }}" class="sh__btn">
-    <i class="bi bi-arrow-left"></i> Voltar para {{ (aluno_filtro_nome or 'o aluno').split()[0] }}
+  <a href="{{ url_for('alunos.ficha_aluno', aluno_id=aluno_filtro) }}" class="sh__btn"
+     title="Voltar para a ficha de {{ aluno_filtro_nome or 'o aluno' }}">
+    <i class="bi bi-arrow-left"></i>
+    <span class="sh__btn__nome">Voltar para {{ (aluno_filtro_nome or 'o aluno').split()[0] }}</span>
   </a>
   {% else %}
   <a href="{{ url_for('financeiro.painel_mensalidades', **_a) }}" class="sh__btn">
@@ -388,6 +397,20 @@
             {% else %}
             <a class="lst-sub" href="{{ url_for('financeiro.formas_pagamento', academia_id=academia_id) }}">Cadastre uma forma de pagamento</a>
             {% endif %}
+            {# Desconto/valor/vencimento da cobrança já gerada. Existia só na
+               ficha do aluno: quem trabalhava por esta tela não tinha como
+               lançar um desconto sem dar baixa no pagamento. #}
+            <button type="button" class="lst-acao js-fin-editar"
+                    title="Aplicar desconto ou editar valor e vencimento"
+                    aria-label="Aplicar desconto na cobrança de {{ m.aluno_nome }}"
+                    data-id="{{ m.id }}"
+                    data-nome="{{ m.aluno_nome }}"
+                    data-valor="{{ '%.2f'|format(m.edit_valor_cheio or 0) }}"
+                    data-desconto="{{ '%.2f'|format(m.edit_desconto or 0) }}"
+                    data-desconto-id="{{ m.id_desconto or '' }}"
+                    data-vencimento="{{ m.data_vencimento.strftime('%Y-%m-%d') if m.data_vencimento else '' }}">
+              <i class="bi bi-tag"></i>
+            </button>
             {% if gateway_ativo or recorrencia_gw %}
               {% if _tem_cobranca(m)|trim %}
               <button type="button" class="lst-acao" title="Ver PIX / QR Code"
@@ -580,6 +603,45 @@
 </section>
 {% endif %}
 
+{% if matriculas %}
+{# Matrícula: veio do pré-cadastro e virou receita na baixa, então não é uma
+   linha de cobrança do aluno — mas é dinheiro que ele pagou, e some da vida
+   financeira dele se não aparecer aqui. #}
+<section class="lst-quadro mt-3">
+  <header class="lst-quadro__topo">
+    <h2 class="lst-quadro__titulo">Matrícula</h2>
+    <span class="lst-quadro__meta">Cobrança de entrada, lançada em receitas</span>
+  </header>
+
+  <div class="lst-rolagem">
+    <div class="lst-largura" style="--lst-min:460px">
+      <div class="lst-linha lin-matricula lst-cab">
+        <div>Descrição</div>
+        <div class="col-pagto">Pagamento</div>
+        <div class="col-forma">Forma</div>
+        <div class="lst-num">Valor</div>
+        <div class="col-situacao">Situação</div>
+      </div>
+
+      {% for m in matriculas %}
+      <div class="lst-linha lin-matricula lst-item">
+        <div style="min-width:0">
+          <span class="lst-nome">{{ m.descricao }}</span>
+          <span class="lst-sub">{{ m.observacoes or 'Matrícula' }}</span>
+        </div>
+        <div class="col-pagto">{{ m.data|data_br if m.data else '—' }}</div>
+        <div class="col-forma lst-corta">{{ m.forma_nome or '—' }}</div>
+        <div class="lst-num">
+          <span class="fin-val"><span class="fin-val__final">R$ {{ "%.2f"|format(m.valor or 0) }}</span></span>
+        </div>
+        <div class="col-situacao"><span class="lst-situacao is-ativo"><i></i>Paga</span></div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endif %}
+
 {# A rota manda `academias` + `academia_id`; o nome sai daí. #}
 {% set _ac_atual = (academias | selectattr('id', 'equalto', academia_id) | first) if academias else None %}
 <footer class="lst-rodape">
@@ -604,11 +666,13 @@
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="hidden" name="tipo" value="PIX">
         </form>
+        {% if recorrencia_opcoes %}
         <form method="POST" id="formGcRecorrente">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="hidden" name="valor" value="">
           <input type="hidden" name="opcao_recorrencia" value="">
         </form>
+        {% endif %}
 
         <div class="mb-3" id="gcBlocoAvulsa">
           <div class="text-uppercase fw-bold text-muted small mb-2"><i class="bi bi-lightning-charge"></i> Cobrança avulsa <span class="fw-normal text-lowercase">(paga uma vez)</span></div>
@@ -619,21 +683,21 @@
           </div>
         </div>
 
+        {# Só aparece o que o gateway ATIVO faz. Antes o bloco vinha sempre, vazio e
+           com um aviso de "indisponível" — ruído numa tela que a secretaria abre
+           dezenas de vezes por dia para uma função que ela não pode usar. #}
+        {% if recorrencia_opcoes %}
         <div id="gcBlocoRecorrente">
           <div class="text-uppercase fw-bold text-muted small mb-2"><i class="bi bi-arrow-repeat"></i> Mensalidade recorrente <span class="fw-normal text-lowercase">(todo mês)</span></div>
           <div class="d-flex gap-2 flex-wrap">
-            {% for op in (recorrencia_opcoes or []) %}
+            {% for op in recorrencia_opcoes %}
             <button type="button" class="btn btn-sm gc-recorrente {% if op.metodo == 'pix' %}btn-outline-info{% else %}btn-outline-primary{% endif %}" data-opcao="{{ op.val }}">
               {% if op.metodo == 'pix' %}<i class="bi bi-qr-code"></i>{% else %}<i class="bi bi-credit-card"></i>{% endif %} {{ op.label }}
             </button>
             {% endfor %}
           </div>
-          {% if not (recorrencia_opcoes or []) %}
-          <div class="text-muted small mt-2" id="gcRecIndisponivel">
-            <i class="bi bi-info-circle"></i> Recorrência disponível com <strong>Asaas</strong> (cartão/PIX) ou <strong>Mercado Pago</strong> (cartão). Configure em Configurações → Financeiro.
-          </div>
-          {% endif %}
         </div>
+        {% endif %}
       </div>
     </div>
   </div>
@@ -772,8 +836,10 @@ document.addEventListener('click', function (ev) {
         estado.valor = t.getAttribute('data-valor') || '';
         estado.nome = t.getAttribute('data-nome') || '';
         fAvulsa.action = URL_AVULSA.replace(/\/0\/asaas$/, '/' + t.getAttribute('data-ma') + '/asaas');
-        fRec.action = URL_RECORRENTE.replace(/\/0\/assinatura-recorrente$/, '/' + t.getAttribute('data-aluno') + '/assinatura-recorrente');
-        fRec.querySelector('[name=valor]').value = estado.valor;
+        if (fRec) {
+            fRec.action = URL_RECORRENTE.replace(/\/0\/assinatura-recorrente$/, '/' + t.getAttribute('data-aluno') + '/assinatura-recorrente');
+            fRec.querySelector('[name=valor]').value = estado.valor;
+        }
         document.getElementById('gcAluno').textContent = estado.nome;
         document.getElementById('gcValor').textContent = 'R$ ' + estado.valor;
         aplicarGateway();
@@ -831,10 +897,132 @@ document.addEventListener('click', function (ev) {
 })();
 </script>
 
+{# Editar a cobrança gerada: valor combinado, desconto e vencimento. Mesma rota
+   e mesmo modal da ficha do aluno — aqui a lista já vem filtrada, então o nome
+   do aluno entra no topo para não editar a linha errada. #}
+<div class="modal fade" id="modalEditarCobranca" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <form class="modal-content" method="POST" id="formEditarCobranca">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="academia_id" value="{{ academia_id }}">
+      <input type="hidden" name="voltar" value="{{ request.full_path }}">
+      <div class="modal-header">
+        <h5 class="modal-title">Editar cobrança</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+      </div>
+      <div class="modal-body">
+        <p class="lst-sub mb-3" id="edcAluno"></p>
+        <div class="mb-3">
+          <label class="form-label fw-semibold" for="edcValor">Valor da mensalidade</label>
+          <input type="number" step="0.01" min="0.01" class="form-control" id="edcValor" name="valor_original" required>
+          <div class="form-text">Valor cheio, antes do desconto.</div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold" for="edcDescSel">Desconto</label>
+          <select class="form-select" id="edcDescSel" name="desconto_id">
+            <option value="">Sem desconto</option>
+            {% for d in descontos or [] %}
+            <option value="{{ d.id }}" data-tipo="{{ d.tipo }}" data-valor="{{ '%.2f'|format(d.valor|float) }}">
+              {{ d.nome }} — {% if d.tipo == 'percentual' %}{{ '%.0f'|format(d.valor|float) }}%{% else %}R$ {{ '%.2f'|format(d.valor|float) }}{% endif %}
+            </option>
+            {% endfor %}
+            <option value="avulso">Desconto avulso (valor em R$)…</option>
+          </select>
+          <div class="form-text">
+            Os descontos vêm de
+            <a href="{{ url_for('financeiro_painel.descontos', academia_id=academia_id) }}">Financeiro → Descontos</a>.
+          </div>
+          <input type="number" step="0.01" min="0" class="form-control mt-2" id="edcDesconto"
+                 name="desconto_aplicado" value="0" style="display:none" placeholder="Valor do desconto em R$">
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold" for="edcVencimento">Data de vencimento</label>
+          <input type="date" class="form-control" id="edcVencimento" name="data_vencimento" required>
+        </div>
+        <div class="alert alert-light border mb-0 py-2">
+          Valor a cobrar: <strong id="edcLiquido">—</strong>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Fechar</button>
+        <button type="submit" class="btn btn-dark">Salvar alterações</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  var form = document.getElementById('formEditarCobranca');
+  var valor = document.getElementById('edcValor');
+  var desconto = document.getElementById('edcDesconto');
+  var liquido = document.getElementById('edcLiquido');
+  var acao = {{ url_for('financeiro.editar_cobranca_aluno', ma_id=0)|tojson }};
+
+  var sel = document.getElementById('edcDescSel');
+
+  // Quanto vale o desconto escolhido: o cadastrado pode ser percentual, e aí o
+  // valor em reais depende do valor cheio da cobrança — por isso é recalculado
+  // aqui e não fica preso ao que estava gravado.
+  function valorDoDesconto(v) {
+    if (sel.value === 'avulso') {
+      var manual = parseFloat(desconto.value || '0');
+      return isNaN(manual) || manual < 0 ? 0 : manual;
+    }
+    if (!sel.value) return 0;
+    var op = sel.options[sel.selectedIndex];
+    var dv = parseFloat(op.dataset.valor || '0');
+    if (isNaN(dv) || dv < 0) dv = 0;
+    return op.dataset.tipo === 'percentual' ? v * dv / 100 : dv;
+  }
+
+  function recalcular() {
+    var v = parseFloat(valor.value || '0');
+    if (isNaN(v)) v = 0;
+    var d = valorDoDesconto(v);
+    if (d > v) d = v;
+    // O avulso é o único que continua sendo um campo digitado.
+    desconto.style.display = sel.value === 'avulso' ? '' : 'none';
+    liquido.textContent = 'R$ ' + (v - d).toFixed(2).replace('.', ',') +
+      (d > 0 ? ' (desconto de R$ ' + d.toFixed(2).replace('.', ',') + ')' : '');
+  }
+  [valor, desconto].forEach(function (c) { c.addEventListener('input', recalcular); });
+  sel.addEventListener('change', recalcular);
+
+  // Delegação: as linhas são muitas e o botão é o mesmo em todas.
+  document.addEventListener('click', function (ev) {
+    var botao = ev.target.closest && ev.target.closest('.js-fin-editar');
+    if (!botao) return;
+    // A rota é montada com id 0 e o número real entra na hora do clique.
+    form.action = acao.replace('/0/', '/' + botao.dataset.id + '/');
+    document.getElementById('edcAluno').textContent = botao.dataset.nome || '';
+    valor.value = botao.dataset.valor;
+    // Já tem desconto cadastrado gravado: o select abre nele. Se o valor veio
+    // sem vínculo (avulso), abre no avulso com o valor à vista.
+    var did = botao.dataset.descontoId || '';
+    var temValor = parseFloat(botao.dataset.desconto || '0') > 0;
+    if (did && sel.querySelector('option[value="' + did + '"]')) {
+      sel.value = did;
+      desconto.value = '0';
+    } else if (temValor) {
+      sel.value = 'avulso';
+      desconto.value = botao.dataset.desconto;
+    } else {
+      sel.value = '';
+      desconto.value = '0';
+    }
+    document.getElementById('edcVencimento').value = botao.dataset.vencimento;
+    recalcular();
+    new bootstrap.Modal(document.getElementById('modalEditarCobranca')).show();
+  });
+});
+</script>
+
 {% if aluno_filtro %}
 {# Cobrança rápida para o aluno filtrado, sem sair desta tela. #}
 {{ modal_gerar_cobranca(aluno_filtro, aluno_filtro_nome or 'aluno', academia_id,
-                        planos_cobranca, request.full_path, mes or 1, ano, descontos) }}
+                        planos_cobranca, request.full_path, mes or 1, ano, descontos,
+                        valor_matricula) }}
 
 {# Mudança do dia de vencimento do aluno filtrado, com o proporcional do período. #}
 {{ modal_alterar_vencimento(aluno_filtro, aluno_filtro_nome or 'aluno',

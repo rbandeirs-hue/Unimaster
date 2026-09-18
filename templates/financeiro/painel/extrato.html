@@ -42,7 +42,9 @@
     <span class="lst-campo__rotulo">Conta</span>
     <select name="conta" onchange="this.form.submit()">
       {% for c in contas %}
-      <option value="{{ c.id }}" {% if c.id == id_conta %}selected{% endif %}>{{ c.nome }} · {{ fmt_moeda(c.saldo) }}</option>
+      <option value="{{ c.id }}" {% if c.id == id_conta %}selected{% endif %}>
+        {{ c.nome }} · {{ fmt_moeda(c.saldo) }}{% if c.movimentos_mes %} · {{ c.movimentos_mes }} no mês{% endif %}
+      </option>
       {% endfor %}
     </select>
   </label>
@@ -126,7 +128,18 @@
         </div>
       </div>
       {% else %}
-      <p class="lst-vazio">Nenhuma movimentação nesta conta em {{ mes_label }}.</p>
+      {# Conta parada num mês em que OUTRA conta teve movimento é a origem mais
+         comum de "o extrato não mostra nada": o dinheiro está na conta ao lado. #}
+      {% set _outras = contas | selectattr('movimentos_mes') | rejectattr('id', 'equalto', id_conta) | list %}
+      <p class="lst-vazio">
+        Nenhuma movimentação nesta conta em {{ mes_label }}.
+        {% if _outras %}
+        <br><span class="lst-quadro__meta">
+          Neste mês houve movimento em:
+          {% for c in _outras %}<a href="{{ url_for('financeiro_painel.extrato', academia_id=academia_id, conta=c.id, mes=mes_chave) }}">{{ c.nome }}</a> ({{ c.movimentos_mes }}){% if not loop.last %} · {% endif %}{% endfor %}.
+        </span>
+        {% endif %}
+      </p>
       {% endfor %}
     </div>
   </div>

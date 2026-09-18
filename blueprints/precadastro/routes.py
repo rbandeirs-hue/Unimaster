@@ -6,7 +6,7 @@ import re
 import base64
 import unicodedata
 import uuid
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session, current_app, jsonify
 from flask_login import login_required, current_user
 from extensions import csrf
@@ -14,8 +14,18 @@ from config import get_db_connection
 from math import ceil
 from werkzeug.security import generate_password_hash
 
+from utils.permissoes import somente_gestao
+# Dias para pagar a matrícula, contados da inscrição. É o vencimento que a
+# régua de cobrança usa para saber quando avisar.
+PRAZO_MATRICULA_DIAS = 3
+
 bp_precadastro = Blueprint("precadastro", __name__, url_prefix="/precadastro")
 
+
+
+# Aluno, responsável e visitante não entram aqui nem digitando a URL:
+# a maioria destas rotas tinha só `@login_required`.
+bp_precadastro.before_request(somente_gestao())
 
 def _slugify(nome):
     """Converte nome em slug URL-amigável: 'Academia Judô Centro' -> 'academia-judo-centro'."""
@@ -959,11 +969,15 @@ def matricula_publica(academia_slug):
                (academia_id, nome, email, telefone, data_nascimento, sexo, cpf,
                 responsavel_financeiro_nome, responsavel_financeiro_cpf,
                 matricula_valor, matricula_valor_original, matricula_desconto, matricula_cupom,
+                matricula_vencimento,
                 cep, numero, rua, bairro, cidade, origem)
-               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'matricula')""",
+               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'matricula')""",
             (academia_id, nome, email, telefone, data_nascimento, sexo, cpf_aluno,
              resp_nome, resp_cpf_raw,
              valor_final, valor_base, desconto, (cupom_codigo if cupom_obj else None),
+             # Prazo para pagar a matrícula. É esta data que coloca a matrícula na
+             # régua de cobrança: sem ela não há "faltam 3 dias" nem "venceu há 10".
+             date.today() + timedelta(days=PRAZO_MATRICULA_DIAS),
              cep, numero, rua, bairro, cidade),
         )
         precad_id = cur.lastrowid
@@ -1108,13 +1122,195 @@ def matricula_pagamento(precad_id):
     if academia_id and p["academia_id"] != academia_id and not current_user.has_role("admin"):
         flash("Sem permissão.", "danger")
         return redirect(url_for("precadastro.lista"))
-    if not p.get("matricula_link") and not p.get("matricula_qrcode"):
-        flash("Esta matrícula não tem cobrança online gerada.", "warning")
+    # Sem link ainda não é motivo para barrar: esta tela também é onde se troca o
+    # cupom e se dá a baixa manual, e a reemissão da cobrança pode ter falhado.
+    # Só pré-cadastro que nunca foi matrícula não tem o que mostrar aqui.
+    if not any((p.get("matricula_link"), p.get("matricula_qrcode"),
+                p.get("matricula_valor"), p.get("matricula_status"))):
+        flash("Este pré-cadastro não tem matrícula com cobrança.", "warning")
         return redirect(url_for("precadastro.lista", academia_id=p["academia_id"]))
     back_url = request.referrer or url_for("precadastro.lista", academia_id=p["academia_id"])
+    cupons_disp = _cupons_ativos(p["academia_id"])
     if _quer_parcial():
-        return render_template("precadastro/_matricula_pagamento_conteudo.html", p=p, back_url=back_url)
-    return render_template("precadastro/matricula_pagamento.html", p=p, back_url=back_url)
+        return render_template("precadastro/_matricula_pagamento_conteudo.html",
+                               p=p, back_url=back_url, cupons_disp=cupons_disp)
+    return render_template("precadastro/matricula_pagamento.html",
+                           p=p, back_url=back_url, cupons_disp=cupons_disp)
+
+
+def _cupons_ativos(academia_id):
+    """Cupons ativos da academia, para o seletor de troca. Nunca levanta."""
+    try:
+        conn = get_db_connection(); cur = conn.cursor(dictionary=True)
+        try:
+            cur.execute(
+                """SELECT codigo, tipo, valor FROM cupons_matricula
+                   WHERE id_academia=%s AND ativo=1 ORDER BY codigo""",
+                (academia_id,),
+            )
+            return cur.fetchall() or []
+        finally:
+            cur.close(); conn.close()
+    except Exception:
+        return []
+
+
+def _regerar_cobranca_matricula(p, valor):
+    """Reemite a cobrança online da matrícula com o novo valor.
+
+    Devolve o link novo, ou None quando não deu (academia sem gateway, valor
+    abaixo do mínimo do gateway, serviço fora do ar). Nesse caso apaga a
+    cobrança anterior: ela está com o valor errado, e um link errado no bolso
+    da secretaria é pior do que link nenhum.
+    """
+    conn = get_db_connection(); cur = conn.cursor()
+    try:
+        r = None
+        try:
+            from blueprints.financeiro.routes import gerar_cobranca_matricula
+            endereco = {"cep": p.get("cep"), "street": p.get("rua"),
+                        "neighborhood": p.get("bairro"), "number": p.get("numero")}
+            cpf_pag = "".join(filter(
+                str.isdigit,
+                str(p.get("responsavel_financeiro_cpf") or p.get("cpf") or ""),
+            ))
+            r = gerar_cobranca_matricula(
+                p["academia_id"],
+                nome=p.get("responsavel_financeiro_nome") or p.get("nome"),
+                cpf=cpf_pag, email=p.get("email"), telefone=p.get("telefone"),
+                valor=valor, precad_id=p["id"],
+                descricao=f"Matrícula - {p.get('nome')}", endereco=endereco,
+            )
+        except Exception as e:
+            current_app.logger.error(
+                f"Trocar cupom: reemissão da cobrança falhou (precad {p['id']}): {e}", exc_info=True)
+        if not r:
+            cur.execute(
+                """UPDATE pre_cadastro SET matricula_gateway=NULL, matricula_payment_id=NULL,
+                       matricula_link=NULL, matricula_qrcode=NULL, matricula_copia_cola=NULL
+                   WHERE id=%s""",
+                (p["id"],),
+            )
+            conn.commit()
+            return None
+        qr = r.get("pix_qrcode")
+        if not qr and r.get("boleto_url"):
+            try:
+                from utils.qrcode_util import gerar_qr_base64
+                qr = gerar_qr_base64(r.get("boleto_url"))
+            except Exception:
+                qr = None
+        cur.execute(
+            """UPDATE pre_cadastro SET matricula_gateway=%s, matricula_payment_id=%s,
+                   matricula_link=%s, matricula_qrcode=%s, matricula_copia_cola=%s,
+                   matricula_status='pendente'
+               WHERE id=%s""",
+            (r.get("gateway"), r.get("payment_id"), r.get("boleto_url"), qr,
+             r.get("pix_copia_cola"), p["id"]),
+        )
+        conn.commit()
+        return r.get("boleto_url")
+    finally:
+        cur.close(); conn.close()
+
+
+@bp_precadastro.route("/<int:precad_id>/trocar-cupom", methods=["POST"])
+@login_required
+def matricula_trocar_cupom(precad_id):
+    """Troca (ou remove) o cupom de desconto de uma matrícula ainda não paga.
+
+    O cupom é digitado pela própria pessoa no formulário público, então errar o
+    código é comum — e não havia como corrigir depois: o valor ficava travado no
+    desconto errado e o link de pagamento já saía com ele. Recalcula o desconto
+    sobre o valor original, acerta o contador de usos dos dois cupons e reemite
+    a cobrança, porque a antiga carrega o valor velho.
+    """
+    academia_id, _ = _get_academia_filtro()
+    destino = request.referrer or url_for("precadastro.lista", academia_id=academia_id)
+    novo_codigo = (request.form.get("cupom") or "").strip().upper()
+
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute(
+            """SELECT p.*, ac.nome AS academia_nome
+               FROM pre_cadastro p LEFT JOIN academias ac ON ac.id = p.academia_id
+               WHERE p.id = %s""",
+            (precad_id,),
+        )
+        p = cur.fetchone()
+        if not p:
+            flash("Pré-cadastro não encontrado.", "danger")
+            return redirect(destino)
+        if academia_id and p["academia_id"] != academia_id and not current_user.has_role("admin"):
+            flash("Sem permissão.", "danger")
+            return redirect(destino)
+        if (p.get("matricula_status") or "").lower() == "pago":
+            flash("A matrícula já está paga — o cupom não pode mais ser trocado.", "warning")
+            return redirect(destino)
+
+        acad_id = p["academia_id"]
+        # O valor cheio é a base do recálculo. Matrícula antiga pode ter ficado
+        # sem `matricula_valor_original`; aí o valor atual é o que temos.
+        base = float(p.get("matricula_valor_original") or p.get("matricula_valor") or 0)
+        if base <= 0:
+            flash("Esta matrícula não tem valor definido — ajuste o valor antes de aplicar cupom.", "warning")
+            return redirect(destino)
+
+        antigo = (p.get("matricula_cupom") or "").strip().upper()
+        if novo_codigo == antigo:
+            flash("O cupom informado já é o que está aplicado.", "info")
+            return redirect(destino)
+
+        if novo_codigo:
+            cupom_obj, desconto, valor_final, msg = _aplicar_cupom(cur, acad_id, novo_codigo, base)
+            if not cupom_obj:
+                flash(msg or "Cupom inválido.", "danger")
+                return redirect(destino)
+        else:
+            # Código vazio = tirar o desconto e voltar ao valor cheio.
+            cupom_obj, desconto, valor_final = None, 0.0, base
+
+        valor_antes = float(p.get("matricula_valor") or 0)
+
+        # Contador de usos: devolve o do cupom errado e consome o do certo.
+        if antigo:
+            cur.execute(
+                "UPDATE cupons_matricula SET usos = GREATEST(usos - 1, 0) "
+                "WHERE id_academia=%s AND UPPER(codigo)=%s",
+                (acad_id, antigo),
+            )
+        if cupom_obj:
+            cur.execute("UPDATE cupons_matricula SET usos = usos + 1 WHERE id=%s", (cupom_obj["id"],))
+
+        cur.execute(
+            """UPDATE pre_cadastro
+               SET matricula_cupom=%s, matricula_desconto=%s,
+                   matricula_valor=%s, matricula_valor_original=%s
+               WHERE id=%s""",
+            (novo_codigo or None, desconto, valor_final, base, precad_id),
+        )
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        current_app.logger.error(f"Erro ao trocar cupom (precad {precad_id}): {e}", exc_info=True)
+        flash(f"Erro ao trocar o cupom: {e}", "danger")
+        return redirect(destino)
+    finally:
+        cur.close(); conn.close()
+
+    def _fmt(v):
+        return f"R$ {float(v):.2f}".replace(".", ",")
+
+    resumo = (f"Cupom de {p.get('nome')}: {antigo or 'nenhum'} → {novo_codigo or 'nenhum'}. "
+              f"Valor: {_fmt(valor_antes)} → {_fmt(valor_final)}.")
+    if _regerar_cobranca_matricula(p, valor_final):
+        flash(resumo + " Link de pagamento reemitido com o valor novo.", "success")
+    else:
+        flash(resumo + " Não foi possível reemitir a cobrança online, então o link antigo foi "
+                       "removido para ninguém pagar o valor errado — gere a cobrança de novo "
+                       "ou receba por fora.", "warning")
+    return redirect(destino)
 
 
 @bp_precadastro.route("/<int:precad_id>/registrar-pagamento", methods=["GET", "POST"])
@@ -1852,6 +2048,7 @@ def promover(precadastro_id):
         usuario_id = None
         aluno_id = None
         origem_cpf = None  # 'aluno' | 'responsavel_financeiro' | None
+        usuario_reaproveitado = None  # nome do usuário já existente reusado, se houve
 
         # Criar usuário se necessário
         if precisa_usuario:
@@ -1893,9 +2090,21 @@ def promover(precadastro_id):
                 )
                 return redirect(url_for("precadastro.promover", precadastro_id=precadastro_id))
 
-            # CPF não pode estar em uso por outro usuário
-            cur.execute("SELECT id FROM usuarios WHERE cpf = %s", (cpf_login,))
-            if cur.fetchone():
+            # CPF já cadastrado é o caso da mãe que já tem outro filho na
+            # academia. Antes a promoção parava aqui e o aluno nem era criado —
+            # a secretaria tinha que refazer tudo na mão. Quando a promoção é só
+            # de responsável, reaproveita o usuário e pendura o novo aluno nele.
+            # Nos demais perfis o erro continua: virar professor ou gestor em
+            # cima de um login alheio é grave demais para acontecer sozinho.
+            cur.execute("SELECT id, nome FROM usuarios WHERE cpf = %s LIMIT 1", (cpf_login,))
+            usuario_existente = cur.fetchone()
+            chaves_escolhidas = {
+                r.get("chave") for r in roles_disponiveis
+                if str(r.get("id")) in roles_escolhidas
+            }
+            pode_reaproveitar = bool(usuario_existente) and chaves_escolhidas == {"responsavel"}
+
+            if usuario_existente and not pode_reaproveitar:
                 cur.close()
                 conn.close()
                 flash(
@@ -1904,20 +2113,50 @@ def promover(precadastro_id):
                 )
                 return redirect(url_for("precadastro.promover", precadastro_id=precadastro_id))
 
-            cur.execute(
-                """INSERT INTO usuarios (nome, email, cpf, senha, id_academia, id_associacao, id_federacao)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s)""",
-                (pc.get("nome"), email_usuario, cpf_login, generate_password_hash(senha_usuario),
-                 academia_id, id_associacao, id_federacao),
-            )
-            usuario_id = cur.lastrowid
+            # Nome do usuário: quem está sendo criado, não de quem ele cuida.
+            # Só "responsável" (sem a role aluno) é o responsável financeiro em
+            # pessoa — o login sai com o CPF dele, e sair com o nome do filho
+            # deixava a lista de usuários cheia de criança que não loga.
+            if tem_role_responsavel and not tem_role_aluno:
+                nome_usuario = (pc.get("responsavel_financeiro_nome")
+                                or pc.get("responsavel_nome")
+                                or pc.get("nome"))
+            else:
+                nome_usuario = pc.get("nome")
 
-            # Vincular roles
-            for rid in roles_escolhidas:
-                cur.execute("INSERT INTO roles_usuario (usuario_id, role_id) VALUES (%s, %s)", (usuario_id, rid))
+            if pode_reaproveitar:
+                usuario_id = usuario_existente["id"]
+                usuario_reaproveitado = usuario_existente.get("nome") or nome_usuario
+                # Conta que já existe fica com a senha dela: nada de sobrescrever
+                # nem de mandar credenciais novas para quem já entra no sistema.
+                senha_gerada = False
+                # Só a role de responsável entra na conta existente, e resolvida
+                # pela lista do servidor — nunca por um id que veio no POST.
+                for _r in roles_disponiveis:
+                    if _r.get("chave") == "responsavel" and str(_r.get("id")) in roles_escolhidas:
+                        cur.execute(
+                            "INSERT IGNORE INTO roles_usuario (usuario_id, role_id) VALUES (%s, %s)",
+                            (usuario_id, _r["id"]),
+                        )
+                cur.execute(
+                    "INSERT IGNORE INTO usuarios_academias (usuario_id, academia_id) VALUES (%s, %s)",
+                    (usuario_id, academia_id),
+                )
+            else:
+                cur.execute(
+                    """INSERT INTO usuarios (nome, email, cpf, senha, id_academia, id_associacao, id_federacao)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+                    (nome_usuario, email_usuario, cpf_login, generate_password_hash(senha_usuario),
+                     academia_id, id_associacao, id_federacao),
+                )
+                usuario_id = cur.lastrowid
 
-            # Vincular academia
-            cur.execute("INSERT INTO usuarios_academias (usuario_id, academia_id) VALUES (%s, %s)", (usuario_id, academia_id))
+                # Vincular roles
+                for rid in roles_escolhidas:
+                    cur.execute("INSERT INTO roles_usuario (usuario_id, role_id) VALUES (%s, %s)", (usuario_id, rid))
+
+                # Vincular academia
+                cur.execute("INSERT INTO usuarios_academias (usuario_id, academia_id) VALUES (%s, %s)", (usuario_id, academia_id))
 
         # Criar/vincular aluno se role aluno está selecionada,
         # OU se for responsável (precisamos do cadastro do aluno mesmo sem login do aluno).
@@ -2071,6 +2310,43 @@ def promover(precadastro_id):
                 if not tem_role_aluno and tem_role_responsavel:
                     aluno_criado_via_responsavel = True
 
+                # A matrícula foi paga enquanto isto ainda era um pré-cadastro,
+                # e a receita ficou apontando só para "Pré-cadastro #N". O
+                # pré-cadastro é apagado no fim desta aprovação: sem carimbar o
+                # aluno agora, aquele pagamento perde o dono e a ficha
+                # financeira dele volta a depender do nome.
+                try:
+                    cur.execute(
+                        """UPDATE receitas SET id_aluno = %s
+                           WHERE id_academia = %s AND categoria = 'Matrículas'
+                             AND id_aluno IS NULL
+                             AND (observacoes = %s OR observacoes LIKE %s)""",
+                        (aluno_id, academia_id, f"Pré-cadastro #{precadastro_id}",
+                         f"Pré-cadastro #{precadastro_id} ·%"),
+                    )
+                except Exception:
+                    # Sem a coluna (migração não rodada) a aprovação segue igual.
+                    current_app.logger.warning(
+                        "Receita da matrícula do pré-cadastro %s não pôde ser "
+                        "vinculada ao aluno %s", precadastro_id, aluno_id)
+
+                # As modalidades escolhidas no pré-cadastro morriam aqui: o
+                # aluno nascia sem nenhuma e a tela de matrícula (logo adiante)
+                # abria em branco. Vêm como texto ("3,5"), daí a limpeza.
+                for _mid in {
+                    int(x) for x in str(pc.get("modalidades_ids") or "")
+                    .replace(";", ",").split(",") if x.strip().isdigit()
+                }:
+                    cur.execute(
+                        "INSERT IGNORE INTO aluno_modalidades (aluno_id, modalidade_id) VALUES (%s, %s)",
+                        (aluno_id, _mid),
+                    )
+                if turma_id:
+                    cur.execute(
+                        "INSERT IGNORE INTO aluno_turmas (aluno_id, TurmaID) VALUES (%s, %s)",
+                        (aluno_id, turma_id),
+                    )
+
                 # Garantir vínculo correto (aluno só recebe usuario_id se for aluno)
                 if usuario_id and tem_role_aluno:
                     cur.execute(
@@ -2220,7 +2496,14 @@ def promover(precadastro_id):
                 })
         except Exception:
             pass
-        if origem_cpf == "responsavel_financeiro":
+        if usuario_reaproveitado:
+            flash(
+                f'Já existia um usuário com este CPF ("{usuario_reaproveitado}"). '
+                "O aluno foi vinculado a ele — a senha atual continua valendo e "
+                "nenhuma credencial nova foi enviada.",
+                "info",
+            )
+        elif origem_cpf == "responsavel_financeiro":
             flash(
                 "O login foi criado com o CPF do responsável financeiro.",
                 "info",
@@ -2230,10 +2513,11 @@ def promover(precadastro_id):
                 "O cadastro do aluno foi criado automaticamente e vinculado ao responsável.",
                 "info",
             )
-        # Antes a promoção despejava o gestor na ficha para digitar o que
-        # faltava. Agora o próprio aluno completa no primeiro acesso, então a
-        # tela só avisa o que ficou pendente e volta para a lista. Quem quiser
-        # adiantar continua tendo o link da ficha.
+        # A ficha completa quem preenche é o próprio aluno, no primeiro acesso —
+        # aqui só avisamos o que ficou pendente. O que NÃO dá para deixar para
+        # depois é turma, modalidade e mensalidade: sem isso o aluno não entra
+        # em chamada nem é cobrado. Por isso a promoção emenda na tela de
+        # matrícula, que volta para a lista quando terminar.
         if aluno_id:
             try:
                 from blueprints.aluno.alunos import campos_pendentes_autopreenchiveis
@@ -2252,6 +2536,13 @@ def promover(precadastro_id):
                     )
             except Exception:
                 pass
+            return redirect(
+                url_for(
+                    "alunos.matricula_inicial",
+                    aluno_id=aluno_id,
+                    next=url_for("precadastro.lista", academia_id=academia_id),
+                )
+            )
         return redirect(url_for("precadastro.lista", academia_id=academia_id))
 
     except Exception as e:

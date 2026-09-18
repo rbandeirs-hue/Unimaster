@@ -196,6 +196,14 @@ async function startSession(id) {
         if (code === DisconnectReason.loggedOut) {
           st.status = 'logged_out';
           st.sock = null; st.qr = null; st.qrDataUrl = null; st.number = null;
+          // Credencial invalidada precisa SAIR do disco. Quando o gestor
+          // desvincula pelo celular (em vez de usar o botão do sistema), o
+          // Baileys apaga as sessões mas mantém o `creds.json`; a proxima
+          // tentativa recarregava essa credencial morta, o WhatsApp recusava
+          // de novo e o QR nunca chegava a ser gerado — a tela ficava em
+          // "Gerando QR Code..." para sempre.
+          st.enviadas = new Map(); st.carregado = false;
+          try { fs.rmSync(path.join(AUTH_DIR, String(id)), { recursive: true, force: true }); } catch (e) {}
         } else {
           // 515 (restart required, após escanear o QR) e demais quedas: reconecta.
           // IMPORTANTE: zerar o sock e o starting para o guard de startSession não bloquear.
@@ -231,7 +239,16 @@ async function processQueue(id) {
         const res = await st.sock.onWhatsApp(phone);
         if (res && res[0] && res[0].exists && res[0].jid) jid = res[0].jid;
       } catch (e) {}
-      const enviada = await st.sock.sendMessage(jid, { text: job.mensagem });
+      // `linkPreview: null` desliga a prévia do link. O Baileys tenta montá-la
+      // com `link-preview-js`, que é dependência opcional e não está instalada:
+      // toda cobrança — que sempre leva o link de pagamento — gravava um
+      // "url generation failed" no log. A mensagem ia mesmo assim, mas o erro
+      // escondia os problemas de verdade. Sem a prévia, o serviço também deixa
+      // de buscar a página do gateway a cada envio.
+      // `linkPreview: null` vai DENTRO do conteúdo: o Baileys só pula a geração
+      // quando `message.linkPreview` não é `undefined` (Utils/messages.js).
+      const enviada = await st.sock.sendMessage(
+        jid, { text: job.mensagem, linkPreview: null });
       if (enviada && enviada.key && enviada.key.id) lembrarMensagem(id, enviada.key.id, enviada.message);
       job.resolve && job.resolve(jid);
     } catch (e) {

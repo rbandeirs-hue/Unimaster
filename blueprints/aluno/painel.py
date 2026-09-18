@@ -671,6 +671,40 @@ def pagar_mensalidade(aluno, registro_id):
     return redirect(url)
 
 
+@bp_painel_aluno.route("/familia/<int:grupo_id>/pagar")
+@login_required
+@_aluno_required
+def pagar_cobranca_familia(aluno, grupo_id):
+    """Abre o pagamento da cobrança única da família, emitindo-a se faltar.
+
+    O grupo já guarda link e PIX próprios; quando ainda não foram emitidos, a
+    emissão acontece aqui, no clique — mesmo caminho de `pagar_mensalidade`,
+    só que para a cobrança que cobre todos os irmãos.
+    """
+    from utils.cobranca_familia import carregar_grupo, gerar_link
+
+    g = carregar_grupo(grupo_id)
+    if not g or not any(i.get("aluno_id") == aluno["id"] for i in (g.get("itens") or [])):
+        flash("Cobrança da família não encontrada.", "warning")
+        return redirect(url_for("painel_aluno.minhas_mensalidades"))
+    if (g.get("status") or "") == "pago":
+        flash("Esta cobrança da família já está paga.", "success")
+        return redirect(url_for("painel_aluno.minhas_mensalidades"))
+
+    if not (g.get("link") or g.get("copia_cola")):
+        ok, msg = gerar_link(grupo_id)
+        if not ok:
+            flash(msg or "Não foi possível abrir o pagamento agora.", "danger")
+            return redirect(url_for("painel_aluno.minhas_mensalidades"))
+        g = carregar_grupo(grupo_id) or g
+
+    if g.get("link"):
+        return redirect(g["link"])
+    # Só PIX copia e cola: a lista já mostra o código no modal da família.
+    flash("Cobrança da família emitida — use o PIX abaixo para pagar.", "success")
+    return redirect(url_for("painel_aluno.minhas_mensalidades"))
+
+
 @bp_painel_aluno.route("/completar-cadastro", methods=["GET", "POST"])
 @login_required
 def completar_cadastro():
@@ -984,7 +1018,13 @@ def _stats_painel_aluno(aluno):
 
 def _calcular_valor_com_juros_multas(ma, hoje=None):
     """Calcula valor ajustado com multa (2% flat ao atrasar) e juros (0,033%/dia) quando atrasado.
-    Retorna (valor_total, valor_original, multa_val, juros_val). multa_val/juros_val são None quando não aplicável."""
+    Retorna (valor_total, valor_original, multa_val, juros_val). multa_val/juros_val são None quando não aplicável.
+
+    Sábado, domingo e feriado nacional não contam como atraso: o vencimento anda
+    para o próximo dia útil antes de qualquer conta, como no boleto. Sem isso, quem
+    vencia numa sexta-feira já chegava na segunda com multa e três dias de juros
+    por um período em que não tinha como pagar.
+    """
     hoje = hoje or date.today()
     valor = float(ma.get("valor") or 0)
     if ma.get("status") == "pago" or not ma.get("aplicar_juros_multas") or ma.get("remover_juros"):
@@ -997,7 +1037,12 @@ def _calcular_valor_com_juros_multas(ma, hoje=None):
             return valor, None, None, None
     except Exception:
         return valor, None, None, None
-    dias = (hoje - venc).days
+    try:
+        from utils.dias_uteis import dias_de_atraso
+        dias = dias_de_atraso(venc, hoje)
+    except Exception:
+        # Calendário indisponível: volta à contagem corrida em vez de travar a tela.
+        dias = (hoje - venc).days
     if dias <= 0:
         return valor, None, None, None
     # Multa: 2% flat ao atrasar (não por mês)
@@ -1204,6 +1249,23 @@ def minhas_mensalidades(aluno):
 
     cur.close()
     conn.close()
+
+    # Cobrança familiar: as mensalidades dos irmãos são cobradas num link só.
+    # Sem isto o responsável via três cobranças abertas e não sabia que pagar
+    # uma delas (a do grupo) quitava as três — ou pagava a mesma coisa duas vezes.
+    try:
+        from utils.cobranca_familia import grupos_das_mensalidades
+        _grupos = grupos_das_mensalidades([m.get("id") for m in mensalidades])
+    except Exception:
+        _grupos = {}
+    for m in mensalidades:
+        g = _grupos.get(m.get("id"))
+        m["grupo"] = g
+        if not g:
+            continue
+        # Nomes dos irmãos cobertos pela mesma cobrança, sem repetir o próprio.
+        m["grupo_outros"] = [i.get("aluno_nome") for i in (g.get("itens") or [])
+                             if i.get("aluno_id") != aluno["id"]]
 
     # PIX da academia por cobrança — alternativa ao gateway, com o valor já
     # embutido em cada código.
