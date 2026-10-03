@@ -57,6 +57,18 @@
   }
   .cal-mais { font-size: .7rem; font-weight: 500; color: var(--sh-ink-soft); }
 
+  /* Marca de modalidade. Só quem tem modalidade ganha marca: lançamento geral
+     (feriado, reunião) fica sem nada, que é a informação correta. */
+  .cal-mod {
+    display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+    margin-right: .3rem; vertical-align: middle;
+    background: var(--cal-mod, #cfcbc4);
+  }
+  .cal-mod-nome {
+    display: inline-flex; align-items: center; gap: .3rem;
+    font-size: .72rem; color: var(--sh-ink-soft); white-space: nowrap;
+  }
+
   /* Legenda */
   .cal-legenda { display: flex; align-items: center; gap: 1.25rem; flex-wrap: wrap; }
   .cal-legenda__item { display: inline-flex; align-items: center; gap: .5rem; font-size: .85rem; color: var(--sh-ink-soft); }
@@ -92,7 +104,8 @@
 
 {% block content %}
 {% set cores = {'aula': '#2563eb', 'evento': '#0891b2', 'competicao': '#C8102E', 'feriado': '#eab308'} %}
-{% set nav = {'nivel': nivel, 'nivel_id': nivel_id, 'visao': visao, 'tipo': tipo_filtro} %}
+{% set nav = {'nivel': nivel, 'nivel_id': nivel_id, 'visao': visao, 'tipo': tipo_filtro,
+              'modalidade': modalidade_filtro or ''} %}
 
 <div class="cal-barra">
   <div class="cal-mes">
@@ -105,18 +118,28 @@
 
   <div class="d-flex align-items-center gap-3 flex-wrap">
     <div class="cal-seg">
-      <a href="{{ url_for('calendario.visualizar', nivel=nivel, nivel_id=nivel_id, mes=mes, ano=ano, tipo=tipo_filtro, visao='mes') }}"
+      <a href="{{ url_for('calendario.visualizar', nivel=nivel, nivel_id=nivel_id, mes=mes, ano=ano, tipo=tipo_filtro, modalidade=modalidade_filtro or '', visao='mes') }}"
          class="{{ 'is-ativa' if visao == 'mes' }}">Mês</a>
-      <a href="{{ url_for('calendario.visualizar', nivel=nivel, nivel_id=nivel_id, mes=mes, ano=ano, tipo=tipo_filtro, visao='lista') }}"
+      <a href="{{ url_for('calendario.visualizar', nivel=nivel, nivel_id=nivel_id, mes=mes, ano=ano, tipo=tipo_filtro, modalidade=modalidade_filtro or '', visao='lista') }}"
          class="{{ 'is-ativa' if visao == 'lista' }}">Lista</a>
     </div>
-    <form method="GET">
+    <form method="GET" class="d-flex align-items-center gap-2 flex-wrap">
       <input type="hidden" name="nivel" value="{{ nivel }}">
       <input type="hidden" name="nivel_id" value="{{ nivel_id }}">
       <input type="hidden" name="mes" value="{{ mes }}">
       <input type="hidden" name="ano" value="{{ ano }}">
       <input type="hidden" name="visao" value="{{ visao }}">
-      <select name="tipo" class="form-select form-select-sm" style="min-width:11rem" onchange="this.form.submit()" aria-label="Tipo de lançamento">
+      {# Modalidade só é uma pergunta onde há mais de uma resposta possível. #}
+      {% if modalidades_cal and modalidades_cal|length > 1 %}
+      <select name="modalidade" class="u-campo__controle" style="min-width:11rem"
+              onchange="this.form.submit()" aria-label="Modalidade">
+        <option value="">Todas as modalidades</option>
+        {% for m in modalidades_cal %}
+        <option value="{{ m.id }}" {% if modalidade_filtro == m.id %}selected{% endif %}>{{ m.nome }}</option>
+        {% endfor %}
+      </select>
+      {% endif %}
+      <select name="tipo" class="u-campo__controle" style="min-width:11rem" onchange="this.form.submit()" aria-label="Tipo de lançamento">
         <option value="">Todos os tipos</option>
         {% for chave, rotulo in [('aula','Aulas'), ('evento','Eventos'), ('competicao','Competições'), ('feriado','Feriados')] %}
         <option value="{{ chave }}" {% if tipo_filtro == chave %}selected{% endif %}>{{ rotulo }}</option>
@@ -139,16 +162,18 @@
       {# No máximo dois por célula: o mês cheio de aulas recorrentes vira uma
          parede de texto repetido, e o excedente vai para a visão lista. #}
       {% for i in c.itens[:2] %}
-      <span class="cal-item" title="{{ i.nome }} — {{ i.horario }}">
+      <span class="cal-item" title="{{ i.nome }} — {{ i.horario }}{% if i.modalidade %} · {{ i.modalidade }}{% endif %}">
         <span class="cal-item__risco" style="--cal-cor: {{ cores.get(i.tipo, i.cor or '#cfcbc4') }}"></span>
         <span class="cal-item__txt">
           <span class="cal-item__hora">{{ i.horario }}</span>
-          <span class="cal-item__nome">{{ i.nome }}</span>
+          <span class="cal-item__nome">
+            {% if i.modalidade %}<span class="cal-mod" style="--cal-mod: {{ i.modalidade_cor or '#cfcbc4' }}"></span>{% endif %}{{ i.nome }}
+          </span>
         </span>
       </span>
       {% endfor %}
       {% if c.itens|length > 2 %}
-      <a class="cal-mais" href="{{ url_for('calendario.visualizar', nivel=nivel, nivel_id=nivel_id, mes=mes, ano=ano, tipo=tipo_filtro, visao='lista', dia=c.dia) }}">
+      <a class="cal-mais" href="{{ url_for('calendario.visualizar', nivel=nivel, nivel_id=nivel_id, mes=mes, ano=ano, tipo=tipo_filtro, modalidade=modalidade_filtro or '', visao='lista', dia=c.dia) }}">
         +{{ c.itens|length - 2 }} lançamento{{ 's' if c.itens|length - 2 != 1 }}
       </a>
       {% endif %}
@@ -182,6 +207,11 @@
         <div class="d-flex align-items-center gap-2" style="min-width:0">
           <span class="cal-item__risco" style="--cal-cor: {{ cores.get(l.tipo, l.cor or '#cfcbc4') }}; height:1rem"></span>
           <span class="lst-nome lst-corta">{{ l.nome }}</span>
+          {% if l.modalidade %}
+          <span class="cal-mod-nome">
+            <span class="cal-mod" style="--cal-mod: {{ l.modalidade_cor or '#cfcbc4' }}"></span>{{ l.modalidade }}
+          </span>
+          {% endif %}
         </div>
         <div class="col-tipo"><span class="lst-tag">{{ l.tipo|capitalize }}</span></div>
         <div class="col-horario lst-fim">{{ l.horario }}</div>
@@ -196,7 +226,7 @@
 
   {% if dia_filtro %}
   <div class="lst-paginacao">
-    <a href="{{ url_for('calendario.visualizar', nivel=nivel, nivel_id=nivel_id, mes=mes, ano=ano, tipo=tipo_filtro, visao='lista') }}"
+    <a href="{{ url_for('calendario.visualizar', nivel=nivel, nivel_id=nivel_id, mes=mes, ano=ano, tipo=tipo_filtro, modalidade=modalidade_filtro or '', visao='lista') }}"
        class="sh__btn">Ver o mês inteiro</a>
   </div>
   {% endif %}
@@ -211,6 +241,14 @@
       <span class="cal-legenda__cor" style="background: {{ cores[chave] }}"></span>{{ rotulo }}
     </span>
     {% endfor %}
+    {% if modalidades_cal and modalidades_cal|length > 1 %}
+    {% for m in modalidades_cal %}
+    <span class="cal-legenda__item">
+      <span class="cal-mod" style="--cal-mod: {{ m.cor or '#cfcbc4' }}"></span>{{ m.nome }}
+    </span>
+    {% endfor %}
+    <span class="cal-legenda__item">Sem marca: vale para todas</span>
+    {% endif %}
   </div>
 </div>
 

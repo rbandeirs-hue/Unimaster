@@ -1,34 +1,129 @@
 {% extends "base_app.html" %}
+{% from 'components/ui.html' import voltar, vazio %}
+{% set menu_ativo = 'modalidades' %}
 {% block title %}Vincular academias — {{ modalidade.nome }}{% endblock %}
+
+{% block pagina_titulo %}Vincular academias{% endblock %}
+{% block pagina_subtitulo %}
+  Quais academias oferecem <strong>{{ modalidade.nome }}</strong>. Marcar aqui faz a modalidade
+  aparecer nas turmas, nas matrículas e no seletor do topo daquela academia.
+{% endblock %}
+
+{% block pagina_acoes %}
+  {% set back_url = back_url or url_for('configuracoes.modalidades_lista') %}
+  {{ voltar(back_url) }}
+{% endblock %}
+
+{% block extra_css %}
+<style>
+  .vinc-topo {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: var(--u-space-3); flex-wrap: wrap;
+    padding: var(--u-space-3);
+    border-bottom: 1px solid var(--u-border);
+  }
+  .vinc-contagem { font-size: var(--u-fs-sm); color: var(--u-text-muted); }
+  .vinc-contagem strong { color: var(--u-text); }
+
+  .vinc-lista { max-height: 62vh; overflow-y: auto; }
+  .vinc-item {
+    display: flex; align-items: center; gap: .75rem;
+    padding: .65rem var(--u-space-3);
+    border-bottom: 1px solid var(--u-border);
+    cursor: pointer;
+  }
+  .vinc-item:last-child { border-bottom: 0; }
+  .vinc-item:hover { background: var(--u-surface-alt); }
+  .vinc-item input { width: 18px; height: 18px; flex: none; cursor: pointer; }
+  .vinc-item__txt { min-width: 0; display: flex; flex-direction: column; }
+  .vinc-item__nome { overflow-wrap: anywhere; }
+  .vinc-item__meta { font-size: var(--u-fs-xs); color: var(--u-text-muted); }
+
+  /* A barra de salvar acompanha a rolagem: com 30 academias, o botão ficava
+     abaixo da lista e fora da tela justamente enquanto se marcava. */
+  .vinc-rodape {
+    position: sticky; bottom: 0;
+    display: flex; gap: .5rem; flex-wrap: wrap;
+    padding: var(--u-space-3);
+    background: var(--u-surface);
+    border-top: 1px solid var(--u-border);
+  }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="container my-4" style="max-width: 640px;">
-    {% set back_url = back_url or get_back_url_default() %}
-{% include 'components/botao_voltar.html' %}
-    <div class="card shadow-sm">
-        <div class="card-header bg-primary text-white">
-            <h5 class="mb-0"><i class="bi bi-link-45deg me-2"></i> Vincular academias — {{ modalidade.nome }}</h5>
-        </div>
-        <div class="card-body p-4">
-            <form method="POST">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <div class="mb-4">
-                    <div class="border rounded p-3" style="max-height: 280px; overflow-y: auto;">
-                        {% for ac in academias %}
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" name="academia_ids" id="ac{{ ac.id }}" value="{{ ac.id }}"
-                                   {% if ac.id in vinculadas %}checked{% endif %}>
-                            <label class="form-check-label" for="ac{{ ac.id }}">{{ ac.nome }}</label>
-                        </div>
-                        {% endfor %}
-                        {% if not academias %}<p class="text-muted small mb-0">Nenhuma academia cadastrada.</p>{% endif %}
-                    </div>
-                </div>
-                <div class="d-flex gap-2">
-                    <button type="submit" class="btn btn-primary">Atualizar vínculos</button>
-                    <a href="{{ url_for('configuracoes.modalidades_lista') }}" class="btn btn-outline-secondary">Cancelar</a>
-                </div>
-            </form>
-        </div>
+
+<form method="POST">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+  <section class="lst-quadro">
+    <div class="vinc-topo">
+      <span class="vinc-contagem">
+        <strong id="vincTotal">{{ vinculadas|length }}</strong>
+        de {{ academias|length }} academia{{ 's' if academias|length != 1 }} marcada(s)
+      </span>
+      <div class="d-flex gap-2">
+        <button type="button" class="u-btn u-btn--pequeno u-btn--fantasma" id="vincTodas">
+          Marcar todas
+        </button>
+        <button type="button" class="u-btn u-btn--pequeno u-btn--fantasma" id="vincNenhuma">
+          Desmarcar todas
+        </button>
+      </div>
     </div>
-</div>
+
+    {% if academias %}
+    <div class="vinc-lista">
+      {% for ac in academias %}
+      <label class="vinc-item" for="ac{{ ac.id }}">
+        <input type="checkbox" name="academia_ids" id="ac{{ ac.id }}" value="{{ ac.id }}"
+               {% if ac.id in vinculadas %}checked{% endif %}>
+        <span class="vinc-item__txt">
+          <span class="vinc-item__nome">{{ ac.nome }}</span>
+          <span class="vinc-item__meta">
+            {% if ac.cidade %}{{ ac.cidade }}{% if ac.uf %}/{{ ac.uf }}{% endif %} · {% endif %}
+            {{ ac.alunos }} aluno{{ 's' if ac.alunos != 1 }} ativo{{ 's' if ac.alunos != 1 }}
+          </span>
+        </span>
+      </label>
+      {% endfor %}
+    </div>
+
+    <div class="vinc-rodape">
+      <button type="submit" class="u-btn u-btn--forte">
+        <i class="bi bi-check-lg"></i> Salvar vínculos
+      </button>
+      <a href="{{ url_for('configuracoes.modalidades_lista') }}" class="u-btn">Cancelar</a>
+    </div>
+    {% else %}
+    <div style="padding:1rem 1.1rem">
+      {{ vazio('Nenhuma academia cadastrada ainda.', icone='bi-house-door') }}
+    </div>
+    {% endif %}
+  </section>
+</form>
+
+<script>
+  // Sem framework: o contador é a única coisa que precisa reagir, e a lista
+  // funciona igual com o JavaScript desligado.
+  (function () {
+    var caixas = document.querySelectorAll('.vinc-item input[type="checkbox"]');
+    var total = document.getElementById('vincTotal');
+    function atualizar() {
+      var n = 0;
+      caixas.forEach(function (c) { if (c.checked) n++; });
+      if (total) total.textContent = n;
+    }
+    caixas.forEach(function (c) { c.addEventListener('change', atualizar); });
+    var todas = document.getElementById('vincTodas');
+    var nenhuma = document.getElementById('vincNenhuma');
+    if (todas) todas.addEventListener('click', function () {
+      caixas.forEach(function (c) { c.checked = true; }); atualizar();
+    });
+    if (nenhuma) nenhuma.addEventListener('click', function () {
+      caixas.forEach(function (c) { c.checked = false; }); atualizar();
+    });
+  })();
+</script>
+
 {% endblock %}

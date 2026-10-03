@@ -1,9 +1,14 @@
 {% extends "base_app.html" %}
 {% block title %}Controle do Placar — {{ luta.atleta_branco_nome }} × {{ luta.atleta_azul_nome }}{% endblock %}
+{% block pagina_titulo %}Controle do placar{% endblock %}
+{% block pagina_subtitulo %}{{ luta.evento_nome }}{% if luta.categoria_nome %} — {{ luta.categoria_nome }}{% endif %}{% endblock %}
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/placar_judo.css') }}">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <style>
+/* Em tela cheia o placar ocupa tudo: o cabeçalho do shell sai junto com o
+   resto do layout (a barra de operação continua dentro do placar). */
+body.placar-fullscreen .sh__cabecalho { display: none !important; }
 /* Garantir que não há zoom no double-tap */
 * {
     touch-action: manipulation;
@@ -190,7 +195,7 @@
 }
 .mm-bar-titulo { font-size: 1rem; font-weight: 600; margin: 0 0 8px 0; }
 .mm-bar-buttons { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
-.mm-bar-buttons .btn { font-weight: 600; padding: 4px 10px; font-size: 0.75rem; }
+.mm-bar-buttons .btn, .mm-bar-buttons .u-btn { font-weight: 600; padding: 4px 10px; font-size: 0.75rem; }
 .mm-bar-direita {
     display: flex;
     flex-direction: column;
@@ -276,7 +281,7 @@
     .mm-nome { font-size: 1.35rem; }
     /* Cabeçalho mobile mais compacto */
     .d-flex.justify-content-between { flex-wrap: wrap; gap: 8px; }
-    .btn-group-tempo .btn { padding: 12px 16px; font-size: 1rem; }
+    .btn-group-tempo .btn{ padding: 12px 16px; font-size: 1rem; }
 }
 @media (max-width: 576px) {
     .mm-bar-timer { font-size: 4rem; letter-spacing: 6px; }
@@ -302,30 +307,26 @@
 <div class="container-fluid placar-controle" id="placar-controle-wrapper" data-modelo="{{ data_modelo_inicial }}" data-controle-fixo="{{ '1' if controle_fixo else '0' }}">
     <div class="row mb-2">
         <div class="col-12">
-            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-                <div>
-                    <h2 class="h5 fw-bold mb-0">🥋 Controle do Placar</h2>
-                    <small class="text-muted">{{ luta.evento_nome }}{% if luta.categoria_nome %} — {{ luta.categoria_nome }}{% endif %}</small>
-                </div>
+            <div class="d-flex justify-content-end align-items-center flex-wrap gap-2">
                 <div class="d-flex gap-2 align-items-center flex-shrink-0 flex-wrap justify-content-end" id="toolbar-trocar-modelo-placar">
                     <div class="form-check form-switch m-0 d-flex align-items-center gap-1 px-2 py-1 border rounded bg-light" id="bloco-chk-trocar-modelo-placar" title="Desligado: a mesa não alterna entre Controle 1 e Controle 2 nesta sessão">
                         <input class="form-check-input m-0" type="checkbox" id="chk-trocar-modelo-placar" checked>
                         <label class="form-check-label small mb-0 text-nowrap" for="chk-trocar-modelo-placar">Trocar modelo</label>
                     </div>
-                    <button type="button" id="btn-voltar-placar" class="btn btn-success btn-sm"
+                    <button type="button" id="btn-voltar-placar" class="u-btn u-btn--ok u-btn--pequeno"
                             data-voltar-href="{{ voltar_placar_url }}"
                             {% if luta.status == 'em_andamento' %}disabled{% endif %}
                             title="{% if luta.status == 'em_andamento' %}Disponível quando a luta não estiver em andamento{% else %}Volta à lista do placar e coloca a TV da área em espera (área + aguardando luta){% endif %}">
                         <i class="bi bi-arrow-left-circle"></i> Voltar ao placar
                     </button>
-                    <button type="button" class="btn btn-outline-secondary btn-sm" id="btn-trocar-modelo-controle" onclick="trocarModeloControle()" title="Alternar entre Controle 1 e Controle 2 (exige ‘Trocar modelo’ ligado)">
+                    <button type="button" class="u-btn u-btn--pequeno" id="btn-trocar-modelo-controle" onclick="trocarModeloControle()" title="Alternar entre Controle 1 e Controle 2 (exige ‘Trocar modelo’ ligado)">
                         <i class="bi bi-palette"></i> <span id="label-modelo-controle">{% if data_modelo_inicial == 'unimaster' %}Controle 2{% else %}Controle 1{% endif %}</span>
                     </button>
-                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="toggleFullscreenPlacarControle()" title="Tela cheia">
+                    <button type="button" class="u-btn u-btn--pequeno" onclick="toggleFullscreenPlacarControle()" title="Tela cheia">
                         <i class="bi bi-arrows-fullscreen"></i> Tela cheia
                     </button>
                     <a href="{{ url_for('eventos_competicoes.placar_judo_monitor_area', evento_id=luta.evento_id, area_num=luta.area_num|default(1)) }}" 
-                       target="_blank" class="btn btn-outline-primary btn-sm" title="TV desta área — acompanha a luta aberta no controle">
+                       target="_blank" class="u-btn u-btn--pequeno" title="TV desta área — acompanha a luta aberta no controle">
                         <i class="bi bi-tv"></i> Monitor da competição
                     </a>
                 </div>
@@ -337,7 +338,7 @@
         <div class="col-12">
             <div class="alert alert-info d-flex flex-wrap align-items-center justify-content-between gap-2 py-2 mb-0">
                 <span class="fw-semibold mb-0">Luta encerrada — use Voltar ao placar para colocar a TV da área em espera e escolher a próxima luta.</span>
-                <a href="{{ voltar_placar_url }}" class="btn btn-primary btn-sm flex-shrink-0">
+                <a href="{{ voltar_placar_url }}" class="u-btn u-btn--primario u-btn--pequeno flex-shrink-0">
                     <i class="bi bi-list-ul"></i> Voltar ao placar
                 </a>
             </div>
@@ -384,29 +385,29 @@
                                 </div>
                             </div>
                             <div class="position-absolute end-0 top-0">
-                                <button type="button" class="btn btn-outline-danger btn-sm btn-desfazer" onclick="desfazerUltimaAcao()" title="Desfazer última pontuação/penalidade">
+                                <button type="button" class="u-btn u-btn--pequeno btn-desfazer" onclick="desfazerUltimaAcao()" title="Desfazer última pontuação/penalidade">
                                     <i class="bi bi-arrow-counterclockwise"></i> <span class="btn-desfazer-texto">Desfazer</span>
                                 </button>
                             </div>
                         </div>
                     </div>
                     <div class="btn-group btn-group-tempo" role="group">
-                        <button id="btn-iniciar" class="btn btn-success btn-lg" onclick="iniciarLuta()" type="button">
+                        <button id="btn-iniciar" class="u-btn u-btn--ok u-btn--grande" onclick="iniciarLuta()" type="button">
                             <i class="bi bi-play-fill"></i> <span>Iniciar</span>
                         </button>
-                        <button id="btn-pausar" class="btn btn-warning btn-lg" onclick="pausarLuta()" style="display:none;" type="button">
+                        <button id="btn-pausar" class="u-btn u-btn--alerta u-btn--grande" onclick="pausarLuta()" style="display:none;" type="button">
                             <i class="bi bi-pause-fill"></i> <span>Pausar</span>
                         </button>
-                        <button id="btn-retomar" class="btn btn-success btn-lg" onclick="retomarLuta()" style="display:none;" type="button">
+                        <button id="btn-retomar" class="u-btn u-btn--ok u-btn--grande" onclick="retomarLuta()" style="display:none;" type="button">
                             <i class="bi bi-play-fill"></i> <span>Retomar</span>
                         </button>
-                        <button id="btn-finalizar" class="btn btn-danger btn-lg" onclick="finalizarLuta()" type="button">
+                        <button id="btn-finalizar" class="u-btn u-btn--perigo u-btn--grande" onclick="finalizarLuta()" type="button">
                             <i class="bi bi-stop-fill"></i> <span>Finalizar</span>
                         </button>
-                        <button id="btn-golden-score" class="btn btn-warning btn-lg" onclick="toggleGoldenScore()" type="button">
+                        <button id="btn-golden-score" class="u-btn u-btn--alerta u-btn--grande" onclick="toggleGoldenScore()" type="button">
                             <i class="bi bi-clock-history"></i> <span>Golden Score</span>
                         </button>
-                        <button id="btn-resetar" class="btn btn-secondary btn-lg" onclick="resetarLuta()" type="button" title="Resetar luta para estado inicial (modo teste)">
+                        <button id="btn-resetar" class="u-btn u-btn--grande" onclick="resetarLuta()" type="button" title="Resetar luta para estado inicial (modo teste)">
                             <i class="bi bi-arrow-counterclockwise"></i> <span>Resetar</span>
                         </button>
                     </div>
@@ -465,10 +466,10 @@
                         <div class="ponto-controle-item">
                             <div class="ponto-nome">IPPON</div>
                             <div class="ponto-botoes">
-                                <button class="btn btn-danger btn-lg btn-ponto btn-adicionar" onclick="marcarPonto('branco', 'ippon', this)" type="button" title="Adicionar Ippon">
+                                <button class="u-btn u-btn--perigo u-btn--grande btn-ponto btn-adicionar" onclick="marcarPonto('branco', 'ippon', this)" type="button" title="Adicionar Ippon">
                                     <i class="bi bi-plus-circle-fill"></i>
                                 </button>
-                                <button class="btn btn-danger btn-lg btn-ponto btn-remover" onclick="removerPonto('branco', 'ippon', this)" type="button" title="Remover Ippon">
+                                <button class="u-btn u-btn--perigo u-btn--grande btn-ponto btn-remover" onclick="removerPonto('branco', 'ippon', this)" type="button" title="Remover Ippon">
                                     <i class="bi bi-dash-circle-fill"></i>
                                 </button>
                             </div>
@@ -478,10 +479,10 @@
                         <div class="ponto-controle-item">
                             <div class="ponto-nome">WAZA-ARI</div>
                             <div class="ponto-botoes">
-                                <button class="btn btn-warning btn-lg btn-ponto btn-adicionar" onclick="marcarPonto('branco', 'wazaari', this)" type="button" title="Adicionar Waza-ari">
+                                <button class="u-btn u-btn--alerta u-btn--grande btn-ponto btn-adicionar" onclick="marcarPonto('branco', 'wazaari', this)" type="button" title="Adicionar Waza-ari">
                                     <i class="bi bi-plus-circle-fill"></i>
                                 </button>
-                                <button class="btn btn-warning btn-lg btn-ponto btn-remover" onclick="removerPonto('branco', 'wazaari', this)" type="button" title="Remover Waza-ari">
+                                <button class="u-btn u-btn--alerta u-btn--grande btn-ponto btn-remover" onclick="removerPonto('branco', 'wazaari', this)" type="button" title="Remover Waza-ari">
                                     <i class="bi bi-dash-circle-fill"></i>
                                 </button>
                             </div>
@@ -491,10 +492,10 @@
                         <div class="ponto-controle-item">
                             <div class="ponto-nome">YOKO</div>
                             <div class="ponto-botoes">
-                                <button class="btn btn-secondary btn-lg btn-ponto btn-adicionar" onclick="marcarPonto('branco', 'yoko', this)" type="button" title="Adicionar Yoko">
+                                <button class="u-btn u-btn--grande btn-ponto btn-adicionar" onclick="marcarPonto('branco', 'yoko', this)" type="button" title="Adicionar Yoko">
                                     <i class="bi bi-plus-circle-fill"></i>
                                 </button>
-                                <button class="btn btn-secondary btn-lg btn-ponto btn-remover" onclick="removerPonto('branco', 'yoko', this)" type="button" title="Remover Yoko">
+                                <button class="u-btn u-btn--grande btn-ponto btn-remover" onclick="removerPonto('branco', 'yoko', this)" type="button" title="Remover Yoko">
                                     <i class="bi bi-dash-circle-fill"></i>
                                 </button>
                             </div>
@@ -504,10 +505,10 @@
                         <div class="ponto-controle-item">
                             <div class="ponto-nome">SHIDO</div>
                             <div class="ponto-botoes">
-                                <button class="btn btn-info btn-lg btn-ponto btn-adicionar" onclick="marcarPonto('branco', 'shido', this)" type="button" title="Adicionar Shido (3 Shido = Hansoku-make)">
+                                <button class="u-btn u-btn--grande btn-ponto btn-adicionar" onclick="marcarPonto('branco', 'shido', this)" type="button" title="Adicionar Shido (3 Shido = Hansoku-make)">
                                     <i class="bi bi-plus-circle-fill"></i>
                                 </button>
-                                <button class="btn btn-info btn-lg btn-ponto btn-remover" onclick="removerPonto('branco', 'shido', this)" type="button" title="Remover Shido">
+                                <button class="u-btn u-btn--grande btn-ponto btn-remover" onclick="removerPonto('branco', 'shido', this)" type="button" title="Remover Shido">
                                     <i class="bi bi-dash-circle-fill"></i>
                                 </button>
                             </div>
@@ -517,7 +518,7 @@
                         <div class="ponto-controle-item">
                             <div class="ponto-nome">OSAEKOMI</div>
                             <div class="ponto-botoes">
-                                <button type="button" id="btn-osaekomi-branco" class="btn btn-outline-dark btn-lg btn-ponto" title="OSAEKOMI = iniciar imobilização, TOKETA = parar">
+                                <button type="button" id="btn-osaekomi-branco" class="u-btn u-btn--grande btn-ponto" title="OSAEKOMI = iniciar imobilização, TOKETA = parar">
                                     OSAEKOMI
                                 </button>
                                 <span id="osaekomi-timer-branco" class="ponto-osaekomi-timer text-muted small" style="display:none;">0:00</span>
@@ -576,10 +577,10 @@
                         <div class="ponto-controle-item">
                             <div class="ponto-nome">IPPON</div>
                             <div class="ponto-botoes">
-                                <button class="btn btn-danger btn-lg btn-ponto btn-adicionar" onclick="marcarPonto('azul', 'ippon', this)" type="button" title="Adicionar Ippon">
+                                <button class="u-btn u-btn--perigo u-btn--grande btn-ponto btn-adicionar" onclick="marcarPonto('azul', 'ippon', this)" type="button" title="Adicionar Ippon">
                                     <i class="bi bi-plus-circle-fill"></i>
                                 </button>
-                                <button class="btn btn-danger btn-lg btn-ponto btn-remover" onclick="removerPonto('azul', 'ippon', this)" type="button" title="Remover Ippon">
+                                <button class="u-btn u-btn--perigo u-btn--grande btn-ponto btn-remover" onclick="removerPonto('azul', 'ippon', this)" type="button" title="Remover Ippon">
                                     <i class="bi bi-dash-circle-fill"></i>
                                 </button>
                             </div>
@@ -589,10 +590,10 @@
                         <div class="ponto-controle-item">
                             <div class="ponto-nome">WAZA-ARI</div>
                             <div class="ponto-botoes">
-                                <button class="btn btn-warning btn-lg btn-ponto btn-adicionar" onclick="marcarPonto('azul', 'wazaari', this)" type="button" title="Adicionar Waza-ari">
+                                <button class="u-btn u-btn--alerta u-btn--grande btn-ponto btn-adicionar" onclick="marcarPonto('azul', 'wazaari', this)" type="button" title="Adicionar Waza-ari">
                                     <i class="bi bi-plus-circle-fill"></i>
                                 </button>
-                                <button class="btn btn-warning btn-lg btn-ponto btn-remover" onclick="removerPonto('azul', 'wazaari', this)" type="button" title="Remover Waza-ari">
+                                <button class="u-btn u-btn--alerta u-btn--grande btn-ponto btn-remover" onclick="removerPonto('azul', 'wazaari', this)" type="button" title="Remover Waza-ari">
                                     <i class="bi bi-dash-circle-fill"></i>
                                 </button>
                             </div>
@@ -602,10 +603,10 @@
                         <div class="ponto-controle-item">
                             <div class="ponto-nome">YOKO</div>
                             <div class="ponto-botoes">
-                                <button class="btn btn-secondary btn-lg btn-ponto btn-adicionar" onclick="marcarPonto('azul', 'yoko', this)" type="button" title="Adicionar Yoko">
+                                <button class="u-btn u-btn--grande btn-ponto btn-adicionar" onclick="marcarPonto('azul', 'yoko', this)" type="button" title="Adicionar Yoko">
                                     <i class="bi bi-plus-circle-fill"></i>
                                 </button>
-                                <button class="btn btn-secondary btn-lg btn-ponto btn-remover" onclick="removerPonto('azul', 'yoko', this)" type="button" title="Remover Yoko">
+                                <button class="u-btn u-btn--grande btn-ponto btn-remover" onclick="removerPonto('azul', 'yoko', this)" type="button" title="Remover Yoko">
                                     <i class="bi bi-dash-circle-fill"></i>
                                 </button>
                             </div>
@@ -615,10 +616,10 @@
                         <div class="ponto-controle-item">
                             <div class="ponto-nome">SHIDO</div>
                             <div class="ponto-botoes">
-                                <button class="btn btn-info btn-lg btn-ponto btn-adicionar" onclick="marcarPonto('azul', 'shido', this)" type="button" title="Adicionar Shido (3 Shido = Hansoku-make)">
+                                <button class="u-btn u-btn--grande btn-ponto btn-adicionar" onclick="marcarPonto('azul', 'shido', this)" type="button" title="Adicionar Shido (3 Shido = Hansoku-make)">
                                     <i class="bi bi-plus-circle-fill"></i>
                                 </button>
-                                <button class="btn btn-info btn-lg btn-ponto btn-remover" onclick="removerPonto('azul', 'shido', this)" type="button" title="Remover Shido">
+                                <button class="u-btn u-btn--grande btn-ponto btn-remover" onclick="removerPonto('azul', 'shido', this)" type="button" title="Remover Shido">
                                     <i class="bi bi-dash-circle-fill"></i>
                                 </button>
                             </div>
@@ -628,7 +629,7 @@
                         <div class="ponto-controle-item">
                             <div class="ponto-nome">OSAEKOMI</div>
                             <div class="ponto-botoes">
-                                <button type="button" id="btn-osaekomi-azul" class="btn btn-outline-primary btn-lg btn-ponto" title="OSAEKOMI = iniciar imobilização, TOKETA = parar">
+                                <button type="button" id="btn-osaekomi-azul" class="u-btn u-btn--grande btn-ponto" title="OSAEKOMI = iniciar imobilização, TOKETA = parar">
                                     OSAEKOMI
                                 </button>
                                 <span id="osaekomi-timer-azul" class="ponto-osaekomi-timer text-muted small" style="display:none;">0:00</span>
@@ -714,14 +715,14 @@
             <div class="mm-bar-esquerda">
                 <h2 class="mm-bar-titulo d-none d-md-block">{{ luta.categoria_nome or luta.evento_nome }}</h2>
                 <div class="mm-bar-buttons">
-                    <button type="button" id="btn-iniciar-mm" class="btn btn-success btn-sm" onclick="iniciarLuta()"><i class="bi bi-play-fill"></i> Começar!</button>
-                    <button type="button" id="btn-pausar-mm" class="btn btn-warning btn-sm" onclick="pausarLuta()" style="display:none;"><i class="bi bi-pause-fill"></i> Pausar</button>
-                    <button type="button" id="btn-retomar-mm" class="btn btn-success btn-sm" onclick="retomarLuta()" style="display:none;"><i class="bi bi-play-fill"></i> Retomar</button>
-                    <button type="button" id="btn-finalizar-mm" class="btn btn-danger btn-sm" onclick="finalizarLuta()"><i class="bi bi-stop-fill"></i> Finalizar</button>
-                    <button type="button" id="btn-golden-score-mm" class="btn btn-warning btn-sm" onclick="toggleGoldenScore()"><i class="bi bi-clock-history"></i> Golden Score</button>
-                    <button type="button" id="btn-resetar-mm" class="btn btn-secondary btn-sm" onclick="resetarLuta()"><i class="bi bi-arrow-counterclockwise"></i> Resetar</button>
-                    <button type="button" class="btn btn-outline-danger btn-sm btn-desfazer" onclick="desfazerUltimaAcao()" title="Desfazer"><i class="bi bi-arrow-counterclockwise"></i> <span class="btn-desfazer-texto">Desfazer</span></button>
-                    <button type="button" id="btn-trocar-lados-mm" class="btn btn-light border btn-sm" onclick="trocarNomesMartialMatch()" title="Trocar nomes: quem é Azul passa a ser Branco e vice-versa"><i class="bi bi-arrow-down-up"></i> Trocar</button>
+                    <button type="button" id="btn-iniciar-mm" class="u-btn u-btn--ok u-btn--pequeno" onclick="iniciarLuta()"><i class="bi bi-play-fill"></i> Começar!</button>
+                    <button type="button" id="btn-pausar-mm" class="u-btn u-btn--alerta u-btn--pequeno" onclick="pausarLuta()" style="display:none;"><i class="bi bi-pause-fill"></i> Pausar</button>
+                    <button type="button" id="btn-retomar-mm" class="u-btn u-btn--ok u-btn--pequeno" onclick="retomarLuta()" style="display:none;"><i class="bi bi-play-fill"></i> Retomar</button>
+                    <button type="button" id="btn-finalizar-mm" class="u-btn u-btn--perigo u-btn--pequeno" onclick="finalizarLuta()"><i class="bi bi-stop-fill"></i> Finalizar</button>
+                    <button type="button" id="btn-golden-score-mm" class="u-btn u-btn--alerta u-btn--pequeno" onclick="toggleGoldenScore()"><i class="bi bi-clock-history"></i> Golden Score</button>
+                    <button type="button" id="btn-resetar-mm" class="u-btn u-btn--pequeno" onclick="resetarLuta()"><i class="bi bi-arrow-counterclockwise"></i> Resetar</button>
+                    <button type="button" class="u-btn u-btn--pequeno btn-desfazer" onclick="desfazerUltimaAcao()" title="Desfazer"><i class="bi bi-arrow-counterclockwise"></i> <span class="btn-desfazer-texto">Desfazer</span></button>
+                    <button type="button" id="btn-trocar-lados-mm" class="u-btn border u-btn--pequeno" onclick="trocarNomesMartialMatch()" title="Trocar nomes: quem é Azul passa a ser Branco e vice-versa"><i class="bi bi-arrow-down-up"></i> Trocar</button>
                 </div>
             </div>
             <div class="mm-bar-direita">
@@ -742,14 +743,14 @@
                 <div class="modal-body">
                     <div class="mb-3">
                         <label class="form-label">Vencedor</label>
-                        <select id="vencedor-select" class="form-select">
+                        <select id="vencedor-select" class="u-campo__controle" aria-label="Vencedor">
                             <option value="branco">{{ luta.atleta_branco_nome }} (Branco)</option>
                             <option value="azul">{{ luta.atleta_azul_nome }} (Azul)</option>
                         </select>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Tipo de Vitória</label>
-                        <select id="tipo-vitoria-select" class="form-select">
+                        <select id="tipo-vitoria-select" class="u-campo__controle" aria-label="Tipo de Vitória">
                             <option value="ippon">Ippon</option>
                             <option value="wazaari">Waza-ari</option>
                             <option value="hansoku_make">Hansoku-make</option>
@@ -759,8 +760,8 @@
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="button" class="btn btn-danger" onclick="confirmarFinalizar()">Finalizar</button>
+                    <button type="button" class="u-btn" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="u-btn u-btn--perigo" onclick="confirmarFinalizar()">Finalizar</button>
                 </div>
             </div>
         </div>

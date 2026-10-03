@@ -1,5 +1,12 @@
 {% extends "base_app.html" %}
 {% block title %}Descontos{% endblock %}
+{% set back_url = url_for('financeiro.dashboard', academia_id=academia_id) if academia_id else url_for('financeiro.dashboard') %}
+{% block pagina_titulo %}Descontos{% endblock %}
+{% block pagina_subtitulo %}{% if descontos %}{{ descontos|length }} desconto(s) cadastrado(s). {% endif %}Aplique-os às mensalidades e cobranças dos alunos.{% endblock %}
+{% block pagina_acoes %}
+<a href="{{ url_voltar(back_url) }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Voltar</a>
+<a href="{{ url_for('financeiro.cadastrar_desconto') }}{% if academia_id %}?academia_id={{ academia_id }}{% endif %}" class="sh__btn sh__btn--forte"><i class="bi bi-plus-lg"></i> Novo desconto</a>
+{% endblock %}
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/financeiro/responsive.css') }}?v=1">
 <style>
@@ -14,7 +21,7 @@
   padding: .28rem .6rem; border-radius: 999px; font-size: .78rem; font-weight: 600;
   border: 1px solid transparent; white-space: nowrap;
 }
-.descontos-page .tipo-pill--perc { background: rgba(13,110,253,.1); color: #0d6efd; border-color: rgba(13,110,253,.22); }
+.descontos-page .tipo-pill--perc { background: rgba(28, 28, 28,.1); color: #1c1c1c; border-color: rgba(28, 28, 28,.22); }
 .descontos-page .tipo-pill--fixo { background: rgba(25,135,84,.1); color: #198754; border-color: rgba(25,135,84,.22); }
 
 .descontos-page .cond-pill {
@@ -42,8 +49,8 @@
   .descontos-page .descontos-table-wrap { display: none; }
   .descontos-page .descontos-cards { display: block; }
   .descontos-page .container { padding-left: 0.75rem; padding-right: 0.75rem; }
-  .descontos-page .desconto-card .btn { min-height: 44px; }
-  .descontos-page .page-hero .btn { width: 100%; }
+  .descontos-page .desconto-card .btn, .descontos-page .desconto-card .u-btn { min-height: 44px; }
+  .descontos-page .page-hero .btn, .descontos-page .page-hero .u-btn { width: 100%; }
 }
 </style>
 {% endblock %}
@@ -66,24 +73,6 @@
 {% endmacro %}
 
 <div class="container mt-4 descontos-page">
-    <div class="mb-3">
-        {% set back_url = url_for('financeiro.dashboard', academia_id=academia_id) if academia_id else url_for('financeiro.dashboard') %}
-        {% include 'components/botao_voltar.html' %}
-    </div>
-
-    <div class="page-hero d-flex flex-wrap align-items-center gap-3 mb-4">
-        <div class="hero-icon"><i class="bi bi-tags-fill"></i></div>
-        <div class="flex-grow-1 min-w-0">
-            <h2 class="h4 fw-bold mb-1">Descontos</h2>
-            <p class="text-muted small mb-0">
-                {% if descontos %}{{ descontos|length }} desconto(s) cadastrado(s). {% endif %}Aplique-os às mensalidades e cobranças dos alunos.
-            </p>
-        </div>
-        <a href="{{ url_for('financeiro.cadastrar_desconto') }}{% if academia_id %}?academia_id={{ academia_id }}{% endif %}" class="btn btn-warning fw-semibold">
-            <i class="bi bi-plus-lg me-1"></i><span class="d-none d-sm-inline">Cadastrar Desconto</span><span class="d-inline d-sm-none">Novo desconto</span>
-        </a>
-    </div>
-
     {% if descontos %}
     <!-- Cards (mobile) -->
     <div class="descontos-cards row g-3 mb-4">
@@ -106,7 +95,7 @@
                         {% else %}
                         <span class="cond-pill cond-pill--sempre"><i class="bi bi-infinity"></i> Sempre aplica</span>
                         {% endif %}
-                        <a href="{{ url_for('financeiro.editar_desconto', desconto_id=d.id) }}{% if academia_id %}?academia_id={{ academia_id }}{% endif %}" class="btn btn-sm btn-outline-primary flex-shrink-0">
+                        <a href="{{ url_for('financeiro.editar_desconto', desconto_id=d.id) }}{% if academia_id %}?academia_id={{ academia_id }}{% endif %}" class="u-btn u-btn--pequeno flex-shrink-0">
                             <i class="bi bi-pencil-fill"></i><span class="ms-1">Editar</span>
                         </a>
                     </div>
@@ -144,7 +133,7 @@
                                 {% endif %}
                             </td>
                             <td class="text-end">
-                                <a href="{{ url_for('financeiro.editar_desconto', desconto_id=d.id) }}{% if academia_id %}?academia_id={{ academia_id }}{% endif %}" class="btn btn-sm btn-outline-primary">
+                                <a href="{{ url_for('financeiro.editar_desconto', desconto_id=d.id) }}{% if academia_id %}?academia_id={{ academia_id }}{% endif %}" class="u-btn u-btn--pequeno">
                                     <i class="bi bi-pencil-fill me-1"></i>Editar
                                 </a>
                             </td>
@@ -160,7 +149,7 @@
         <div class="card-body text-center py-5">
             <i class="bi bi-tags text-muted" style="font-size: 2.5rem;"></i>
             <p class="text-muted mb-3 mt-2">Nenhum desconto cadastrado ainda.</p>
-            <a href="{{ url_for('financeiro.cadastrar_desconto') }}{% if academia_id %}?academia_id={{ academia_id }}{% endif %}" class="btn btn-warning fw-semibold">
+            <a href="{{ url_for('financeiro.cadastrar_desconto') }}{% if academia_id %}?academia_id={{ academia_id }}{% endif %}" class="u-btn u-btn--alerta fw-semibold">
                 <i class="bi bi-plus-lg me-1"></i>Cadastrar o primeiro desconto
             </a>
         </div>

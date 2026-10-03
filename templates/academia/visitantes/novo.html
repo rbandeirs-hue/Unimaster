@@ -1,15 +1,14 @@
 {% extends "base_app.html" %}
+{% set back_url = url_for('academia.lista_visitantes', academia_id=academia_id) %}
 {% block title %}Novo Visitante{% endblock %}
+{% block pagina_titulo %}Novo visitante{% endblock %}
+{% block pagina_subtitulo %}Cadastre um visitante e, se quiser, já agende a aula experimental.{% endblock %}
+{% block pagina_acoes %}
+<a href="{{ url_voltar(back_url) }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Voltar</a>
+{% endblock %}
 {% block content %}
 <div class="container mt-4">
-    <div class="mb-4">
-        {% set back_url = url_for('academia.lista_visitantes', academia_id=academia_id) %}
-        {% include 'components/botao_voltar.html' %}
-        <h2 class="h4 fw-bold text-primary mb-1">Novo Visitante</h2>
-        <p class="text-muted mb-0">Cadastre um visitante e, se quiser, já agende a aula experimental.</p>
-    </div>
-
-    <div class="card shadow-sm" style="max-width: 640px;">
+    <div class="card shadow-sm">
         <div class="card-body p-4">
             <form method="POST" action="{{ url_for('academia.novo_visitante', academia_id=academia_id) }}">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -17,21 +16,21 @@
                 <h6 class="fw-semibold mb-3"><i class="bi bi-person me-1"></i>Dados do visitante</h6>
                 <div class="mb-3">
                     <label for="nome" class="form-label fw-semibold">Nome completo <span class="text-danger">*</span></label>
-                    <input type="text" id="nome" name="nome" class="form-control" required placeholder="Nome do visitante">
+                    <input type="text" id="nome" name="nome" class="u-campo__controle" required placeholder="Nome do visitante">
                 </div>
                 <div class="row">
                     <div class="col-md-6 mb-3">
                         <label for="telefone" class="form-label fw-semibold">Telefone / WhatsApp</label>
-                        <input type="text" id="telefone" name="telefone" class="form-control" placeholder="(11) 99999-9999" maxlength="15" data-mask="phone">
+                        <input type="text" id="telefone" name="telefone" class="u-campo__controle" placeholder="(11) 99999-9999" maxlength="15" data-mask="phone">
                     </div>
                     <div class="col-md-6 mb-3">
                         <label for="email" class="form-label fw-semibold">E-mail</label>
-                        <input type="email" id="email" name="email" class="form-control" placeholder="email@exemplo.com">
+                        <input type="email" id="email" name="email" class="u-campo__controle" placeholder="email@exemplo.com">
                     </div>
                 </div>
                 <div class="mb-3">
                     <label for="data_nascimento" class="form-label fw-semibold">Data de nascimento</label>
-                    <input type="date" id="data_nascimento" name="data_nascimento" class="form-control">
+                    <input type="date" id="data_nascimento" name="data_nascimento" class="u-campo__controle">
                 </div>
 
                 <hr class="my-4">
@@ -41,7 +40,7 @@
                 <div class="row">
                     <div class="col-md-6 mb-3">
                         <label for="turma_id" class="form-label fw-semibold">Turma</label>
-                        <select id="turma_id" name="turma_id" class="form-select">
+                        <select id="turma_id" name="turma_id" class="u-campo__controle">
                             <option value="">— Não agendar —</option>
                             {% for t in turmas %}
                             <option value="{{ t.turma_id }}">{{ t.turma_nome }}{% if t.DiasHorario %} — {{ t.DiasHorario }}{% endif %}</option>
@@ -50,7 +49,7 @@
                     </div>
                     <div class="col-md-6 mb-3">
                         <label for="data_aula" class="form-label fw-semibold">Data da aula</label>
-                        <input type="date" id="data_aula" name="data_aula" class="form-control">
+                        <input type="date" id="data_aula" name="data_aula" class="u-campo__controle">
                     </div>
                 </div>
                 {% else %}
@@ -58,8 +57,8 @@
                 {% endif %}
 
                 <div class="d-flex gap-2 pt-2">
-                    <a href="{{ url_for('academia.lista_visitantes', academia_id=academia_id) }}" class="btn btn-outline-secondary">Cancelar</a>
-                    <button type="submit" class="btn btn-success"><i class="bi bi-check-lg me-1"></i> Salvar visitante</button>
+                    <a href="{{ url_for('academia.lista_visitantes', academia_id=academia_id) }}" class="u-btn">Cancelar</a>
+                    <button type="submit" class="u-btn u-btn--ok"><i class="bi bi-check-lg me-1"></i> Salvar visitante</button>
                 </div>
             </form>
         </div>

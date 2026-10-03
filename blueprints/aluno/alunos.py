@@ -16,6 +16,7 @@ from flask import (
 )
 from flask_login import login_required, current_user
 from config import get_db_connection
+from utils.planos_modalidade import filtrar_contexto as filtrar_planos
 from utils.modalidades import filtro_visibilidade_sql
 from utils.upload_seguro import validar_upload, nome_seguro, UploadInvalido
 from utils.alunos_academias import (
@@ -28,9 +29,12 @@ from dateutil.relativedelta import relativedelta
 import os
 import base64
 import unicodedata
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 from utils.permissoes import somente_gestao_alunos
+from utils.faixa_branca import faixa_eh_branca, graduacao_eh_branca, marcar_brancas
+from utils import campos_obrigatorios_aluno as campos_obrig
+from utils import graduacao_modalidade as grad_mod
 bp_alunos = Blueprint("alunos", __name__, url_prefix="/alunos")
 
 
@@ -55,12 +59,20 @@ def _get_academias_ids():
             return ids
         cur.execute("SELECT academia_id FROM usuarios_academias WHERE usuario_id = %s ORDER BY academia_id", (current_user.id,))
         vinculadas = [r["academia_id"] for r in cur.fetchall()]
-        if vinculadas:
+        # Admin não é limitado pelo vínculo explícito: ter sido ligado a três
+        # academias não pode esconder as outras nove. Foi o que aconteceu ao
+        # cadastrar uma academia independente — ela ficava invisível para quem
+        # administra o sistema.
+        if vinculadas and not current_user.has_role("admin"):
             cur.close()
             conn.close()
             return vinculadas
         # Modo academia: gestor_academia/professor só veem academias de usuarios_academias (não id_academia)
-        if session.get("modo_painel") == "academia" and (current_user.has_role("gestor_academia") or current_user.has_role("professor")):
+        # Admin fica de fora: ele costuma acumular o papel de gestor_academia,
+        # e esta trava o deixava sem academia nenhuma no modo academia.
+        if (session.get("modo_painel") == "academia"
+                and not current_user.has_role("admin")
+                and (current_user.has_role("gestor_academia") or current_user.has_role("professor"))):
             cur.close()
             conn.close()
             return []
@@ -437,13 +449,49 @@ def salvar_imagem_base64(data_url, prefix):
     return filename
 
 
+def _contexto_mensagens(aluno):
+    """Dados da aba de mensagens da ficha. Nunca derruba a ficha por falha."""
+    vazio = {"msg_modelos": [], "msg_conectado": False, "msg_telefone": "",
+             "msg_destinatario": "", "msg_faltas": 0, "msg_periodo": ""}
+    try:
+        from utils import whatsapp_templates as tpl
+        from utils import whatsapp_aluno as wa
+        from utils import whatsapp as wpp
+
+        academia_id = aluno.get("id_academia")
+        salvos = tpl.carregar(academia_id)
+        # Só o que está ativo entra na lista: oferecer um modelo desativado
+        # para depois recusar no envio seria uma promessa vazia.
+        modelos = [{"tipo": t, "label": tpl.TIPOS[t]["label"],
+                    "texto": salvos[t]["texto"]}
+                   for t in tpl.ORDEM if salvos.get(t, {}).get("ativo")]
+        tel, quem = wa.destinatario(aluno)
+        faltas, periodo = wa.contar_faltas(aluno.get("id"))
+        return {"msg_modelos": modelos,
+                "msg_conectado": wpp.status(academia_id).get("status") == "open",
+                "msg_telefone": tel, "msg_destinatario": quem,
+                "msg_faltas": faltas, "msg_periodo": periodo}
+    except Exception:
+        return vazio
+
+
 def salvar_arquivo_upload(file_storage, prefix):
-    """Salva foto enviada via input[type=file] — valida extensão + magic bytes."""
+    """Salva foto enviada via input[type=file] — valida extensão + magic bytes.
+
+    Quando a foto é recusada, avisa. A versão anterior devolvia None em
+    silêncio: quem escolhia um HEIC do iPhone, ou um arquivo grande demais,
+    salvava o cadastro e descobria depois que a foto não tinha entrado, sem
+    nenhuma pista do motivo.
+    """
     if not file_storage or not file_storage.filename:
         return None
     try:
         ext = validar_upload(file_storage, categorias=["imagem"])
-    except UploadInvalido:
+    except UploadInvalido as e:
+        try:
+            flash(f"A foto não foi salva: {e}", "warning")
+        except Exception:
+            pass
         return None
     filename = nome_seguro(prefix, ext)
     upload_folder = os.path.join(current_app.root_path, "static", "uploads")
@@ -593,8 +641,12 @@ def _montar_contexto_lista(so_aluno_id=None):
         sexo_filtro = ""
         modalidade_filtro = None
 
-    # Base
-    query = """
+    # Base. Com uma modalidade em foco no topo, a coluna Faixa é a do aluno
+    # NAQUELA modalidade (judô e jiu-jitsu não se misturam).
+    from utils.multimodalidade import CHAVE_SESSAO as _CHAVE_MOD
+    _join_fx, _par_fx, _on_fx, _par_on_fx = grad_mod.sql_faixa_no_contexto(
+        session.get(_CHAVE_MOD), cur=cursor)
+    query = f"""
         SELECT a.*,
                ac.nome  AS academia_nome,
                ass.nome AS associacao_nome,
@@ -603,14 +655,15 @@ def _montar_contexto_lista(so_aluno_id=None):
                g.graduacao AS graduacao,
                t.Nome   AS turma_nome
         FROM alunos a
+        {_join_fx}
         LEFT JOIN academias ac   ON a.id_academia   = ac.id
         LEFT JOIN associacoes ass ON a.id_associacao = ass.id
         LEFT JOIN federacoes fed ON a.id_federacao = fed.id
-        LEFT JOIN graduacao g    ON a.graduacao_id = g.id
+        LEFT JOIN graduacao g    ON {_on_fx}
         LEFT JOIN turmas t       ON a.TurmaID      = t.TurmaID
         WHERE 1=1
     """
-    params = []
+    params = list(_par_fx) + list(_par_on_fx)
 
     # ======================================================
     # 🔐 RBAC — CONTROLE DE ACESSO POR ROLE
@@ -705,7 +758,8 @@ def _montar_contexto_lista(so_aluno_id=None):
 
     # Filtros dinâmicos (ano de nascimento, graduação, peso)
     if graduacao_id is not None:
-        query += " AND a.graduacao_id = %s"
+        # `g` já é a faixa da modalidade em foco (ou a principal, sem foco).
+        query += " AND g.id = %s"
         params.append(graduacao_id)
 
     # Filtro por ano de nascimento (único ou período: de X a Y)
@@ -1554,6 +1608,8 @@ def _montar_contexto_lista(so_aluno_id=None):
         aluno["ultimo_exame_faixa_formatada"] = (
             exame.strftime("%d/%m/%Y") if exame else "-"
         )
+        # Faixa branca não tem data de graduação: o modal mostra isso em vez de "-".
+        aluno["faixa_branca"] = faixa_eh_branca(aluno.get("faixa"), aluno.get("graduacao"))
 
         faixa_sugerida = "-"
         regra_especial = "-"
@@ -1846,6 +1902,9 @@ def _montar_contexto_lista(so_aluno_id=None):
         # mensalidade em atraso são os dois casos que pedem ação na lista.
         "sem_turma": 0,
         "atrasados": 0,
+        # Sem o telefone do responsável financeiro não sai cobrança nem
+        # lembrete de WhatsApp: é a pendência que cala o aluno.
+        "sem_tel_resp": 0,
         "por_academia": {},
         "por_graduacao": {},
         "por_turma": {},
@@ -1878,17 +1937,21 @@ def _montar_contexto_lista(so_aluno_id=None):
             stats["sem_turma"] += 1
         if aluno.get("mensalidade_atrasada"):
             stats["atrasados"] += 1
+        if not str(aluno.get("responsavel_financeiro_telefone") or "").strip():
+            stats["sem_tel_resp"] += 1
 
     # Card clicado na faixa de indicadores. O recorte é aplicado depois de
     # contar, para os números continuarem mostrando o total de cada situação
     # mesmo com um deles ativo — senão o card ativo viraria sempre "todos".
     recorte = (request.args.get("recorte") or "").strip().lower()
-    if recorte not in ("sem_turma", "atrasados"):
+    if recorte not in ("sem_turma", "atrasados", "sem_tel_resp"):
         recorte = ""
     if recorte:
         def _no_recorte(a):
             if recorte == "sem_turma":
                 return not a.get("turma_nome")
+            if recorte == "sem_tel_resp":
+                return not str(a.get("responsavel_financeiro_telefone") or "").strip()
             return bool(a.get("mensalidade_atrasada"))
 
         alunos_agrupados = [
@@ -1927,10 +1990,10 @@ def _montar_contexto_lista(so_aluno_id=None):
             conn2 = get_db_connection()
             cur2 = conn2.cursor(dictionary=True)
             cur2.execute(
-                "SELECT id, nome, valor FROM mensalidades WHERE id_academia = %s AND ativo = 1 ORDER BY nome",
+                "SELECT id, nome, valor FROM mensalidades WHERE id_academia = %s AND ativo = 1 AND COALESCE(periodicidade,'mensal') <> 'diaria' ORDER BY nome",
                 (academia_planos_id,),
             )
-            planos_mensalidades = cur2.fetchall()
+            planos_mensalidades = filtrar_planos(cur2, cur2.fetchall())
             cur2.close()
             conn2.close()
     except Exception:
@@ -1985,11 +2048,11 @@ def _montar_contexto_lista(so_aluno_id=None):
             cursor.execute(
                 """
                 SELECT id, nome, valor FROM mensalidades
-                WHERE id_academia = %s AND ativo = 1 ORDER BY nome
+                WHERE id_academia = %s AND ativo = 1 AND COALESCE(periodicidade,'mensal') <> 'diaria' ORDER BY nome
                 """,
                 (acad_id,),
             )
-            planos_por_academia[acad_id] = cursor.fetchall()
+            planos_por_academia[acad_id] = filtrar_planos(cursor, cursor.fetchall(), acad_id)
             try:
                 from blueprints.financeiro.routes import _ensure_formas_padrao
 
@@ -2201,6 +2264,11 @@ def _montar_contexto_lista(so_aluno_id=None):
     # Modo associação: filtros sempre vazios (só placeholders)
     return dict(
         alunos=alunos,
+        # A tabela itera ESTA lista, não `alunos_agrupados`: lá o aluno de duas
+        # modalidades entra uma vez por grupo, e como a tela não imprime o nome
+        # do grupo, ele aparecia duas vezes seguidas, sem explicação — e o
+        # rodapé, que conta daqui, dizia um número menor que o de linhas.
+        alunos_exibidos=alunos_exibidos,
         asaas_academias=asaas_academias,
         gateway_por_academia=gateway_por_academia,
         recorrencia_por_academia=recorrencia_por_academia,
@@ -2501,6 +2569,7 @@ def enriquecer_aluno_para_modal(aluno, ctx=None):
 
         aluno["data_nascimento_formatada"] = nasc.strftime("%d/%m/%Y") if nasc else "-"
         aluno["ultimo_exame_faixa_formatada"] = exame.strftime("%d/%m/%Y") if exame else "-"
+        aluno["faixa_branca"] = faixa_eh_branca(aluno.get("faixa"), aluno.get("graduacao"))
 
         gid = aluno.get("graduacao_id")
         proxima = None
@@ -2698,10 +2767,10 @@ def _planos_mensalidade_da_academia(academia_id):
     cur = conn.cursor(dictionary=True)
     try:
         cur.execute(
-            "SELECT id, nome, valor FROM mensalidades WHERE id_academia = %s AND ativo = 1 ORDER BY nome",
+            "SELECT id, nome, valor FROM mensalidades WHERE id_academia = %s AND ativo = 1 AND COALESCE(periodicidade,'mensal') <> 'diaria' ORDER BY nome",
             (academia_id,),
         )
-        return cur.fetchall() or []
+        return filtrar_planos(cur, cur.fetchall() or [], academia_id)
     except Exception:
         return []
     finally:
@@ -2709,6 +2778,10 @@ def _planos_mensalidade_da_academia(academia_id):
         conn.close()
 
 
+# Lista histórica dos obrigatórios do cadastro. O que vale agora é a
+# configuração de cada academia (utils/campos_obrigatorios_aluno.py, cujo
+# padrão reproduz esta lista); ela continua aqui como base dos campos que o
+# próprio aluno consegue completar no primeiro acesso.
 CAMPOS_OBRIGATORIOS_ALUNO = (
     ("nome", "Nome completo"),
     ("data_nascimento", "Data de nascimento"),
@@ -2745,29 +2818,86 @@ COLUNA_DO_CAMPO_ALUNO = {
 }
 
 
-def _campos_obrigatorios_faltando(form):
-    """Rótulos dos campos obrigatórios que vieram vazios no formulário."""
-    faltando = [
-        rotulo
-        for campo, rotulo in CAMPOS_OBRIGATORIOS_ALUNO
-        if not (form.get(campo) or "").strip()
-    ]
-    if not form.getlist("aluno_modalidade_ids"):
-        faltando.append("Modalidade")
-    return faltando
+def _faixas_do_form(form, modalidades_ids):
+    """{modalidade_id: graduacao_id|None} dos seletores "Faixa — <modalidade>" do formulário."""
+    out = {}
+    for mid in modalidades_ids or []:
+        if not str(mid).strip().isdigit():
+            continue
+        v = (form.get(f"graduacao_mod_{int(mid)}") or "").strip()
+        out[int(mid)] = int(v) if v.isdigit() else None
+    return out
+
+
+def _datas_do_form(form, modalidades_ids):
+    """{modalidade_id: date|None} das datas "última graduação" de cada modalidade."""
+    out = {}
+    for mid in modalidades_ids or []:
+        if not str(mid).strip().isdigit():
+            continue
+        v = (form.get(f"data_graduacao_mod_{int(mid)}") or "").strip()[:10]
+        try:
+            out[int(mid)] = datetime.strptime(v, "%Y-%m-%d").date() if v else None
+        except ValueError:
+            out[int(mid)] = None
+    return out
+
+
+def _campos_obrigatorios_faltando(form, academia_id=None, faixa_branca=False):
+    """Rótulos dos campos obrigatórios que vieram vazios no formulário.
+
+    A lista do que é obrigatório é da academia (Configurações → Campos
+    obrigatórios no cadastro do aluno); sem configuração, vale o padrão de
+    sempre. Ver utils/campos_obrigatorios_aluno.py.
+    """
+    return campos_obrig.validar(form, academia_id, faixa_branca=faixa_branca)
+
+
+def _valor_do_aluno(aluno, coluna):
+    return aluno.get(coluna) if isinstance(aluno, dict) else getattr(aluno, coluna, None)
+
+
+def _obrigatorios_do_aluno(aluno):
+    """Obrigatórios da academia do aluno; sem academia, o padrão."""
+    return campos_obrig.obrigatorios(_valor_do_aluno(aluno, "id_academia"))
 
 
 def campos_pendentes_do_aluno(aluno):
-    """Rótulos do que falta num aluno já cadastrado (usado só para avisar)."""
+    """Rótulos do que falta num aluno já cadastrado (usado só para avisar).
+
+    Segue a configuração da academia do aluno: campo que a academia dispensou
+    não aparece como pendência.
+    """
     if not aluno:
         return []
+    obrig = _obrigatorios_do_aluno(aluno)
     pendentes = []
-    for campo, rotulo in CAMPOS_OBRIGATORIOS_ALUNO:
+    chaves = [c for c, _r in campos_obrig.SEMPRE_OBRIGATORIOS] + list(campos_obrig.CHAVES_CONFIGURAVEIS)
+    for campo in chaves:
+        if campo not in obrig or campo == "aluno_modalidade_ids":
+            continue
         coluna = COLUNA_DO_CAMPO_ALUNO.get(campo, campo)
-        valor = aluno.get(coluna) if isinstance(aluno, dict) else getattr(aluno, coluna, None)
+        valor = _valor_do_aluno(aluno, coluna)
         if valor is None or str(valor).strip() == "":
-            pendentes.append(rotulo)
+            if campo == "ultimo_exame_faixa" and _aluno_na_faixa_branca(aluno):
+                continue  # branca não tem data de graduação
+            pendentes.append(campos_obrig.ROTULOS.get(campo, campo))
     return pendentes
+
+
+def _aluno_na_faixa_branca(aluno):
+    faixa = _valor_do_aluno(aluno, "faixa")
+    if faixa:
+        return faixa_eh_branca(faixa, _valor_do_aluno(aluno, "graduacao"))
+    gid = _valor_do_aluno(aluno, "graduacao_id")
+    if not gid:
+        return False
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor(dictionary=True)
+        return graduacao_eh_branca(cur, gid)
+    finally:
+        conn.close()
 
 
 # O que o próprio aluno consegue completar no primeiro acesso. Academia, turma
@@ -2787,13 +2917,21 @@ def campos_pendentes_autopreenchiveis(aluno):
     Separado de `campos_pendentes_do_aluno` porque aquele conta também o que só
     a secretaria resolve — e travar o aluno por falta de turma seria trancá-lo
     fora do sistema por algo que não está na mão dele.
+
+    Campo que a academia do aluno dispensou não trava o primeiro acesso. A
+    lista só encolhe — campo que a academia passou a exigir e que não está em
+    CAMPOS_AUTOPREENCHIVEIS_ALUNO não entra, porque a tela de completar
+    cadastro não tem como pedi-lo.
     """
     if not aluno:
         return []
+    obrig = _obrigatorios_do_aluno(aluno)
     faltando = []
     for campo, rotulo in CAMPOS_AUTOPREENCHIVEIS_ALUNO:
+        if campo not in obrig:
+            continue
         coluna = COLUNA_DO_CAMPO_ALUNO.get(campo, campo)
-        valor = aluno.get(coluna) if isinstance(aluno, dict) else getattr(aluno, coluna, None)
+        valor = _valor_do_aluno(aluno, coluna)
         if valor is None or str(valor).strip() == "":
             faltando.append((campo, rotulo, coluna))
     return faltando
@@ -2832,6 +2970,8 @@ def cadastrar_aluno():
     except Exception:
         cursor.execute("SELECT * FROM graduacao ORDER BY id")
         graduacoes = cursor.fetchall()
+    # O formulário desliga a data da última graduação quando a faixa é branca.
+    marcar_brancas(graduacoes)
 
     acad_filtro = request.args.get("academia_id", type=int) or session.get("academia_gerenciamento_id")
     ids_acad = _get_academias_ids()
@@ -3043,6 +3183,15 @@ def cadastrar_aluno():
             modalidades_ids = [int(x) for x in modalidades_ids_raw if str(x).strip().isdigit() and int(x) in ids_validos]
         else:
             modalidades_ids = [int(x) for x in modalidades_ids_raw if str(x).strip().isdigit()]
+        # Academia de uma modalidade só: o aluno entra nela mesmo sem marcar.
+        if not modalidades_ids and id_academia:
+            cursor.execute(
+                "SELECT modalidade_id FROM academia_modalidades WHERE academia_id = %s",
+                (id_academia,),
+            )
+            unicas = [r["modalidade_id"] for r in cursor.fetchall()]
+            if len(unicas) == 1:
+                modalidades_ids = unicas
 
         # Graduação só pode ser genérica (modalidade_id NULL) ou da modalidade selecionada.
         if graduacao_id:
@@ -3081,9 +3230,26 @@ def cadastrar_aluno():
         cursor.execute("SHOW COLUMNS FROM alunos")
         colunas_alunos = {row["Field"] for row in cursor.fetchall()}
 
-        # Cadastro novo exige a ficha completa. A checagem é aqui, e não só no
+        # Faixa branca não é graduação — o aluno começa nela —, então não tem
+        # data. Forçado aqui porque o JS que desliga o campo é contornável.
+        faixa_branca = graduacao_eh_branca(cursor, graduacao_id)
+        if faixa_branca:
+            ultimo_exame_faixa = None
+
+        # Cadastro novo exige a ficha completa — o que é "completa" é a academia
+        # quem define (Configurações). A checagem é aqui, e não só no
         # `required` do HTML, porque o navegador é contornável.
-        faltando = _campos_obrigatorios_faltando(form)
+        obrig_form = campos_obrig.obrigatorios(id_academia)
+        faltando = campos_obrig.validar(form, id_academia, faixa_branca=faixa_branca, obrig=obrig_form)
+        # CPF de quem já tem cadastro: não é cadastro novo, é matrícula da mesma
+        # pessoa — os obrigatórios do cadastro não se aplicam (o aviso abaixo
+        # cuida, e exige nome e nascimento conferindo).
+        if faltando and validar_cpf(cpf):
+            cursor.execute(
+                "SELECT 1 FROM alunos WHERE REPLACE(REPLACE(REPLACE(cpf, '.', ''), '-', ''), ' ', '') = %s LIMIT 1",
+                ("".join(filter(str.isdigit, str(cpf))),))
+            if cursor.fetchone():
+                faltando = []
         if faltando:
             flash(
                 "Complete o cadastro antes de salvar. Falta preencher: "
@@ -3102,13 +3268,17 @@ def cadastrar_aluno():
                 form_data=form,
                 academia_selecionada=form.get("id_academia") or request.args.get("academia_id"),
                 aluno=None,
+                obrigatorios=obrig_form,
             )
 
         # Regra: CPF obrigatório (aluno ou responsável financeiro)
         cpf_aluno_valido = validar_cpf(cpf)
         cpf_resp_valido = validar_cpf(responsavel_financeiro_cpf)
 
-        if not (cpf_aluno_valido or cpf_resp_valido):
+        # A regra dos CPFs vale enquanto a academia exigir algum dos dois: com
+        # ambos dispensados, não há CPF a validar.
+        exige_cpf = "cpf" in obrig_form or "responsavel_financeiro_cpf" in obrig_form
+        if exige_cpf and not (cpf_aluno_valido or cpf_resp_valido):
             flash(
                 "Informe CPF válido do aluno ou do responsável financeiro.",
                 "danger",
@@ -3124,32 +3294,18 @@ def cadastrar_aluno():
                 form_data=form,
                 academia_selecionada=form.get("id_academia") or request.args.get("academia_id"),
                 aluno=None,
+                obrigatorios=obrig_form,
             )
 
-        # Telefone do responsável financeiro é obrigatório (usado nas cobranças online)
-        if not responsavel_financeiro_telefone:
-            flash(
-                "Informe o telefone do responsável financeiro (usado nas cobranças online).",
-                "danger",
-            )
-            db.close()
-            return render_template(
-                "alunos/cadastro_aluno.html",
-                graduacoes=graduacoes,
-                turmas=turmas,
-                modalidades=modalidades,
-                academias=academias,
-                back_url=back_url,
-                form_data=form,
-                academia_selecionada=form.get("id_academia") or request.args.get("academia_id"),
-                aluno=None,
-            )
+        # O telefone do responsável financeiro (usado nas cobranças online) era
+        # checado à parte aqui; agora é um campo da configuração da academia e
+        # entra no `validar` acima — padrão continua obrigatório.
 
         if cpf_aluno_valido:
             cpf_digits = "".join(filter(str.isdigit, str(cpf)))
             cursor.execute(
                 """
-                SELECT id, nome, cpf
+                SELECT id, nome, cpf, data_nascimento
                 FROM alunos
                 WHERE REPLACE(REPLACE(REPLACE(cpf, '.', ''), '-', ''), ' ', '') = %s
                 """,
@@ -3157,10 +3313,45 @@ def cadastrar_aluno():
             )
             existente = cursor.fetchone()
             if existente:
-                flash(
-                    f"CPF já cadastrado para o aluno \"{existente['nome']}\" (ID {existente['id']}).",
-                    "danger",
-                )
+                # Uma pessoa, várias matrículas: CPF existente não bloqueia mais.
+                from utils.alunos_academias import matricular_pessoa_existente, mesma_pessoa
+                acad_destino = int(id_academia) if str(id_academia or "").isdigit() else None
+                if acad_destino and aluno_vinculado_a_academia(cursor, existente["id"], acad_destino):
+                    db.close()
+                    flash(f'{existente["nome"]} já é aluno(a) desta academia — abrimos o cadastro dele(a).',
+                          "info")
+                    return redirect(url_for("alunos.ficha_aluno", aluno_id=existente["id"],
+                                            academia_id=acad_destino))
+                confere = mesma_pessoa(existente, nome, data_nascimento)
+                if str(form.get("vincular_existente") or "") == str(existente["id"]) and acad_destino:
+                    if confere:
+                        ok_v, msg_v = matricular_pessoa_existente(
+                            cursor, existente["id"], acad_destino,
+                            modalidades_ids=modalidades_ids,
+                            turma_ids=[TurmaID] if TurmaID else [],
+                            faixas=_faixas_do_form(form, modalidades_ids),
+                            datas=_datas_do_form(form, modalidades_ids),
+                            usuario_id=current_user.id,
+                        )
+                        if ok_v:
+                            db.commit()
+                            db.close()
+                            flash(f'{existente["nome"]} já tinha cadastro: foi matriculado(a) nesta '
+                                  "academia, sem duplicar a pessoa.", "success")
+                            return redirect(url_for("alunos.ficha_aluno", aluno_id=existente["id"],
+                                                    academia_id=acad_destino))
+                        flash(msg_v, "danger")
+                    else:
+                        flash("O nome e a data de nascimento informados não conferem com o cadastro "
+                              "deste CPF. Confira os dados com o aluno.", "danger")
+                # Sem dados da outra academia: só o nome e o ano, para a secretaria
+                # reconhecer a pessoa.
+                nasc = existente.get("data_nascimento")
+                cpf_existente = {
+                    "id": existente["id"], "nome": existente["nome"],
+                    "ano": nasc.year if hasattr(nasc, "year") else (str(nasc)[:4] if nasc else ""),
+                    "confere": confere,
+                }
                 db.close()
                 return render_template(
                     "alunos/cadastro_aluno.html",
@@ -3172,6 +3363,7 @@ def cadastrar_aluno():
                     form_data=form,
                     academia_selecionada=form.get("id_academia") or request.args.get("academia_id"),
                     aluno=None,
+                    obrigatorios=obrig_form, cpf_existente=cpf_existente,
                 )
 
         # Regra: aluno menor precisa CPF válido do responsável financeiro
@@ -3189,7 +3381,7 @@ def cadastrar_aluno():
             idade = hoje.year - nasc_data.year - (
                 (hoje.month, hoje.day) < (nasc_data.month, nasc_data.day)
             )
-            if idade < 18 and not cpf_resp_valido:
+            if idade < 18 and "responsavel_financeiro_cpf" in obrig_form and not cpf_resp_valido:
                 flash(
                     "Aluno menor: informe CPF válido do responsável financeiro.",
                     "danger",
@@ -3205,6 +3397,7 @@ def cadastrar_aluno():
                     form_data=form,
                     academia_selecionada=form.get("id_academia") or request.args.get("academia_id"),
                     aluno=None,
+                    obrigatorios=obrig_form,
                 )
 
         if not cadastro_zempo:
@@ -3294,11 +3487,17 @@ def cadastrar_aluno():
                     if mid:
                         cursor_insert.execute(
                             """
-                            INSERT INTO aluno_modalidades (aluno_id, modalidade_id)
+                            INSERT IGNORE INTO aluno_modalidades (aluno_id, modalidade_id)
                             VALUES (%s, %s)
                             """,
                             (aluno_id, mid),
                         )
+            # Faixa de cada modalidade (judô e jiu-jitsu não se misturam).
+            if modalidades_ids:
+                _cd = db.cursor(dictionary=True)   # mesma conexão, mesma transação
+                grad_mod.gravar_faixas(_cd, aluno_id, _faixas_do_form(request.form, modalidades_ids),
+                                   _datas_do_form(request.form, modalidades_ids))
+                _cd.close()
 
             # 3) Foto (se enviada)
             foto_filename = None
@@ -3368,6 +3567,7 @@ def cadastrar_aluno():
                 form_data=form,
                 academia_selecionada=academia_selecionada,
                 aluno=None,
+                obrigatorios=obrig_form,
             )
 
     academia_selecionada = (
@@ -3387,6 +3587,7 @@ def cadastrar_aluno():
         back_url=back_url,
         academia_selecionada=academia_selecionada,
         aluno=None,
+        obrigatorios=campos_obrig.obrigatorios(academia_selecionada),
     )
 
 
@@ -3428,6 +3629,15 @@ def _voltar_da_ficha():
     if not destino or not destino.startswith("/") or destino.startswith("//"):
         return url_for("alunos.lista_alunos")
     return destino
+
+
+def _academia_do_next(destino):
+    """`academia_id` da lista de onde a ficha foi aberta (?next=/alunos/lista_alunos?academia_id=14)."""
+    try:
+        valor = parse_qs(urlparse(destino or "").query).get("academia_id", [""])[0]
+        return int(valor) if valor else None
+    except (ValueError, TypeError):
+        return None
 
 
 @bp_alunos.route("/ficha/<int:aluno_id>/graduacao", methods=["POST"])
@@ -3481,6 +3691,13 @@ def registrar_graduacao(aluno_id):
         if not g:
             flash("Faixa inválida.", "danger")
             return redirect(destino)
+        # Faixa branca não se registra: o aluno começa nela, não há graduação
+        # nem data a lançar (e o histórico exige data). O select do modal já
+        # não oferece a branca; isto cobre quem chegar aqui por fora dele.
+        if faixa_eh_branca(g.get("faixa"), g.get("graduacao")):
+            flash("Faixa branca não é graduação — o aluno já começa nela, sem data. "
+                  "Para colocar o aluno na branca, edite o cadastro.", "warning")
+            return redirect(destino)
 
         cur.execute(
             """INSERT INTO aluno_graduacao
@@ -3490,18 +3707,30 @@ def registrar_graduacao(aluno_id):
              data_grad, origem, observacao, getattr(current_user, "id", None)),
         )
 
-        # Faixa atual só muda se esta for a graduação mais recente do aluno.
+        # Faixa atual só muda se esta for a graduação mais recente do aluno NA
+        # MODALIDADE dela: uma graduação de jiu-jitsu não impede a de judô.
         cur.execute(
-            "SELECT MAX(data) AS ultima FROM aluno_graduacao WHERE aluno_id = %s",
-            (aluno_id,),
+            """SELECT MAX(ag.data) AS ultima FROM aluno_graduacao ag
+               LEFT JOIN graduacao gx ON gx.id = ag.graduacao_id
+               WHERE ag.aluno_id = %s
+                 AND (gx.modalidade_id <=> (SELECT modalidade_id FROM graduacao WHERE id = %s))""",
+            (aluno_id, g["id"]),
         )
         ultima = (cur.fetchone() or {}).get("ultima")
         virou_atual = ultima is None or data_grad >= ultima
         if virou_atual:
-            cur.execute(
-                "UPDATE alunos SET graduacao_id = %s, ultimo_exame_faixa = %s WHERE id = %s",
-                (g["id"], data_grad, aluno_id),
-            )
+            if grad_mod.registrar(cur, aluno_id, g["id"], data_grad):
+                # A faixa foi para a modalidade dela; a data acompanha só se ela
+                # virou a faixa principal.
+                cur.execute(
+                    "UPDATE alunos SET ultimo_exame_faixa = %s WHERE id = %s AND graduacao_id = %s",
+                    (data_grad, aluno_id, g["id"]),
+                )
+            else:
+                cur.execute(
+                    "UPDATE alunos SET graduacao_id = %s, ultimo_exame_faixa = %s WHERE id = %s",
+                    (g["id"], data_grad, aluno_id),
+                )
         db.commit()
     except Exception as e:
         db.rollback()
@@ -3540,19 +3769,34 @@ def excluir_graduacao(aluno_id, grad_id):
             flash("Sem permissão para este aluno.", "danger")
             return redirect(destino)
 
-        cur.execute("DELETE FROM aluno_graduacao WHERE id = %s AND aluno_id = %s", (grad_id, aluno_id))
-        # A faixa atual passa a ser a graduação mais recente que sobrou.
+        # Modalidade da graduação apagada: a faixa volta dentro DELA (apagar um
+        # lançamento de judô não pode deixar o aluno com a faixa de jiu-jitsu).
         cur.execute(
-            """SELECT graduacao_id, data FROM aluno_graduacao
-               WHERE aluno_id = %s ORDER BY data DESC, id DESC LIMIT 1""",
-            (aluno_id,),
+            """SELECT g.modalidade_id FROM aluno_graduacao ag
+               LEFT JOIN graduacao g ON g.id = ag.graduacao_id
+               WHERE ag.id = %s AND ag.aluno_id = %s""", (grad_id, aluno_id))
+        mod_apagada = (cur.fetchone() or {}).get("modalidade_id")
+        cur.execute("DELETE FROM aluno_graduacao WHERE id = %s AND aluno_id = %s", (grad_id, aluno_id))
+        # A faixa atual passa a ser a graduação mais recente que sobrou NA MODALIDADE.
+        cur.execute(
+            """SELECT ag.graduacao_id, ag.data FROM aluno_graduacao ag
+               LEFT JOIN graduacao g ON g.id = ag.graduacao_id
+               WHERE ag.aluno_id = %s AND g.modalidade_id <=> %s
+               ORDER BY ag.data DESC, ag.id DESC LIMIT 1""",
+            (aluno_id, mod_apagada),
         )
         ult = cur.fetchone()
         if ult and ult.get("graduacao_id"):
-            cur.execute(
-                "UPDATE alunos SET graduacao_id = %s, ultimo_exame_faixa = %s WHERE id = %s",
-                (ult["graduacao_id"], ult["data"], aluno_id),
-            )
+            if grad_mod.registrar(cur, aluno_id, ult["graduacao_id"], ult["data"]):
+                cur.execute(
+                    "UPDATE alunos SET ultimo_exame_faixa = %s WHERE id = %s AND graduacao_id = %s",
+                    (ult["data"], aluno_id, ult["graduacao_id"]),
+                )
+            else:
+                cur.execute(
+                    "UPDATE alunos SET graduacao_id = %s, ultimo_exame_faixa = %s WHERE id = %s",
+                    (ult["graduacao_id"], ult["data"], aluno_id),
+                )
         db.commit()
         flash("Graduação removida do histórico.", "success")
     except Exception as e:
@@ -3592,17 +3836,56 @@ def ficha_aluno(aluno_id):
 
     # Permissão: precisa ter a academia do aluno entre as acessíveis (gestor academia/
     # associação/federação/professor) ou ser admin.
-    ids_acessiveis = _get_academias_ids()
-    if not (current_user.has_role("admin") or aluno.get("id_academia") in (ids_acessiveis or [])):
+    # Aluno de mais de uma academia: vale a principal e as de alunos_academias.
+    ids_acessiveis = _get_academias_ids() or []
+    cur.execute("SELECT academia_id FROM alunos_academias WHERE aluno_id = %s", (aluno_id,))
+    ids_do_aluno = [r["academia_id"] for r in cur.fetchall()]
+    if aluno.get("id_academia") and aluno["id_academia"] not in ids_do_aluno:
+        ids_do_aluno.insert(0, aluno["id_academia"])
+    ids_visiveis = [i for i in ids_do_aluno if current_user.has_role("admin") or i in ids_acessiveis]
+    if not (current_user.has_role("admin") or ids_visiveis):
         cur.close(); db.close()
         flash("Você não tem permissão para ver este aluno.", "danger")
         return redirect(back_url)
 
-    # Turmas do aluno
+    # A ficha mostra os dados de UMA academia: a pedida na URL, a da lista de
+    # onde se veio (`next`) ou a escolhida no gerenciamento. Antes vinham as
+    # mensalidades, presenças e turmas de todas as academias do aluno juntas.
+    pedidas = [
+        request.args.get("academia_id", type=int),
+        _academia_do_next(back_url),
+        session.get("academia_gerenciamento_id"),
+    ]
+    academia_ficha = next((p for p in pedidas if p and p in ids_visiveis), None)
+    if not academia_ficha:
+        academia_ficha = (aluno.get("id_academia") if aluno.get("id_academia") in ids_visiveis
+                          else (ids_visiveis[0] if ids_visiveis else aluno.get("id_academia")))
+    academias_ficha = []
+    if len(ids_visiveis) > 1:
+        ph = ",".join(["%s"] * len(ids_visiveis))
+        cur.execute(f"SELECT id, nome FROM academias WHERE id IN ({ph}) ORDER BY nome", tuple(ids_visiveis))
+        academias_ficha = cur.fetchall()
+    if academia_ficha and academia_ficha != aluno.get("id_academia"):
+        cur.execute("SELECT nome FROM academias WHERE id = %s", (academia_ficha,))
+        aluno["academia_nome"] = (cur.fetchone() or {}).get("nome") or aluno.get("academia_nome")
+    # Daqui para baixo tudo (formas, descontos, planos, WhatsApp) é da academia da ficha.
+    aluno["id_academia_principal"] = aluno.get("id_academia")
+    aluno["id_academia"] = academia_ficha
+
+    # Faixa de cada modalidade (judô e jiu-jitsu separados). Com uma modalidade
+    # em foco no topo, a ficha mostra só a faixa dela.
+    from utils.multimodalidade import CHAVE_SESSAO as _CHAVE_MOD
+    faixas_modalidade = grad_mod.faixas_por_modalidade(cur, [aluno_id]).get(aluno_id, [])
+    _mod_ctx = session.get(_CHAVE_MOD)
+    if _mod_ctx and any(f["modalidade_id"] == _mod_ctx for f in faixas_modalidade):
+        faixas_modalidade = [f for f in faixas_modalidade if f["modalidade_id"] == _mod_ctx]
+
+    # Turmas do aluno nesta academia
     cur.execute(
         """SELECT t.Nome AS nome, t.DiasHorario FROM aluno_turmas at
-           JOIN turmas t ON t.TurmaID = at.TurmaID WHERE at.aluno_id = %s ORDER BY t.Nome""",
-        (aluno_id,),
+           JOIN turmas t ON t.TurmaID = at.TurmaID
+           WHERE at.aluno_id = %s AND t.id_academia = %s ORDER BY t.Nome""",
+        (aluno_id, academia_ficha),
     )
     turmas_aluno = cur.fetchall()
     # Modalidades do aluno
@@ -3632,8 +3915,9 @@ def ficha_aluno(aluno_id):
            FROM presencas p
            LEFT JOIN turmas t ON t.TurmaID = p.turma_id
            WHERE p.aluno_id = %s AND YEAR(p.data_presenca) = %s AND MONTH(p.data_presenca) = %s
+             AND t.id_academia = %s
            ORDER BY p.data_presenca""",
-        (aluno_id, ano_ref, mes_ref),
+        (aluno_id, ano_ref, mes_ref, academia_ficha),
     )
     aulas_mes = len(registros_mes)
     presencas_mes = sum(1 for r in registros_mes if r.get("presente") == 1)
@@ -3655,9 +3939,9 @@ def ficha_aluno(aluno_id):
         """SELECT p.data_presenca, p.presente, p.horario_aula, t.Nome AS turma_nome
            FROM presencas p
            LEFT JOIN turmas t ON t.TurmaID = p.turma_id
-           WHERE p.aluno_id = %s
+           WHERE p.aluno_id = %s AND t.id_academia = %s
            ORDER BY p.data_presenca DESC LIMIT 30""",
-        (aluno_id,),
+        (aluno_id, academia_ficha),
     )
 
     # --- graduações -----------------------------------------------------
@@ -3724,9 +4008,10 @@ def ficha_aluno(aluno_id):
            FROM mensalidade_aluno ma
            LEFT JOIN mensalidades m ON m.id = ma.mensalidade_id
            WHERE ma.aluno_id = %s AND (ma.status IS NULL OR ma.status <> 'cancelado')
+             AND m.id_academia = %s
            ORDER BY (ma.data_vencimento > LAST_DAY(CURDATE())), ma.data_vencimento DESC
            LIMIT 6""",
-        (aluno_id,),
+        (aluno_id, academia_ficha),
     )
     # Status EFETIVO (determinístico), não o cru: uma pendente vencida vira
     # 'atrasado' aqui mesmo, sem depender de um job ter rodado antes. Sem isso a
@@ -3793,15 +4078,16 @@ def ficha_aluno(aluno_id):
         """SELECT MIN(data_vencimento) AS proximo,
                   SUM(status = 'atrasado' OR (status = 'pendente' AND data_vencimento < CURDATE())) AS atrasadas
            FROM mensalidade_aluno
-           WHERE aluno_id = %s AND status IN ('pendente', 'atrasado')""",
-        (aluno_id,), um_so=True,
+           WHERE aluno_id = %s AND status IN ('pendente', 'atrasado')
+             AND mensalidade_id IN (SELECT id FROM mensalidades WHERE id_academia = %s)""",
+        (aluno_id, academia_ficha), um_so=True,
     ) or {}
     # Saldo da carteira (crédito): gerado quando um pagamento com confirmação
     # automática é cancelado. Pode quitar outras mensalidades.
     _cart = _consulta(
         """SELECT COALESCE(SUM(CASE WHEN tipo='credito' THEN valor ELSE -valor END), 0) AS saldo
-           FROM carteira_movimentos WHERE aluno_id = %s""",
-        (aluno_id,), um_so=True,
+           FROM carteira_movimentos WHERE aluno_id = %s AND id_academia = %s""",
+        (aluno_id, academia_ficha), um_so=True,
     ) or {}
     try:
         saldo_carteira = round(float(_cart.get("saldo") or 0), 2)
@@ -3819,13 +4105,15 @@ def ficha_aluno(aluno_id):
     _dia_venc = _consulta(
         """SELECT DAY(data_vencimento) AS dia FROM mensalidade_aluno
            WHERE aluno_id = %s AND status IN ('pendente', 'atrasado')
+             AND mensalidade_id IN (SELECT id FROM mensalidades WHERE id_academia = %s)
            ORDER BY data_vencimento ASC LIMIT 1""",
-        (aluno_id,), um_so=True,
+        (aluno_id, academia_ficha), um_so=True,
     ) or _consulta(
         """SELECT DAY(data_vencimento) AS dia FROM mensalidade_aluno
            WHERE aluno_id = %s AND status <> 'cancelado'
+             AND mensalidade_id IN (SELECT id FROM mensalidades WHERE id_academia = %s)
            ORDER BY data_vencimento DESC LIMIT 1""",
-        (aluno_id,), um_so=True,
+        (aluno_id, academia_ficha), um_so=True,
     ) or {}
     dia_vencimento_atual = _dia_venc.get("dia")
 
@@ -3834,14 +4122,14 @@ def ficha_aluno(aluno_id):
     _pac = _consulta(
         """SELECT m.id, m.nome FROM alunos a
            JOIN mensalidades m ON m.id = a.plano_mensalidade_id
-           WHERE a.id = %s""",
-        (aluno_id,), um_so=True,
+           WHERE a.id = %s AND m.id_academia = %s""",
+        (aluno_id, academia_ficha), um_so=True,
     ) or _consulta(
         """SELECT m.id, m.nome FROM mensalidade_aluno ma
            JOIN mensalidades m ON m.id = ma.mensalidade_id
-           WHERE ma.aluno_id = %s AND ma.status <> 'cancelado'
+           WHERE ma.aluno_id = %s AND ma.status <> 'cancelado' AND m.id_academia = %s
            ORDER BY ma.data_vencimento DESC, ma.id DESC LIMIT 1""",
-        (aluno_id,), um_so=True,
+        (aluno_id, academia_ficha), um_so=True,
     ) or {}
 
     # --- observações ----------------------------------------------------
@@ -3850,9 +4138,11 @@ def ficha_aluno(aluno_id):
         observacoes.append({"texto": aluno["observacoes"], "autor": "Cadastro", "data": None})
     for o in _consulta(
         """SELECT observacao, responsavel_nome, atualizado_em, data_aula
-           FROM presencas_observacao_aluno
-           WHERE aluno_id = %s AND observacao <> '' ORDER BY data_aula DESC LIMIT 8""",
-        (aluno_id,),
+           FROM presencas_observacao_aluno o
+           WHERE o.aluno_id = %s AND o.observacao <> ''
+             AND o.turma_id IN (SELECT TurmaID FROM turmas WHERE id_academia = %s)
+           ORDER BY o.data_aula DESC LIMIT 8""",
+        (aluno_id, academia_ficha),
     ):
         observacoes.append({
             "texto": o.get("observacao"),
@@ -3870,11 +4160,28 @@ def ficha_aluno(aluno_id):
     # Catálogo de faixas para o modal de graduação. Precisa sair daqui, antes do
     # close: `_consulta` engole exceção e devolve [], então rodar depois do
     # fechamento não dava erro — dava um select vazio, sem nenhuma pista.
+    # Só as faixas DAS MODALIDADES DO ALUNO, com o nome da modalidade junto.
+    # Antes vinham as 36 de todas as modalidades sem distinção, e nove nomes se
+    # repetem entre judô e jiu-jitsu (Branca, Azul, Verde, Roxa, Marrom, Preta…):
+    # o gestor via "Branca" duas vezes sem saber qual era qual, e foi assim que
+    # uma aluna de jiu-jitsu acabou com faixa de judô. Aluno sem modalidade
+    # cadastrada continua vendo tudo — esconder a lista dele seria pior.
     faixas_catalogo = _consulta(
-        """SELECT id, faixa, graduacao FROM graduacao
-           WHERE COALESCE(ativo, 1) = 1 ORDER BY ordem, faixa, graduacao""",
-        (),
+        """SELECT g.id, g.faixa, g.graduacao, md.nome AS modalidade
+           FROM graduacao g
+           LEFT JOIN modalidade md ON md.id = g.modalidade_id
+           WHERE COALESCE(g.ativo, 1) = 1
+             AND (g.modalidade_id IS NULL
+                  OR NOT EXISTS (SELECT 1 FROM matricula_modalidade mm
+                                  WHERE mm.aluno_id = %s AND mm.status = 'ativa')
+                  OR g.modalidade_id IN (SELECT mm.modalidade_id
+                                           FROM matricula_modalidade mm
+                                          WHERE mm.aluno_id = %s AND mm.status = 'ativa'))
+           ORDER BY md.nome, g.ordem, g.faixa, g.graduacao""",
+        (aluno_id, aluno_id),
     )
+    # Branca fora do modal: não é graduação e não tem data para registrar.
+    faixas_catalogo = [f for f in faixas_catalogo if not faixa_eh_branca(f.get("faixa"), f.get("graduacao"))]
 
     cur.close(); db.close()
 
@@ -3901,6 +4208,8 @@ def ficha_aluno(aluno_id):
     return render_template(
         "alunos/ficha_aluno.html",
         aluno=aluno, turmas_aluno=turmas_aluno, modalidades_aluno=modalidades_aluno,
+        # Branca não tem data de graduação: o topo diz isso em vez de "desde".
+        faixa_branca=faixa_eh_branca(aluno.get("faixa"), aluno.get("graduacao")),
         frequencia=frequencia, presencas_recentes=presencas_recentes,
         graduacoes=graduacoes, mensalidades=mensalidades, financeiro=financeiro,
         formas=formas, pode_baixar=pode_baixar, descontos=descontos_ficha,
@@ -3917,6 +4226,9 @@ def ficha_aluno(aluno_id):
             if (m.get("status") or "") in ("pendente", "atrasado")
         ),
         observacoes=observacoes, eventos=eventos,
+        # Aba "Mensagens": modelos disponíveis, faltas do mês e se o WhatsApp
+        # da academia está de pé. Tudo resolvido aqui para a aba abrir pronta.
+        **_contexto_mensagens(aluno),
         hoje_iso=date.today().isoformat(),
         faixas_catalogo=faixas_catalogo,
         dia_vencimento_atual=dia_vencimento_atual,
@@ -3926,6 +4238,7 @@ def ficha_aluno(aluno_id):
         mes_label=MESES_FICHA[mes_ref],
         academia_id=aluno.get("id_academia"),
         academia={"id": aluno.get("id_academia"), "nome": aluno.get("academia_nome")} if aluno.get("id_academia") else None,
+        academias_ficha=academias_ficha, faixas_modalidade=faixas_modalidade,
         back_url=back_url,
     )
 
@@ -4039,6 +4352,7 @@ def editar_aluno(aluno_id):
             graduacoes = cursor.fetchall()
     except Exception:
         pass
+    marcar_brancas(graduacoes)
 
     try:
         # Filtrar turmas apenas das academias acessíveis ao usuário
@@ -4202,6 +4516,9 @@ def editar_aluno(aluno_id):
                 )
                 ids_validos = {r["modalidade_id"] for r in cursor.fetchall()}
                 modalidades_ids = [str(x) for x in modalidades_ids_raw if str(x).strip().isdigit() and int(x) in ids_validos]
+                # Academia de uma modalidade só: o aluno fica nela mesmo sem marcar.
+                if not modalidades_ids and len(ids_validos) == 1:
+                    modalidades_ids = [str(next(iter(ids_validos)))]
             else:
                 modalidades_ids = [x for x in modalidades_ids_raw if str(x).strip()]
         else:
@@ -4220,6 +4537,12 @@ def editar_aluno(aluno_id):
             except Exception:
                 pass
 
+        # Faixa branca não tem data de graduação (o aluno começa nela). O JS
+        # desliga o campo, mas quem decide é o servidor.
+        faixa_branca = graduacao_eh_branca(cursor, graduacao_id)
+        if faixa_branca:
+            ultimo_exame_faixa = None
+
         # Foto
         foto_dataurl = form.get("foto")
         foto_arquivo = request.files.get("foto_arquivo")
@@ -4231,14 +4554,17 @@ def editar_aluno(aluno_id):
         elif foto_arquivo:
             foto_filename = salvar_arquivo_upload(foto_arquivo, f"aluno_{aluno_id}")
 
-        # Telefone do responsável financeiro é obrigatório também na edição: é o
-        # número usado na cobrança online e no lembrete de WhatsApp. A tela
-        # oferece copiar o telefone do próprio aluno quando houver, para que a
-        # exigência não emperre a correção de cadastros antigos.
-        if not responsavel_financeiro_telefone:
+        # Obrigatórios da academia do aluno. Na edição só trava (1) apagar um
+        # campo obrigatório que já estava preenchido e (2) o que a edição já
+        # exigia antes — nome, nascimento, e-mail e telefone do responsável
+        # financeiro (número da cobrança online e do lembrete de WhatsApp) —
+        # enquanto a academia os mantiver obrigatórios. Ficha antiga com outros
+        # buracos continua salvando; a tela só avisa o que falta.
+        faltando = campos_obrig.validar(
+            form, aluno.get("id_academia"), anterior=aluno, faixa_branca=faixa_branca)
+        if faltando:
             flash(
-                "Informe o telefone do responsável financeiro — é o número usado "
-                "na cobrança online e no lembrete de WhatsApp.",
+                "Não foi possível salvar. Preencha: " + ", ".join(faltando) + ".",
                 "danger",
             )
             db.close()
@@ -4354,26 +4680,26 @@ def editar_aluno(aluno_id):
                 except Exception:
                     pass
 
-            # Atualizar modalidades N:N
-            cursor_update.execute(
-                "DELETE FROM aluno_modalidades WHERE aluno_id = %s", (aluno_id,)
-            )
-            if modalidades_ids:
-                for mid in modalidades_ids:
-                    if mid:
-                        cursor_update.execute(
-                            """
-                            INSERT INTO aluno_modalidades (aluno_id, modalidade_id)
-                            VALUES (%s, %s)
-                            """,
-                            (aluno_id, mid),
-                        )
+            # Atualizar modalidades N:N sem apagar o vínculo das que ficam: é nele
+            # que mora a faixa de cada modalidade.
+            _cd = db.cursor(dictionary=True)   # mesma conexão, mesma transação
+            # Só remove modalidades que esta tela oferecia (as de outra academia ficam).
+            grad_mod.sincronizar_modalidades(_cd, aluno_id, modalidades_ids,
+                                             escopo={m["id"] for m in (modalidades or [])})
+            grad_mod.gravar_faixas(_cd, aluno_id, _faixas_do_form(request.form, modalidades_ids),
+                                   _datas_do_form(request.form, modalidades_ids))
+            _cd.close()
 
-            # Atualizar aluno_turmas N:N (múltiplas turmas)
+            # Atualizar aluno_turmas N:N (múltiplas turmas). Só mexe nas turmas que
+            # esta tela oferecia: as de outra academia (que o usuário nem vê) ficam.
             try:
-                cursor_update.execute(
-                    "DELETE FROM aluno_turmas WHERE aluno_id = %s", (aluno_id,)
-                )
+                _ofertadas = [t["TurmaID"] for t in (turmas or []) if t.get("TurmaID")]
+                if _ofertadas:
+                    _ph = ",".join(["%s"] * len(_ofertadas))
+                    cursor_update.execute(
+                        f"DELETE FROM aluno_turmas WHERE aluno_id = %s AND TurmaID IN ({_ph})",
+                        (aluno_id, *_ofertadas),
+                    )
                 for tid in turmas_ids:
                     if tid:
                         cursor_update.execute(
@@ -4434,10 +4760,19 @@ def editar_aluno(aluno_id):
         or current_user.has_role("gestor_academia")
     )
 
+    # Faixa de cada modalidade do aluno, para os seletores "Faixa — <modalidade>".
+    _cf = db.cursor(dictionary=True)
+    _fxs = grad_mod.faixas_por_modalidade(_cf, [aluno_id]).get(aluno_id, [])
+    faixas_atuais = {f["modalidade_id"]: f["graduacao_id"] for f in _fxs}
+    datas_atuais = {f["modalidade_id"]: f.get("data_graduacao") for f in _fxs}
+    _cf.close()
     db.close()
+    # Campo sem informação (ex.: aluno vindo do pré-cadastro) aparece vazio, não
+    # "None". O peso fica de fora: o template trata a ausência dele à parte.
+    aluno = {k: ("" if v is None and k != "peso" else v) for k, v in aluno.items()}
     return render_template(
         "alunos/editar_aluno.html",
-        aluno=aluno,
+        aluno=aluno, faixas_atuais=faixas_atuais, datas_atuais=datas_atuais,
         graduacoes=graduacoes,
         turmas=turmas,
         modalidades=modalidades,
@@ -4449,6 +4784,8 @@ def editar_aluno(aluno_id):
         # Avisa o que falta no cadastro antigo — sem travar o salvamento, senão
         # nem uma correção de telefone passaria antes de completar tudo.
         campos_pendentes=campos_pendentes_do_aluno(aluno),
+        # `required` do HTML: o mesmo critério que o servidor aplica no POST.
+        obrigatorios=campos_obrig.exigidos(aluno.get("id_academia"), anterior=aluno),
         back_url=back_url,
     )
 
@@ -4799,11 +5136,11 @@ def turmas_matricula_json(aluno_id):
             cursor.execute(
                 """
                 SELECT id, nome, valor FROM mensalidades
-                WHERE id_academia = %s AND ativo = 1 ORDER BY nome
+                WHERE id_academia = %s AND ativo = 1 AND COALESCE(periodicidade,'mensal') <> 'diaria' ORDER BY nome
                 """,
                 (id_acad,),
             )
-            rows_pl = cursor.fetchall() or []
+            rows_pl = filtrar_planos(cursor, cursor.fetchall() or [], id_acad)
         except Exception:
             try:
                 cursor.execute(
@@ -5408,7 +5745,11 @@ def matricula_inicial(aluno_id):
             cursor.execute("SELECT 1 FROM aluno_modalidades WHERE aluno_id = %s LIMIT 1", (aluno_id,))
             tinha_modalidade = bool(cursor.fetchone())
 
-            cursor.execute("DELETE FROM aluno_turmas WHERE aluno_id = %s", (aluno_id,))
+            # Só as turmas DESTA academia: matrícula aqui não tira o aluno das
+            # turmas que ele tem em outra academia.
+            cursor.execute(
+                """DELETE at FROM aluno_turmas at JOIN turmas t ON t.TurmaID = at.TurmaID
+                   WHERE at.aluno_id = %s AND t.id_academia = %s""", (aluno_id, id_acad))
             for tid in {t["TurmaID"] for t in turmas_validas}:
                 cursor.execute(
                     "INSERT IGNORE INTO aluno_turmas (aluno_id, TurmaID) VALUES (%s, %s)",
@@ -5420,12 +5761,11 @@ def matricula_inicial(aluno_id):
             cursor.execute("UPDATE alunos SET TurmaID = %s WHERE id = %s",
                            (turma_principal, aluno_id))
 
-            cursor.execute("DELETE FROM aluno_modalidades WHERE aluno_id = %s", (aluno_id,))
-            for mid in set(modalidades_validas):
-                cursor.execute(
-                    "INSERT INTO aluno_modalidades (aluno_id, modalidade_id) VALUES (%s, %s)",
-                    (aluno_id, mid),
-                )
+            cursor.execute("SELECT id_associacao FROM academias WHERE id = %s", (id_acad,))
+            _assoc_m = (cursor.fetchone() or {}).get("id_associacao")
+            grad_mod.sincronizar_modalidades(
+                cursor, aluno_id, set(modalidades_validas),
+                escopo={m["id"] for m in _carregar_modalidades_form(cursor, id_acad, _assoc_m)})
 
             # Desconto escolhido na tela: o vínculo é criado ANTES de gerar as
             # parcelas, senão `_valor_com_desconto` não teria o que enxergar e a
@@ -5581,10 +5921,10 @@ def matricula_inicial(aluno_id):
 
         cursor.execute(
             "SELECT id, nome, valor FROM mensalidades "
-            "WHERE id_academia = %s AND ativo = 1 ORDER BY nome",
+            "WHERE id_academia = %s AND ativo = 1 AND COALESCE(periodicidade,'mensal') <> 'diaria' ORDER BY nome",
             (id_acad,),
         )
-        planos = cursor.fetchall() or []
+        planos = filtrar_planos(cursor, cursor.fetchall() or [], id_acad)
 
         cursor.execute(
             """SELECT 1 FROM mensalidade_aluno
@@ -6059,3 +6399,82 @@ def tornar_principal_academia(aluno_id):
         cur.close()
         conn.close()
     return redirect(url_for("alunos.editar_aluno", aluno_id=aluno_id))
+
+
+# ======================================================
+# 🔹 Mensagens da ficha do aluno (ocorrência, faltas, texto livre, modelos)
+# ======================================================
+def _pode_falar_com_aluno(aluno_id):
+    """(aluno, erro). Confere que o aluno é de uma academia do usuário.
+
+    O id chega pela URL e é editável; sem esta checagem, qualquer gestor
+    mandaria mensagem para o aluno de outra academia.
+    """
+    from utils import whatsapp_aluno as wa
+
+    if not (current_user.has_role("admin")
+            or current_user.has_role("gestor_academia")
+            or current_user.has_role("gestor_associacao")
+            or current_user.has_role("gestor_federacao")
+            or current_user.has_role("professor")):
+        return None, "Acesso negado."
+    aluno = wa.dados_do_aluno(aluno_id)
+    if not aluno:
+        return None, "Aluno não encontrado."
+    if current_user.has_role("admin"):
+        return aluno, ""
+    from utils.escopo import academias_do_usuario
+    if aluno.get("id_academia") not in academias_do_usuario():
+        return None, "Este aluno não é de uma academia sua."
+    return aluno, ""
+
+
+def _extra_da_mensagem(aluno_id):
+    """Placeholders que dependem do formulário: ocorrência e faltas."""
+    from utils import whatsapp_aluno as wa
+
+    faltas, periodo = wa.contar_faltas(
+        aluno_id,
+        mes=request.values.get("mes", type=int),
+        ano=request.values.get("ano", type=int))
+    return {
+        "ocorrencia": (request.values.get("ocorrencia") or "").strip(),
+        "faltas": faltas,
+        "periodo": periodo,
+    }
+
+
+@bp_alunos.route("/<int:aluno_id>/mensagem/previa", methods=["POST"])
+@login_required
+def mensagem_previa(aluno_id):
+    """O texto como sairá. A tela mostra antes de qualquer envio."""
+    from utils import whatsapp_aluno as wa
+
+    aluno, erro = _pode_falar_com_aluno(aluno_id)
+    if erro:
+        return jsonify({"ok": False, "erro": erro}), 403
+    texto, erro = wa.previa(
+        aluno_id, (request.form.get("tipo") or "livre").strip(),
+        academia_id=aluno.get("id_academia"),
+        texto_livre=request.form.get("texto"),
+        extra=_extra_da_mensagem(aluno_id))
+    return jsonify({"ok": not erro, "texto": texto, "erro": erro,
+                    "destinatario": wa.destinatario(aluno)[1]})
+
+
+@bp_alunos.route("/<int:aluno_id>/mensagem", methods=["POST"])
+@login_required
+def mensagem_enviar(aluno_id):
+    """Envia a mensagem para o contato do aluno e registra no histórico."""
+    from utils import whatsapp_aluno as wa
+
+    aluno, erro = _pode_falar_com_aluno(aluno_id)
+    if erro:
+        return jsonify({"ok": False, "erro": erro}), 403
+    ok, msg = wa.enviar(
+        aluno_id, (request.form.get("tipo") or "livre").strip(),
+        academia_id=aluno.get("id_academia"),
+        texto_livre=request.form.get("texto"),
+        extra=_extra_da_mensagem(aluno_id),
+        usuario_id=current_user.id)
+    return jsonify({"ok": ok, "msg": msg}), (200 if ok else 400)

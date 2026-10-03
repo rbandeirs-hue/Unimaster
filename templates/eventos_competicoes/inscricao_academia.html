@@ -73,8 +73,13 @@
           {% elif chave == 'graduacao_id' %}
             <select id="campo_{{ chave }}" name="campo_{{ chave }}">
               <option value="">Selecione</option>
-              {% for g in graduacoes %}
-              <option value="{{ g.id }}">{{ g.faixa }} {{ g.graduacao or '' }}</option>
+              {# Agrupadas por modalidade: judô e jiu-jitsu não se misturam. #}
+              {% for mod, itens in (graduacoes or [])|groupby('modalidade') %}
+              <optgroup label="{{ mod }}">
+                {% for g in itens %}
+                <option value="{{ g.id }}">{{ [g.faixa, g.graduacao] | reject('none') | map('string') | map('trim') | reject('in', ['', '.', '-']) | join(' - ') }}</option>
+                {% endfor %}
+              </optgroup>
               {% endfor %}
             </select>
           {% elif chave in ('data_nascimento', 'ultimo_exame_faixa', 'rg_data_emissao') %}

@@ -34,9 +34,9 @@
     .form-label{ font-weight:600; font-size:.82rem; color:#2a2724; margin-bottom:.34rem; }
     .req{ color:var(--primary); }
     .text-danger{ color:var(--primary) !important; }
-    .form-control, .form-select{ background:#fff; border:1px solid var(--input-border); color:var(--fg); border-radius:8px; padding:.62rem .82rem; font-size:.92rem; }
-    .form-control::placeholder{ color:#adaaa4; }
-    .form-control:focus, .form-select:focus{ border-color:var(--primary); box-shadow:0 0 0 3px rgba(193,18,31,.14); }
+    .form-control, .form-select, .u-campo__controle, .u-campo__controle { background:#fff; border:1px solid var(--input-border); color:var(--fg); border-radius:8px; padding:.62rem .82rem; font-size:.92rem; }
+    .form-control::placeholder, .u-campo__controle::placeholder { color:#adaaa4; }
+    .form-control:focus, .form-select:focus, .u-campo__controle:focus, .u-campo__controle:focus { border-color:var(--primary); box-shadow:0 0 0 3px rgba(193,18,31,.14); }
     .form-text{ color:var(--muted2) !important; font-size:.76rem; }
     .form-check-input{ border-color:var(--input-border); }
     .form-check-input:checked{ background-color:var(--primary); border-color:var(--primary); }
@@ -118,8 +118,8 @@
             {% endif %}
             {% if resultado.copia_cola %}
             <div style="display:flex; gap:8px; align-items:stretch;">
-              <input type="text" class="form-control" id="copiaCola" value="{{ resultado.copia_cola }}" readonly style="font-size:.82rem;">
-              <button class="btn btn-ghost" type="button" onclick="copiar('copiaCola', this)" style="flex:none; white-space:nowrap;"><i class="bi bi-clipboard me-1"></i>Copiar</button>
+              <input type="text" class="u-campo__controle" id="copiaCola" value="{{ resultado.copia_cola }}" readonly style="font-size:.82rem;">
+              <button class="u-btn btn-ghost" type="button" onclick="copiar('copiaCola', this)" style="flex:none; white-space:nowrap;"><i class="bi bi-clipboard me-1"></i>Copiar</button>
             </div>
             {% elif resultado.link and not resultado.qrcode %}
             <p class="text-muted" style="font-size:.86rem;">Use o botão ao lado para abrir a página de pagamento.</p>
@@ -142,7 +142,7 @@
           </div>
 
           {% if resultado.link %}
-          <a href="{{ resultado.link }}" target="_blank" rel="noopener" class="btn btn-mat"><i class="bi bi-box-arrow-up-right"></i> Abrir página de pagamento</a>
+          <a href="{{ resultado.link }}" target="_blank" rel="noopener" class="u-btn btn-mat"><i class="bi bi-box-arrow-up-right"></i> Abrir página de pagamento</a>
           <p class="text-center text-muted" style="font-size:.8rem; margin:-6px 0 0;">Cartão de crédito, débito ou boleto em ambiente seguro.</p>
           {% endif %}
 
@@ -171,22 +171,32 @@
     <form method="POST" autocomplete="off">
       <div class="card">
 
-        <!-- 01 ALUNO -->
+        <!-- 01 MODALIDADE E TURMA -->
+        {% if op.modalidades or op.turmas %}
         <div class="sec">
-          <div><div class="sec-num">01 · Aluno</div><div class="sec-desc">Quem vai treinar.</div></div>
+          <div><div class="sec-num">01 · Modalidade e turma</div><div class="sec-desc">O valor da matrícula é a mensalidade da turma.</div></div>
+          <div style="display:flex; flex-direction:column; gap:18px;">
+            {% with com_turma=true, turma_obrig=true, com_valor=true %}{% include 'precadastro/_modalidade_turma.html' %}{% endwith %}
+          </div>
+        </div>
+        {% endif %}
+
+        <!-- 02 ALUNO -->
+        <div class="sec">
+          <div><div class="sec-num">02 · Aluno</div><div class="sec-desc">Quem vai treinar.</div></div>
           <div style="display:flex; flex-direction:column; gap:18px;">
             <div>
               <label class="form-label">Nome completo <span class="req">*</span></label>
-              <input type="text" class="form-control" name="nome" required placeholder="Nome do aluno" value="{{ form.get('nome','') }}">
+              <input type="text" class="u-campo__controle" name="nome" required placeholder="Nome do aluno" value="{{ form.get('nome','') }}" aria-label="Nome completo">
             </div>
             <div class="row g-3">
               <div class="col-7">
                 <label class="form-label">Data de nascimento <span class="req">*</span></label>
-                <input type="date" class="form-control" name="data_nascimento" value="{{ form.get('data_nascimento','') }}">
+                <input type="date" class="u-campo__controle" name="data_nascimento" value="{{ form.get('data_nascimento','') }}" aria-label="Data de nascimento">
               </div>
               <div class="col-5">
                 <label class="form-label">Sexo</label>
-                <select class="form-select" name="sexo">
+                <select class="u-campo__controle" name="sexo" aria-label="Sexo">
                   <option value="">—</option>
                   <option value="M" {% if form.get('sexo')=='M' %}selected{% endif %}>Masculino</option>
                   <option value="F" {% if form.get('sexo')=='F' %}selected{% endif %}>Feminino</option>
@@ -199,7 +209,7 @@
 
         <!-- 02 RESPONSÁVEL FINANCEIRO -->
         <div class="sec">
-          <div><div class="sec-num">02 · Responsável financeiro</div><div class="sec-desc">Quem responde pelo pagamento e recebe os avisos.</div></div>
+          <div><div class="sec-num">03 · Responsável financeiro</div><div class="sec-desc">Quem responde pelo pagamento e recebe os avisos.</div></div>
           <div style="display:flex; flex-direction:column; gap:18px;">
             <div class="form-check form-switch" style="padding-left:3em;">
               <input class="form-check-input" type="checkbox" id="proprio" name="responsavel_eh_proprio" value="1" {% if form.get('responsavel_eh_proprio')=='1' %}checked{% endif %} onchange="togProprio()">
@@ -207,22 +217,22 @@
             </div>
             <div id="campoRespNome">
               <label class="form-label">Nome do responsável <span class="req">*</span></label>
-              <input type="text" class="form-control" name="responsavel_financeiro_nome" id="respNome" placeholder="Nome completo" value="{{ form.get('responsavel_financeiro_nome','') }}">
+              <input type="text" class="u-campo__controle" name="responsavel_financeiro_nome" id="respNome" placeholder="Nome completo" value="{{ form.get('responsavel_financeiro_nome','') }}" aria-label="Nome do responsável">
             </div>
             <div class="row g-3">
               <div class="col-6">
                 <label class="form-label">CPF <span class="req">*</span></label>
-                <input type="text" class="form-control" name="responsavel_financeiro_cpf" id="respCpf" required placeholder="000.000.000-00" maxlength="14" value="{{ form.get('responsavel_financeiro_cpf','') }}">
+                <input type="text" class="u-campo__controle" name="responsavel_financeiro_cpf" id="respCpf" required placeholder="000.000.000-00" maxlength="14" value="{{ form.get('responsavel_financeiro_cpf','') }}" aria-label="CPF">
               </div>
               <div class="col-6">
-                <label class="form-label">Celular</label>
-                <input type="text" class="form-control" name="telefone" id="tel" placeholder="(00) 00000-0000" value="{{ form.get('telefone','') }}">
+                <label class="form-label">Celular <span class="req">*</span></label>
+                <input type="text" class="u-campo__controle" name="telefone" id="tel" required placeholder="(00) 00000-0000" maxlength="15" value="{{ form.get('telefone','') }}" aria-label="Celular">
               </div>
             </div>
             <div>
               <label class="form-label">E-mail <span class="text-danger">*</span></label>
-              <input type="email" class="form-control" name="email" required
-                     placeholder="email@exemplo.com" value="{{ form.get('email','') }}">
+              <input type="email" class="u-campo__controle" name="email" required
+                     placeholder="email@exemplo.com" value="{{ form.get('email','') }}" aria-label="E-mail">
               <div class="form-text mt-1">Para onde enviamos o recibo do pagamento.</div>
             </div>
           </div>
@@ -230,31 +240,31 @@
 
         <!-- 03 ENDEREÇO -->
         <div class="sec">
-          <div><div class="sec-num">03 · Endereço</div><div class="sec-desc">Opcional. Se preenchido, já vai pronto no checkout.</div></div>
+          <div><div class="sec-num">04 · Endereço</div><div class="sec-desc">Opcional. Se preenchido, já vai pronto no checkout.</div></div>
           <div style="display:flex; flex-direction:column; gap:18px;">
             <div class="row g-3">
               <div class="col-7">
                 <label class="form-label">CEP</label>
-                <input type="text" class="form-control" name="cep" id="cep" placeholder="00000-000" maxlength="9" value="{{ form.get('cep','') }}">
+                <input type="text" class="u-campo__controle" name="cep" id="cep" placeholder="00000-000" maxlength="9" value="{{ form.get('cep','') }}" aria-label="CEP">
                 <div class="form-text" id="cepStatus"></div>
               </div>
               <div class="col-5">
                 <label class="form-label">Número</label>
-                <input type="text" class="form-control" name="numero" id="numero" placeholder="123" value="{{ form.get('numero','') }}">
+                <input type="text" class="u-campo__controle" name="numero" id="numero" placeholder="123" value="{{ form.get('numero','') }}" aria-label="Número">
               </div>
             </div>
             <div>
               <label class="form-label">Logradouro</label>
-              <input type="text" class="form-control" name="rua" id="rua" placeholder="Rua, avenida" value="{{ form.get('rua','') }}">
+              <input type="text" class="u-campo__controle" name="rua" id="rua" placeholder="Rua, avenida" value="{{ form.get('rua','') }}" aria-label="Logradouro">
             </div>
             <div class="row g-3">
               <div class="col-6">
                 <label class="form-label">Bairro</label>
-                <input type="text" class="form-control" name="bairro" id="bairro" placeholder="Bairro" value="{{ form.get('bairro','') }}">
+                <input type="text" class="u-campo__controle" name="bairro" id="bairro" placeholder="Bairro" value="{{ form.get('bairro','') }}" aria-label="Bairro">
               </div>
               <div class="col-6">
                 <label class="form-label">Cidade</label>
-                <input type="text" class="form-control" name="cidade" id="cidade" placeholder="Cidade" value="{{ form.get('cidade','') }}">
+                <input type="text" class="u-campo__controle" name="cidade" id="cidade" placeholder="Cidade" value="{{ form.get('cidade','') }}" aria-label="Cidade">
               </div>
             </div>
           </div>
@@ -262,25 +272,26 @@
 
         <!-- 04 PAGAMENTO -->
         <div class="sec">
-          <div><div class="sec-num">04 · Pagamento</div><div class="sec-desc">Taxa única de matrícula.</div></div>
+          <div><div class="sec-num">05 · Pagamento</div><div class="sec-desc">Taxa única de matrícula.</div></div>
           <div style="display:flex; flex-direction:column; gap:16px;">
-            {% if valor_matricula %}
+            {% if tem_valor %}
             <div>
               <label class="form-label">Cupom de desconto</label>
               <div class="input-group">
-                <input type="text" class="form-control text-uppercase" name="cupom" id="cupom" placeholder="DIGITE O CÓDIGO" value="{{ form.get('cupom','') }}">
-                <button type="button" class="btn btn-ghost" id="btnAplicarCupom">Aplicar</button>
+                <input type="text" class="u-campo__controle text-uppercase" name="cupom" id="cupom" placeholder="DIGITE O CÓDIGO" value="{{ form.get('cupom','') }}" aria-label="Cupom de desconto">
+                <button type="button" class="u-btn btn-ghost" id="btnAplicarCupom">Aplicar</button>
               </div>
               <div class="form-text mt-1" id="cupomMsg">Se você recebeu um código promocional, informe aqui.</div>
             </div>
             <div class="totbox">
-              <div class="rrow"><span class="text-muted">Taxa de matrícula</span><span>R$ {{ "%.2f"|format(valor_matricula|float) }}</span></div>
+              {% set _vb = (valor_matricula or 0)|float %}
+              <div class="rrow"><span class="text-muted" id="rotuloValor">Taxa de matrícula</span><span id="valorBase" data-academia="{{ '%.2f'|format(_vb) }}">R$ {{ "%.2f"|format(_vb) }}</span></div>
               <div style="height:1px; background:#e2e1de; margin:12px 0;"></div>
-              <div class="rrow" style="font-size:1.05rem; font-weight:700;"><span>Total</span><span id="totalMatricula" data-base="{{ '%.2f'|format(valor_matricula|float) }}">R$ {{ "%.2f"|format(valor_matricula|float) }}</span></div>
+              <div class="rrow" style="font-size:1.05rem; font-weight:700;"><span>Total</span><span id="totalMatricula" data-base="{{ '%.2f'|format(_vb) }}">R$ {{ "%.2f"|format(_vb) }}</span></div>
             </div>
             {% endif %}
-            <button type="submit" class="btn btn-mat" id="btnEnviar">
-              {% if valor_matricula %}<span id="lblEnviar">Continuar para pagamento</span><i class="bi bi-arrow-right"></i>{% else %}<i class="bi bi-check-lg"></i> Enviar matrícula{% endif %}
+            <button type="submit" class="u-btn btn-mat" id="btnEnviar">
+              {% if tem_valor %}<span id="lblEnviar">Continuar para pagamento</span><i class="bi bi-arrow-right"></i>{% else %}<i class="bi bi-check-lg"></i> Enviar matrícula{% endif %}
             </button>
             <p class="text-center text-muted" style="font-size:.8rem; margin:0;">Pagamento processado em ambiente seguro. A matrícula é confirmada após a aprovação.</p>
           </div>
@@ -339,10 +350,27 @@
     var base=total?parseFloat(total.getAttribute('data-base')):0;
     function fmt(v){return 'R$ '+Number(v).toFixed(2).replace('.',',');}
     function setTotal(v){ if(total) total.textContent=fmt(v); if(lbl) lbl.textContent='Continuar para pagamento ('+fmt(v)+')'; }
+    // A matrícula é a mensalidade da turma escolhida; sem plano na turma, vale
+    // o valor da academia. Trocar a turma refaz o total (e o cupom, se houver).
+    var selTurma=document.getElementById('pcTurma');
+    var vBase=document.getElementById('valorBase'), rot=document.getElementById('rotuloValor');
+    function baseDaTurma(){
+      var o=selTurma && selTurma.selectedOptions[0];
+      var v=o && o.getAttribute('data-valor');
+      if(v){ if(rot) rot.textContent='Mensalidade da turma'+(o.getAttribute('data-plano')?' ('+o.getAttribute('data-plano')+')':''); return parseFloat(v); }
+      if(rot) rot.textContent='Taxa de matrícula';
+      return parseFloat(vBase ? vBase.getAttribute('data-academia') : 0) || 0;
+    }
+    if(selTurma) selTurma.addEventListener('change',function(){
+      base=baseDaTurma(); if(vBase) vBase.textContent=fmt(base); setTotal(base);
+      if((inp.value||'').trim()) aplicar();
+    });
+    if(selTurma && selTurma.value){ base=baseDaTurma(); if(vBase) vBase.textContent=fmt(base); setTotal(base); }
     function aplicar(){
       var cod=(inp.value||'').trim().toUpperCase(); if(!cod){return;}
       msg.innerHTML='<span class="text-muted">Validando...</span>';
       var fd=new FormData(); fd.append('codigo',cod);
+      if(selTurma && selTurma.value) fd.append('turma_id', selTurma.value);
       fetch("{{ url_for('precadastro.validar_cupom_publico', academia_slug=academia_slug) }}",{method:'POST',body:fd})
         .then(function(r){return r.json();}).then(function(j){
           if(j.valido){

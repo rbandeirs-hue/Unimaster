@@ -12,6 +12,13 @@ texto salvo, usa o padrão (DEFAULTS). Placeholders disponíveis:
   {academia}   -> nome da academia
   {mes}        -> competência (mm/aaaa); {competencia} é o mesmo
   {responsavel}-> nome completo de quem recebe (responsável financeiro ou aluno)
+  {descricao}  -> o que é a cobrança avulsa (ex.: "Exame de faixa — Laranja → Verde")
+
+Na ocorrência e no aviso de faltas, disparados da ficha do aluno:
+  {ocorrencia} -> o texto que a secretaria escreveu
+  {faltas}     -> quantas faltas no período
+  {periodo}    -> o período contado (ex.: "setembro de 2026")
+  {turma}      -> nome da turma do aluno
 
 Só na cobrança consolidada (várias mensalidades vencidas do mesmo responsável):
   {lista}                  -> uma linha por mensalidade em aberto
@@ -36,6 +43,22 @@ TIPOS = {
         "default": ("Olá {nome}! 🔔 A mensalidade de *{aluno}* está em atraso "
                     "(venceu em {vencimento}).\n\n💰 Valor: {valor}\n"
                     "🔗 Regularize pelo link:\n{link}\n\n_{academia}_"),
+    },
+    # Cobrança avulsa (taxa, uniforme, exame de faixa): o lembrete da mensalidade
+    # diria "mensalidade" para algo que não é. Este nomeia a cobrança.
+    "lembrete_avulsa": {
+        "label": "Lembrete de cobrança avulsa (taxa, uniforme, exame…)",
+        "default": ("Olá {nome}! 🔔 Lembrete da cobrança *{descricao}* de *{aluno}*, "
+                    "com vencimento em {vencimento}.\n\n💰 Valor: {valor}\n"
+                    "🔗 Pague pelo link:\n{link}\n\n_{academia}_"),
+    },
+    # Dia seguinte à aula experimental: pergunta como foi e convida a matricular.
+    "pos_aula_experimental": {
+        "label": "Pós-aula experimental (feedback e convite para matrícula)",
+        "default": ("Olá {nome}! 🥋 Obrigado por fazer a aula experimental na turma "
+                    "*{turma}*. Como foi? Conta pra gente o que achou — sua opinião "
+                    "ajuda muito.\n\nSe quiser continuar treinando, a matrícula é por aqui:\n"
+                    "{link}\n\n_{academia}_"),
     },
     "cobranca_consolidada": {
         "label": "Cobrança consolidada (várias mensalidades vencidas)",
@@ -68,6 +91,19 @@ TIPOS = {
                     "Estamos felizes em ter *{aluno}* na nossa equipe. "
                     "Qualquer dúvida, é só chamar por aqui."),
     },
+    "ocorrencia": {
+        "label": "Ocorrência (comunicado sobre o aluno)",
+        "default": ("Olá {nome}! Comunicado da {academia} sobre *{aluno}*:\n\n"
+                    "{ocorrencia}\n\n"
+                    "Qualquer dúvida, é só responder esta mensagem."),
+    },
+    "faltas": {
+        "label": "Aviso de faltas",
+        "default": ("Olá {nome}! Notamos que *{aluno}* tem {faltas} falta(s) "
+                    "em {periodo}.\n\nEstá tudo bem? Se precisar remarcar ou "
+                    "conversar sobre a frequência, é só responder por aqui.\n\n"
+                    "_{academia}_"),
+    },
     "aniversario": {
         "label": "Feliz aniversário (envio diário)",
         "default": ("Olá {nome}! 🎉 Hoje é um dia especial: *{aluno}* está de "
@@ -76,8 +112,14 @@ TIPOS = {
     },
 }
 
-ORDEM = ["lembrete_vencimento", "lembrete_atraso", "cobranca_consolidada", "confirmacao_pagamento",
-         "matricula", "confirmacao_matricula", "boas_vindas", "aniversario"]
+ORDEM = ["lembrete_vencimento", "lembrete_atraso", "lembrete_avulsa", "cobranca_consolidada", "confirmacao_pagamento",
+         "matricula", "confirmacao_matricula", "pos_aula_experimental", "boas_vindas", "ocorrencia", "faltas",
+         "aniversario"]
+
+# Modelos que a secretaria dispara a partir da ficha do aluno, um a um. Ficam
+# separados porque nenhum deles faz sentido em automação: quem manda uma
+# ocorrência está respondendo a um fato, não a um calendário.
+MANUAIS_DO_ALUNO = ["ocorrencia", "faltas", "boas_vindas", "aniversario"]
 
 
 def padrao(tipo):
@@ -134,7 +176,7 @@ def render(texto, ctx):
     out = texto or ""
     for k in ["nome", "responsavel", "aluno", "valor", "vencimento", "link", "pix",
               "academia", "mes", "competencia", "lista", "quantidade_pendencias",
-              "valor_total"]:
+              "valor_total", "ocorrencia", "faltas", "periodo", "turma", "descricao"]:
         out = out.replace("{" + k + "}", str(ctx.get(k, "") or ""))
     # remove linhas que ficaram com 'link' vazio (ex.: "🔗 ...\n{link}")
     linhas = [ln for ln in out.split("\n") if ln.strip() not in ("🔗 Pague pelo link:", "🔗 Regularize pelo link:")

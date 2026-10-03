@@ -1,0 +1,97 @@
+{% extends "base_app.html" %}
+{% block title %}Relatórios{% endblock %}
+
+{% block pagina_titulo %}Relatórios{% endblock %}
+{% block pagina_subtitulo %}
+  {{ total }} relatórios · o recorte abaixo vale para todos · toda exportação sai com academia, período e quem gerou
+{% endblock %}
+
+{% block conteudo_classe %}sh__conteudo--relatorios{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ asset('css/pages/relatorios.css') }}">
+{% endblock %}
+
+{% block content %}
+
+{# Um filtro só, no topo, para os 48 relatórios: antes cada tela tinha o
+   seu, e comparar dois números virava conferir dois períodos. #}
+{# O recorte do topo vale para os 47 relatórios. A academia NÃO entra aqui:
+   é a da sessão, escolhida na entrada do sistema. #}
+{% set datas_abertas = rec.atalho == 'datas' %}
+<form method="GET" class="rel-filtro">
+  <span class="rel-periodo">
+    {% for chave, rotulo in [('mes','Este mês'), ('mes_passado','Mês passado'),
+                             ('90d','90 dias'), ('ano','Ano')] %}
+    <a href="{{ url_for('relatorios.hub', p=chave, modalidade_id=rec.modalidade_id, turma_id=rec.turma_id) }}"
+       class="{% if rec.atalho == chave %}is-ativo{% endif %}">{{ rotulo }}</a>
+    {% endfor %}
+    <a href="{{ url_for('relatorios.hub', p='datas', de=rec.ini, ate=rec.fim,
+                        modalidade_id=rec.modalidade_id, turma_id=rec.turma_id) }}"
+       class="{% if datas_abertas %}is-ativo{% endif %}">Escolher datas</a>
+  </span>
+
+  {# Os campos de data só aparecem quando alguém pede: nos quatro atalhos eles
+     eram dois controles ocupando espaço sem ninguém tocar. #}
+  {% if datas_abertas %}
+  <input type="hidden" name="p" value="datas">
+  <input type="date" name="de" value="{{ rec.ini }}" aria-label="De">
+  <input type="date" name="ate" value="{{ rec.fim }}" aria-label="Até">
+  <button type="submit" class="sh__btn sh__btn--forte rel-filtro__ok">Aplicar</button>
+  {% endif %}
+
+  <select name="modalidade_id" onchange="this.form.submit()" aria-label="Modalidade">
+    <option value="">Todas as modalidades</option>
+    {% for m in modalidades %}
+    <option value="{{ m.id }}" {% if m.id == rec.modalidade_id %}selected{% endif %}>{{ m.nome }}</option>
+    {% endfor %}
+  </select>
+
+  <select name="turma_id" onchange="this.form.submit()" aria-label="Turma">
+    <option value="">Todas as turmas</option>
+    {% for t in turmas %}
+    <option value="{{ t.id }}" {% if t.id == rec.turma_id %}selected{% endif %}>{{ t.nome }}</option>
+    {% endfor %}
+  </select>
+
+  <span class="rel-filtro__nota">{{ rec.rotulo() }} · {{ faltas.total }} alunos ativos</span>
+</form>
+
+<div class="rel-colunas">
+  {% for g in grupos %}
+  <section class="rel-area">
+    <header class="rel-area__topo">
+      <i class="bi {{ g.icone }}" aria-hidden="true"></i>
+      <span class="rel-area__nome">{{ g.titulo }}</span>
+      <span class="rel-area__conta">{{ g.itens|length }}</span>
+    </header>
+
+    {% for d in g.itens %}
+      {% if not d.pronto %}
+      {# Em construção fica à vista: some só o link. #}
+      <div class="rel-item rel-item--obra">
+        <span class="rel-item__txt">
+          <span class="rel-item__nome">{{ d.nome }}</span>
+          <span class="rel-item__desc">{{ d.descricao }}</span>
+        </span>
+        <span class="rel-marca rel-marca--obra">em construção</span>
+      </div>
+      {% else %}
+      <a class="rel-item" href="{{ url_for('relatorios.ver', rid=d.id, **filtros) }}">
+        <span class="rel-item__txt">
+          <span class="rel-item__nome">{{ d.nome }}</span>
+          <span class="rel-item__desc">{{ d.descricao }}</span>
+        </span>
+        {% if g.chave == 'cadastro' %}
+          {% set n = faltas.get(d.id, 0) %}
+          <span class="rel-item__n {% if n > (faltas.total / 3) %}rel-item__n--alto{% elif n == 0 %}rel-item__n--zero{% endif %}">{{ n }}</span>
+        {% endif %}
+        <i class="bi bi-chevron-right rel-item__seta" aria-hidden="true"></i>
+      </a>
+      {% endif %}
+    {% endfor %}
+  </section>
+  {% endfor %}
+</div>
+
+{% endblock %}

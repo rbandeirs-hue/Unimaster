@@ -1,17 +1,14 @@
 {% extends "base_app.html" %}
+{% set back_url = back_url or get_back_url_default() %}
 {% block title %}Gerenciar Graduações{% endblock %}
+{% block pagina_titulo %}Gerenciar graduações{% endblock %}
+{% block pagina_subtitulo %}Ajuste regras de transição de faixa com base na graduação.{% endblock %}
+{% block pagina_acoes %}
+<a href="{{ url_voltar(back_url) }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Voltar</a>
+{% endblock %}
 {% block content %}
 
 <div class="container mt-4">
-    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 mb-3">
-        <div>
-            <h3 class="fw-bold text-danger mb-1">Gerenciar Graduações</h3>
-            <p class="text-muted mb-0">Ajuste regras de transição de faixa com base na graduação.</p>
-        </div>
-        {% set back_url = back_url or get_back_url_default() %}
-{% include 'components/botao_voltar.html' %}
-    </div>
-
     <div class="card shadow-sm">
         <div class="card-header bg-danger text-white">
             <i class="bi bi-award-fill me-2"></i> Regras por Graduação
@@ -79,28 +76,28 @@
                                         <span class="faixa-cor-ponta" style="background-color: {{ cor_ponta }};"></span>
                                     </span>
                                     <div class="faixa-cores-edit">
-                                        <input type="color" class="form-control form-control-sm campo-cor"
+                                        <input type="color" class="u-campo__controle campo-cor"
                                                name="cor_faixa" value="{{ cor_faixa }}" disabled>
-                                        <input type="color" class="form-control form-control-sm campo-cor"
+                                        <input type="color" class="u-campo__controle campo-cor"
                                                name="cor_ponta" value="{{ cor_ponta }}" disabled>
                                     </div>
                                     <input type="hidden" name="id" value="{{ g.get('id') }}">
                                 </td>
                                 <td data-label="Faixa">
-                                    <input type="text" class="form-control form-control-sm campo-graduacao"
+                                    <input type="text" class="u-campo__controle campo-graduacao"
                                            name="faixa" value="{{ g.get('faixa') or '' }}" readonly>
                                 </td>
                                 <td data-label="Graduação">
-                                    <input type="text" class="form-control form-control-sm campo-graduacao"
+                                    <input type="text" class="u-campo__controle campo-graduacao"
                                            name="graduacao" value="{{ g.get('graduacao') or '' }}" readonly>
                                 </td>
                                 <td data-label="Categoria">
-                                    <input type="text" class="form-control form-control-sm campo-graduacao"
+                                    <input type="text" class="u-campo__controle campo-graduacao"
                                            name="categoria" value="{{ g.get('categoria') or '' }}" readonly>
                                 </td>
                                 {% if col_modalidade_id %}
                                 <td data-label="Modalidade">
-                                    <select class="form-select form-select-sm campo-graduacao"
+                                    <select class="u-campo__controle campo-graduacao"
                                             name="modalidade_id" disabled>
                                         <option value="">Sem modalidade</option>
                                         {% for m in modalidades %}
@@ -111,42 +108,42 @@
                                 {% endif %}
                                 {% if col_idade_minima %}
                                 <td data-label="Idade mínima">
-                                    <input type="text" class="form-control form-control-sm campo-graduacao"
+                                    <input type="text" class="u-campo__controle campo-graduacao"
                                            name="idade_minima" value="{{ g.get(col_idade_minima) or '' }}" readonly>
                                 </td>
                                 {% endif %}
                                 {% if col_carencia_meses %}
                                 <td data-label="Carência (meses)">
                                     <input type="number" min="0" step="1"
-                                           class="form-control form-control-sm campo-graduacao"
+                                           class="u-campo__controle campo-graduacao"
                                            name="carencia_meses" value="{{ g.get(col_carencia_meses) or '' }}" readonly>
                                 </td>
                                 {% endif %}
                                 {% if col_carencia_dias %}
                                 <td data-label="Carência (dias)">
                                     <input type="number" min="0" step="1"
-                                           class="form-control form-control-sm campo-graduacao"
+                                           class="u-campo__controle campo-graduacao"
                                            name="carencia_dias" value="{{ g.get(col_carencia_dias) or '' }}" readonly>
                                 </td>
                                 {% endif %}
                                 {% if col_carencia and not (col_carencia_meses or col_carencia_dias) %}
                                 <td data-label="Carência">
-                                    <input type="text" class="form-control form-control-sm campo-graduacao"
+                                    <input type="text" class="u-campo__controle campo-graduacao"
                                            name="carencia" value="{{ g.get(col_carencia) or '' }}" readonly>
                                 </td>
                                 {% endif %}
                                 {% if col_carencia_minima %}
                                 <td data-label="Carência mínima">
-                                    <input type="text" class="form-control form-control-sm campo-graduacao"
+                                    <input type="text" class="u-campo__controle campo-graduacao"
                                            name="carencia_minima" value="{{ g.get(col_carencia_minima) or '' }}" readonly>
                                 </td>
                                 {% endif %}
                                 {% if col_observacao %}
                                 <td data-label="Observação" class="col-observacao">
-                                    <textarea class="form-control form-control-sm observacao-textarea campo-graduacao"
+                                    <textarea class="u-campo__controle observacao-textarea campo-graduacao"
                                               name="observacao" rows="3" readonly>{{ g.get(col_observacao) or '' }}</textarea>
                                     <button type="button"
-                                            class="btn btn-link btn-sm p-0 mt-1 btn-ver-observacao"
+                                            class="u-btn u-btn--fantasma u-btn--pequeno p-0 mt-1 btn-ver-observacao"
                                             data-bs-toggle="modal"
                                             data-bs-target="#modalObs{{ g.get('id') }}">
                                         <i class="bi bi-arrows-fullscreen me-1"></i> Ver completo
@@ -154,7 +151,7 @@
                                 </td>
                                 {% endif %}
                                 <td data-label="Ações" class="col-acoes">
-                                    <button type="button" class="btn btn-outline-primary btn-sm btn-editar-linha">
+                                    <button type="button" class="u-btn u-btn--pequeno btn-editar-linha">
                                         <i class="bi bi-pencil-square me-1"></i> Editar
                                     </button>
                                 </td>
@@ -173,7 +170,7 @@
                                             </div>
                                         </div>
                                         <div class="modal-footer">
-                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+                                            <button type="button" class="u-btn" data-bs-dismiss="modal">Fechar</button>
                                         </div>
                                     </div>
                                 </div>
@@ -197,7 +194,7 @@
                         Ajuste a carência conforme o padrão atual da sua tabela.
                         {% endif %}
                     </small>
-                    <button type="submit" class="btn btn-danger">
+                    <button type="submit" class="u-btn u-btn--perigo">
                         <i class="bi bi-save me-1"></i> Salvar alterações
                     </button>
                 </div>

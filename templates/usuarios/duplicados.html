@@ -1,5 +1,11 @@
 {% extends "base_app.html" %}
+{% set back_url = back_url or get_back_url_default() %}
 {% block title %}Cadastros duplicados{% endblock %}
+{% block pagina_titulo %}Cadastros duplicados{% endblock %}
+{% block pagina_subtitulo %}Identifica e unifica usuários potencialmente duplicados (mesmo e-mail ou mesmo CPF de aluno).{% endblock %}
+{% block pagina_acoes %}
+<a href="{{ url_voltar(back_url) }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Voltar</a>
+{% endblock %}
 {% block content %}
 <style>
   :root {
@@ -7,10 +13,10 @@
     --c-border: #e5e9f2;
     --c-text: #1f2937;
     --c-muted: #6b7280;
-    --c-primary: #0d6efd;
+    --c-primary: #1c1c1c;
     --c-primary-soft: #e8f1ff;
   }
-  .dup-page { max-width: 1080px; margin: 0 auto; }
+  .dup-page { max-width: none; }
   .dup-header {
     background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
     border: 1px solid var(--c-border);
@@ -136,10 +142,10 @@
     background: var(--c-primary); color: #fff; border: none;
     padding: .55rem 1.1rem; border-radius: 10px;
     font-weight: 600; font-size: .85rem; cursor: pointer;
-    box-shadow: 0 2px 6px rgba(13,110,253,.25);
+    box-shadow: 0 2px 6px rgba(28, 28, 28,.25);
     display: inline-flex; align-items: center; gap: .35rem;
   }
-  .btn-unificar:hover { box-shadow: 0 4px 12px rgba(13,110,253,.35); }
+  .btn-unificar:hover { box-shadow: 0 4px 12px rgba(28, 28, 28,.35); }
   .btn-unificar:disabled { background: #cbd5e1; box-shadow: none; cursor: not-allowed; }
   .legenda { font-size: .78rem; color: var(--c-muted); margin-right: auto; align-self: center; }
 
@@ -183,7 +189,7 @@
   }
   .manual-search:focus {
     outline: none; border-color: var(--c-primary);
-    box-shadow: 0 0 0 3px rgba(13,110,253,.15); background: #fff;
+    box-shadow: 0 0 0 3px rgba(28, 28, 28,.15); background: #fff;
   }
   .manual-results {
     margin-top: .65rem;
@@ -239,18 +245,6 @@
 </style>
 
 <div class="container my-4 dup-page">
-  <div class="dup-header">
-    {% set back_url = back_url or get_back_url_default() %}
-    {% include 'components/botao_voltar.html' %}
-    <h1>
-      <span class="icon-wrap"><i class="bi bi-people-fill"></i></span>
-      Cadastros duplicados
-    </h1>
-    <p class="subtitle mb-0">
-      Identifica e unifica usuários potencialmente duplicados (mesmo e-mail ou mesmo CPF de aluno).
-    </p>
-  </div>
-
   <div class="dup-warn">
     <i class="bi bi-exclamation-triangle-fill"></i>
     <div>
@@ -272,7 +266,7 @@
     <div class="manual-search-wrap">
       <i class="bi bi-search"></i>
       <input type="text" class="manual-search" id="manualSearch"
-             placeholder="Digite nome, e-mail ou CPF (mín. 2 caracteres)…" autocomplete="off">
+             placeholder="Digite nome, e-mail ou CPF (mín. 2 caracteres)…" autocomplete="off" aria-label="Digite nome, e-mail ou CPF (mín. 2 caracteres)…">
     </div>
     <div class="manual-results" id="manualResults"></div>
 
@@ -288,7 +282,7 @@
           1 clique = <strong style="color:#10b981">Principal</strong> · 2 cliques = <strong style="color:#dc2626">Perdedor</strong> · 3 cliques = limpar
         </span>
         <button type="submit" class="btn-unificar"
-                onclick="return confirm('Tem certeza que deseja unificar os usuários selecionados? A ação é IRREVERSÍVEL.');"
+                data-confirmar="Tem certeza que deseja unificar os usuários selecionados? A ação é IRREVERSÍVEL."
                 disabled>
           <i class="bi bi-arrows-collapse"></i> Unificar selecionados
         </button>
@@ -345,7 +339,7 @@
           1 clique = <strong style="color:#10b981">Principal</strong> · 2 cliques = <strong style="color:#dc2626">Perdedor</strong> · 3 cliques = limpar
         </span>
         <button type="submit" class="btn-unificar"
-                onclick="return confirm('Tem certeza que deseja unificar esses cadastros? A ação é IRREVERSÍVEL.');">
+                data-confirmar="Tem certeza que deseja unificar esses cadastros? A ação é IRREVERSÍVEL.">
           <i class="bi bi-arrows-collapse"></i> Unificar grupo
         </button>
       </div>

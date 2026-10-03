@@ -1,13 +1,13 @@
 {% extends "base_app.html" %}
+{% set back_url = back_url or get_back_url_default() %}
 {% block title %}Aderir ao Evento{% endblock %}
+{% block pagina_titulo %}Aderir ao evento{% endblock %}
+{% block pagina_subtitulo %}{{ evento.nome }}{% endblock %}
+{% block pagina_acoes %}
+<a href="{{ url_voltar(back_url) }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Voltar</a>
+{% endblock %}
 {% block content %}
-<div class="container mt-5">
-    <div class="mb-4">
-        {% set back_url = back_url or get_back_url_default() %}
-{% include 'components/botao_voltar.html' %}
-        <h2 class="h4 fw-bold text-primary">Aderir ao Evento</h2>
-        <p class="text-muted mb-0">{{ evento.nome }}</p>
-    </div>
+<div class="container">
 
     <div class="card shadow-sm">
         <div class="card-body p-4">
@@ -36,7 +36,7 @@
                         <input type="number" 
                                id="valor_taxa" 
                                name="valor_taxa" 
-                               class="form-control" 
+                               class="u-campo__controle" 
                                step="0.01" 
                                min="{{ valor_sugerido or 0 }}" 
                                value="{{ valor_atual or valor_sugerido or '' }}" 
@@ -57,10 +57,10 @@
                 </div>
                 
                 <div class="d-flex gap-2">
-                    <button type="submit" class="btn btn-success">
+                    <button type="submit" class="u-btn u-btn--ok">
                         <i class="bi bi-check-lg me-1"></i> {% if ja_aderiu %}Atualizar Valor{% else %}Confirmar Adesão{% endif %}
                     </button>
-                    <a href="{{ back_url }}" class="btn btn-outline-secondary">Cancelar</a>
+                    <a href="{{ back_url }}" class="u-btn">Cancelar</a>
                 </div>
             </form>
         </div>

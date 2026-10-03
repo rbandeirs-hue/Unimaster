@@ -1,0 +1,91 @@
+{# Diálogo "Imprimir apostila": escolhe os alunos da academia. Marcados, sai
+   uma apostila por aluno, com o nome dele e o material da faixa do próximo
+   exame dele (rota exame_faixa.programa_apostilas). Ninguém marcado, imprime
+   a apostila desta tela, sem nome.
+   Espera: alunos_apostila (com sit.promocao), esc, idx. #}
+<dialog class="exf-dialogo" id="exf-apostila" aria-labelledby="exf-apostila-titulo">
+  <form method="GET" action="{{ url_for('exame_faixa.programa_apostilas') }}" id="exf-apostila-form">
+    <input type="hidden" name="academia_id" value="{{ esc.academia_id }}">
+    <input type="hidden" name="p" value="{{ idx }}">
+    <header class="exf-dialogo__topo">
+      <h2 id="exf-apostila-titulo">Imprimir apostila</h2>
+      <span class="u-muted u-fs-sm">Marque os alunos para sair uma apostila com o nome de cada um, no material da faixa do próximo exame dele. Sem ninguém marcado, imprime esta, sem nome.</span>
+    </header>
+    <div class="exf-dialogo__corpo">
+      <div class="exf-ap-topo">
+        <label class="exf-ap-todos"><input type="checkbox" class="form-check-input" id="exf-ap-todos"> Selecionar todos</label>
+        <input type="search" class="u-campo__controle exf-ap-busca" id="exf-ap-busca" placeholder="Buscar aluno" aria-label="Buscar aluno">
+      </div>
+      <ul class="exf-ap-lista">
+        {% for a in alunos_apostila %}
+        {% set p = a.sit.promocao %}
+        <li data-nome="{{ (a.nome or '')|lower }}">
+          <label>
+            <input type="checkbox" class="form-check-input" name="aluno_id" value="{{ a.id }}">
+            <span class="exf-ap-nome">{{ a.nome }}</span>
+            <span class="exf-ap-faixa">{{ p.de }} → <strong>{{ p.para }}</strong></span>
+          </label>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    <footer class="exf-dialogo__rodape">
+      <button type="button" class="sh__btn" data-ap-fechar>Cancelar</button>
+      <button type="submit" class="sh__btn sh__btn--forte" data-ap-imprimir><i class="bi bi-printer"></i> <span>Imprimir sem nome</span></button>
+    </footer>
+  </form>
+</dialog>
+<style>
+  .exf-ap-topo { display: flex; align-items: center; justify-content: space-between; gap: .75rem; flex-wrap: wrap; }
+  .exf-ap-todos { display: inline-flex; align-items: center; gap: .45rem; font-weight: 600; cursor: pointer; }
+  .exf-ap-busca { flex: 1; min-width: 160px; max-width: 240px; }
+  .exf-ap-lista { list-style: none; margin: .5rem 0 0; padding: 0; max-height: 50vh; overflow-y: auto;
+                  border: 1px solid var(--sh-line); border-radius: var(--u-radius-sm); }
+  .exf-ap-lista li + li { border-top: 1px solid var(--sh-line); }
+  .exf-ap-lista label { display: flex; align-items: center; gap: .6rem; padding: .55rem .8rem; cursor: pointer; margin: 0; }
+  .exf-ap-lista label:hover { background: #fdfcfa; }
+  .exf-ap-nome { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .exf-ap-faixa { flex: none; font-size: .82rem; color: var(--sh-ink-soft); }
+</style>
+<script>
+(function () {
+  var dlg = document.getElementById('exf-apostila');
+  if (!dlg || !dlg.showModal) return;
+  var form = document.getElementById('exf-apostila-form');
+  var todos = document.getElementById('exf-ap-todos');
+  var busca = document.getElementById('exf-ap-busca');
+  var btn = dlg.querySelector('[data-ap-imprimir] span');
+  function caixas() { return Array.prototype.slice.call(form.querySelectorAll('input[name="aluno_id"]')); }
+  function visiveis() { return caixas().filter(function (c) { return !c.closest('li').hidden; }); }
+  function atualizar() {
+    var n = caixas().filter(function (c) { return c.checked; }).length;
+    var vis = visiveis();
+    btn.textContent = n ? 'Imprimir ' + n + ' apostila' + (n > 1 ? 's' : '') : 'Imprimir sem nome';
+    todos.checked = vis.length > 0 && vis.every(function (c) { return c.checked; });
+    todos.indeterminate = !todos.checked && vis.some(function (c) { return c.checked; });
+  }
+  document.addEventListener('click', function (e) {
+    if (e.target.closest('[data-exf-apostila]')) { atualizar(); dlg.showModal(); }
+  });
+  todos.addEventListener('change', function () {
+    visiveis().forEach(function (c) { c.checked = todos.checked; });
+    atualizar();
+  });
+  form.addEventListener('change', function (e) { if (e.target.name === 'aluno_id') atualizar(); });
+  busca.addEventListener('input', function () {
+    var q = busca.value.trim().toLowerCase();
+    form.querySelectorAll('.exf-ap-lista li').forEach(function (li) {
+      li.hidden = q && li.getAttribute('data-nome').indexOf(q) === -1;
+    });
+    atualizar();
+  });
+  // Ninguém marcado: imprime a apostila desta tela, sem nome.
+  form.addEventListener('submit', function (e) {
+    if (caixas().some(function (c) { return c.checked; })) return;
+    e.preventDefault();
+    dlg.close();
+    setTimeout(function () { window.print(); }, 50);
+  });
+  dlg.querySelector('[data-ap-fechar]').addEventListener('click', function () { dlg.close(); });
+})();
+</script>

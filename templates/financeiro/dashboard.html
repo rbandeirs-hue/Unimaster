@@ -1,29 +1,27 @@
 {% extends "base_app.html" %}
 {% block title %}Financeiro — Dashboard{% endblock %}
+{% set back_url = url_for('academia.painel_academia', academia_id=academia_id) if academia_id else None %}
+{% block pagina_titulo %}Financeiro — {{ academia_nome or 'Dashboard' }}{% endblock %}
+{% block pagina_acoes %}
+{% if academia_id %}<a href="{{ url_voltar(back_url) }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Voltar</a>{% endif %}
+{% endblock %}
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/financeiro/responsive.css') }}?v=1">
 {% endblock %}
 {% block content %}
 <div class="container mt-4 financeiro-dash">
-    {% if academia_id %}
-    <div class="mb-3">
-        {% set back_url = url_for('academia.painel_academia', academia_id=academia_id) %}
-        {% include 'components/botao_voltar.html' %}
-    </div>
-    {% endif %}
-    <h2 class="h4 fw-bold mb-3">Financeiro — {{ academia_nome or 'Dashboard' }}</h2>
 
     <form method="GET" class="d-flex flex-wrap align-items-center gap-2 mb-3" id="filtro-dash">
         {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
         <label class="form-label mb-0 small fw-semibold">Filtrar:</label>
-        <select name="mes" class="form-select form-select-sm" style="width: auto; max-width: 160px;" onchange="this.form.submit()">
+        <select name="mes" class="u-campo__controle" style="width: auto; max-width: 160px;" onchange="this.form.submit()" aria-label="Filtrar">
             <option value="" {% if not mes %}selected{% endif %}>Todos os meses</option>
             {% set meses_nome = ['', 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'] %}
             {% for m in range(1, 13) %}
             <option value="{{ m }}" {% if mes == m %}selected{% endif %}>{{ meses_nome[m] }}</option>
             {% endfor %}
         </select>
-        <select name="ano" class="form-select form-select-sm" style="width: auto; max-width: 100px;" onchange="this.form.submit()">
+        <select name="ano" class="u-campo__controle" style="width: auto; max-width: 100px;" onchange="this.form.submit()">
             {% for a in range(ano_atual, ano_atual - 6, -1) %}
             <option value="{{ a }}" {% if ano == a %}selected{% endif %}>{{ a }}</option>
             {% endfor %}
@@ -115,27 +113,27 @@
             <h5 class="card-title mb-3">Módulos</h5>
             <div class="row g-2">
                 <div class="col-12 col-sm-6 col-md-4">
-                    <a href="{{ url_for('financeiro.lista_descontos', academia_id=academia_id) }}" class="btn btn-outline-primary w-100">
+                    <a href="{{ url_for('financeiro.lista_descontos', academia_id=academia_id) }}" class="u-btn w-100">
                         <i class="bi bi-percent me-2"></i> Descontos
                     </a>
                 </div>
                 <div class="col-12 col-sm-6 col-md-4">
-                    <a href="{{ url_for('financeiro.painel_mensalidades', academia_id=academia_id) }}" class="btn btn-outline-primary w-100">
+                    <a href="{{ url_for('financeiro.painel_mensalidades', academia_id=academia_id) }}" class="u-btn w-100">
                         <i class="bi bi-calendar-check me-2"></i> Mensalidades
                     </a>
                 </div>
                 <div class="col-12 col-sm-6 col-md-4">
-                    <a href="{{ url_for('financeiro.lista_receitas', academia_id=academia_id) }}" class="btn btn-outline-success w-100">
+                    <a href="{{ url_for('financeiro.lista_receitas', academia_id=academia_id) }}" class="u-btn w-100">
                         <i class="bi bi-cash-coin me-2"></i> Receitas
                     </a>
                 </div>
                 <div class="col-12 col-sm-6 col-md-4">
-                    <a href="{{ url_for('financeiro.lista_despesas', academia_id=academia_id) }}" class="btn btn-outline-danger w-100">
+                    <a href="{{ url_for('financeiro.lista_despesas', academia_id=academia_id) }}" class="u-btn w-100">
                         <i class="bi bi-cash-stack me-2"></i> Despesas
                     </a>
                 </div>
                 <div class="col-12 col-sm-6 col-md-4">
-                    <a href="{{ url_for('financeiro.relatorios', academia_id=academia_id) }}" class="btn btn-outline-primary w-100">
+                    <a href="{{ url_for('financeiro.relatorios', academia_id=academia_id) }}" class="u-btn w-100">
                         <i class="bi bi-file-earmark-bar-graph me-2"></i> Relatórios
                     </a>
                 </div>

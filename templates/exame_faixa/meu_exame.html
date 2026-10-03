@@ -1,0 +1,60 @@
+{% extends "base_app.html" %}
+{% block conteudo_classe %}exf-tela{% endblock %}
+{% from 'exame_faixa/_macros.html' import obi, promo, trilha, pill with context %}
+{% set menu_ativo = 'eventos' %}
+{% block title %}Meu exame — {{ ev.nome }}{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{{ asset('css/exame_faixa.css') }}">{% endblock %}
+
+{% block pagina_titulo %}{{ ev.nome }}{% endblock %}
+{% block pagina_subtitulo %}{{ aluno.nome }}{% if data_exame %} · prova em {{ data_exame|data_br }}{% if hora_prova %} às {{ hora_prova }}{% endif %}{% endif %}{% endblock %}
+{% block pagina_acoes %}
+<a href="{{ url_for('exame_faixa.meus_exames', aluno_id=aluno.id) }}" class="sh__btn"><i class="bi bi-clock-history"></i> Meus exames</a>
+<button type="button" class="sh__btn" onclick="window.print()"><i class="bi bi-printer"></i> Imprimir</button>
+{% endblock %}
+
+{% block content %}
+{% include 'exame_faixa/_seletor_aluno.html' %}
+
+<div class="exf-cab">
+  <div>
+    {% if promocao %}<p class="exf-cab__titulo">{{ promo(promocao) }}</p>{% else %}<p class="exf-cab__titulo">{{ dados.de }} → {{ dados.para }}</p>{% endif %}
+    <span class="u-muted u-fs-sm">Inscrição confirmada em {{ insc.created_at|data_br }}</span>
+  </div>
+  <dl class="exf-dados">
+    <div><dt>Valor</dt><dd>{{ valor_fmt }}</dd></div>
+    {% if pagamento %}<div><dt>Fatura</dt><dd>{{ pill(pagamento.rotulo, pagamento.cor) }}{% if pagamento.status in ('pendente', 'atrasado') %}<span class="d-block u-fs-sm u-muted">vence {{ pagamento.vencimento|data_br }}</span>
+      <a href="{{ url_for('painel_responsavel.minhas_mensalidades', aluno_id=aluno.id) if modo == 'responsavel' else url_for('painel_aluno.minhas_mensalidades') }}" class="sh__btn sh__btn--forte mt-1"><i class="bi bi-qr-code"></i> {{ 'Pagar agora' if pagamento.online else 'Ver fatura' }}</a>{% endif %}</dd></div>{% endif %}
+    <div><dt>Resultado</dt><dd>{{ pill(av.resultado_rotulo, av.resultado_cor) if av else pill('Aguardando prova', 'warning') }}</dd></div>
+    {% if av and av.media_geral is not none %}<div><dt>Média geral</dt><dd>{{ av.media_geral|nota_br }}</dd></div>{% endif %}
+  </dl>
+</div>
+
+{% if av and linhas %}
+<h2 class="exf-secao-titulo">Notas da prova</h2>
+<div class="exf-grade mb-3">
+  {% for pt in linhas %}
+  <section class="exf-cartao">
+    <h3>{{ pt.parte.nome }}<span>{{ pt.media|nota_br }}</span></h3>
+    {% for gr in pt.grupos %}
+    {% if pt.grupos|length > 1 %}<p class="u-muted u-fs-sm mt-2 mb-1">{{ gr.grupo.nome }}</p>{% endif %}
+    <ul class="list-unstyled mb-0">
+      {% for it in gr.itens %}<li class="d-flex justify-content-between gap-2"><span>{{ it.rotulo }}</span><strong class="u-num">{{ it.nota|nota_br }}</strong></li>{% endfor %}
+    </ul>
+    {% endfor %}
+  </section>
+  {% endfor %}
+</div>
+{% if av.observacao %}<p><strong>Observação da banca:</strong> {{ av.observacao }}</p>{% endif %}
+{% endif %}
+
+{% if promocao %}
+<h2 class="exf-secao-titulo">O que cai na prova</h2>
+<p class="u-muted u-fs-sm">A prova tem três partes com nota própria — <strong>teórica</strong>, <strong>prática de nage-waza</strong> (inclui kaeshi e renraku) e <strong>prática de katame-waza</strong> — sobre o conteúdo da sua faixa e das anteriores.</p>
+{{ trilha(liberadas, idx, 'exame_faixa.meu_exame', {'evento_id': ev.id, 'aluno_id': aluno.id}, alvo=k) }}
+{% with quiz=false %}{% include 'exame_faixa/_conteudo.html' %}{% endwith %}
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+{% include 'exame_faixa/_video_dialogo.html' %}
+{% endblock %}

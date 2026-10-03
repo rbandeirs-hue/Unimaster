@@ -32,9 +32,11 @@ from blueprints.cadastros import cadastros_bp
 from blueprints.usuarios.routes import bp_usuarios
 from blueprints.turmas.routes import bp_turmas
 from blueprints.presencas.presencas import bp_presencas
+from blueprints.relatorios import bp_relatorios
 from blueprints.professores.routes import bp_professores
 from blueprints.professor.routes import bp_professor
 from blueprints.configuracoes import bp_configuracoes
+from blueprints.estoque import bp_estoque
 from blueprints.financeiro.routes import bp_financeiro
 from blueprints.financeiro.painel import bp_financeiro_painel, bp_link_pagamento
 from blueprints.precadastro import bp_precadastro
@@ -49,6 +51,8 @@ from blueprints.notificacoes import bp_notificacoes
 from blueprints.aniversario_mensagens import aniversario_mensagens_bp
 from blueprints.aniversariante_live import bp_aniversariante_live
 from blueprints.zempo import bp_zempo, bp_zempo_publico
+from blueprints.exame_faixa import bp_exame_faixa
+from blueprints.aula_particular import bp_aula_particular
 
 # 🔹 Modelo de Usuário (flask-login)
 from blueprints.auth.user_model import Usuario
@@ -287,6 +291,59 @@ def _exigir_academia_escolhida():
     return None
 
 
+# Telas de gestão de usuários: só o gestor principal (MM-13). O próprio
+# cadastro continua livre em usuarios.meu_perfil.
+_SO_GESTOR_PRINCIPAL = {
+    "academia.lista_usuarios", "academia.cadastro_usuario",
+    "usuarios.lista_usuarios", "usuarios.cadastro_usuario", "usuarios.editar_usuario",
+    "usuarios.toggle_ativo", "usuarios.excluir_usuario",
+    "usuarios.duplicados", "usuarios.duplicados_buscar", "usuarios.duplicados_unificar",
+}
+
+
+@app.before_request
+def _exigir_acesso_na_academia():
+    """Acesso por usuário na academia (utils/acesso_academia): áreas financeiro
+    e acadêmico, e o que é só do gestor principal. Vale para a equipe da
+    academia nos modos academia/professor; aluno, responsável e quem tem escopo
+    de associação/federação/admin não passam por aqui."""
+    from flask import flash, jsonify, session
+    if not current_user.is_authenticated:
+        return None
+    endpoint = request.endpoint or ""
+    if not endpoint or endpoint.endswith(".static"):
+        return None
+    if (session.get("modo_painel") or "") not in ("academia", "professor"):
+        return None
+    try:
+        from utils import acesso_academia as acs
+        if acs.escopo_amplo():
+            return None
+        if not (current_user.has_role("gestor_academia") or current_user.has_role("professor")):
+            return None
+        ac = acs.acesso(acs.academia_atual())
+        if ac["total"]:
+            return None
+        area = acs.area_do_blueprint(request.blueprint)
+        bloqueio = None
+        if area and not ac.get(area, True):
+            bloqueio = {"financeiro": "o financeiro", "academico": "a área acadêmica"}[area]
+        elif endpoint in _SO_GESTOR_PRINCIPAL and not ac["principal"]:
+            # Nem o próprio cadastro: a tela de usuário mexe em papéis. O
+            # próprio perfil fica em usuarios.meu_perfil.
+            bloqueio = "a gestão de usuários"
+        if not bloqueio:
+            return None
+        msg = f"Seu acesso nesta academia não inclui {bloqueio}. Fale com o gestor principal."
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest" or request.is_json:
+            return jsonify({"ok": False, "erro": msg}), 403
+        flash(msg, "warning")
+        return redirect(url_for("painel.home"))
+    except Exception:
+        app.logger.exception("Checagem de acesso na academia")
+        return None
+
+
 # ============================================================
 # 🔹 Configuração do Login
 # ============================================================
@@ -447,6 +504,7 @@ def injetar_modos_e_contexto():
 # blueprint já identifica sozinho onde o usuário está. A tela sobrescreve
 # quando o blueprint atende mais de um item da lateral.
 MENU_POR_BLUEPRINT = {
+    "estoque": "estoque",
     "academia": "gerenciamento",
     "alunos": "alunos",
     "aniversariante_live": "aniversariantes",
@@ -456,6 +514,8 @@ MENU_POR_BLUEPRINT = {
     "competicoes": "competicoes",
     "configuracoes": "configuracoes",
     "eventos_competicoes": "eventos",
+    "exame_faixa": "exame_faixa",
+    "aula_particular": "aulas_particulares",
     "federacao": "gerenciamento",
     "financeiro": "financeiro",
     "formularios": "formularios",
@@ -464,6 +524,7 @@ MENU_POR_BLUEPRINT = {
     "painel_responsavel": "gerenciamento",
     "precadastro": "precadastro",
     "presencas": "presencas",
+    "relatorios": "relatorios",
     "professor": "gerenciamento",
     "professores": "professores",
     "solicitacoes": "solicitacoes",
@@ -609,6 +670,115 @@ def injetar_shell():
         except Exception as e:
             app.logger.info("Escopo de academia indisponível (%s)", e)
 
+    # Judô ou não: o menu do aluno e do responsável oferece coisas que só
+    # existem no judô — categoria de peso vem da tabela da CBJ e o Zempo é o
+    # registro nacional da modalidade. Para quem faz só jiu-jitsu, esses itens
+    # não levam a lugar nenhum útil.
+    #
+    # Na dúvida MOSTRA: tirar item de quem tem direito é pior do que deixar um
+    # a mais na lista.
+    ctx["pratica_judo"] = True
+    if modo in ("aluno", "responsavel"):
+        try:
+            from utils.multimodalidade import pratica_judo
+            from config import get_db_connection
+            _c = get_db_connection()
+            _cur = _c.cursor()
+            try:
+                if modo == "aluno":
+                    _cur.execute("SELECT id FROM alunos WHERE usuario_id = %s LIMIT 1",
+                                 (current_user.id,))
+                    _r = _cur.fetchone()
+                    _ids = [_r[0]] if _r else []
+                else:
+                    # O responsável pode ter filhos em modalidades diferentes:
+                    # basta um no judô para o menu continuar completo.
+                    _cur.execute(
+                        "SELECT aluno_id FROM responsavel_alunos WHERE usuario_id = %s",
+                        (current_user.id,))
+                    _ids = [r[0] for r in _cur.fetchall() or []]
+            finally:
+                _cur.close()
+                _c.close()
+            ctx["_alunos_do_usuario"] = _ids
+            if _ids:
+                ctx["pratica_judo"] = any(pratica_judo(i) for i in _ids)
+        except Exception as e:
+            app.logger.info("Modalidade do aluno indisponível (%s)", e)
+
+    # As modalidades da academia precisam ser resolvidas ANTES do menu: é o
+    # menu que decide esconder "Modalidades" (academia de uma modalidade só não
+    # tem o que gerenciar) e "Cadastro no Zempo" (registro nacional do judô).
+    # O resultado fica em cache por alguns minutos e é reusado mais abaixo.
+    ctx["academia_modalidades"] = []
+    if modo in ("academia", "professor"):
+        try:
+            from utils import multimodalidade as mm
+            _aid_men = (ctx.get("academia_id")
+                        or session.get("academia_gerenciamento_id")
+                        or session.get("finance_academia_id"))
+            ctx["academia_modalidades"] = mm.modalidades_da_academia(_aid_men)
+        except Exception as e:
+            app.logger.info("Modalidades da academia indisponíveis (%s)", e)
+
+    # Um único lugar responde "esta academia é de judô?", para o menu lateral e
+    # o painel de gerenciamento nunca divergirem. Sem modalidades cadastradas a
+    # resposta é True: na dúvida, mostra.
+    _mods_ac = ctx.get("academia_modalidades") or []
+    ctx["academia_tem_judo"] = (not _mods_ac) or any(
+        "jud" in (m.get("nome") or "").lower() for m in _mods_ac)
+
+    # Estoque: módulo opcional, ligado por academia e por associação. Resolvido
+    # aqui para o menu não consultar banco, e em cache curto como os demais.
+    ctx["tem_estoque"] = False
+    try:
+        from config import get_db_connection as _gdb
+        _c = _gdb(); _cur = _c.cursor()
+        try:
+            if modo in ("academia", "professor"):
+                _aid_est = (ctx.get("academia_id")
+                            or session.get("academia_gerenciamento_id"))
+                if _aid_est:
+                    _cur.execute("SELECT COALESCE(modulo_estoque,0) FROM academias "
+                                 "WHERE id = %s", (_aid_est,))
+                    _r = _cur.fetchone()
+                    ctx["tem_estoque"] = bool(_r and _r[0])
+            elif modo == "associacao":
+                _assoc = getattr(current_user, "id_associacao", None)
+                if _assoc:
+                    _cur.execute("SELECT COALESCE(modulo_estoque,0) FROM associacoes "
+                                 "WHERE id = %s", (_assoc,))
+                    _r = _cur.fetchone()
+                    ctx["tem_estoque"] = bool(_r and _r[0])
+        finally:
+            _cur.close(); _c.close()
+    except Exception as e:
+        app.logger.info("Módulo de estoque indisponível (%s)", e)
+
+    # Quais modalidades valem para o menu deste usuário agora. É o que o
+    # administrador liga e desliga na tela de menu por modalidade.
+    #
+    # Na academia, com um contexto escolhido só ele conta — o recorte é exato.
+    # Sem contexto, contam todas as da academia, e aí basta uma querer o item
+    # para ele ficar.
+    ctx["menu_modalidade_ids"] = []
+    try:
+        if modo in ("academia", "professor"):
+            from utils.multimodalidade import contexto_id
+            _ctx_mod = contexto_id()
+            ctx["menu_modalidade_ids"] = ([_ctx_mod] if _ctx_mod
+                                          else [m["id"] for m in _mods_ac])
+        elif modo in ("aluno", "responsavel"):
+            from utils.multimodalidade import modalidades_ids_do_aluno
+            _vistos = []
+            for _aid_aluno in ctx.get("_alunos_do_usuario") or []:
+                for _m in modalidades_ids_do_aluno(_aid_aluno):
+                    if _m not in _vistos:
+                        _vistos.append(_m)
+            ctx["menu_modalidade_ids"] = _vistos
+    except Exception as e:
+        app.logger.info("Modalidades do menu indisponíveis (%s)", e)
+
     try:
         from utils.menu import menu_do_modo
         menu_grupos = menu_do_modo(modo, ctx)
@@ -652,7 +822,12 @@ def injetar_shell():
             _aid_ctx = (ctx.get("academia_id")
                         or session.get("academia_gerenciamento_id")
                         or session.get("finance_academia_id"))
-            if modo == "professor":
+            restrito = mm._permitidas_do_usuario(_aid_ctx) is not None
+            if restrito:
+                # Acesso definido pelo gestor principal (MM-13): só as dele,
+                # sem "Todas".
+                modalidades = mm.modalidades_do_usuario(_aid_ctx)
+            elif modo == "professor":
                 # O professor só escolhe entre o que leciona. Sem vínculo
                 # cadastrado, continua vendo tudo — a tabela ainda está sendo
                 # preenchida e ninguém pode perder acesso por causa disso.
@@ -660,15 +835,11 @@ def injetar_shell():
                     getattr(current_user, "id", None), _aid_ctx)
             else:
                 modalidades = mm.modalidades_da_academia(_aid_ctx)
+            ctx["modalidade_sem_todas"] = restrito
             if len(modalidades) > 1:
                 ctx["modalidades_contexto"] = modalidades
                 ctx["modalidade_contexto_id"] = mm.contexto_id(_aid_ctx)
                 ctx["modalidade_contexto_nome"] = mm.nome_contexto(_aid_ctx)
-                # Com o recorte ligado, a tela avisa quantos registros não
-                # pertencem a modalidade nenhuma — para o gestor não achar que
-                # sumiu aluno.
-                if ctx["modalidade_contexto_id"]:
-                    ctx["modalidade_pendencias"] = mm.pendencias(_aid_ctx)
             rotulo, cor = mm.identidade(_aid_ctx)
             ctx["marca_modalidade"] = rotulo
             ctx["marca_cor"] = cor
@@ -807,6 +978,7 @@ app.register_blueprint(painel_bp)       # Painel principal
 app.register_blueprint(federacao_bp)    # Gestão da Federação
 app.register_blueprint(associacao_bp)   # Gestão da Associação
 app.register_blueprint(academia_bp)     # Gestão da Academia
+app.register_blueprint(bp_relatorios)   # Catálogo de relatórios (gestão, financeiro, cadastro)
 app.register_blueprint(aniversario_mensagens_bp)
 app.register_blueprint(bp_aniversariante_live)  # Modo aniversariante estilo live (SPA + JSON)
 
@@ -821,6 +993,7 @@ app.register_blueprint(bp_presencas)    # Presenças (registro, ata, histórico)
 app.register_blueprint(bp_professores)  # Professores (CRUD por academia)
 app.register_blueprint(bp_professor)    # Painel Professor (presença, relatório, histórico)
 app.register_blueprint(bp_configuracoes)  # Configurações (admin: modalidades)
+app.register_blueprint(bp_estoque)      # Estoque (produtos, movimentação, venda)
 app.register_blueprint(bp_financeiro)   # Financeiro (dashboard, descontos, mensalidades, receitas, despesas)
 app.register_blueprint(bp_financeiro_painel)  # Painel Financeiro (layout próprio, 7 telas)
 app.register_blueprint(bp_link_pagamento)     # /p/<token> — link curto de pagamento
@@ -835,6 +1008,8 @@ app.register_blueprint(bp_visitante)     # Visitante (aulas experimentais)
 app.register_blueprint(bp_notificacoes)  # Web Push Notifications
 app.register_blueprint(bp_zempo)        # Zempo/CBJ — solicitar, migrar e sincronizar atletas
 app.register_blueprint(bp_zempo_publico)  # Zempo/CBJ — formulário público do aluno (sem login)
+app.register_blueprint(bp_exame_faixa)   # Exame de faixa — programa, preços, banca e modo estudo
+app.register_blueprint(bp_aula_particular)  # Aula particular — combinado por aluno e registro de cada aula
 
 try:
     import pywebpush  # noqa: F401 — dependência opcional em runtime antigo; requirements.txt inclui.

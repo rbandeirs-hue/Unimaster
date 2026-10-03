@@ -1,5 +1,7 @@
 {% extends "base_app.html" %}
 {% block title %}Inscrição — {{ evento.nome if evento else 'Competição' }}{% endblock %}
+{% block pagina_titulo %}{% if evento and not erro and not ok %}{{ evento.nome }}{% endif %}{% endblock %}
+{% block pagina_subtitulo %}{% if evento and not erro and not ok %}Preencha os dados para inscrição na competição (sem cadastro no sistema).{% endif %}{% endblock %}
 {% block content %}
 <div class="container mt-4" style="max-width: 560px;">
     {% if erro %}
@@ -9,8 +11,6 @@
     <div class="alert alert-success">Sua inscrição foi registrada.</div>
     <p class="text-muted small">Guarde a confirmação. Você pode fechar esta página.</p>
     {% elif evento %}
-    <h1 class="h4 fw-bold text-primary mb-1">{{ evento.nome }}</h1>
-    <p class="text-muted small mb-4">Preencha os dados para inscrição na competição (sem cadastro no sistema).</p>
     <form method="POST" class="card shadow-sm border-0">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="card-body">
@@ -25,7 +25,7 @@
             {% elif academias_opts|length > 1 %}
             <div class="mb-3">
                 <label class="form-label fw-semibold">Academia / local de treino <span class="text-danger">*</span></label>
-                <select name="id_academia" id="insc_academia" class="form-select" required>
+                <select name="id_academia" id="insc_academia" class="u-campo__controle" required aria-label="Academia / local de treino">
                     <option value="">— Escolha —</option>
                     {% for ac in academias_opts %}
                     <option value="{{ ac.id }}">{{ ac.nome }}</option>
@@ -36,7 +36,7 @@
             <div class="mb-3">
                 <label class="form-label fw-semibold">Professor</label>
                 {% if professores_opts|length > 0 %}
-                <select name="professor_id" id="insc_professor_id" class="form-select mb-2">
+                <select name="professor_id" id="insc_professor_id" class="u-campo__controle mb-2" aria-label="Professor">
                     <option value="">— Escolha a academia acima —</option>
                     {% set resp_ids = responsaveis_ids|default([]) %}
                     {% for p in professores_opts %}
@@ -46,23 +46,23 @@
                     {% endfor %}
                 </select>
                 {% endif %}
-                <input type="text" name="professor" class="form-control" maxlength="200" autocomplete="name" placeholder="Nome do professor (se não estiver na lista)">
+                <input type="text" name="professor" class="u-campo__controle" maxlength="200" autocomplete="name" placeholder="Nome do professor (se não estiver na lista)" aria-label="Nome do professor (se não estiver na lista)">
             </div>
             <div class="mb-3">
                 <label class="form-label fw-semibold">Nome completo <span class="text-danger">*</span></label>
-                <input type="text" name="nome_completo" class="form-control" required maxlength="200" autocomplete="name">
+                <input type="text" name="nome_completo" class="u-campo__controle" required maxlength="200" autocomplete="name" aria-label="Nome completo">
             </div>
             <div class="mb-3">
                 <label class="form-label fw-semibold">Data de nascimento <span class="text-danger">*</span></label>
-                <input type="date" name="data_nascimento" class="form-control" required>
+                <input type="date" name="data_nascimento" class="u-campo__controle" required aria-label="Data de nascimento">
             </div>
             <div class="mb-3">
                 <label class="form-label fw-semibold">Peso (kg) <span class="text-danger">*</span></label>
-                <input type="text" name="peso" class="form-control" required inputmode="decimal" placeholder="Ex: 45,5">
+                <input type="text" name="peso" class="u-campo__controle" required inputmode="decimal" placeholder="Ex: 45,5" aria-label="Peso (kg)">
             </div>
             <div class="mb-3">
                 <label class="form-label fw-semibold">Sexo <span class="text-danger">*</span></label>
-                <select name="sexo" class="form-select" required>
+                <select name="sexo" class="u-campo__controle" required aria-label="Sexo">
                     <option value="">— Escolha —</option>
                     <option value="M">Masculino</option>
                     <option value="F">Feminino</option>
@@ -76,12 +76,12 @@
             </div>
             <div class="mb-3">
                 <label class="form-label fw-semibold">Complemento do local <span class="text-muted fw-normal">(opcional)</span></label>
-                <input type="text" name="local_treino" class="form-control" maxlength="200" placeholder="Sala, bairro, observação…">
+                <input type="text" name="local_treino" class="u-campo__controle" maxlength="200" placeholder="Sala, bairro, observação…" aria-label="Complemento do local (opcional)">
             </div>
             {% if categorias_opts and categorias_opts|length > 0 %}
             <div class="mb-3">
                 <label class="form-label fw-semibold">Categoria (opcional)</label>
-                <select name="categoria" class="form-select">
+                <select name="categoria" class="u-campo__controle" aria-label="Categoria (opcional)">
                     <option value="">— Escolher depois / não sei —</option>
                     {% for c in categorias_opts %}
                     <option value="{{ c.nome_categoria }}">{{ c.nome_categoria }}</option>
@@ -89,7 +89,7 @@
                 </select>
             </div>
             {% endif %}
-            <button type="submit" class="btn btn-primary w-100">Enviar inscrição</button>
+            <button type="submit" class="u-btn u-btn--primario w-100">Enviar inscrição</button>
         </div>
     </form>
     {% endif %}

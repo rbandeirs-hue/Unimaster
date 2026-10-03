@@ -1,0 +1,81 @@
+{# Corpo da apostila de uma promoção: ficha da promoção, teoria e técnicas,
+   katas e documentos. Usado pela tela do programa e pela impressão em lote
+   (uma apostila por aluno). Espera: atual, acumulado, conhecimento, tecnicas,
+   anteriores, mostra_katas, katas_cobrados, katas_extra, documentos, esc. #}
+{% from 'exame_faixa/_macros.html' import obi, promo with context %}
+    <div class="exf-cab">
+      <div>
+        <p class="exf-cab__titulo">{{ promo(atual) }}</p>
+        <span class="u-muted u-fs-sm">Edição {{ atual.edicao or '—' }} · {{ atual.ordem }}ª promoção do programa{% if not atual.ativo %} · <strong class="exf-alerta">inativa</strong>{% endif %}</span>
+      </div>
+      <dl class="exf-dados">
+        <div><dt>Idade</dt><dd>{{ atual.idade_txt }}</dd></div>
+        <div><dt>Carência</dt><dd>{{ atual.carencia_txt }}</dd></div>
+        <div><dt>Valor do exame</dt><dd>{{ atual.valor_fmt }}</dd></div>
+      </dl>
+      <div class="exf-banco">
+        <span class="exf-rotulo">O exame cobra (acumulado até a {{ atual.para }})</span>
+        <ul>
+          {% for a in acumulado %}
+          <li><strong>{{ a.n }}</strong> {{ a.nome }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+
+    {% with quiz=false, sem_pede=true %}{% include 'exame_faixa/_conteudo.html' %}{% endwith %}
+
+    {# ------------------------------------- katas (a partir da faixa Verde) #}
+    {% if mostra_katas %}
+    <section class="exf-bloco" id="mat-katas">
+      <header class="exf-bloco__topo">
+        <h2><i class="bi bi-diagram-3" aria-hidden="true"></i> Katas</h2>
+        <span>{% if katas_cobrados %}{{ katas_cobrados|map(attribute='nome')|join(' e ') }} cobrado{{ 's' if katas_cobrados|length > 1 }} nesta promoção{% else %}material complementar — esta promoção não cobra kata{% endif %}</span>
+      </header>
+      <div class="exf-katas">
+        {% for k in katas_cobrados + katas_extra %}
+        {% set cobrado = k in katas_cobrados %}
+        <article class="exf-kata{{ ' is-cobrado' if cobrado }}">
+          <header class="exf-kata__topo">
+            <div>
+              <h3>{{ k.nome }} <small>{{ k.traducao }}</small></h3>
+              <span class="exf-kata__sit">{{ 'Cobrado nesta promoção' if cobrado else 'Material complementar' }} · {{ k.grupos|length }} grupos · {{ k.grupos|sum(attribute=1, start=[])|length }} técnicas</span>
+            </div>
+            {% if k.video %}
+            <button type="button" class="exf-vid exf-nao-imprime" data-exf-video data-embed="{{ k.video.embed or '' }}" data-url="{{ k.video.url }}" data-titulo="{{ k.nome }}"><i class="bi bi-play-fill"></i> Assistir o kata</button>
+            {% if k.qr %}<img class="exf-so-papel exf-qr" src="{{ k.qr }}" alt="QR do vídeo do {{ k.nome }}">{% endif %}
+            {% else %}<span class="exf-kata__semvideo exf-nao-imprime">Sem vídeo ainda</span>{% endif %}
+          </header>
+          <ol class="exf-kata__grupos">
+            {% for nome_g, tecs in k.grupos %}
+            <li><strong>{{ nome_g }}</strong><span>{{ tecs|join(' · ') }}</span></li>
+            {% endfor %}
+          </ol>
+        </article>
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+
+    {# --------------------------------------------------------- documentos #}
+    <section class="exf-bloco{{ ' exf-nao-imprime' if not documentos }}" id="mat-docs">
+      <header class="exf-bloco__topo">
+        <h2><i class="bi bi-file-earmark-text" aria-hidden="true"></i> Documentos</h2>
+        <span>{{ 'arquivos do programa e desta faixa' if documentos else 'nenhum documento vinculado' }}</span>
+      </header>
+      {% if documentos %}
+      <ul class="exf-docs">
+        {% for d in documentos %}
+        {% set href = url_for('static', filename='uploads/exame_faixa_docs/' ~ d.arquivo) if d.arquivo else d.url %}
+        <li>
+          <span class="exf-docs__tipo">{{ (d.arquivo.rsplit('.', 1)[-1] if d.arquivo else 'link')|upper }}</span>
+          <span class="exf-docs__txt"><a href="{{ href }}" target="_blank" rel="noopener">{{ d.titulo }}</a>
+            <small>{{ 'Todas as faixas' if not d.programa_id else 'Esta faixa' }}</small></span>
+          <a href="{{ href }}" target="_blank" rel="noopener" class="sh__btn exf-nao-imprime">Abrir</a>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="u-muted exf-bloco__vazio">{% if esc.pode_editar %}Adicione regulamentos, apostilas e fichas em <a href="{{ url_for('exame_faixa.materiais', aba='documentos') }}">Vídeos e documentos</a>.{% else %}A associação ainda não vinculou documentos.{% endif %}</p>
+      {% endif %}
+    </section>

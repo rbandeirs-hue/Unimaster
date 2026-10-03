@@ -1,0 +1,276 @@
+{% extends "base_app.html" %}
+{% block conteudo_classe %}exf-tela{% endblock %}
+{% from 'exame_faixa/_macros.html' import obi, promo, pill with context %}
+{% set menu_ativo = 'exame_faixa' %}
+{% set STATUS = {'apto': ('Apto', 'success'), 'aguardando': ('Aguardando', 'warning'), 'verificar': ('Verificar cadastro', 'info'), 'fora_idade': ('Fora da faixa etária', 'danger')} %}
+{% set base = {'academia_id': esc.academia_id} if esc.academia_id else {} %}
+{% block title %}Exame de faixa — alunos aptos{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{{ asset('css/exame_faixa.css') }}">{% endblock %}
+
+{% block pagina_titulo %}Exame de faixa{% endblock %}
+{% block pagina_subtitulo %}Quem pode fazer o próximo exame — idade e carência conferidas {% if proximo %}na data da prova ({{ proximo.data_exame|data_br }}){% else %}hoje{% endif %}.{% endblock %}
+{% block pagina_acoes %}
+<button type="button" class="sh__btn" onclick="window.print()"><i class="bi bi-printer"></i> Imprimir lista</button>
+{% if pode_inscrever %}
+<button type="submit" form="exf-inscrever" class="sh__btn sh__btn--forte exf-nao-imprime"><i class="bi bi-person-plus"></i> Inscrever <span data-exf-n>0</span> no exame</button>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+{% set seletor_academia = true %}
+{% include 'exame_faixa/_abas.html' %}
+
+{% if not prog %}
+<div class="lst-quadro"><div class="lst-vazio">A associação ainda não tem programa de exame cadastrado.</div></div>
+{% else %}
+
+{# ------------------------------------------------------------ próximo exame #}
+{% if proximo %}
+{% set dia = proximo.data_exame %}
+<section class="exf-proximo">
+  <div class="exf-data" aria-hidden="true">
+    <span class="exf-data__mes">{{ ['JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV','DEZ'][dia.month - 1] }}</span>
+    <span class="exf-data__dia">{{ '%02d'|format(dia.day) }}</span>
+  </div>
+  <div class="exf-proximo__texto">
+    <span class="exf-rotulo{{ ' is-ok' if not proximo.encerrado and not proximo.nao_abriu }}">Próximo exame ·
+      {% if proximo.nao_abriu %}inscrições abrem em {{ proximo.data_inicio|data_br }}{% elif proximo.encerrado %}inscrições encerradas{% else %}inscrições abertas{% endif %}</span>
+    <strong class="exf-proximo__nome">{{ proximo.nome }}{% if proximo.hora_prova %} — prova às {{ proximo.hora_prova }}{% endif %}</strong>
+    <span class="u-muted u-fs-sm">{% if proximo.data_fim %}Inscrições até {{ proximo.data_fim|data_br }} · {% endif %}pagamento até {{ proximo.prazo_pagamento|data_br }}</span>
+  </div>
+  <dl class="exf-proximo__nums">
+    <div><dt>Inscritos</dt><dd>{{ proximo.inscritos_ids|length }}</dd></div>
+    <div><dt>Aptos não inscritos</dt><dd>{{ contagem.aptos_fora }}</dd></div>
+  </dl>
+  <a href="{{ url_for('exame_faixa.banca', evento_id=proximo.id, **base) }}" class="sh__btn exf-nao-imprime">Abrir banca <i class="bi bi-chevron-right"></i></a>
+</section>
+{% else %}
+<section class="exf-proximo exf-proximo--vazio">
+  <div class="exf-proximo__texto">
+    <strong class="exf-proximo__nome">Nenhum exame de faixa marcado</strong>
+    <span class="u-muted u-fs-sm">A situação abaixo é conferida hoje. Quando houver exame, passa a valer a data da prova e dá para inscrever os aptos em lote.</span>
+  </div>
+  {% if esc.pode_criar %}<a href="{{ url_for('exame_faixa.editar_exame') }}" class="sh__btn sh__btn--forte exf-nao-imprime"><i class="bi bi-plus-lg"></i> Marcar exame</a>{% endif %}
+</section>
+{% endif %}
+
+{# --------------------------------------------------- situação (vira filtro) #}
+<nav class="exf-status exf-nao-imprime" aria-label="Filtrar por situação">
+  {% for k, rot, sub, n in [
+      ('apto', 'Aptos', 'Cumprem idade e carência', contagem.apto),
+      ('aguardando', 'Aguardando', 'Falta idade ou tempo na faixa', contagem.aguardando),
+      ('verificar', 'Verificar cadastro', 'Sem nascimento ou data da faixa', contagem.verificar),
+      ('fora_idade', 'Fora da faixa etária', 'Acima da idade da promoção', contagem.fora_idade),
+      ('salto', 'Com salto de faixa', 'Cinza aos 6 · Azul aos 11 · Amarela aos 15 · em dezembro: 5, 10 e 14 anos · Laranja', contagem.salto)] %}
+  {% set ativo = f_status == k %}
+  <a href="{{ url_for('exame_faixa.alunos', status=(None if ativo else k), promocao=f_prom, q=busca or None, **base) }}"
+     class="exf-status__item exf-status__item--{{ k }}{{ ' is-ativo' if ativo }}" {% if ativo %}aria-current="true"{% endif %}>
+    <span class="exf-status__rotulo"><i></i>{{ rot }}</span>
+    <span class="exf-status__n{{ ' is-alerta' if k == 'verificar' and n }}">{{ n }}</span>
+    <span class="exf-status__sub">{{ sub }}</span>
+  </a>
+  {% endfor %}
+</nav>
+
+{# ------------------------------------------------ busca + filtro por faixa #}
+<div class="exf-barra exf-nao-imprime">
+  <form method="GET" class="exf-busca" role="search">
+    {% if esc.academia_id %}<input type="hidden" name="academia_id" value="{{ esc.academia_id }}">{% endif %}
+    {% if f_status %}<input type="hidden" name="status" value="{{ f_status }}">{% endif %}
+    {% if f_prom %}<input type="hidden" name="promocao" value="{{ f_prom }}">{% endif %}
+    <i class="bi bi-search" aria-hidden="true"></i>
+    <input type="search" name="q" value="{{ busca }}" autocomplete="off" placeholder="Buscar aluno pelo nome" aria-label="Buscar aluno">
+  </form>
+  <div class="exf-chips" aria-label="Filtrar pela faixa do exame">
+    <a href="{{ url_for('exame_faixa.alunos', status=f_status or None, q=busca or None, **base) }}" class="exf-chip{{ ' is-ativo' if not f_prom }}">Todas as faixas</a>
+    {% for p in prog %}
+    <a href="{{ url_for('exame_faixa.alunos', status=f_status or None, promocao=(None if f_prom == p.id else p.id), q=busca or None, **base) }}"
+       class="exf-chip{{ ' is-ativo' if f_prom == p.id }}" title="{{ p.de }} → {{ p.para }}">{{ obi(p.cores_para) }} {{ p.para }}</a>
+    {% endfor %}
+  </div>
+  <span class="exf-barra__conta">{{ alunos|length }} de {{ total }} alunos{% if filtrado %} · <a href="{{ url_for('exame_faixa.alunos', **base) }}">limpar filtros</a>{% endif %}</span>
+</div>
+
+{# ---------------------------------------------------------------- lista #}
+<form method="POST" id="exf-inscrever" {% if pode_inscrever %}action="{{ url_for('exame_faixa.incluir', evento_id=proximo.id) }}"
+      data-confirmar="Inscrever os alunos marcados em {{ proximo.nome }}? Cada inscrição gera a fatura do exame." data-confirmar-acao="Inscrever"{% endif %}>
+  {% if pode_inscrever %}
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="academia_id" value="{{ esc.academia_id }}">
+  <input type="hidden" name="voltar" value="{{ request.full_path }}">
+  {% endif %}
+
+  <section class="lst-quadro exf-lista">
+    <div class="exf-linha exf-linha--cab">
+      <div class="col-sel">{% if pode_inscrever %}<input type="checkbox" class="form-check-input" id="exf-todos" aria-label="Marcar todos os aptos">{% endif %}</div>
+      <div>Aluno</div>
+      <div class="col-idade lst-num">Idade</div>
+      <div class="col-req">Requisitos</div>
+      <div class="col-valor lst-num">Valor</div>
+      <div>Situação</div>
+      <div class="col-acao"></div>
+    </div>
+
+    {% for g in grupos %}
+    {% set p = g.promocao %}
+    <div class="exf-grupo">
+      <span class="exf-promo">{{ obi(p.cores_de, true) }} {{ p.de }} <span class="exf-promo__seta">→</span> {{ obi(p.cores_para, true) }} <strong>{{ p.para }}</strong>
+        {% if p.salto %}<span class="lst-tag">salto de faixa</span>{% endif %}</span>
+      <span class="exf-grupo__req">{{ p.idade_txt }} · carência {{ p.carencia_txt }} · {{ p.valor_fmt }}</span>
+      <span class="exf-grupo__conta">{{ g.aptos }} apto{{ 's' if g.aptos != 1 }} de {{ g.alunos|length }}</span>
+    </div>
+
+    {% for a in g.alunos %}
+    {% set s = a.sit %}{% set r = a.req %}{% set partes = (a.nome or '?').split() %}
+    <div class="exf-linha{{ ' is-inscrito' if a.inscrito }}">
+      <div class="col-sel">
+        {% if pode_inscrever and not a.inscrito %}
+        <input type="checkbox" class="form-check-input exf-sel{{ ' is-apto' if s.status == 'apto' }}" name="aluno_id" value="{{ a.id }}"
+               {% if s.status == 'apto' %}checked{% endif %} aria-label="Marcar {{ a.nome }}">
+        {% endif %}
+      </div>
+      <div class="col-aluno">
+        <span class="exf-avatar" aria-hidden="true">{{ partes[0][:1] }}{{ partes[-1][:1] if partes|length > 1 }}</span>
+        <span class="lst-corta">
+          <a class="lst-nome" href="{{ url_for('alunos.ficha_aluno', aluno_id=a.id) }}">{{ a.nome }}</a>
+          <span class="lst-sub">{% if not esc.academia_id and esc.academias|length > 1 %}{{ a.academia_nome }} · {% endif %}{% if p.escolha %}<span class="exf-tag-escolha">escolha do professor</span> pela regra: {{ s.pela_regra }}{% elif p.salto %}sem o salto seria {{ p.promocao_normal }}{% else %}faixa {{ p.de }}{% endif %}</span>
+        </span>
+      </div>
+      <div class="col-idade lst-num">{{ s.idade if s.idade is not none else '—' }}</div>
+      <div class="col-req">
+        <span class="exf-req"><i class="exf-ponto {{ 'is-ok' if r.idade_ok else ('is-falta' if r.idade_ok is none else 'is-nao') }}"></i>{{ r.idade_txt }}</span>
+        <span class="exf-req"><span class="exf-barrinha"><span class="{{ 'is-ok' if r.car_ok }}" style="width:{{ r.car_pct }}%"></span></span>{{ r.car_txt }}</span>
+        {% if s.atrasos %}<span class="lst-tag lst-tag--alerta">{{ s.atrasos }} mensalidade{{ 's' if s.atrasos != 1 }} em atraso</span>{% endif %}
+      </div>
+      <div class="col-valor lst-num">{{ p.valor_fmt }}</div>
+      <div class="col-sit">
+        {% if a.inscrito %}{{ pill('Inscrito', 'primary') }}{% else %}{{ pill(STATUS[s.status][0], STATUS[s.status][1]) }}{% endif %}
+        {% if s.status == 'aguardando' and s.data_elegivel %}<span class="lst-sub">apto a partir de {{ s.data_elegivel|data_br }}</span>{% endif %}
+        {% if s.liberado %}<span class="lst-sub" title="{{ s.liberado.motivo }}"><i class="bi bi-unlock"></i> liberado pela academia</span>{% endif %}
+      </div>
+      <div class="col-acao">
+        <button type="button" class="lst-acao exf-nao-imprime" data-exf-destino
+                data-url="{{ url_for('exame_faixa.definir_destino', aluno_id=a.id) }}" data-nome="{{ a.nome }}"
+                data-natural="{{ s.indice_natural }}" data-regra="{{ s.pela_regra }}"
+                data-atual="{{ p.id if p.escolha else '' }}" data-motivo="{{ (a._destino.motivo or '') if p.escolha and a._destino else '' }}"
+                title="Mudar a faixa do exame" aria-label="Mudar a faixa do exame de {{ a.nome }}"><i class="bi bi-pencil-square"></i></button>
+        {% if pode_liberar and not a.inscrito and (s.status in ('aguardando', 'fora_idade') or s.liberado) %}
+        <button type="button" class="lst-acao exf-nao-imprime" data-exf-liberar
+                data-url="{{ url_for('exame_faixa.liberar_aluno', aluno_id=a.id) }}" data-nome="{{ a.nome }}"
+                data-pendencias="{{ (s.pendencias or [])|join(' · ') }}" data-liberado="{{ '1' if s.liberado }}"
+                data-motivo="{{ s.liberado.motivo if s.liberado else '' }}"
+                title="{{ 'Desfazer liberação' if s.liberado else 'Liberar para o exame' }}"
+                aria-label="{{ 'Desfazer liberação de' if s.liberado else 'Liberar para o exame' }} {{ a.nome }}"><i class="bi {{ 'bi-unlock-fill' if s.liberado else 'bi-unlock' }}"></i></button>
+        {% endif %}
+        <a href="{{ url_for('exame_faixa.historico_aluno', aluno_id=a.id, **base) }}" class="lst-acao" title="Exames e notas" aria-label="Exames e notas de {{ a.nome }}"><i class="bi bi-clock-history"></i></a>
+      </div>
+    </div>
+    {% endfor %}
+    {% else %}
+    <div class="lst-vazio">{{ 'Nenhum aluno com esse filtro.' if filtrado else 'Nenhum aluno com exame previsto no programa.' }}
+      {% if filtrado %}<a href="{{ url_for('exame_faixa.alunos', **base) }}">Limpar filtros</a>{% endif %}</div>
+    {% endfor %}
+  </section>
+
+  {% if pode_inscrever %}
+  <div class="exf-rodape exf-nao-imprime">
+    <span><strong data-exf-n>0</strong> marcado(s) para {{ proximo.nome }}</span>
+    <button type="button" class="sh__btn" id="exf-alternar-todos"><i class="bi bi-x-square"></i> <span>Desmarcar todos</span></button>
+    <label class="exf-alternar"><input type="checkbox" class="form-check-input" name="forcar" value="1"> incluir mesmo sem cumprir idade/carência</label>
+    <button type="submit" class="sh__btn sh__btn--forte"><i class="bi bi-person-plus"></i> Inscrever no exame</button>
+  </div>
+  {% elif proximo and not esc.academia_id %}
+  <p class="u-muted u-fs-sm mt-3 exf-nao-imprime">Para inscrever alunos no exame, escolha a academia no seletor acima.</p>
+  {% endif %}
+</form>
+
+{% include 'exame_faixa/_destino_dialogo.html' %}
+{% if pode_liberar %}{% include 'exame_faixa/_liberar_dialogo.html' %}{% endif %}
+
+{# ------------------------------------------------- só na impressão #}
+{# Lista de papel: uma linha por aluno, com o que se confere na mão —
+   nome completo, idade, faixa atual e pretendida, aptidão e a regra que
+   explica a faixa e a liberação. A tela não mostra este bloco. #}
+{% set ac_sel = (esc.academias|selectattr('id', 'equalto', esc.academia_id)|first) if esc.academia_id else none %}
+<section class="exf-impressao" aria-hidden="true">
+  <header class="exf-impressao__topo">
+    <div>
+      <h1>Exame de faixa — lista de alunos</h1>
+      <p>{{ ac_sel.nome if ac_sel else 'Todas as academias' }}{% if proximo %} · {{ proximo.nome }} · prova em {{ proximo.data_exame|data_br }}{% if proximo.hora_prova %} às {{ proximo.hora_prova }}{% endif %}{% endif %}</p>
+    </div>
+    <div class="exf-impressao__meta">
+      <span>Impresso em {{ hoje_txt }}</span>
+      <span>{{ alunos|length }} aluno{{ 's' if alunos|length != 1 }}{% if filtrado %} (filtrado){% endif %} · {{ contagem.apto }} apto{{ 's' if contagem.apto != 1 }}</span>
+      <span>Idade e carência conferidas {% if proximo %}na data da prova{% else %}hoje{% endif %}</span>
+    </div>
+  </header>
+  <table class="exf-impressao__tabela">
+    <thead>
+      <tr>
+        <th class="c-n">Nº</th>
+        <th>Nome completo</th>
+        <th class="c-idade">Idade</th>
+        <th class="c-faixa">Faixa atual</th>
+        <th class="c-faixa">Faixa pretendida</th>
+        <th class="c-sit">Aptidão</th>
+        <th>Regra e liberação</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% set num = namespace(n=0) %}
+      {% for a in impressao %}{% set num.n = num.n + 1 %}
+      {% set s = a.sit %}{% set p = s.promocao %}
+      <tr>
+        <td class="c-n">{{ num.n }}</td>
+        <td><strong>{{ a.nome }}</strong>{% if not esc.academia_id and esc.academias|length > 1 %}<br><small>{{ a.academia_nome }}</small>{% endif %}</td>
+        <td class="c-idade">{{ s.idade if s.idade is not none else '—' }}</td>
+        <td class="c-faixa">{{ obi(p.cores_de) }} {{ p.de }}</td>
+        <td class="c-faixa">{{ obi(p.cores_para) }} <strong>{{ p.para }}</strong></td>
+        <td class="c-sit">{% if a.inscrito %}Inscrito{% elif s.liberado %}Liberado{% else %}{{ STATUS[s.status][0] }}{% endif %}</td>
+        <td class="c-regra">{{ a.regra_txt }}<br><span>{{ a.liberacao_txt }}</span></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<p class="u-muted u-fs-sm mt-3">Fora do programa: {{ fora.sem_faixa }} sem faixa cadastrada · {{ fora.sem_programa }} com faixa sem exame kyu.</p>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  var sels = document.querySelectorAll('.exf-sel');
+  var todos = document.getElementById('exf-todos');
+  var alternar = document.getElementById('exf-alternar-todos');
+  function conta() {
+    var n = 0;
+    sels.forEach(function (c) { if (c.checked) n++; });
+    document.querySelectorAll('[data-exf-n]').forEach(function (el) { el.textContent = n; });
+    document.querySelectorAll('button[form="exf-inscrever"], .exf-rodape button[type="submit"]').forEach(function (b) { b.disabled = !n; });
+    if (alternar) {
+      alternar.querySelector('span').textContent = n ? 'Desmarcar todos' : 'Marcar aptos';
+      alternar.querySelector('i').className = 'bi ' + (n ? 'bi-x-square' : 'bi-check2-square');
+    }
+    if (todos) {
+      var aptos = document.querySelectorAll('.exf-sel.is-apto');
+      todos.checked = aptos.length > 0 && Array.prototype.every.call(aptos, function (c) { return c.checked; });
+    }
+  }
+  sels.forEach(function (c) { c.addEventListener('change', conta); });
+  if (todos) todos.addEventListener('change', function () {
+    document.querySelectorAll('.exf-sel.is-apto').forEach(function (c) { c.checked = todos.checked; });
+    conta();
+  });
+  // Com algo marcado, desmarca tudo (inclusive quem foi marcado à mão);
+  // sem nada, volta a marcar os aptos.
+  if (alternar) alternar.addEventListener('click', function () {
+    var algum = Array.prototype.some.call(sels, function (c) { return c.checked; });
+    sels.forEach(function (c) { c.checked = !algum && c.classList.contains('is-apto'); });
+    conta();
+  });
+  conta();
+})();
+</script>
+{% endblock %}

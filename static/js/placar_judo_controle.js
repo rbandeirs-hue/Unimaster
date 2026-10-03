@@ -317,8 +317,8 @@ function confirmarFinalizar() {
     });
 }
 
-function resetarLuta() {
-    if (!confirm('⚠️ ATENÇÃO: Isso irá resetar TODA a luta para o estado inicial.\n\nPontuação, tempo e status serão zerados.\n\nDeseja continuar?')) {
+async function resetarLuta() {
+    if (!await Dialogo.confirmar('⚠️ ATENÇÃO: Isso irá resetar TODA a luta para o estado inicial.\n\nPontuação, tempo e status serão zerados.\n\nDeseja continuar?')) {
         return;
     }
     
@@ -701,7 +701,7 @@ function atualizarEstado(status) {
 }
 
 // Desfazer última ação (usa backend para descobrir o último ponto/penalidade e reverter)
-function desfazerUltimaAcao() {
+async function desfazerUltimaAcao() {
     if (!LUTA_ID) {
         showToast('Erro: ID da luta não encontrado!', 'danger');
         return;
@@ -712,7 +712,7 @@ function desfazerUltimaAcao() {
         return;
     }
 
-    if (!confirm('Deseja desfazer a última pontuação/penalidade registrada?')) {
+    if (!await Dialogo.confirmar('Deseja desfazer a última pontuação/penalidade registrada?')) {
         return;
     }
 

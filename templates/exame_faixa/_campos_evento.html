@@ -1,0 +1,47 @@
+{# Opções de exame de faixa no cadastro/edição de evento.
+   Espera `exf_ev` (evento ou {}) e `exf_marcado` (bool). #}
+{% set _prova = exf_ev.exame_data_prova if exf_ev else none %}
+{% set _prazo = exf_ev.exame_prazo_pagamento if exf_ev else none %}
+<div class="mb-3 p-3 border rounded" id="exf-bloco">
+  <input type="hidden" name="exame_faixa_presente" value="1">
+  <label class="form-check mb-0">
+    <input type="checkbox" class="form-check-input" name="exame_faixa" value="1" id="exf-marca" {% if exf_marcado %}checked{% endif %}>
+    <span class="form-check-label"><strong>Exame de faixa</strong></span>
+  </label>
+  <small class="text-muted d-block mt-1">Cada aluno se inscreve na promoção da sua faixa (idade, carência e valor da tabela de preços), recebe o programa do exame e, no dia, a banca aplica a prova com nota teórica, de nage-waza e de katame-waza.</small>
+
+  <div id="exf-campos" class="mt-3" {% if not exf_marcado %}hidden{% endif %}>
+    <p class="small mb-2"><i class="bi bi-info-circle"></i> No exame, <strong>Data/hora início</strong> é a <strong>abertura das inscrições</strong> e <strong>Data/hora fim</strong> é o <strong>encerramento</strong>.</p>
+    <div class="row g-3">
+      <div class="col-md-6">
+        <label for="exame_data_prova" class="form-label fw-semibold">Dia e hora da prova <span class="text-danger">*</span></label>
+        <input type="datetime-local" id="exame_data_prova" name="exame_data_prova" class="u-campo__controle"
+               value="{{ _prova.strftime('%Y-%m-%dT%H:%M') if _prova else '' }}">
+        <small class="text-muted">É esta data que aparece no calendário.</small>
+      </div>
+      <div class="col-md-6">
+        <label for="exame_prazo_pagamento" class="form-label fw-semibold">Prazo de pagamento</label>
+        <input type="date" id="exame_prazo_pagamento" name="exame_prazo_pagamento" class="u-campo__controle"
+               value="{{ _prazo.strftime('%Y-%m-%d') if _prazo else '' }}">
+        <small class="text-muted">Vencimento da fatura. Em branco: vence no dia da prova.</small>
+      </div>
+      <div class="col-12">
+        <label class="form-check mb-0">
+          <input type="checkbox" class="form-check-input" name="exame_gera_fatura" value="1"
+                 {% if not exf_ev or exf_ev.exame_gera_fatura is none or exf_ev.exame_gera_fatura %}checked{% endif %}>
+          <span class="form-check-label">Ao se inscrever, gerar fatura para o aluno — “Exame de faixa — faixa atual → nova faixa”, no valor da tabela de preços</span>
+        </label>
+        <small class="text-muted d-block">A cobrança cai em “Minhas mensalidades” do aluno e no financeiro da academia (academias com o módulo financeiro).</small>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+(function () {
+  var m = document.getElementById('exf-marca'), campos = document.getElementById('exf-campos'),
+      prova = document.getElementById('exame_data_prova');
+  if (!m) return;
+  function sync() { campos.hidden = !m.checked; prova.required = m.checked; }
+  m.addEventListener('change', sync); sync();
+})();
+</script>

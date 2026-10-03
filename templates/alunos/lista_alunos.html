@@ -14,6 +14,7 @@
   {% set back_url = back_url or get_back_url_default() %}
   <a href="{{ url_voltar(back_url) }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Voltar</a>
   <button type="button" class="sh__btn" id="alExportar"><i class="bi bi-download"></i> Exportar</button>
+  <button type="button" class="sh__btn" onclick="window.print()"><i class="bi bi-printer"></i> Imprimir</button>
   {% if not modo_associacao %}
   <a href="{{ url_for('alunos.cadastrar_aluno', academia_id=academia_id, next=request.full_path) if academia_id else url_for('alunos.cadastrar_aluno', next=request.full_path) }}"
      class="sh__btn sh__btn--forte">
@@ -23,11 +24,96 @@
 {% endblock %}
 
 {% block content %}
+{# ----------------------------------------------------- só na impressão #}
+{# Lista de papel dos alunos que estão na tela (mesmos filtros), em ordem
+   alfabética. A tela não mostra este bloco; ao imprimir, só ele sai. #}
+{# Nome próprio: inicial maiúscula, resto minúsculo; da/de/do/das/dos/e
+   ficam minúsculas no meio do nome. #}
+{% macro nome_proprio(t) -%}
+{%- for w in (t or '').lower().split() -%}
+{{ w if (w in ('da', 'de', 'do', 'das', 'dos', 'e') and not loop.first) else (w[:1]|upper ~ w[1:]) }}{{ ' ' if not loop.last }}
+{%- endfor -%}
+{%- endmacro %}
+<section class="al-impressao" aria-hidden="true">
+  <header class="al-impressao__topo">
+    <div>
+      <h1>Lista de alunos</h1>
+      <p>{{ academia.nome if academia else 'Todas as academias' }}
+        · {{ {'ativo': 'ativos', 'inativo': 'inativos'}.get(filtro_ativo, 'todos os status') }}
+        {%- if busca %} · busca "{{ busca }}"{% endif %}
+        {%- if turma_id %} · turma filtrada{% endif %}
+        {%- if modalidade_id %} · modalidade filtrada{% endif %}</p>
+    </div>
+    <div class="al-impressao__meta">
+      <span>Impresso em {{ hoje.strftime('%d/%m/%Y') if hoje else '' }}</span>
+      <span>{{ alunos_exibidos|length }} aluno{{ 's' if alunos_exibidos|length != 1 }}</span>
+    </div>
+  </header>
+  <table class="al-impressao__tabela">
+    <thead>
+      <tr>
+        <th class="c-n">Nº</th>
+        <th>Nome completo</th>
+        <th class="c-nasc">Nascimento</th>
+        <th class="c-faixa">Faixa</th>
+        <th>Turma</th>
+        <th class="c-mod">Modalidade</th>
+        <th>Responsável</th>
+        <th class="c-tel">Telefone</th>
+        <th class="c-st">Situação</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for a in alunos_exibidos|sort(attribute='nome') %}
+      <tr>
+        <td class="c-n">{{ loop.index }}</td>
+        <td><strong>{{ nome_proprio(a.nome) }}</strong>{% if modo_associacao and a.academia_nome %} <small>· {{ a.academia_nome }}</small>{% endif %}</td>
+        <td class="c-nasc">{{ a.data_nascimento.strftime('%d/%m/%Y') if a.data_nascimento else '—' }}{% if a.idade is not none %} <small>· {{ a.idade }} anos</small>{% endif %}</td>
+        <td class="c-faixa">{{ a.faixa.lower().split('/')|map('capitalize')|join('/') if a.faixa else '—' }}{% if a.graduacao and a.graduacao|trim|length > 1 %} <small>· {{ a.graduacao|title }}</small>{% endif %}</td>
+        <td class="c-turma">{{ a.turma_nome or 'Sem turma' }}</td>
+        <td class="c-mod">{{ a.modalidades_nomes or '—' }}</td>
+        <td>{{ nome_proprio(a.responsavel_financeiro_nome or a.responsavel_nome or a.nome_mae) or '—' }}</td>
+        <td class="c-tel">{{ a.responsavel_financeiro_telefone or a.tel_celular or a.telefone or '—' }}</td>
+        <td class="c-st">{{ 'Ativo' if a.ativo else 'Inativo' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+<style>
+  .al-impressao { display: none; }
+  @media print {
+    @page { size: A4 landscape; margin: 10mm; }
+    .sh__side, .sh__top, .sh__overlay, .toast-container { display: none !important; }
+    .sh__main { margin-left: 0 !important; }
+    .sh__conteudo { padding: 0 !important; max-width: none !important; }
+    .sh__conteudo > *:not(.al-impressao) { display: none !important; }
+    .modal, .modal-backdrop { display: none !important; }
+    .al-impressao { display: block !important; color: #000; font-size: 8.5pt; }
+    .al-impressao__topo { display: flex; justify-content: space-between; align-items: flex-end; gap: 12mm; padding-bottom: 3mm; margin-bottom: 3mm; border-bottom: 1.5pt solid #000; }
+    .al-impressao__topo h1 { margin: 0; font-size: 15pt; font-weight: 700; }
+    .al-impressao__topo p { margin: 1mm 0 0; font-size: 10pt; }
+    .al-impressao__meta { display: flex; flex-direction: column; align-items: flex-end; font-size: 8.5pt; color: #333; }
+    .al-impressao__tabela { width: 100%; border-collapse: collapse; }
+    .al-impressao__tabela thead { display: table-header-group; }
+    .al-impressao__tabela th { text-align: left; font-size: 7.5pt; text-transform: uppercase; letter-spacing: .04em; border-bottom: 1pt solid #000; padding: 1.5mm 1.8mm; }
+    .al-impressao__tabela td { padding: .7mm 1.8mm; line-height: 1.25; border-bottom: .5pt solid #bbb; vertical-align: top; }
+    .al-impressao__tabela tr { break-inside: avoid; }
+    .al-impressao__tabela small { color: #555; }
+    .al-impressao__tabela .c-n { width: 8mm; text-align: right; color: #555; }
+    .al-impressao__tabela .c-nasc { width: 28mm; white-space: nowrap; }
+    .al-impressao__tabela .c-faixa { width: 34mm; white-space: nowrap; }
+    .al-impressao__tabela .c-turma { white-space: nowrap; }
+    .al-impressao__tabela .c-mod { width: 18mm; }
+    .al-impressao__tabela .c-tel { width: 30mm; white-space: nowrap; }
+    .al-impressao__tabela .c-st { width: 14mm; }
+  }
+</style>
 <script type="application/json" id="js-formas-por-academia-data">{{ (formas_por_academia or {})|tojson }}</script>
 
 <style>
   .alunos-page {
-    max-width: 1400px;
+    max-width: none;
     margin: 0 auto;
   }
   .alunos-header {
@@ -47,7 +133,7 @@
     gap: 0.5rem;
     color: #212529;
   }
-  .alunos-header h1 i { color: #0d6efd; }
+  .alunos-header h1 i { color: #1c1c1c; }
   .alunos-header .subtitle {
     font-size: 0.9rem;
     margin-top: 0.25rem;
@@ -92,7 +178,7 @@
     color: #1f2937;
     line-height: 1;
   }
-  .alunos-stat-card.total .value { color: #0d6efd; }
+  .alunos-stat-card.total .value { color: #1c1c1c; }
   .alunos-stat-card.ativos .value { color: #198754; }
   .alunos-stat-card.inativos .value { color: #6c757d; }
   .search-card {
@@ -103,14 +189,14 @@
     box-shadow: 0 1px 3px rgba(0,0,0,0.06);
     border: 1px solid #e9ecef;
   }
-  .search-card .form-control {
+  .search-card .form-control, .search-card .u-campo__controle {
     border-radius: 10px;
     border: 1px solid #dee2e6;
     padding: 0.6rem 1rem;
   }
-  .search-card .form-control:focus {
-    border-color: #0d6efd;
-    box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.15);
+  .search-card .form-control:focus, .search-card .u-campo__controle:focus {
+    border-color: #1c1c1c;
+    box-shadow: 0 0 0 3px rgba(28, 28, 28, 0.15);
   }
   .aluno-card {
     background: #fff;
@@ -122,8 +208,8 @@
     box-shadow: 0 1px 3px rgba(0,0,0,0.04);
   }
   .aluno-card:hover {
-    box-shadow: 0 8px 24px rgba(13, 110, 253, 0.12);
-    border-color: #cfe2ff;
+    box-shadow: 0 8px 24px rgba(28, 28, 28, 0.12);
+    border-color: #e6e4e0;
     transform: translateY(-2px);
   }
   .aluno-card-inner {
@@ -149,7 +235,7 @@
     background: #f8f9fa;
   }
   .aluno-card:hover .foto-aluno {
-    border-color: #0d6efd;
+    border-color: #1c1c1c;
   }
   .aluno-info {
     min-width: 0;
@@ -193,13 +279,13 @@
     align-self: stretch;
     align-items: flex-start;
   }
-  .aluno-actions .btn {
+  .aluno-actions .btn, .aluno-actions .u-btn {
     width: 38px; height: 38px; padding: 0;
     display: inline-flex; align-items: center; justify-content: center;
     border-radius: 10px; transition: all 0.2s;
   }
-  .aluno-actions .btn-outline-primary:hover { background: #0d6efd; color: white; }
-  .aluno-actions .btn-outline-warning:hover { background: #ffc107; color: #212529; }
+  .aluno-actions .btn-outline-primary:hover, .aluno-actions .u-btn:hover { background: #1c1c1c; color: white; }
+  .aluno-actions .btn-outline-warning:hover, .aluno-actions .u-btn:hover { background: #ffc107; color: #212529; }
   /* ── Modal registrar pagamento ── */
   .fin-pag-hero { background: linear-gradient(135deg, #064e3b 0%, #059669 100%); color: #fff; padding: 1.25rem 1.5rem 1rem; border-radius: 0; }
   .fin-pag-hero-icon { width: 44px; height: 44px; background: rgba(255,255,255,.18); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.25rem; margin-bottom: .6rem; }
@@ -219,7 +305,7 @@
   @media (max-width: 576px) { .fin-pag-linha-card .fpl-fields { grid-template-columns: 1fr 1fr; } .fin-pag-info-bar { flex-direction: column; gap: .4rem; } }
   .fin-pag-linha-card label { font-size: .72rem; font-weight: 600; color: #475569; margin-bottom: .2rem; display: block; }
   .fin-pag-soma-bar { display: flex; justify-content: space-between; align-items: center; background: #f1f5f9; border-radius: 10px; padding: .6rem 1rem; font-size: .85rem; margin-top: .25rem; }
-  .fin-pag-soma-bar .fsb-soma { color: #0d6efd; font-weight: 700; font-size: 1rem; }
+  .fin-pag-soma-bar .fsb-soma { color: #1c1c1c; font-weight: 700; font-size: 1rem; }
   .fin-pag-soma-bar .fsb-total { color: #374151; font-weight: 600; }
   .fin-pag-dica { font-size: .75rem; color: #6c757d; margin-bottom: .75rem; display: flex; align-items: flex-start; gap: .4rem; }
   /* Modal resumo detalhe pagamento — mesmo vocabulário visual do fin-pag */
@@ -238,37 +324,39 @@
   .js-fin-pag-linhas .js-fin-pag-linha:nth-child(2) .js-fin-pag-del-line { display: inline-flex !important; }
   .empty-state {
     text-align: center;
-    padding: 4rem 2rem;
-    background: #f8f9fa;
-    border-radius: 16px;
-    border: 2px dashed #dee2e6;
+    padding: 3rem 2rem;
+    background: var(--u-surface-alt);
+    border-radius: var(--u-radius);
+    border: 1px dashed var(--u-border);
   }
   .empty-state i {
-    font-size: 4rem;
-    color: #adb5bd;
-    margin-bottom: 1rem;
+    font-size: 2.5rem;
+    color: var(--u-text-muted);
+    margin-bottom: .75rem;
   }
   .empty-state h4 {
-    color: #495057;
-    font-weight: 600;
-    margin-bottom: 0.5rem;
+    color: var(--u-text);
+    font-size: var(--u-fs-lg);
+    font-weight: var(--u-fw-semibold);
+    margin-bottom: .35rem;
   }
   .empty-state p {
-    color: #6c757d;
-    margin-bottom: 1.5rem;
+    color: var(--u-text-muted);
+    margin-bottom: .5rem;
   }
+  .empty-state__dica { font-size: var(--u-fs-sm); color: var(--u-text-muted); }
   /* ── Modal Financeiro / Mensalidade ────────────────────────── */
   .mf-tipo-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 0.6rem; margin-bottom: 1.25rem; }
   .mf-tipo-card {
     border: 2px solid #dee2e6; border-radius: 10px; padding: 0.75rem 0.5rem;
     text-align: center; cursor: pointer; transition: all 0.2s; background: #fff;
   }
-  .mf-tipo-card:hover { border-color: #0d6efd; background: #f0f7ff; }
-  .mf-tipo-card.active { border-color: #0d6efd; background: #e7f3ff; }
+  .mf-tipo-card:hover { border-color: #1c1c1c; background: #e6e4e0; }
+  .mf-tipo-card.active { border-color: #1c1c1c; background: #e6e4e0; }
   .mf-tipo-card input[type=radio] { display: none; }
   .mf-tipo-card .mf-tipo-icon { font-size: 1.5rem; margin-bottom: 0.25rem; display: block; }
   .mf-tipo-card .mf-tipo-label { font-size: 0.78rem; font-weight: 700; color: #495057; }
-  .mf-tipo-card.active .mf-tipo-icon, .mf-tipo-card.active .mf-tipo-label { color: #0d6efd; }
+  .mf-tipo-card.active .mf-tipo-icon, .mf-tipo-card.active .mf-tipo-label { color: #1c1c1c; }
 
   .mf-section { border: 1px solid #e9ecef; border-radius: 10px; padding: 1rem; background: #fafafa; }
   .mf-section-title { font-size: 0.75rem; font-weight: 700; color: #6c757d; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.75rem; }
@@ -293,7 +381,7 @@
     padding: 0.5rem 0.75rem; background: #f8f9fa; border-radius: 10px; border: 1px solid #e9ecef;
   }
   .ms-plano-pag-nav .js-ms-plano-label { min-height: 1.25rem; }
-  .ms-plano-page-titulo { font-size: 0.82rem; font-weight: 700; color: #0d6efd; margin-bottom: 0.65rem; }
+  .ms-plano-page-titulo { font-size: 0.82rem; font-weight: 700; color: #1c1c1c; margin-bottom: 0.65rem; }
   .ms-item {
     display: flex; justify-content: space-between; align-items: center;
     padding: 0.7rem 0.85rem; border-radius: 8px; background: #fff;
@@ -321,8 +409,8 @@
     line-height: 1;
   }
   .ms-btn-icon i { font-size: 1.05rem; }
-  .ms-btn-icon.btn-success { border-color: transparent; }
-  .ms-btn-icon.btn-success:focus { box-shadow: 0 0 0 0.2rem rgba(25,135,84,.35); }
+  .ms-btn-icon.btn-success{ border-color: transparent; }
+  .ms-btn-icon.btn-success:focus{ box-shadow: 0 0 0 0.2rem rgba(25,135,84,.35); }
   .ms-valor-stack { font-size: 0.78rem; line-height: 1.35; max-width: 14rem; }
   .ms-valor-stack .ms-item-valor { font-weight: 700; font-size: 0.92rem; margin-top: 0.15rem; }
   .ms-item-valor { font-weight: 700; font-size: 0.92rem; }
@@ -382,8 +470,8 @@
     transition: color 0.2s, border-color 0.2s;
     margin-bottom: -2px;
   }
-  .ma-tab:hover { color: #0d6efd; }
-  .ma-tab.active { color: #0d6efd; border-bottom-color: #0d6efd; }
+  .ma-tab:hover { color: #1c1c1c; }
+  .ma-tab.active { color: #1c1c1c; border-bottom-color: #1c1c1c; }
 
   /* panes */
   .ma-body { padding: 1.5rem; overflow-y: auto; max-height: 60vh; }
@@ -403,14 +491,14 @@
   /* stat cards */
   .ma-stats { display: grid; grid-template-columns: repeat(3,1fr); gap: 0.75rem; margin-bottom: 1.25rem; }
   .ma-stat-card { background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 10px; padding: 0.85rem; text-align: center; }
-  .ma-stat-card .sv { font-size: 1.5rem; font-weight: 800; color: #0d6efd; line-height: 1; }
+  .ma-stat-card .sv { font-size: 1.5rem; font-weight: 800; color: #1c1c1c; line-height: 1; }
   .ma-stat-card .sl { font-size: 0.68rem; color: #6c757d; margin-top: 0.2rem; text-transform: uppercase; letter-spacing: 0.04em; }
   .ma-stat-card.warn .sv { color: #e67e22; }
   .ma-stat-card.ok .sv { color: #198754; }
   .ma-stat-card.danger .sv { color: #dc3545; }
 
   /* categoria badges */
-  .ma-cat-badge { display: inline-block; padding: 0.3rem 0.65rem; background: #e7f3ff; border: 1px solid #b3d9ff; border-radius: 6px; font-size: 0.8rem; color: #004085; margin: 0.2rem; }
+  .ma-cat-badge { display: inline-block; padding: 0.3rem 0.65rem; background: #e6e4e0; border: 1px solid #b3d9ff; border-radius: 6px; font-size: 0.8rem; color: #004085; margin: 0.2rem; }
 
   /* aptidão */
   .ma-apto { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.6rem 1.25rem; border-radius: 10px; font-weight: 700; font-size: 1rem; }
@@ -430,7 +518,7 @@
   .ma-cal-stat .csl { font-size: 0.65rem; color: #6c757d; text-transform: uppercase; }
   .ma-cal-stat.c-pres .csv { color: #198754; }
   .ma-cal-stat.c-falt .csv { color: #dc3545; }
-  .ma-cal-stat.c-pct .csv { color: #0d6efd; }
+  .ma-cal-stat.c-pct .csv { color: #1c1c1c; }
   /* lista de aulas */
   .ma-aula-list { display: flex; flex-direction: column; gap: 0.35rem; }
 
@@ -547,8 +635,8 @@
 
   .ua-tabs { background: #fff; border-bottom: 2px solid #e9ecef; display: flex; padding: 0 0.5rem; }
   .ua-tab { padding: 0.6rem 0.9rem; font-size: 0.8rem; font-weight: 600; color: #6c757d; border: 0; border-bottom: 2px solid transparent; background: transparent; cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 0.3rem; margin-bottom: -2px; transition: color 0.2s, border-color 0.2s; }
-  .ua-tab:hover { color: #0d6efd; }
-  .ua-tab.active { color: #0d6efd; border-bottom-color: #0d6efd; }
+  .ua-tab:hover { color: #1c1c1c; }
+  .ua-tab.active { color: #1c1c1c; border-bottom-color: #1c1c1c; }
 
   .ua-body { padding: 1.25rem; max-height: 55vh; overflow-y: auto; }
   .ua-pane { display: none; animation: maFadeIn 0.2s ease; }
@@ -620,10 +708,10 @@
   .ua-freq-stat { background:#f8f9fa; border:1px solid #e9ecef; border-radius:8px; padding:0.5rem 0.3rem; text-align:center; }
   .ua-freq-stat .fsv { font-size:1.1rem; font-weight:800; line-height:1; }
   .ua-freq-stat .fsl { font-size:0.62rem; color:#6c757d; text-transform:uppercase; margin-top:0.15rem; }
-  .ua-freq-stat.fp .fsv { color:#198754; } .ua-freq-stat.ff .fsv { color:#dc3545; } .ua-freq-stat.fc .fsv { color:#0d6efd; }
+  .ua-freq-stat.fp .fsv { color:#198754; } .ua-freq-stat.ff .fsv { color:#dc3545; } .ua-freq-stat.fc .fsv { color:#1c1c1c; }
   .ua-freq-periodo { display:flex; gap:0.35rem; margin-bottom:0.75rem; }
   .ua-freq-periodo button { flex:1; padding:0.3rem 0; font-size:0.75rem; font-weight:600; border-radius:8px; border:1.5px solid #dee2e6; background:#fff; color:#6c757d; cursor:pointer; transition:all .15s; }
-  .ua-freq-periodo button.active { background:#0d6efd; border-color:#0d6efd; color:#fff; }
+  .ua-freq-periodo button.active { background:#1c1c1c; border-color:#1c1c1c; color:#fff; }
   .ua-freq-list { display:flex; flex-direction:column; gap:0.3rem; min-height:60px; }
   .ma-aula-obs-btn { background:none; border:none; padding:0 0 0 0.35rem; color:#f59e0b; font-size:0.85rem; cursor:pointer; line-height:1; }
   .ma-aula-obs-btn:hover { color:#d97706; }
@@ -637,7 +725,7 @@
 
   @media (max-width: 576px) {
     .alunos-header-btns .aluno-btn-text { display: none; }
-    .alunos-header-btns .btn { padding: 0.5rem 0.75rem; min-width: 44px; }
+    .alunos-header-btns .btn, .alunos-header-btns .u-btn { padding: 0.5rem 0.75rem; min-width: 44px; }
     .alunos-stats-grid { grid-template-columns: 1fr; }
     .aluno-card-inner { flex-wrap: wrap; }
     .aluno-actions { width: 100%; justify-content: flex-end; margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid #eee; }
@@ -676,14 +764,14 @@
     border-radius: var(--u-radius-sm);
     font-size: .95rem; color: var(--sh-ink);
   }
-  .al-filtros .form-select {
+  .al-filtros .form-select, .al-filtros .u-campo__controle {
     width: auto; flex: 0 1 auto;
     min-width: 172px; height: 46px;
     border: 1px solid var(--sh-line);
     border-radius: var(--u-radius-sm);
     font-size: .95rem; color: var(--sh-ink);
   }
-  .al-busca input:focus, .al-filtros .form-select:focus, .al-avancado .form-control:focus {
+  .al-busca input:focus, .al-filtros .form-select:focus, .al-avancado .form-control:focus, .al-filtros .u-campo__controle:focus, .al-avancado .u-campo__controle:focus {
     outline: none; border-color: #cfcbc4;
     box-shadow: 0 0 0 3px rgba(28, 28, 28, .06);
   }
@@ -704,7 +792,7 @@
     font-size: .68rem; font-weight: 600;
     letter-spacing: .14em; text-transform: uppercase;
   }
-  .al-avancado .form-select, .al-avancado .form-control {
+  .al-avancado .form-select, .al-avancado .form-control, .al-avancado .u-campo__controle, .al-avancado .u-campo__controle {
     width: 100%; min-width: 0; height: 46px;
     border: 1px solid var(--sh-line);
     border-radius: var(--u-radius-sm);
@@ -856,7 +944,7 @@
   @media (max-width: 767.98px) {
     .al-filtros { padding: .8rem; }
     .al-busca { flex: 1 1 100%; }
-    .al-filtros .form-select { flex: 1 1 100%; width: 100%; min-width: 0; }
+    .al-filtros .form-select, .al-filtros .u-campo__controle { flex: 1 1 100%; width: 100%; min-width: 0; }
     .al-mais, .al-filtros-acoes .sh__btn { width: 100%; justify-content: center; margin-right: 0; }
     .al-filtros-acoes { flex-direction: column-reverse; }
   }
@@ -920,6 +1008,12 @@
       <span class="sh__faixa-valor {% if stats.atrasados %}sh__faixa-valor--alerta{% endif %}">{{ stats.atrasados }}</span>
     </a>
     {% endif %}
+    <a class="sh__faixa-item al-ind {% if recorte == 'sem_tel_resp' %}is-ativo{% endif %}"
+       href="{{ url_ind({} if recorte == 'sem_tel_resp' else {'recorte': 'sem_tel_resp'}) }}"
+       title="Ver quem está sem o telefone do responsável financeiro — sem ele não sai cobrança nem lembrete no WhatsApp">
+      <span class="sh__faixa-rotulo">Sem telefone do financeiro</span>
+      <span class="sh__faixa-valor {% if stats.sem_tel_resp %}sh__faixa-valor--alerta{% endif %}">{{ stats.sem_tel_resp }}</span>
+    </a>
   </div>
 
   <!-- Filtros: a linha principal fica sempre visível; o resto abre em "Mais filtros" -->
@@ -928,12 +1022,12 @@
       <div class="al-busca">
         <i class="bi bi-search"></i>
         <input type="text" name="busca" id="searchInput" placeholder="Buscar por nome"
-               value="{{ busca or '' }}" autocomplete="off">
+               value="{{ busca or '' }}" autocomplete="off" aria-label="Buscar por nome">
       </div>
 
       {# Com uma só academia na sessão o seletor não tem função: some. #}
       {% if academias and academias|length > 1 %}
-      <select name="academia_id" class="form-select" onchange="this.form.submit()" aria-label="Academia">
+      <select name="academia_id" class="u-campo__controle" onchange="this.form.submit()" aria-label="Academia">
         <option value="" {% if not academia_id %}selected{% endif %}>Todas as academias</option>
         {% for ac in academias %}
         <option value="{{ ac.id }}" {% if academia_id and ac.id == academia_id %}selected{% endif %}>{{ ac.academia_nome or ac.nome }}</option>
@@ -941,14 +1035,14 @@
       </select>
       {% endif %}
 
-      <select name="filtro_ativo" class="form-select" onchange="this.form.submit()" aria-label="Situação">
+      <select name="filtro_ativo" class="u-campo__controle" onchange="this.form.submit()" aria-label="Situação">
         <option value="todos" {% if filtro_ativo == 'todos' %}selected{% endif %}>Todos</option>
         <option value="ativo" {% if filtro_ativo == 'ativo' %}selected{% endif %}>Ativos</option>
         <option value="inativo" {% if filtro_ativo == 'inativo' %}selected{% endif %}>Inativos</option>
       </select>
 
       {% if modalidades_filtro %}
-      <select name="modalidade_id" class="form-select" onchange="this.form.submit()" aria-label="Modalidade">
+      <select name="modalidade_id" class="u-campo__controle" onchange="this.form.submit()" aria-label="Modalidade">
         <option value="">Todas as modalidades</option>
         {% for m in modalidades_filtro %}
         <option value="{{ m.id }}" {% if modalidade_id is not none and m.id == modalidade_id %}selected{% endif %}>{{ m.nome }}</option>
@@ -960,7 +1054,7 @@
       {% endif %}
 
       {% if turmas_filtro %}
-      <select name="turma_id" class="form-select" onchange="this.form.submit()" aria-label="Turma">
+      <select name="turma_id" class="u-campo__controle" onchange="this.form.submit()" aria-label="Turma">
         <option value="">Todas as turmas</option>
         {% for t in turmas_filtro %}
         <option value="{{ t.turma_id }}" {% if turma_id is not none and t.turma_id == turma_id %}selected{% endif %}>{{ t.turma_nome }}</option>
@@ -977,7 +1071,7 @@
       <div class="al-avancado-grade">
         <div>
           <label class="al-rotulo">Graduação</label>
-          <select name="graduacao_id" class="form-select">
+          <select name="graduacao_id" class="u-campo__controle" aria-label="Graduação">
             <option value="">Todas</option>
             {% for f in faixas %}
             <option value="{{ f.id }}" {% if graduacao_id is not none and f.id == graduacao_id %}selected{% endif %}>{{ f.faixa }}{% if f.graduacao %} {{ f.graduacao }}{% endif %}</option>
@@ -986,7 +1080,7 @@
         </div>
         <div>
           <label class="al-rotulo">Sexo</label>
-          <select name="sexo" class="form-select">
+          <select name="sexo" class="u-campo__controle" aria-label="Sexo">
             <option value="">Todos</option>
             <option value="M" {% if sexo == 'M' %}selected{% endif %}>Masculino</option>
             <option value="F" {% if sexo == 'F' %}selected{% endif %}>Feminino</option>
@@ -995,23 +1089,23 @@
         </div>
         <div>
           <label class="al-rotulo">Ano nasc. (de)</label>
-          <input type="number" name="ano_nasc_min" class="form-control" placeholder="1989" min="1900" max="2100"
-                 value="{{ ano_nasc_min if ano_nasc_min is not none else '' }}">
+          <input type="number" name="ano_nasc_min" class="u-campo__controle" placeholder="1989" min="1900" max="2100"
+                 value="{{ ano_nasc_min if ano_nasc_min is not none else '' }}" aria-label="Ano nasc. (de)">
         </div>
         <div>
           <label class="al-rotulo">Ano nasc. (até)</label>
-          <input type="number" name="ano_nasc_max" class="form-control" placeholder="1992" min="1900" max="2100"
-                 value="{{ ano_nasc_max if ano_nasc_max is not none else '' }}">
+          <input type="number" name="ano_nasc_max" class="u-campo__controle" placeholder="1992" min="1900" max="2100"
+                 value="{{ ano_nasc_max if ano_nasc_max is not none else '' }}" aria-label="Ano nasc. (até)">
         </div>
         <div>
           <label class="al-rotulo">Peso mín (kg)</label>
-          <input type="number" name="peso_min" class="form-control" placeholder="—" min="0" step="0.1"
-                 value="{{ peso_min if peso_min is not none else '' }}">
+          <input type="number" name="peso_min" class="u-campo__controle" placeholder="—" min="0" step="0.1"
+                 value="{{ peso_min if peso_min is not none else '' }}" aria-label="Peso mín (kg)">
         </div>
         <div>
           <label class="al-rotulo">Peso máx (kg)</label>
-          <input type="number" name="peso_max" class="form-control" placeholder="—" min="0" step="0.1"
-                 value="{{ peso_max if peso_max is not none else '' }}">
+          <input type="number" name="peso_max" class="u-campo__controle" placeholder="—" min="0" step="0.1"
+                 value="{{ peso_max if peso_max is not none else '' }}" aria-label="Peso máx (kg)">
         </div>
       </div>
     </div>
@@ -1053,12 +1147,12 @@
         {% endif %}
       {% endif %}
       <a href="{{ url_az }}" 
-         class="btn btn-sm {% if not agrupar_por_academia %}btn-primary{% else %}btn-outline-primary{% endif %}" 
+         class="u-btn u-btn--pequeno {% if not agrupar_por_academia %}btn-primary{% else %}btn-outline-primary{% endif %}" 
          title="Ordenar A-Z">
         <i class="bi bi-sort-alpha-down me-1"></i> A-Z
       </a>
       <a href="{{ url_academia }}" 
-         class="btn btn-sm {% if agrupar_por_academia %}btn-primary{% else %}btn-outline-primary{% endif %}" 
+         class="u-btn u-btn--pequeno {% if agrupar_por_academia %}btn-primary{% else %}btn-outline-primary{% endif %}" 
          title="Agrupar por Academia">
         <i class="bi bi-building me-1"></i> Por Academia
       </a>
@@ -1084,8 +1178,10 @@
         </tr>
       </thead>
       <tbody>
-    {% for grupo_nome, alunos_grupo in alunos_agrupados %}
-    {% for aluno in alunos_grupo %}
+    {# Uma linha por aluno. `alunos_agrupados` repete quem tem mais de uma
+       modalidade — e o nome do grupo nem é impresso aqui, então a repetição
+       aparecia como aluno duplicado. A modalidade já é uma coluna da linha. #}
+    {% for aluno in alunos_exibidos %}
     {% set partes = (aluno.nome or '?').split() %}
     <tr class="al-linha" data-nome="{{ aluno.nome|lower }}"
         data-faixa="{{ ((aluno.faixa or '') ~ ' ' ~ (aluno.graduacao or ''))|trim|lower }}"
@@ -1159,7 +1255,6 @@
     </tr>
 
     {% endfor %}
-    {% endfor %}
       </tbody>
     </table>
     </div>
@@ -1191,7 +1286,7 @@
           <p class="small text-muted mb-0 mt-3 d-none js-fin-det-vazio">Nenhum lançamento em receitas para esta mensalidade.</p>
         </div>
         <div class="fin-det-footer">
-          <button type="button" class="btn btn-secondary btn-sm px-3" data-bs-dismiss="modal">Fechar</button>
+          <button type="button" class="u-btn u-btn--pequeno px-3" data-bs-dismiss="modal">Fechar</button>
         </div>
       </div>
     </div>
@@ -1209,7 +1304,7 @@
           <p class="text-muted small mb-0">Carregando…</p>
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Fechar</button>
+          <button type="button" class="u-btn u-btn--pequeno" data-bs-dismiss="modal">Fechar</button>
         </div>
       </div>
     </div>
@@ -1357,11 +1452,33 @@
   <div class="empty-state">
     <i class="bi bi-people d-block"></i>
     <h4>Nenhum aluno encontrado</h4>
-    <p>{% if busca or idade_min is not none or idade_max is not none or graduacao_id is not none or peso_min is not none or peso_max is not none %}Ajuste os filtros ou <a href="{{ request.path }}?academia_id=">limpe</a> para ver todos.{% elif modo_associacao %}Nenhum aluno cadastrado no sistema ou nenhum resultado para os filtros atuais.{% else %}Cadastre o primeiro aluno para começar.{% endif %}</p>
-    {% if not modo_associacao %}
-    <a href="{{ url_for('alunos.cadastrar_aluno', academia_id=academia_id, next=request.full_path) if academia_id else url_for('alunos.cadastrar_aluno', next=request.full_path) }}" class="btn btn-primary">
-      <i class="bi bi-plus-lg me-1"></i> Novo Aluno
-    </a>
+    {# `idade_min` e `idade_max` nunca chegam da rota: em Jinja isso é Undefined,
+       e `Undefined is not none` dá True. Resultado: a tela dizia "Ajuste os
+       filtros" mesmo sem filtro nenhum — era o caso desta academia, que estava
+       simplesmente sem alunos. Agora a conta usa só o que a rota manda. #}
+    {% set _tem_filtro = busca or graduacao_id is not none or peso_min is not none
+                         or peso_max is not none or ano_nasc_min is not none
+                         or ano_nasc_max is not none or turma_id is not none
+                         or modalidade_id is not none or sexo
+                         or filtro_ativo != 'ativo' %}
+    <p>
+      {%- if _tem_filtro -%}
+      Ajuste os filtros ou
+      {# O "limpe" mandava para `?academia_id=` vazio e derrubava o escopo da
+         academia junto com os filtros. Agora limpa só os filtros. #}
+      <a href="{{ url_for('alunos.lista_alunos', academia_id=academia_id) }}">limpe</a>
+      para ver todos.
+      {%- elif modo_associacao -%}
+      Nenhum aluno cadastrado no sistema.
+      {%- else -%}
+      Nenhum aluno cadastrado ainda.
+      {%- endif -%}
+    </p>
+    {% if not modo_associacao and not _tem_filtro %}
+    {# Sem botão aqui: "Novo aluno" já está no cabeçalho da tela. Um segundo
+       botão grande no meio do vazio repetia a mesma ação com mais peso visual
+       do que a própria mensagem. #}
+    <span class="empty-state__dica">Use <strong>Novo aluno</strong>, no topo da tela.</span>
     {% endif %}
   </div>
   {% endif %}
@@ -1631,7 +1748,7 @@ function uaFreqInit(pane) {
     overlay.innerHTML = '<div class="ma-obs-modal-box">' +
       '<div class="ma-obs-modal-head"><i class="bi bi-chat-left-text-fill"></i> Observações</div>' +
       '<div class="ma-obs-modal-body">' + sections + '</div>' +
-      '<div class="ma-obs-modal-footer"><button type="button" class="btn btn-sm btn-secondary">Fechar</button></div>' +
+      '<div class="ma-obs-modal-footer"><button type="button" class="u-btn u-btn--pequeno">Fechar</button></div>' +
       '</div>';
     overlay.querySelector('button').addEventListener('click', function(){ overlay.remove(); });
     overlay.addEventListener('click', function(e){ if (e.target === overlay) overlay.remove(); });
@@ -1659,7 +1776,7 @@ function uaFreqInit(pane) {
           '<span class="ma-grupo-mes-stats">' +
           '<span class="ma-grupo-stat pres"><i class="bi bi-check-circle-fill"></i>' + pres + '</span>' +
           '<span class="ma-grupo-stat falt"><i class="bi bi-x-circle-fill"></i>' + falt + '</span>' +
-          '<span class="ma-grupo-stat" style="color:#0d6efd;font-weight:700">' + pct + '%</span>' +
+          '<span class="ma-grupo-stat" style="color:#1c1c1c;font-weight:700">' + pct + '%</span>' +
           '</span></div>';
         itens.forEach(function(d){ html += renderItem(d); });
         html += '</div>';
@@ -2280,7 +2397,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   });
 
-  alPorElemento('.btn-gerar-cobranca', function(btn) {
+  alPorElemento('.btn-gerar-cobranca', function(btn){
     btn.addEventListener('click', function() {
       const modalContent = btn.closest('.modal-content');
       const form = modalContent.querySelector('.form-financeiro-aluno');
@@ -2576,15 +2693,13 @@ document.addEventListener('DOMContentLoaded', function() {
       if (ev.defaultPrevented) return;
 
       const act = form.getAttribute('action') || '';
-      if (act.indexOf('cancelar-pagamento') >= 0) {
-        if (
-          !window.confirm(
-            'Estornar este pagamento? O status voltará para pendente ou atrasado (conforme o vencimento) e a receita será excluída.'
-          )
-        ) {
-          ev.preventDefault();
-          return;
-        }
+      if (act.indexOf('cancelar-pagamento') >= 0 && !form.__dlgLiberado) {
+        Dialogo.confirmarEvento(
+          ev,
+          'Estornar este pagamento? O status voltará para pendente ou atrasado (conforme o vencimento) e a receita será excluída.',
+          { confirmar: 'Estornar', alvo: form }
+        );
+        return;
       }
 
       const needsFp =
@@ -2907,12 +3022,12 @@ document.addEventListener('DOMContentLoaded', function() {
         '<div class="fpl-num">Forma ' + num + '</div>' +
         '<div class="fpl-fields">' +
         '<div><label>Forma de pagamento</label>' +
-        '<select class="form-select form-select-sm js-fin-sel-fp"><option value="">Selecione…</option>' + opts + '</select></div>' +
+        '<select class="u-campo__controle js-fin-sel-fp" aria-label="Forma de pagamento"><option value="">Selecione…</option>' + opts + '</select></div>' +
         '<div><label>Valor (R$)</label>' +
-        '<input type="text" class="form-control form-control-sm js-fin-inp-valor" inputmode="decimal" autocomplete="off" required value="' + vd + '"></div>' +
+        '<input type="text" class="u-campo__controle js-fin-inp-valor" inputmode="decimal" autocomplete="off" required value="' + vd + '" aria-label="Valor (R$)"></div>' +
         '<div><label>Data do pagamento</label>' +
-        '<input type="date" class="form-control form-control-sm js-fin-inp-data" required value="' + (dataDefault || '') + '"></div>' +
-        '<div style="padding-bottom:2px"><button type="button" class="btn btn-outline-danger btn-sm js-fin-pag-del-line" title="Remover" style="height:34px;width:34px;padding:0;display:inline-flex;align-items:center;justify-content:center"><i class="bi bi-trash3"></i></button></div>' +
+        '<input type="date" class="u-campo__controle js-fin-inp-data" required value="' + (dataDefault || '') + '" aria-label="Data do pagamento"></div>' +
+        '<div style="padding-bottom:2px"><button type="button" class="u-btn u-btn--pequeno js-fin-pag-del-line" title="Remover" style="height:34px;width:34px;padding:0;display:inline-flex;align-items:center;justify-content:center"><i class="bi bi-trash3"></i></button></div>' +
         '</div>';
       if (linhas) linhas.appendChild(div);
       atualizaSomaPag(modalPag);

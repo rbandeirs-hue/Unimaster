@@ -1,0 +1,321 @@
+/* =======================================================================
+   Relatórios — catálogo e tabela
+   =======================================================================
+   O catálogo é denso de propósito: são quase 50 relatórios, e quem procura
+   um deles quer varrer a lista com o olho, não rolar cartões grandes. Por
+   isso painéis em colunas, com linhas de duas alturas — nome e o que ele
+   responde.
+   ======================================================================= */
+
+/* ------------------------------------------------------- largura da tela */
+/* O shell limita o conteúdo em 1320px, que é largura de leitura — certo para
+   formulário e ficha, errado aqui: o catálogo tem 10 painéis e as tabelas têm
+   até 7 colunas, e em monitor de 1920 ou 2560 sobrava um terço da tela vazio
+   enquanto a tabela rolava na horizontal. */
+.sh__conteudo--relatorios { max-width: none; }
+
+/* ---------------------------------------------------------------- filtro */
+.rel-filtro {
+  display: flex;
+  align-items: center;
+  gap: .65rem;
+  flex-wrap: wrap;
+  padding: .75rem .9rem;
+  background: #fff;
+  border: 1px solid var(--sh-line);
+  border-radius: var(--u-radius);
+  margin-bottom: 1.15rem;
+}
+
+.rel-periodo {
+  display: inline-flex;
+  border: 1px solid var(--sh-line);
+  border-radius: var(--u-radius-sm);
+  overflow: hidden;
+}
+.rel-periodo a {
+  padding: .45rem .75rem;
+  font-size: .8rem;
+  font-weight: 500;
+  color: var(--sh-ink-soft);
+  text-decoration: none;
+  background: #fff;
+  border-left: 1px solid var(--sh-line);
+}
+.rel-periodo a:first-child { border-left: 0; }
+.rel-periodo a:hover { background: #f7f5f1; color: var(--sh-ink); }
+.rel-periodo a.is-ativo { background: var(--sh-ink); color: #fff; }
+
+.rel-filtro select,
+.rel-filtro input[type="date"] {
+  padding: .45rem .6rem;
+  font-size: .8rem;
+  color: var(--sh-ink);
+  background: #fdfcfa;
+  border: 1px solid var(--sh-line);
+  border-radius: var(--u-radius-sm);
+}
+.rel-filtro__nota { margin-left: auto; font-size: .78rem; color: var(--sh-ink-soft); }
+
+/* -------------------------------------------------------------- catálogo */
+/* Colunas de verdade (CSS multi-column): os painéis têm alturas diferentes
+   e um grid deixaria buracos no fim de cada linha. */
+.rel-colunas { column-count: 3; column-gap: .9rem; }
+@media (max-width: 1100px) { .rel-colunas { column-count: 2; } }
+@media (max-width: 720px)  { .rel-colunas { column-count: 1; } }
+/* Três colunas em qualquer tela grande, e não quatro: com `column-count: 4` o
+   navegador equilibra a altura, descobre que o conteúdo cabe em três e deixa a
+   quarta vazia — a tela larga voltava a ter um terço em branco. Três colunas
+   largas usam o espaço de verdade. */
+
+.rel-area {
+  break-inside: avoid;
+  display: inline-block;
+  width: 100%;
+  margin-bottom: .9rem;
+  background: #fff;
+  border: 1px solid var(--sh-line);
+  border-radius: var(--u-radius);
+  overflow: hidden;
+}
+
+.rel-area__topo {
+  display: flex;
+  align-items: center;
+  gap: .55rem;
+  padding: .7rem .85rem;
+  background: var(--sh-page-bg);
+  border-bottom: 1px solid var(--sh-line);
+}
+.rel-area__topo i { font-size: .85rem; color: var(--sh-ink-soft); }
+.rel-area__nome { flex-grow: 1; font-size: .82rem; font-weight: 700; }
+.rel-area__conta { font-size: .76rem; color: #a9a6a1; }
+
+.rel-item {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  width: 100%;
+  padding: .6rem .85rem;
+  text-align: left;
+  text-decoration: none;
+  background: #fff;
+  border: 0;
+  border-bottom: 1px solid #f0eeea;
+  cursor: pointer;
+}
+.rel-item:last-child { border-bottom: 0; }
+.rel-item:hover { background: #faf9f7; }
+.rel-item__txt { flex-grow: 1; min-width: 0; }
+.rel-item__nome { display: block; font-size: .82rem; font-weight: 600; color: var(--sh-ink); }
+.rel-item__desc { display: block; margin-top: 1px; font-size: .72rem; color: var(--sh-ink-soft); }
+.rel-item__seta { flex: none; color: #a9a6a1; font-size: .8rem; }
+
+/* O número do cadastro incompleto. Vermelho só quando é muita gente: o que
+   comunica urgência é a proporção, não o campo. */
+.rel-item__n { flex: none; font-size: .85rem; font-weight: 600; }
+.rel-item__n--alto { color: #c40017; }
+.rel-item__n--zero { color: #1c6b35; font-weight: 500; }
+
+.rel-marca {
+  flex: none;
+  padding: 1px .45rem;
+  font-size: .64rem;
+  font-weight: 600;
+  border-radius: var(--u-radius-pill);
+}
+.rel-marca--obra { color: #8a5600; background: #fdf6e7; }
+
+/* Em construção continua visível — some só o clique. Esconder o que falta
+   faz o gestor procurar de novo daqui a um mês. */
+.rel-item--obra { cursor: default; opacity: .72; }
+.rel-item--obra:hover { background: #fff; }
+
+/* ---------------------------------------------------------------- tabela */
+.rel-cabecalho {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+.rel-acoes { display: flex; gap: .5rem; flex-wrap: wrap; }
+
+.rel-tabela-caixa {
+  background: #fff;
+  border: 1px solid var(--sh-line);
+  border-radius: var(--u-radius);
+  overflow: auto;
+}
+.rel-tabela { width: 100%; border-collapse: collapse; font-size: .85rem; }
+.rel-tabela th {
+  position: sticky;
+  top: 0;
+  padding: .6rem .8rem;
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  text-align: left;
+  color: var(--sh-ink-soft);
+  background: var(--sh-page-bg);
+  border-bottom: 1px solid var(--sh-line);
+  white-space: nowrap;
+}
+.rel-tabela td {
+  padding: .55rem .8rem;
+  border-bottom: 1px solid #f0eeea;
+  vertical-align: top;
+}
+.rel-tabela tbody tr:last-child td { border-bottom: 0; }
+.rel-tabela tbody tr:hover td { background: #faf9f7; }
+.rel-tabela .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.rel-tabela tfoot td {
+  padding: .6rem .8rem;
+  font-weight: 700;
+  background: var(--sh-page-bg);
+  border-top: 1px solid var(--sh-line);
+}
+
+.rel-vazio { padding: 2.5rem 1rem; text-align: center; color: var(--sh-ink-soft); font-size: .9rem; }
+
+.rel-criterio {
+  display: flex;
+  align-items: flex-start;
+  gap: .65rem;
+  margin-top: .9rem;
+  padding: .8rem .95rem;
+  font-size: .8rem;
+  line-height: 1.55;
+  color: var(--sh-ink-soft);
+  background: #fff;
+  border: 1px solid var(--sh-line);
+  border-left: 3px solid var(--sh-ink);
+  border-radius: var(--u-radius);
+}
+
+/* -------------------------------------------------------------- celular */
+@media (max-width: 575.98px) {
+  .rel-filtro { padding: .65rem; }
+  .rel-filtro__nota { margin-left: 0; width: 100%; }
+  .rel-acoes .sh__btn { flex: 1; justify-content: center; }
+  .rel-tabela { font-size: .8rem; }
+}
+
+/* ------------------------------------------------------------ impressão */
+@page { size: A4 landscape; margin: 12mm; }
+@media print {
+  .sh__side, .sh__top, .rel-filtro, .rel-acoes, .sh__btn,
+  .nao-imprime { display: none !important; }
+  .sh__main, .sh__conteudo, body { margin: 0 !important; padding: 0 !important; background: #fff !important; }
+  .rel-tabela-caixa { border: 0; overflow: visible; }
+  .rel-tabela { font-size: 9pt; }
+  .rel-tabela th { background: #eee !important; color: #000 !important; }
+  /* O cabeçalho repete em cada página: relatório de 8 páginas sem título de
+     coluna no meio é papel perdido. */
+  thead { display: table-header-group; }
+  tr { break-inside: avoid; }
+  .rel-so-papel { display: block !important; margin-bottom: 8mm; }
+}
+.rel-so-papel { display: none; }
+
+/* ==================================================================
+   Tela de um relatório — trilha, fichas de filtro, pessoa e ação
+   ================================================================== */
+
+.rel-trilha {
+  display: flex;
+  align-items: center;
+  gap: .45rem;
+  margin-bottom: .9rem;
+  font-size: .8rem;
+  color: var(--sh-ink-soft);
+}
+.rel-trilha a { color: var(--sh-ink-soft); text-decoration: none; }
+.rel-trilha a:hover { color: var(--sh-ink); text-decoration: underline; }
+.rel-trilha__aqui { color: var(--sh-ink); font-weight: 500; }
+
+.rel-cabecalho__txt { min-width: 0; }
+.rel-titulo {
+  margin: 0 0 .35rem;
+  font-size: 1.7rem;
+  font-weight: 600;
+  letter-spacing: -.02em;
+}
+.rel-sub { margin: 0; font-size: .88rem; color: var(--sh-ink-soft); max-width: 70ch; }
+
+/* Fichas do recorte: o que está filtrado fica à vista, e sai daqui mesmo. */
+.rel-fichas {
+  display: flex;
+  align-items: center;
+  gap: .55rem;
+  flex-wrap: wrap;
+  margin-bottom: .9rem;
+}
+.rel-ficha {
+  display: inline-flex;
+  align-items: center;
+  gap: .45rem;
+  padding: .35rem .7rem;
+  font-size: .76rem;
+  color: var(--sh-ink);
+  background: #f4f2ee;
+  border: 1px solid var(--sh-line);
+  border-radius: var(--u-radius-pill);
+}
+.rel-ficha i { color: var(--sh-ink-soft); }
+.rel-ficha a { display: inline-flex; color: #a9a6a1; text-decoration: none; }
+.rel-ficha a:hover { color: var(--sh-ink); }
+.rel-fichas__espaco { flex-grow: 1; }
+.rel-fichas__nota { font-size: .76rem; color: var(--sh-ink-soft); }
+
+/* Linha de pessoa: iniciais + nome + apoio, como no desenho. Achar alguém
+   numa lista de 200 é mais rápido pela massa do círculo do que lendo nome
+   por nome. */
+.rel-pessoa { display: flex; align-items: center; gap: .6rem; min-width: 0; }
+.rel-pessoa__ini {
+  width: 32px; height: 32px;
+  flex: none;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  background: #f4f2ee;
+  font-size: .72rem;
+  font-weight: 600;
+  color: var(--sh-ink);
+}
+.rel-pessoa__txt { min-width: 0; }
+.rel-pessoa__nome { display: block; font-weight: 500; }
+.rel-pessoa__sub { display: block; font-size: .72rem; color: var(--sh-ink-soft); }
+
+.rel-tabela td.acao, .rel-tabela th.acao { text-align: right; white-space: nowrap; }
+.rel-corrigir {
+  display: inline-block;
+  padding: .3rem .7rem;
+  font-size: .76rem;
+  font-weight: 600;
+  color: #fff;
+  background: var(--sh-ink);
+  border-radius: var(--u-radius-sm);
+  text-decoration: none;
+}
+.rel-corrigir:hover { background: #000; color: #fff; }
+
+.rel-rodape {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: .7rem .9rem;
+  font-size: .76rem;
+  color: var(--sh-ink-soft);
+  background: var(--sh-page-bg);
+  border-top: 1px solid var(--sh-line);
+}
+
+.rel-filtro__ok { padding: .45rem .9rem; font-size: .8rem; }
+
+@media (max-width: 575.98px) {
+  .rel-titulo { font-size: 1.35rem; }
+  .rel-fichas__nota, .rel-rodape__nota { display: none; }
+}

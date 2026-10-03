@@ -1,13 +1,13 @@
 {% extends "base_app.html" %}
+{% set back_url = back_url or get_back_url_default() %}
 {% block title %}Imprimir/Exportar{% if evento %} — {{ evento.nome }}{% endif %}{% endblock %}
+{% block pagina_titulo %}Imprimir/exportar{% if evento %} — {{ evento.nome }}{% endif %}{% endblock %}
+{% block pagina_subtitulo %}Configure os campos, escala, layout e orientação antes de exportar ou imprimir.{% endblock %}
+{% block pagina_acoes %}
+<a href="{{ url_voltar(back_url) }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Voltar</a>
+{% endblock %}
 {% block content %}
-<div class="container mt-3 mt-md-5 px-2 px-md-3">
-    <div class="mb-3 mb-md-4">
-        {% set back_url = back_url or get_back_url_default() %}
-{% include 'components/botao_voltar.html' %}
-        <h2 class="h5 h4-md fw-bold text-primary">Imprimir/Exportar{% if evento %} — {{ evento.nome }}{% endif %}</h2>
-        <p class="text-muted mb-0 small small-md">Configure os campos, escala, layout e orientação antes de exportar ou imprimir.</p>
-    </div>
+<div class="container px-2 px-md-3">
 
     <div class="row">
         <div class="col-12 col-lg-4 mb-3 mb-lg-4">
@@ -67,7 +67,7 @@
                             </label>
                             <div class="row g-2 mb-2">
                                 <div class="col-12 col-sm-8">
-                                    <select class="form-select form-select-sm" id="campo_ordenacao">
+                                    <select class="u-campo__controle" id="campo_ordenacao" aria-label="Ordenar Dados por">
                                         <option value="">-- Selecionar campo --</option>
                                         {% if campos_form %}
                                             {% for c in campos_form %}
@@ -79,7 +79,7 @@
                                     </select>
                                 </div>
                                 <div class="col-12 col-sm-4">
-                                    <select class="form-select form-select-sm" id="direcao_ordenacao">
+                                    <select class="u-campo__controle" id="direcao_ordenacao">
                                         <option value="asc">Crescente</option>
                                         <option value="desc">Decrescente</option>
                                     </select>
@@ -98,12 +98,12 @@
                             </label>
                             <div class="btn-group w-100" role="group">
                                 <input type="radio" class="btn-check" name="orientacao_pdf" id="orientacao_paisagem" value="paisagem" checked>
-                                <label class="btn btn-outline-primary" for="orientacao_paisagem">
+                                <label class="u-btn" for="orientacao_paisagem">
                                     <i class="bi bi-arrows-expand me-1"></i> Paisagem
                                 </label>
                                 
                                 <input type="radio" class="btn-check" name="orientacao_pdf" id="orientacao_retrato" value="retrato">
-                                <label class="btn btn-outline-primary" for="orientacao_retrato">
+                                <label class="u-btn" for="orientacao_retrato">
                                     <i class="bi bi-arrows-collapse me-1"></i> Retrato
                                 </label>
                             </div>
@@ -114,7 +114,7 @@
                             <label class="form-label fw-semibold">
                                 <i class="bi bi-zoom-in me-1"></i>Escala da Tabela (%):
                             </label>
-                            <input type="range" class="form-range" id="escala_tabela" min="50" max="100" value="100" step="5" oninput="atualizarEscala(this.value)">
+                            <input type="range" class="form-range" id="escala_tabela" min="50" max="100" value="100" step="5" oninput="atualizarEscala(this.value)" aria-label="Escala da Tabela (%)">
                             <div class="d-flex justify-content-between">
                                 <small class="text-muted">50%</small>
                                 <small class="text-muted fw-bold" id="escala_valor">100%</small>
@@ -131,7 +131,7 @@
                             <label class="form-label fw-semibold">
                                 <i class="bi bi-type me-1"></i>Tamanho da Fonte:
                             </label>
-                            <select class="form-select" id="tamanho_fonte">
+                            <select class="u-campo__controle" id="tamanho_fonte" aria-label="Tamanho da Fonte">
                                 <option value="8">Muito Pequeno (8pt)</option>
                                 <option value="9">Pequeno (9pt)</option>
                                 <option value="10" selected>Normal (10pt)</option>
@@ -148,11 +148,11 @@
                             <div class="row g-2">
                                 <div class="col-12 col-sm-6">
                                     <label class="form-label small">Superior/Inferior:</label>
-                                    <input type="number" class="form-control form-control-sm" id="margem_vertical" value="20" min="5" max="50">
+                                    <input type="number" class="u-campo__controle" id="margem_vertical" value="20" min="5" max="50" aria-label="Superior/Inferior">
                                 </div>
                                 <div class="col-12 col-sm-6">
                                     <label class="form-label small">Esquerda/Direita:</label>
-                                    <input type="number" class="form-control form-control-sm" id="margem_horizontal" value="20" min="5" max="50">
+                                    <input type="number" class="u-campo__controle" id="margem_horizontal" value="20" min="5" max="50" aria-label="Esquerda/Direita">
                                 </div>
                             </div>
                         </div>
@@ -184,13 +184,13 @@
     </div>
 
     <div class="mt-3 mt-md-4 d-flex flex-column flex-md-row gap-2 justify-content-end">
-        <a href="{{ back_url }}" class="btn btn-outline-secondary w-100 w-md-auto">
+        <a href="{{ back_url }}" class="u-btn w-100 w-md-auto">
             <i class="bi bi-x-circle me-1"></i> Cancelar
         </a>
-        <button type="button" class="btn btn-success w-100 w-md-auto" onclick="exportar('excel')">
+        <button type="button" class="u-btn u-btn--ok w-100 w-md-auto" onclick="exportar('excel')">
             <i class="bi bi-file-earmark-excel me-1"></i> <span class="d-none d-sm-inline">Exportar </span>Excel (XLSX)
         </button>
-        <button type="button" class="btn btn-primary w-100 w-md-auto" onclick="imprimir()">
+        <button type="button" class="u-btn u-btn--primario w-100 w-md-auto" onclick="imprimir()">
             <i class="bi bi-printer me-1"></i> Imprimir
         </button>
     </div>
@@ -278,7 +278,7 @@
 }
 .campo-item.dragging {
     opacity: 0.5;
-    background-color: #e7f1ff;
+    background-color: #f4f2ee;
 }
 .campo-item .form-check {
     display: flex;
@@ -307,13 +307,13 @@
     padding: 8px;
     margin-bottom: 5px;
     background: white;
-    border: 1px solid #0d6efd;
+    border: 1px solid #1c1c1c;
     border-radius: 4px;
     cursor: move;
     gap: 8px;
 }
 .campo-item-ordenado:hover {
-    background-color: #e7f1ff;
+    background-color: #f4f2ee;
 }
 .campo-item-ordenado .badge {
     margin-right: 0;
@@ -330,7 +330,7 @@
     flex: 1;
     min-width: 0;
 }
-.campo-item-ordenado .btn-group-vertical {
+.campo-item-ordenado .btn-group-vertical{
     flex-shrink: 0;
 }
 
@@ -383,36 +383,36 @@
         padding: 0.2em 0.35em;
     }
     
-    .campo-item-ordenado .btn-group-vertical {
+    .campo-item-ordenado .btn-group-vertical{
         margin-left: auto;
     }
     
-    .campo-item-ordenado .btn-group-vertical .btn {
+    .campo-item-ordenado .btn-group-vertical .btn{
         padding: 2px 5px;
         font-size: 0.65rem;
         min-height: 28px;
     }
     
-    .btn-group {
+    .btn-group{
         display: flex;
         flex-direction: column;
         gap: 0.25rem;
     }
     
-    .btn-group .btn {
+    .btn-group .btn{
         border-radius: 0.375rem !important;
         margin-bottom: 0;
         width: 100%;
     }
     
-    .btn-group .btn:first-child {
+    .btn-group .btn:first-child{
         border-top-left-radius: 0.375rem !important;
         border-top-right-radius: 0.375rem !important;
         border-bottom-left-radius: 0 !important;
         border-bottom-right-radius: 0 !important;
     }
     
-    .btn-group .btn:last-child {
+    .btn-group .btn:last-child{
         border-top-left-radius: 0 !important;
         border-top-right-radius: 0 !important;
         border-bottom-left-radius: 0.375rem !important;
@@ -444,7 +444,7 @@
     }
     
     .form-select,
-    .form-control {
+    .form-control, .u-campo__controle {
         font-size: 0.875rem;
         padding: 0.5rem 0.75rem;
     }
@@ -496,7 +496,7 @@
         touch-action: none;
     }
     
-    .btn {
+    .btn, .u-btn {
         min-height: 44px;
     }
     
@@ -624,10 +624,10 @@ function atualizarOrdemCampos() {
                     <i class="bi bi-grip-vertical d-none d-md-inline"></i>
                     <span class="flex-grow-1">${label}</span>
                     <div class="btn-group-vertical btn-group-sm d-md-none" role="group">
-                        <button type="button" class="btn btn-outline-secondary btn-sm campo-move-up" data-index="${index}" ${index === 0 ? 'disabled' : ''} style="padding: 2px 8px; line-height: 1;">
+                        <button type="button" class="u-btn u-btn--pequeno campo-move-up" data-index="${index}" ${index === 0 ? 'disabled' : ''} style="padding: 2px 8px; line-height: 1;">
                             <i class="bi bi-arrow-up"></i>
                         </button>
-                        <button type="button" class="btn btn-outline-secondary btn-sm campo-move-down" data-index="${index}" ${index === camposOrdenados.length - 1 ? 'disabled' : ''} style="padding: 2px 8px; line-height: 1;">
+                        <button type="button" class="u-btn u-btn--pequeno campo-move-down" data-index="${index}" ${index === camposOrdenados.length - 1 ? 'disabled' : ''} style="padding: 2px 8px; line-height: 1;">
                             <i class="bi bi-arrow-down"></i>
                         </button>
                     </div>

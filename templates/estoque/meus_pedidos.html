@@ -1,0 +1,49 @@
+{% extends "base_app.html" %}
+{% from 'components/ui.html' import vazio, voltar %}
+{% set menu_ativo = 'loja' %}
+{% block title %}Meus pedidos{% endblock %}
+
+{% block pagina_titulo %}Meus pedidos{% endblock %}
+{% block pagina_subtitulo %}O que você pediu na loja da academia.{% endblock %}
+
+{% block pagina_acoes %}
+  {{ voltar(url_for('estoque.loja')) }}
+{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ asset('css/painel/estoque.css') }}">
+{% endblock %}
+
+{% block content %}
+{% if pedidos %}
+<div class="est-alertas">
+  {% for p in pedidos %}
+  <div class="est-alerta">
+    <div class="est-alerta__titulo">
+      {{ p.criado_em.strftime('%d/%m/%Y %H:%M') if p.criado_em }} ·
+      {% if p.status == 'confirmado' %}Entregue
+      {% elif p.status == 'cancelado' %}Cancelado
+      {% else %}Aguardando a recepção{% endif %}
+    </div>
+    <div class="est-alerta__lista">
+      {% for i in p.itens %}
+      <span class="est-alerta__item">
+        <span>{{ i.quantidade }}× {{ i.produto }}{% if i.variacao != 'Único' %} · {{ i.variacao }}{% endif %}</span>
+        <span class="est-alerta__qtd">
+          R$ {{ '%.2f'|format((i.preco_unitario * i.quantidade)|float)|replace('.', ',') }}
+        </span>
+      </span>
+      {% endfor %}
+    </div>
+    <div class="est-total" style="font-size:var(--u-fs-base)">
+      <small>Total</small>
+      <span>R$ {{ '%.2f'|format(p.valor_total|float)|replace('.', ',') }}</span>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+{{ vazio('Você ainda não fez nenhum pedido.',
+         href=url_for('estoque.loja'), acao='Ver a loja', icone='bi-bag') }}
+{% endif %}
+{% endblock %}

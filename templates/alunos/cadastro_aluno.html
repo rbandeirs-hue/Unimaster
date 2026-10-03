@@ -1,5 +1,7 @@
 {% extends "base_app.html" %}
 {% block title %}{{ 'Editar' if aluno else 'Cadastrar' }} Aluno{% endblock %}
+{% block pagina_titulo %}{{ 'Editar aluno' if aluno else 'Cadastrar novo aluno' }}{% endblock %}
+{% block pagina_subtitulo %}Preencha todas as informações do aluno abaixo.{% endblock %}
 {% block extra_css %}
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/photo-cropper.css') }}">
@@ -12,6 +14,10 @@
 {% set graduacao_sel = form_data.get('graduacao_id', '') %}
 {% set turma_sel = form_data.get('TurmaID', '') %}
 {% set id_academia_sel = form_data.get('id_academia', '') or (academia_selecionada if academia_selecionada is defined else '') %}
+{# Campos obrigatórios: cada academia escolhe os seus em Configurações
+   (utils/campos_obrigatorios_aluno.py). O `required` e o asterisco de cada
+   campo configurável saem daqui; o servidor confere a mesma lista. #}
+{% set obrig = obrigatorios if obrigatorios is defined else ['nome', 'data_nascimento', 'id_academia', 'aluno_modalidade_ids'] %}
 
 <style>
     /* --------------------------------------------- */
@@ -82,7 +88,7 @@
         height: 150px;
         object-fit: cover;
         border-radius: 50%;
-        border: 3px solid #0d6efd;
+        border: 3px solid #1c1c1c;
     }
 
     /* --------------------------------------------- */
@@ -158,7 +164,7 @@
 
     @media (min-width: 1400px) {
         .fullwidth-card {
-            max-width: 1400px;
+            max-width: none;
             margin: auto;
         }
     }
@@ -172,14 +178,6 @@
 
 
 <div class="container-fluid px-4 mt-4">
-
-    <!-- Título -->
-    <div class="text-center mb-4">
-        <h2 class="display-6 text-primary fw-bold">
-            {{ 'Editar Aluno' if aluno else 'Cadastrar Novo Aluno' }}
-        </h2>
-        <p class="lead text-muted">Preencha todas as informações do aluno abaixo.</p>
-    </div>
 
     <!-- Card Principal -->
     <div class="card shadow-lg fullwidth-card p-3 p-md-4">
@@ -195,6 +193,36 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="next" value="{{ back_url }}">
 
+                {# CPF de quem já tem cadastro: uma pessoa, várias matrículas. Mostra só
+                   o nome e o ano de nascimento — nada da outra academia. #}
+                {% if cpf_existente %}
+                <div class="cpf-existente" role="alert">
+                  <i class="bi bi-person-check"></i>
+                  <div class="cpf-existente__txt">
+                    <strong>Este CPF já tem cadastro: {{ cpf_existente.nome }}{% if cpf_existente.ano %} (nascido(a) em {{ cpf_existente.ano }}){% endif %}.</strong>
+                    <span>
+                      {% if cpf_existente.confere %}
+                      Em vez de criar outro cadastro, matricule a mesma pessoa nesta academia, com as modalidades, a turma e a faixa marcadas abaixo. Os dados de outras academias continuam só com elas.
+                      {% else %}
+                      O nome e a data de nascimento digitados não batem com esse cadastro. Confira com o aluno: para matricular a mesma pessoa, os dois precisam conferir.
+                      {% endif %}
+                    </span>
+                  </div>
+                  {% if cpf_existente.confere %}
+                  <button type="submit" name="vincular_existente" value="{{ cpf_existente.id }}" class="sh__btn sh__btn--forte" formnovalidate>
+                    <i class="bi bi-link-45deg"></i> Matricular nesta academia
+                  </button>
+                  {% endif %}
+                </div>
+                <style>
+                  .cpf-existente { display: flex; align-items: center; gap: .9rem; flex-wrap: wrap;
+                    padding: .9rem 1.1rem; margin-bottom: 1rem; background: #fdfcfa;
+                    border: 1px solid var(--sh-line); border-left: 3px solid var(--sh-ink); border-radius: var(--u-radius-sm); }
+                  .cpf-existente > i { font-size: 1.4rem; }
+                  .cpf-existente__txt { flex: 1; min-width: 220px; display: flex; flex-direction: column; gap: .2rem; font-size: .9rem; }
+                </style>
+                {% endif %}
+
                 <!-- ===================================================== -->
                 <!-- 🟦 1 — Dados do Atleta                                 -->
                 <!-- ===================================================== -->
@@ -205,16 +233,16 @@
                 <div class="row">
                     <div class="col-md-12 mb-3">
                         <label class="form-label fw-semibold campo-obrigatorio">Nome completo</label>
-                        <input type="text" class="form-control" name="nome" required
+                        <input type="text" class="u-campo__controle" name="nome" required
                                placeholder="Nome completo"
-                               value="{{ form_data.get('nome', aluno.nome if aluno else '') }}">
+                               value="{{ form_data.get('nome', aluno.nome if aluno else '') }}" aria-label="Nome completo">
                     </div>
                 </div>
 
                 <div class="row">
                     <div class="col-md-4 mb-3">
                         <label class="form-label fw-semibold">Sexo</label>
-                        <select class="form-control" name="sexo" required>
+                        <select class="u-campo__controle" name="sexo" aria-label="Sexo"{% if 'sexo' in obrig %} required{% endif %}>
                             <option value="" {% if not sexo_val %}selected{% endif %}>Selecione</option>
                             <option value="M" {% if sexo_val == 'M' %}selected{% endif %}>Masculino</option>
                             <option value="F" {% if sexo_val == 'F' %}selected{% endif %}>Feminino</option>
@@ -230,11 +258,19 @@
                     <i class="bi bi-diagram-3 me-1"></i> Vínculos
                 </h6>
 
+                {# Associação só aparece quando a academia tem uma: escolhida pelo admin
+                   (o JS mostra/esconde ao trocar) ou a fixa de quem cadastra. #}
+                {% if current_user.has_role('admin') %}
+                  {% set _ac_sel = academias | selectattr('id', 'equalto', (id_academia_sel or current_user.id_academia)|int) | first %}
+                {% else %}
+                  {% set _ac_sel = academias | first %}
+                {% endif %}
+                {% set _assoc_nome = form_data.get('associacao_nome', '') or (_ac_sel.associacao_nome if _ac_sel else '') %}
                 <div class="row">
-                    <div class="col-md-6 mb-3">
+                    <div class="{{ 'col-md-6' if _assoc_nome else 'col-12' }} mb-3" id="campo-academia">
                         <label class="form-label fw-semibold campo-obrigatorio">Academia</label>
                         {% if current_user.has_role('admin') %}
-                        <select class="form-control" name="id_academia" id="id_academia" required>
+                        <select class="u-campo__controle" name="id_academia" id="id_academia" required aria-label="Academia">
                             <option value="" disabled {% if not id_academia_sel %}selected{% endif %}>Selecione a academia</option>
                             {% for ac in academias %}
                             <option value="{{ ac.id }}"
@@ -246,16 +282,16 @@
                         </select>
                         {% else %}
                         {% set ac_atual = (academias|first) %}
-                        <input type="text" class="form-control" value="{{ ac_atual.academia_nome if ac_atual else '' }}" readonly>
+                        <input type="text" class="u-campo__controle" value="{{ ac_atual.academia_nome if ac_atual else '' }}" readonly>
                         <input type="hidden" name="id_academia" value="{{ id_academia_sel if id_academia_sel else current_user.id_academia }}">
                         {% endif %}
                     </div>
 
-                    <div class="col-md-6 mb-3">
+                    <div class="col-md-6 mb-3" id="campo-associacao" {% if not _assoc_nome %}hidden{% endif %}>
                         <label class="form-label fw-semibold">Associação</label>
-                        <input type="text" class="form-control" name="associacao_nome"
+                        <input type="text" class="u-campo__controle" name="associacao_nome"
                                id="associacao_nome" placeholder="Associação" readonly
-                               value="{{ form_data.get('associacao_nome', '') }}">
+                               value="{{ _assoc_nome }}" aria-label="Associação">
                     </div>
                 </div>
 
@@ -269,16 +305,16 @@
                 <div class="row">
                     <div class="col-md-6 mb-3">
                         <label class="form-label fw-semibold">Nome do Pai</label>
-                        <input type="text" class="form-control" name="nome_pai"
+                        <input type="text" class="u-campo__controle" name="nome_pai"
                                placeholder="Nome do pai"
-                               value="{{ form_data.get('nome_pai', aluno.nome_pai if aluno else '') }}" required>
+                               value="{{ form_data.get('nome_pai', aluno.nome_pai if aluno else '') }}" aria-label="Nome do Pai"{% if 'nome_pai' in obrig %} required{% endif %}>
                     </div>
 
                     <div class="col-md-6 mb-3">
                         <label class="form-label fw-semibold">Nome da Mãe</label>
-                        <input type="text" class="form-control" name="nome_mae"
+                        <input type="text" class="u-campo__controle" name="nome_mae"
                                placeholder="Nome da mãe"
-                               value="{{ form_data.get('nome_mae', aluno.nome_mae if aluno else '') }}" required>
+                               value="{{ form_data.get('nome_mae', aluno.nome_mae if aluno else '') }}" aria-label="Nome da Mãe"{% if 'nome_mae' in obrig %} required{% endif %}>
                     </div>
                 </div>
 
@@ -292,7 +328,7 @@
                 <div class="row">
                     <div class="col-md-6 mb-3">
                         <label class="form-label fw-semibold">Grau de Parentesco</label>
-                        <select class="form-control" name="responsavel_grau_parentesco" id="responsavel_grau_parentesco">
+                        <select class="u-campo__controle" name="responsavel_grau_parentesco" id="responsavel_grau_parentesco" aria-label="Grau de Parentesco">
                             <option value="" {% if not parentesco_sel %}selected{% endif %}>Selecione</option>
                             <option value="Pai" {% if parentesco_sel == 'Pai' %}selected{% endif %}>Pai</option>
                             <option value="Mãe" {% if parentesco_sel == 'Mãe' %}selected{% endif %}>Mãe</option>
@@ -302,18 +338,18 @@
 
                     <div class="col-md-6 mb-3">
                         <label class="form-label fw-semibold">Responsável (menor)</label>
-                        <input type="text" class="form-control" name="responsavel_nome" id="responsavel_nome"
+                        <input type="text" class="u-campo__controle" name="responsavel_nome" id="responsavel_nome"
                                placeholder="Nome do responsável"
-                               value="{{ form_data.get('responsavel_nome', aluno.responsavel_nome if aluno else '') }}" readonly>
+                               value="{{ form_data.get('responsavel_nome', aluno.responsavel_nome if aluno else '') }}" readonly aria-label="Responsável (menor)">
                     </div>
                 </div>
 
                 <div class="row" id="responsavel_tipo_wrapper" style="display: none;">
                     <div class="col-md-6 mb-3">
                         <label class="form-label fw-semibold">Tipo</label>
-                        <input type="text" class="form-control" name="responsavel_parentesco" id="responsavel_parentesco"
+                        <input type="text" class="u-campo__controle" name="responsavel_parentesco" id="responsavel_parentesco"
                                placeholder="Ex: Tio, Avó, Avô..."
-                               value="{{ form_data.get('responsavel_parentesco', '') }}">
+                               value="{{ form_data.get('responsavel_parentesco', '') }}" aria-label="Tipo">
                     </div>
                 </div>
 
@@ -335,39 +371,27 @@
                 <div class="row">
                     <div class="col-md-4 mb-3">
                         <label class="form-label fw-semibold">Registro Zempo nº</label>
-                        <input type="text" class="form-control" name="zempo" id="zempo"
+                        <input type="text" class="u-campo__controle" name="zempo" id="zempo"
                                placeholder="Número do registro Zempo"
-                               value="{{ form_data.get('zempo', aluno.zempo if aluno else '') }}" disabled>
+                               value="{{ form_data.get('zempo', aluno.zempo if aluno else '') }}" disabled aria-label="Registro Zempo nº">
                     </div>
 
                     <div class="col-md-4 mb-3">
                         <label class="form-label fw-semibold">Data de Cadastro Zempo</label>
-                        <input type="date" class="form-control" name="data_cadastro_zempo" id="data_cadastro_zempo"
+                        <input type="date" class="u-campo__controle" name="data_cadastro_zempo" id="data_cadastro_zempo"
                                placeholder="Data de cadastro"
-                               value="{{ form_data.get('data_cadastro_zempo', aluno.data_cadastro_zempo if aluno else '') }}" disabled>
+                               value="{{ form_data.get('data_cadastro_zempo', aluno.data_cadastro_zempo if aluno else '') }}" disabled aria-label="Data de Cadastro Zempo">
                     </div>
 
-                    <div class="col-md-4 mb-3" id="graduacao_container">
-                        <label class="form-label fw-semibold">Faixa / Grau</label>
-                        <select class="form-control" name="graduacao_id" id="graduacao_id" required>
-                            <option value="" disabled {% if not graduacao_sel %}selected{% endif %}>Selecione</option>
-                            {% for g in graduacoes %}
-                            <option value="{{ g.id }}" data-modalidade-id="{{ g.modalidade_id if g.modalidade_id is defined and g.modalidade_id is not none else '' }}"
-                                {% if graduacao_sel and graduacao_sel|int == g.id %}selected{% elif aluno and aluno.graduacao_id == g.id %}selected{% endif %}>
-                                {{ g.faixa }} - {{ g.graduacao }} - {{ g.categoria }}
-                            </option>
-                            {% endfor %}
-                        </select>
-                        <small class="text-muted d-none" id="graduacao_empty_hint">Nenhuma graduação disponível para a(s) modalidade(s) selecionada(s).</small>
-                    </div>
+                    {% with faixas_atuais=faixas_atuais, principal_id=graduacao_sel or (aluno.graduacao_id if aluno else '') %}{% include 'alunos/_faixas_modalidade.html' %}{% endwith %}
                 </div>
 
                 <div class="row">
                     <div class="col-md-4 mb-3">
                         <label class="form-label fw-semibold">Peso</label>
-                        <input type="number" step="0.1" class="form-control" name="peso"
+                        <input type="number" step="0.1" class="u-campo__controle" name="peso"
                                placeholder="Peso (kg)"
-                               value="{{ form_data.get('peso', aluno.peso if aluno else '') }}" required>
+                               value="{{ form_data.get('peso', aluno.peso if aluno else '') }}" aria-label="Peso"{% if 'peso' in obrig %} required{% endif %}>
                     </div>
                 </div>
 
@@ -380,57 +404,61 @@
 
                 <div class="row">
 
-                    <div class="col-md-4 mb-3">
+                    {# Faixa branca não é graduação — o aluno começa nela —, então não
+                       tem data: com a branca escolhida o campo some e fica o aviso.
+                       O servidor grava NULL de qualquer jeito. #}
+                    <div class="col-md-4 mb-3" id="ultimo_exame_container">
                         <label class="form-label fw-semibold">Data da Última Graduação</label>
-                        <input type="date" class="form-control" name="ultimo_exame_faixa"
+                        <input type="date" class="u-campo__controle" name="ultimo_exame_faixa" id="ultimo_exame_faixa"
                                placeholder="Data da última graduação"
-                               value="{{ form_data.get('ultimo_exame_faixa', aluno.ultimo_exame_faixa if aluno else '') }}">
+                               value="{{ form_data.get('ultimo_exame_faixa', aluno.ultimo_exame_faixa if aluno else '') }}" aria-label="Data da Última Graduação"{% if 'ultimo_exame_faixa' in obrig %} required data-obrigatorio="1"{% endif %}>
+                        <div class="text-muted small d-none" id="ultimo_exame_branca">Faixa branca — sem data de graduação</div>
                     </div>
 
                     <div class="col-md-4 mb-3">
                         <label class="form-label fw-semibold campo-obrigatorio">Data de nascimento</label>
-                        <input type="date" class="form-control" name="data_nascimento" required
+                        <input type="date" class="u-campo__controle" name="data_nascimento" required
                                placeholder="Selecione a data"
-                               value="{{ form_data.get('data_nascimento', aluno.data_nascimento if aluno else '') }}">
+                               value="{{ form_data.get('data_nascimento', aluno.data_nascimento if aluno else '') }}" aria-label="Data de nascimento">
                     </div>
                 </div>
 
                 <div class="row">
                     <div class="col-md-4 mb-3">
                         <label class="form-label fw-semibold">Nacionalidade</label>
-                        <input type="text" class="form-control" name="nacionalidade"
+                        <input type="text" class="u-campo__controle" name="nacionalidade"
                                placeholder="Nacionalidade"
-                               value="{{ form_data.get('nacionalidade', aluno.nacionalidade if aluno else '') }}" required>
+                               value="{{ form_data.get('nacionalidade', aluno.nacionalidade if aluno else '') }}" aria-label="Nacionalidade"{% if 'nacionalidade' in obrig %} required{% endif %}>
                     </div>
 
                     <div class="col-md-4 mb-3">
                         <label class="form-label fw-semibold">CPF</label>
-                        <input type="text" class="form-control" name="cpf" data-mask="cpf"
+                        <input type="text" class="u-campo__controle" name="cpf" data-mask="cpf"
                                placeholder="CPF"
-                               value="{{ form_data.get('cpf', aluno.cpf if aluno else '') }}" required>
+                               value="{{ form_data.get('cpf', aluno.cpf if aluno else '') }}" aria-label="CPF"{% if 'cpf' in obrig %} required{% endif %}>
                     </div>
 
                     <div class="col-md-4 mb-3">
                         <label class="form-label fw-semibold">RG</label>
-                        <input type="text" class="form-control" name="rg"
+                        <input type="text" class="u-campo__controle" name="rg"
                                placeholder="RG"
-                               value="{{ form_data.get('rg', aluno.rg if aluno else '') }}">
+                               value="{{ form_data.get('rg', aluno.rg if aluno else '') }}" aria-label="RG"{% if 'rg' in obrig %} required{% endif %}>
                     </div>
                 </div>
 
                 <div class="row">
                     <div class="col-md-4 mb-3">
                         <label class="form-label fw-semibold">Órgão Emissor / UF</label>
-                        <input type="text" class="form-control" name="orgao_emissor"
+                        <input type="text" class="u-campo__controle" name="orgao_emissor"
                                placeholder="Ex: SDS/PE"
-                               value="{{ form_data.get('orgao_emissor', aluno.orgao_emissor if aluno else '') }}">
+                               value="{{ form_data.get('orgao_emissor', aluno.orgao_emissor if aluno else '') }}" aria-label="Órgão Emissor / UF"{% if 'orgao_emissor' in obrig %} required{% endif %}>
                     </div>
 
                     <div class="col-md-4 mb-3">
                         <label class="form-label fw-semibold">Data de Emissão</label>
-                        <input type="date" class="form-control" name="rg_data_emissao"
+                        <input type="date" class="u-campo__controle" name="rg_data_emissao"
                                placeholder="Data de emissão"
-                               value="{{ form_data.get('rg_data_emissao', aluno.rg_data_emissao if aluno else '') }}">
+                               value="{{ form_data.get('rg_data_emissao', aluno.rg_data_emissao if aluno else '') }}" aria-label="Data de Emissão"{% if 'rg_data_emissao' in obrig %} required{% endif %}>
                     </div>
                 </div>
 
@@ -445,10 +473,10 @@
                     <div class="col-md-3 mb-3">
                         <label class="form-label fw-semibold">CEP</label>
                         <div class="input-group">
-                            <input type="text" class="form-control" name="cep" id="cep" data-mask="cep"
+                            <input type="text" class="u-campo__controle" name="cep" id="cep" data-mask="cep"
                                    placeholder="00000-000"
-                                   value="{{ form_data.get('cep', aluno.cep if aluno else '') }}" required>
-                            <button type="button" class="btn btn-outline-primary" id="btnBuscarCEP">
+                                   value="{{ form_data.get('cep', aluno.cep if aluno else '') }}" aria-label="CEP"{% if 'cep' in obrig %} required{% endif %}>
+                            <button type="button" class="u-btn" id="btnBuscarCEP" aria-label="Buscar">
                                 <i class="bi bi-search"></i>
                             </button>
                         </div>
@@ -457,49 +485,49 @@
 
                     <div class="col-md-6 mb-3">
                         <label class="form-label fw-semibold">Rua / Logradouro</label>
-                        <input type="text" class="form-control" name="endereco"
+                        <input type="text" class="u-campo__controle" name="endereco"
                                placeholder="Endereço completo"
                                id="endereco"
-                               value="{{ form_data.get('endereco', aluno.endereco if aluno else '') }}" required>
+                               value="{{ form_data.get('endereco', aluno.endereco if aluno else '') }}" aria-label="Rua / Logradouro"{% if 'endereco' in obrig %} required{% endif %}>
                     </div>
 
                     <div class="col-md-3 mb-3">
                         <label class="form-label fw-semibold">Nº</label>
-                        <input type="text" class="form-control" name="numero"
+                        <input type="text" class="u-campo__controle" name="numero"
                                placeholder="Número"
-                               value="{{ form_data.get('numero', aluno.numero if aluno else '') }}" required>
+                               value="{{ form_data.get('numero', aluno.numero if aluno else '') }}" aria-label="Nº"{% if 'numero' in obrig %} required{% endif %}>
                     </div>
                 </div>
 
                 <div class="row">
                     <div class="col-md-4 mb-3">
                         <label class="form-label fw-semibold">Bairro</label>
-                        <input type="text" class="form-control" name="bairro" id="bairro"
+                        <input type="text" class="u-campo__controle" name="bairro" id="bairro"
                                placeholder="Bairro"
-                               value="{{ form_data.get('bairro', aluno.bairro if aluno else '') }}" required>
+                               value="{{ form_data.get('bairro', aluno.bairro if aluno else '') }}" aria-label="Bairro"{% if 'bairro' in obrig %} required{% endif %}>
                     </div>
 
                     <div class="col-md-4 mb-3">
                         <label class="form-label fw-semibold">Cidade</label>
-                        <input type="text" class="form-control" name="cidade" id="cidade"
+                        <input type="text" class="u-campo__controle" name="cidade" id="cidade"
                                placeholder="Cidade"
-                               value="{{ form_data.get('cidade', aluno.cidade if aluno else '') }}" required>
+                               value="{{ form_data.get('cidade', aluno.cidade if aluno else '') }}" aria-label="Cidade"{% if 'cidade' in obrig %} required{% endif %}>
                     </div>
 
                     <div class="col-md-4 mb-3">
                         <label class="form-label fw-semibold">Estado</label>
-                        <input type="text" class="form-control" name="estado" id="estado"
+                        <input type="text" class="u-campo__controle" name="estado" id="estado"
                                placeholder="UF"
-                               value="{{ form_data.get('estado', aluno.estado if aluno else '') }}" required>
+                               value="{{ form_data.get('estado', aluno.estado if aluno else '') }}" aria-label="Estado"{% if 'estado' in obrig %} required{% endif %}>
                     </div>
                 </div>
 
                 <div class="row">
                     <div class="col-md-12 mb-3">
                         <label class="form-label fw-semibold">Complemento</label>
-                        <input type="text" class="form-control" name="complemento"
+                        <input type="text" class="u-campo__controle" name="complemento"
                                placeholder="Complemento"
-                               value="{{ form_data.get('complemento', aluno.complemento if aluno else '') }}">
+                               value="{{ form_data.get('complemento', aluno.complemento if aluno else '') }}" aria-label="Complemento"{% if 'complemento' in obrig %} required{% endif %}>
                     </div>
                 </div>
 
@@ -512,41 +540,41 @@
 
                 <div class="row">
                     <div class="col-md-6 mb-3">
-                        <label class="form-label fw-semibold campo-obrigatorio">E-mail</label>
-                        <input type="email" class="form-control" name="email" required
+                        <label class="form-label fw-semibold{{ ' campo-obrigatorio' if 'email' in obrig }}">E-mail</label>
+                        <input type="email" class="u-campo__controle" name="email"
                                placeholder="email@exemplo.com"
-                               value="{{ form_data.get('email', aluno.email if aluno else '') }}">
+                               value="{{ form_data.get('email', aluno.email if aluno else '') }}" aria-label="E-mail"{% if 'email' in obrig %} required{% endif %}>
                     </div>
 
                     <div class="col-md-6 mb-3">
-                        <label class="form-label fw-semibold campo-obrigatorio">Telefone Celular</label>
-                        <input type="tel" class="form-control" name="telefone_celular" required
+                        <label class="form-label fw-semibold{{ ' campo-obrigatorio' if 'telefone_celular' in obrig }}">Telefone Celular</label>
+                        <input type="tel" class="u-campo__controle" name="telefone_celular"
                                data-mask="phone"
                                placeholder="(00) 00000-0000"
-                               value="{{ form_data.get('telefone_celular', aluno.tel_celular if aluno and aluno.tel_celular else aluno.telefone if aluno and aluno.telefone else '') }}">
+                               value="{{ form_data.get('telefone_celular', aluno.tel_celular if aluno and aluno.tel_celular else aluno.telefone if aluno and aluno.telefone else '') }}" aria-label="Telefone Celular"{% if 'telefone_celular' in obrig %} required{% endif %}>
                     </div>
                 </div>
 
                 <div class="row">
                     <div class="col-md-4 mb-3">
                         <label class="form-label fw-semibold">Telefone Residencial</label>
-                        <input type="tel" class="form-control" name="telefone_residencial" data-mask="phone"
+                        <input type="tel" class="u-campo__controle" name="telefone_residencial" data-mask="phone"
                                placeholder="(00) 0000-0000"
-                               value="{{ form_data.get('telefone_residencial', aluno.tel_residencial if aluno else '') }}">
+                               value="{{ form_data.get('telefone_residencial', aluno.tel_residencial if aluno else '') }}" aria-label="Telefone Residencial">
                     </div>
 
                     <div class="col-md-4 mb-3">
                         <label class="form-label fw-semibold">Telefone Comercial</label>
-                        <input type="tel" class="form-control" name="telefone_comercial" data-mask="phone"
+                        <input type="tel" class="u-campo__controle" name="telefone_comercial" data-mask="phone"
                                placeholder="(00) 0000-0000"
-                               value="{{ form_data.get('telefone_comercial', aluno.tel_comercial if aluno else '') }}">
+                               value="{{ form_data.get('telefone_comercial', aluno.tel_comercial if aluno else '') }}" aria-label="Telefone Comercial">
                     </div>
 
                     <div class="col-md-4 mb-3">
                         <label class="form-label fw-semibold">Outro Telefone</label>
-                        <input type="tel" class="form-control" name="telefone_outro" data-mask="phone"
+                        <input type="tel" class="u-campo__controle" name="telefone_outro" data-mask="phone"
                                placeholder="(00) 0000-0000"
-                               value="{{ form_data.get('telefone_outro', aluno.tel_outro if aluno else '') }}">
+                               value="{{ form_data.get('telefone_outro', aluno.tel_outro if aluno else '') }}" aria-label="Outro Telefone">
                     </div>
                 </div>
 
@@ -559,8 +587,8 @@
 
                 <div class="row">
                     <div class="col-md-8 mb-3">
-                        <label class="form-label fw-semibold">Turma *</label>
-                        <select class="form-control" name="TurmaID" required>
+                        <label class="form-label fw-semibold">Turma</label>
+                        <select class="u-campo__controle" name="TurmaID" aria-label="Turma"{% if 'TurmaID' in obrig %} required{% endif %}>
                             <option value="">Selecione a turma</option>
                             {% for t in turmas %}
                             <option value="{{ t.TurmaID }}"
@@ -580,7 +608,7 @@
                             <input type="checkbox" class="form-check-input"
                                    name="aluno_modalidade_ids"
                                    value="{{ m.id }}"
-                                   {% if (m.id|string) in modalidades_sel %}checked{% elif aluno and m.id in (aluno.modalidades_ids or []) %}checked{% endif %}>
+                                   {% if (m.id|string) in modalidades_sel %}checked{% elif aluno and m.id in (aluno.modalidades_ids or []) %}checked{% elif modalidades|length == 1 and not modalidades_sel %}checked{% endif %} aria-label="Modalidades">
                             <label class="form-check-label">{{ m.nome }}</label>
                         </div>
                         {% endfor %}
@@ -589,7 +617,7 @@
 
                 <div class="mb-4">
                     <label class="form-label fw-semibold">Observações</label>
-                    <textarea class="form-control" name="observacoes" rows="3" placeholder="Observações adicionais">{{ form_data.get('observacoes', aluno.observacoes if aluno else '') }}</textarea>
+                    <textarea class="u-campo__controle" name="observacoes" rows="3" placeholder="Observações adicionais" aria-label="Observações">{{ form_data.get('observacoes', aluno.observacoes if aluno else '') }}</textarea>
                 </div>
 
                 <!-- ===================================================== -->
@@ -602,26 +630,26 @@
                 <div class="row align-items-end">
                     <div class="col-md-4 mb-3">
                         <label class="form-label fw-semibold">Nome do Responsável Financeiro</label>
-                        <input type="text" class="form-control" name="responsavel_financeiro_nome"
+                        <input type="text" class="u-campo__controle" name="responsavel_financeiro_nome"
                                id="responsavel_financeiro_nome"
                                placeholder="Nome do responsável financeiro"
-                               value="{{ form_data.get('responsavel_financeiro_nome', aluno.responsavel_financeiro_nome if aluno else '') }}" required>
+                               value="{{ form_data.get('responsavel_financeiro_nome', aluno.responsavel_financeiro_nome if aluno else '') }}" aria-label="Nome do Responsável Financeiro"{% if 'responsavel_financeiro_nome' in obrig %} required{% endif %}>
                     </div>
 
                     <div class="col-md-3 mb-3">
                         <label class="form-label fw-semibold">CPF do Responsável Financeiro</label>
-                        <input type="text" class="form-control" name="responsavel_financeiro_cpf"
+                        <input type="text" class="u-campo__controle" name="responsavel_financeiro_cpf"
                                id="responsavel_financeiro_cpf" data-mask="cpf"
                                placeholder="CPF do responsável financeiro"
-                               value="{{ form_data.get('responsavel_financeiro_cpf', aluno.responsavel_financeiro_cpf if aluno else '') }}" required>
+                               value="{{ form_data.get('responsavel_financeiro_cpf', aluno.responsavel_financeiro_cpf if aluno else '') }}" aria-label="CPF do Responsável Financeiro"{% if 'responsavel_financeiro_cpf' in obrig %} required{% endif %}>
                     </div>
 
                     <div class="col-md-3 mb-3">
-                        <label class="form-label fw-semibold">Telefone do Responsável Financeiro <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control" name="responsavel_financeiro_telefone"
-                               id="responsavel_financeiro_telefone" data-mask="phone" required
+                        <label class="form-label fw-semibold">Telefone do Responsável Financeiro{% if 'responsavel_financeiro_telefone' in obrig %} <span class="text-danger obrigatorio">*</span>{% endif %}</label>
+                        <input type="text" class="u-campo__controle" name="responsavel_financeiro_telefone"
+                               id="responsavel_financeiro_telefone" data-mask="phone"
                                placeholder="(00) 00000-0000"
-                               value="{{ form_data.get('responsavel_financeiro_telefone', aluno.responsavel_financeiro_telefone if aluno else '') }}">
+                               value="{{ form_data.get('responsavel_financeiro_telefone', aluno.responsavel_financeiro_telefone if aluno else '') }}" aria-label="Telefone do Responsável Financeiro"{% if 'responsavel_financeiro_telefone' in obrig %} required{% endif %}>
                         <small class="text-muted">Usado na cobrança online (InfinitePay).</small>
                     </div>
 
@@ -661,13 +689,13 @@
                         <label class="form-label fw-semibold">Opções de foto</label>
                         <div class="d-flex flex-column flex-md-row gap-2">
                             <button type="button"
-                                    class="btn btn-primary btn-sm d-flex align-items-center gap-2"
+                                    class="u-btn u-btn--primario u-btn--pequeno d-flex align-items-center gap-2"
                                     id="btnAbrirCamera">
                                 <i class="bi bi-camera-fill"></i>
                                 Câmera
                             </button>
 
-                            <input type="file" name="foto_arquivo" id="fotoArquivoAluno" class="form-control" accept="image/*" capture="environment">
+                            <input type="file" name="foto_arquivo" id="fotoArquivoAluno" class="u-campo__controle" accept="image/*">
                         </div>
                     </div>
                 </div>
@@ -679,7 +707,7 @@
                     {% set back_url = back_url or get_back_url_default() %}
                     {% include 'components/botao_voltar.html' %}
 
-                    <button type="submit" class="btn btn-success btn-lg">
+                    <button type="submit" class="u-btn u-btn--ok u-btn--grande">
                         <i class="bi bi-save2-fill me-2"></i>
                         {{ 'Atualizar Aluno' if aluno else 'Salvar Aluno' }}
                     </button>
@@ -701,23 +729,23 @@
         <canvas id="cameraCanvas" style="display:none;"></canvas>
 
         <div class="camera-buttons">
-            <button class="btn btn-success" id="btnCapturar">
+            <button class="u-btn u-btn--ok" id="btnCapturar">
                 <i class="bi bi-camera"></i> Capturar
             </button>
 
-            <button class="btn btn-primary" id="btnConfirmarFoto" style="display:none;">
+            <button class="u-btn u-btn--primario" id="btnConfirmarFoto" style="display:none;">
                 <i class="bi bi-check"></i> Confirmar
             </button>
 
-            <button class="btn btn-warning" id="btnTirarNovamente" style="display:none;">
+            <button class="u-btn u-btn--alerta" id="btnTirarNovamente" style="display:none;">
                 <i class="bi bi-arrow-clockwise"></i> Refazer
             </button>
 
-            <button class="btn btn-info text-white" id="btnTrocarCameraModal">
+            <button class="u-btn text-white" id="btnTrocarCameraModal">
                 <i class="bi bi-arrow-repeat"></i> <span id="btnTrocarCameraText">Trocar Câmera</span>
             </button>
 
-            <button class="btn btn-danger" id="btnFecharModal">
+            <button class="u-btn u-btn--perigo" id="btnFecharModal">
                 <i class="bi bi-x"></i> Fechar
             </button>
         </div>
@@ -1257,6 +1285,11 @@
         if (!select || !assocInput) return;
         const option = select.options[select.selectedIndex];
         assocInput.value = option ? (option.getAttribute('data-associacao') || '') : '';
+        // Academia sem associação: o campo some e a academia ocupa a linha.
+        const campo = document.getElementById('campo-associacao');
+        const campoAcad = document.getElementById('campo-academia');
+        if (campo) campo.hidden = !assocInput.value;
+        if (campoAcad) campoAcad.className = (assocInput.value ? 'col-md-6' : 'col-12') + ' mb-3';
     }
 
     document.getElementById('id_academia')?.addEventListener('change', preencherAssociacao);
@@ -1317,39 +1350,7 @@
     document.querySelector('input[name="nome_mae"]')?.addEventListener('input', atualizarResponsavel);
     atualizarResponsavel();
 
-    // Preservar a graduação já selecionada — nunca limpar automaticamente.
-    const _gradSelectInicial = document.getElementById('graduacao_id');
-    const _graduacaoInicialId = _gradSelectInicial ? _gradSelectInicial.value : '';
-
-    function atualizarGraduacoesPorModalidade() {
-        const gradContainer = document.getElementById('graduacao_container');
-        const gradSelect = document.getElementById('graduacao_id');
-        if (!gradContainer || !gradSelect) return;
-        const hint = document.getElementById('graduacao_empty_hint');
-        const modalidadesMarcadas = Array.from(document.querySelectorAll('input[name="aluno_modalidade_ids"]'))
-            .filter(el => el.type !== 'checkbox' || el.checked)
-            .map(el => String(el.value));
-        let visiveis = 0;
-        Array.from(gradSelect.options).forEach((opt, idx) => {
-            if (!opt.value) return;
-            const modId = opt.dataset.modalidadeId || '';
-            // A graduação atual do aluno fica sempre visível (não perder dado já gravado).
-            const ehAtualDoAluno = _graduacaoInicialId && opt.value === _graduacaoInicialId;
-            const mostrar = ehAtualDoAluno
-                || (modalidadesMarcadas.length > 0 && (!modId || modalidadesMarcadas.includes(modId)));
-            opt.hidden = !mostrar;
-            if (mostrar) visiveis += 1;
-        });
-        const exibir = visiveis > 0;
-        gradContainer.style.display = exibir ? '' : 'none';
-        gradSelect.required = false;
-        if (hint) hint.classList.toggle('d-none', exibir || modalidadesMarcadas.length === 0);
-    }
-
-    document.querySelectorAll('input[name="aluno_modalidade_ids"]').forEach(function(el) {
-        el.addEventListener('change', atualizarGraduacoesPorModalidade);
-    });
-    atualizarGraduacoesPorModalidade();
+    {% include 'alunos/_faixas_modalidade_js.html' %}
 
     /* ---------------------------- */
     /* 🟦 Validação menor + CPF     */
@@ -1446,14 +1447,17 @@
         const cpfAluno = $('input[name="cpf"]').val();
         const cpfResp = $('#responsavel_financeiro_cpf').val();
 
-        if (!validarCPF(cpfAluno) && !validarCPF(cpfResp)) {
+        // Mesmas regras do servidor: só valem se a academia exige algum CPF.
+        const EXIGE_CPF = {{ 'true' if ('cpf' in obrig or 'responsavel_financeiro_cpf' in obrig) else 'false' }};
+        const EXIGE_CPF_RESP = {{ 'true' if 'responsavel_financeiro_cpf' in obrig else 'false' }};
+        if (EXIGE_CPF && !validarCPF(cpfAluno) && !validarCPF(cpfResp)) {
             e.preventDefault();
             alert('Informe CPF válido do aluno ou do responsável financeiro.');
             $('input[name="cpf"]').focus();
             return false;
         }
 
-        if (idade !== null && idade < 18) {
+        if (EXIGE_CPF_RESP && idade !== null && idade < 18) {
             if (!validarCPF(cpfResp)) {
                 e.preventDefault();
                 alert('Aluno menor: informe CPF válido do responsável financeiro.');

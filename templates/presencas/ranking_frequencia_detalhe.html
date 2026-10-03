@@ -1,5 +1,12 @@
 {% extends "base_app.html" %}
+{% set back_url = back_url or get_back_url_default() %}
 {% block title %}Ranking de frequência — completo{% endblock %}
+{% block pagina_titulo %}Ranking completo{% endblock %}
+{% block pagina_subtitulo %}Todos os alunos por turma, ordenados por presenças (mesmo critério do pódio).{% endblock %}
+{% block pagina_acoes %}
+<a href="{{ url_voltar(back_url) }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Voltar</a>
+<a href="{{ url_voltar_podium }}" class="sh__btn"><i class="bi bi-trophy-fill"></i> Voltar ao pódio</a>
+{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -14,34 +21,21 @@
     width: 32px; height: 32px; object-fit: cover;
 }
 .ranking-detalhe-table tr.destaque-aluno td {
-    box-shadow: inset 3px 0 0 0 #0d6efd;
-    background-color: rgba(13, 110, 253, 0.06);
+    box-shadow: inset 3px 0 0 0 #1c1c1c;
+    background-color: rgba(28, 28, 28, 0.06);
 }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="container mt-4 mb-5">
-    {% set back_url = back_url or get_back_url_default() %}
-    {% include 'components/botao_voltar.html' %}
-
-    <div class="mb-3 d-flex flex-wrap align-items-start justify-content-between gap-2">
-        <div>
-            <h1 class="h4 fw-bold text-primary mb-1"><i class="bi bi-list-ol me-2"></i>Ranking completo</h1>
-            <p class="text-muted mb-0 small">Todos os alunos por turma, ordenados por presenças (mesmo critério do pódio).</p>
-        </div>
-        <a href="{{ url_voltar_podium }}" class="btn btn-sm btn-outline-primary flex-shrink-0">
-            <i class="bi bi-trophy-fill me-1"></i> Voltar ao pódio
-        </a>
-    </div>
-
     <div class="card shadow-sm ranking-filtros-card mb-4">
         <div class="card-body p-3 p-md-4">
             <form method="GET" action="{{ url_for('presencas.ranking_frequencia_detalhe') }}" class="row g-3 align-items-end" id="formFiltrosRankingDetalhe">
                 {% if academias and academias|length > 1 %}
                 <div class="col-12">
                     <label class="form-label fw-semibold text-muted">Academia</label>
-                    <select name="academia_id" class="form-select form-select-sm" style="max-width: 420px;">
+                    <select name="academia_id" class="u-campo__controle" style="max-width: 420px;" aria-label="Academia">
                         {% for ac in academias %}
                         <option value="{{ ac.id }}" {% if ac.id == academia_id %}selected{% endif %}>{{ ac.nome }}</option>
                         {% endfor %}
@@ -53,7 +47,7 @@
 
                 <div class="col-6 col-md-4 col-lg-2">
                     <label class="form-label fw-semibold text-muted">Mês (sem intervalo)</label>
-                    <select name="mes" class="form-select form-select-sm">
+                    <select name="mes" class="u-campo__controle" aria-label="Mês (sem intervalo)">
                         {% for mid, mnome in meses_opts %}
                         <option value="{{ mid }}" {% if mid == mes_sel %}selected{% endif %}>{{ mnome }}</option>
                         {% endfor %}
@@ -61,7 +55,7 @@
                 </div>
                 <div class="col-6 col-md-4 col-lg-2">
                     <label class="form-label fw-semibold text-muted">Ano</label>
-                    <select name="ano" class="form-select form-select-sm">
+                    <select name="ano" class="u-campo__controle" aria-label="Ano">
                         {% for y in anos_opts %}
                         <option value="{{ y }}" {% if y == ano_sel %}selected{% endif %}>{{ y }}</option>
                         {% endfor %}
@@ -69,16 +63,16 @@
                 </div>
                 <div class="col-6 col-md-4 col-lg-2">
                     <label class="form-label fw-semibold text-muted">Data início <span class="fw-normal opacity-75">(opcional)</span></label>
-                    <input type="date" name="data_inicio" class="form-control form-control-sm" value="{{ data_inicio_val or '' }}" autocomplete="off">
+                    <input type="date" name="data_inicio" class="u-campo__controle" value="{{ data_inicio_val or '' }}" autocomplete="off" aria-label="Data início (opcional)">
                 </div>
                 <div class="col-6 col-md-4 col-lg-2">
                     <label class="form-label fw-semibold text-muted">Data fim <span class="fw-normal opacity-75">(opcional)</span></label>
-                    <input type="date" name="data_fim" class="form-control form-control-sm" value="{{ data_fim_val or '' }}" autocomplete="off">
+                    <input type="date" name="data_fim" class="u-campo__controle" value="{{ data_fim_val or '' }}" autocomplete="off" aria-label="Data fim (opcional)">
                 </div>
                 {% if turmas_opciones and turmas_opciones|length > 0 %}
                 <div class="col-12 col-md-8 col-lg-4">
                     <label class="form-label fw-semibold text-muted">Turma</label>
-                    <select name="turma_id" class="form-select form-select-sm">
+                    <select name="turma_id" class="u-campo__controle" aria-label="Turma">
                         <option value="">Todas as turmas</option>
                         {% for tt in turmas_opciones %}
                         <option value="{{ tt.TurmaID }}" {% if turma_sel == tt.TurmaID %}selected{% endif %}>{{ tt.Nome }}</option>
@@ -88,7 +82,7 @@
                 {% endif %}
                 <div class="col-12 col-md-4 col-lg-3">
                     <label class="form-label fw-semibold text-muted">Turmas por página</label>
-                    <select name="per_page" class="form-select form-select-sm">
+                    <select name="per_page" class="u-campo__controle" aria-label="Turmas por página">
                         <option value="1" {% if per_page_sel == 1 %}selected{% endif %}>1 turma</option>
                         <option value="3" {% if per_page_sel == 3 %}selected{% endif %}>3 turmas</option>
                         <option value="6" {% if per_page_sel == 6 %}selected{% endif %}>6 turmas</option>
@@ -96,10 +90,10 @@
                     </select>
                 </div>
                 <div class="col-12 col-lg-auto mt-2 mt-lg-0 d-flex flex-wrap gap-2">
-                    <button type="submit" class="btn btn-primary btn-sm px-4">
+                    <button type="submit" class="u-btn u-btn--primario u-btn--pequeno px-4">
                         <i class="bi bi-funnel-fill me-1"></i> Aplicar filtros
                     </button>
-                    <a href="{{ url_for('presencas.ranking_frequencia_detalhe') }}" class="btn btn-outline-secondary btn-sm">Limpar</a>
+                    <a href="{{ url_for('presencas.ranking_frequencia_detalhe') }}" class="u-btn u-btn--pequeno">Limpar</a>
                 </div>
                 <div class="col-12">
                     <p class="text-muted small mb-0">
@@ -125,14 +119,14 @@
         {% if pagination.total_pages > 1 and not turma_sel %}
         <div class="btn-group btn-group-sm" role="group" aria-label="Paginação">
             {% if pagination.url_prev %}
-            <a class="btn btn-outline-primary" href="{{ pagination.url_prev }}">« Anterior</a>
+            <a class="u-btn" href="{{ pagination.url_prev }}">« Anterior</a>
             {% else %}
-            <span class="btn btn-outline-secondary disabled">« Anterior</span>
+            <span class="u-btn disabled">« Anterior</span>
             {% endif %}
             {% if pagination.url_next %}
-            <a class="btn btn-outline-primary" href="{{ pagination.url_next }}">Próxima »</a>
+            <a class="u-btn" href="{{ pagination.url_next }}">Próxima »</a>
             {% else %}
-            <span class="btn btn-outline-secondary disabled">Próxima »</span>
+            <span class="u-btn disabled">Próxima »</span>
             {% endif %}
         </div>
         {% endif %}
@@ -212,10 +206,10 @@
     {% if pagination and pagination.total_pages > 1 and not turma_sel and (pagination.url_prev or pagination.url_next) %}
     <div class="d-flex justify-content-center gap-2 mt-4">
         {% if pagination.url_prev %}
-        <a class="btn btn-outline-primary btn-sm" href="{{ pagination.url_prev }}">« Página anterior</a>
+        <a class="u-btn u-btn--pequeno" href="{{ pagination.url_prev }}">« Página anterior</a>
         {% endif %}
         {% if pagination.url_next %}
-        <a class="btn btn-outline-primary btn-sm" href="{{ pagination.url_next }}">Próxima página »</a>
+        <a class="u-btn u-btn--pequeno" href="{{ pagination.url_next }}">Próxima página »</a>
         {% endif %}
     </div>
     {% endif %}

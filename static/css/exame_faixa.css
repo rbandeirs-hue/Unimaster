@@ -1,0 +1,1238 @@
+/* Exame de faixa — programa, estudo, banca e ficha de avaliação.
+   Usa os tokens do design system (tokens.css) e os blocos de lista (listas.css).
+   Só o que é próprio do exame mora aqui: o selo de faixa, a trilha de faixas,
+   os cartões de estudo e a ficha de notas. */
+
+/* ------------------------------------------------------------ selo de faixa */
+.exf-obi {
+  display: inline-flex;
+  width: 30px;
+  height: 12px;
+  border-radius: 3px;
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, .18);
+  flex: none;
+  vertical-align: middle;
+}
+.exf-obi > span { flex: 1; }
+.exf-obi--g { width: 44px; height: 16px; }
+.exf-promo {
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  white-space: nowrap;
+}
+.exf-promo__seta { color: var(--u-text-muted); }
+
+/* --------------------------------------------------------- trilha de faixas */
+.exf-trilha {
+  display: flex;
+  gap: .4rem;
+  overflow-x: auto;
+  padding: .15rem 0 .6rem;
+  margin-bottom: 1rem;
+  scrollbar-width: thin;
+}
+.exf-trilha__item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: .35rem;
+  flex: none;
+  min-width: 124px;
+  padding: .55rem .7rem;
+  border: 1px solid var(--u-border);
+  border-radius: var(--u-radius-sm);
+  background: var(--u-surface);
+  color: var(--u-text);
+  text-decoration: none;
+  font-size: var(--u-fs-sm);
+  line-height: 1.25;
+}
+.exf-trilha__item:hover { border-color: var(--u-primary); color: var(--u-text); }
+.exf-trilha__item.is-ativa {
+  border-color: var(--u-text);
+  box-shadow: inset 0 0 0 1px var(--u-text);
+  font-weight: var(--u-fw-semibold);
+}
+.exf-trilha__item small { color: var(--u-text-muted); font-weight: 400; }
+.exf-trilha__item.is-alvo { background: var(--u-surface-alt); }
+.exf-trilha__marca {
+  font-size: var(--u-fs-label);
+  letter-spacing: var(--u-ls-label);
+  text-transform: uppercase;
+  color: var(--u-primary);
+  font-weight: var(--u-fw-semibold);
+}
+
+/* ---------------------------------------------------------- cabeçalho promo */
+.exf-cab {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem 1.5rem;
+  padding: 1rem 1.15rem;
+  border: 1px solid var(--u-border);
+  border-radius: var(--u-radius);
+  background: var(--u-surface);
+  margin-bottom: 1rem;
+}
+.exf-cab__titulo { font-size: var(--u-fs-lg); font-weight: var(--u-fw-bold); margin: 0; }
+.exf-dados {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .4rem 1.4rem;
+  margin: 0;
+}
+.exf-dados div { display: flex; flex-direction: column; }
+.exf-dados dt {
+  font-size: var(--u-fs-label);
+  letter-spacing: var(--u-ls-label);
+  text-transform: uppercase;
+  color: var(--u-text-muted);
+  font-weight: var(--u-fw-semibold);
+}
+.exf-dados dd { margin: 0; font-weight: var(--u-fw-semibold); font-variant-numeric: tabular-nums; }
+
+/* ------------------------------------------------------------ estudo: grade */
+.exf-secao-titulo {
+  font-size: var(--u-fs-label);
+  letter-spacing: var(--u-ls-label);
+  text-transform: uppercase;
+  color: var(--u-text-muted);
+  font-weight: var(--u-fw-semibold);
+  margin: 1.25rem 0 .6rem;
+}
+.exf-grade {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: .75rem;
+}
+.exf-cartao {
+  border: 1px solid var(--u-border);
+  border-radius: var(--u-radius-sm);
+  background: var(--u-surface);
+  padding: .8rem .95rem;
+  min-width: 0;
+}
+.exf-cartao h3 {
+  display: flex;
+  justify-content: space-between;
+  gap: .5rem;
+  font-size: var(--u-fs-sm);
+  font-weight: var(--u-fw-bold);
+  margin: 0 0 .55rem;
+}
+.exf-cartao h3 span { color: var(--u-text-muted); font-weight: 500; font-variant-numeric: tabular-nums; }
+.exf-cartao ul, .exf-cartao ol { margin: 0; padding-left: 1.15rem; }
+.exf-cartao li { margin-bottom: .35rem; overflow-wrap: anywhere; }
+.exf-cartao li:last-child { margin-bottom: 0; }
+.exf-cartao p { margin: 0; }
+.exf-resp { display: block; color: var(--u-text-muted); font-size: var(--u-fs-sm); }
+
+/* Esconder as respostas vira "modo pergunta": o aluno testa a si mesmo. */
+.exf-quiz .exf-resp { filter: blur(5px); cursor: pointer; transition: filter var(--u-transition); }
+.exf-quiz .exf-resp.is-visto { filter: none; }
+.exf-alternar { display: inline-flex; align-items: center; gap: .4rem; font-size: var(--u-fs-sm); }
+
+/* ------------------------------------------------------------- avisos/situação */
+.exf-situacao {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: .6rem;
+  margin-bottom: 1rem;
+}
+.exf-situacao__item {
+  border: 1px solid var(--u-border);
+  border-radius: var(--u-radius-sm);
+  background: var(--u-surface);
+  padding: .65rem .8rem;
+}
+.exf-situacao__item dt {
+  font-size: var(--u-fs-label);
+  letter-spacing: var(--u-ls-label);
+  text-transform: uppercase;
+  color: var(--u-text-muted);
+  font-weight: var(--u-fw-semibold);
+}
+.exf-situacao__item dd { margin: .15rem 0 0; font-weight: var(--u-fw-semibold); }
+.exf-lista-aviso { margin: .35rem 0 0; padding-left: 1.1rem; font-size: var(--u-fs-sm); }
+
+/* ------------------------------------------------------------------ banca */
+.exf-grupo-banca { margin-bottom: 1rem; }
+.lin-banca { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) 60px 110px 200px 130px; }
+.lin-aprov { grid-template-columns: 34px minmax(0, 1.4fr) minmax(0, 1.4fr) 70px 120px; }
+.lin-aptos { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1.4fr) 70px minmax(0, 1.3fr) 90px 150px; }
+.lin-cand  { grid-template-columns: 34px minmax(0, 1.5fr) 70px minmax(0, 1.6fr) 150px; }
+.lin-precos { grid-template-columns: minmax(0, 1.8fr) 120px 96px 96px 110px 70px; }
+.lin-exames { grid-template-columns: minmax(0, 1.8fr) 110px 90px 170px 100px 140px; }
+.lin-precos input, .lin-precos .exf-in {
+  width: 100%;
+  padding: .3rem .45rem;
+  border: 1px solid var(--u-border);
+  border-radius: 6px;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  background: var(--u-surface);
+  color: var(--u-text);
+}
+@media (max-width: 1240px) {
+  .lin-banca { grid-template-columns: minmax(0, 1.6fr) 60px 110px 200px 130px; }
+  .lin-banca .col-academia { display: none !important; }
+  .lin-aptos { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1.4fr) 70px 90px 150px; }
+  .lin-aptos .col-pend { display: none !important; }
+}
+@media (max-width: 720px) {
+  .lin-banca { grid-template-columns: minmax(0, 1.6fr) 150px 120px; }
+  .lin-banca .col-idade, .lin-banca .col-pag { display: none !important; }
+  .lin-aprov { grid-template-columns: 34px minmax(0, 1.4fr) 60px 110px; }
+  .lin-aprov .col-promo { display: none !important; }
+  .lin-aptos { grid-template-columns: minmax(0, 1.4fr) 150px; }
+  .lin-aptos .col-promo, .lin-aptos .col-idade, .lin-aptos .col-valor { display: none !important; }
+  .lin-cand { grid-template-columns: 34px minmax(0, 1.5fr) 130px; }
+  .lin-cand .col-idade, .lin-cand .col-promo { display: none !important; }
+  .lin-exames { grid-template-columns: minmax(0, 1.6fr) 110px 120px; }
+  .lin-exames .col-prazo, .lin-exames .col-n { display: none !important; }
+}
+
+/* ------------------------------------------------------------ ficha de notas */
+.exf-config {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .75rem 1.25rem;
+  align-items: flex-end;
+}
+.exf-config label { display: flex; flex-direction: column; gap: .2rem; font-size: var(--u-fs-sm); }
+.exf-config input[type=number] {
+  width: 76px;
+  padding: .3rem .45rem;
+  border: 1px solid var(--u-border);
+  border-radius: 6px;
+  font: inherit;
+  background: var(--u-surface);
+  color: var(--u-text);
+}
+.exf-config__rotulo {
+  width: 100%;
+  font-size: var(--u-fs-label);
+  letter-spacing: var(--u-ls-label);
+  text-transform: uppercase;
+  color: var(--u-text-muted);
+  font-weight: var(--u-fw-semibold);
+}
+.exf-ficha-grupo {
+  border: 1px solid var(--u-border);
+  border-radius: var(--u-radius-sm);
+  background: var(--u-surface);
+  margin-bottom: .75rem;
+  overflow: hidden;
+}
+.exf-ficha-grupo__topo {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: .5rem;
+  padding: .55rem .9rem;
+  background: var(--u-surface-alt);
+  border-bottom: 1px solid var(--u-border);
+  font-weight: var(--u-fw-semibold);
+}
+.exf-ficha-grupo__media { font-variant-numeric: tabular-nums; color: var(--u-text-muted); }
+.exf-nota-linha {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  padding: .45rem .9rem;
+  border-bottom: 1px solid var(--u-border-soft);
+}
+.exf-nota-linha:last-child { border-bottom: 0; }
+.exf-nota-linha > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.exf-nota {
+  width: 84px;
+  padding: .35rem .5rem;
+  text-align: center;
+  border: 1px solid var(--u-border);
+  border-radius: 6px;
+  font: inherit;
+  font-size: 1.05rem;
+  font-variant-numeric: tabular-nums;
+  background: var(--u-surface);
+  color: var(--u-text);
+}
+.exf-nota:focus { outline: 2px solid var(--u-primary-ring); border-color: var(--u-primary); }
+/* ================================================================ redesign
+   Lista de aptos, exames, banca e ficha — mesma linguagem do shell (tons
+   --sh-*, ação principal preta). Verde e vermelho só para situação. */
+
+.exf-rotulo {
+  font-size: .68rem;
+  font-weight: 600;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--sh-ink-soft);
+}
+.exf-rotulo.is-ok { color: #146c43; }
+.exf-alerta { color: var(--sh-red); }
+
+/* ------------------------------------------------------- selo de data */
+.exf-data {
+  width: 64px;
+  height: 64px;
+  flex: none;
+  border-radius: 10px;
+  background: var(--sh-ink);
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+.exf-data__mes { font-size: .66rem; font-weight: 600; letter-spacing: .14em; }
+.exf-data__dia { font-size: 1.7rem; font-weight: 700; margin-top: .2rem; font-variant-numeric: tabular-nums; }
+.exf-data__hora { font-size: .7rem; margin-top: .3rem; opacity: .75; }
+.exf-data--g { width: 84px; height: 84px; }
+.exf-data--g .exf-data__dia { font-size: 2.1rem; }
+.exf-data:not(.is-escura).exf-data--g { background: #f4f2ee; color: var(--sh-ink); }
+
+/* ------------------------------------------------------ próximo exame */
+.exf-proximo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem 1.5rem;
+  padding: 1.1rem 1.4rem;
+  background: #fff;
+  border: 1px solid var(--sh-line);
+  border-radius: var(--u-radius);
+  margin-bottom: 1rem;
+}
+.exf-proximo__texto { flex: 1 1 280px; display: flex; flex-direction: column; gap: .15rem; min-width: 0; }
+.exf-proximo__nome { font-size: 1.05rem; font-weight: 600; }
+.exf-proximo__nums, .exf-nums { display: flex; gap: 1.75rem; margin: 0; }
+.exf-proximo__nums { padding: 0 1.5rem; border-left: 1px solid var(--sh-line); border-right: 1px solid var(--sh-line); }
+.exf-proximo__nums div, .exf-nums div { display: flex; flex-direction: column; }
+.exf-proximo__nums dt, .exf-nums dt {
+  font-size: .66rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--sh-ink-soft);
+}
+.exf-proximo__nums dd, .exf-nums dd { margin: 0; font-size: 1.5rem; font-weight: 700; line-height: 1.15; font-variant-numeric: tabular-nums; }
+
+/* ------------------------------------------- situação que vira filtro */
+.exf-status {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: .6rem;
+  margin-bottom: 1rem;
+}
+.exf-status__item {
+  display: flex;
+  flex-direction: column;
+  gap: .3rem;
+  padding: .9rem 1rem;
+  background: #fff;
+  border: 1px solid var(--sh-line);
+  border-radius: var(--u-radius);
+  color: var(--sh-ink);
+  text-decoration: none;
+  transition: border-color var(--u-transition), box-shadow var(--u-transition);
+}
+.exf-status__item:hover { border-color: #cfccc6; color: var(--sh-ink); }
+.exf-status__item.is-ativo { border-color: var(--sh-ink); box-shadow: inset 0 0 0 1px var(--sh-ink); }
+.exf-status__rotulo {
+  display: flex; align-items: center; gap: .45rem;
+  font-size: .68rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--sh-ink-soft);
+}
+.exf-status__rotulo i { width: 8px; height: 8px; border-radius: 50%; background: var(--sh-ink-soft); flex: none; }
+.exf-status__item--apto .exf-status__rotulo i { background: #198754; }
+.exf-status__item--aguardando .exf-status__rotulo i { background: #d39e00; }
+.exf-status__item--verificar .exf-status__rotulo i { background: #0aa2c0; }
+.exf-status__item--fora_idade .exf-status__rotulo i { background: #dc3545; }
+.exf-status__item--salto .exf-status__rotulo i { background: #6a4c93; }
+.exf-status__n { font-size: 1.7rem; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.exf-status__n.is-alerta { color: var(--sh-red); }
+.exf-status__sub { font-size: .76rem; color: var(--sh-ink-soft); line-height: 1.35; }
+
+/* ------------------------------------------------ busca + chips de faixa */
+.exf-barra { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem 1rem; margin-bottom: 1rem; }
+.exf-busca {
+  flex: 0 1 340px;
+  display: flex; align-items: center; gap: .5rem;
+  height: 42px; padding: 0 .8rem;
+  background: #fff; border: 1px solid var(--sh-line); border-radius: var(--u-radius-sm);
+  color: var(--sh-ink-soft);
+}
+.exf-busca:focus-within { border-color: var(--sh-ink); }
+.exf-busca input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font: inherit; font-size: .9rem; color: var(--sh-ink); }
+.exf-chips { display: flex; flex-wrap: wrap; gap: .4rem; }
+.exf-chip {
+  display: inline-flex; align-items: center; gap: .45rem;
+  height: 34px; padding: 0 .8rem;
+  border: 1px solid var(--sh-line); border-radius: 999px; background: #fff;
+  color: var(--sh-ink); font-size: .84rem; text-decoration: none; white-space: nowrap;
+}
+.exf-chip:hover { border-color: #cfccc6; color: var(--sh-ink); }
+.exf-chip.is-ativo { border-color: var(--sh-ink); background: #f4f2ee; font-weight: 600; }
+.exf-chip .exf-obi { width: 22px; height: 9px; }
+.exf-barra__conta { margin-left: auto; font-size: .84rem; color: var(--sh-ink-soft); }
+
+/* --------------------------------------------- lista agrupada de aptos */
+.exf-lista { overflow: hidden; }
+.exf-linha {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1.5fr) 64px minmax(0, 1.5fr) 100px 170px 84px;
+  grid-template-areas: "sel aluno idade req valor sit acao";
+  align-items: center;
+  gap: 0 .75rem;
+  padding: .7rem 1.1rem;
+  border-top: 1px solid var(--sh-line);
+}
+.exf-linha > .col-sel { grid-area: sel; }
+.exf-linha > .col-aluno, .exf-linha--cab > :nth-child(2) { grid-area: aluno; }
+.exf-linha > .col-idade { grid-area: idade; }
+.exf-linha > .col-req { grid-area: req; }
+.exf-linha > .col-valor { grid-area: valor; }
+.exf-linha > .col-sit, .exf-linha--cab > :nth-child(6) { grid-area: sit; }
+.exf-linha > .col-acao { grid-area: acao; justify-self: end; display: flex; gap: .25rem; }
+.exf-linha--cab {
+  border-top: 0;
+  background: #f7f6f3;
+  font-size: .68rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--sh-ink-soft);
+}
+.exf-linha.is-inscrito { background: #fbfaf8; }
+.exf-linha:has(.exf-sel:checked) { background: #f6f8fc; }
+.exf-linha .col-sit { display: flex; flex-direction: column; align-items: flex-start; gap: .2rem; }
+.exf-linha .col-aluno { display: flex; align-items: center; gap: .7rem; min-width: 0; }
+.exf-linha .col-req { display: flex; flex-direction: column; align-items: flex-start; gap: .3rem; min-width: 0; }
+.exf-linha .form-check-input { width: 1.15rem; height: 1.15rem; margin: 0; }
+.exf-avatar {
+  width: 36px; height: 36px; flex: none; border-radius: 50%;
+  background: #eeece8; color: #55524d;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: .8rem; font-weight: 600; text-transform: uppercase;
+}
+.exf-grupo {
+  display: flex; flex-wrap: wrap; align-items: center; gap: .3rem 1rem;
+  padding: .8rem 1.1rem;
+  border-top: 1px solid var(--sh-line);
+  background: #fbfaf8;
+}
+.exf-grupo__req { font-size: .82rem; color: var(--sh-ink-soft); }
+.exf-grupo__conta { margin-left: auto; font-size: .82rem; color: var(--sh-ink); font-weight: 500; }
+
+.exf-req { display: inline-flex; align-items: center; gap: .5rem; font-size: .8rem; color: #4a4843; line-height: 1.3; }
+.exf-ponto { width: 8px; height: 8px; border-radius: 50%; flex: none; background: #adb5bd; }
+.exf-ponto.is-ok { background: #198754; }
+.exf-ponto.is-nao { background: #dc3545; }
+.exf-barrinha { display: inline-block; width: 84px; height: 6px; flex: none; border-radius: 3px; background: #eeece8; overflow: hidden; }
+.exf-barrinha > span { display: block; height: 100%; background: #d39e00; border-radius: 3px; }
+.exf-barrinha > span.is-ok { background: #198754; }
+
+.exf-rodape {
+  position: sticky; bottom: 0; z-index: 5;
+  display: flex; flex-wrap: wrap; align-items: center; gap: .6rem 1.25rem;
+  margin-top: 1rem; padding: .8rem 1.1rem;
+  background: #fff; border: 1px solid var(--sh-line); border-radius: var(--u-radius);
+  box-shadow: 0 -4px 16px rgba(20, 20, 20, .06);
+}
+.exf-rodape > button { margin-left: auto; }
+
+@media (max-width: 1240px) {
+  .exf-status { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .exf-linha { grid-template-columns: 40px minmax(0, 1.4fr) 56px minmax(0, 1.5fr) 150px 84px;
+               grid-template-areas: "sel aluno idade req sit acao"; }
+  .exf-linha > .col-valor { display: none; }
+}
+@media (max-width: 720px) {
+  .exf-status { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .exf-proximo__nums { padding: 0; border: 0; }
+  .exf-barra__conta { margin-left: 0; }
+  .exf-busca { flex: 1 1 100%; }
+  .exf-linha { grid-template-columns: 32px minmax(0, 1fr) auto;
+               grid-template-areas: "sel aluno sit" ". req req"; gap: .5rem .6rem; }
+  .exf-linha > .col-idade, .exf-linha > .col-acao { display: none; }
+  .exf-linha--cab > .col-req { display: none; }
+  .exf-linha .col-sit { align-items: flex-end; }
+  .exf-avatar { display: none; }
+  .exf-grupo__conta { margin-left: 0; }
+}
+
+/* ------------------------------------------------------------- exames */
+.exf-exame {
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr) minmax(280px, 380px);
+  gap: 1.25rem 1.75rem;
+  align-items: center;
+  padding: 1.3rem 1.5rem;
+  margin-bottom: .9rem;
+  background: #fff;
+  border: 1px solid var(--sh-line);
+  border-radius: var(--u-radius);
+}
+.exf-exame--pendente { border-style: dashed; border-color: #cfccc6; }
+.exf-exame__corpo { display: flex; flex-direction: column; gap: 1rem; min-width: 0; }
+.exf-exame__nome { margin: .4rem 0 0; font-size: 1.15rem; font-weight: 600; }
+.exf-exame__nome a { color: var(--sh-ink); text-decoration: none; }
+.exf-exame__nome a:hover { text-decoration: underline; }
+.exf-exame__corpo .lst-tag { margin-left: .4rem; }
+.exf-exame__lado { display: flex; flex-direction: column; gap: 1rem; }
+.exf-exame__lado .exf-nums { justify-content: space-between; padding: .7rem .9rem; background: #f7f6f3; border-radius: var(--u-radius-sm); }
+.exf-exame__acoes { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .5rem; }
+.exf-exame__acoes form { display: contents; }
+
+.exf-etapas { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .5rem; }
+.exf-etapas li { display: flex; flex-direction: column; gap: .2rem; padding-top: .55rem; border-top: 4px solid #e6e4e0; }
+.exf-etapas li.is-feito { border-top-color: #198754; }
+.exf-etapas li.is-agora { border-top-color: var(--sh-ink); }
+.exf-etapas__nome { font-size: .78rem; font-weight: 600; color: var(--sh-ink-soft); }
+.exf-etapas li.is-feito .exf-etapas__nome { color: #146c43; }
+.exf-etapas li.is-agora .exf-etapas__nome { color: var(--sh-ink); }
+.exf-etapas__txt { font-size: .78rem; color: var(--sh-ink-soft); }
+
+@media (max-width: 1240px) {
+  .exf-exame { grid-template-columns: 84px minmax(0, 1fr); }
+  .exf-exame__lado { grid-column: 1 / -1; flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: space-between; }
+}
+@media (max-width: 720px) {
+  .exf-exame { grid-template-columns: 1fr; padding: 1rem; }
+  .exf-data--g { width: 64px; height: 64px; }
+  .exf-etapas { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .exf-exame__lado { flex-direction: column; align-items: stretch; }
+}
+
+/* -------------------------------------------------------------- banca */
+.exf-progresso {
+  display: flex; flex-direction: column; gap: .7rem;
+  padding: 1.1rem 1.4rem; margin-bottom: 1rem;
+  background: #fff; border: 1px solid var(--sh-line); border-radius: var(--u-radius);
+}
+.exf-progresso__topo { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: .5rem; }
+.exf-progresso__topo strong { font-size: 1.05rem; font-weight: 600; }
+.exf-progresso__barra { display: flex; gap: 2px; height: 12px; border-radius: 6px; overflow: hidden; background: #eeece8; }
+.exf-progresso__barra .is-ok, .exf-legenda i.is-ok { background: #198754; }
+.exf-progresso__barra .is-nao, .exf-legenda i.is-nao { background: #dc3545; }
+.exf-progresso__barra .is-ausente, .exf-legenda i.is-ausente { background: #9a968f; }
+.exf-legenda { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: .4rem 1.5rem; font-size: .84rem; color: #4a4843; }
+.exf-legenda li { display: inline-flex; align-items: center; gap: .45rem; }
+.exf-legenda i { width: 10px; height: 10px; border-radius: 2px; background: #eeece8; border: 1px solid #d8d5d0; }
+.exf-legenda i[class] { border: 0; }
+.exf-legenda__fim { margin-left: auto; }
+
+.exf-banca { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 1.25rem; align-items: start; }
+.exf-banca__lado { position: sticky; top: 1rem; display: flex; flex-direction: column; gap: 1rem; }
+.lin-banca.is-proximo { background: #f6f8fc; box-shadow: inset 3px 0 0 var(--sh-ink); }
+.exf-resultado { display: flex; align-items: center; gap: .6rem; }
+.exf-resultado__nota { min-width: 2.2rem; font-size: 1.1rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+.exf-lado__topo { padding: .9rem 1.1rem; border-bottom: 1px solid var(--sh-line); }
+.exf-lado__todos { display: flex; gap: .7rem; align-items: flex-start; cursor: pointer; margin: 0; }
+.exf-lado__todos .lst-sub { white-space: normal; }
+.exf-lado__linha {
+  display: flex; align-items: center; gap: .7rem;
+  padding: .65rem 1.1rem; margin: 0;
+  border-top: 1px solid var(--sh-line); cursor: pointer;
+}
+.exf-lado__linha:first-of-type { border-top: 0; }
+.exf-lado__linha > .lst-corta { flex: 1; }
+.exf-lado__linha .lst-sub { display: flex; align-items: center; gap: .35rem; }
+.exf-lado__linha .exf-obi { width: 20px; height: 8px; }
+.exf-lado__feito { width: 1.15rem; color: #198754; text-align: center; }
+.exf-lado__st { font-size: .76rem; font-weight: 600; color: #997404; white-space: nowrap; }
+.exf-lado__st.is-ok { color: #146c43; }
+.exf-lado__rodape { padding: .9rem 1.1rem; border-top: 1px solid var(--sh-line); }
+.exf-lado__vazio, .exf-lado__fila { display: flex; flex-direction: column; gap: .35rem; padding: 1rem 1.1rem; }
+.exf-lado__fila ol { margin: .2rem 0 0; padding-left: 1.2rem; display: flex; flex-direction: column; gap: .35rem; font-size: .9rem; }
+
+.exf-incluir > summary { cursor: pointer; list-style: none; }
+.exf-incluir > summary::-webkit-details-marker { display: none; }
+.exf-incluir > summary::after { content: "\F282"; font-family: bootstrap-icons; margin-left: .75rem; color: var(--sh-ink-soft); transition: transform var(--u-transition); }
+.exf-incluir[open] > summary::after { transform: rotate(180deg); }
+.exf-incluir__acoes { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem 1.25rem; padding: .9rem 1.1rem; border-top: 1px solid var(--sh-line); }
+
+@media (max-width: 1240px) {
+  .exf-banca { grid-template-columns: minmax(0, 1fr); }
+  .exf-banca__lado { position: static; order: -1; }
+}
+
+/* -------------------------------------------------------------- ficha */
+.exf-sorteio > summary { cursor: pointer; }
+.exf-ficha { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 1.25rem; align-items: start; }
+.exf-ficha__lado { position: sticky; top: 1rem; display: flex; flex-direction: column; gap: .75rem; }
+.exf-nota-sub { padding: .4rem .9rem; background: #f7f6f3; border-bottom: 1px solid var(--u-border-soft); font-size: .78rem; color: var(--sh-ink-soft); }
+.exf-nota-linha { flex-wrap: wrap; padding: .7rem .9rem; }
+.exf-nota-linha__rotulo { flex: 1 1 200px; font-weight: 500; }
+.exf-nota-linha__campos { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
+.exf-rapidas { display: grid; grid-template-columns: repeat(11, 40px); gap: 4px; }
+.exf-rapida {
+  height: 40px; padding: 0;
+  border: 1px solid var(--sh-line); border-radius: 8px; background: #fff;
+  color: var(--sh-ink); font: inherit; font-weight: 600; font-variant-numeric: tabular-nums;
+  cursor: pointer; touch-action: manipulation;
+}
+.exf-rapida:hover { border-color: #b9b5ae; }
+.exf-rapida.is-sel { background: var(--sh-ink); border-color: var(--sh-ink); color: #fff; }
+.exf-rapida.is-sel.is-baixa { background: #b02a37; border-color: #b02a37; }
+.exf-nota { width: 72px; height: 40px; }
+
+.exf-placar {
+  display: flex; flex-direction: column; gap: .75rem;
+  padding: 1.2rem;
+  background: #fff; border: 1px solid var(--sh-line); border-radius: var(--u-radius);
+}
+.exf-placar__nota { font-size: 3.2rem; font-weight: var(--u-fw-bold); line-height: 1; font-variant-numeric: tabular-nums; }
+.exf-placar__nota small { font-size: 1rem; color: var(--sh-ink-soft); font-weight: 500; margin-left: .2rem; }
+.exf-placar__detalhe { color: var(--sh-ink-soft); font-size: var(--u-fs-sm); }
+.exf-placar__barra { position: relative; height: 10px; border-radius: 5px; background: #eeece8; }
+.exf-placar__barra > span { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 5px; background: #dc3545; transition: width .2s ease; }
+.exf-placar__barra > span.is-ok { background: #198754; }
+.exf-placar__barra > i { position: absolute; left: var(--corte); top: -4px; bottom: -4px; width: 2px; background: var(--sh-ink); }
+.exf-placar__partes { list-style: none; margin: 0; padding: .75rem 0 0; border-top: 1px solid var(--sh-line); display: flex; flex-direction: column; gap: .35rem; font-size: .9rem; }
+.exf-placar__partes li { display: flex; justify-content: space-between; gap: .5rem; }
+.exf-placar__partes strong { font-variant-numeric: tabular-nums; }
+.exf-ficha__promover { padding: .8rem 1rem; background: #fff; border: 1px solid var(--sh-line); border-radius: var(--u-radius); }
+.exf-ficha__botoes { display: flex; flex-direction: column; gap: .5rem; }
+.exf-ficha__botoes .sh__btn { justify-content: center; }
+.exf-btn-ausente { color: #a4131f; }
+
+@media (max-width: 1240px) {
+  .exf-ficha { grid-template-columns: minmax(0, 1fr); }
+  .exf-ficha__lado { position: static; }
+}
+@media (max-width: 720px) {
+  .exf-rapidas { grid-template-columns: repeat(6, 40px); }
+}
+
+/* ------------------------------------------------ tela na largura toda */
+/* O shell limita o conteúdo a 1320px; as telas do exame são tabelas e
+   painéis lado a lado, então usam toda a área ao lado da barra lateral. */
+.sh__conteudo.exf-tela { max-width: none; }
+
+/* ----------------------------------------------------------- programa */
+.exf-programa { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 1.25rem; align-items: start; }
+.exf-promos {
+  position: sticky; top: 1rem;
+  display: flex; flex-direction: column;
+  background: #fff; border: 1px solid var(--sh-line); border-radius: var(--u-radius);
+  overflow: hidden; max-height: calc(100vh - 2rem); overflow-y: auto;
+}
+.exf-promos__titulo { padding: .8rem 1rem; border-bottom: 1px solid var(--sh-line); }
+.exf-promos__item {
+  display: grid; grid-template-columns: 22px 44px minmax(0, 1fr) auto; align-items: center; gap: .65rem;
+  padding: .65rem 1rem; border-top: 1px solid #f0eeea;
+  color: var(--sh-ink); text-decoration: none; font-size: .88rem;
+}
+.exf-promos__item:first-of-type { border-top: 0; }
+.exf-promos__item:hover { background: #faf9f7; color: var(--sh-ink); }
+.exf-promos__item.is-ativa { background: #f4f2ee; box-shadow: inset 3px 0 0 var(--sh-ink); }
+.exf-promos__item.is-inativa { opacity: .55; }
+.exf-promos__n { font-size: .74rem; color: var(--sh-ink-soft); font-variant-numeric: tabular-nums; text-align: right; }
+.exf-promos__txt { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+.exf-promos__txt strong { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.exf-promos__txt small, .exf-promos__meta small { color: var(--sh-ink-soft); font-size: .74rem; }
+.exf-promos__meta { display: flex; flex-direction: column; align-items: flex-end; font-size: .8rem; font-weight: 500; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.exf-programa__corpo { min-width: 0; }
+.exf-programa__corpo .exf-cab { background: #fff; border-color: var(--sh-line); }
+.exf-banco { flex: 1 1 100%; display: flex; flex-wrap: wrap; align-items: center; gap: .4rem 1rem; padding-top: .8rem; border-top: 1px solid var(--sh-line); }
+.exf-banco ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: .4rem; }
+.exf-banco li { padding: .2rem .65rem; border: 1px solid var(--sh-line); border-radius: 999px; font-size: .8rem; color: #4a4843; background: #faf9f7; }
+.exf-banco li strong { font-variant-numeric: tabular-nums; color: var(--sh-ink); }
+.exf-programa__nav { display: flex; justify-content: space-between; gap: .5rem; margin-top: 1.25rem; }
+.exf-programa .exf-grade { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+
+@media (max-width: 1024px) {
+  .exf-programa { grid-template-columns: minmax(0, 1fr); }
+  .exf-promos { position: static; flex-direction: row; overflow-x: auto; max-height: none; }
+  .exf-promos__titulo { display: none; }
+  .exf-promos__item { grid-template-columns: 44px auto; border-top: 0; border-left: 1px solid #f0eeea; flex: none; }
+  .exf-promos__n, .exf-promos__meta { display: none; }
+}
+
+/* ---------------------------------------------------- tabela de preços */
+.exf-faixa-texto { display: flex; flex-direction: column; margin-top: .3rem; font-weight: 600; line-height: 1.2; }
+.exf-faixa-texto small { color: var(--sh-ink-soft); font-weight: 400; font-size: .8rem; }
+.exf-precos { overflow: hidden; }
+.exf-preco {
+  display: grid;
+  grid-template-columns: 36px minmax(260px, 1.6fr) minmax(130px, 1fr) minmax(120px, .8fr) minmax(120px, .8fr) minmax(130px, .8fr) 80px;
+  align-items: center; gap: .75rem;
+  padding: .6rem 1.1rem;
+  border-top: 1px solid #f0eeea;
+}
+.exf-preco--cab {
+  border-top: 0; background: #f7f6f3;
+  font-size: .68rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--sh-ink-soft);
+}
+.exf-preco__n { font-size: .78rem; color: var(--sh-ink-soft); font-variant-numeric: tabular-nums; }
+.exf-preco__ativa { display: flex; justify-content: center; }
+.exf-preco.is-inativa > :not(.exf-preco__ativa) { opacity: .5; }
+.exf-preco.is-alterada { background: #fffbeb; box-shadow: inset 3px 0 0 #d39e00; }
+.exf-preco .form-switch .form-check-input { width: 2.4em; height: 1.3em; cursor: pointer; }
+.exf-preco .form-switch .form-check-input:checked { background-color: var(--sh-ink); border-color: var(--sh-ink); }
+.exf-in {
+  display: flex; align-items: center; gap: .35rem;
+  height: 38px; padding: 0 .6rem; margin: 0;
+  border: 1px solid var(--sh-line); border-radius: var(--u-radius-sm); background: #fff;
+  cursor: text;
+}
+.exf-in:focus-within { border-color: var(--sh-ink); box-shadow: 0 0 0 3px rgba(28, 28, 28, .08); }
+.exf-in span { font-size: .78rem; color: var(--sh-ink-soft); white-space: nowrap; }
+.exf-in input {
+  flex: 1; min-width: 0; width: 100%;
+  border: 0; outline: 0; padding: 0; background: transparent;
+  font: inherit; font-variant-numeric: tabular-nums; text-align: right; color: var(--sh-ink);
+}
+.exf-in input::-webkit-outer-spin-button, .exf-in input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.exf-in input[type=number] { -moz-appearance: textfield; }
+.exf-rodape__status { font-weight: 500; }
+.exf-rodape__status.is-alerta { color: #997404; }
+
+@media (max-width: 1024px) {
+  .exf-precos { overflow-x: auto; }
+  .exf-preco { min-width: 900px; }
+}
+
+/* ------------------------------------------ abas + seletor de academia */
+.exf-topo {
+  display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: .5rem 1.5rem;
+  border-bottom: 1px solid var(--sh-line); margin-bottom: 1.25rem;
+}
+.exf-topo__abas { border-bottom: 0; margin-bottom: 0; }
+.exf-topo__academia { display: flex; align-items: center; gap: .6rem; padding-bottom: .5rem; }
+.exf-topo__academia label { display: flex; align-items: center; gap: .35rem; margin: 0; font-size: .68rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--sh-ink-soft); white-space: nowrap; }
+.exf-topo__academia select {
+  height: 38px; min-width: 280px; max-width: 420px; padding: 0 2rem 0 .75rem;
+  border: 1px solid var(--sh-line); border-radius: var(--u-radius-sm); background-color: #fff;
+  font: inherit; font-size: .9rem; font-weight: 500; color: var(--sh-ink); cursor: pointer;
+}
+.exf-topo__academia select:focus { outline: 0; border-color: var(--sh-ink); }
+@media (max-width: 720px) {
+  .exf-topo__academia { width: 100%; }
+  .exf-topo__academia select { flex: 1; min-width: 0; }
+}
+
+/* --------------------------------------------------------- estado vazio */
+.exf-vazio { display: flex; flex-direction: column; align-items: center; gap: .6rem; padding: 3.5rem 1.5rem; text-align: center; }
+.exf-vazio > i { font-size: 2rem; color: #b9b5ae; }
+.exf-vazio strong { font-size: 1.05rem; }
+.exf-vazio p { margin: 0; max-width: 560px; color: var(--sh-ink-soft); }
+.exf-vazio .sh__btn { margin-top: .5rem; }
+
+/* ------------------------------------------------ formulário do exame */
+.exf-form { max-width: 1100px; }
+.exf-form__bloco { padding: 1.2rem 1.4rem; margin-bottom: 1rem; }
+.exf-form__titulo { font-size: 1rem; font-weight: 600; margin: 0 0 1rem; }
+.exf-form__grade { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 1rem 1.25rem; }
+.exf-form__grade .exf-form__largo:last-child { grid-column: 1 / -1; }
+.exf-form__linha { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; }
+.exf-form small { display: block; margin-top: .25rem; font-size: .76rem; }
+.exf-form .u-campo { display: flex; flex-direction: column; gap: .3rem; margin: 0; }
+.exf-proximo--vazio { justify-content: space-between; }
+.exf-presente { color: #146c43; }
+.exf-chamada { max-height: 360px; overflow-y: auto; border-top: 1px solid var(--sh-line); }
+.lst-acoes form { display: inline-flex; }
+@media (max-width: 1024px) {
+  .exf-form__grade, .exf-form__linha { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ---------------------------------------------- conteúdo da promoção */
+.exf-bloco { background: #fff; border: 1px solid var(--sh-line); border-radius: var(--u-radius); margin-bottom: 1rem; overflow: hidden; }
+.exf-bloco__topo {
+  display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: .3rem 1rem;
+  padding: .9rem 1.2rem; border-bottom: 1px solid var(--sh-line);
+}
+.exf-bloco__topo h2 { display: flex; align-items: center; gap: .5rem; margin: 0; font-size: 1rem; font-weight: 600; }
+.exf-bloco__topo h2 i { color: var(--sh-ink-soft); }
+.exf-bloco__topo > span { font-size: .8rem; color: var(--sh-ink-soft); }
+.exf-bloco__vazio { margin: 0; padding: 1rem 1.2rem; }
+
+.exf-curtos { display: flex; flex-wrap: wrap; gap: .5rem; margin: 0; padding: .9rem 1.2rem 0; }
+.exf-curtos div { display: flex; align-items: baseline; gap: .5rem; padding: .45rem .8rem; background: #f7f6f3; border-radius: var(--u-radius-sm); }
+.exf-curtos dt { font-size: .68rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--sh-ink-soft); }
+.exf-curtos dd { margin: 0; font-weight: 600; }
+
+/* Colunas que se encaixam: bloco curto não deixa buraco ao lado do comprido. */
+/* Cada bloco na largura toda; os termos se distribuem em grade dentro dele. */
+.exf-teoria { display: flex; flex-direction: column; gap: .9rem; padding: .9rem 1.2rem 1.1rem; }
+.exf-teoria__grupo { padding: .85rem 1rem; border: 1px solid #efedea; border-radius: var(--u-radius-sm); background: #fcfbfa; }
+.exf-teoria__grupo .exf-termos { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(230px, 100%), 1fr)); gap: .5rem; }
+.exf-teoria__grupo .exf-termos--qa { grid-template-columns: repeat(auto-fill, minmax(min(360px, 100%), 1fr)); }
+.exf-teoria__grupo .exf-termos > div, .exf-teoria__grupo .exf-termos > li,
+.exf-teoria__grupo .exf-termos > div:first-child, .exf-teoria__grupo .exf-termos > li:first-child {
+  padding: .55rem .7rem; border: 1px solid #efedea; border-radius: 8px; background: #fff;
+}
+.exf-teoria__grupo h3, .exf-tecnicas__grupo h3 {
+  display: flex; justify-content: space-between; align-items: center; gap: .5rem;
+  margin: 0 0 .6rem; font-size: .76rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: #4a4843;
+}
+.exf-teoria__grupo h3 span, .exf-tecnicas__grupo h3 span {
+  min-width: 1.5rem; padding: .05rem .45rem; border-radius: 999px; background: #eeece8;
+  font-size: .72rem; letter-spacing: 0; text-align: center; color: var(--sh-ink); font-variant-numeric: tabular-nums;
+}
+.exf-termos { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; }
+.exf-termos > div, .exf-termos > li { padding: .45rem 0; border-top: 1px dashed #e6e4e0; }
+.exf-termos > div:first-child, .exf-termos > li:first-child { border-top: 0; padding-top: 0; }
+.exf-termos dt { font-weight: 600; font-size: .92rem; }
+.exf-termos dd { margin: .1rem 0 0; font-size: .82rem; color: var(--sh-ink-soft); line-height: 1.4; }
+.exf-termos--qa dt { font-weight: 500; }
+.exf-termos--qa dd { color: #3d3b37; }
+.exf-termos--simples li { font-size: .9rem; }
+
+.exf-tecnicas { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 1rem; padding: .9rem 1.2rem 1.1rem; }
+.exf-tecnicas__grupo { padding: .85rem 1rem; border: 1px solid #efedea; border-radius: var(--u-radius-sm); background: #fcfbfa; }
+.exf-tecnicas__grupo ol { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: .45rem; }
+.exf-tecnicas__grupo li { display: flex; align-items: flex-start; gap: .6rem; font-size: .92rem; line-height: 1.35; }
+.exf-tecnicas__n {
+  flex: none; width: 1.45rem; height: 1.45rem; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--sh-ink); color: #fff; font-size: .72rem; font-weight: 600; font-variant-numeric: tabular-nums;
+}
+.exf-par { display: flex; flex-direction: column; }
+.exf-par b { font-size: .72rem; font-weight: 600; color: var(--sh-red); line-height: 1.2; }
+.exf-tecnicas__grupo--kaeshi .exf-par b::after { content: " contra-ataque"; font-weight: 500; color: var(--sh-ink-soft); }
+.exf-tecnicas__grupo--renraku .exf-par b::after { content: " em seguida"; font-weight: 500; color: var(--sh-ink-soft); }
+/* ------------------------------ fundamentos: ukemi e kumi-kata como estudo
+   O programa diz "um tipo"; só o catálogo diz quais são. Por isso o material
+   vem primeiro, em grade, e o recorte que a banca cobra fica destacado no
+   rodapé do bloco — é a ordem que o aluno usa: estudar tudo, cobrar um. */
+.exf-fund { padding: .9rem 1.2rem 1.1rem; border-top: 1px solid var(--sh-line); }
+.exf-fund:first-of-type { border-top: 0; }
+.exf-fund__topo h3 {
+  display: flex; align-items: center; gap: .5rem; margin: 0;
+  font-size: .78rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: #4a4843;
+}
+.exf-fund__topo h3 small { font-size: .74rem; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--sh-ink-soft); }
+.exf-fund__topo h3 span {
+  min-width: 1.5rem; padding: .05rem .45rem; border-radius: 999px; background: #eeece8;
+  font-size: .72rem; letter-spacing: 0; text-align: center; color: var(--sh-ink); font-variant-numeric: tabular-nums;
+}
+.exf-fund__nota { margin: .5rem 0 0; max-width: 72ch; font-size: .84rem; line-height: 1.5; color: var(--sh-ink-soft); }
+.exf-fund__grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(265px, 1fr)); gap: .7rem; margin-top: .85rem; }
+.exf-fund__item { padding: .75rem .9rem; border: 1px solid #efedea; border-radius: var(--u-radius-sm); background: #fcfbfa; }
+.exf-fund__item.is-exigido { border-color: #cfc9bf; background: #fff; box-shadow: inset 3px 0 0 var(--sh-ink); }
+.exf-fund__item h4 { margin: 0; font-size: .95rem; font-weight: 600; }
+.exf-fund__item h4 span { display: block; font-size: .78rem; font-weight: 400; color: var(--sh-ink-soft); }
+.exf-fund__item > p { margin: .4rem 0 0; font-size: .84rem; line-height: 1.45; color: #3d3b37; }
+/* O nome do grupo vem com o que ele quer dizer ao lado: "Nage-waza" não diz
+   nada a quem ainda está aprendendo o vocabulário. O seletor é mais
+   específico que o da pastilha de contagem (h3 span), que vem logo acima. */
+.exf-tecnicas__grupo h3 span.exf-grupo__tit,
+.exf-teoria__grupo h3 span.exf-grupo__tit {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: .2rem .45rem;
+  min-width: 0; padding: 0; background: none; border-radius: 0;
+  font-size: inherit; color: inherit; text-align: left;
+}
+.exf-grupo__tit small {
+  font-size: .68rem; font-weight: 500; letter-spacing: 0; text-transform: none;
+  color: var(--sh-ink-soft);
+}
+
+/* O quadro do que cai, depois de todo o material: aqui não entra explicação,
+   só a lista — é o que a pessoa confere na véspera da prova. */
+.exf-pede__grade { display: flex; flex-direction: column; gap: .75rem; margin: 0; padding: .9rem 1.2rem 1.1rem; }
+.exf-pede__grade > div { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: .25rem .9rem; align-items: baseline; }
+.exf-pede__grade dt {
+  font-size: .72rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--sh-ink-soft);
+}
+.exf-pede__grade dd { margin: 0; }
+.exf-pede__itens { display: flex; flex-wrap: wrap; gap: .35rem; }
+.exf-pede__itens > span {
+  padding: .22rem .55rem; border: 1px solid #e6e4e0; border-radius: 999px;
+  background: #fff; font-size: .84rem; line-height: 1.3;
+}
+.exf-pede__grade dd small { display: block; margin-top: .35rem; font-size: .76rem; color: var(--sh-ink-soft); }
+@media (max-width: 640px) {
+  .exf-pede__grade > div { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* "Como se faz": fechado por padrão para a lista continuar varrível. */
+.exf-passos { margin: .55rem 0 0; }
+.exf-passos > summary { cursor: pointer; list-style: none; font-size: .76rem; font-weight: 600; color: var(--sh-red); }
+.exf-passos > summary::-webkit-details-marker { display: none; }
+.exf-passos > summary::after { content: "\00a0\203A"; display: inline-block; transition: transform var(--u-transition); }
+.exf-passos[open] > summary::after { transform: rotate(90deg); }
+.exf-passos ol { margin: .45rem 0 0; padding-left: 1.15rem; display: flex; flex-direction: column; gap: .3rem; font-size: .82rem; line-height: 1.45; color: #3d3b37; }
+
+/* Ficha de estudo embaixo do nome da técnica, na lista da promoção. */
+.exf-tecnicas__corpo { flex: 1; min-width: 0; }
+.exf-tecnicas__nome { font-weight: 600; }
+.exf-tec-ficha { margin-top: .3rem; }
+.exf-tec-ficha + .exf-tec-ficha { margin-top: .55rem; padding-top: .55rem; border-top: 1px dashed #e6e4e0; }
+.exf-tec-ficha__alvo { display: block; font-size: .82rem; font-weight: 600; }
+.exf-tec-ficha__sub { display: block; font-size: .72rem; line-height: 1.35; color: var(--sh-ink-soft); }
+.exf-tec-ficha p { margin: .25rem 0 0; font-size: .82rem; line-height: 1.45; color: #3d3b37; }
+
+/* No papel o material é o produto: o passo a passo sai aberto. */
+@media print {
+  .exf-passos > summary { display: none; }
+  .exf-passos > ol { display: block !important; }
+  .exf-fund__item, .exf-tecnicas__grupo li { break-inside: avoid; }
+}
+
+.exf-anteriores > summary { cursor: pointer; list-style: none; border-bottom: 0; }
+.exf-anteriores[open] > summary { border-bottom: 1px solid var(--sh-line); }
+.exf-anteriores > summary::-webkit-details-marker { display: none; }
+.exf-anteriores > summary h2::after { content: "\F282"; font-family: bootstrap-icons; font-size: .8rem; color: var(--sh-ink-soft); transition: transform var(--u-transition); }
+.exf-anteriores[open] > summary h2::after { transform: rotate(180deg); }
+.exf-quiz .exf-resp { filter: blur(5px); cursor: pointer; transition: filter var(--u-transition); }
+.exf-quiz .exf-resp.is-visto { filter: none; }
+.exf-exame__alerta { margin-right: auto; align-self: center; font-size: .82rem; font-weight: 500; color: #997404; }
+.exf-avatar--g { width: 52px; height: 52px; font-size: 1rem; }
+.exf-cab__corpo { flex: 1 1 260px; min-width: 0; }
+
+/* ------------------------------------------- escolha da faixa de destino */
+.exf-tag-escolha { display: inline-block; padding: 0 .45rem; margin-right: .25rem; border-radius: 999px; background: #efe9f7; color: #5b3c86; font-size: .72rem; font-weight: 600; }
+.exf-dialogo { width: min(520px, calc(100vw - 2rem)); padding: 0; border: 1px solid var(--sh-line); border-radius: var(--u-radius); box-shadow: 0 20px 60px rgba(20, 20, 20, .25); color: var(--sh-ink); }
+.exf-dialogo::backdrop { background: rgba(20, 20, 20, .45); }
+.exf-dialogo__topo { display: flex; flex-direction: column; gap: .15rem; padding: 1rem 1.25rem; border-bottom: 1px solid var(--sh-line); }
+.exf-dialogo__topo h2 { margin: 0; font-size: 1.05rem; font-weight: 600; }
+.exf-dialogo__corpo { display: flex; flex-direction: column; gap: .9rem; padding: 1rem 1.25rem; max-height: 60vh; overflow-y: auto; }
+.exf-dialogo__regra { margin: 0; padding: .55rem .8rem; background: #f7f6f3; border-radius: var(--u-radius-sm); font-size: .88rem; }
+.exf-dialogo__rodape { display: flex; justify-content: flex-end; gap: .5rem; padding: .9rem 1.25rem; border-top: 1px solid var(--sh-line); }
+.exf-destinos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .4rem; margin: 0; padding: 0; border: 0; }
+.exf-destinos__op { display: flex; align-items: flex-start; gap: .55rem; margin: 0; padding: .55rem .7rem; border: 1px solid var(--sh-line); border-radius: var(--u-radius-sm); cursor: pointer; }
+.exf-destinos__op:has(input:checked) { border-color: var(--sh-ink); box-shadow: inset 0 0 0 1px var(--sh-ink); background: #faf9f7; }
+.exf-destinos__op input { margin-top: .2rem; accent-color: var(--sh-ink); }
+.exf-destinos__op span { display: flex; flex-direction: column; line-height: 1.25; }
+.exf-destinos__op small { color: var(--sh-ink-soft); font-size: .76rem; }
+@media (max-width: 560px) { .exf-destinos { grid-template-columns: minmax(0, 1fr); } }
+
+@media print {
+  .exf-anteriores:not([open]) { display: none; }
+}
+
+@media print {
+  .sh__side, .sh__top, .sh__overlay, .sh__acoes, .lst-abas, .exf-nao-imprime, .toast-container { display: none !important; }
+  .sh__conteudo { padding: 0 !important; }
+  .exf-cartao, .exf-ficha-grupo { break-inside: avoid; }
+  .exf-banca, .exf-ficha { display: block; }
+  .exf-rodape, .exf-rapidas { display: none !important; }
+}
+
+/* ------------------------------------------------ lista impressa (aptos) */
+.exf-impressao { display: none; }
+@media print {
+  /* Página nomeada: a folha deitada vale só para a lista; a apostila do
+     programa continua em pé. */
+  @page lista-deitada { size: A4 landscape; margin: 10mm; }
+  .exf-impressao { page: lista-deitada; }
+  body:has(.exf-impressao) .sh__cabecalho,
+  body:has(.exf-impressao) .exf-proximo,
+  body:has(.exf-impressao) .exf-topo,
+  body:has(.exf-impressao) #exf-inscrever,
+  body:has(.exf-impressao) .sh__conteudo > p,
+  body:has(.exf-impressao) .sh__rodape,
+  body:has(.exf-impressao) footer { display: none !important; }
+  /* A lateral some na impressão; a margem que ela reservava também. */
+  body:has(.exf-impressao) .sh__main { margin-left: 0 !important; }
+  body:has(.exf-impressao) .sh__conteudo { padding: 0 !important; max-width: none !important; }
+  .exf-impressao { display: block; color: #000; font-size: 9.5pt; }
+  .exf-impressao__topo { display: flex; justify-content: space-between; align-items: flex-end; gap: 12mm; padding-bottom: 3mm; margin-bottom: 3mm; border-bottom: 1.5pt solid #000; }
+  .exf-impressao__topo h1 { margin: 0; font-size: 15pt; font-weight: 700; }
+  .exf-impressao__topo p { margin: 1mm 0 0; font-size: 10pt; }
+  .exf-impressao__meta { display: flex; flex-direction: column; align-items: flex-end; font-size: 8.5pt; color: #333; }
+  .exf-impressao__tabela { width: 100%; border-collapse: collapse; }
+  .exf-impressao__tabela thead { display: table-header-group; }
+  .exf-impressao__tabela th { text-align: left; font-size: 8pt; text-transform: uppercase; letter-spacing: .04em; border-bottom: 1pt solid #000; padding: 1.5mm 2mm; }
+  .exf-impressao__tabela td { padding: 1.8mm 2mm; border-bottom: .5pt solid #bbb; vertical-align: top; }
+  .exf-impressao__tabela tr { break-inside: avoid; }
+  .exf-impressao__tabela .c-n { width: 8mm; text-align: right; color: #555; }
+  .exf-impressao__tabela .c-idade { width: 12mm; text-align: center; }
+  .exf-impressao__tabela .c-faixa { width: 34mm; white-space: nowrap; }
+  .exf-impressao__tabela .c-sit { width: 24mm; font-weight: 600; }
+  .exf-impressao__tabela .c-regra { font-size: 8.5pt; line-height: 1.35; }
+  .exf-impressao__tabela .c-regra span { color: #333; }
+  .exf-impressao__tabela small { color: #555; }
+  /* A faixa sai com a cor: sem isto o navegador não imprime o fundo. */
+  .exf-impressao .exf-obi { -webkit-print-color-adjust: exact; print-color-adjust: exact; border-color: #555; }
+  .exf-impressao .exf-obi > span { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+
+/* ===================================== material: vídeos, katas, documentos */
+.exf-so-papel { display: none; }
+.exf-vids { display: inline-flex; flex-wrap: wrap; gap: .35rem; margin-left: .5rem; vertical-align: middle; }
+.exf-vid {
+  display: inline-flex; align-items: center; gap: .3rem;
+  height: 28px; padding: 0 .65rem;
+  border: 1px solid var(--sh-ink); border-radius: 999px; background: var(--sh-ink); color: #fff;
+  font: inherit; font-size: .76rem; font-weight: 600; cursor: pointer; white-space: nowrap;
+}
+.exf-vid:hover { background: #000; }
+.exf-vid .bi { font-size: .95rem; }
+
+.exf-indice { display: flex; flex-direction: column; gap: .1rem; padding: .8rem 1rem 1rem; border-top: 1px solid var(--sh-line); }
+.exf-indice .exf-rotulo { margin-bottom: .35rem; }
+.exf-indice a { padding: .35rem .5rem; border-radius: 6px; color: var(--sh-ink); font-size: .88rem; text-decoration: none; }
+.exf-indice a:hover { background: #f4f2ee; }
+.exf-indice small { color: var(--sh-ink-soft); }
+
+.exf-katas { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 1rem; padding: .9rem 1.2rem 1.1rem; }
+.exf-kata { border: 1px solid #efedea; border-radius: var(--u-radius-sm); background: #fcfbfa; padding: .9rem 1rem; display: flex; flex-direction: column; gap: .7rem; }
+.exf-kata.is-cobrado { border-color: var(--sh-ink); box-shadow: inset 3px 0 0 var(--sh-ink); background: #fff; }
+.exf-kata__topo { display: flex; justify-content: space-between; align-items: flex-start; gap: .75rem; }
+.exf-kata__topo h3 { margin: 0; font-size: 1.05rem; font-weight: 600; }
+.exf-kata__topo h3 small { font-size: .8rem; font-weight: 400; color: var(--sh-ink-soft); }
+.exf-kata__sit { font-size: .78rem; color: var(--sh-ink-soft); }
+.exf-kata__semvideo { font-size: .76rem; color: var(--sh-ink-soft); white-space: nowrap; }
+.exf-kata__grupos { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.exf-kata__grupos li { display: grid; grid-template-columns: 9.5rem minmax(0, 1fr); gap: .6rem; padding: .4rem 0; border-top: 1px dashed #e6e4e0; font-size: .86rem; }
+.exf-kata__grupos li:first-child { border-top: 0; }
+.exf-kata__grupos span { color: #3d3b37; }
+
+.exf-docs { list-style: none; margin: 0; padding: 0; }
+.exf-docs li, .exf-docs__linha { display: flex; align-items: center; gap: .85rem; padding: .7rem 1.2rem; border-top: 1px solid #f0eeea; }
+.exf-docs li:first-child { border-top: 0; }
+.exf-docs__tipo { flex: none; width: 42px; height: 48px; border: 1px solid var(--sh-line); border-radius: 6px; background: #faf9f7; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 6px; box-sizing: border-box; font-size: .62rem; font-weight: 700; color: var(--sh-red); }
+.exf-docs__txt { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.exf-docs__txt a { font-weight: 600; color: var(--sh-ink); text-decoration: none; }
+.exf-docs__txt a:hover { text-decoration: underline; }
+.exf-docs__txt small { color: var(--sh-ink-soft); font-size: .78rem; }
+
+.exf-video-dlg { width: min(960px, calc(100vw - 2rem)); }
+.exf-video-dlg__topo { flex-direction: row; align-items: center; justify-content: space-between; }
+.exf-video-dlg__tela { aspect-ratio: 16 / 9; background: #000; }
+.exf-video-dlg__tela iframe { width: 100%; height: 100%; border: 0; display: block; }
+
+/* ---------------------------------------------- área de vídeos (admin) */
+.exf-barrinha--larga { width: 100%; margin-top: .4rem; }
+.exf-mat { overflow: hidden; }
+.exf-mat__linha {
+  display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.4fr) minmax(0, .9fr) 110px 150px;
+  align-items: center; gap: .75rem; padding: .65rem 1.1rem; margin: 0; border-top: 1px solid #f0eeea;
+}
+.exf-mat__linha--cab { border-top: 0; background: #f7f6f3; font-size: .68rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--sh-ink-soft); }
+.exf-mat__linha:target { background: #fffbeb; }
+.exf-mat__tec { display: flex; flex-direction: column; min-width: 0; }
+.exf-mat__tec small { color: var(--sh-ink-soft); font-size: .76rem; overflow-wrap: anywhere; }
+.exf-in--url input { text-align: left; }
+.exf-mat__acoes { display: flex; align-items: center; justify-content: flex-end; gap: .35rem; }
+.exf-mat-docs { display: grid; grid-template-columns: 380px minmax(0, 1fr); gap: 1rem; align-items: start; }
+.exf-mat-docs__form { padding: 1.1rem 1.2rem; display: flex; flex-direction: column; gap: .85rem; }
+.exf-mat-docs__tit { margin: 0; font-size: 1rem; font-weight: 600; }
+@media (max-width: 1024px) {
+  .exf-mat__linha { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .exf-mat__linha--cab { display: none; }
+  .exf-mat__acoes { justify-content: flex-start; }
+  .exf-mat-docs { grid-template-columns: minmax(0, 1fr); }
+  .exf-katas { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 560px) {
+  .exf-mat__linha { grid-template-columns: minmax(0, 1fr); }
+  .exf-kata__grupos li { grid-template-columns: minmax(0, 1fr); gap: .1rem; }
+}
+
+/* ------------------------------------- material: vitrine de técnicas (artboard) */
+.exf-numerado { counter-reset: exf-sec; }
+.exf-numerado > .exf-bloco:not(.exf-anteriores) > .exf-bloco__topo h2::before {
+  counter-increment: exf-sec; content: counter(exf-sec); color: var(--sh-ink-soft); font-weight: 600; margin-right: .1rem;
+}
+.exf-numerado > .exf-bloco:not(.exf-anteriores) > .exf-bloco__topo h2 i { display: none; }
+.exf-numerado .exf-cab__titulo { font-size: 1.55rem; letter-spacing: -.01em; }
+.exf-indice a { display: flex; justify-content: space-between; align-items: baseline; gap: .5rem; }
+.exf-indice a b { display: inline-block; min-width: 1.1rem; color: var(--sh-ink-soft); font-weight: 500; }
+
+.exf-ficha-dados { display: none; }
+.exf-tecnicas--vitrine { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.exf-tecnicas--vitrine .exf-tecnicas__grupo.is-cards { grid-column: 1 / -1; padding: 0; border: 0; background: none; }
+.exf-tecnicas--vitrine .is-cards > ol { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(190px, 100%), 1fr)); gap: .75rem; }
+.exf-tecnicas__grupo li.exf-card {
+  display: flex; flex-direction: column; align-items: stretch; gap: 0; overflow: hidden;
+  border: 1px solid #efedea; border-radius: 10px; background: #fff;
+}
+.exf-card__capa {
+  position: relative; display: flex; align-items: center; justify-content: center; width: 100%; height: 104px;
+  padding: 0; border: 0; background: #f1efeb; cursor: pointer;
+}
+.exf-card.tem-video .exf-card__capa { background: #2b2a28; }
+.exf-card__play {
+  display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 50%;
+  background: #e6e4e0; color: #9a968f; font-size: 1.25rem; transition: transform var(--u-transition);
+}
+.exf-card.tem-video .exf-card__play { background: #fff; color: var(--sh-ink); }
+.exf-card__capa:hover .exf-card__play { transform: scale(1.08); }
+.exf-card__capa:focus-visible { outline: 2px solid var(--sh-ink); outline-offset: -2px; }
+.exf-card__n {
+  position: absolute; left: 8px; top: 8px; padding: .1rem .5rem; border-radius: 999px;
+  background: rgba(255, 255, 255, .92); font-size: .7rem; font-weight: 600; color: var(--sh-ink);
+}
+.exf-card__corpo { display: flex; flex-direction: column; gap: .1rem; padding: .6rem .75rem .65rem; }
+.exf-card__corpo .exf-tecnicas__nome { font-size: .9rem; }
+.exf-card__trad { font-size: .76rem; line-height: 1.3; color: var(--sh-ink-soft); }
+.exf-card__rodape { display: flex; justify-content: space-between; align-items: center; gap: .5rem; margin-top: .2rem; font-size: .74rem; color: var(--sh-ink-soft); }
+.exf-card__ficha, .exf-parl__txt { padding: 0; border: 0; background: none; font: inherit; cursor: pointer; }
+.exf-card__ficha { font-size: .74rem; font-weight: 600; color: var(--sh-red); }
+.exf-card__ficha:hover { text-decoration: underline; }
+
+.exf-tecnicas--vitrine .is-pares > ol { gap: 0; }
+.exf-tecnicas__grupo li.exf-parl { align-items: center; padding: .5rem 0; border-top: 1px solid #f0eeea; }
+.exf-tecnicas__grupo li.exf-parl:first-child { border-top: 0; }
+.exf-parl__txt { text-align: left; color: var(--sh-ink); }
+.exf-parl__txt:hover .exf-par > span { text-decoration: underline; text-decoration-color: #c9c6c0; }
+.exf-parl .exf-par { flex-direction: row; flex-wrap: wrap; align-items: baseline; gap: 0 .35rem; }
+.exf-parl .exf-par b { font-size: .9rem; }
+.exf-parl .exf-par b::after { content: none !important; }
+.exf-parl__vids { display: flex; gap: .3rem; flex: none; }
+.exf-play {
+  display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; padding: 0;
+  border: 1px solid var(--sh-line); border-radius: 50%; background: #fff; color: var(--sh-ink); font-size: .95rem; cursor: pointer;
+}
+.exf-play:hover { background: var(--sh-ink); border-color: var(--sh-ink); color: #fff; }
+.exf-play.is-vazio { opacity: .3; cursor: default; }
+.exf-play.is-vazio:hover { background: #fff; border-color: var(--sh-line); color: var(--sh-ink); }
+
+.exf-ficha-dlg { width: min(560px, calc(100vw - 32px)); }
+.exf-ficha-dlg__corpo { padding: 1rem 1.25rem; max-height: 65vh; overflow-y: auto; }
+.exf-ficha-dlg__corpo .exf-passos > summary { pointer-events: none; }
+.exf-ficha-dlg__vids { display: flex; flex-wrap: wrap; gap: .5rem; }
+.exf-ficha-dlg__vids[hidden] { display: none; }
+
+@media (max-width: 900px) {
+  .exf-tecnicas--vitrine { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 560px) {
+  .exf-tecnicas--vitrine .is-cards > ol { grid-template-columns: minmax(0, 1fr); gap: .6rem; }
+  .exf-tecnicas__grupo li.exf-card { flex-direction: row; align-items: center; gap: .75rem; padding: .6rem; border-radius: 12px; }
+  .exf-card__capa { width: 104px; height: 60px; flex: none; border-radius: 8px; }
+  .exf-card__play { width: 30px; height: 30px; font-size: 1rem; }
+  .exf-card__n { left: 5px; top: 5px; font-size: .65rem; padding: 0 .4rem; }
+  .exf-card__corpo { flex: 1; min-width: 0; padding: 0; }
+}
+
+/* --------------------------------------------------- apostila impressa
+   Papel: tipografia preta, sem caixas da tela, seções numeradas com fio,
+   técnicas em linhas (nº · nome · ficha · QR), pares e katas em 2 colunas. */
+@media print {
+  @page { size: A4 portrait; margin: 13mm 13mm 14mm;
+    @bottom-left { content: "Unimaster · Apostila do exame de faixa"; font: 7.5pt Inter, sans-serif; color: #666; }
+    @bottom-right { content: "Página " counter(page) " de " counter(pages); font: 7.5pt Inter, sans-serif; color: #666; } }
+  body:has(.exf-apostila-cab) .sh__main { margin-left: 0 !important; }
+  body:has(.exf-apostila-cab) .sh__conteudo { padding: 0 !important; max-width: none !important; }
+  body:has(.exf-apostila-cab) .sh__cabecalho, body:has(.exf-apostila-cab) .exf-topo, body:has(.exf-apostila-cab) .exf-programa__nav, body:has(.exf-apostila-cab) #mat-revisao, body:has(.exf-apostila-cab) #mat-pede,
+  body:has(.exf-apostila-cab) .exf-programa__corpo > .exf-cab,
+  body:has(.exf-apostila-cab) .exf-tecnicas__grupo li:has(.exf-par) .exf-tec-ficha { display: none !important; }
+  .exf-so-papel { display: block; }
+  img.exf-so-papel, span.exf-so-papel { display: inline-block; }
+  body:has(.exf-apostila-cab), body:has(.exf-apostila-cab) .exf-programa__corpo { color: #000; font-size: 9.5pt; line-height: 1.4; }
+  body:has(.exf-apostila-cab) .exf-obi, body:has(.exf-apostila-cab) .exf-obi > span { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+  /* capa */
+  .exf-apostila-cab { display: flex !important; justify-content: space-between; align-items: flex-end; gap: 10mm;
+    padding-bottom: 3mm; margin-bottom: 5mm; border-bottom: 2pt solid #000; color: #000; }
+  .exf-apostila-cab .exf-rotulo { font-size: 7.5pt; letter-spacing: .12em; color: #444; }
+  .exf-apostila-cab h1 { margin: 1.5mm 0 1mm; font-size: 17pt; font-weight: 700; }
+  .exf-apostila-cab h1 .exf-obi { width: 12mm; height: 3.6mm; }
+  .exf-apostila-cab p { margin: 0; font-size: 9.5pt; }
+  .exf-apostila-cab__meta { display: flex; flex-direction: column; align-items: flex-end; gap: 1.8mm; font-size: 8.5pt; color: #222; }
+
+  /* seções: sem caixa, título numerado com fio */
+  body:has(.exf-apostila-cab) .exf-programa { display: block !important; }
+  body:has(.exf-apostila-cab) .exf-bloco, body:has(.exf-apostila-cab) .exf-teoria__grupo, body:has(.exf-apostila-cab) .exf-tecnicas__grupo, body:has(.exf-apostila-cab) .exf-fund, body:has(.exf-apostila-cab) .exf-kata, body:has(.exf-apostila-cab) .exf-kata.is-cobrado,
+  body:has(.exf-apostila-cab) .exf-docs, body:has(.exf-apostila-cab) .exf-docs li {
+    border: 0 !important; border-radius: 0 !important; background: none !important; box-shadow: none !important; padding: 0 !important; }
+  body:has(.exf-apostila-cab) .exf-bloco { margin: 0 0 6mm !important; break-inside: auto; overflow: visible !important; }
+  body:has(.exf-apostila-cab) .exf-bloco__topo { display: flex; justify-content: space-between; align-items: baseline; gap: 6mm;
+    padding: 0 0 1.5mm !important; margin: 0 0 3mm; border-bottom: 1pt solid #000 !important; background: none !important; break-after: avoid; }
+  body:has(.exf-apostila-cab) .exf-bloco__topo h2 { font-size: 12.5pt; font-weight: 700; }
+  body:has(.exf-apostila-cab) .exf-bloco__topo > span { font-size: 7.5pt; color: #555; text-align: right; }
+  body:has(.exf-apostila-cab) .exf-teoria, body:has(.exf-apostila-cab) .exf-tecnicas { padding: 0 !important; gap: 0 !important; }
+  body:has(.exf-apostila-cab) .exf-teoria__grupo, body:has(.exf-apostila-cab) .exf-tecnicas__grupo { margin-bottom: 4mm !important; }
+  body:has(.exf-apostila-cab) .exf-teoria__grupo h3, body:has(.exf-apostila-cab) .exf-tecnicas__grupo h3 {
+    display: flex; justify-content: space-between; align-items: baseline; margin: 0 0 1.5mm; padding: 0 0 .8mm;
+    border-bottom: .5pt solid #999; font-size: 8pt; letter-spacing: .08em; text-transform: uppercase; color: #000; break-after: avoid; }
+  body:has(.exf-apostila-cab) .exf-teoria__grupo h3 span, body:has(.exf-apostila-cab) .exf-tecnicas__grupo h3 > span:last-child { background: none !important; padding: 0 !important; color: #555; font-size: 7.5pt; }
+  body:has(.exf-apostila-cab) .exf-grupo__tit small { color: #555; text-transform: none; letter-spacing: 0; font-weight: 400; }
+
+  /* teoria: perguntas em lista, termos em 3 colunas */
+  body:has(.exf-apostila-cab) .exf-teoria__grupo .exf-termos { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.2mm 6mm; }
+  body:has(.exf-apostila-cab) .exf-teoria__grupo .exf-termos--qa { grid-template-columns: minmax(0, 1fr); gap: 1.8mm; }
+  body:has(.exf-apostila-cab) .exf-teoria__grupo .exf-termos > div, body:has(.exf-apostila-cab) .exf-teoria__grupo .exf-termos > li {
+    border: 0 !important; background: none !important; padding: 0 !important; border-radius: 0 !important; break-inside: avoid; }
+  body:has(.exf-apostila-cab) .exf-termos dt { font-size: 9.5pt; font-weight: 700; }
+  body:has(.exf-apostila-cab) .exf-termos dd { margin: .3mm 0 0; font-size: 8.5pt; color: #333; }
+  body:has(.exf-apostila-cab) .exf-termos--simples li { font-size: 9pt; }
+  body:has(.exf-apostila-cab) .exf-resp { filter: none !important; color: #333 !important; }
+
+  /* técnicas em linhas */
+  .exf-ficha-dados { display: block; }
+  .exf-tecnicas--vitrine { display: block !important; }
+  .exf-tecnicas--vitrine .is-cards > ol { display: flex; flex-direction: column; gap: 0; }
+  .exf-tecnicas__grupo li.exf-card, .exf-tecnicas__grupo li.exf-parl {
+    display: flex; flex-direction: row; align-items: flex-start; gap: 2.2mm; padding: 1.8mm 0 !important; margin: 0;
+    border: 0 !important; border-bottom: .5pt solid #ccc !important; border-radius: 0; overflow: visible; background: none; break-inside: avoid; }
+  .exf-card__corpo { padding: 0; flex: 1; min-width: 0; }
+  body:has(.exf-apostila-cab) .exf-tecnicas__nome { font-size: 10.5pt; font-weight: 700; }
+  body:has(.exf-apostila-cab) .exf-tecnicas__n { width: auto; height: auto; min-width: 4mm; background: none !important; color: #555 !important;
+    font-size: 8.5pt; font-weight: 500; justify-content: flex-end; padding-top: .4mm; }
+  .exf-marca { font-size: 12pt; line-height: 1; }
+  body:has(.exf-apostila-cab) .exf-tec-ficha { margin-top: .6mm; }
+  body:has(.exf-apostila-cab) .exf-tec-ficha__sub { font-size: 7.5pt; color: #555; }
+  body:has(.exf-apostila-cab) .exf-tec-ficha p { margin: .6mm 0 0; font-size: 8.8pt; color: #111; }
+  body:has(.exf-apostila-cab) .exf-passos { margin: .8mm 0 0; }
+  body:has(.exf-apostila-cab) .exf-passos > summary { display: none; }
+  body:has(.exf-apostila-cab) .exf-passos ol { display: block !important; margin: 0; padding-left: 4.5mm; color: #222; list-style: decimal; }
+  body:has(.exf-apostila-cab) .exf-passos li { display: list-item; font-size: 8.3pt; line-height: 1.35; margin: 0 0 .3mm; padding: 0; }
+  .exf-qr { width: 16mm; height: 16mm; flex: none; margin-left: auto; }
+
+  /* pares: kaeshi e renraku lado a lado, uma linha por par */
+  body:has(.exf-apostila-cab) .exf-tecnicas--vitrine:has(.is-pares) { display: grid !important; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 8mm; }
+  body:has(.exf-apostila-cab) .exf-tecnicas--vitrine .is-cards { grid-column: 1 / -1; }
+  body:has(.exf-apostila-cab) .is-pares { break-inside: avoid; }
+  .exf-tecnicas__grupo li.exf-parl { align-items: center; padding: 1.1mm 0 !important; }
+  .exf-par { display: inline; }
+  .exf-par > span, .exf-par b { display: inline; }
+  .exf-par b { margin: 0 1.2mm; color: #000 !important; font-size: 9pt; }
+  .exf-par b::after { content: none !important; }
+  .exf-parl__txt { pointer-events: none; font-size: 9.3pt; color: #000; }
+  .exf-parl .exf-qr { width: 12mm; height: 12mm; }
+
+  /* katas: duas colunas, grupos em linhas */
+  body:has(.exf-apostila-cab) #mat-katas { break-inside: avoid; }
+  body:has(.exf-apostila-cab) .exf-katas { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 8mm; padding: 0 !important; }
+  body:has(.exf-apostila-cab) .exf-kata { break-inside: avoid; }
+  body:has(.exf-apostila-cab) .exf-kata__topo { display: flex; justify-content: space-between; align-items: flex-start; gap: 3mm; padding: 0 0 1.5mm !important;
+    border-bottom: .5pt solid #999; background: none !important; }
+  body:has(.exf-apostila-cab) .exf-kata__topo h3 { margin: 0; font-size: 11pt; font-weight: 700; }
+  body:has(.exf-apostila-cab) .exf-kata__topo h3 small { display: block; font-size: 7.5pt; font-weight: 400; color: #555; }
+  body:has(.exf-apostila-cab) .exf-kata__sit { font-size: 7.5pt; color: #555; }
+  body:has(.exf-apostila-cab) .exf-kata__topo .exf-qr { width: 16mm; height: 16mm; }
+  body:has(.exf-apostila-cab) .exf-kata__grupos { margin: 0; padding: 0 !important; list-style: none; }
+  body:has(.exf-apostila-cab) .exf-kata__grupos li { display: block !important; padding: 1.2mm 0 !important; border-bottom: .5pt solid #ddd; font-size: 8.5pt; }
+  body:has(.exf-apostila-cab) .exf-kata__grupos li strong { display: inline; margin-right: 1.5mm; }
+  body:has(.exf-apostila-cab) .exf-kata__grupos li span { display: inline; color: #222; }
+
+  /* marca: logo no topo e marca d'água em todas as folhas */
+  .exf-apostila-cab { align-items: center !important; }
+  .exf-apostila-cab__logo { width: 22mm; height: 22mm; object-fit: contain; flex: none; }
+  .exf-apostila-cab__tit { flex: 1; min-width: 0; }
+  .exf-apostila-cab__acad { display: block; font-size: 10pt; font-weight: 700; margin-bottom: .6mm; }
+  .exf-marca-dagua { position: fixed !important; top: 50%; left: 50%; width: 140mm; height: 140mm; object-fit: contain;
+    transform: translate(-50%, -50%); opacity: .14; z-index: 0; pointer-events: none;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body:has(.exf-apostila-cab) .exf-programa { position: relative; z-index: 1; }
+
+  /* fundamentos (ukemi, kumi-kata): mesmo padrão das técnicas */
+  body:has(.exf-apostila-cab) .exf-fund { margin: 0 0 4mm !important; }
+  body:has(.exf-apostila-cab) .exf-fund__topo h3 { display: flex; align-items: baseline; gap: 2mm; margin: 0 0 1.5mm; padding: 0 0 .8mm; border-bottom: .5pt solid #999;
+    font-size: 8pt; letter-spacing: .08em; text-transform: uppercase; color: #000; break-after: avoid; }
+  body:has(.exf-apostila-cab) .exf-fund__topo h3 small { font-size: 7.5pt; letter-spacing: 0; text-transform: none; color: #555; font-weight: 400; }
+  body:has(.exf-apostila-cab) .exf-fund__topo h3 span { margin-left: auto; background: none !important; padding: 0 !important; color: #555; font-size: 7.5pt; }
+  body:has(.exf-apostila-cab) .exf-fund__nota { margin: 0 0 2mm; max-width: none; font-size: 8.5pt; line-height: 1.4; color: #333; }
+  body:has(.exf-apostila-cab) .exf-fund__grade { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 8mm; margin: 0; }
+  body:has(.exf-apostila-cab) .exf-fund__item, body:has(.exf-apostila-cab) .exf-fund__item.is-exigido { padding: 1.6mm 0 !important; border: 0 !important; border-bottom: .5pt solid #ccc !important;
+    border-radius: 0 !important; background: none !important; box-shadow: none !important; break-inside: avoid; }
+  body:has(.exf-apostila-cab) .exf-fund__item h4 { margin: 0; font-size: 10pt; font-weight: 700; }
+  body:has(.exf-apostila-cab) .exf-fund__item h4 span { display: inline; margin-left: 1.5mm; font-size: 7.5pt; font-weight: 400; color: #555; }
+  body:has(.exf-apostila-cab) .exf-fund__item > p { margin: .6mm 0 0; font-size: 8.8pt; line-height: 1.4; color: #111; }
+
+  /* documentos */
+  body:has(.exf-apostila-cab) .exf-docs li { display: flex; gap: 3mm; padding: 1.2mm 0 !important; border-bottom: .5pt solid #ddd !important; }
+  .exf-docs__txt a::after { content: " — " attr(href); font-weight: 400; font-size: 7.5pt; color: #555; overflow-wrap: anywhere; }
+}
+.exf-parl .exf-tecnicas__n { background: none; color: var(--sh-ink-soft); font-weight: 500; font-size: .76rem; }
+@media print {
+  .exf-apostila-cab__meta { flex: none; max-width: 68mm; text-align: right; }
+  .exf-apostila-cab { margin-bottom: 1.5mm !important; }
+  .exf-apostila-cab h1 { font-size: 15pt !important; }
+  .exf-apostila-leg { margin: 0 0 5mm; font-size: 7.8pt; color: #444; }
+  .exf-apostila-cab__tit h1 { flex-wrap: wrap; }
+}

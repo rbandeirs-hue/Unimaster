@@ -1,0 +1,166 @@
+{% extends "estoque/_base.html" %}
+{% from 'components/ui.html' import vazio %}
+{% set est_aba = 'painel' %}
+{% block title %}Estoque — {{ ctx.nome }}{% endblock %}
+
+{% block pagina_titulo %}Estoque{% endblock %}
+{% block pagina_subtitulo %}{{ ctx.nome }} · últimos {{ dias }} dias{% endblock %}
+
+{% block pagina_acoes %}
+  <a href="{{ url_for('estoque.movimentar') }}" class="sh__btn">
+    <i class="bi bi-arrow-left-right"></i> Movimentar
+  </a>
+  <a href="{{ url_for('estoque.venda_balcao') }}" class="sh__btn sh__btn--forte">
+    <i class="bi bi-cart-plus"></i> Nova venda
+  </a>
+{% endblock %}
+
+{% block est_conteudo %}
+
+<div class="sh__faixa">
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Produtos ativos</span>
+    <span class="sh__faixa-valor">{{ dados.produtos }}</span>
+    <span class="lst-sub">No catálogo</span>
+  </div>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Itens em estoque</span>
+    <span class="sh__faixa-valor">{{ dados.itens }}</span>
+    <span class="lst-sub">Somando todos os locais</span>
+  </div>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Valor do estoque</span>
+    <span class="sh__faixa-valor">R$ {{ '%.2f'|format(dados.valor|float)|replace('.', ',') }}</span>
+    <span class="lst-sub">Pelo custo de aquisição</span>
+  </div>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Entradas</span>
+    <span class="sh__faixa-valor">{{ dados.entradas }}</span>
+    <span class="lst-sub">Em {{ dias }} dias</span>
+  </div>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Saídas</span>
+    <span class="sh__faixa-valor">{{ dados.saidas }}</span>
+    <span class="lst-sub">Em {{ dias }} dias</span>
+  </div>
+</div>
+
+{% if caixa %}
+<div class="sh__faixa mt-3">
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Recebido</span>
+    <span class="sh__faixa-valor">R$ {{ '%.2f'|format(caixa.recebido|float)|replace('.', ',') }}</span>
+    <span class="lst-sub">Caixa da loja</span>
+  </div>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Pago</span>
+    <span class="sh__faixa-valor">R$ {{ '%.2f'|format(caixa.pago|float)|replace('.', ',') }}</span>
+    <span class="lst-sub">Compras e despesas</span>
+  </div>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Saldo</span>
+    <span class="sh__faixa-valor">R$ {{ '%.2f'|format(caixa.saldo|float)|replace('.', ',') }}</span>
+    <span class="lst-sub">{{ caixa.lancamentos }} lançamento(s)</span>
+  </div>
+</div>
+{% endif %}
+
+{% if repasse and repasse.em_aberto %}
+<div class="est-aviso mt-3">
+  <span>
+    <i class="bi bi-arrow-left-right"></i>
+    Sua academia deve <strong>R$ {{ '%.2f'|format(repasse.em_aberto|float)|replace('.', ',') }}</strong>
+    à associação, de vendas do estoque dela.
+  </span>
+  <a href="{{ url_for('estoque.repasses') }}" class="u-btn u-btn--pequeno">Ver extrato</a>
+</div>
+{% endif %}
+
+{# ------------------------------------------------------------- alertas #}
+{% if dados.sem_estoque or dados.estoque_baixo %}
+<div class="sh__secao">Precisa de reposição</div>
+<div class="est-alertas">
+  {% if dados.sem_estoque %}
+  <div class="est-alerta">
+    <div class="est-alerta__titulo">Sem estoque · {{ dados.sem_estoque|length }}</div>
+    <div class="est-alerta__lista">
+      {% for x in dados.sem_estoque[:8] %}
+      <span class="est-alerta__item">
+        <a href="{{ url_for('estoque.produto', produto_id=x.produto_id) }}">
+          {{ x.produto }}{% if x.variacao != 'Único' %} · {{ x.variacao }}{% endif %}
+        </a>
+        <span class="est-alerta__qtd">0</span>
+      </span>
+      {% endfor %}
+    </div>
+    {% if dados.sem_estoque|length > 8 %}
+    <p class="lst-sub mt-2 mb-0">e mais {{ dados.sem_estoque|length - 8 }}.</p>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if dados.estoque_baixo %}
+  <div class="est-alerta">
+    <div class="est-alerta__titulo">Abaixo do mínimo · {{ dados.estoque_baixo|length }}</div>
+    <div class="est-alerta__lista">
+      {% for x in dados.estoque_baixo[:8] %}
+      <span class="est-alerta__item">
+        <a href="{{ url_for('estoque.produto', produto_id=x.produto_id) }}">
+          {{ x.produto }}{% if x.variacao != 'Único' %} · {{ x.variacao }}{% endif %}
+        </a>
+        <span class="est-alerta__qtd">{{ x.saldo }} de {{ x.estoque_min }}</span>
+      </span>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+{# --------------------------------------------------------- movimentações #}
+<section class="lst-quadro mt-3">
+  <header class="lst-quadro__topo">
+    <h2 class="lst-quadro__titulo">Últimas movimentações</h2>
+    <a class="lst-quadro__meta" href="{{ url_for('estoque.historico') }}">Ver histórico</a>
+  </header>
+
+  {% if recentes %}
+  <div class="lst-rolagem">
+    <div class="lst-largura" style="--lst-min:560px">
+      <div class="lst-linha lin-mov lst-cab">
+        <div>Quando</div>
+        <div class="col-sentido">Tipo</div>
+        <div>Produto</div>
+        <div class="col-local">Local</div>
+        <div class="lst-fim">Qtd</div>
+        <div class="col-quem">Quem</div>
+        <div class="col-acao"></div>
+      </div>
+      {% for m in recentes %}
+      <div class="lst-linha lin-mov lst-item">
+        <div>{{ m.criado_em.strftime('%d/%m %H:%M') if m.criado_em else '—' }}</div>
+        <div class="col-sentido">
+          <span class="lst-tag">{{ 'Entrada' if m.sentido == 'E' else 'Saída' }}</span>
+        </div>
+        <div class="lst-corta">
+          <span class="lst-nome">{{ m.produto }}</span>
+          {% if m.variacao != 'Único' %}<span class="lst-sub"> · {{ m.variacao }}</span>{% endif %}
+        </div>
+        <div class="col-local lst-corta">{{ m.local }}</div>
+        <div class="lst-fim">{{ '+' if m.sentido == 'E' else '−' }}{{ m.quantidade }}</div>
+        <div class="col-quem lst-corta">{{ m.usuario or '—' }}</div>
+        <div class="col-acao"></div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% else %}
+  <div style="padding:1rem 1.1rem">
+    {{ vazio('Nenhuma movimentação ainda. Comece registrando uma entrada.',
+             href=url_for('estoque.movimentar'), acao='Registrar entrada',
+             icone='bi-box-seam') }}
+  </div>
+  {% endif %}
+</section>
+
+{% endblock %}

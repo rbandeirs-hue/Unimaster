@@ -77,7 +77,7 @@
 
       .form-label { color: #374151; font-weight: 600; font-size: .88rem; margin-bottom: .35rem; }
       .form-label .req { color: #dc2626; margin-left: 2px; }
-      .form-control, .form-select {
+      .form-control, .form-select, .u-campo__controle, .u-campo__controle {
         border-radius: 10px;
         border: 1px solid var(--c-border);
         padding: .6rem .85rem;
@@ -85,7 +85,7 @@
         font-size: .95rem;
         transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
       }
-      .form-control:focus, .form-select:focus {
+      .form-control:focus, .form-select:focus, .u-campo__controle:focus, .u-campo__controle:focus {
         border-color: var(--c-primary);
         box-shadow: 0 0 0 3px rgba(193,18,31,.14);
         background: #fff;
@@ -96,7 +96,7 @@
         position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
         color: var(--c-muted); pointer-events: none; font-size: 1rem; z-index: 2;
       }
-      .input-icon-wrap > .form-control { padding-left: 2.4rem; }
+      .input-icon-wrap > .form-control, .input-icon-wrap > .u-campo__controle { padding-left: 2.4rem; }
       .form-text-help {
         font-size: .78rem; color: var(--c-muted); margin-top: .3rem;
       }
@@ -176,7 +176,7 @@
 
       /* Submit */
       .submit-card { display: flex; flex-wrap: wrap; gap: .6rem; justify-content: flex-end; }
-      .btn-submit {
+      .btn-submit{
         background: var(--c-primary); color: #fff; border: none;
         padding: .8rem 1.6rem;
         border-radius: 12px;
@@ -186,8 +186,8 @@
         transition: all .15s ease;
         display: inline-flex; align-items: center; gap: .5rem;
       }
-      .btn-submit:hover { box-shadow: 0 6px 18px rgba(193,18,31,.4); transform: translateY(-1px); }
-      .btn-submit:active { transform: translateY(0); }
+      .btn-submit:hover{ box-shadow: 0 6px 18px rgba(193,18,31,.4); transform: translateY(-1px); }
+      .btn-submit:active{ transform: translateY(0); }
 
       .alert {
         border-radius: 12px;
@@ -207,7 +207,7 @@
         .section-card { padding: 1rem; border-radius: 12px; }
         .form-page-header h1 { font-size: 1.2rem; }
         .submit-card { justify-content: stretch; }
-        .submit-card .btn-submit { flex: 1 1 100%; justify-content: center; }
+        .submit-card .btn-submit{ flex: 1 1 100%; justify-content: center; }
       }
 
       /* ===== Layout em passos (mesmo padrão da matrícula/aula) ===== */
@@ -239,6 +239,7 @@
       @media (max-width:860px){ .sec{ grid-template-columns:1fr;gap:14px; } }
       @media (max-width:640px){ .sec{ padding:20px 16px; } .page-title{ font-size:1.8rem; } .wrap{ padding:26px 14px 44px; } }
     </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/base/dialogo.css') }}">
 </head>
 <body>
 <div class="topbar">
@@ -298,18 +299,19 @@
                 <div class="form-text-help mt-1">A foto é obrigatória — use a câmera ou envie da galeria.</div>
               </div>
             </div>
+            {% with com_turma=true, turma_obrig=false, com_valor=false %}{% include 'precadastro/_modalidade_turma.html' %}{% endwith %}
             <div>
               <label class="form-label" for="nomeInput">Nome completo <span class="req">*</span></label>
-              <input id="nomeInput" type="text" class="form-control" name="nome" required value="{{ form.get('nome','') }}" placeholder="Nome do aluno">
+              <input id="nomeInput" type="text" class="u-campo__controle" name="nome" required value="{{ form.get('nome','') }}" placeholder="Nome do aluno">
             </div>
             <div class="row g-3">
               <div class="col-12 col-md-6">
                 <label class="form-label" for="dataNasc">Data de nascimento</label>
-                <input type="date" class="form-control" name="data_nascimento" id="dataNasc" value="{{ form.get('data_nascimento','') }}">
+                <input type="date" class="u-campo__controle" name="data_nascimento" id="dataNasc" value="{{ form.get('data_nascimento','') }}">
               </div>
               <div class="col-12 col-md-6">
                 <label class="form-label">Sexo</label>
-                <select class="form-select" name="sexo">
+                <select class="u-campo__controle" name="sexo" aria-label="Sexo">
                   <option value="">—</option>
                   <option value="M" {% if form.get('sexo')=='M' %}selected{% endif %}>Masculino</option>
                   <option value="F" {% if form.get('sexo')=='F' %}selected{% endif %}>Feminino</option>
@@ -318,26 +320,26 @@
               </div>
               <div class="col-12 col-md-6">
                 <label class="form-label">Graduação</label>
-                <select class="form-select" name="graduacao_id">
+                <select class="u-campo__controle" name="graduacao_id" aria-label="Graduação">
                   <option value="">Sem graduação</option>
                   {% for g in graduacoes or [] %}
-                  <option value="{{ g.id }}" {% if form.get('graduacao_id') == (g.id|string) %}selected{% endif %}>{{ g.faixa }}{% if g.graduacao %} {{ g.graduacao }}{% endif %}</option>
+                  <option value="{{ g.id }}" data-modalidade="{{ g.modalidade_id or '' }}" {% if form.get('graduacao_id') == (g.id|string) %}selected{% endif %}>{{ g.faixa }}{% if g.graduacao %} {{ g.graduacao }}{% endif %}</option>
                   {% endfor %}
                 </select>
               </div>
               <div class="col-12 col-md-6">
                 <label class="form-label" for="cpfAluno">CPF do aluno</label>
-                <input type="text" class="form-control" name="cpf" id="cpfAluno" data-mask="cpf" placeholder="000.000.000-00" value="{{ form.get('cpf','') }}">
+                <input type="text" class="u-campo__controle" name="cpf" id="cpfAluno" data-mask="cpf" placeholder="000.000.000-00" value="{{ form.get('cpf','') }}">
                 <div class="form-text-help mt-1">Informe o CPF do aluno ou o do responsável — será o login do sistema.</div>
               </div>
               <div class="col-12 col-md-6">
                 <label class="form-label" for="telAluno">Telefone <span class="req">*</span></label>
-                <input type="text" class="form-control" name="telefone" id="telAluno" data-mask="phone" placeholder="(11) 99999-9999" value="{{ form.get('telefone','') }}" required>
+                <input type="text" class="u-campo__controle" name="telefone" id="telAluno" data-mask="phone" placeholder="(11) 99999-9999" value="{{ form.get('telefone','') }}" required>
                 <div class="form-text-help mt-1">Usado para enviar os dados de acesso.</div>
               </div>
               <div class="col-12 col-md-6">
                 <label class="form-label" for="emailInput">E-mail <span class="req">*</span></label>
-                <input type="email" class="form-control" name="email" id="emailInput" placeholder="email@exemplo.com" required value="{{ form.get('email','') }}">
+                <input type="email" class="u-campo__controle" name="email" id="emailInput" placeholder="email@exemplo.com" required value="{{ form.get('email','') }}">
                 <div class="form-text-help mt-1">Usado para recuperação de senha.</div>
               </div>
             </div>
@@ -357,11 +359,11 @@
               <div class="row g-3">
                 <div class="col-12 col-md-6">
                   <label class="form-label" for="respNome">Nome do responsável</label>
-                  <input type="text" class="form-control" name="responsavel_financeiro_nome" id="respNome" value="{{ form.get('responsavel_financeiro_nome','') }}" placeholder="Nome completo">
+                  <input type="text" class="u-campo__controle" name="responsavel_financeiro_nome" id="respNome" value="{{ form.get('responsavel_financeiro_nome','') }}" placeholder="Nome completo">
                 </div>
                 <div class="col-12 col-md-6">
                   <label class="form-label" for="respCpf">CPF do responsável</label>
-                  <input type="text" class="form-control" name="responsavel_financeiro_cpf" id="respCpf" data-mask="cpf" placeholder="000.000.000-00" value="{{ form.get('responsavel_financeiro_cpf','') }}">
+                  <input type="text" class="u-campo__controle" name="responsavel_financeiro_cpf" id="respCpf" data-mask="cpf" placeholder="000.000.000-00" value="{{ form.get('responsavel_financeiro_cpf','') }}">
                   <div class="form-text-help mt-1">Vira o login quando o aluno não tem CPF próprio.</div>
                 </div>
               </div>
@@ -375,7 +377,7 @@
           <div class="fields">
             <div>
               <label class="form-label">Algo que a academia precisa saber?</label>
-              <textarea class="form-control" name="observacoes" rows="3" placeholder="Restrição médica, horário preferido, indicação de amigo">{{ form.get('observacoes','') }}</textarea>
+              <textarea class="u-campo__controle" name="observacoes" rows="3" placeholder="Restrição médica, horário preferido, indicação de amigo" aria-label="Algo que a academia precisa saber?">{{ form.get('observacoes','') }}</textarea>
             </div>
             <div class="form-check">
               <input class="form-check-input" type="checkbox" name="aula_experimental" id="aulaExperimental" value="1" {% if form.get('aula_experimental') in ('1','on','true','True') %}checked{% endif %}>
@@ -398,11 +400,11 @@
         <video id="cameraVideo" autoplay playsinline></video>
         <canvas id="cameraCanvas" style="display:none;"></canvas>
         <div class="cam-btns">
-            <button type="button" class="btn btn-success" id="btnCapturar"><i class="bi bi-camera me-1"></i> Capturar</button>
-            <button type="button" class="btn btn-info text-white" id="btnTrocarCamera"><i class="bi bi-arrow-repeat me-1"></i> <span id="btnTrocarCameraText">Trocar Câmera</span></button>
-            <button type="button" class="btn btn-primary d-none" id="btnConfirmar"><i class="bi bi-check me-1"></i> Confirmar</button>
-            <button type="button" class="btn btn-warning d-none" id="btnRefazer"><i class="bi bi-arrow-clockwise me-1"></i> Refazer</button>
-            <button type="button" class="btn btn-danger" id="btnFechar"><i class="bi bi-x me-1"></i> Fechar</button>
+            <button type="button" class="u-btn u-btn--ok" id="btnCapturar"><i class="bi bi-camera me-1"></i> Capturar</button>
+            <button type="button" class="u-btn text-white" id="btnTrocarCamera"><i class="bi bi-arrow-repeat me-1"></i> <span id="btnTrocarCameraText">Trocar Câmera</span></button>
+            <button type="button" class="u-btn u-btn--primario d-none" id="btnConfirmar"><i class="bi bi-check me-1"></i> Confirmar</button>
+            <button type="button" class="u-btn u-btn--alerta d-none" id="btnRefazer"><i class="bi bi-arrow-clockwise me-1"></i> Refazer</button>
+            <button type="button" class="u-btn u-btn--perigo" id="btnFechar"><i class="bi bi-x me-1"></i> Fechar</button>
         </div>
     </div>
 </div>
@@ -878,5 +880,6 @@ document.addEventListener('DOMContentLoaded', function(){
     }
 });
 </script>
+    <script src="{{ url_for('static', filename='js/base/dialogo.js') }}"></script>
 </body>
 </html>

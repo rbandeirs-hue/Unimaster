@@ -1,19 +1,14 @@
 {% extends "base_app.html" %}
+{% set back_url = back_url or get_back_url_default() %}
 {% set modo = tipo_default if tipo_default in ('evento', 'competicao') else 'evento' %}
 {% block title %}{% if modo == 'competicao' %}Cadastrar competição{% else %}Cadastrar evento{% endif %}{% endblock %}
+{% block pagina_titulo %}{% if modo == 'competicao' %}Cadastrar competição{% else %}Cadastrar evento{% endif %}{% endblock %}
+{% block pagina_subtitulo %}{% if modo == 'competicao' %}Competição de judô: placar, chaves, súmulas e resultados. Após criar, use <strong>Editar</strong> na lista para o menu completo da competição.{% else %}Evento geral (curso, seminário etc.): inscrições e calendário, <strong>sem</strong> placar de lutas nem chaves de judô.{% endif %}{% endblock %}
+{% block pagina_acoes %}
+<a href="{{ url_voltar(back_url) }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Voltar</a>
+{% endblock %}
 {% block content %}
-<div class="container mt-5">
-    <div class="mb-4">
-        {% set back_url = back_url or get_back_url_default() %}
-{% include 'components/botao_voltar.html' %}
-        {% if modo == 'competicao' %}
-        <h2 class="h4 fw-bold text-primary">Cadastrar competição</h2>
-        <p class="text-muted mb-0">Competição de judô: placar, chaves, súmulas e resultados. Após criar, use <strong>Editar</strong> na lista para o menu completo da competição.</p>
-        {% else %}
-        <h2 class="h4 fw-bold text-primary">Cadastrar evento</h2>
-        <p class="text-muted mb-0">Evento geral (curso, seminário etc.): inscrições e calendário, <strong>sem</strong> placar de lutas nem chaves de judô.</p>
-        {% endif %}
-    </div>
+<div class="container">
 
     <div class="card shadow-sm">
         <div class="card-body p-4">
@@ -22,24 +17,37 @@
                 <input type="hidden" name="tipo" value="{{ modo }}">
                 <div class="mb-3">
                     <label for="nome" class="form-label fw-semibold">Nome <span class="text-danger">*</span></label>
-                    <input type="text" id="nome" name="nome" class="form-control" required maxlength="200" placeholder="{% if modo == 'competicao' %}Ex: Campeonato Regional 2026{% else %}Ex: Seminário de arbitragem{% endif %}">
+                    <input type="text" id="nome" name="nome" class="u-campo__controle" required maxlength="200" placeholder="{% if modo == 'competicao' %}Ex: Campeonato Regional 2026{% else %}Ex: Seminário de arbitragem{% endif %}">
                 </div>
                 <div class="mb-3">
                     <label for="descricao" class="form-label fw-semibold">Descrição</label>
-                    <textarea id="descricao" name="descricao" class="form-control" rows="2" placeholder="Descrição"></textarea>
+                    <textarea id="descricao" name="descricao" class="u-campo__controle" rows="2" placeholder="Descrição"></textarea>
                 </div>
+                {% if modo == 'evento' %}
+                {% with exf_ev={}, exf_marcado=request.args.get('exame') %}{% include 'exame_faixa/_campos_evento.html' %}{% endwith %}
+                {% endif %}
                 {% if modo == 'competicao' %}
                 <div id="opcoes-competicao" class="mb-3 p-3 border rounded bg-light">
                     <div class="mb-3">
+                        <label class="form-label fw-semibold">Modalidade</label>
+                        <select name="modalidade_id" class="u-campo__controle" aria-label="Modalidade">
+                            <option value="">Não definida</option>
+                            {% for m in modalidades_evento() %}
+                            <option value="{{ m.id }}">{{ m.nome }}</option>
+                            {% endfor %}
+                        </select>
+                        <small class="text-muted">Define qual faixa do aluno vem na inscrição — judô e jiu-jitsu não se misturam.</small>
+                    </div>
+                    <div class="mb-3">
                         <label class="form-label fw-semibold">Tipo de competição</label>
-                        <select name="natureza" class="form-select">
+                        <select name="natureza" class="u-campo__controle" aria-label="Tipo de competição">
                             <option value="oficial">Oficial (aparece no calendário como competição)</option>
                             <option value="festival">Festival (aparece no calendário como evento)</option>
                         </select>
                     </div>
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Categorias no placar</label>
-                        <select name="categorias_modo" class="form-select">
+                        <select name="categorias_modo" class="u-campo__controle" aria-label="Categorias no placar">
                             <option value="padrao">Usar categorias padrão (tabela da associação/federação)</option>
                             <option value="aproximacao">Criar categorias por aproximação (lista própria desta competição)</option>
                         </select>
@@ -63,7 +71,7 @@
                     </div>
                     <div class="mb-0 pt-3 border-top">
                         <label class="form-label fw-semibold">Inscrições na competição</label>
-                        <select name="inscricao_modo" class="form-select">
+                        <select name="inscricao_modo" class="u-campo__controle" aria-label="Inscrições na competição">
                             <option value="academias_formulario" selected>Apenas pelo sistema: academias aderem e alunos usam o formulário de inscrição</option>
                             <option value="publico_avulso">Apenas avulso: link público (sem login), planilha Excel e inclusão manual pelo gestor</option>
                             <option value="misto">Misto: academias com formulário + link/planilha/manual para quem não está no sistema</option>
@@ -74,7 +82,7 @@
                 {% endif %}
                 <div class="mb-3">
                     <label for="id_formulario" class="form-label fw-semibold">Formulário de inscrição</label>
-                    <select id="id_formulario" name="id_formulario" class="form-select">
+                    <select id="id_formulario" name="id_formulario" class="u-campo__controle">
                         <option value="">— Sem formulário —</option>
                         {% for f in formularios %}
                         <option value="{{ f.id }}">{{ f.nome }}</option>
@@ -85,11 +93,11 @@
                 <div class="row">
                     <div class="col-md-6 mb-3">
                         <label for="data_inicio" class="form-label fw-semibold">Data/hora início</label>
-                        <input type="datetime-local" id="data_inicio" name="data_inicio" class="form-control">
+                        <input type="datetime-local" id="data_inicio" name="data_inicio" class="u-campo__controle">
                     </div>
                     <div class="col-md-6 mb-3">
                         <label for="data_fim" class="form-label fw-semibold">Data/hora fim <span class="text-danger">*</span></label>
-                        <input type="datetime-local" id="data_fim" name="data_fim" class="form-control" required>
+                        <input type="datetime-local" id="data_fim" name="data_fim" class="u-campo__controle" required>
                         <small class="text-muted">Após esta data não será possível inscrever nem editar a lista.</small>
                     </div>
                 </div>
@@ -102,23 +110,23 @@
                     <div id="anexosContainer">
                         <div class="anexo-item mb-2">
                             <div class="input-group">
-                                <input type="file" name="anexos" class="form-control anexo-file" accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.zip,.rar,.txt">
-                                <input type="text" name="descricao_anexo_" class="form-control" placeholder="Descrição (opcional)" style="max-width: 200px;">
-                                <button type="button" class="btn btn-outline-danger remover-anexo" title="Remover">
+                                <input type="file" name="anexos" class="u-campo__controle anexo-file" accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.zip,.rar,.txt" aria-label="Anexos">
+                                <input type="text" name="descricao_anexo_" class="u-campo__controle" placeholder="Descrição (opcional)" style="max-width: 200px;" aria-label="Descrição (opcional)">
+                                <button type="button" class="u-btn remover-anexo" title="Remover">
                                     <i class="bi bi-x"></i>
                                 </button>
                             </div>
                         </div>
                     </div>
-                    <button type="button" class="btn btn-sm btn-outline-primary mt-2" id="adicionarAnexo">
+                    <button type="button" class="u-btn u-btn--pequeno mt-2" id="adicionarAnexo">
                         <i class="bi bi-plus-circle me-1"></i>Adicionar mais anexos
                     </button>
                     <small class="text-muted d-block mt-1">Formatos permitidos: PDF, DOC, DOCX, XLS, XLSX, JPG, PNG, GIF, ZIP, RAR, TXT</small>
                 </div>
                 
                 <div class="d-flex gap-2">
-                    <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>{% if modo == 'competicao' %}Criar competição{% else %}Criar evento{% endif %}</button>
-                    <a href="{{ back_url }}" class="btn btn-outline-secondary">Cancelar</a>
+                    <button type="submit" class="u-btn u-btn--primario"><i class="bi bi-check-lg me-1"></i>{% if modo == 'competicao' %}Criar competição{% else %}Criar evento{% endif %}</button>
+                    <a href="{{ back_url }}" class="u-btn">Cancelar</a>
                 </div>
             </form>
         </div>
@@ -135,9 +143,9 @@ document.addEventListener('DOMContentLoaded', function() {
         div.className = 'anexo-item mb-2';
         div.innerHTML = `
             <div class="input-group">
-                <input type="file" name="anexos" class="form-control anexo-file" accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.zip,.rar,.txt">
-                <input type="text" name="descricao_anexo_" class="form-control descricao-anexo" placeholder="Descrição (opcional)" style="max-width: 200px;">
-                <button type="button" class="btn btn-outline-danger remover-anexo" title="Remover">
+                <input type="file" name="anexos" class="u-campo__controle anexo-file" accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.zip,.rar,.txt">
+                <input type="text" name="descricao_anexo_" class="u-campo__controle descricao-anexo" placeholder="Descrição (opcional)" style="max-width: 200px;" aria-label="Descrição (opcional)">
+                <button type="button" class="u-btn remover-anexo" title="Remover">
                     <i class="bi bi-x"></i>
                 </button>
             </div>

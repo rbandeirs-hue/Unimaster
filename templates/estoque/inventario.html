@@ -1,0 +1,84 @@
+{% extends "estoque/_base.html" %}
+{% from 'components/ui.html' import vazio %}
+{% set est_aba = 'inventario' %}
+{% block title %}Inventário — Estoque{% endblock %}
+
+{% block pagina_titulo %}Inventário físico{% endblock %}
+{% block pagina_subtitulo %}
+  Conferir a prateleira contra o sistema. A diferença vira ajuste no histórico,
+  com o motivo — o saldo nunca é sobrescrito em silêncio.
+{% endblock %}
+
+{% block est_conteudo %}
+
+{% if locais %}
+<form method="POST" class="lst-filtros">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <label class="lst-campo lst-campo--curto">
+    <span class="lst-campo__rotulo">Local a contar</span>
+    <select name="local_id" required>
+      {% for l in locais %}<option value="{{ l.id }}">{{ l.nome }}</option>{% endfor %}
+    </select>
+  </label>
+  <label class="lst-campo lst-campo--largo">
+    <span class="lst-campo__rotulo">Observação</span>
+    <input type="text" name="observacao" maxlength="255" placeholder="Opcional">
+  </label>
+  <button type="submit" class="u-btn u-btn--forte">
+    <i class="bi bi-clipboard-check"></i> Abrir inventário
+  </button>
+</form>
+{% else %}
+<div class="est-aviso">
+  <span>Cadastre um local de estoque antes de inventariar.</span>
+  <a href="{{ url_for('estoque.config') }}" class="u-btn u-btn--pequeno">Criar local</a>
+</div>
+{% endif %}
+
+<section class="lst-quadro mt-3">
+  <header class="lst-quadro__topo">
+    <h2 class="lst-quadro__titulo">Inventários</h2>
+    <span class="lst-quadro__meta">{{ lista|length }} registro(s)</span>
+  </header>
+
+  {% if lista %}
+  <div class="lst-rolagem">
+    <div class="lst-largura" style="--lst-min:520px">
+      <div class="lst-linha lst-cab" style="grid-template-columns:140px minmax(0,1fr) 120px 110px 80px">
+        <div>Aberto em</div><div>Local</div><div>Contagem</div>
+        <div>Situação</div><div class="lst-fim">Abrir</div>
+      </div>
+      {% for i in lista %}
+      <div class="lst-linha lst-item {% if i.status == 'cancelado' %}u-muted{% endif %}">
+        <div>{{ i.iniciado_em.strftime('%d/%m/%Y %H:%M') if i.iniciado_em else '—' }}</div>
+        <div class="lst-corta">{{ i.local }}</div>
+        <div>{{ i.contados }} de {{ i.itens }}</div>
+        <div><span class="lst-tag">{{ i.status|capitalize }}</span></div>
+        <div class="lst-acoes">
+          <a class="lst-acao" title="Abrir inventário"
+             aria-label="Abrir inventário de {{ i.local }}"
+             href="{{ url_for('estoque.inventario_contar', inventario_id=i.id) }}">
+            <i class="bi bi-chevron-right"></i>
+          </a>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% else %}
+  <div style="padding:1rem 1.1rem">
+    {{ vazio('Nenhum inventário ainda. Abra um para conferir a prateleira.',
+             icone='bi-clipboard-check') }}
+  </div>
+  {% endif %}
+</section>
+
+<style>
+  .lst-linha[style*="140px minmax"] { grid-template-columns: 140px minmax(0,1fr) 120px 110px 80px; }
+  @media (max-width: 700px) {
+    .lst-linha[style*="140px minmax"] { grid-template-columns: 110px minmax(0,1fr) 80px; }
+    .lst-linha[style*="140px minmax"] > :nth-child(3),
+    .lst-linha[style*="140px minmax"] > :nth-child(4) { display: none; }
+  }
+</style>
+{% endblock %}

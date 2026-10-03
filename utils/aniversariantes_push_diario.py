@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-Envio em massa (Web Push) no dia do aniversário: avisa todos os usuários com assinatura push
-que uma pessoa está aniversariando hoje, com botão para abrir o modo ao vivo.
+Envio (Web Push) no dia do aniversário: avisa os usuários com assinatura push das
+academias do aniversariante, com botão para abrir o modo ao vivo. Antes ia para a base
+inteira — uma academia recebia o aniversário dos alunos de outra.
 
 Disparo típico: cron HTTP GET em /push/dispatch-aniversariantes-hoje (ver blueprint notificacoes).
 """
@@ -59,6 +60,24 @@ def _listar_distinct_usuarios_com_push(cur) -> List[int]:
         if uid > 0:
             out.append(uid)
     return sorted(set(out))
+
+
+def _academias_dos_aniversariantes(cur, aluno_ids) -> dict:
+    """{aluno_id: {academias}} — a principal e as de alunos_academias."""
+    ids = [int(i) for i in aluno_ids]
+    if not ids:
+        return {}
+    ph = ",".join(["%s"] * len(ids))
+    cur.execute(
+        f"""SELECT id AS aluno_id, id_academia AS academia_id FROM alunos WHERE id IN ({ph})
+            UNION SELECT aluno_id, academia_id FROM alunos_academias WHERE aluno_id IN ({ph})""",
+        tuple(ids) * 2,
+    )
+    out: dict = {}
+    for r in cur.fetchall() or []:
+        if r.get("academia_id"):
+            out.setdefault(int(r["aluno_id"]), set()).add(int(r["academia_id"]))
+    return out
 
 
 def _aniversariantes_hoje(cur, hoje: date) -> List[dict]:
@@ -125,8 +144,8 @@ def executar_push_aniversariantes_do_dia(
     force: bool = False,
 ) -> dict[str, Any]:
     """
-    Para cada aluno com aniversário em ref_dia (default: hoje), envia um push a todos os
-    usuários que possuem assinatura push (exceto o próprio aniversariante, se tiver usuario_id).
+    Para cada aluno com aniversário em ref_dia (default: hoje), envia um push aos usuários
+    com assinatura push das academias dele (exceto o próprio aniversariante).
 
     Retorna resumo JSON-safe para o endpoint de cron.
     """
@@ -143,8 +162,13 @@ def executar_push_aniversariantes_do_dia(
         _garantir_tabela_log(cur)
         conn.commit()
 
-        destinatarios_todos = _listar_distinct_usuarios_com_push(cur)
+        from utils.aniversariantes import academias_ids_do_usuario
+
         anivs = _aniversariantes_hoje(cur, hoje)
+        academias_aniv = _academias_dos_aniversariantes(cur, [a["id"] for a in anivs])
+        # Academias de cada usuário com push: só recebe quem divide academia com o aniversariante.
+        academias_usuario = {u: academias_ids_do_usuario(cur, u)
+                             for u in (_listar_distinct_usuarios_com_push(cur) if anivs else [])}
 
         for a in anivs:
             aluno_id = a["id"]
@@ -162,7 +186,9 @@ def executar_push_aniversariantes_do_dia(
                 )
                 continue
 
-            destinatarios = [u for u in destinatarios_todos if u != uid_aniv]
+            minhas = academias_aniv.get(aluno_id, set())
+            destinatarios = [u for u, acads in academias_usuario.items()
+                             if u != uid_aniv and acads & minhas]
             if not destinatarios:
                 detalhes.append(
                     {

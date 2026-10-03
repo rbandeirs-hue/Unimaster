@@ -1,34 +1,21 @@
 {% extends "base_app.html" %}
+{% set eh_competicao = tipo_filtro == 'competicao' %}
+{% set back_url = back_url or get_back_url_default() %}
 {% block title %}
 {% if tipo_filtro == 'evento' %}Eventos gerais{% elif tipo_filtro == 'competicao' %}Competições{% else %}Eventos e competições{% endif %}
 {% endblock %}
+{% block pagina_titulo %}{% if eh_competicao %}Competições{% else %}Eventos{% endif %}{% endblock %}
+{% block pagina_subtitulo %}{% if eh_competicao %}Competições de judô com placar, chaves e resultados.{% else %}Cursos, seminários e eventos sem placar. As academias aderem e enviam inscrições.{% endif %}{% endblock %}
+{% block pagina_acoes %}
+<a href="{{ url_voltar(back_url) }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Voltar</a>
+{% if eh_competicao %}
+<a href="{{ url_for('eventos_competicoes.cadastro', tipo='competicao', next=request.full_path) }}" class="sh__btn sh__btn--forte"><i class="bi bi-plus-lg"></i> Nova competição</a>
+{% else %}
+<a href="{{ url_for('eventos_competicoes.cadastro', tipo='evento', next=request.full_path) }}" class="sh__btn sh__btn--forte"><i class="bi bi-plus-lg"></i> Novo evento</a>
+{% endif %}
+{% endblock %}
 {% block content %}
-<div class="container mt-3 mt-md-5 px-2 px-md-3">
-    {% set eh_competicao = tipo_filtro == 'competicao' %}
-    <div class="mb-3 mb-md-4 d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2">
-        <div>
-            {% set back_url = back_url or get_back_url_default() %}
-            {% include 'components/botao_voltar.html' %}
-            {% if eh_competicao %}
-            <h1 class="h4 fw-bold mb-1 mt-2"><i class="bi bi-trophy-fill text-danger me-2"></i>Competições</h1>
-            <p class="text-muted small mb-0">Competições de judô com placar, chaves e resultados.</p>
-            {% else %}
-            <h1 class="h4 fw-bold mb-1 mt-2"><i class="bi bi-calendar-event text-primary me-2"></i>Eventos</h1>
-            <p class="text-muted small mb-0">Cursos, seminários e eventos sem placar. As academias aderem e enviam inscrições.</p>
-            {% endif %}
-        </div>
-        <div>
-            {% if eh_competicao %}
-            <a href="{{ url_for('eventos_competicoes.cadastro', tipo='competicao', next=request.full_path) }}" class="btn btn-danger">
-                <i class="bi bi-plus-lg me-1"></i> Nova competição
-            </a>
-            {% else %}
-            <a href="{{ url_for('eventos_competicoes.cadastro', tipo='evento', next=request.full_path) }}" class="btn btn-primary">
-                <i class="bi bi-plus-lg me-1"></i> Novo evento
-            </a>
-            {% endif %}
-        </div>
-    </div>
+<div class="container px-2 px-md-3">
 
     {% if eventos and tipo_filtro == 'competicao' %}
     <div class="row g-3 g-md-4 justify-content-start">
@@ -81,19 +68,19 @@
                     </div>
                     {% endif %}
                     <div class="d-flex flex-wrap align-items-center gap-2 pt-3 mt-2 border-top border-light">
-                        <a href="{{ url_for('eventos_competicoes.painel_competicao', evento_id=ev.id) }}" class="btn btn-danger comp-lista-btn-ico" title="Abrir painel da competição"><i class="bi bi-grid-3x3-gap"></i></a>
+                        <a href="{{ url_for('eventos_competicoes.painel_competicao', evento_id=ev.id) }}" class="u-btn u-btn--perigo comp-lista-btn-ico" title="Abrir painel da competição"><i class="bi bi-grid-3x3-gap"></i></a>
                         <form action="{{ url_for('eventos_competicoes.finalizar', evento_id=ev.id) }}" method="POST" class="d-inline">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             {% if ev.status == 'finalizado' %}
-                            <button type="submit" class="btn btn-outline-success comp-lista-btn-ico" title="Reativar competição"><i class="bi bi-play-circle"></i></button>
+                            <button type="submit" class="u-btn comp-lista-btn-ico" title="Reativar competição"><i class="bi bi-play-circle"></i></button>
                             {% else %}
-                            <button type="submit" class="btn btn-outline-dark comp-lista-btn-ico" title="Finalizar competição"><i class="bi bi-check-circle"></i></button>
+                            <button type="submit" class="u-btn comp-lista-btn-ico" title="Finalizar competição"><i class="bi bi-check-circle"></i></button>
                             {% endif %}
                         </form>
                         <form action="{{ url_for('eventos_competicoes.excluir', evento_id=ev.id) }}" method="POST" class="d-inline"
-                              onsubmit="return confirm('Excluir permanentemente esta competição? Inscrições, lutas e anexos serão removidos.');">
+                              data-confirmar="Excluir permanentemente esta competição? Inscrições, lutas e anexos serão removidos.">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <button type="submit" class="btn btn-outline-danger comp-lista-btn-ico" title="Excluir competição"><i class="bi bi-trash"></i></button>
+                            <button type="submit" class="u-btn comp-lista-btn-ico" title="Excluir competição"><i class="bi bi-trash"></i></button>
                         </form>
                     </div>
                 </div>
@@ -109,7 +96,7 @@
                 <div class="evento-faixa bg-{{ 'secondary' if ev.status == 'finalizado' else 'primary' }}"></div>
                 <div class="card-body d-flex flex-column p-3">
                     <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
-                        <h2 class="h6 fw-bold mb-0" style="line-height:1.3;">{{ ev.nome }}</h2>
+                        <h2 class="h6 fw-bold mb-0" style="line-height:1.3;">{{ ev.nome }}{% if ev.exame_faixa %} <span class="badge bg-primary-subtle text-primary-emphasis border border-primary-subtle">Exame de faixa</span>{% endif %}</h2>
                         {% if ev.status == 'finalizado' %}
                         <span class="badge bg-secondary flex-shrink-0">Finalizado</span>
                         {% else %}
@@ -130,27 +117,33 @@
                     </ul>
 
                     <div class="mt-auto">
+                        {% if ev.exame_faixa %}
+                        <a href="{{ url_for('exame_faixa.banca', evento_id=ev.id) }}"
+                           class="u-btn u-btn--primario u-btn--pequeno w-100 mb-2">
+                            <i class="bi bi-clipboard-check me-1"></i>Banca do exame de faixa
+                        </a>
+                        {% endif %}
                         <a href="{{ url_for('eventos_competicoes.consolidar', evento_id=ev.id) }}"
-                           class="btn btn-primary btn-sm w-100 mb-2">
+                           class="u-btn u-btn--primario u-btn--pequeno w-100 mb-2">
                             <i class="bi bi-collection me-1"></i>Consolidar inscrições
                         </a>
                         <div class="d-flex gap-1">
                             <a href="{{ url_for('eventos_competicoes.editar', evento_id=ev.id) }}"
-                               class="btn btn-outline-secondary btn-sm flex-fill" title="Editar">
+                               class="u-btn u-btn--pequeno flex-fill" title="Editar">
                                 <i class="bi bi-pencil"></i>
                             </a>
                             <form action="{{ url_for('eventos_competicoes.finalizar', evento_id=ev.id) }}" method="POST" class="flex-fill">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 {% if ev.status == 'finalizado' %}
-                                <button type="submit" class="btn btn-outline-success btn-sm w-100" title="Reativar"><i class="bi bi-play-circle"></i></button>
+                                <button type="submit" class="u-btn u-btn--pequeno w-100" title="Reativar"><i class="bi bi-play-circle"></i></button>
                                 {% else %}
-                                <button type="submit" class="btn btn-outline-dark btn-sm w-100" title="Finalizar"><i class="bi bi-check-circle"></i></button>
+                                <button type="submit" class="u-btn u-btn--pequeno w-100" title="Finalizar"><i class="bi bi-check-circle"></i></button>
                                 {% endif %}
                             </form>
                             <form action="{{ url_for('eventos_competicoes.excluir', evento_id=ev.id) }}" method="POST" class="flex-fill"
-                                  onsubmit="return confirm('Excluir permanentemente? Inscrições, lutas e anexos serão removidos.');">
+                                  data-confirmar="Excluir permanentemente? Inscrições, lutas e anexos serão removidos.">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <button type="submit" class="btn btn-outline-danger btn-sm w-100" title="Excluir"><i class="bi bi-trash"></i></button>
+                                <button type="submit" class="u-btn u-btn--pequeno w-100" title="Excluir"><i class="bi bi-trash"></i></button>
                             </form>
                         </div>
                     </div>
@@ -166,12 +159,12 @@
             <i class="bi bi-trophy text-body-tertiary" style="font-size:2.5rem;"></i>
             <h2 class="h6 text-muted mt-3 mb-1">Nenhuma competição cadastrada</h2>
             <p class="text-muted small mb-3">Crie uma competição para gerir inscrições, chaves, placar e resultados.</p>
-            <a href="{{ url_for('eventos_competicoes.cadastro', tipo='competicao') }}" class="btn btn-danger btn-sm"><i class="bi bi-plus-lg me-1"></i> Nova competição</a>
+            <a href="{{ url_for('eventos_competicoes.cadastro', tipo='competicao') }}" class="u-btn u-btn--perigo u-btn--pequeno"><i class="bi bi-plus-lg me-1"></i> Nova competição</a>
             {% else %}
             <i class="bi bi-calendar-x text-body-tertiary" style="font-size:2.5rem;"></i>
             <h2 class="h6 text-muted mt-3 mb-1">Nenhum evento cadastrado</h2>
             <p class="text-muted small mb-3">Crie um evento vinculando um formulário. As academias poderão aderir e receber inscrições.</p>
-            <a href="{{ url_for('eventos_competicoes.cadastro', tipo='evento') }}" class="btn btn-primary btn-sm"><i class="bi bi-plus-lg me-1"></i> Novo evento</a>
+            <a href="{{ url_for('eventos_competicoes.cadastro', tipo='evento') }}" class="u-btn u-btn--primario u-btn--pequeno"><i class="bi bi-plus-lg me-1"></i> Novo evento</a>
             {% endif %}
         </div>
     </div>

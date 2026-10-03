@@ -16,382 +16,223 @@
 {% endblock %}
 {% block content %}
 <style>
-  /* A tela tinha paleta própria (azul Bootstrap, raio 16px). Os tokens agora
-     vêm do design system; abaixo fica só o que é específico deste formulário. */
-  :root {
-    --c-surface: #fff;
-    --c-border: var(--sh-line);
-    --c-text: var(--sh-ink);
-    --c-muted: var(--sh-ink-soft);
-    --c-primary: var(--sh-ink);
-    --c-primary-soft: #f4f2ee;
-    --c-warn: #9a6700;
-    --c-warn-soft: #fdf6e3;
-  }
-  .form-page { max-width: 1080px; }
+  /* Editar usuário — padrão do design system (tokens --sh-*): cartões brancos
+     com fio, rótulos em caixa alta, seleção em preto/bege, rodapé fixo. */
+  .ue { max-width: none; padding-bottom: 5.5rem; }
 
-  /* Cartão de identidade do usuário */
-  .user-header {
-    background: #fff;
-    border: 1px solid var(--c-border);
-    border-radius: var(--u-radius);
-    padding: 1.4rem 1.6rem;
-    margin-bottom: 1.25rem;
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 1rem;
-    box-shadow: 0 1px 3px rgba(15,23,42,.04);
+  /* perfil: foto + identidade + ações de foto */
+  .ue-perfil {
+    display: flex; align-items: center; gap: 1.25rem; flex-wrap: wrap;
+    padding: 1.25rem 1.5rem; margin-bottom: 1rem;
+    background: #fff; border: 1px solid var(--sh-line); border-radius: var(--u-radius);
   }
-  .uh-avatar {
-    width: 64px; height: 64px;
-    border-radius: 50%;
-    object-fit: cover;
-    border: 3px solid #fff;
-    box-shadow: 0 0 0 1px var(--c-border);
-    flex-shrink: 0;
-  }
-  .uh-avatar-initials {
-    width: 64px; height: 64px;
-    border-radius: 50%;
-    flex-shrink: 0;
-    color: #fff; font-weight: 700; font-size: 1.4rem;
-    display: inline-flex; align-items: center; justify-content: center;
-    background: var(--c-primary);
-    border: 3px solid #fff;
-    box-shadow: 0 0 0 1px var(--c-border);
-  }
-  .uh-info { flex: 1 1 240px; min-width: 0; }
-  .uh-info h1 {
-    font-size: 1.4rem; font-weight: 700; margin: 0 0 .25rem 0;
-    color: var(--c-text);
-    word-break: break-word;
-  }
-  .uh-info .uh-email { font-size: .88rem; color: var(--c-muted); margin: 0; word-break: break-word; }
-  .uh-badges { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .5rem; }
-  .uh-status {
-    font-size: .72rem; font-weight: 600;
-    padding: .25rem .65rem; border-radius: 999px;
-  }
-  .uh-status.ok { background: #ecfdf5; color: #047857; }
-  .uh-status.off { background: #f3f4f6; color: #6b7280; }
-  .uh-status.warn { background: var(--c-warn-soft); color: #92400e; }
-
-  /* Sections */
-  .section-card {
-    background: var(--c-surface);
-    border: 1px solid var(--c-border);
-    border-radius: 16px;
-    padding: 1.35rem 1.5rem;
-    margin-bottom: 1.1rem;
-    box-shadow: 0 1px 3px rgba(15,23,42,.04);
-  }
-  .section-title {
-    display: flex; align-items: center; gap: .55rem;
-    font-size: .9rem; font-weight: 700; color: var(--c-text);
-    text-transform: uppercase; letter-spacing: .04em;
-    margin-bottom: 1rem;
-    padding-bottom: .65rem;
-    border-bottom: 1px solid var(--c-border);
-  }
-  .section-title i { color: var(--c-primary); font-size: 1rem; }
-  .section-help { font-size: .82rem; color: var(--c-muted); margin: -.4rem 0 .8rem 0; }
-
-  /* Foto card */
-  .photo-card { text-align: center; }
   .photo-frame {
-    position: relative;
-    width: 150px; height: 150px;
-    border-radius: 50%;
-    margin: 0 auto;
-    border: 4px solid #fff;
-    box-shadow: 0 0 0 1px var(--c-border), 0 4px 12px rgba(15,23,42,.06);
-    overflow: hidden;
-    background: #f3f4f6;
+    position: relative; width: 88px; height: 88px; flex: none; overflow: hidden;
+    border-radius: 50%; background: #f1efeb; box-shadow: 0 0 0 1px var(--sh-line);
   }
   .photo-frame img { width: 100%; height: 100%; object-fit: cover; }
   .photo-frame .placeholder {
-    width: 100%; height: 100%;
-    display: flex; align-items: center; justify-content: center;
-    color: #9ca3af; font-size: 3rem;
+    width: 100%; height: 100%; align-items: center; justify-content: center;
+    color: #fff; font-size: 2rem; font-weight: 600;
   }
-  .photo-actions { display: flex; flex-direction: column; gap: .5rem; margin-top: 1rem; }
-  .photo-actions .btn { border-radius: 10px; }
+  .ue-perfil__info { flex: 1 1 240px; min-width: 0; }
+  .ue-perfil__info h2 { margin: 0; font-size: 1.35rem; font-weight: 600; letter-spacing: -.01em; overflow-wrap: anywhere; }
+  .ue-perfil__email { margin: .2rem 0 0; font-size: .88rem; color: var(--sh-ink-soft); overflow-wrap: anywhere; }
+  .ue-perfil__selos { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .55rem; }
+  .ue-perfil__acoes { display: flex; flex-wrap: wrap; gap: .5rem; }
+  .ue-arquivo { position: relative; cursor: pointer; }
+  .ue-arquivo input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+  .ue-arquivo:focus-within { outline: 2px solid var(--sh-ink); outline-offset: 2px; }
 
-  .form-label { color: #374151; font-weight: 600; font-size: .88rem; }
-  .form-control, .form-select {
-    border-radius: 10px;
-    border: 1px solid var(--c-border);
-    padding: .6rem .85rem;
-    background: #f9fafb;
-    transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
+  /* grade de seções */
+  .ue-grade { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 1rem; align-items: start; }
+  .ue-grade > .section-card:not(.ue-ident):not(.ue-senha) { grid-column: 1 / -1; }
+  .ue-grade > script { display: none; }
+  .section-card {
+    background: #fff; border: 1px solid var(--sh-line); border-radius: var(--u-radius);
+    padding: 1.15rem 1.35rem 1.3rem; margin: 0; min-width: 0;
   }
-  .form-control:focus, .form-select:focus {
-    border-color: var(--c-primary);
-    box-shadow: 0 0 0 3px rgba(13,110,253,.15);
-    background: #fff;
+  .section-title {
+    display: flex; align-items: center; gap: .5rem; margin: 0 0 .9rem; padding: 0 0 .7rem;
+    border-bottom: 1px solid var(--sh-line);
+    font-size: .74rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--sh-ink-soft);
   }
-  .form-control:disabled, .form-control[readonly] { background: #f3f4f6; color: #6b7280; }
+  .section-title i { color: var(--sh-ink-soft); font-size: .95rem; }
+  .section-help { margin: -.3rem 0 .85rem; font-size: .85rem; color: var(--sh-ink-soft); }
+  .ue-rotulo { margin: .4rem 0 .45rem; font-size: .7rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--sh-ink-soft); }
+
+  .form-label { color: var(--sh-ink); font-weight: 600; font-size: .85rem; margin-bottom: .35rem; }
+  .ue small.text-muted { display: block; margin-top: .3rem; font-size: .8rem; color: var(--sh-ink-soft) !important; }
   .input-icon-wrap { position: relative; }
   .input-icon-wrap > i {
-    position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
-    color: var(--c-muted); pointer-events: none; font-size: 1rem;
+    position: absolute; left: .85rem; top: 50%; transform: translateY(-50%);
+    color: var(--sh-ink-soft); pointer-events: none; font-size: .95rem;
   }
-  .input-icon-wrap > .form-control { padding-left: 2.4rem; }
+  .input-icon-wrap > .u-campo__controle { padding-left: 2.3rem; }
+  .ue .u-campo__controle:disabled { background: #f6f5f2; color: var(--sh-ink-soft); }
 
-  /* Pills */
-  .role-grid, .acad-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
-    gap: .55rem;
-  }
+  /* escolhas (papéis, áreas, modalidades, academias) */
+  .role-grid, .acad-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(200px, 100%), 1fr)); gap: .5rem; }
   .role-pill, .acad-pill {
-    position: relative;
-    display: flex; align-items: center; gap: .55rem;
-    padding: .65rem .85rem;
-    background: #f9fafb;
-    border: 1.5px solid var(--c-border);
-    border-radius: 10px;
-    cursor: pointer;
-    transition: all .15s ease;
-    user-select: none;
+    position: relative; display: flex; align-items: center; gap: .6rem; min-height: 2.9rem;
+    padding: .6rem .8rem; border: 1px solid var(--sh-line); border-radius: 8px; background: #fff;
+    color: var(--sh-ink); cursor: pointer; user-select: none; transition: border-color .15s ease, background .15s ease;
   }
   .role-pill input, .acad-pill input { position: absolute; opacity: 0; pointer-events: none; }
   .role-pill .check-ic, .acad-pill .check-ic {
-    width: 20px; height: 20px; border-radius: 50%;
-    border: 1.5px solid #cbd5e1;
-    display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
-    font-size: .75rem; color: transparent;
+    width: 18px; height: 18px; flex: none; display: inline-flex; align-items: center; justify-content: center;
+    border: 1.5px solid #c9c6c0; border-radius: 5px; color: transparent; font-size: .7rem;
   }
-  .role-pill:hover { border-color: #cfe0ff; background: #f3f8ff; }
-  .role-pill.checked { border-color: var(--c-primary); background: var(--c-primary-soft); color: #0a4cab; }
-  .role-pill.checked .check-ic { background: var(--c-primary); border-color: var(--c-primary); color: #fff; }
-  .role-pill .role-name { font-size: .88rem; font-weight: 600; }
+  .role-pill:hover, .acad-pill:hover { border-color: #c9c6c0; background: #faf9f7; }
+  .role-pill.checked, .acad-pill.checked { border-color: var(--sh-ink); background: #f4f2ee; color: var(--sh-ink); }
+  .role-pill.checked .check-ic, .acad-pill.checked .check-ic { background: var(--sh-ink); border-color: var(--sh-ink); color: #fff; }
+  .role-pill:focus-within, .acad-pill:focus-within { outline: 2px solid var(--sh-ink); outline-offset: 1px; }
+  .role-pill .role-name { font-size: .88rem; font-weight: 500; line-height: 1.3; }
+  .acad-pill > .bi-building { color: var(--sh-ink-soft); }
+  .acad-pill span:last-child { font-size: .88rem; line-height: 1.3; }
+  .acad-pill.disabled { cursor: default; }
+  .acad-pill.disabled:hover { border-color: var(--sh-line); background: #fff; }
+  .acad-pill.disabled.checked:hover { border-color: var(--sh-ink); background: #f4f2ee; }
 
-  .acad-pill:hover { border-color: #a7f3d0; background: #f0fdf4; }
-  .acad-pill.checked { border-color: #10b981; background: #ecfdf5; color: #065f46; }
-  .acad-pill.checked .check-ic { background: #10b981; border-color: #10b981; color: #fff; }
-  .acad-pill input:disabled ~ * { opacity: .55; }
-  .acad-pill.disabled { cursor: not-allowed; opacity: .7; }
-
-  /* Sub-blocks por role */
+  /* blocos que aparecem conforme o papel */
   .conditional-block {
-    background: #fafbff;
-    border: 1px dashed #c7d2fe;
-    border-radius: 12px;
-    padding: 1rem 1.1rem;
-    margin-top: 1rem;
+    margin-top: 1rem; padding: 1rem 1.1rem;
+    background: #faf9f7; border: 1px solid var(--sh-line); border-radius: 10px;
   }
-  .conditional-block .block-title {
-    font-size: .85rem; font-weight: 700; color: #4338ca;
-    display: flex; align-items: center; gap: .4rem; margin-bottom: .65rem;
+  .conditional-block .block-title, .block-title {
+    display: flex; align-items: center; gap: .4rem; margin-bottom: .6rem;
+    font-size: .85rem; font-weight: 600; color: var(--sh-ink);
   }
-  .alunos-checkbox-list {
-    max-height: 220px; overflow-y: auto;
-    background: #fff; border: 1px solid var(--c-border);
-    border-radius: 10px; padding: .65rem;
-  }
-  .alunos-checkbox-list .form-check { margin-bottom: .35rem; }
-  .alunos-checkbox-list .form-check:last-child { margin-bottom: 0; }
+  .conditional-block .block-title i { color: var(--sh-ink-soft); }
 
-  /* Picker de alunos com busca */
+  /* picker de alunos (responsável) */
   .aluno-picker { position: relative; }
   .aluno-picker .picker-input-wrap { position: relative; }
   .aluno-picker .picker-input-wrap > i.bi-search {
-    position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
-    color: var(--c-muted); pointer-events: none;
+    position: absolute; left: .85rem; top: 50%; transform: translateY(-50%); color: var(--sh-ink-soft); pointer-events: none;
   }
   .aluno-picker .picker-input {
-    width: 100%;
-    padding: .55rem .85rem .55rem 2.4rem;
-    border: 1px solid var(--c-border);
-    border-radius: 10px;
-    background: #fff;
-    transition: border-color .15s ease, box-shadow .15s ease;
+    width: 100%; min-height: 2.75rem; padding: .55rem .85rem .55rem 2.3rem;
+    border: 1px solid var(--sh-line); border-radius: 8px; background: #fff; font-size: 16px;
   }
-  .aluno-picker .picker-input:focus {
-    outline: none;
-    border-color: var(--c-primary);
-    box-shadow: 0 0 0 3px rgba(13,110,253,.15);
-  }
+  .aluno-picker .picker-input:focus { outline: none; border-color: var(--sh-ink); box-shadow: 0 0 0 3px rgba(28, 28, 28, .12); }
   .aluno-picker .picker-suggestions {
-    position: absolute; top: calc(100% + 4px); left: 0; right: 0;
-    background: #fff;
-    border: 1px solid var(--c-border);
-    border-radius: 10px;
-    max-height: 240px; overflow-y: auto;
-    box-shadow: 0 6px 18px rgba(15,23,42,.10);
-    z-index: 20;
-    display: none;
+    position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 20; display: none;
+    max-height: 240px; overflow-y: auto; background: #fff; border: 1px solid var(--sh-line); border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(28, 28, 28, .1);
   }
   .aluno-picker .picker-suggestions.open { display: block; }
   .aluno-picker .picker-suggestion {
-    padding: .55rem .85rem;
-    cursor: pointer;
-    display: flex; align-items: center; gap: .5rem;
-    font-size: .9rem;
-    color: var(--c-text);
-    border-bottom: 1px solid #f1f5f9;
+    display: flex; align-items: center; gap: .5rem; padding: .55rem .85rem; cursor: pointer;
+    font-size: .9rem; color: var(--sh-ink); border-bottom: 1px solid #f0eeea;
   }
   .aluno-picker .picker-suggestion:last-child { border-bottom: 0; }
-  .aluno-picker .picker-suggestion:hover,
-  .aluno-picker .picker-suggestion.active {
-    background: var(--c-primary-soft);
-    color: #0a4cab;
-  }
-  .aluno-picker .picker-suggestion i.bi-mortarboard { color: #6b7280; }
-  .aluno-picker .picker-suggestion .empty,
-  .aluno-picker .picker-suggestion-empty {
-    color: var(--c-muted);
-    font-style: italic;
-    cursor: default;
-  }
-  .aluno-picker .picker-suggestion-empty:hover { background: transparent; color: var(--c-muted); }
-
-  .aluno-picker .picker-selected {
-    display: flex; flex-wrap: wrap; gap: .35rem;
-    margin-top: .65rem;
-    min-height: 0;
-  }
+  .aluno-picker .picker-suggestion:hover, .aluno-picker .picker-suggestion.active { background: #f4f2ee; color: var(--sh-ink); }
+  .aluno-picker .picker-suggestion i.bi-mortarboard { color: var(--sh-ink-soft); }
+  .aluno-picker .picker-suggestion .empty, .aluno-picker .picker-suggestion-empty { color: var(--sh-ink-soft); font-style: italic; cursor: default; }
+  .aluno-picker .picker-suggestion-empty:hover { background: transparent; }
+  .aluno-picker .picker-selected { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .65rem; }
   .aluno-picker .picker-selected:empty { margin-top: 0; }
   .aluno-picker .chip {
-    display: inline-flex; align-items: center; gap: .35rem;
-    padding: .3rem .55rem .3rem .65rem;
-    background: var(--c-primary-soft);
-    color: #0a4cab;
-    border: 1px solid #c7d8ff;
-    border-radius: 999px;
-    font-size: .82rem;
-    font-weight: 600;
+    display: inline-flex; align-items: center; gap: .35rem; padding: .3rem .4rem .3rem .7rem;
+    background: #fff; color: var(--sh-ink); border: 1px solid var(--sh-line); border-radius: 999px; font-size: .82rem; font-weight: 500;
   }
+  .aluno-picker .chip i { color: var(--sh-ink-soft); }
   .aluno-picker .chip button {
-    background: transparent;
-    border: 0;
-    color: #0a4cab;
-    line-height: 1;
-    padding: 0 .15rem;
-    cursor: pointer;
-    border-radius: 50%;
-    width: 20px; height: 20px;
-    display: inline-flex; align-items: center; justify-content: center;
-    transition: background .15s ease;
+    display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; padding: 0;
+    border: 0; border-radius: 50%; background: transparent; color: var(--sh-ink-soft); cursor: pointer;
   }
-  .aluno-picker .chip button:hover { background: rgba(13,110,253,.18); }
-  .aluno-picker .picker-empty-state {
-    font-size: .82rem; color: var(--c-muted);
-    margin-top: .5rem;
+  .aluno-picker .chip button:hover { background: #f1efeb; color: var(--sh-ink); }
+  .aluno-picker .picker-empty-state { margin-top: .5rem; font-size: .82rem; color: var(--sh-ink-soft); }
+
+  /* rodapé fixo com as ações */
+  .ue-rodape {
+    position: sticky; bottom: 0; z-index: 30; display: flex; justify-content: flex-end; gap: .6rem;
+    margin: 1rem 0 0; padding: .85rem 0;
+    background: linear-gradient(to bottom, rgba(250, 249, 247, 0), var(--sh-page-bg, #faf9f7) 30%);
   }
 
-  .form-actions {
-    display: flex; flex-wrap: wrap; gap: .6rem; justify-content: space-between;
-    padding: .25rem 0 0 0;
-  }
-  .form-actions .btn-primary {
-    background: var(--c-primary); border: none; padding: .7rem 1.5rem;
-    font-weight: 600; border-radius: 10px;
-    box-shadow: 0 2px 6px rgba(13,110,253,.25);
-  }
-  .form-actions .btn-primary:hover { box-shadow: 0 4px 12px rgba(13,110,253,.35); transform: translateY(-1px); }
-
-  /* Câmera modal */
+  /* câmera */
   .camera-modal-usuario { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; justify-content: center; align-items: center; background: rgba(0,0,0,.9); z-index: 9999; padding: 10px; }
   .camera-content-usuario { width: 90%; max-width: 480px; text-align: center; }
   .camera-content-usuario video, .camera-content-usuario canvas {
     width: 100%; max-width: 100%; height: auto; max-height: 70vh;
-    border-radius: 10px; border: 2px solid #ddd; margin-bottom: 10px;
-    object-fit: contain; background: #000;
+    border-radius: 10px; border: 2px solid #ddd; margin-bottom: 10px; object-fit: contain; background: #000;
   }
-  .camera-content-usuario .btn { margin: 5px; }
+  .camera-content-usuario .btn, .camera-content-usuario .u-btn { margin: 5px; }
 
+  @media (max-width: 900px) {
+    .ue-grade { grid-template-columns: minmax(0, 1fr); }
+  }
   @media (max-width: 768px) {
-    .camera-modal-usuario { padding: 10px; }
     .camera-content-usuario { width: 100%; max-width: 100%; }
     .camera-content-usuario video, .camera-content-usuario canvas { max-height: 60vh; }
-    .camera-content-usuario .btn { flex: 1 1 auto; min-width: 80px; font-size: .85rem; padding: .4rem; margin: 3px; }
+    .camera-content-usuario .btn, .camera-content-usuario .u-btn { flex: 1 1 auto; min-width: 80px; font-size: .85rem; padding: .4rem; margin: 3px; }
     .camera-content-usuario > div { display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; }
   }
   @media (max-width: 575.98px) {
-    .user-header { padding: 1rem; border-radius: 12px; }
-    .section-card { padding: 1rem; border-radius: 12px; }
-    .role-grid, .acad-grid { grid-template-columns: 1fr; }
-    .form-actions .btn { flex: 1 1 auto; }
-    .photo-frame { width: 120px; height: 120px; }
+    .ue-perfil { padding: 1rem; gap: .9rem; }
+    .photo-frame { width: 72px; height: 72px; }
+    .ue-perfil__acoes { width: 100%; }
+    .ue-perfil__acoes .sh__btn { flex: 1 1 0; justify-content: center; }
+    .section-card { padding: 1rem; }
+    .role-grid, .acad-grid { grid-template-columns: minmax(0, 1fr); }
+    .ue-rodape .sh__btn { flex: 1 1 0; justify-content: center; }
+    .ue-longo { display: none; }
   }
 </style>
 
-<div class="form-page">
+<div class="form-page ue">
 
   {% set palette = ['#6366f1','#0ea5e9','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#14b8a6','#f97316'] %}
   {% set cor = palette[(usuario.id or 0) % palette|length] %}
-
-  <!-- HEADER do usuário -->
-  <div class="user-header">
-    {% if usuario.foto %}
-      <img src="{{ url_for('static', filename='uploads/' ~ usuario.foto) }}" alt="{{ usuario.nome }}" class="uh-avatar"
-           onerror="this.outerHTML='<span class=&quot;uh-avatar-initials&quot; style=&quot;background:{{ cor }}&quot;>{{ (usuario.nome or '?')[:1] }}</span>'">
-    {% else %}
-      <span class="uh-avatar-initials" style="background: {{ cor }}">{{ (usuario.nome or '?')[:1] }}</span>
-    {% endif %}
-    <div class="uh-info">
-      <h1>{{ usuario.nome }}</h1>
-      {% if usuario.email %}<p class="uh-email"><i class="bi bi-envelope me-1"></i>{{ usuario.email }}</p>{% endif %}
-      <div class="uh-badges">
-        <span class="uh-status {{ 'ok' if usuario.get('ativo', 1) else 'off' }}">
-          <i class="bi bi-{{ 'check-circle-fill' if usuario.get('ativo',1) else 'pause-circle-fill' }} me-1"></i>
-          {{ 'Ativo' if usuario.get('ativo', 1) else 'Inativo' }}
-        </span>
-        {% if not usuario.cpf %}
-        <span class="uh-status warn"><i class="bi bi-exclamation-triangle-fill me-1"></i> CPF pendente</span>
-        {% endif %}
-      </div>
-    </div>
-  </div>
 
   <form method="POST" enctype="multipart/form-data">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="next" value="{{ back_url }}">
 
-    <div class="row g-3">
-      <!-- COLUNA ESQUERDA: foto -->
-      <div class="col-12 col-lg-4">
-        <div class="section-card photo-card">
-          <div class="section-title"><i class="bi bi-camera"></i> Foto</div>
-          <div class="photo-frame">
-            <img id="miniaturaUsuario"
-                 src="{{ url_for('static', filename='uploads/' + usuario.foto) if usuario.get('foto') else '' }}"
-                 class="{{ 'd-block' if usuario.foto else 'd-none' }}"
-                 alt="Foto" onerror="this.style.display='none'">
-            <div id="placeholderFoto" class="{{ 'd-none' if usuario.get('foto') else 'd-flex' }} placeholder">
-              <i class="bi bi-person-fill"></i>
-            </div>
-          </div>
-          <input type="hidden" name="foto" id="fotoInputUsuario">
-          <div class="photo-actions">
-            <button type="button" class="btn btn-primary btn-sm" id="btnAbrirCameraUsuario">
-              <i class="bi bi-camera-fill me-1"></i> Tirar da câmera
-            </button>
-            <label class="form-label small mb-0 mt-2 text-muted">ou escolher arquivo</label>
-            <input type="file" name="foto_arquivo" class="form-control form-control-sm" accept="image/*" id="fotoArquivoUsuario">
-          </div>
+    <!-- PERFIL: foto + identidade -->
+    <section class="ue-perfil">
+      <div class="photo-frame ue-perfil__foto">
+        <img id="miniaturaUsuario"
+             src="{{ url_for('static', filename='uploads/' + usuario.foto) if usuario.get('foto') else '' }}"
+             class="{{ 'd-block' if usuario.foto else 'd-none' }}"
+             alt="Foto de {{ usuario.nome }}" onerror="this.style.display='none'">
+        <div id="placeholderFoto" class="{{ 'd-none' if usuario.get('foto') else 'd-flex' }} placeholder" style="background: {{ cor }}">
+          {{ (usuario.nome or '?')[:1] }}
         </div>
       </div>
+      <div class="ue-perfil__info">
+        <h2>{{ usuario.nome }}</h2>
+        {% if usuario.email %}<p class="ue-perfil__email"><i class="bi bi-envelope" aria-hidden="true"></i> {{ usuario.email }}</p>{% endif %}
+        <div class="ue-perfil__selos">
+          <span class="u-pill {{ 'u-pill--success' if usuario.get('ativo', 1) }}">{{ 'Ativo' if usuario.get('ativo', 1) else 'Inativo' }}</span>
+          {% if not usuario.cpf %}<span class="u-pill u-pill--warning">CPF pendente</span>{% endif %}
+        </div>
+      </div>
+      <div class="ue-perfil__acoes">
+        <input type="hidden" name="foto" id="fotoInputUsuario">
+        <button type="button" class="sh__btn" id="btnAbrirCameraUsuario"><i class="bi bi-camera"></i> Tirar foto</button>
+        <label class="sh__btn ue-arquivo" for="fotoArquivoUsuario"><i class="bi bi-upload"></i> Escolher arquivo
+          <input type="file" name="foto_arquivo" accept="image/*" id="fotoArquivoUsuario" aria-label="Escolher arquivo de foto"></label>
+      </div>
+    </section>
 
-      <!-- COLUNA DIREITA: dados -->
-      <div class="col-12 col-lg-8">
+    <div class="ue-grade">
         <!-- IDENTIFICAÇÃO -->
-        <div class="section-card">
+        <div class="section-card ue-ident">
           <div class="section-title"><i class="bi bi-person-vcard"></i> Identificação</div>
           <div class="row g-3">
             <div class="col-12">
               <label class="form-label">Nome</label>
               <div class="input-icon-wrap"><i class="bi bi-person"></i>
-                <input type="text" class="form-control" value="{{ usuario.nome }}" disabled>
+                <input type="text" class="u-campo__controle" value="{{ usuario.nome }}" disabled aria-label="Nome">
               </div>
             </div>
             <div class="col-12 col-md-6">
               <label class="form-label">E-mail</label>
               <div class="input-icon-wrap"><i class="bi bi-envelope"></i>
-                <input type="email" class="form-control" value="{{ usuario.email }}" disabled>
+                <input type="email" class="u-campo__controle" value="{{ usuario.email }}" disabled aria-label="E-mail">
               </div>
             </div>
             <div class="col-12 col-md-6">
@@ -400,7 +241,7 @@
                 {% if not usuario.cpf %}<span class="badge bg-warning text-dark ms-1" style="font-size:.65rem;">Pendente</span>{% endif %}
               </label>
               <div class="input-icon-wrap"><i class="bi bi-person-badge"></i>
-                <input type="text" inputmode="numeric" class="form-control" id="cpf" name="cpf"
+                <input type="text" inputmode="numeric" class="u-campo__controle" id="cpf" name="cpf"
                        value="{{ usuario.cpf or '' }}" placeholder="000.000.000-00" maxlength="14" autocomplete="off">
               </div>
               <small class="text-muted">
@@ -415,23 +256,135 @@
         </div>
 
         <!-- ACESSO -->
-        <div class="section-card">
+        <div class="section-card ue-senha">
           <div class="section-title"><i class="bi bi-shield-lock"></i> Acesso</div>
           <div class="row g-3">
-            <div class="col-12 col-md-6">
+            <div class="col-12">
               <label class="form-label">Nova senha <span class="text-muted fw-normal">(opcional)</span></label>
               <div class="input-icon-wrap"><i class="bi bi-lock"></i>
-                <input type="password" name="senha" class="form-control" placeholder="••••••" autocomplete="new-password">
+                <input type="password" name="senha" class="u-campo__controle" placeholder="••••••" autocomplete="new-password" aria-label="Nova senha (opcional)">
               </div>
               <small class="text-muted">Deixe em branco para manter a senha atual.</small>
             </div>
           </div>
         </div>
 
+        {# Acesso nesta academia (MM-13): o gestor principal define o que cada
+           gestor/professor vê. Gestor principal vê tudo e gerencia os outros. #}
+        {% if acesso_secao %}
+        {% set ac = acesso_secao.atual %}
+        <div class="section-card" id="acessoAcademia">
+          <input type="hidden" name="acesso_presente" value="1">
+          <input type="hidden" name="acesso_academia_id" value="{{ acesso_secao.academia_id }}">
+          <div class="section-title"><i class="bi bi-shield-lock"></i> Acesso em {{ acesso_secao.academia_nome }}</div>
+          {# Uma configuração por academia: quem está em várias troca aqui. #}
+          {% if acesso_secao.academias | length > 1 %}
+          <div class="acesso-academias" role="group" aria-label="Academia do acesso">
+            {% for ac_op in acesso_secao.academias %}
+            <a class="sh__btn {% if ac_op.id == acesso_secao.academia_id %}sh__btn--forte{% endif %}"
+               {% if ac_op.id == acesso_secao.academia_id %}aria-current="true"{% endif %}
+               href="{{ url_for('usuarios.editar_usuario', user_id=usuario.id, acesso_academia=ac_op.id, next=request.args.get('next')) }}#acessoAcademia">{{ ac_op.nome }}</a>
+            {% endfor %}
+          </div>
+          <div class="section-help">Cada academia tem a sua configuração. Salve antes de trocar de academia.</div>
+          {% else %}
+          <div class="section-help">O que este usuário vê e faz nesta academia.</div>
+          {% endif %}
+          <style>.acesso-academias { display: flex; gap: .5rem; flex-wrap: wrap; margin: .2rem 0 .6rem; }</style>
+
+          {% if acesso_secao.eh_gestor %}
+          <div class="role-grid mb-3">
+            <label class="role-pill" data-role-pill>
+              <input type="checkbox" class="acesso-cb" name="acesso_principal" value="1" id="acessoPrincipal" {% if ac.principal %}checked{% endif %}>
+              <span class="check-ic"><i class="bi bi-check-lg"></i></span>
+              <span class="role-name">Gestor principal — vê tudo e gerencia o acesso dos outros</span>
+            </label>
+          </div>
+          {% endif %}
+
+          {% if acesso_secao.eh_gestor %}
+          <p class="text-muted small mb-2" id="acessoAvisoPrincipal" {% if not ac.principal %}hidden{% endif %}>
+            Gestor principal vê tudo. <strong>Desmarque "Gestor principal"</strong> para escolher áreas e modalidades.
+          </p>
+          {% endif %}
+          <div id="acessoRestricoes">
+            <div class="ue-rotulo">Áreas</div>
+            <div class="role-grid mb-3">
+              <label class="role-pill" data-role-pill>
+                <input type="checkbox" class="acesso-cb" name="acesso_financeiro" value="1" {% if ac.financeiro %}checked{% endif %}>
+                <span class="check-ic"><i class="bi bi-check-lg"></i></span>
+                <span class="role-name">Financeiro</span>
+              </label>
+              <label class="role-pill" data-role-pill>
+                <input type="checkbox" class="acesso-cb" name="acesso_academico" value="1" {% if ac.academico %}checked{% endif %}>
+                <span class="check-ic"><i class="bi bi-check-lg"></i></span>
+                <span class="role-name">Acadêmico — presenças, turmas, exame, calendário, eventos</span>
+              </label>
+            </div>
+
+            {% if acesso_secao.modalidades | length > 1 %}
+            <div class="ue-rotulo">Modalidades</div>
+            <div class="role-grid">
+              <label class="role-pill" data-role-pill>
+                <input type="checkbox" class="acesso-cb" name="acesso_modalidades_todas" value="1" id="acessoTodas" {% if not ac.modalidades %}checked{% endif %}>
+                <span class="check-ic"><i class="bi bi-check-lg"></i></span>
+                <span class="role-name">Todas</span>
+              </label>
+              {% for m in acesso_secao.modalidades %}
+              <label class="role-pill" data-role-pill>
+                <input type="checkbox" class="acesso-cb acesso-mod" name="acesso_modalidades" value="{{ m.id }}" {% if m.id in ac.modalidades %}checked{% endif %}>
+                <span class="check-ic"><i class="bi bi-check-lg"></i></span>
+                <span class="role-name">{{ m.nome }}</span>
+              </label>
+              {% endfor %}
+            </div>
+            <small class="text-muted">Com modalidades marcadas, o usuário só vê essas — uma por vez no seletor do topo.</small>
+            {% endif %}
+          </div>
+        </div>
+        <script>
+        (function () {
+          var pr = document.getElementById('acessoPrincipal');
+          var bloco = document.getElementById('acessoRestricoes');
+          var todas = document.getElementById('acessoTodas');
+          var mods = document.querySelectorAll('.acesso-mod');
+          function principal() {
+            // Principal vê tudo: as restrições não se aplicam.
+            if (!pr || !bloco) return;
+            bloco.style.opacity = pr.checked ? .45 : 1;
+            bloco.querySelectorAll('input').forEach(function (i) { i.disabled = pr.checked; });
+            var aviso = document.getElementById('acessoAvisoPrincipal');
+            if (aviso) aviso.hidden = !pr.checked;
+          }
+          function sincTodas(ev) {
+            if (!todas) return;
+            var algum = Array.prototype.some.call(mods, function (m) { return m.checked; });
+            if (ev && ev.target === todas && todas.checked) mods.forEach(function (m) { m.checked = false; });
+            else todas.checked = !algum;
+            // As pílulas mostram o estado pela classe `checked`: avisa a mudança.
+            [todas].concat(Array.prototype.slice.call(mods)).forEach(function (c) {
+              var pill = c.closest('.role-pill'); if (pill) pill.classList.toggle('checked', c.checked);
+            });
+          }
+          if (pr) pr.addEventListener('change', principal);
+          if (todas) todas.addEventListener('change', sincTodas);
+          mods.forEach(function (m) { m.addEventListener('change', sincTodas); });
+          principal();
+        })();
+        </script>
+        {% endif %}
+
+
         <!-- ROLES -->
         <div class="section-card">
-          <div class="section-title"><i class="bi bi-people"></i> Níveis de acesso (Roles)</div>
-          <div class="section-help">Selecione os papéis que o usuário deve ter.</div>
+          <div class="section-title"><i class="bi bi-people"></i> Níveis de acesso (Roles){% if academia_papeis_nome %} em {{ academia_papeis_nome }}{% endif %}</div>
+          <div class="section-help">
+            {% if academia_papeis_nome %}
+            Os papéis marcados valem <strong>só nesta academia</strong> — numa outra academia a mesma pessoa pode ser, por exemplo, aluno.
+            {% else %}
+            Selecione os papéis que o usuário deve ter.
+            {% endif %}
+          </div>
           <div class="role-grid">
             {% for role in roles %}
             <label class="role-pill" data-role-pill>
@@ -448,7 +401,7 @@
           <div id="blocoAluno" class="conditional-block" style="display:none;">
             <div class="block-title"><i class="bi bi-mortarboard-fill"></i> Vínculo com aluno</div>
             <label for="aluno_id" class="form-label">Qual aluno é este usuário?</label>
-            <select class="form-select" id="aluno_id" name="aluno_id">
+            <select class="u-campo__controle" id="aluno_id" name="aluno_id">
               <option value="">— Selecione o aluno —</option>
               {% for a in alunos_para_aluno %}
               <option value="{{ a.id }}" {% if a.id == aluno_vinculado_id %}selected{% endif %}>{{ a.nome }}</option>
@@ -465,7 +418,7 @@
               <div class="picker-input-wrap">
                 <i class="bi bi-search"></i>
                 <input type="text" class="picker-input" id="alunoRespBusca"
-                       placeholder="Digite para buscar alunos…" autocomplete="off">
+                       placeholder="Digite para buscar alunos…" autocomplete="off" aria-label="Digite para buscar alunos…">
               </div>
               <div class="picker-suggestions" id="alunoRespSuggestions" role="listbox"></div>
 
@@ -513,14 +466,12 @@
         <div class="section-card">
           <div class="section-title"><i class="bi bi-building"></i> Academias vinculadas</div>
           {% if academias_bloqueadas %}
-          <div class="alert alert-secondary small py-2 mb-3">
-            <i class="bi bi-lock-fill me-1"></i> No modo academia não é possível alterar academias vinculadas.
-          </div>
+          <div class="section-help"><i class="bi bi-lock" aria-hidden="true"></i> No modo academia as academias vinculadas só podem ser vistas — a associação altera.</div>
           {% else %}
           <div class="section-help">Marque as academias às quais o usuário tem acesso.</div>
           {% endif %}
           <div class="acad-grid">
-            {% for ac in academias_disponiveis %}
+            {% for ac in academias_disponiveis if not academias_bloqueadas or ac.id in (academias_vinculadas_ids or []) %}
             <label class="acad-pill {% if academias_bloqueadas %}disabled{% endif %}" data-acad-pill>
               <input type="checkbox" name="academias" id="academia_{{ ac.id }}" value="{{ ac.id }}"
                      {% if ac.id in (academias_vinculadas_ids or []) %}checked{% endif %}
@@ -534,16 +485,13 @@
         </div>
         {% endif %}
 
-        <div class="form-actions">
-          {% set back_url = back_url or get_back_url_default() %}
-          <a href="{{ url_voltar(back_url) }}" class="sh__btn">Cancelar</a>
-          <button type="submit" class="sh__btn sh__btn--forte">
-            <i class="bi bi-save"></i> Salvar alterações
-          </button>
-        </div>
-      </div>
     </div>
 
+    <div class="ue-rodape">
+      {% set back_url = back_url or get_back_url_default() %}
+      <a href="{{ url_voltar(back_url) }}" class="sh__btn">Cancelar</a>
+      <button type="submit" class="sh__btn sh__btn--forte"><i class="bi bi-check-lg"></i> Salvar<span class="ue-longo"> alterações</span></button>
+    </div>
   </form>
 </div>
 
@@ -553,13 +501,13 @@
     <video id="cameraVideoUsuario" autoplay playsinline></video>
     <canvas id="cameraCanvasUsuario" style="display:none;"></canvas>
     <div>
-      <button type="button" class="btn btn-success btn-sm" id="btnCapturarUsuario">Capturar</button>
-      <button type="button" class="btn btn-primary btn-sm" id="btnConfirmarFotoUsuario" style="display:none;">Confirmar</button>
-      <button type="button" class="btn btn-warning btn-sm" style="display:none;" id="btnTirarNovamenteUsuario">Refazer</button>
-      <button type="button" class="btn btn-info btn-sm text-white" id="btnTrocarCameraUsuario" style="display:none;">
+      <button type="button" class="u-btn u-btn--ok u-btn--pequeno" id="btnCapturarUsuario">Capturar</button>
+      <button type="button" class="u-btn u-btn--primario u-btn--pequeno" id="btnConfirmarFotoUsuario" style="display:none;">Confirmar</button>
+      <button type="button" class="u-btn u-btn--alerta u-btn--pequeno" style="display:none;" id="btnTirarNovamenteUsuario">Refazer</button>
+      <button type="button" class="u-btn u-btn--pequeno text-white" id="btnTrocarCameraUsuario" style="display:none;">
         <span id="btnTrocarCameraTextUsuario">Trocar Câmera</span>
       </button>
-      <button type="button" class="btn btn-danger btn-sm" id="btnFecharCameraUsuario">Fechar</button>
+      <button type="button" class="u-btn u-btn--perigo u-btn--pequeno" id="btnFecharCameraUsuario">Fechar</button>
     </div>
   </div>
 </div>

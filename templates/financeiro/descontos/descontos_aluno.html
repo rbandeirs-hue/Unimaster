@@ -1,20 +1,17 @@
 {% extends "base_app.html" %}
 {% block title %}Descontos - {{ aluno.nome }}{% endblock %}
+{% set back_url = url_for('financeiro.lista_descontos', academia_id=academia_id) if academia_id else url_for('financeiro.lista_descontos') %}
+{% block pagina_titulo %}{{ aluno.nome }}{% endblock %}
+{% block pagina_subtitulo %}Descontos vinculados (aplicados normalmente nas mensalidades){% endblock %}
+{% block pagina_acoes %}
+<a href="{{ url_voltar(back_url) }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Voltar</a>
+{% endblock %}
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/financeiro/responsive.css') }}?v=1">
 {% endblock %}
 
 {% block content %}
 <div class="container-fluid mt-4 descontos-aluno-page">
-    <div class="d-flex justify-content-between align-items-center mb-4 financeiro-header flex-wrap gap-2">
-        <div>
-            {% set back_url = url_for('financeiro.lista_descontos', academia_id=academia_id) if academia_id else url_for('financeiro.lista_descontos') %}
-            {% include 'components/botao_voltar.html' %}
-            <h2 class="h4 fw-bold text-dark mb-1">{{ aluno.nome }}</h2>
-            <p class="text-muted small mb-0">Descontos vinculados (aplicados normalmente nas mensalidades)</p>
-        </div>
-    </div>
-
     <!-- Vincular novo desconto -->
     <div class="card shadow-sm mb-4">
         <div class="card-header bg-light">
@@ -25,7 +22,7 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="col-12 col-md-4">
                     <label class="form-label small">Desconto</label>
-                    <select name="desconto_id" class="form-select" required>
+                    <select name="desconto_id" class="u-campo__controle" required aria-label="Desconto">
                         <option value="">Selecione...</option>
                         {% for d in descontos_disponiveis %}
                         <option value="{{ d.id }}">{{ d.nome }} — {% if d.tipo == 'percentual' %}{{ "%.0f"|format(d.valor|float) }}%{% else %}R$ {{ "%.2f"|format(d.valor|float) }}{% endif %}</option>
@@ -34,21 +31,21 @@
                 </div>
                 <div class="col-6 col-md-2">
                     <label class="form-label small">Início</label>
-                    <input type="date" name="data_inicio" class="form-control">
+                    <input type="date" name="data_inicio" class="u-campo__controle" aria-label="Início">
                 </div>
                 <div class="col-6 col-md-2">
                     <label class="form-label small">Fim</label>
-                    <input type="date" name="data_fim" class="form-control">
+                    <input type="date" name="data_fim" class="u-campo__controle" aria-label="Fim">
                 </div>
                 <div class="col-12 col-md-2">
                     <label class="form-label small">Tipo vigência</label>
-                    <select name="tipo_vigencia" class="form-select">
+                    <select name="tipo_vigencia" class="u-campo__controle" aria-label="Tipo vigência">
                         <option value="parcial">Parcial</option>
                         <option value="integral">Integral</option>
                     </select>
                 </div>
                 <div class="col-12 col-md-2">
-                    <button type="submit" class="btn btn-primary w-100">Vincular</button>
+                    <button type="submit" class="u-btn u-btn--primario w-100">Vincular</button>
                 </div>
             </form>
         </div>
@@ -87,9 +84,9 @@
                             {{ v.data_inicio|data_br or '-' }} até {{ v.data_fim|data_br or '-' }}
                         </p>
                         {% if v.ativo %}
-                        <form method="POST" action="{{ url_for('financeiro.remover_desconto_aluno', aluno_id=aluno.id, desconto_id=v.desconto_id) }}" class="d-inline" onsubmit="return confirm('Remover este desconto do aluno?');">
+                        <form method="POST" action="{{ url_for('financeiro.remover_desconto_aluno', aluno_id=aluno.id, desconto_id=v.desconto_id) }}" class="d-inline" data-confirmar="Remover este desconto do aluno?">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <button type="submit" class="btn btn-sm btn-outline-danger">Remover</button>
+                            <button type="submit" class="u-btn u-btn--pequeno">Remover</button>
                         </form>
                         {% endif %}
                     </div>
@@ -141,9 +138,9 @@
                             </td>
                             <td class="text-end">
                                 {% if v.ativo %}
-                                <form method="POST" action="{{ url_for('financeiro.remover_desconto_aluno', aluno_id=aluno.id, desconto_id=v.desconto_id) }}" class="d-inline" onsubmit="return confirm('Remover este desconto do aluno?');">
+                                <form method="POST" action="{{ url_for('financeiro.remover_desconto_aluno', aluno_id=aluno.id, desconto_id=v.desconto_id) }}" class="d-inline" data-confirmar="Remover este desconto do aluno?">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                    <button type="submit" class="btn btn-sm btn-outline-danger">Remover</button>
+                                    <button type="submit" class="u-btn u-btn--pequeno">Remover</button>
                                 </form>
                                 {% endif %}
                             </td>

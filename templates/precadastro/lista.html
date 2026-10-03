@@ -57,7 +57,31 @@
     color: var(--sh-ink-soft);
     word-break: break-all;
   }
-  .pre-link__acoes { display: flex; gap: .5rem; flex: none; }
+  .pre-link__acoes { display: flex; gap: .5rem; flex: none; flex-wrap: wrap; }
+  /* No celular os botões descem para a linha de baixo, na largura toda —
+     com flex:none eles ficavam do lado e o "Abrir" era cortado pelo quadro. */
+  @media (max-width: 767.98px) {
+    .pre-link { flex-wrap: wrap; }
+    .pre-link__acoes { flex: 1 1 100%; }
+    .pre-link__acoes .sh__btn { flex: 1 1 auto; justify-content: center; }
+  }
+
+  /* O verde só no ícone: o botão continua igual aos vizinhos, mas se acha
+     de relance quando se procura "mandar no WhatsApp". */
+  .sh__btn--wpp i { color: #25d366; }
+
+  .pre-wpp-previa {
+    white-space: pre-wrap;
+    background: #fdfcfa;
+    border: 1px solid var(--sh-line);
+    border-radius: 10px;
+    padding: .7rem .85rem;
+    font-size: .85rem;
+    color: var(--sh-ink-soft);
+    word-break: break-word;
+  }
+  .pre-wpp-erro { color: #b42318; }
+  .pre-wpp-ok { color: #15803d; }
 
   .pre-rodape-links {
     display: flex;
@@ -82,23 +106,40 @@
     <span class="lst-quadro__meta">Compartilhe por WhatsApp, bio ou anúncio</span>
   </header>
 
-  {% for nome, desc, url in [
-      ('Página da academia', 'modalidades, horários, localização e botões de matrícula', link_landing),
-      ('Pré-cadastro', 'formulário curto de interesse', link_publico),
-      ('Aula experimental', 'agendamento de aula avulsa', link_aula_experimental),
-      ('Matrícula', 'o aluno preenche os dados e recebe a cobrança', link_matricula)
+  {% if modalidades_academia|length > 1 %}
+  {# Link de uma modalidade: o formulário abre com ela marcada e só mostra as
+     turmas e faixas dela. "Todas" deixa o interessado escolher. #}
+  <div class="pre-link" style="gap:.75rem">
+    <label class="lst-campo lst-campo--curto" style="flex:none">
+      <span class="lst-campo__rotulo">Modalidade dos links</span>
+      <select id="preLinkModalidade">
+        <option value="">Todas — o interessado escolhe</option>
+        {% for m in modalidades_academia %}<option value="{{ m.id }}">{{ m.nome }}</option>{% endfor %}
+      </select>
+    </label>
+  </div>
+  {% endif %}
+  {# Sem "Página da academia": o link não é mais oferecido em tela nenhuma. #}
+  {% for nome, desc, url, tipo in [
+      ('Pré-cadastro', 'formulário curto de interesse', link_publico, 'precadastro'),
+      ('Aula experimental', 'agendamento de aula avulsa', link_aula_experimental, 'aula_experimental'),
+      ('Matrícula', 'o aluno preenche os dados e recebe a cobrança', link_matricula, 'matricula')
     ] %}
   <div class="pre-link">
     <div style="min-width:0; flex:1 1 320px">
       <span class="pre-link__nome">{{ nome }}</span>
       <span class="pre-link__desc"> {{ desc }}</span>
-      <div class="pre-link__url">{{ url }}</div>
+      <div class="pre-link__url" data-url-base="{{ url }}">{{ url }}</div>
     </div>
     <div class="pre-link__acoes">
-      <button type="button" class="sh__btn js-copiar" data-url="{{ url }}">
+      <button type="button" class="sh__btn sh__btn--wpp js-wpp" data-url-base="{{ url }}"
+              data-tipo="{{ tipo }}" data-nome="{{ nome }}" data-url="{{ url }}">
+        <i class="bi bi-whatsapp"></i> WhatsApp
+      </button>
+      <button type="button" class="sh__btn js-copiar" data-url-base="{{ url }}" data-url="{{ url }}">
         <i class="bi bi-clipboard"></i> Copiar
       </button>
-      <a class="sh__btn" href="{{ url }}" target="_blank" rel="noopener">
+      <a class="sh__btn" href="{{ url }}" data-url-base="{{ url }}" target="_blank" rel="noopener">
         <i class="bi bi-box-arrow-up-right"></i> Abrir
       </a>
     </div>
@@ -179,6 +220,15 @@
       <option value="matricula" {% if origem_filtro == 'matricula' %}selected{% endif %}>Matrícula</option>
     </select>
   </label>
+  {% if modalidades_academia|length > 1 %}
+  <label class="lst-campo lst-campo--curto">
+    <span class="lst-campo__rotulo">Modalidade</span>
+    <select name="modalidade">
+      <option value="">Todas</option>
+      {% for m in modalidades_academia %}<option value="{{ m.id }}" {% if modalidade_filtro == m.id %}selected{% endif %}>{{ m.nome }}</option>{% endfor %}
+    </select>
+  </label>
+  {% endif %}
   <div class="lst-filtros__acoes">
     <button type="submit" class="sh__btn sh__btn--forte">Filtrar</button>
     {% if filtrado %}
@@ -224,6 +274,8 @@
             <span class="lst-nome">{{ p.nome }}</span>
             <span class="lst-sub">
               {{ rotulo_origem }}
+              {%- for m in p.modalidades %} · <span class="lst-tag" style="border-color:{{ m.cor or '#d9d8d4' }}">{{ m.nome }}</span>{% endfor %}
+              {%- if p.turma_nome %} · {{ p.turma_nome }}{% endif %}
               {%- if p.origem == 'matricula' %}
               {# Quem já pagou a matrícula: é o que decide se dá para promover. #}
               {%- if p.matricula_status == 'pago' %}
@@ -296,10 +348,10 @@
     <span class="lst-quadro__meta">Página {{ pagina_atual }} de {{ total_paginas }}</span>
     <div style="display:flex; gap:.5rem">
       {% if pagina_atual > 1 %}
-      <a class="sh__btn" href="{{ url_for('precadastro.lista', academia_id=academia_id, busca=busca, origem=origem_filtro, page=pagina_atual-1) }}">Anterior</a>
+      <a class="sh__btn" href="{{ url_for('precadastro.lista', academia_id=academia_id, busca=busca, origem=origem_filtro, modalidade=modalidade_filtro, page=pagina_atual-1) }}">Anterior</a>
       {% endif %}
       {% if pagina_atual < total_paginas %}
-      <a class="sh__btn" href="{{ url_for('precadastro.lista', academia_id=academia_id, busca=busca, origem=origem_filtro, page=pagina_atual+1) }}">Próxima</a>
+      <a class="sh__btn" href="{{ url_for('precadastro.lista', academia_id=academia_id, busca=busca, origem=origem_filtro, modalidade=modalidade_filtro, page=pagina_atual+1) }}">Próxima</a>
       {% endif %}
     </div>
   </div>
@@ -311,6 +363,35 @@
 </footer>
 
 {% include 'components/_modal.html' %}
+<div class="um-modal" id="modalWpp" onclick="umFechar(event,'modalWpp')">
+  <div class="um-modal-cx" style="width:440px" onclick="event.stopPropagation()">
+    <div class="um-modal-h">
+      <div>
+        <div class="um-modal-t">Enviar por WhatsApp</div>
+        <div class="um-modal-s" id="wppSub"></div>
+      </div>
+      <button type="button" class="um-x" onclick="umFecharId('modalWpp')" aria-label="Fechar">
+        <i class="bi bi-x-lg"></i>
+      </button>
+    </div>
+    <div class="um-modal-b">
+      <label class="lst-campo" style="flex:none">
+        <span class="lst-campo__rotulo">Número com DDD</span>
+        <input type="tel" id="wppTel" inputmode="numeric" placeholder="(81) 99999-9999"
+               autocomplete="off" maxlength="20">
+      </label>
+      <div class="pre-wpp-previa" id="wppPrevia"></div>
+      <div class="lst-quadro__meta" id="wppMsg"></div>
+    </div>
+    <div class="um-modal-f">
+      <button type="button" class="sh__btn" onclick="umFecharId('modalWpp')">Cancelar</button>
+      <button type="button" class="sh__btn sh__btn--forte" id="wppEnviar">
+        <i class="bi bi-send"></i> Enviar link
+      </button>
+    </div>
+  </div>
+</div>
+
 {# Uma caixa só para as duas telas de matrícula: o conteúdo vem por fetch da
    própria rota. Guardar 15 modais prontos na página carregaria um QR Code
    base64 por linha — pesado e quase sempre inútil. #}
@@ -356,9 +437,112 @@ document.querySelectorAll('.js-copiar').forEach(function (botao) {
   });
 });
 
+// ------------------------------------------- links por modalidade
+(function () {
+  var sel = document.getElementById('preLinkModalidade');
+  if (!sel) return;
+  sel.addEventListener('change', function () {
+    document.querySelectorAll('[data-url-base]').forEach(function (el) {
+      var u = el.getAttribute('data-url-base') + (sel.value ? '?modalidade=' + sel.value : '');
+      if (el.tagName === 'A') el.href = u;
+      else if (el.classList.contains('pre-link__url')) el.textContent = u;
+      else el.setAttribute('data-url', u);
+    });
+  });
+})();
+
+// ------------------------------------------- enviar link por WhatsApp
+// A mensagem sai pelo WhatsApp conectado da academia. Se o serviço estiver
+// fora, a resposta traz um link wa.me e a caixa passa a oferecer o envio
+// manual — quem está atendendo não fica sem saída.
+(function () {
+  var modal = document.getElementById('modalWpp');
+  if (!modal) return;
+  var campoTel = document.getElementById('wppTel');
+  var previa = document.getElementById('wppPrevia');
+  var aviso = document.getElementById('wppMsg');
+  var btnEnviar = document.getElementById('wppEnviar');
+  var tipoAtual = '';
+  var ENVIAR_URL = "{{ url_for('precadastro.enviar_link_whatsapp', academia_id=academia_id) }}";
+  var CSRF = "{{ csrf_token() }}";
+
+  // (81) 99999-9999 enquanto digita; o envio manda só os dígitos.
+  function mascara(v) {
+    var d = (v || '').replace(/\D/g, '').slice(0, 11);
+    if (d.length <= 2) return d;
+    if (d.length <= 6) return '(' + d.slice(0, 2) + ') ' + d.slice(2);
+    if (d.length <= 10) return '(' + d.slice(0, 2) + ') ' + d.slice(2, 6) + '-' + d.slice(6);
+    return '(' + d.slice(0, 2) + ') ' + d.slice(2, 7) + '-' + d.slice(7);
+  }
+  campoTel.addEventListener('input', function () { campoTel.value = mascara(campoTel.value); });
+
+  document.querySelectorAll('.js-wpp').forEach(function (botao) {
+    botao.addEventListener('click', function () {
+      tipoAtual = botao.dataset.tipo || '';
+      document.getElementById('wppSub').textContent = 'Link de ' + (botao.dataset.nome || '').toLowerCase();
+      // Só o endereço: o texto que embrulha o link é montado no servidor,
+      // e repeti-lo aqui só criaria duas versões para sair do lugar.
+      previa.textContent = 'A mensagem leva este link:\n' + (botao.dataset.url || '');
+      aviso.textContent = '';
+      campoTel.value = '';
+      umAbrir('modalWpp');
+      setTimeout(function () { campoTel.focus(); }, 80);
+    });
+  });
+
+  function enviar() {
+    var tel = campoTel.value.replace(/\D/g, '');
+    if (tel.length < 10) {
+      aviso.innerHTML = '<span class="pre-wpp-erro">Informe o número com DDD.</span>';
+      return;
+    }
+    var original = btnEnviar.innerHTML;
+    btnEnviar.disabled = true;
+    btnEnviar.innerHTML = '<i class="bi bi-hourglass-split"></i> Enviando…';
+    aviso.textContent = '';
+    var dados = new FormData();
+    dados.append('telefone', tel);
+    dados.append('tipo', tipoAtual);
+    var selMod = document.getElementById('preLinkModalidade');
+    if (selMod && selMod.value) dados.append('modalidade', selMod.value);
+    fetch(ENVIAR_URL, {
+      method: 'POST', body: dados, credentials: 'same-origin',
+      headers: { 'X-CSRFToken': CSRF }
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (d && d.ok) {
+          aviso.innerHTML = '<span class="pre-wpp-ok"><i class="bi bi-check-circle"></i> Link enviado para '
+            + campoTel.value + '.</span>';
+          campoTel.value = '';
+          return;
+        }
+        var texto = '<span class="pre-wpp-erro"><i class="bi bi-x-circle"></i> '
+          + ((d && d.erro) || 'Não foi possível enviar.') + '</span>';
+        if (d && d.wa) {
+          texto += ' <a href="' + d.wa + '" target="_blank" rel="noopener">Abrir no WhatsApp e enviar à mão</a>.';
+        }
+        aviso.innerHTML = texto;
+      })
+      .catch(function () {
+        aviso.innerHTML = '<span class="pre-wpp-erro">Erro de rede. Tente de novo.</span>';
+      })
+      .finally(function () {
+        btnEnviar.disabled = false;
+        btnEnviar.innerHTML = original;
+      });
+  }
+
+  btnEnviar.addEventListener('click', enviar);
+  campoTel.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); enviar(); }
+  });
+})();
+
 document.querySelectorAll('.js-excluir-precad').forEach(function (form) {
   form.addEventListener('submit', function (e) {
-    if (!confirm('Excluir o pré-cadastro de ' + (form.dataset.nome || 'este interessado') + '?')) e.preventDefault();
+    Dialogo.confirmarEvento(e, 'Excluir o pré-cadastro de ' + (form.dataset.nome || 'este interessado') + '?',
+                            { confirmar: 'Excluir' });
   });
 });
 

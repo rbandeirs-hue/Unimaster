@@ -1,0 +1,281 @@
+{% extends "base_app.html" %}
+{% block conteudo_classe %}exf-tela{% endblock %}
+{% from 'exame_faixa/_macros.html' import obi, promo, pill with context %}
+{% set menu_ativo = 'exame_faixa' %}
+{% set STATUS = {'apto': ('Apto', 'success'), 'aguardando': ('Aguardando', 'warning'), 'verificar': ('Verificar cadastro', 'info'), 'fora_idade': ('Fora da faixa etária', 'danger')} %}
+{% set base = {'academia_id': esc.academia_id} if esc.academia_id else {} %}
+{% set avaliados = resumo.aprovados + resumo.reprovados %}
+{% set ausentes = resumo.inscritos - avaliados - resumo.pendentes %}
+{% block title %}Banca — {{ ev.nome }}{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{{ asset('css/exame_faixa.css') }}">{% endblock %}
+
+{% block pagina_titulo %}{{ ev.nome }}{% endblock %}
+{% block pagina_subtitulo %}{{ 'Exame da academia ' ~ dono if dono else 'Exame da associação' }}{% if data_exame %} · prova em {{ data_exame|data_br }}{% if hora_prova %} às {{ hora_prova }}{% endif %}{% endif %}{% if ev.data_fim %} · inscrições até {{ ev.data_fim|data_br }}{% endif %} · pagamento até {{ prazo|data_br }}{% endblock %}
+{% block pagina_acoes %}
+<a href="{{ url_for('exame_faixa.exames', **base) }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Exames</a>
+{% if pode_editar %}<a href="{{ url_for('exame_faixa.editar_exame', evento_id=ev.id) }}" class="sh__btn"><i class="bi bi-pencil"></i> Editar exame</a>{% endif %}
+<button type="button" class="sh__btn" onclick="window.print()"><i class="bi bi-printer"></i> Imprimir lista</button>
+{% if fila %}
+<a href="{{ url_for('exame_faixa.avaliar', evento_id=ev.id, inscricao_id=fila[0].inscricao_id, **base) }}" class="sh__btn sh__btn--forte">
+  Chamar próximo: <span class="sh__btn__nome">{{ fila[0].nome }}</span> <i class="bi bi-chevron-right"></i></a>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+{% set seletor_academia = true %}
+{% include 'exame_faixa/_abas.html' %}
+
+{# -------------------------------------------------------- progresso da banca #}
+{% if resumo.inscritos %}
+<section class="exf-progresso">
+  <div class="exf-progresso__topo">
+    <strong>{{ avaliados }} de {{ resumo.inscritos }} avaliado{{ 's' if resumo.inscritos != 1 }}</strong>
+    <span class="u-muted u-fs-sm">Nota de corte 6,0 · média ponderada das partes</span>
+  </div>
+  <div class="exf-progresso__barra" role="img" aria-label="{{ resumo.aprovados }} aprovados, {{ resumo.reprovados }} não aprovados, {{ resumo.pendentes }} aguardando prova">
+    {% if resumo.aprovados %}<span class="is-ok" style="width:{{ resumo.aprovados * 100 / resumo.inscritos }}%"></span>{% endif %}
+    {% if resumo.reprovados %}<span class="is-nao" style="width:{{ resumo.reprovados * 100 / resumo.inscritos }}%"></span>{% endif %}
+    {% if ausentes > 0 %}<span class="is-ausente" style="width:{{ ausentes * 100 / resumo.inscritos }}%"></span>{% endif %}
+  </div>
+  <ul class="exf-legenda">
+    <li><i class="is-ok"></i>{{ resumo.aprovados }} aprovado{{ 's' if resumo.aprovados != 1 }}</li>
+    <li><i class="is-nao"></i>{{ resumo.reprovados }} não aprovado{{ 's' if resumo.reprovados != 1 }}</li>
+    <li><i></i>{{ resumo.pendentes }} aguardando prova</li>
+    {% if ausentes > 0 %}<li><i class="is-ausente"></i>{{ ausentes }} ausente{{ 's' if ausentes != 1 }}</li>{% endif %}
+    <li class="exf-legenda__fim">Faturas: <strong>{{ resumo.pagos }} paga{{ 's' if resumo.pagos != 1 }}</strong> de {{ resumo.inscritos }}{% if resumo.bloqueados %} · <strong class="exf-alerta">{{ resumo.bloqueados }} com a prova travada pelo pagamento</strong>{% endif %}</li>
+  </ul>
+</section>
+{% endif %}
+
+<div class="exf-banca">
+  {# ------------------------------------------------------- fila por promoção #}
+  <div class="exf-banca__principal">
+    {% for gr in grupos %}
+    <section class="lst-quadro exf-grupo-banca">
+      <header class="lst-quadro__topo">
+        <h2 class="lst-quadro__titulo">{{ promo(gr.promocao) }}</h2>
+        <span class="lst-quadro__meta">{{ gr.inscritos|length }} candidato{{ 's' if gr.inscritos|length != 1 }} · {{ gr.promocao.valor_fmt }}</span>
+      </header>
+      <div class="lst-rolagem">
+        <div class="lst-largura" style="--lst-min:420px">
+          <div class="lst-linha lin-banca lst-cab">
+            <div>Aluno</div>
+            <div class="col-academia">Academia</div>
+            <div class="col-idade lst-num">Idade</div>
+            <div class="col-pag">Pagamento</div>
+            <div>Resultado</div>
+            <div class="lst-fim exf-nao-imprime">Ações</div>
+          </div>
+          {% for r in gr.inscritos %}
+          {% set pendente = (r.resultado or 'pendente') == 'pendente' %}
+          <div class="lst-linha lin-banca lst-item{{ ' is-proximo' if fila and r.inscricao_id == fila[0].inscricao_id }}">
+            <div class="lst-corta">
+              <a class="lst-nome" href="{{ url_for('exame_faixa.historico_aluno', aluno_id=r.aluno_id, **base) }}" title="Histórico de exames">{{ r.nome }}</a>
+              {% if r.exame.escolha_professor %}<span class="lst-sub"><span class="exf-tag-escolha">escolha do professor</span> {{ r.exame.de }} → {{ r.exame.para }}{% if r.pela_regra and r.pela_regra != r.exame.para %} · pela regra: {{ r.pela_regra }}{% endif %}</span>
+              {% elif r.exame.salto %}<span class="lst-sub">Salto: {{ r.exame.de }} → {{ r.exame.para }} · {{ r.exame.salto }}</span>{% endif %}
+              {% if r.exame.pendencias %}<span class="lst-sub">{{ r.exame.pendencias|join(' · ') }}</span>{% endif %}
+              {% if r.exame.avisos %}<span class="lst-sub">{{ r.exame.avisos|join(' · ') }}</span>{% endif %}
+            </div>
+            <div class="col-academia lst-corta">{{ r.academia_nome }}</div>
+            <div class="col-idade lst-num">{{ r.exame.idade_no_exame if r.exame.idade_no_exame is not none else '—' }}</div>
+            <div class="col-pag">{% if r.pagamento %}{{ pill(r.pagamento.rotulo, r.pagamento.cor) }}{% else %}<span class="lst-sub">sem fatura</span>{% endif %}
+              {% if r.exame.liberado_por and r.pagamento and r.pagamento.status != 'pago' %}<span class="lst-sub">prova liberada</span>{% endif %}
+              {% if r.exame.presente and pendente %}<span class="lst-sub exf-presente"><i class="bi bi-check2"></i> presente</span>{% endif %}</div>
+            <div class="exf-resultado">
+              <span class="exf-resultado__nota">{{ r.media_geral|nota_br if r.media_geral is not none else '—' }}</span>
+              <span>{{ pill(r.resultado_rotulo, r.resultado_cor) }}
+                {% if r.aluno_graduacao_id %}<span class="lst-sub">faixa registrada</span>{% endif %}</span>
+            </div>
+            <div class="lst-fim lst-acoes exf-nao-imprime">
+              {% if r.bloqueio and pendente %}
+              <form method="POST" action="{{ url_for('exame_faixa.liberar_prova', evento_id=ev.id, inscricao_id=r.inscricao_id) }}"
+                    data-confirmar="{{ r.nome }} está com a fatura do exame em aberto. Liberar a prova mesmo assim?" data-confirmar-tom="aviso" data-confirmar-acao="Liberar">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="voltar" value="{{ request.full_path }}">
+                <button type="submit" class="sh__btn" title="{{ r.bloqueio }}"><i class="bi bi-unlock"></i> Liberar prova</button>
+              </form>
+              {% else %}
+              <a href="{{ url_for('exame_faixa.avaliar', evento_id=ev.id, inscricao_id=r.inscricao_id, **base) }}"
+                 class="sh__btn{% if pendente %} sh__btn--forte{% endif %}">
+                {{ 'Aplicar prova' if not r.avaliacao_id else ('Lançar notas' if pendente else 'Ver ficha') }}</a>
+              {% endif %}
+              {% if pendente and r.indice_natural is not none and not r.media_geral %}
+              <button type="button" class="lst-acao" data-exf-destino
+                      data-url="{{ url_for('exame_faixa.definir_destino', aluno_id=r.aluno_id) }}" data-nome="{{ r.nome }}"
+                      data-natural="{{ r.indice_natural }}" data-regra="{{ r.pela_regra or '' }}"
+                      data-atual="{{ r.promocao.id if r.exame.escolha_professor and r.promocao else '' }}" data-motivo="{{ r.destino_motivo or '' }}"
+                      title="Trocar a faixa do exame" aria-label="Trocar a faixa do exame de {{ r.nome }}"><i class="bi bi-pencil-square"></i></button>
+              {% endif %}
+              {% if not r.aluno_graduacao_id %}
+              <form method="POST" action="{{ url_for('exame_faixa.cancelar_inscricao', evento_id=ev.id, inscricao_id=r.inscricao_id) }}"
+                    data-confirmar="Cancelar a inscrição de {{ r.nome }}? A fatura em aberto é cancelada e a ficha, se houver, é apagada." data-confirmar-tom="perigo" data-confirmar-acao="Cancelar inscrição">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="voltar" value="{{ request.full_path }}">
+                <button type="submit" class="lst-acao" title="Cancelar inscrição" aria-label="Cancelar inscrição de {{ r.nome }}"><i class="bi bi-x-lg"></i></button>
+              </form>
+              {% endif %}
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </section>
+    {% else %}
+    <div class="lst-quadro mb-3"><div class="lst-vazio">
+      Nenhum inscrito{% if esc.academia_id and not esc.ve_todas %} desta academia{% endif %} ainda.
+      Os alunos se inscrevem em <em>Eventos disponíveis</em>; a academia também pode incluí-los pela lista de aptos ou abaixo.
+    </div></div>
+    {% endfor %}
+
+    {% if sem_promocao %}
+    <p class="u-muted u-fs-sm">{{ sem_promocao|length }} inscrito(s) com faixa fora do programa: {{ sem_promocao|map(attribute='nome')|join(', ') }}.</p>
+    {% endif %}
+
+    {# ----------------------------------------------------- incluir alunos #}
+    {% if esc.academia_id %}
+    {% set n_aptos = candidatos|selectattr('sit.status', 'equalto', 'apto')|list|length %}
+    <form method="POST" action="{{ url_for('exame_faixa.incluir', evento_id=ev.id) }}" class="exf-nao-imprime">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="academia_id" value="{{ esc.academia_id }}">
+      <details class="lst-quadro exf-incluir" {% if not grupos %}open{% endif %}>
+        <summary class="lst-quadro__topo">
+          <h2 class="lst-quadro__titulo">Incluir alunos da academia</h2>
+          <span class="lst-quadro__meta">{% if candidatos %}{{ n_aptos }} apto{{ 's' if n_aptos != 1 }} e {{ candidatos|length - n_aptos }} outro{{ 's' if candidatos|length - n_aptos != 1 }} fora deste exame · situação na data da prova{% else %}todos já inscritos{% endif %}</span>
+        </summary>
+        <div class="lst-rolagem">
+          <div class="lst-largura" style="--lst-min:420px">
+            <div class="lst-linha lin-cand lst-cab">
+              <div></div><div>Aluno</div><div class="col-idade lst-num">Idade</div><div class="col-promo">Exame</div><div class="lst-fim">Situação</div>
+            </div>
+            {% for a in candidatos %}
+            <label class="lst-linha lin-cand lst-item" style="cursor:pointer">
+              <div><input type="checkbox" class="form-check-input" name="aluno_id" value="{{ a.id }}" {% if a.sit.status == 'apto' %}checked{% endif %}></div>
+              <div class="lst-corta"><span class="lst-nome">{{ a.nome }}</span>
+                {% if a.sit.pendencias %}<span class="lst-sub">{{ a.sit.pendencias|join(' · ') }}</span>{% endif %}
+                {% if a.sit.atrasos %}<span class="lst-tag lst-tag--alerta">{{ a.sit.atrasos }} mensalidade(s) em atraso</span>{% endif %}</div>
+              <div class="col-idade lst-num">{{ a.sit.idade if a.sit.idade is not none else '—' }}</div>
+              <div class="col-promo lst-corta">{{ promo(a.sit.promocao, false) }}</div>
+              <div class="lst-fim">{{ pill(STATUS[a.sit.status][0], STATUS[a.sit.status][1]) }}</div>
+            </label>
+            {% else %}
+            <div class="lst-vazio">Todos os alunos com exame no programa já estão inscritos.</div>
+            {% endfor %}
+          </div>
+        </div>
+        {% if candidatos %}
+        <div class="exf-incluir__acoes">
+          <button type="submit" class="sh__btn sh__btn--forte"><i class="bi bi-person-plus"></i> Incluir marcados</button>
+          <label class="exf-alternar"><input type="checkbox" class="form-check-input" name="forcar" value="1"> incluir mesmo sem cumprir idade/carência</label>
+          <span class="u-muted u-fs-sm">Cada inclusão gera a fatura do exame com o valor da tabela.</span>
+        </div>
+        {% endif %}
+      </details>
+    </form>
+    {% elif esc.ve_todas %}
+    <p class="u-muted u-fs-sm exf-nao-imprime">Para incluir alunos, escolha a academia no seletor acima.</p>
+    {% endif %}
+  </div>
+
+  {# --------------------------------------------------------- coluna lateral #}
+  <aside class="exf-banca__lado exf-nao-imprime">
+    {% if chamada %}
+    <section class="lst-quadro">
+      <header class="exf-lado__topo">
+        <strong>Dia do exame</strong>
+        <span class="lst-sub">{{ resumo.presentes }} presente{{ 's' if resumo.presentes != 1 }} na chamada · {{ chamada|length }} aguardando prova</span>
+      </header>
+      {% if resumo.sem_sorteio %}
+      <form method="POST" action="{{ url_for('exame_faixa.sortear_todos', evento_id=ev.id) }}" class="exf-lado__rodape"
+            data-confirmar="Sortear agora a prova dos {{ resumo.sem_sorteio }} aluno(s) sem ficha? Usa o padrão: cumulativo, 4 nage-waza, 3 katame-waza, 2 kaeshi, 2 renraku e 3 perguntas." data-confirmar-tom="aviso" data-confirmar-acao="Sortear">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="voltar" value="{{ request.full_path }}">
+        <button type="submit" class="sh__btn w-100 justify-content-center"><i class="bi bi-shuffle"></i> Sortear a prova de todos ({{ resumo.sem_sorteio }})</button>
+      </form>
+      {% endif %}
+      <form method="POST" action="{{ url_for('exame_faixa.presenca', evento_id=ev.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="voltar" value="{{ request.full_path }}">
+        <div class="exf-chamada">
+          {% for r in chamada %}
+          <label class="exf-lado__linha">
+            <input type="checkbox" class="form-check-input" name="presente" value="{{ r.inscricao_id }}" {% if r.exame.presente %}checked{% endif %}>
+            <span class="lst-corta"><span class="lst-nome">{{ r.nome }}</span>
+              <span class="lst-sub">{% if r.promocao %}{{ r.promocao.de }} → {{ r.promocao.para }}{% endif %}{% if r.bloqueio %} · <span class="exf-alerta">fatura em aberto</span>{% endif %}</span></span>
+          </label>
+          {% endfor %}
+        </div>
+        <div class="exf-lado__rodape d-flex flex-column gap-2">
+          <label class="exf-alternar"><input type="checkbox" class="form-check-input" name="ausentes" value="1"> marcar como ausente quem não está marcado</label>
+          <button type="submit" class="sh__btn w-100 justify-content-center"><i class="bi bi-person-check"></i> Salvar chamada</button>
+        </div>
+      </form>
+    </section>
+    {% endif %}
+
+    {% if aprovados %}
+    <form method="POST" action="{{ url_for('exame_faixa.promover') }}"
+          data-confirmar="Registrar a nova faixa dos alunos selecionados? A faixa entra no histórico e no cadastro de cada um."
+          data-confirmar-tom="aviso" data-confirmar-acao="Promover">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="voltar" value="{{ request.full_path }}">
+      <section class="lst-quadro">
+        <header class="exf-lado__topo">
+          <label class="exf-lado__todos">
+            {% if resumo.a_promover %}<input type="checkbox" class="form-check-input" id="exf-todos" aria-label="Selecionar todos" checked>{% endif %}
+            <span><strong>Promover aprovados</strong>
+              <span class="lst-sub">{{ resumo.a_promover }} a promover · a faixa entra no histórico e no cadastro</span></span>
+          </label>
+        </header>
+        {% for r in aprovados %}
+        <label class="exf-lado__linha">
+          {% if not r.aluno_graduacao_id %}<input type="checkbox" class="form-check-input exf-sel" name="avaliacao_id" value="{{ r.avaliacao_id }}" checked>
+          {% else %}<i class="bi bi-check2 exf-lado__feito" aria-hidden="true"></i>{% endif %}
+          <span class="lst-corta">
+            <span class="lst-nome">{{ r.nome }}</span>
+            <span class="lst-sub">{% if r.promocao %}{{ obi(r.promocao.cores_para) }} {{ r.promocao.para }} · {% endif %}média {{ r.media_geral|nota_br }}</span>
+          </span>
+          <span class="exf-lado__st{{ ' is-ok' if r.aluno_graduacao_id }}">{{ 'Registrada' if r.aluno_graduacao_id else 'A promover' }}</span>
+        </label>
+        {% endfor %}
+        {% if resumo.a_promover %}
+        <div class="exf-lado__rodape">
+          <button type="submit" class="sh__btn sh__btn--forte w-100 justify-content-center"><i class="bi bi-award"></i> Promover selecionados</button>
+        </div>
+        {% endif %}
+      </section>
+    </form>
+    {% else %}
+    <section class="lst-quadro exf-lado__vazio">
+      <strong>Promover aprovados</strong>
+      <span class="u-muted u-fs-sm">Quem for aprovado aparece aqui para registrar a nova faixa de uma vez.</span>
+    </section>
+    {% endif %}
+
+    {% if fila|length > 1 %}
+    <section class="lst-quadro exf-lado__fila">
+      <strong>Próximos da fila</strong>
+      <ol>
+        {% for r in fila[1:6] %}
+        <li><a href="{{ url_for('exame_faixa.avaliar', evento_id=ev.id, inscricao_id=r.inscricao_id, **base) }}">{{ r.nome }}</a>
+          {% if r.promocao %}<span class="lst-sub">{{ r.promocao.de }} → {{ r.promocao.para }}</span>{% endif %}</li>
+        {% endfor %}
+      </ol>
+      {% if fila|length > 6 %}<span class="u-muted u-fs-sm">e mais {{ fila|length - 6 }}</span>{% endif %}
+    </section>
+    {% endif %}
+  </aside>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{% include 'exame_faixa/_destino_dialogo.html' %}
+<script>
+(function () {
+  var t = document.getElementById('exf-todos');
+  if (!t) return;
+  t.addEventListener('change', function () {
+    document.querySelectorAll('.exf-sel').forEach(function (c) { c.checked = t.checked; });
+  });
+})();
+</script>
+{% endblock %}

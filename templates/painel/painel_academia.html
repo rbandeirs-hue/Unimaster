@@ -1,5 +1,7 @@
 {% extends "base_academia.html" %}
 {% from 'components/ui.html' import celula %}
+{# Telas da operação do judô. Sem a informação, mostra (mesma regra do menu). #}
+{% set tem_judo = academia_tem_judo if academia_tem_judo is defined else true %}
 {% set menu_ativo = 'gerenciamento' %}
 {% block title %}Gerenciamento — {{ academia.nome if academia else 'Academia' }}{% endblock %}
 
@@ -22,6 +24,9 @@
 {% block content %}
 
 {# ------------------------------------------------- precisa da sua atenção #}
+{# O card "sem telefone do responsável financeiro" existe porque sem esse número
+   não sai cobrança nem lembrete no WhatsApp; ele abre a lista de alunos já
+   recortada em quem está assim. #}
 {% set alertas = [
   {'n': resumo.solicitacoes_pendentes,
    'texto': 'solicitação pendente' if resumo.solicitacoes_pendentes == 1 else 'solicitações pendentes',
@@ -35,7 +40,13 @@
   {'n': resumo.aniversariantes,
    'texto': 'aniversariante no mês' if resumo.aniversariantes == 1 else 'aniversariantes no mês',
    'acao': 'Parabenizar',
-   'href': url_for('aniversariante_live.pagina'), 'urgente': false}
+   'href': url_for('aniversariante_live.pagina'), 'urgente': false},
+  {'n': resumo.sem_tel_resp,
+   'texto': 'aluno sem telefone do responsável financeiro' if resumo.sem_tel_resp == 1
+            else 'alunos sem telefone do responsável financeiro',
+   'acao': 'Ver quem são',
+   'href': url_for('alunos.lista_alunos', academia_id=academia_id,
+                   filtro_ativo='ativo', recorte='sem_tel_resp'), 'urgente': false}
 ] %}
 {% set alertas_ativos = alertas | selectattr('n') | list %}
 
@@ -60,8 +71,6 @@
             'Horários, locais e professores responsáveis.') }}
   {{ celula(url_for('presencas.painel_presenca', academia_id=academia_id), 'bi-check2-square', 'Presenças',
             'Chamada diária e ranking de frequência.') }}
-  {{ celula(url_for('precadastro.lista', academia_id=academia_id), 'bi-person-plus', 'Pré-cadastro',
-            'Pré-cadastros para converter em alunos.') }}
   {{ celula(url_for('academia.lista_visitantes', academia_id=academia_id), 'bi-door-open', 'Visitantes',
             'Aulas experimentais e retorno de contato.') }}
   {{ celula(url_for('aniversariante_live.pagina'), 'bi-balloon', 'Aniversariantes',
@@ -82,16 +91,20 @@
   {{ celula(url_for('financeiro.dashboard', academia_id=academia_id), 'bi-cash-coin', 'Financeiro',
             'Mensalidades, recebimentos e despesas.') }}
   {% endif %}
+  {% if tem_judo %}
   {{ celula(url_for('academia.locais_treino', academia_id=academia_id), 'bi-geo-alt', 'Locais de treino',
             'Escolas e núcleos onde seus alunos treinam.') }}
   {{ celula(url_for('configuracoes.modalidades_lista', academia_id=academia_id), 'bi-diagram-3', 'Modalidades',
             'Modalidades, planos e valores.') }}
+  {% endif %}
   {{ celula(url_for('academia.lista_usuarios', academia_id=academia_id), 'bi-person-gear', 'Usuários',
             'Usuários vinculados à academia e permissões.') }}
   {{ celula(url_for('academia.whatsapp_config', academia_id=academia_id), 'bi-whatsapp', 'WhatsApp',
             'Mensagens e avisos em massa.') }}
+  {% if tem_judo %}
   {{ celula(url_for('zempo.solicitar', academia_id=academia_id), 'bi-person-vcard', 'Cadastro no Zempo',
             'Solicite o cadastro dos alunos na federação.', zempo_prontos) }}
+  {% endif %}
   {{ celula(url_for('academia.configuracoes_academia', academia_id=academia_id), 'bi-gear', 'Configurações',
             'Dados da academia, cobrança e integrações.') }}
 </div>

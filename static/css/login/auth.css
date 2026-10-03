@@ -5,58 +5,84 @@
    cadastrar-cpf. Para não arrastar essas telas junto, esta folha é nova e todo
    seletor vive sob `.auth` — as duas nunca disputam a mesma regra.
 
-   Consome os tokens de base/tokens.css e define os seus próprios só para o que
-   é identidade desta tela (fundo escuro, faixa vermelha, botão preto).
+   O cartão tem duas colunas: a escura conta o que o sistema é, a clara pede
+   os dados. Nada aqui tem largura cravada — o cartão é 100% com teto, e as
+   duas colunas viram uma só em 900px e depois em 600px, onde a faixa escura
+   sai do cartão e se funde ao fundo. Assim a tela não estoura em monitor
+   grande nem corta em celular.
+
+   Consome os tokens de base/tokens.css e define os seus próprios só para o
+   que é identidade desta tela (fundo escuro, faixa vermelha, botão preto).
    ======================================================================= */
 
 .auth {
   --auth-bg:        #16090c;
-  --auth-bg-2:      #2a1116;
+  --auth-bg-2:      #1c1214;
   --auth-card:      #fbfbfa;
   --auth-ink:       #1c1c1c;
   --auth-red:       #e4001b;
+  --auth-red-claro: #ff8a96;
   --auth-line:      #e3e3e0;
-  --auth-muted:     #8a8a86;
+  /* #8a8a86 dava ~3:1 em texto de 12px, abaixo do mínimo de 4,5:1. */
+  --auth-muted:     #57575a;
   --auth-radius:    4px;
 
   min-height: 100vh;
   margin: 0;
-  /* Coluna: o cartão e o copyright são irmãos e precisam empilhar. Sem a
-     direção explícita o flex usa `row` e joga o rodapé para o lado do cartão,
-     fora da área visível. */
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  padding: var(--u-space-4) var(--u-space-3);
-  /* Nada deve vazar na horizontal, em nenhuma largura. */
+  /* Centrado por margem automática, não por `justify-content: center`: em
+     janela baixa (notebook 1366x620, ou com o aviso de erro aberto) a
+     centralização por flex corta o topo do cartão, que fica fora da rolagem.
+     Com margem automática ele centraliza quando sobra espaço e rola quando
+     falta. */
+  justify-content: flex-start;
+  padding: 2.5rem 1.5rem;
   overflow-x: hidden;
   font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
   color: var(--auth-ink);
   background-color: var(--auth-bg);
   /* Trama diagonal discreta: duas camadas de linhas a 45°, sem imagem. */
   background-image:
-    radial-gradient(ellipse at 50% 0%, rgba(228, 0, 27, .10), transparent 60%),
+    radial-gradient(ellipse at 50% 0%, rgba(228, 0, 27, .12), transparent 60%),
     repeating-linear-gradient(45deg,  rgba(255,255,255,.022) 0 1px, transparent 1px 14px),
     repeating-linear-gradient(-45deg, rgba(255,255,255,.022) 0 1px, transparent 1px 14px);
 }
 
 /* --------------------------------------------------------------- cartão */
 .auth__card {
+  /* Em cima e embaixo: centraliza quando sobra espaço, some quando falta. */
+  margin-block: auto;
   width: 100%;
-  max-width: 570px;
+  max-width: 920px;
+  min-height: 520px;
+  display: flex;
   background: var(--auth-card);
   border-top: 3px solid var(--auth-red);
   box-shadow: 0 24px 60px rgba(0, 0, 0, .45);
-  padding: 3rem;
+  overflow: hidden;
 }
 
-/* ---------------------------------------------------------------- marca */
+/* ------------------------------------------------------- coluna escura */
+.auth__lado {
+  /* Largura firme: quem cede é o cartão inteiro, e abaixo de 900px o layout
+     vira uma coluna só. Deixá-la encolher fazia a marca dançar quando o
+     aviso de erro entrava no formulário. */
+  flex: 0 0 360px;
+  box-sizing: border-box;
+  padding: 2.5rem 2.25rem;
+  background: var(--auth-bg-2);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 1.75rem;
+}
+
 .auth__marca {
   display: flex;
   align-items: center;
   gap: .75rem;
-  margin-bottom: 2rem;
 }
 .auth__marca-icone {
   width: 42px;
@@ -64,41 +90,78 @@
   flex: 0 0 42px;
   display: grid;
   place-items: center;
-  background: var(--auth-ink);
+  background: var(--auth-red);
   color: #fff;
   border-radius: 10px;
   font-size: 1.15rem;
 }
 .auth__marca-texto {
-  font-size: 1.05rem;
+  font-size: .95rem;
   font-weight: 700;
   letter-spacing: .14em;
   text-transform: uppercase;
-}
-.auth__marca-texto em {
-  font-style: normal;
-  color: var(--auth-red);
+  color: var(--auth-card);
 }
 
-/* -------------------------------------------------------------- títulos */
+.auth__lado-meio { display: block; }
+
+.auth__pitch {
+  margin: 0 0 1.6rem;
+  font-size: 1.55rem;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -.01em;
+  color: var(--auth-card);
+}
+
+.auth__lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: .95rem;
+}
+.auth__lista li {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  font-size: .88rem;
+  color: #d8d2d3;
+}
+.auth__lista i { color: var(--auth-red-claro); font-size: 1rem; }
+
+.auth__lado-rodape { font-size: .75rem; color: #8a7d80; }
+
+/* -------------------------------------------------------- coluna clara */
+.auth__form-lado {
+  flex-grow: 1;
+  /* Sem isto o formulário não encolhe e empurra a coluna escura para fora. */
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 2.75rem 3rem;
+  display: flex;
+  flex-direction: column;
+}
+
 .auth__titulo {
-  font-size: 1.9rem;
+  font-size: 1.6rem;
   font-weight: 600;
   letter-spacing: -.01em;
-  margin: 0 0 .5rem;
+  margin: 0 0 .35rem;
 }
 .auth__sub {
-  color: #57575a;
-  font-size: 1rem;
-  margin: 0 0 2rem;
+  color: var(--auth-muted);
+  font-size: .88rem;
+  margin: 0 0 1.85rem;
 }
 
 /* ---------------------------------------------------------------- campos */
-.auth__campo { margin-bottom: 1.5rem; }
+.auth__campo { margin-bottom: 1.35rem; }
 
 .auth__label {
   display: block;
-  font-size: .72rem;
+  font-size: .7rem;
   font-weight: 600;
   letter-spacing: .12em;
   text-transform: uppercase;
@@ -106,9 +169,27 @@
   margin-bottom: .5rem;
 }
 
+/* Rótulo e "esqueci minha senha" na mesma linha: o atalho fica onde o olho
+   está quando a senha não entra, não depois do botão. */
+.auth__rotulo-linha {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: .75rem;
+}
+.auth__rotulo-linha .auth__label { margin-bottom: .5rem; }
+
+.auth__esqueci {
+  font-size: .82rem;
+  font-weight: 500;
+  color: var(--auth-muted);
+  text-decoration: none;
+}
+.auth__esqueci:hover { color: var(--auth-red); text-decoration: underline; }
+
 .auth__input {
   width: 100%;
-  height: 56px;
+  height: 54px;
   padding: 0 1rem;
   font-size: 1rem;
   color: var(--auth-ink);
@@ -123,29 +204,30 @@
   border-color: var(--auth-ink);
   box-shadow: 0 0 0 3px rgba(28, 28, 28, .08);
 }
+.auth__input[aria-invalid="true"] { border: 1.5px solid #c40017; }
 
-.auth__ajuda {
+.auth__dica {
   display: block;
   margin-top: .5rem;
-  font-size: .82rem;
+  font-size: .75rem;
   line-height: 1.45;
   color: var(--auth-muted);
 }
 
 /* Olho de mostrar/ocultar senha */
 .auth__campo--senha { position: relative; }
-.auth__campo--senha .auth__input { padding-right: 3rem; }
+.auth__campo--senha .auth__input { padding-right: 3.25rem; }
 .auth__olho {
   position: absolute;
-  right: .5rem;
+  right: 0;
   bottom: 0;
-  height: 56px;
-  width: 2.75rem;
+  height: 54px;
+  width: 3.25rem;
   display: grid;
   place-items: center;
   background: none;
   border: 0;
-  color: var(--auth-muted);
+  color: #8a8a86;
   cursor: pointer;
 }
 .auth__olho:hover { color: var(--auth-ink); }
@@ -154,14 +236,14 @@
 /* ---------------------------------------------------------------- botão */
 .auth__botao {
   width: 100%;
-  height: 58px;
+  height: 54px;
   border: 0;
   border-radius: var(--auth-radius);
   background: var(--auth-ink);
   color: #fff;
-  font-size: .95rem;
+  font-size: .88rem;
   font-weight: 700;
-  letter-spacing: .16em;
+  letter-spacing: .12em;
   text-transform: uppercase;
   cursor: pointer;
   transition: background var(--u-transition), transform var(--u-transition);
@@ -171,54 +253,126 @@
 .auth__botao:disabled,
 .auth__botao.loading { opacity: .75; cursor: progress; }
 
-.auth__esqueci {
-  display: block;
-  margin-top: 1.25rem;
-  text-align: center;
-  color: #2f2f31;
-  text-decoration: none;
-  font-size: .95rem;
-}
-.auth__esqueci:hover { color: var(--auth-red); text-decoration: underline; }
-
 /* --------------------------------------------------------------- rodapé */
-.auth__divisor {
-  border: 0;
-  border-top: 1px solid var(--auth-line);
-  margin: 2rem 0 1.25rem;
-}
 .auth__seguro {
+  margin: auto 0 0;
+  padding-top: 1.5rem;
   display: flex;
   align-items: center;
-  gap: .5rem;
+  justify-content: center;
+  gap: .45rem;
   color: var(--auth-muted);
-  font-size: .88rem;
+  font-size: .75rem;
 }
 .auth__copy {
-  margin: 1.5rem 0 0;
+  margin: 1.1rem 0 0;
   text-align: center;
   color: rgba(255, 255, 255, .45);
-  font-size: .82rem;
+  font-size: .72rem;
+  /* No desktop quem assina é o rodapé da coluna escura. */
+  display: none;
 }
 
 /* -------------------------------------------------------------- avisos */
-/* Mensagens de flash mantêm as cores de estado do sistema. */
-.auth__flash { margin-bottom: 1.5rem; }
+.auth__flash { margin-bottom: 1.25rem; }
 .auth__flash .alert {
+  display: flex;
+  align-items: flex-start;
+  gap: .7rem;
+  margin: 0 0 .6rem;
+  padding: .8rem .95rem;
+  font-size: .82rem;
+  line-height: 1.5;
   border-radius: var(--auth-radius);
-  font-size: .9rem;
+}
+.auth__flash .alert:last-child { margin-bottom: 0; }
+.auth__flash .alert-danger {
+  background: #fdf1f2;
+  border: 1px solid #f3cdd2;
+  border-left: 3px solid #c40017;
+  color: #7a0010;
+}
+.auth__flash .alert-warning {
+  background: #fdf6e7;
+  border: 1px solid #f0dcb0;
+  border-left: 3px solid #a86a00;
+  color: #6b4200;
+}
+.auth__flash .alert-success {
+  background: #eef7f0;
+  border: 1px solid #c6e2cd;
+  border-left: 3px solid #1c6b35;
+  color: #14512a;
+}
+/* O x é posicionado pelo Bootstrap (`.alert-dismissible` é relative): aqui
+   só se abre espaço para ele não cair em cima do texto. */
+.auth__flash .alert-dismissible { padding-right: 2.5rem; }
+.auth__flash .btn-close { position: absolute; top: .5rem; right: .5rem; padding: .4rem; font-size: .7rem; }
+
+/* ====================================================================
+   Redimensionamento
+   ====================================================================
+   900px  — as duas colunas viram uma: a escura sobe como faixa, com a
+            marca e os itens em linha.
+   600px  — a faixa sai do cartão e se funde ao fundo escuro; só o
+            formulário continua sendo cartão.
+   ==================================================================== */
+@media (max-width: 900px) {
+  .auth__card { flex-direction: column; max-width: 520px; min-height: 0; }
+
+  /* Frase e lista deixam de ser um bloco e viram linhas da faixa. */
+  .auth__lado-meio { display: contents; }
+
+  .auth__lado {
+    flex: none;
+    padding: 1.5rem 1.75rem;
+    gap: 1rem;
+  }
+  .auth__pitch {
+    margin: 0;
+    font-size: .88rem;
+    font-weight: 500;
+    color: #b9aaad;
+  }
+  .auth__lista { flex-direction: row; flex-wrap: wrap; gap: .6rem 1.25rem; }
+  .auth__lista li { font-size: .82rem; }
+  .auth__lado-rodape { display: none; }
+
+  .auth__form-lado { padding: 2rem 1.75rem 1.5rem; }
+  .auth__copy { display: block; }
 }
 
-/* ---------------------------------------------------------- responsivo */
-@media (max-width: 575.98px) {
-  .auth { padding: var(--u-space-3) var(--u-space-2); align-items: flex-start; }
-  .auth__card { padding: 2rem 1.25rem; }
-  .auth__titulo { font-size: 1.55rem; }
-  .auth__sub { font-size: .95rem; margin-bottom: 1.5rem; }
-  .auth__input, .auth__olho { height: 52px; }
-  .auth__botao { height: 54px; letter-spacing: .12em; }
-}
+@media (max-width: 600px) {
+  .auth { padding: 1.5rem 1rem 1.25rem; }
+  .auth__card { margin-block: 0; }
 
-@media (min-width: 576px) and (max-width: 991.98px) {
-  .auth__card { max-width: 520px; padding: 2.5rem; }
+  .auth__card {
+    max-width: 440px;
+    background: transparent;
+    border-top: 0;
+    box-shadow: none;
+    overflow: visible;
+  }
+
+  /* A faixa escura deixa de ser parte do cartão: vira o topo da página. */
+  .auth__lado {
+    background: transparent;
+    align-items: center;
+    padding: 1.25rem 0 1.5rem;
+  }
+  .auth__marca { flex-direction: column; gap: .7rem; }
+  .auth__marca-icone { width: 52px; height: 52px; flex-basis: 52px; border-radius: 12px; font-size: 1.4rem; }
+  .auth__pitch, .auth__lista { display: none; }
+
+  .auth__form-lado {
+    background: var(--auth-card);
+    border-top: 3px solid var(--auth-red);
+    box-shadow: 0 -8px 40px rgba(0, 0, 0, .4);
+    padding: 1.75rem 1.4rem 1.5rem;
+  }
+
+  .auth__titulo { font-size: 1.4rem; }
+  .auth__sub { font-size: .82rem; margin-bottom: 1.5rem; }
+  /* 16px evita o zoom automático do iOS ao focar o campo. */
+  .auth__input { font-size: 16px; }
 }

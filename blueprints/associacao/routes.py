@@ -10,6 +10,7 @@ from werkzeug.security import generate_password_hash
 from config import get_db_connection
 from utils.modalidades import filtro_visibilidade_sql
 from utils.upload_seguro import validar_upload, UploadInvalido
+from utils.acesso_academia import sql_papel_na_academia as _papel_acad
 
 associacao_bp = Blueprint("associacao", __name__, url_prefix="/associacao")
 
@@ -465,7 +466,10 @@ def cadastro_academia():
         gestor_senha = request.form.get("gestor_senha", "").strip()
 
         if current_user.has_role("admin"):
-            id_associacao = request.form.get("id_associacao")
+            # Vazio = academia INDEPENDENTE, sem associação. O sistema também é
+            # vendido para academias que não seguem federação nenhuma; a coluna
+            # sempre aceitou NULL, o que faltava era a tela deixar escolher.
+            id_associacao = (request.form.get("id_associacao") or "").strip() or None
         else:
             id_associacao = id_associacao_padrao
 
@@ -474,7 +478,9 @@ def cadastro_academia():
         gestor_user = None  # preenchido quando vincular usuário já existente
         if not nome:
             erro = "Informe o nome da academia."
-        elif not id_associacao:
+        elif not id_associacao and not current_user.has_role("admin"):
+            # Gestor de associação só cadastra dentro da própria associação.
+            # Independente é decisão de quem administra o sistema.
             erro = "Selecione a associação da academia."
         elif usar_gestor_existente:
             cur.execute(
@@ -526,6 +532,7 @@ def cadastro_academia():
                 modo_associacao=modo_associacao,
                 associacao_nome=associacao_nome_cadastro,
                 modalidades=modalidades,
+                pode_independente=current_user.has_role("admin"),
             )
 
         # ---------- Criação ----------
@@ -635,15 +642,9 @@ def cadastro_academia():
 
             # Garantir a role gestor_academia (sem duplicar)
             if role_gestor:
-                cur.execute(
-                    "SELECT 1 FROM roles_usuario WHERE usuario_id = %s AND role_id = %s",
-                    (gestor_user_id, role_gestor["id"]),
-                )
-                if not cur.fetchone():
-                    cur.execute(
-                        "INSERT INTO roles_usuario (usuario_id, role_id) VALUES (%s, %s)",
-                        (gestor_user_id, role_gestor["id"]),
-                    )
+                # Gestor DESTA academia (MM-14).
+                from utils.acesso_academia import inserir_papel
+                inserir_papel(cur, gestor_user_id, role_gestor["id"], academia_id)
 
             # Vincular usuário à academia
             cur.execute(
@@ -666,18 +667,14 @@ def cadastro_academia():
         gestor_user_id = cur.lastrowid
 
         # Vincular role gestor_academia
+        # Papéis DESTA academia (MM-14).
+        from utils.acesso_academia import inserir_papel
         if role_gestor:
-            cur.execute("""
-                INSERT INTO roles_usuario (usuario_id, role_id)
-                VALUES (%s, %s)
-            """, (gestor_user_id, role_gestor["id"]))
+            inserir_papel(cur, gestor_user_id, role_gestor["id"], academia_id)
 
         # Vincular role aluno
         if role_aluno:
-            cur.execute("""
-                INSERT INTO roles_usuario (usuario_id, role_id)
-                VALUES (%s, %s)
-            """, (gestor_user_id, role_aluno["id"]))
+            inserir_papel(cur, gestor_user_id, role_aluno["id"], academia_id)
 
         # Vincular usuário à academia
         cur.execute("""
@@ -717,6 +714,8 @@ def cadastro_academia():
         modo_associacao=modo_associacao,
         associacao_nome=associacao_nome_cadastro,
         modalidades=modalidades,
+        # Só quem administra o sistema cadastra academia sem associação.
+        pode_independente=current_user.has_role("admin"),
     )
 
 
@@ -1123,7 +1122,13 @@ def editar_academia(academia_id):
             conn.close()
             return redirect(url_for("associacao.lista_academias"))
 
-    if current_user.has_role("gestor_federacao") and academia.get("id_federacao") != getattr(current_user, "id_federacao", None):
+    # Admin edita qualquer academia. As travas abaixo são dos outros papéis — e o
+    # admin costuma acumulá-los (gestor de academia, professor, gestor de
+    # federação), o que o barrava fora das academias em que está vinculado,
+    # como a independente The Brother Ibura.
+    eh_admin = current_user.has_role("admin")
+    if (not eh_admin and current_user.has_role("gestor_federacao")
+            and academia.get("id_federacao") != getattr(current_user, "id_federacao", None)):
         flash("Acesso negado.", "danger")
         cur.close()
         conn.close()
@@ -1131,7 +1136,8 @@ def editar_academia(academia_id):
 
     # Gestor academia/professor: só academias em usuarios_academias — exceto se gestor_associacao no modo associação
     em_modo_associacao = session.get("modo_painel") == "associacao"
-    if (current_user.has_role("gestor_academia") or current_user.has_role("professor")) and not (current_user.has_role("gestor_associacao") and em_modo_associacao):
+    if (not eh_admin and (current_user.has_role("gestor_academia") or current_user.has_role("professor"))
+            and not (current_user.has_role("gestor_associacao") and em_modo_associacao)):
         cur.execute("SELECT 1 FROM usuarios_academias WHERE usuario_id = %s AND academia_id = %s", (current_user.id, academia_id))
         if cur.fetchone() is None:
             flash("Acesso negado.", "danger")
@@ -1200,11 +1206,11 @@ def editar_academia(academia_id):
 
     # Gestores vinculados à academia (somente exibição; edição é no cadastro de usuários)
     cur.execute(
-        """
+        f"""
         SELECT DISTINCT u.id, u.nome, u.email, u.cpf
         FROM usuarios u
         INNER JOIN usuarios_academias ua ON ua.usuario_id = u.id
-        INNER JOIN roles_usuario ru ON ru.usuario_id = u.id
+        INNER JOIN roles_usuario ru ON ru.usuario_id = u.id {_papel_acad()}
         INNER JOIN roles r ON r.id = ru.role_id
         WHERE ua.academia_id = %s
           AND COALESCE(r.chave, LOWER(REPLACE(r.nome,' ','_'))) = 'gestor_academia'
@@ -1234,13 +1240,17 @@ def editar_academia(academia_id):
         modalidade_ids = [int(x) for x in request.form.getlist("modalidade_ids") if str(x).strip().isdigit()]
 
         if current_user.has_role("admin") or current_user.has_role("gestor_federacao"):
-            id_associacao = request.form.get("id_associacao")
+            id_associacao = request.form.get("id_associacao") or None
         else:
             id_associacao = academia.get("id_associacao")
+        # Academia independente (sem associação) existe: o admin cadastra assim
+        # e pode deixar ou tornar independente; quem não é admin mantém a que já
+        # tem — inclusive nenhuma, senão o gestor da independente nunca salva.
+        pode_ficar_sem = eh_admin or not academia.get("id_associacao")
 
         if not nome:
             flash("Informe o nome da academia.", "danger")
-        elif not id_associacao:
+        elif not id_associacao and not pode_ficar_sem:
             flash("Selecione a associação da academia.", "danger")
         else:
             # Modo associação: validar modalidades apenas as vinculadas à associação
@@ -1313,9 +1323,8 @@ def editar_academia(academia_id):
                     if role:
                         # Adiciona o novo gestor e o define como responsável. A
                         # remoção de outros gestores é feita individualmente na tela.
-                        cur.execute(
-                            "INSERT IGNORE INTO roles_usuario (usuario_id, role_id) VALUES (%s, %s)",
-                            (novo_gestor_id, role["id"]))
+                        from utils.acesso_academia import inserir_papel
+                        inserir_papel(cur, novo_gestor_id, role["id"], academia_id)
                         cur.execute(
                             "INSERT IGNORE INTO usuarios_academias (usuario_id, academia_id) VALUES (%s, %s)",
                             (novo_gestor_id, academia_id))

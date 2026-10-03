@@ -1,14 +1,14 @@
 {% extends "base_app.html" %}
+{% set back_url = back_url or get_back_url_default() %}
 {% block title %}Editar Inscrição — {{ evento.nome }}{% endblock %}
+{% block pagina_titulo %}Editar inscrição — {{ evento.nome }}{% endblock %}
+{% block pagina_subtitulo %}Aluno: {{ inscricao.aluno_nome or 'Avulso' }}. Atualize os dados abaixo.{% endblock %}
+{% block pagina_acoes %}
+<a href="{{ url_voltar(back_url) }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Voltar</a>
+{% endblock %}
 {% block content %}
 {% set cat_aprox = (evento.categorias_modo or '') == 'aproximacao' %}
-<div class="container mt-5">
-    <div class="mb-4">
-        {% set back_url = back_url or get_back_url_default() %}
-{% include 'components/botao_voltar.html' %}
-        <h2 class="h4 fw-bold text-primary">Editar Inscrição — {{ evento.nome }}</h2>
-        <p class="text-muted mb-0">Aluno: {{ inscricao.aluno_nome or 'Avulso' }}. Atualize os dados abaixo.</p>
-    </div>
+<div class="container">
 
     <div class="card shadow-sm">
         <div class="card-body p-4">
@@ -23,12 +23,12 @@
                     <label for="campo_{{ c.campo_chave }}" class="form-label fw-semibold">{{ c.label }}{% if obrig_aprox %} <span class="text-danger">*</span>{% endif %}</label>
                     {% set val = valores_iniciais.get(chave, '') %}
                     {% if chave == 'id_academia' %}
-                    <select id="campo_{{ chave }}" name="campo_{{ chave }}" class="form-select" required>
+                    <select id="campo_{{ chave }}" name="campo_{{ chave }}" class="u-campo__controle" required>
                         <option value="{{ academia_id }}" selected>{{ academia_nome or 'Academia' }}</option>
                     </select>
                     <small class="form-text text-muted">Academia vinculada ao aluno</small>
                     {% elif chave == 'sexo' %}
-                    <select id="campo_{{ chave }}" name="campo_{{ chave }}" class="form-control"{% if cat_aprox %} required{% endif %}>
+                    <select id="campo_{{ chave }}" name="campo_{{ chave }}" class="u-campo__controle"{% if cat_aprox %} required{% endif %}>
                         <option value="">Selecione</option>
                         <option value="M" {% if val == 'M' %}selected{% endif %}>Masculino</option>
                         <option value="F" {% if val == 'F' %}selected{% endif %}>Feminino</option>
@@ -36,41 +36,45 @@
                     </select>
                     {% elif chave == 'graduacao_id' %}
                     {% if graduacoes %}
-                    <select id="campo_{{ chave }}" name="campo_{{ chave }}" class="form-select">
+                    <select id="campo_{{ chave }}" name="campo_{{ chave }}" class="u-campo__controle">
                         <option value="">Selecione</option>
-                        {% for g in graduacoes %}
-                        <option value="{{ g.id }}" {% if val|string == g.id|string %}selected{% endif %}>{{ g.faixa }} {% if g.graduacao %}{{ g.graduacao }}{% endif %} {% if g.categoria %}{{ g.categoria }}{% endif %}</option>
+                        {% for mod, itens in graduacoes|groupby('modalidade') %}
+                        <optgroup label="{{ mod }}">
+                        {% for g in itens %}
+                        <option value="{{ g.id }}" {% if val|string == g.id|string %}selected{% endif %}>{{ [g.faixa, g.graduacao, g.categoria] | reject('none') | map('string') | map('trim') | reject('in', ['', '.', '-']) | join(' - ') }}</option>
+                        {% endfor %}
+                        </optgroup>
                         {% endfor %}
                     </select>
                     {% else %}
-                    <input type="number" id="campo_{{ chave }}" name="campo_{{ chave }}" class="form-control" value="{{ val }}">
+                    <input type="number" id="campo_{{ chave }}" name="campo_{{ chave }}" class="u-campo__controle" value="{{ val }}">
                     {% endif %}
                     {% elif chave == 'TurmaID' %}
                     {% if turmas %}
-                    <select id="campo_{{ chave }}" name="campo_{{ chave }}" class="form-select">
+                    <select id="campo_{{ chave }}" name="campo_{{ chave }}" class="u-campo__controle">
                         <option value="">Selecione</option>
                         {% for t in turmas %}
                         <option value="{{ t.TurmaID }}" {% if val|string == t.TurmaID|string %}selected{% endif %}>{{ t.Nome }} ({{ t.Classificacao or '' }}, {{ t.DiasHorario or '' }})</option>
                         {% endfor %}
                     </select>
                     {% else %}
-                    <input type="number" id="campo_{{ chave }}" name="campo_{{ chave }}" class="form-control" value="{{ val }}">
+                    <input type="number" id="campo_{{ chave }}" name="campo_{{ chave }}" class="u-campo__controle" value="{{ val }}">
                     {% endif %}
                     {% elif chave == 'data_nascimento' %}
-                    <input type="text" id="campo_{{ chave }}" name="campo_{{ chave }}" class="form-control" 
+                    <input type="text" id="campo_{{ chave }}" name="campo_{{ chave }}" class="u-campo__controle" 
                            value="{% if val %}{{ val|data_br }}{% endif %}" 
                            placeholder="dd/mm/aaaa" required onchange="buscarCategorias()" 
-                           pattern="\d{2}/\d{2}/\d{4}" maxlength="10">
+                           pattern="\d{2}/\d{2}/\d{4}" maxlength="10" aria-label="dd/mm/aaaa">
                     <small class="form-text text-muted">Formato: dd/mm/aaaa</small>
                     {% elif chave in ['ultimo_exame_faixa','rg_data_emissao','data_cadastro_zempo'] %}
-                    <input type="text" id="campo_{{ chave }}" name="campo_{{ chave }}" class="form-control" 
+                    <input type="text" id="campo_{{ chave }}" name="campo_{{ chave }}" class="u-campo__controle" 
                            value="{% if val %}{{ val|data_br }}{% endif %}" 
-                           placeholder="dd/mm/aaaa" pattern="\d{2}/\d{2}/\d{4}" maxlength="10">
+                           placeholder="dd/mm/aaaa" pattern="\d{2}/\d{2}/\d{4}" maxlength="10" aria-label="dd/mm/aaaa">
                     <small class="form-text text-muted">Formato: dd/mm/aaaa</small>
                     {% elif chave == 'peso' %}
-                    <input type="number" step="0.1" id="campo_{{ chave }}" name="campo_{{ chave }}" class="form-control" value="{{ val }}" onchange="buscarCategorias()"{% if cat_aprox %} required min="0.1"{% endif %}>
+                    <input type="number" step="0.1" id="campo_{{ chave }}" name="campo_{{ chave }}" class="u-campo__controle" value="{{ val }}" onchange="buscarCategorias()"{% if cat_aprox %} required min="0.1"{% endif %}>
                     {% elif chave == 'categoria' %}
-                    <select id="campo_{{ chave }}" name="campo_{{ chave }}" class="form-select">
+                    <select id="campo_{{ chave }}" name="campo_{{ chave }}" class="u-campo__controle">
                         <option value="">Selecione uma categoria</option>
                         {% for cat in categorias_disponiveis %}
                         <option value="{{ cat.nome_categoria }}" {% if val == cat.nome_categoria %}selected{% endif %}>{{ cat.nome_categoria }}</option>
@@ -78,13 +82,13 @@
                     </select>
                     <small class="form-text text-muted">Preencha o peso para ver as categorias disponíveis</small>
                     {% else %}
-                    <input type="text" id="campo_{{ chave }}" name="campo_{{ chave }}" class="form-control" value="{{ val }}">
+                    <input type="text" id="campo_{{ chave }}" name="campo_{{ chave }}" class="u-campo__controle" value="{{ val }}">
                     {% endif %}
                 </div>
                 {% endfor %}
                 <div class="d-flex gap-2">
-                    <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i> Salvar Alterações</button>
-                    <a href="{{ back_url }}" class="btn btn-outline-secondary">Cancelar</a>
+                    <button type="submit" class="u-btn u-btn--primario"><i class="bi bi-check-lg me-1"></i> Salvar Alterações</button>
+                    <a href="{{ back_url }}" class="u-btn">Cancelar</a>
                 </div>
             </form>
         </div>

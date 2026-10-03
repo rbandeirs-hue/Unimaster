@@ -1,38 +1,36 @@
 {% extends "base_app.html" %}
 {% block title %}Editar Mensalidade{% endblock %}
+{% set back_url = url_for('financeiro.lista_planos_mensalidades', academia_id=academia_id) if academia_id else url_for('financeiro.lista_planos_mensalidades') %}
+{% block pagina_titulo %}Editar mensalidade{% endblock %}
+{% block pagina_acoes %}
+<a href="{{ url_voltar(back_url) }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Voltar</a>
+{% endblock %}
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/financeiro/responsive.css') }}?v=1">
 {% endblock %}
 
 {% block content %}
 <div class="container mt-4">
-    <div class="mb-3">
-        {% set back_url = url_for('financeiro.lista_planos_mensalidades', academia_id=academia_id) if academia_id else url_for('financeiro.lista_planos_mensalidades') %}
-        {% include 'components/botao_voltar.html' %}
-    </div>
-    <div class="card shadow-lg border-0 mx-auto financeiro-form" style="max-width: 600px;">
-        <div class="card-header bg-warning text-dark">
-            <h5 class="mb-0"><i class="bi bi-pencil-square me-2"></i> Editar Mensalidade</h5>
-        </div>
+    <div class="card shadow-lg border-0 financeiro-form">
         <div class="card-body p-4">
             <form method="POST">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="mb-3">
                     <label for="nome" class="form-label fw-semibold">Nome <span class="text-danger">*</span></label>
-                    <input type="text" class="form-control" id="nome" name="nome" required value="{{ mensalidade.nome }}">
+                    <input type="text" class="u-campo__controle" id="nome" name="nome" required value="{{ mensalidade.nome }}">
                 </div>
                 <div class="mb-3">
                     <label for="descricao" class="form-label fw-semibold">Descrição</label>
-                    <textarea class="form-control" id="descricao" name="descricao" rows="3">{{ mensalidade.descricao or '' }}</textarea>
+                    <textarea class="u-campo__controle" id="descricao" name="descricao" rows="3">{{ mensalidade.descricao or '' }}</textarea>
                 </div>
                 <div class="mb-3">
                     <label for="valor" class="form-label fw-semibold">Valor (R$) <span class="text-danger">*</span></label>
-                    <input type="text" class="form-control" id="valor" name="valor" required value="{{ "%.2f"|format(mensalidade.valor|float) }}" pattern="[0-9]+([,\.][0-9]{2})?">
+                    <input type="text" class="u-campo__controle" id="valor" name="valor" required value="{{ "%.2f"|format(mensalidade.valor|float) }}" pattern="[0-9]+([,\.][0-9]{2})?">
                 </div>
                 {% if academias|length > 1 %}
                 <div class="mb-3">
                     <label for="id_academia" class="form-label fw-semibold">Academia <span class="text-danger">*</span></label>
-                    <select class="form-select" id="id_academia" name="id_academia" required>
+                    <select class="u-campo__controle" id="id_academia" name="id_academia" required>
                         {% for ac in academias %}
                         <option value="{{ ac.id }}" {% if mensalidade.id_academia == ac.id %}selected{% endif %}>{{ ac.nome }}</option>
                         {% endfor %}
@@ -58,7 +56,7 @@
                 <div class="d-flex gap-2 mt-4 justify-content-between">
                     {% set back_url = url_for('financeiro.lista_planos_mensalidades', academia_id=academia_id) if academia_id else url_for('financeiro.lista_planos_mensalidades') %}
                     {% include 'components/botao_voltar.html' %}
-                    <button type="submit" class="btn btn-warning">Salvar</button>
+                    <button type="submit" class="u-btn u-btn--alerta">Salvar</button>
                 </div>
             </form>
         </div>

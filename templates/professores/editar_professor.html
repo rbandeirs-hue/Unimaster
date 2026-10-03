@@ -1,15 +1,14 @@
 {% extends "base_app.html" %}
+{% set back_url = back_url or get_back_url_default() %}
 {% block title %}Editar Professor — {{ professor.nome }}{% endblock %}
+{% block pagina_titulo %}Editar professor{% endblock %}
+{% block pagina_subtitulo %}{{ academia.nome }}{% endblock %}
+{% block pagina_acoes %}
+<a href="{{ url_voltar(back_url) }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Voltar</a>
+{% endblock %}
 {% block content %}
 <div class="container mt-5">
-    <div class="mb-4">
-        {% set back_url = back_url or get_back_url_default() %}
-{% include 'components/botao_voltar.html' %}
-        <h2 class="h4 fw-bold text-dark">Editar Professor</h2>
-        <p class="text-muted small">{{ academia.nome }}</p>
-    </div>
-
-    <div class="card shadow-sm" style="max-width: 600px;">
+    <div class="card shadow-sm">
         <div class="card-body p-4">
             <form method="POST">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -22,7 +21,7 @@
                             <div class="small text-muted">{{ professor.telefone or 'Sem telefone' }}</div>
                         </div>
                         {% if professor.usuario_id %}
-                        <a href="{{ url_for('usuarios.editar_usuario', user_id=professor.usuario_id, next=request.full_path) }}" class="btn btn-outline-primary btn-sm">
+                        <a href="{{ url_for('usuarios.editar_usuario', user_id=professor.usuario_id, next=request.full_path) }}" class="u-btn u-btn--pequeno">
                             <i class="bi bi-pencil-square me-1"></i>Editar no cadastro de usuários
                         </a>
                         {% endif %}
@@ -31,7 +30,7 @@
                 </div>
                 <div class="mb-3">
                     <label for="usuario_id" class="form-label fw-semibold">Vincular ao usuário</label>
-                    <select id="usuario_id" name="usuario_id" class="form-select">
+                    <select id="usuario_id" name="usuario_id" class="u-campo__controle">
                         <option value="">— Não vincular —</option>
                         {% for u in usuarios %}
                         <option value="{{ u.id }}" {% if professor.usuario_id == u.id %}selected{% endif %}>{{ u.nome }} ({{ u.email or '-' }})</option>
@@ -61,8 +60,8 @@
                     </div>
                 </div>
                 <div class="d-flex gap-2 pt-2">
-                    <a href="{{ back_url }}" class="btn btn-outline-secondary">Cancelar</a>
-                    <button type="submit" class="btn btn-primary"><i class="bi bi-save me-1"></i> Salvar</button>
+                    <a href="{{ back_url }}" class="u-btn">Cancelar</a>
+                    <button type="submit" class="u-btn u-btn--primario"><i class="bi bi-save me-1"></i> Salvar</button>
                 </div>
             </form>
         </div>

@@ -1,21 +1,14 @@
 {% extends "base_app.html" %}
+{% set back_url = back_url or get_back_url_default() %}
 {% block title %}Formulários{% endblock %}
+{% block pagina_titulo %}Formulários{% endblock %}
+{% block pagina_subtitulo %}Cadastre formulários baseados nos campos do cadastro de aluno.{% endblock %}
+{% block pagina_acoes %}
+<a href="{{ url_voltar(back_url) }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Voltar</a>
+<a href="{{ url_for('formularios.cadastro', next=request.full_path) }}" class="sh__btn sh__btn--forte"><i class="bi bi-plus-lg"></i> Novo formulário</a>
+{% endblock %}
 {% block content %}
 <div class="container mt-3 mt-md-5 px-2 px-md-3">
-    <div class="mb-3 mb-md-4 d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2">
-        <div>
-            <h2 class="h5 h4-md fw-bold text-primary">Formulários</h2>
-            <p class="text-muted mb-0 small small-md">Cadastre formulários baseados nos campos do cadastro de aluno.</p>
-        </div>
-        <div class="d-flex flex-column flex-sm-row gap-2 w-100 w-md-auto">
-            {% set back_url = back_url or get_back_url_default() %}
-{% include 'components/botao_voltar.html' %}
-            <a href="{{ url_for('formularios.cadastro', next=request.full_path) }}" class="btn btn-primary btn-sm">
-                <i class="bi bi-plus-lg me-1"></i> Novo Formulário
-            </a>
-        </div>
-    </div>
-
     {% if formularios %}
     <!-- Tabela para desktop -->
     <div class="card shadow-sm d-none d-md-block">
@@ -42,12 +35,12 @@
                         </td>
                         <td>{{ f.created_at|data_br if f.created_at else '-' }}</td>
                         <td class="text-end">
-                            <a href="{{ url_for('formularios.editar', formulario_id=f.id, next=request.full_path) }}" class="btn btn-outline-primary btn-sm" title="Editar">
+                            <a href="{{ url_for('formularios.editar', formulario_id=f.id, next=request.full_path) }}" class="u-btn u-btn--pequeno" title="Editar">
                                 <i class="bi bi-pencil"></i>
                             </a>
-                            <form method="POST" action="{{ url_for('formularios.excluir', formulario_id=f.id) }}" class="d-inline" onsubmit="return confirm('Excluir este formulário?');">
+                            <form method="POST" action="{{ url_for('formularios.excluir', formulario_id=f.id) }}" class="d-inline" data-confirmar="Excluir este formulário?">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <button type="submit" class="btn btn-outline-danger btn-sm" title="Excluir">
+                                <button type="submit" class="u-btn u-btn--pequeno" title="Excluir">
                                     <i class="bi bi-trash"></i>
                                 </button>
                             </form>
@@ -76,12 +69,12 @@
                     <strong>Criado em:</strong> {{ f.created_at|data_br if f.created_at else '-' }}
                 </p>
                 <div class="d-flex gap-2">
-                    <a href="{{ url_for('formularios.editar', formulario_id=f.id, next=request.full_path) }}" class="btn btn-outline-primary btn-sm flex-fill">
+                    <a href="{{ url_for('formularios.editar', formulario_id=f.id, next=request.full_path) }}" class="u-btn u-btn--pequeno flex-fill">
                         <i class="bi bi-pencil"></i> Editar
                     </a>
-                    <form method="POST" action="{{ url_for('formularios.excluir', formulario_id=f.id) }}" class="d-inline flex-fill" onsubmit="return confirm('Excluir este formulário?');">
+                    <form method="POST" action="{{ url_for('formularios.excluir', formulario_id=f.id) }}" class="d-inline flex-fill" data-confirmar="Excluir este formulário?">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <button type="submit" class="btn btn-outline-danger btn-sm w-100">
+                        <button type="submit" class="u-btn u-btn--pequeno w-100">
                             <i class="bi bi-trash"></i> Excluir
                         </button>
                     </form>
@@ -96,7 +89,7 @@
             <i class="bi bi-file-earmark-text display-4 display-6-md text-muted mb-3"></i>
             <h5 class="text-muted h6 h5-md">Nenhum formulário cadastrado</h5>
             <p class="text-muted mb-4 small small-md">Crie um formulário escolhendo os campos padrão do cadastro de aluno.</p>
-            <a href="{{ url_for('formularios.cadastro', next=request.full_path) }}" class="btn btn-primary btn-sm btn-md-normal">
+            <a href="{{ url_for('formularios.cadastro', next=request.full_path) }}" class="u-btn u-btn--primario u-btn--pequeno btn-md-normal">
                 <i class="bi bi-plus-lg me-1"></i> Novo Formulário
             </a>
         </div>

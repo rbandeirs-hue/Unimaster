@@ -15,9 +15,14 @@
      .frm__acoes     barra de botões no fim
      .frm__opcoes    grade de caixas selecionáveis (papéis, academias…)
      .frm__opcao     uma caixa selecionável
+     .frm__arquivo   logo/foto: miniatura + botão no lugar do campo nativo
+     .frm__modos     seletor segmentado entre dois caminhos do mesmo campo
+     .frm__busca     campo com lista de achados flutuante (.frm__achado)
+     .frm__pessoa    quem foi escolhido na busca
+     .frm__grupo     campo com botão colado (CEP + lupa)
    ======================================================================= */
 
-.frm { max-width: 920px; }
+.frm { max-width: none; }
 
 /* ------------------------------------------------------------ bloco */
 .frm__secao {
@@ -60,7 +65,7 @@
 }
 
 .frm .form-control,
-.frm .form-select {
+.frm .form-select, .frm .u-campo__controle {
   border-radius: var(--u-radius-sm);
   border: 1px solid var(--sh-line);
   padding: .6rem .85rem;
@@ -69,14 +74,14 @@
   transition: border-color var(--u-transition), box-shadow var(--u-transition), background var(--u-transition);
 }
 .frm .form-control:focus,
-.frm .form-select:focus {
+.frm .form-select:focus, .frm .u-campo__controle:focus {
   border-color: var(--sh-ink);
   box-shadow: 0 0 0 3px rgba(28, 28, 28, .08);
   background: #fff;
 }
-.frm .form-control::placeholder { color: #a9a6a1; }
+.frm .form-control::placeholder, .frm .u-campo__controle::placeholder { color: #a9a6a1; }
 .frm .form-control:disabled,
-.frm .form-select:disabled { background: #f4f2ee; color: var(--sh-ink-soft); }
+.frm .form-select:disabled, .frm .u-campo__controle:disabled { background: #f4f2ee; color: var(--sh-ink-soft); }
 
 .frm .form-text { color: var(--sh-ink-soft); font-size: .78rem; }
 .frm .invalid-feedback { font-size: .78rem; }
@@ -87,7 +92,7 @@
   position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
   color: var(--sh-ink-soft); pointer-events: none; font-size: 1rem;
 }
-.frm__campo-ico > .form-control { padding-left: 2.4rem; }
+.frm__campo-ico > .form-control, .frm__campo-ico > .u-campo__controle { padding-left: 2.4rem; }
 
 /* ------------------------------------------------ caixas selecionáveis */
 .frm__opcoes {
@@ -143,8 +148,132 @@
 @media (max-width: 767.98px) {
   .frm__secao { padding: 1.1rem 1rem; }
   /* 16px evita o zoom automático do iOS ao focar o campo. */
-  .frm .form-control, .frm .form-select { font-size: 16px; }
+  .frm .form-control, .frm .form-select, .frm .u-campo__controle, .frm .u-campo__controle { font-size: 16px; }
   .frm__acoes { justify-content: stretch; }
   .frm__acoes .sh__btn { flex: 1; justify-content: center; }
   .frm__opcoes { grid-template-columns: 1fr; }
+}
+
+/* ------------------------------------------------------------- arquivo */
+/* Logo/foto: o campo nativo de arquivo é feio e muda de forma em cada
+   navegador. Aqui ele some atrás de um botão do sistema; quem informa o
+   estado é a miniatura ao lado. */
+.frm__arquivo { position: relative; display: flex; align-items: center; gap: 1rem; }
+.frm__arquivo-face {
+  width: 72px; height: 72px;
+  flex: none;
+  border-radius: 50%;
+  border: 1px solid var(--sh-line);
+  background: #f4f2ee;
+  display: grid; place-items: center;
+  overflow: hidden;
+  color: var(--sh-ink-soft);
+  font-size: 1.5rem;
+}
+.frm__arquivo-face img { width: 100%; height: 100%; object-fit: cover; }
+.frm__arquivo-corpo { min-width: 0; }
+.frm__arquivo input[type="file"] {
+  position: absolute; width: 1px; height: 1px;
+  opacity: 0; pointer-events: none;
+}
+
+/* --------------------------------------------------------------- modos */
+/* Duas rotas para o mesmo campo (buscar usuário x criar gestor): um
+   seletor segmentado, não dois botões soltos — a escolha fica visível. */
+.frm__modos { position: relative; display: inline-flex; gap: 0; border: 1px solid var(--sh-line); border-radius: var(--u-radius-sm); overflow: hidden; }
+.frm__modos input { position: absolute; opacity: 0; pointer-events: none; }
+.frm__modo {
+  display: inline-flex; align-items: center; gap: .45rem;
+  padding: .55rem 1rem;
+  font-size: .88rem; font-weight: 500;
+  color: var(--sh-ink-soft);
+  background: #fff;
+  cursor: pointer;
+  transition: background var(--u-transition), color var(--u-transition);
+}
+.frm__modo + input + .frm__modo { border-left: 1px solid var(--sh-line); }
+.frm__modo:hover { background: #f7f5f1; color: var(--sh-ink); }
+.frm__modos input:checked + .frm__modo { background: var(--sh-ink); color: #fff; }
+.frm__modos input:focus-visible + .frm__modo { box-shadow: inset 0 0 0 2px rgba(28,28,28,.25); }
+
+/* -------------------------------------------------------------- busca */
+.frm__busca { position: relative; }
+.frm__achados {
+  position: absolute; top: calc(100% + .25rem); left: 0; right: 0;
+  z-index: 1050;
+  max-height: 16rem; overflow-y: auto;
+  background: #fff;
+  border: 1px solid var(--sh-line);
+  border-radius: var(--u-radius-sm);
+  box-shadow: 0 10px 28px rgba(28, 28, 28, .12);
+}
+.frm__achado {
+  display: block; width: 100%;
+  text-align: left;
+  padding: .6rem .85rem;
+  border: 0; border-bottom: 1px solid var(--sh-line);
+  background: #fff;
+  cursor: pointer;
+}
+.frm__achado:last-child { border-bottom: 0; }
+.frm__achado:hover { background: #f7f5f1; }
+.frm__achado-nome { font-size: .9rem; font-weight: 600; color: var(--sh-ink); }
+.frm__achado-sub { font-size: .78rem; color: var(--sh-ink-soft); }
+.frm__achados-vazio { padding: .7rem .85rem; font-size: .82rem; color: var(--sh-ink-soft); }
+
+/* ------------------------------------------------------------- pessoa */
+/* Quem foi escolhido no campo de busca. Some enquanto não há escolha —
+   e some de verdade: sem `d-flex` do Bootstrap por cima do display. */
+.frm__pessoa {
+  display: flex; align-items: center; gap: .7rem;
+  margin-top: .6rem;
+  padding: .7rem .85rem;
+  background: #f4f2ee;
+  border: 1px solid var(--sh-line);
+  border-radius: var(--u-radius-sm);
+}
+.frm__pessoa[hidden] { display: none; }
+.frm__pessoa-ico {
+  width: 34px; height: 34px; flex: none;
+  border-radius: 50%;
+  background: var(--sh-ink); color: #fff;
+  display: grid; place-items: center;
+  font-size: .95rem;
+}
+.frm__pessoa-corpo { display: block; min-width: 0; flex: 1; }
+.frm__pessoa-nome { display: block; font-size: .9rem; font-weight: 600; color: var(--sh-ink); line-height: 1.2; }
+.frm__pessoa-sub { display: block; font-size: .78rem; color: var(--sh-ink-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.frm__pessoa-sair {
+  flex: none;
+  border: 0; background: transparent;
+  color: var(--sh-ink-soft);
+  font-size: 1.05rem; line-height: 1;
+  padding: .25rem .35rem; border-radius: var(--u-radius-sm);
+  cursor: pointer;
+}
+.frm__pessoa-sair:hover { background: #e7e4df; color: var(--sh-ink); }
+
+/* ----------------------------------------------------------- CEP/anexo */
+/* Campo com botão colado. O `.input-group` do Bootstrap só funciona com
+   `.form-control`; com o campo do sistema o botão caía para a linha de
+   baixo. Aqui a régua é própria. */
+.frm__grupo { display: flex; align-items: stretch; }
+.frm__grupo > .u-campo__controle,
+.frm__grupo > .form-control {
+  flex: 1 1 auto; min-width: 0;
+  border-top-right-radius: 0; border-bottom-right-radius: 0;
+}
+.frm__grupo > .sh__btn {
+  flex: none;
+  margin-left: -1px;
+  padding: .6rem .9rem;
+  border-top-left-radius: 0; border-bottom-left-radius: 0;
+}
+
+/* No celular o seletor segmentado ocupa a largura toda: com dois rótulos
+   longos lado a lado, o texto quebrava dentro do botão. */
+@media (max-width: 575.98px) {
+  .frm__modos { display: flex; width: 100%; }
+  .frm__modo { flex: 1; justify-content: center; text-align: center; padding: .55rem .6rem; }
+  .frm__arquivo { align-items: flex-start; }
 }

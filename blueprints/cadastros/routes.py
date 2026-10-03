@@ -292,11 +292,46 @@ def _render_categorias():
             "descricao": ["descricao", "notas", "observacao", "obs"],
         },
     )
+    # `ativo` é opcional: a tela funciona em base que ainda não tem a coluna.
+    col_ativo = col_map.get("ativo")
 
     if request.method == "POST":
         form_tipo = request.form.get("form_tipo")
         try:
-            if form_tipo == "categorias" and not missing:
+            if form_tipo == "nova_categoria" and not missing:
+                # O modal "Adicionar nova categoria" já existia na tela, mas
+                # esta rota não tratava o POST: o botão salvava no vazio e a
+                # tela recarregava como se nada tivesse acontecido.
+                nome = (request.form.get("nome_categoria") or "").strip()
+                genero = (request.form.get("genero") or "").strip()
+                if not nome or not genero:
+                    flash("Gênero e nome da categoria são obrigatórios.", "warning")
+                else:
+                    campos = [cols["genero"], cols["id_classe"], cols["categoria"],
+                              cols["nome_categoria"], cols["peso_min"], cols["peso_max"],
+                              cols["idade_min"], cols["idade_max"], cols["descricao"]]
+                    valores = [
+                        genero,
+                        (request.form.get("id_classe") or "").strip(),
+                        (request.form.get("categoria") or "").strip(),
+                        nome,
+                        parse_float(request.form.get("peso_min")),
+                        parse_float(request.form.get("peso_max")),
+                        parse_int(request.form.get("idade_min")),
+                        parse_int(request.form.get("idade_max")),
+                        (request.form.get("descricao") or "").strip() or None,
+                    ]
+                    if col_ativo:
+                        campos.append(col_ativo)
+                        valores.append(1 if request.form.get("ativo") == "1" else 0)
+                    marcas = ", ".join(["%s"] * len(valores))
+                    cursor.execute(
+                        f"INSERT INTO {tabela_categorias} "
+                        f"({', '.join(campos)}) VALUES ({marcas})", tuple(valores))
+                    db.commit()
+                    flash(f"Categoria «{nome}» cadastrada.", "success")
+
+            elif form_tipo == "categorias" and not missing:
                 ids = request.form.getlist("id")
                 generos = request.form.getlist("genero")
                 id_classes = request.form.getlist("id_classe")
@@ -307,12 +342,19 @@ def _render_categorias():
                 idades_min = request.form.getlist("idade_min")
                 idades_max = request.form.getlist("idade_max")
                 descricoes = request.form.getlist("descricao")
+                ativos = request.form.getlist("ativo")
+                # O botão Ativar/Desativar só muda o campo escondido; quem grava
+                # é este POST. Sem isto o clique não sobrevivia ao recarregar.
+                while col_ativo and len(ativos) < len(ids):
+                    ativos.append("1")
 
                 total = len(ids)
                 if not all(len(lst) == total for lst in [generos, id_classes, categorias, nomes, pesos_min, pesos_max, idades_min, idades_max, descricoes]):
                     flash("Erro ao salvar categorias: dados inconsistentes.", "danger")
                 else:
+                    extra_set = f", {col_ativo}=%s" if col_ativo else ""
                     for i in range(total):
+                        valores_extra = ((1 if ativos[i] == "1" else 0),) if col_ativo else ()
                         cursor.execute(
                             f"""
                             UPDATE {tabela_categorias}
@@ -324,7 +366,7 @@ def _render_categorias():
                                 {cols['peso_max']}=%s,
                                 {cols['idade_min']}=%s,
                                 {cols['idade_max']}=%s,
-                                {cols['descricao']}=%s
+                                {cols['descricao']}=%s{extra_set}
                             WHERE {cols['id']}=%s
                             """,
                             (
@@ -337,8 +379,7 @@ def _render_categorias():
                                 parse_int(idades_min[i]),
                                 parse_int(idades_max[i]),
                                 descricoes[i].strip() if descricoes[i] else None,
-                                ids[i],
-                            ),
+                            ) + valores_extra + (ids[i],),
                         )
                     db.commit()
                     flash("Categorias atualizadas com sucesso.", "success")
@@ -349,6 +390,7 @@ def _render_categorias():
     categorias_lista = []
     try:
         if not missing:
+            campo_ativo = f", {col_ativo} AS ativo" if col_ativo else ""
             cursor.execute(
                 f"""
                 SELECT {cols['id']} AS id,
@@ -360,7 +402,7 @@ def _render_categorias():
                        {cols['peso_max']} AS peso_max,
                        {cols['idade_min']} AS idade_min,
                        {cols['idade_max']} AS idade_max,
-                       {cols['descricao']} AS descricao
+                       {cols['descricao']} AS descricao{campo_ativo}
                 FROM {tabela_categorias}
                 ORDER BY {cols['id']}
                 """
@@ -387,3 +429,21 @@ def _render_categorias():
 @role_required("admin")
 def gerenciar_categorias():
     return _render_categorias()
+
+
+# ==========================================================
+# 🔹 REFERÊNCIA DO DESIGN SYSTEM
+# ==========================================================
+@cadastros_bp.route("/design")
+@login_required
+@role_required("admin")
+def design_system():
+    """Catálogo vivo dos tokens e componentes.
+
+    Existe para que o sistema não se desfaça de novo: quem for criar tela nova
+    vê aqui o que já existe, em vez de inventar o quarto botão. Renderiza os
+    componentes de verdade — se um quebrar, quebra aqui primeiro.
+
+    Restrita a admin: é documentação técnica, não tela de operação.
+    """
+    return render_template("cadastros/design_system.html")

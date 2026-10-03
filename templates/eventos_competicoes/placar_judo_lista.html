@@ -1,27 +1,17 @@
 {% extends "base_app.html" %}
 {% block title %}Placar de Judô — {{ evento.nome }}{% endblock %}
+{% block pagina_titulo %}Placar de judô{% endblock %}
+{% block pagina_subtitulo %}{{ evento.nome }}{% endblock %}
+{% block pagina_acoes %}
+{% for a in range(1, (evento.placar_num_areas|default(1)|int) + 1) %}
+<a href="{{ url_for('eventos_competicoes.placar_judo_monitor_area', evento_id=evento.id, area_num=a) }}" class="sh__btn" target="_blank" title="Abrir TV apenas da área {{ a }}"><i class="bi bi-tv"></i> TV área {{ a }}</a>
+{% endfor %}
+<a href="{{ url_for('eventos_competicoes.placar_judo_nova_luta', evento_id=evento.id, embed=1) if layout_embed else url_for('eventos_competicoes.placar_judo_nova_luta', evento_id=evento.id) }}" class="sh__btn sh__btn--forte"><i class="bi bi-plus-circle"></i> Nova luta</a>
+{% endblock %}
 {% block content %}
-<div class="container mt-4">
+<div class="container">
     {% set menu_secao_ativa = 'placar' %}
     {% include 'components/menu_competicao.html' %}
-    <div class="mb-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <div>
-            <h2 class="h4 fw-bold text-primary">🥋 Placar de Judô</h2>
-            <p class="text-muted mb-0">{{ evento.nome }}</p>
-        </div>
-        <div class="d-flex gap-2 flex-wrap align-items-center">
-        {% for a in range(1, (evento.placar_num_areas|default(1)|int) + 1) %}
-        <a href="{{ url_for('eventos_competicoes.placar_judo_monitor_area', evento_id=evento.id, area_num=a) }}" 
-           class="btn btn-outline-primary" target="_blank" title="Abrir TV apenas da área {{ a }}">
-            <i class="bi bi-tv"></i> TV área {{ a }}
-        </a>
-        {% endfor %}
-        <a href="{{ url_for('eventos_competicoes.placar_judo_nova_luta', evento_id=evento.id, embed=1) if layout_embed else url_for('eventos_competicoes.placar_judo_nova_luta', evento_id=evento.id) }}" 
-           class="btn btn-primary">
-            <i class="bi bi-plus-circle"></i> Nova Luta
-        </a>
-        </div>
-    </div>
 
     <div class="card shadow-sm mb-4">
         <div class="card-body py-3">
@@ -29,10 +19,10 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="col-auto">
                     <label class="form-label mb-0 small text-muted">Quantidade de áreas</label>
-                    <input type="number" name="placar_num_areas" class="form-control" min="1" max="50" value="{{ evento.placar_num_areas|default(1) }}" style="width: 5rem;">
+                    <input type="number" name="placar_num_areas" class="u-campo__controle" min="1" max="50" value="{{ evento.placar_num_areas|default(1) }}" style="width: 5rem;" aria-label="Quantidade de áreas">
                 </div>
                 <div class="col-auto">
-                    <button type="submit" class="btn btn-secondary"><i class="bi bi-check2"></i> Salvar</button>
+                    <button type="submit" class="u-btn"><i class="bi bi-check2"></i> Salvar</button>
                 </div>
                 <div class="col-12 small text-muted">Cada área tem um link de TV próprio. A área de cada luta você define ao criar a luta ou no card abaixo (campo &quot;Área da luta&quot;).</div>
             </form>
@@ -65,7 +55,7 @@
                         <span class="text-muted">Área da luta:</span>
                         <form method="POST" action="{{ url_for('eventos_competicoes.placar_judo_definir_area_luta', luta_id=luta.id) }}" class="d-inline-flex align-items-center gap-1 ms-1">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <select name="area_num" class="form-select form-select-sm" style="width: auto; min-width: 4.5rem;" onchange="this.form.submit()">
+                            <select name="area_num" class="u-campo__controle" style="width: auto; min-width: 4.5rem;" onchange="this.form.submit()">
                                 {% for a in range(1, (evento.placar_num_areas|default(1)|int) + 1) %}
                                 <option value="{{ a }}" {% if (luta.area_num|default(1))|int == a %}selected{% endif %}>{{ a }}</option>
                                 {% endfor %}
@@ -98,12 +88,12 @@
                     
                     <div class="d-flex gap-2">
                         <a href="{{ url_for('eventos_competicoes.placar_judo_controle', luta_id=luta.id, embed=1) if layout_embed else url_for('eventos_competicoes.placar_judo_controle', luta_id=luta.id) }}" 
-                           class="btn btn-sm btn-primary flex-fill">
+                           class="u-btn u-btn--pequeno u-btn--primario flex-fill">
                             <i class="bi bi-gear"></i> Controle
                         </a>
                         <a href="{{ url_for('eventos_competicoes.placar_judo_monitor_area', evento_id=evento.id, area_num=luta.area_num|default(1)) }}" 
                            target="_blank"
-                           class="btn btn-sm btn-outline-secondary"
+                           class="u-btn u-btn--pequeno"
                            title="TV da área {{ luta.area_num|default(1) }}">
                             <i class="bi bi-tv"></i> TV
                         </a>
@@ -121,7 +111,7 @@
     {% endif %}
 
     <div class="mt-4">
-        <a href="{{ url_voltar(back_url) }}" class="btn btn-outline-secondary">
+        <a href="{{ url_voltar(back_url) }}" class="u-btn">
             <i class="bi bi-arrow-left"></i> Voltar
         </a>
     </div>

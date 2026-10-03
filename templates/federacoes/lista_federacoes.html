@@ -1,138 +1,88 @@
 {% extends "base_app.html" %}
+{% from 'components/ui.html' import vazio %}
+{% set menu_ativo = 'federacoes' %}
 {% block title %}Federações{% endblock %}
-{% block content %}
-<style>
-    .logo-circle {
-        width: var(--logo-size, 44px);
-        height: var(--logo-size, 44px);
-        border-radius: 50%;
-        overflow: hidden;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-weight: 700;
-        font-size: 1.1rem;
-        text-transform: uppercase;
-        flex-shrink: 0;
-    }
-    .logo-circle.logo-has-img {
-        background: #ffffff !important;
-    }
-    .card-link {
-        text-decoration: none;
-        color: inherit;
-        display: block;
-    }
-    .card-link:hover .card {
-        box-shadow: 0 0.75rem 1.5rem rgba(0, 0, 0, 0.08);
-        transform: translateY(-2px);
-        transition: all 0.2s ease;
-    }
-    .card-actions {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-    }
-    .btn-edit-card {
-        position: relative;
-        z-index: 2;
-    }
-    .logo-img {
-        width: 100%;
-        height: 100%;
-        object-fit: contain;
-        padding: 6px;
-        border-radius: 50%;
-    }
-</style>
-<div class="container my-4">
-    <div class="d-flex flex-column flex-md-row justify-content-between align-items-center mb-4 gap-3">
-        <div class="text-center text-md-start">
-            <h2 class="display-6 fw-bold text-primary mb-1">Federações</h2>
-            <p class="lead text-muted mb-0">Lista completa das federações cadastradas.</p>
-        </div>
-        <div class="d-flex flex-column flex-md-row gap-2 w-100 w-md-auto align-items-md-center">
-            <div class="d-flex align-items-center gap-2">
-                <label for="logoSizeSelect" class="small text-muted mb-0">Tamanho da logo</label>
-                <select id="logoSizeSelect" class="form-select form-select-sm" style="width: 96px;">
-                    <option value="36">36px</option>
-                    <option value="44" selected>44px</option>
-                    <option value="56">56px</option>
-                </select>
-            </div>
-            {% set back_url = back_url or get_back_url_default() %}
-{% include 'components/botao_voltar.html' %}
-            <a href="{{ url_for('federacao.cadastro_federacao', next=request.full_path) }}" class="btn btn-success btn-lg w-100 w-md-auto">
-                <i class="bi bi-plus-circle-fill me-2"></i> Nova Federação
-            </a>
-        </div>
-    </div>
 
-    {% if federacoes %}
-    <div class="row g-3">
-        {% for fed in federacoes %}
-        <div class="col-12 col-lg-6">
-            <div class="card shadow-sm border-0 h-100">
-                <a href="{{ url_for('federacao.lista_associacoes', federacao_id=fed.id) }}" class="card-link stretched-link"></a>
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-start">
-                        <div class="d-flex align-items-start gap-3">
-                            <div class="logo-circle bg-primary text-white {% if fed.logo_url %}logo-has-img{% endif %}">
-                                {% if fed.logo_url %}
-                                    <img src="{{ fed.logo_url }}" alt="Logo {{ fed.nome }}" class="logo-img">
-                                {% else %}
-                                    {{ (fed.sigla or fed.nome)[:1] }}
-                                {% endif %}
-                            </div>
-                            <div>
-                                <h5 class="fw-bold mb-1">{{ fed.nome }}</h5>
-                                <div class="text-muted small">
-                                    <span class="me-2">Sigla: {{ fed.sigla or '-' }}</span>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="card-actions">
-                            <span class="badge bg-primary">ID {{ fed.id }}</span>
-                            <a href="{{ url_for('federacao.editar_federacao', federacao_id=fed.id, next=request.full_path) }}"
-                               class="btn btn-sm btn-outline-primary btn-edit-card">
-                                <i class="bi bi-pencil-square"></i> Editar
-                            </a>
-                        </div>
-                    </div>
-                    <div class="mt-3">
-                        <div class="text-muted small">Email: {{ fed.email or '-' }}</div>
-                        <div class="text-muted small">Telefone: {{ fed.telefone or '-' }}</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        {% endfor %}
-    </div>
-    {% else %}
-    <div class="alert alert-info text-center mt-4">
-        Nenhuma federação cadastrada no sistema.
-    </div>
-    {% endif %}
+{% block pagina_titulo %}Federações{% endblock %}
+{% block pagina_subtitulo %}
+  {{ federacoes|length }} federação{{ 'ões' if federacoes|length != 1 else '' }} cadastrada{{ 's' if federacoes|length != 1 }}.
+{% endblock %}
+
+{% block pagina_acoes %}
+  <a class="u-btn u-btn--forte"
+     href="{{ url_for('federacao.cadastro_federacao', next=request.full_path) }}">
+    <i class="bi bi-plus-lg"></i> Nova federação
+  </a>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+  /* Mesma forma da lista de associações e de academias: as três são listas de
+     entidade com logo, nome e contato — não havia razão para cada uma ter o
+     seu desenho. */
+  .ent-grade {
+    display: grid;
+    gap: var(--u-space-3);
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  }
+  .ent-card {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: var(--u-space-3);
+    padding: var(--u-space-3);
+    border: 1px solid var(--u-border);
+    border-radius: var(--u-radius);
+    background: var(--u-surface);
+  }
+  .ent-principal {
+    display: flex; align-items: center; gap: var(--u-space-3);
+    min-width: 0; flex: 1; text-decoration: none; color: inherit;
+  }
+  .ent-principal:hover .ent-nome { text-decoration: underline; }
+  .ent-marca {
+    width: 44px; height: 44px; flex-shrink: 0; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--u-surface-alt); color: var(--u-text-muted);
+    font-weight: var(--u-fw-bold); overflow: hidden;
+  }
+  .ent-marca img { width: 100%; height: 100%; object-fit: contain; padding: 5px; }
+  .ent-dados { display: flex; flex-direction: column; min-width: 0; }
+  .ent-nome { font-weight: var(--u-fw-semibold); overflow-wrap: anywhere; }
+  .ent-meta { font-size: var(--u-fs-xs); color: var(--u-text-muted); overflow-wrap: anywhere; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+{% if federacoes %}
+<div class="ent-grade">
+  {% for fed in federacoes %}
+  <div class="ent-card">
+    <a class="ent-principal"
+       href="{{ url_for('federacao.lista_associacoes', federacao_id=fed.id) }}">
+      <span class="ent-marca">
+        {% if fed.logo_url %}<img src="{{ fed.logo_url }}" alt="">
+        {% else %}{{ (fed.sigla or fed.nome or '?')[0] }}{% endif %}
+      </span>
+      <span class="ent-dados">
+        <span class="ent-nome">{{ fed.nome }}</span>
+        {% if fed.sigla %}<span class="ent-meta">{{ fed.sigla }}</span>{% endif %}
+        {% if fed.email %}<span class="ent-meta">{{ fed.email }}</span>{% endif %}
+        {% if fed.telefone %}<span class="ent-meta">{{ fed.telefone }}</span>{% endif %}
+      </span>
+    </a>
+    {# Fora do link principal: link dentro de link não é clicável de forma
+       confiável, e o `stretched-link` cobria o botão. #}
+    <a class="u-btn u-btn--pequeno"
+       href="{{ url_for('federacao.editar_federacao', federacao_id=fed.id, next=request.full_path) }}">
+      <i class="bi bi-pencil"></i> Editar
+    </a>
+  </div>
+  {% endfor %}
 </div>
-<script>
-    (function () {
-        const select = document.getElementById('logoSizeSelect');
-        if (!select) return;
-        const storageKey = 'logoSize';
-        const applySize = (value) => {
-            document.documentElement.style.setProperty('--logo-size', `${value}px`);
-        };
-        const saved = localStorage.getItem(storageKey);
-        if (saved) {
-            select.value = saved;
-            applySize(saved);
-        } else {
-            applySize(select.value);
-        }
-        select.addEventListener('change', function () {
-            localStorage.setItem(storageKey, this.value);
-            applySize(this.value);
-        });
-    })();
-</script>
+{% else %}
+  {{ vazio('Nenhuma federação cadastrada no sistema.',
+           href=url_for('federacao.cadastro_federacao'),
+           acao='Cadastrar a primeira', icone='bi-flag') }}
+{% endif %}
+
 {% endblock %}

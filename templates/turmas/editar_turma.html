@@ -1,23 +1,31 @@
 {% extends "base_app.html" %}
+{% set back_url = back_url or get_back_url_default() %}
 {% block title %}Editar Turma{% endblock %}
+{% block pagina_titulo %}Editar turma{% endblock %}
+{% block pagina_subtitulo %}{{ turma.Nome }}{% if academia %} — {{ academia.nome }}{% endif %}{% endblock %}
+{% block pagina_acoes %}
+<a href="{{ url_voltar(back_url) }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Voltar</a>
+{% endblock %}
 {% block content %}
 <style>
-.turma-form-wrap { max-width: 680px; margin-left: auto; margin-right: auto; }
+.turma-form-wrap { max-width: none; }
 @media (min-width: 576px) { .turma-form-wrap { padding-left: 0.5rem; padding-right: 0.5rem; } }
 .turma-form .form-section {
-    border-left: 3px solid #cce5ff;
-    background: linear-gradient(90deg, #f8fbff 0%, transparent 100%);
-    padding: 1rem 1.25rem;
-    margin-bottom: 1.25rem;
-    border-radius: 0 8px 8px 0;
+    padding: 1.25rem 0;
+    margin-bottom: 0;
+    border-bottom: 1px solid var(--u-border);
 }
+.turma-form .form-section:first-of-type { padding-top: 0; }
+.turma-form .form-section:last-of-type { border-bottom: none; padding-bottom: 0; }
 .turma-form .form-section h6 {
-    color: #0d6efd;
+    color: var(--u-text);
     font-weight: 600;
-    font-size: 0.9rem;
-    margin-bottom: 0.85rem;
-    letter-spacing: 0.02em;
+    font-size: .78rem;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    margin-bottom: .9rem;
 }
+.turma-form .form-section h6 .bi { color: var(--u-text-muted); }
 .turma-form .auxiliar-row {
     display: flex;
     align-items: center;
@@ -27,21 +35,15 @@
     margin-bottom: 0.3rem;
     transition: background 0.2s;
 }
-.turma-form .auxiliar-row:hover { background: rgba(13, 110, 253, 0.06); }
+.turma-form .auxiliar-row:hover { background: rgba(28, 28, 28, 0.06); }
 .turma-form .auxiliar-row.d-none { display: none !important; }
 .turma-form .card { border-radius: 14px; }
 .turma-form .card-header { border-radius: 14px 14px 0 0; }
 </style>
-<div class="container py-4">
-    <div class="turma-form-wrap mb-4">
-        {% set back_url = back_url or get_back_url_default() %}
-{% include 'components/botao_voltar.html' %}
-        <h2 class="h4 fw-bold text-primary mb-1">Editar Turma</h2>
-        <p class="text-muted small mb-0">{{ turma.Nome }} — {{ academia.nome if academia else '' }}</p>
-    </div>
+<div class="container">
 
     <div class="card shadow-sm border-0 turma-form turma-form-wrap" style="border-radius: 14px; overflow: hidden;">
-        <div class="card-header py-3" style="background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%); color: white; border: none;">
+        <div class="card-header py-3">
             <h5 class="mb-0 fw-bold"><i class="bi bi-pencil-square me-2"></i> Detalhes da Turma</h5>
         </div>
         <div class="card-body p-4">
@@ -54,7 +56,7 @@
                     <div class="row g-3">
                         <div class="col-md-6">
                             <label for="modalidade_id" class="form-label fw-semibold">Modalidade</label>
-                            <select id="modalidade_id" name="modalidade_id" class="form-select">
+                            <select id="modalidade_id" name="modalidade_id" class="u-campo__controle">
                                 <option value="">— Selecione (opcional) —</option>
                                 {% for m in modalidades %}
                                 <option value="{{ m.id }}" {% if turma_modalidade_id == m.id %}selected{% endif %}>{{ m.nome }}</option>
@@ -63,8 +65,19 @@
                             <small class="text-muted">Apenas modalidades liberadas pela academia. Professores são filtrados pela modalidade.</small>
                         </div>
                         <div class="col-md-6">
+                            <label for="mensalidade_id" class="form-label fw-semibold">Plano de mensalidade da turma</label>
+                            {% set _planos = planos_da_academia_turma(turma.id_academia) %}
+                            <select id="mensalidade_id" name="mensalidade_id" class="u-campo__controle">
+                                <option value="">— Sem plano (matrícula usa o valor da academia) —</option>
+                                {% for p in _planos %}
+                                <option value="{{ p.id }}" data-mods="{{ p.mod_ids or '' }}" {% if turma.mensalidade_id == p.id %}selected{% endif %}>{{ p.nome }} — R$ {{ '%.2f'|format(p.valor|float)|replace('.', ',') }}</option>
+                                {% endfor %}
+                            </select>
+                            <small class="text-muted">Define o valor da matrícula pelo link público e o plano sugerido ao matricular.</small>
+                        </div>
+                        <div class="col-md-6">
                             <label for="nome" class="form-label fw-semibold">Nome da Turma <span class="text-danger">*</span></label>
-                            <input type="text" id="nome" name="nome" class="form-control" required value="{{ turma.Nome }}">
+                            <input type="text" id="nome" name="nome" class="u-campo__controle" required value="{{ turma.Nome }}">
                         </div>
                         <div class="col-12">
                             <label class="form-label fw-semibold">Dias da semana com aula <span class="text-danger">*</span></label>
@@ -80,12 +93,12 @@
                         </div>
                         <div class="col-md-6">
                             <label for="hora_inicio" class="form-label fw-semibold">Hora início do treino <span class="text-danger">*</span></label>
-                            <input type="time" id="hora_inicio" name="hora_inicio" class="form-control" required
+                            <input type="time" id="hora_inicio" name="hora_inicio" class="u-campo__controle" required
                                 value="{{ hora_inicio_display or '' }}">
                         </div>
                         <div class="col-md-6">
                             <label for="hora_fim" class="form-label fw-semibold">Hora fim do treino <span class="text-danger">*</span></label>
-                            <input type="time" id="hora_fim" name="hora_fim" class="form-control" required
+                            <input type="time" id="hora_fim" name="hora_fim" class="u-campo__controle" required
                                 value="{{ hora_fim_display or '' }}">
                         </div>
                     </div>
@@ -96,15 +109,15 @@
                     <div class="row g-3">
                         <div class="col-md-4">
                             <label for="idade_min" class="form-label fw-semibold">Idade Mín. <span class="text-danger">*</span></label>
-                            <input type="number" id="idade_min" name="idade_min" class="form-control" required min="1" value="{{ turma.IdadeMin }}">
+                            <input type="number" id="idade_min" name="idade_min" class="u-campo__controle" required min="1" value="{{ turma.IdadeMin }}">
                         </div>
                         <div class="col-md-4">
                             <label for="idade_max" class="form-label fw-semibold">Idade Máx. <span class="text-danger">*</span></label>
-                            <input type="number" id="idade_max" name="idade_max" class="form-control" required min="1" value="{{ turma.IdadeMax }}">
+                            <input type="number" id="idade_max" name="idade_max" class="u-campo__controle" required min="1" value="{{ turma.IdadeMax }}">
                         </div>
                         <div class="col-md-4">
                             <label for="classificacao" class="form-label fw-semibold">Classificação <span class="text-danger">*</span></label>
-                            <input type="text" id="classificacao" name="classificacao" class="form-control" required value="{{ turma.Classificacao }}">
+                            <input type="text" id="classificacao" name="classificacao" class="u-campo__controle" required value="{{ turma.Classificacao }}">
                         </div>
                     </div>
                 </div>
@@ -113,7 +126,7 @@
                     <h6><i class="bi bi-person-badge me-1"></i> Professores</h6>
                     <div class="mb-3">
                         <label for="professor_responsavel_id" class="form-label fw-semibold">Professor responsável <span class="text-danger">*</span></label>
-                        <select id="professor_responsavel_id" name="professor_responsavel_id" class="form-select" required>
+                        <select id="professor_responsavel_id" name="professor_responsavel_id" class="u-campo__controle" required>
                             <option value="">— Selecione —</option>
                             {% for prof in professores %}
                             <option value="{{ prof.id }}" data-modalidades="{{ (prof_modalidades.get(prof.id, []) | map('string') | list | join(',')) or '' }}" {% if prof.id == professor_responsavel_id %}selected{% endif %}>{{ prof.nome }}</option>
@@ -143,12 +156,12 @@
                     <div class="row g-3">
                         <div class="col-md-6">
                             <label for="capacidade" class="form-label fw-semibold">Capacidade máxima</label>
-                            <input type="number" id="capacidade" name="capacidade" class="form-control" required min="1" value="{{ turma.Capacidade }}">
+                            <input type="number" id="capacidade" name="capacidade" class="u-campo__controle" required min="1" value="{{ turma.Capacidade }}">
                         </div>
                         <div class="col-md-6">
                             <label for="id_academia" class="form-label fw-semibold">Academia <span class="text-danger">*</span></label>
                             {% if academias %}
-                            <select id="id_academia" name="id_academia" class="form-select" required>
+                            <select id="id_academia" name="id_academia" class="u-campo__controle" required>
                                 <option value="" disabled {% if not academia_selecionada %}selected{% endif %}>Selecione</option>
                                 {% for academia in academias %}
                                 <option value="{{ academia.id }}" {% if academia.id == academia_selecionada %}selected{% endif %}>{{ academia.nome }}</option>
@@ -170,17 +183,26 @@
 
                 <div class="form-section">
                     <h6><i class="bi bi-chat-text me-1"></i> Observações</h6>
-                    <textarea id="observacoes" name="observacoes" class="form-control" rows="2" placeholder="Informações adicionais sobre a turma...">{{ turma.Observacoes or '' }}</textarea>
+                    <textarea id="observacoes" name="observacoes" class="u-campo__controle" rows="2" placeholder="Informações adicionais sobre a turma..." aria-label="Informações adicionais sobre a turma...">{{ turma.Observacoes or '' }}</textarea>
                 </div>
 
                 <div class="d-flex justify-content-end gap-2 pt-3 border-top mt-4">
-                    <a href="{{ back_url }}" class="btn btn-outline-secondary">Cancelar</a>
-                    <button type="submit" class="btn btn-primary px-4"><i class="bi bi-check-lg me-1"></i> Salvar Alterações</button>
+                    <a href="{{ back_url }}" class="u-btn">Cancelar</a>
+                    <button type="submit" class="u-btn u-btn--primario px-4"><i class="bi bi-check-lg me-1"></i> Salvar Alterações</button>
                 </div>
             </form>
         </div>
     </div>
 </div>
+<script src="{{ asset('js/planos_por_modalidade.js') }}"></script>
+<script>
+  // Plano da turma: só os planos da modalidade escolhida para a turma.
+  (function () {
+    var mod = document.getElementById('modalidade_id');
+    PlanosPorModalidade(document.getElementById('mensalidade_id'),
+      function () { return mod && mod.value ? [mod.value] : []; }, [mod]);
+  })();
+</script>
 <script>
 (function() {
     var selProf = document.getElementById('professor_responsavel_id');

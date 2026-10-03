@@ -1,0 +1,148 @@
+{% extends "base_app.html" %}
+{% from 'components/ui.html' import voltar %}
+{% set menu_ativo = 'modulo_estoque' %}
+{% block title %}Módulo de estoque{% endblock %}
+
+{% block pagina_titulo %}Módulo de estoque{% endblock %}
+{% block pagina_subtitulo %}
+  Quem usa o estoque. O módulo nasce desligado: ligando aqui, a seção aparece
+  no menu e as telas passam a responder.
+{% endblock %}
+
+{% block pagina_acoes %}
+  {{ voltar(url_for('configuracoes.hub')) }}
+{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ asset('css/painel/estoque.css') }}">
+<style>
+  .me-linha {
+    display: grid; gap: .5rem;
+    grid-template-columns: minmax(0,1.6fr) 110px 150px 120px 90px;
+    align-items: center; padding: .55rem 0;
+    border-bottom: 1px solid var(--u-border);
+  }
+  .me-linha:last-child { border-bottom: 0; }
+  .me-marca { display: flex; align-items: center; gap: .45rem; font-size: var(--u-fs-sm); }
+  @media (max-width: 860px) {
+    .me-linha { grid-template-columns: minmax(0,1.6fr) 110px 90px; }
+    .me-opcional { display: none; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<section class="lst-quadro">
+  <header class="lst-quadro__topo">
+    <h2 class="lst-quadro__titulo">Academias</h2>
+    <span class="lst-quadro__meta">
+      {{ academias | selectattr('modulo') | list | length }} de {{ academias|length }} com o módulo ligado
+    </span>
+  </header>
+  <div style="padding:.25rem 1rem 1rem">
+    <div class="me-linha lst-cab">
+      <div>Academia</div>
+      <div>Estoque</div>
+      <div class="me-opcional">Saldo negativo</div>
+      <div class="me-opcional">Produtos</div>
+      <div class="lst-fim">Salvar</div>
+    </div>
+    {% for a in academias %}
+    <form method="POST" class="me-linha">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="alvo" value="academia">
+      <input type="hidden" name="id" value="{{ a.id }}">
+      <div class="lst-corta"><span class="lst-nome">{{ a.nome }}</span></div>
+      <label class="me-marca">
+        <input type="checkbox" name="modulo" value="1" {% if a.modulo %}checked{% endif %}>
+        <span>Ligado</span>
+      </label>
+      <label class="me-marca me-opcional">
+        <input type="checkbox" name="negativo" value="1" {% if a.negativo %}checked{% endif %}>
+        <span>Permitir</span>
+      </label>
+      <div class="me-opcional lst-sub">{{ a.produtos }}</div>
+      <div class="lst-fim">
+        <button type="submit" class="u-btn u-btn--pequeno">Salvar</button>
+      </div>
+    </form>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="lst-quadro mt-3">
+  <header class="lst-quadro__topo">
+    <h2 class="lst-quadro__titulo">Associações</h2>
+    <span class="lst-quadro__meta">Estoque próprio e revenda pelas academias</span>
+  </header>
+  <div style="padding:.25rem 1rem 1rem">
+    <div class="me-linha lst-cab">
+      <div>Associação</div>
+      <div>Estoque</div>
+      <div class="me-opcional">Revenda</div>
+      <div class="me-opcional">Acerto</div>
+      <div class="lst-fim">Salvar</div>
+    </div>
+    {% for s in associacoes %}
+    <form method="POST" class="me-linha">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="alvo" value="associacao">
+      <input type="hidden" name="id" value="{{ s.id }}">
+      <div class="lst-corta"><span class="lst-nome">{{ s.nome }}</span></div>
+      <label class="me-marca">
+        <input type="checkbox" name="modulo" value="1" {% if s.modulo %}checked{% endif %}>
+        <span>Ligado</span>
+      </label>
+      <label class="me-marca me-opcional">
+        <input type="checkbox" name="revenda" value="1" {% if s.revenda %}checked{% endif %}>
+        <span>Liberada</span>
+      </label>
+      <div class="me-opcional">
+        <select name="modo" class="u-campo__controle" aria-label="Modo de acerto">
+          <option value="extrato" {% if s.modo == 'extrato' %}selected{% endif %}>Fatura mensal</option>
+          <option value="venda" {% if s.modo == 'venda' %}selected{% endif %}>Por venda</option>
+        </select>
+      </div>
+      <div class="lst-fim">
+        <button type="submit" class="u-btn u-btn--pequeno">Salvar</button>
+      </div>
+    </form>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="lst-quadro mt-3">
+  <header class="lst-quadro__topo">
+    <h2 class="lst-quadro__titulo">Estoques independentes</h2>
+    <span class="lst-quadro__meta">Sem academia, sem associação, caixa próprio</span>
+  </header>
+  <div style="padding:.25rem 1rem 1rem">
+    {% for o in organizacoes %}
+    <div class="me-linha">
+      <div class="lst-corta"><span class="lst-nome">{{ o.nome }}</span></div>
+      <div class="lst-sub">{{ 'Ativo' if o.ativo else 'Inativo' }}</div>
+      <div class="me-opcional lst-sub">{{ o.produtos }} produto(s)</div>
+      <div class="me-opcional"></div>
+      <div class="lst-fim">
+        <a class="u-btn u-btn--pequeno"
+           href="{{ url_for('estoque.escolher_organizacao', organizacao_id=o.id) }}">Abrir</a>
+      </div>
+    </div>
+    {% else %}
+    <p class="lst-sub">Nenhum estoque independente criado ainda.</p>
+    {% endfor %}
+
+    <form method="POST" action="{{ url_for('configuracoes.estoque_organizacao_nova') }}"
+          class="d-flex gap-2 mt-3 flex-wrap">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="text" name="nome" required placeholder="Nome da loja/depósito"
+             class="u-campo__controle" style="flex:1 1 220px" aria-label="Nome da organização">
+      <input type="text" name="documento" placeholder="CNPJ (opcional)"
+             class="u-campo__controle" style="flex:0 1 180px" aria-label="Documento">
+      <button type="submit" class="u-btn u-btn--forte">Criar estoque independente</button>
+    </form>
+  </div>
+</section>
+
+{% endblock %}

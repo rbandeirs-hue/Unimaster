@@ -118,10 +118,10 @@
 <script>
   // A rota é montada com id 0 e o número real entra na hora do clique.
   var URL_CONFIRMAR = "{{ url_for('academia.confirmar_pagamento_diaria', pagamento_id=0, academia_id=academia_id) }}";
-  document.addEventListener('click', function (ev) {
+  document.addEventListener('click', async function (ev) {
     var botao = ev.target.closest('.js-confirmar-diaria');
     if (!botao) return;
-    if (!confirm('Confirmar este pagamento? Uma receita será gerada automaticamente.')) return;
+    if (!await Dialogo.confirmar('Confirmar este pagamento? Uma receita será gerada automaticamente.')) return;
     botao.disabled = true;
     fetch(URL_CONFIRMAR.replace('/0/', '/' + botao.dataset.id + '/'), {
       method: 'POST',

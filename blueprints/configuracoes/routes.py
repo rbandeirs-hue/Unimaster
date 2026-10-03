@@ -185,7 +185,7 @@ def modalidades_lista():
                 )
             cur.execute(
                 f"""
-                SELECT m.id, m.nome, m.descricao, m.ativo,
+                SELECT m.id, m.nome, m.descricao, m.ativo, m.cor,
                        COALESCE(m.visibilidade, 'publica') as visibilidade
                 FROM modalidade m
                 WHERE 1=1 {where}
@@ -199,6 +199,7 @@ def modalidades_lista():
             modalidades = cur.fetchall()
             for m in modalidades:
                 m["visibilidade"] = "publica"
+                m.setdefault("cor", None)
     except Exception:
         db.close()
         flash("Tabela modalidade não encontrada. Execute a migration add_modalidade_academia_modalidades.sql", "danger")
@@ -453,7 +454,10 @@ def modalidades_vincular(modalidade_id):
         flash("Modalidade não encontrada.", "danger")
         return redirect(url_for("configuracoes.modalidades_lista"))
 
-    cur.execute("SELECT id, nome FROM academias ORDER BY nome")
+    cur.execute("""SELECT a.id, a.nome, a.cidade, a.uf,
+                          (SELECT COUNT(*) FROM alunos al
+                           WHERE al.id_academia = a.id AND al.ativo = 1) AS alunos
+                   FROM academias a ORDER BY a.nome""")
     academias = cur.fetchall()
     try:
         cur.execute("SELECT academia_id FROM academia_modalidades WHERE modalidade_id = %s", (modalidade_id,))
@@ -462,16 +466,43 @@ def modalidades_vincular(modalidade_id):
         vinculadas = set()
 
     if request.method == "POST":
-        novo_ids = [int(x) for x in request.form.getlist("academia_ids") if str(x).strip()]
+        validos = {a["id"] for a in academias}
+        novo_ids = {int(x) for x in request.form.getlist("academia_ids")
+                    if str(x).strip().isdigit()} & validos
+        # Diferença em vez de apagar tudo e reinserir: só o que mudou é tocado.
+        # A versão anterior removia os 11 vínculos do judô e recriava os 11 a
+        # cada salvamento, mesmo quando nada tinha mudado.
+        a_criar = novo_ids - vinculadas
+        a_remover = vinculadas - novo_ids
         try:
-            cur.execute("DELETE FROM academia_modalidades WHERE modalidade_id = %s", (modalidade_id,))
-            for aid in novo_ids:
+            for aid in a_criar:
                 cur.execute(
-                    "INSERT INTO academia_modalidades (academia_id, modalidade_id) VALUES (%s, %s)",
-                    (aid, modalidade_id),
-                )
+                    "INSERT IGNORE INTO academia_modalidades (academia_id, modalidade_id) "
+                    "VALUES (%s, %s)", (aid, modalidade_id))
+            for aid in a_remover:
+                cur.execute(
+                    "DELETE FROM academia_modalidades "
+                    "WHERE academia_id = %s AND modalidade_id = %s", (aid, modalidade_id))
             db.commit()
-            flash("Vínculos atualizados.", "success")
+
+            # Sem isto o sistema continua vendo os vínculos antigos por até 5
+            # minutos: o menu lateral, o seletor de modalidade e o recorte das
+            # telas leem esse cache.
+            try:
+                from utils.multimodalidade import invalidar
+                invalidar()
+            except Exception:
+                pass
+
+            if a_criar or a_remover:
+                partes = []
+                if a_criar:
+                    partes.append(f"{len(a_criar)} vinculada(s)")
+                if a_remover:
+                    partes.append(f"{len(a_remover)} desvinculada(s)")
+                flash("Vínculos atualizados: " + ", ".join(partes) + ".", "success")
+            else:
+                flash("Nada mudou nos vínculos.", "info")
             db.close()
             return redirect(url_for("configuracoes.modalidades_lista"))
         except Exception as e:
@@ -814,3 +845,214 @@ def modalidades_graduacao_toggle(modalidade_id, graduacao_id):
     finally:
         cur.close()
         db.close()
+
+
+# ======================================================
+# Menu por modalidade — liga/desliga de cada item da lateral
+# ======================================================
+@bp_configuracoes.route("/menu-modalidade", methods=["GET", "POST"])
+@login_required
+@admin_required
+def menu_modalidade():
+    """Qual item da lateral cada modalidade mostra.
+
+    A tela existe para que "isto é do judô" deixe de ser uma decisão de código.
+    Cada chave tem três estados possíveis no banco — ligada, desligada e sem
+    linha — mas a tela mostra dois: o interruptor exibe o estado EFETIVO, e
+    mexer nele grava a exceção. Quem quiser devolver um item ao comportamento
+    padrão usa o botão "Voltar ao padrão" do grupo.
+    """
+    from utils import menu_modalidade as regras
+    from utils.menu import catalogo
+
+    db = get_db_connection()
+    cur = db.cursor(dictionary=True)
+    try:
+        cur.execute("SELECT id, nome, cor FROM modalidade WHERE ativo = 1 ORDER BY nome")
+        modalidades = cur.fetchall() or []
+    finally:
+        cur.close()
+        db.close()
+
+    if not modalidades:
+        flash("Nenhuma modalidade ativa cadastrada.", "warning")
+        return redirect(url_for("configuracoes.modalidades_lista"))
+
+    modalidade_id = request.args.get("modalidade_id", type=int) or modalidades[0]["id"]
+    if modalidade_id not in [m["id"] for m in modalidades]:
+        modalidade_id = modalidades[0]["id"]
+
+    if request.method == "POST":
+        alvo = request.form.get("modalidade_id", type=int)
+        if alvo not in [m["id"] for m in modalidades]:
+            flash("Modalidade inválida.", "danger")
+            return redirect(url_for("configuracoes.menu_modalidade"))
+
+        if request.form.get("acao") == "padrao":
+            # Apaga as exceções do modo inteiro: o menu volta a seguir o código.
+            modo_alvo = request.form.get("modo", "")
+            apagados = 0
+            for _grupo, itens in catalogo(modo_alvo):
+                for it in itens:
+                    if regras.estado(alvo, modo_alvo, it.chave) is not None:
+                        regras.definir(alvo, modo_alvo, it.chave, None)
+                        apagados += 1
+            flash(f"{apagados} item(ns) voltaram ao padrão do sistema.", "success")
+            return redirect(url_for("configuracoes.menu_modalidade", modalidade_id=alvo))
+
+        # Um POST por modo: o formulário manda as chaves marcadas, e o que não
+        # veio está desligado. Só grava o que mudou, para não encher a tabela
+        # de linhas idênticas ao padrão.
+        modo_alvo = request.form.get("modo", "")
+        marcados = set(request.form.getlist("itens"))
+        mudou = 0
+        for _grupo, itens in catalogo(modo_alvo):
+            for it in itens:
+                desejado = it.chave in marcados
+                if regras.estado(alvo, modo_alvo, it.chave) != desejado:
+                    regras.definir(alvo, modo_alvo, it.chave, desejado)
+                    mudou += 1
+        flash(f"Menu de {modo_alvo} atualizado ({mudou} mudança(s)).", "success")
+        return redirect(url_for("configuracoes.menu_modalidade", modalidade_id=alvo))
+
+    # Monta o quadro: por modo, os grupos, e cada item com o estado efetivo.
+    quadro = []
+    for modo in regras.MODOS:
+        grupos = []
+        for rotulo, itens in catalogo(modo):
+            linhas = []
+            for it in itens:
+                explicito = regras.estado(modalidade_id, modo, it.chave)
+                linhas.append({
+                    "chave": it.chave,
+                    "icone": it.icone,
+                    "rotulo": it.rotulo,
+                    # Sem linha no banco o item aparece — é o padrão do sistema.
+                    "ligado": True if explicito is None else explicito,
+                    "explicito": explicito is not None,
+                })
+            if linhas:
+                grupos.append({"rotulo": rotulo or "Início", "itens": linhas})
+        if grupos:
+            quadro.append({"modo": modo, "rotulo": _ROTULO_MODO.get(modo, modo),
+                           "grupos": grupos})
+
+    return render_template("configuracoes/menu_modalidade.html",
+                           modalidades=modalidades,
+                           modalidade_id=modalidade_id,
+                           modalidade=next(m for m in modalidades
+                                           if m["id"] == modalidade_id),
+                           quadro=quadro)
+
+
+_ROTULO_MODO = {
+    "academia": "Gestor da academia",
+    "professor": "Professor",
+    "aluno": "Aluno",
+    "responsavel": "Responsável",
+}
+
+
+# ======================================================
+# Módulo de estoque — ligar por academia e por associação
+# ======================================================
+@bp_configuracoes.route("/estoque", methods=["GET", "POST"])
+@login_required
+@admin_required
+def modulo_estoque():
+    """Quem usa o módulo de estoque, e com quais permissões de operação.
+
+    O módulo nasce desligado em todo mundo. Esta tela é o lugar de ligar — e de
+    ligar as duas chaves que mudam regra de negócio: permitir saldo negativo, e
+    liberar as academias a revenderem o estoque da associação.
+    """
+    db = get_db_connection()
+    cur = db.cursor(dictionary=True)
+    try:
+        if request.method == "POST":
+            alvo = request.form.get("alvo")
+            registro_id = request.form.get("id", type=int)
+            if alvo == "academia" and registro_id:
+                cur.execute("""UPDATE academias SET modulo_estoque = %s,
+                                      estoque_permite_negativo = %s WHERE id = %s""",
+                            (1 if request.form.get("modulo") else 0,
+                             1 if request.form.get("negativo") else 0,
+                             registro_id))
+                flash("Academia atualizada.", "success")
+            elif alvo == "associacao" and registro_id:
+                cur.execute("""UPDATE associacoes SET modulo_estoque = %s,
+                                      estoque_revenda = %s,
+                                      estoque_repasse_modo = %s WHERE id = %s""",
+                            (1 if request.form.get("modulo") else 0,
+                             1 if request.form.get("revenda") else 0,
+                             (request.form.get("modo") or "extrato"),
+                             registro_id))
+                flash("Associação atualizada.", "success")
+            db.commit()
+            return redirect(url_for("configuracoes.modulo_estoque"))
+
+        cur.execute("""SELECT a.id, a.nome, a.id_associacao,
+                              COALESCE(a.modulo_estoque,0) AS modulo,
+                              COALESCE(a.estoque_permite_negativo,0) AS negativo,
+                              (SELECT COUNT(*) FROM estoque_produto p
+                               WHERE p.id_academia = a.id) AS produtos
+                       FROM academias a ORDER BY a.nome""")
+        academias = cur.fetchall() or []
+        cur.execute("""SELECT s.id, s.nome,
+                              COALESCE(s.modulo_estoque,0) AS modulo,
+                              COALESCE(s.estoque_revenda,0) AS revenda,
+                              COALESCE(s.estoque_repasse_modo,'extrato') AS modo,
+                              (SELECT COUNT(*) FROM estoque_produto p
+                               WHERE p.id_associacao = s.id) AS produtos
+                       FROM associacoes s ORDER BY s.nome""")
+        associacoes = cur.fetchall() or []
+        cur.execute("""SELECT o.id, o.nome, o.ativo,
+                              (SELECT COUNT(*) FROM estoque_produto p
+                               WHERE p.id_organizacao = o.id) AS produtos
+                       FROM estoque_organizacao o ORDER BY o.nome""")
+        organizacoes = cur.fetchall() or []
+    except Exception as e:
+        db.rollback()
+        flash(f"Erro: {e}", "danger")
+        academias = associacoes = organizacoes = []
+    finally:
+        cur.close()
+        db.close()
+
+    return render_template("configuracoes/modulo_estoque.html",
+                           academias=academias, associacoes=associacoes,
+                           organizacoes=organizacoes)
+
+
+@bp_configuracoes.route("/estoque/organizacao", methods=["POST"])
+@login_required
+@admin_required
+def estoque_organizacao_nova():
+    """Cria um estoque independente e liga quem vai operar."""
+    nome = (request.form.get("nome") or "").strip()
+    if not nome:
+        flash("Informe o nome da organização.", "warning")
+        return redirect(url_for("configuracoes.modulo_estoque"))
+    db = get_db_connection()
+    cur = db.cursor()
+    try:
+        cur.execute("""INSERT INTO estoque_organizacao (nome, documento, criado_por)
+                       VALUES (%s, %s, %s)""",
+                    (nome, (request.form.get("documento") or "").strip() or None,
+                     current_user.id))
+        org_id = cur.lastrowid
+        # Quem cria já entra como gestor: organização sem ninguém ligado é
+        # invisível até para o admin que acabou de criá-la.
+        cur.execute("""INSERT INTO estoque_organizacao_usuario
+                       (organizacao_id, usuario_id, papel) VALUES (%s,%s,'gestor')""",
+                    (org_id, current_user.id))
+        db.commit()
+        flash(f"Estoque independente «{nome}» criado. "
+              "Cadastre um local e as tabelas de preço para começar.", "success")
+    except Exception as e:
+        db.rollback()
+        flash(f"Erro ao criar: {e}", "danger")
+    finally:
+        cur.close()
+        db.close()
+    return redirect(url_for("configuracoes.modulo_estoque"))

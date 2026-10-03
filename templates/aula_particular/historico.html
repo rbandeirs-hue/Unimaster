@@ -1,0 +1,109 @@
+{% extends "base_app.html" %}
+{% set menu_ativo = 'aulas_particulares' %}
+{% block title %}Aula particular — {{ ap.aluno }}{% endblock %}
+{% block extra_css %}
+<style>
+  .lin-reg { grid-template-columns: 120px 110px 150px minmax(0,2fr) 60px; }
+  .ap-reg-form { display:flex; flex-wrap:wrap; gap:.6rem; align-items:flex-end; }
+  .ap-reg-form label { display:flex; flex-direction:column; gap:.2rem; font-size:var(--u-fs-sm); }
+  @media (max-width: 760px) {
+    .lin-reg { grid-template-columns: 100px 120px minmax(0,1fr); }
+    .lin-reg .col-hora, .lin-reg .col-acao { display:none !important; }
+  }
+</style>
+{% endblock %}
+
+{% block pagina_titulo %}{{ ap.aluno }}{% endblock %}
+{% block pagina_subtitulo %}Aula particular{% if ap.modalidade_nome %} de {{ ap.modalidade_nome }}{% endif %} · {{ ap.professor_nome }} · {{ ap.dias_txt }} {{ ap.inicio }}–{{ ap.fim }}{% if ap.local %} · {{ ap.local }}{% endif %}{% endblock %}
+{% block pagina_acoes %}
+<a href="{{ url_for('aula_particular.lista') }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Aulas particulares</a>
+<a href="{{ url_for('aula_particular.editar', ap_id=ap.id) }}" class="sh__btn"><i class="bi bi-pencil"></i> Editar</a>
+<form method="POST" action="{{ url_for('aula_particular.encerrar', ap_id=ap.id) }}" style="display:contents"
+      {% if ap.ativo %}data-confirmar="Encerrar a aula particular de {{ ap.aluno }}? Ela sai da agenda; o histórico fica." data-confirmar-tom="aviso"{% endif %}>
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  {% if ap.ativo %}<button type="submit" class="sh__btn"><i class="bi bi-stop-circle"></i> Encerrar</button>
+  {% else %}<input type="hidden" name="reativar" value="1"><button type="submit" class="sh__btn"><i class="bi bi-play-circle"></i> Reativar</button>{% endif %}
+</form>
+{% endblock %}
+
+{% block content %}
+{% if not ap.ativo %}<p class="alert alert-secondary">Encerrada{% if ap.data_fim %} em {{ ap.data_fim|data_br }}{% endif %} — não aparece mais na agenda.</p>{% endif %}
+{% if ap.observacoes %}<p class="u-muted">{{ ap.observacoes }}</p>{% endif %}
+{% if ap.telefone %}<p class="u-fs-sm">Telefone: {{ ap.telefone|telefone_br }}</p>{% endif %}
+
+<div class="d-flex align-items-center gap-2 mb-2">
+  <a class="lst-acao" href="{{ url_for('aula_particular.historico', ap_id=ap.id, mes=mes_ant) }}" aria-label="Mês anterior"><i class="bi bi-chevron-left"></i></a>
+  <strong>{{ ['','Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'][mes_ini.month] }} de {{ mes_ini.year }}</strong>
+  <a class="lst-acao" href="{{ url_for('aula_particular.historico', ap_id=ap.id, mes=mes_prox) }}" aria-label="Próximo mês"><i class="bi bi-chevron-right"></i></a>
+</div>
+<div class="sh__faixa mb-3">
+  <div class="sh__faixa-item"><span class="sh__faixa-rotulo">Previstas</span><span class="sh__faixa-valor">{{ previstas }}</span></div>
+  <div class="sh__faixa-item"><span class="sh__faixa-rotulo">Dadas</span><span class="sh__faixa-valor">{{ contagem.realizada }}</span></div>
+  <div class="sh__faixa-item"><span class="sh__faixa-rotulo">Faltas</span><span class="sh__faixa-valor{% if contagem.falta %} sh__faixa-valor--alerta{% endif %}">{{ contagem.falta }}</span></div>
+  <div class="sh__faixa-item"><span class="sh__faixa-rotulo">Valor no mês</span><span class="sh__faixa-valor">{{ valor_mes|moeda_br if valor_mes is not none else '—' }}</span>
+    <span class="lst-sub">{% if ap.tipo_cobranca == 'mensal' %}mensal{% elif ap.valor_aula is not none %}{{ contagem.realizada }} × {{ ap.valor_aula|moeda_br }}{% endif %}</span></div>
+</div>
+
+<section class="lst-quadro p-3 mb-3 d-flex flex-wrap align-items-center gap-3">
+  <div style="flex:1 1 260px">
+    <strong>Cobrança de {{ ['','Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'][mes_ini.month] }}</strong>
+    <span class="d-block lst-sub">{% if ap.plano_nome %}{{ ap.plano_nome }} · {% endif %}{{ 'Mensal' if ap.tipo_cobranca == 'mensal' else 'Por aula' }} · {{ ap.valor_txt }}{% if ap.dia_vencimento %} · vence dia {{ ap.dia_vencimento }}{% endif %}</span>
+  </div>
+  <div>
+    {% if cobranca and cobranca.status %}
+      {% set _st = {'pago': ('Paga', 'success'), 'pendente': ('Em aberto', 'warning'), 'atrasado': ('Em atraso', 'danger'), 'cancelado': ('Cancelada', 'info')}[cobranca.status] %}
+      <span class="u-pill u-pill--{{ _st[1] }}">{{ _st[0] }}</span>
+      <span class="lst-sub">{{ cobranca.valor_cobranca|moeda_br }}{% if cobranca.data_vencimento %} · vence {{ cobranca.data_vencimento|data_br }}{% endif %}</span>
+    {% else %}<span class="lst-sub">Ainda não gerada</span>{% endif %}
+  </div>
+  {% if esc.gestor and ap.aluno_id and (not cobranca or cobranca.status in ('pendente', 'atrasado', 'cancelado')) %}
+  <form method="POST" action="{{ url_for('aula_particular.cobrar', ap_id=ap.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="competencia" value="{{ competencia }}">
+    <button type="submit" class="sh__btn sh__btn--forte"><i class="bi bi-receipt"></i>
+      {{ 'Atualizar cobrança' if cobranca and cobranca.status in ('pendente', 'atrasado') else 'Gerar cobrança' }}</button>
+  </form>
+  {% endif %}
+</section>
+
+<section class="lst-quadro p-3 mb-3">
+  <h2 class="lst-quadro__titulo mb-2">Registrar aula</h2>
+  <form method="POST" action="{{ url_for('aula_particular.registrar', ap_id=ap.id) }}" class="ap-reg-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Data<input type="date" name="data" class="u-campo__controle" max="{{ hoje.isoformat() }}" value="{{ (pendentes[-1] if pendentes else hoje).isoformat() }}" required></label>
+    <label>Início<input type="time" name="hora_inicio" class="u-campo__controle" value="{{ ap.inicio }}"></label>
+    <label>Término<input type="time" name="hora_fim" class="u-campo__controle" value="{{ ap.fim }}"></label>
+    <label>Situação
+      <select name="status" class="u-campo__controle">
+        {% for k, v in STATUS.items() %}<option value="{{ k }}">{{ v[0] }}</option>{% endfor %}
+      </select></label>
+    <label style="flex:1 1 260px">O que foi trabalhado<input type="text" name="conteudo" class="u-campo__controle" placeholder="Técnicas, objetivos, observações"></label>
+    <button type="submit" class="sh__btn sh__btn--forte"><i class="bi bi-check-lg"></i> Registrar</button>
+  </form>
+  {% if pendentes %}
+  <p class="u-fs-sm mt-2 mb-0 u-muted">Sem registro neste mês: {% for d in pendentes %}{{ DIAS_LONGOS[d.isoweekday() % 7][:3] }} {{ d.strftime('%d/%m') }}{{ ', ' if not loop.last }}{% endfor %}.</p>
+  {% endif %}
+</section>
+
+<section class="lst-quadro">
+  <header class="lst-quadro__topo"><h2 class="lst-quadro__titulo">Aulas do mês</h2><span class="lst-quadro__meta">{{ registros|length }}</span></header>
+  <div class="lst-rolagem"><div class="lst-largura" style="--lst-min:420px">
+    {% for r in registros %}
+    <div class="lst-linha lin-reg lst-item">
+      <div>{{ r.data|data_br }}<span class="lst-sub">{{ DIAS_LONGOS[r.data.isoweekday() % 7] }}</span></div>
+      <div class="col-hora u-num">{{ r.inicio }}–{{ r.fim }}</div>
+      <div><span class="u-pill u-pill--{{ STATUS[r.status][1] }}">{{ STATUS[r.status][0] }}</span></div>
+      <div class="lst-corta">{{ r.conteudo or '—' }}{% if r.registrado_por_nome %}<span class="lst-sub">por {{ r.registrado_por_nome }}</span>{% endif %}</div>
+      <div class="col-acao lst-fim">
+        <form method="POST" action="{{ url_for('aula_particular.excluir_registro', reg_id=r.id) }}" data-confirmar="Remover o registro de {{ r.data|data_br }}?">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="lst-acao lst-acao--perigo" title="Remover registro" aria-label="Remover registro de {{ r.data|data_br }}"><i class="bi bi-trash"></i></button>
+        </form>
+      </div>
+    </div>
+    {% else %}
+    <div class="lst-vazio">Nenhuma aula registrada neste mês.</div>
+    {% endfor %}
+  </div></div>
+</section>
+{% endblock %}

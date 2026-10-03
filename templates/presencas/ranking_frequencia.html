@@ -27,7 +27,14 @@
 
 {% block pagina_acoes %}
 <a href="{{ url_voltar(back_url) }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Voltar</a>
-<form method="GET" class="rk-filtros" id="rkForm"
+
+<button type="button" class="sh__btn" id="rkImprimir"><i class="bi bi-printer"></i> Imprimir</button>
+{% endblock %}
+
+{% block content %}
+{# Filtros numa barra própria, como nas outras listas — no cabeçalho ficam
+   só as ações (Voltar, Imprimir). #}
+<form method="GET" class="lst-filtros rk-filtros" id="rkForm"
       action="{{ url_for('presencas.ranking_frequencia_pagina') }}">
   {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
   <input type="hidden" name="tipo_filtro" id="rkTipo" value="{{ tipo_filtro }}">
@@ -80,13 +87,10 @@
   <button type="submit" class="sh__btn rk-buscar"
           {% if tipo_filtro != 'periodo' %}hidden{% endif %}>Buscar</button>
 </form>
-<button type="button" class="sh__btn" id="rkImprimir"><i class="bi bi-printer"></i> Imprimir</button>
-{% endblock %}
 
-{% block content %}
 <style>
   /* Filtros no cabeçalho, na mesma altura dos botões do shell. */
-  .rk-filtros { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
+  .rk-filtros { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; padding: .85rem 1rem; }
   .rk-campo {
     height: 42px;
     padding: 0 .8rem;
@@ -153,65 +157,41 @@
   }
 
   /* -------------------------------------------------------------- pódio */
-  /* Três colunas iguais e um degrau por coluna: os blocos dividem a mesma
-     linha de base e ficam com a mesma largura, independente do tamanho do
-     nome. Sem isso o pódio "escorrega" e sobra coluna vazia à direita. */
-  .rk-podio {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    align-items: end;
-    gap: 0;
-    max-width: 760px;
-    margin: 0 auto;
-    padding: 1.75rem 1.25rem 0;
+  .rk-top { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .rk-top__item {
+    display: flex; align-items: center; gap: .85rem;
+    padding: 1.1rem 1.25rem; min-width: 0;
+    border-left: 1px solid var(--sh-line);
   }
-  .rk-degrau { display: flex; flex-direction: column; align-items: center; min-width: 0; }
-  .rk-degrau-topo { width: 100%; padding: 0 .5rem 1rem; text-align: center; min-width: 0; }
-  .rk-medalha {
-    width: 56px; height: 56px;
-    margin: 0 auto .7rem;
+  .rk-top__item:first-child { border-left: 0; }
+  .rk-top__pos {
+    width: 32px; height: 32px; flex: none;
     display: grid; place-items: center;
-    border-radius: 50%;
-    background: #f4f2ee;
-    border: 2px solid var(--sh-line);
-    color: var(--sh-ink-soft);
-    font-size: .82rem; font-weight: 700; letter-spacing: .03em;
-    object-fit: cover;
+    border-radius: var(--u-radius-sm);
+    background: #f4f2ee; color: var(--sh-ink);
+    font-size: .88rem; font-weight: 600; font-variant-numeric: tabular-nums;
   }
-  .rk-degrau--1 .rk-medalha { width: 66px; height: 66px; font-size: .95rem; border-color: #e0be5f; background: #fdf6e3; color: #8a6a16; }
-  .rk-degrau--3 .rk-medalha { border-color: #ecc9bd; background: #fdf1ec; color: #96543a; }
-  .rk-degrau-nome {
-    font-size: .95rem; font-weight: 600;
-    line-height: 1.3;
-    overflow-wrap: anywhere;
+  .rk-top__item--1 .rk-top__pos { background: var(--sh-ink); color: #fff; }
+  .rk-top__foto {
+    width: 44px; height: 44px; flex: none;
+    display: grid; place-items: center;
+    border-radius: 50%; object-fit: cover;
+    background: #f1efeb; color: var(--sh-ink-soft);
+    font-size: .74rem; font-weight: 700;
   }
-  .rk-degrau--1 .rk-degrau-nome { font-size: 1.05rem; }
-  .rk-degrau-turma {
-    display: block;
-    margin-top: .15rem;
-    color: var(--sh-ink-soft);
-    font-size: .82rem;
-    overflow-wrap: anywhere;
+  .rk-top__txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: .1rem; }
+  .rk-top__nome { font-weight: 600; line-height: 1.25; color: inherit; text-decoration: none; overflow-wrap: anywhere; }
+  .rk-top__nome:hover { color: var(--sh-ink); text-decoration: underline; }
+  .rk-top__turma { font-size: .8rem; color: var(--sh-ink-soft); }
+  .rk-top__num { flex: none; display: flex; flex-direction: column; align-items: flex-end; }
+  .rk-top__pct { font-size: 1.55rem; font-weight: 600; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .rk-top__det { font-size: .76rem; color: var(--sh-ink-soft); white-space: nowrap; }
+  .rk-top__item.is-vazio .rk-top__pos { background: transparent; border: 1px dashed var(--sh-line); color: var(--sh-ink-soft); }
+  @media (max-width: 1023.98px) {
+    .rk-top { grid-template-columns: minmax(0, 1fr); }
+    .rk-top__item { border-left: 0; border-top: 1px solid var(--sh-line); padding: .85rem 1rem; }
+    .rk-top__item:first-child { border-top: 0; }
   }
-
-  /* O bloco do degrau: altura fixa por posição, encostado no vizinho. */
-  .rk-bloco {
-    width: 100%;
-    padding: 1rem .75rem;
-    text-align: center;
-    border: 1px solid var(--sh-line);
-    border-bottom: 0;
-    border-radius: var(--u-radius-sm) var(--u-radius-sm) 0 0;
-    background: #faf9f7;
-  }
-  .rk-degrau--1 .rk-bloco { height: 148px; background: #fdf6e3; border-color: #ecd9a4; }
-  .rk-degrau--2 .rk-bloco { height: 116px; }
-  .rk-degrau--3 .rk-bloco { height: 96px; background: #fdf1ec; border-color: #f0d5c9; }
-  .rk-bloco-pos { font-size: 1.5rem; font-weight: 600; line-height: 1; }
-  .rk-bloco-freq { margin-top: .35rem; font-size: 1.05rem; font-weight: 600; font-variant-numeric: tabular-nums; }
-  .rk-bloco-det { display: block; margin-top: .2rem; color: var(--sh-ink-soft); font-size: .82rem; }
-  .rk-degrau.is-vazio .rk-bloco { background: #faf9f7; border-style: dashed; color: var(--sh-ink-soft); }
-  .rk-degrau.is-vazio .rk-bloco-pos { color: #c9c6c0; }
 
   /* ----------------------------------------------------- colunas da tela */
   .rk-colunas {
@@ -262,9 +242,9 @@
     color: var(--sh-ink-soft);
     font-size: .8rem; font-weight: 600;
   }
-  .rk-pos--1 { background: #fdf6e3; color: #8a6a16; }
-  .rk-pos--2 { background: #f1efeb; color: var(--sh-ink); }
-  .rk-pos--3 { background: #fdf1ec; color: #96543a; }
+  /* Mesma marca do pódio: o 1º escuro, os demais neutros. */
+  .rk-pos--1 { background: var(--sh-ink); color: #fff; }
+  .rk-pos--2, .rk-pos--3 { background: #ebe8e3; color: var(--sh-ink); }
 
   .rk-aluno { display: flex; align-items: center; gap: .7rem; text-align: left; min-width: 0; }
   .rk-avatar {
@@ -281,6 +261,8 @@
   /* O nome quebra em vez de cortar: numa lista de ranking, meio nome não
      serve. A turma, que é apoio, essa sim corta com reticências. */
   .rk-nome { min-width: 0; line-height: 1.3; overflow-wrap: anywhere; }
+  /* Turma embaixo do nome: só no celular, onde a coluna dela some. */
+  .rk-aluno-turma { display: none; color: var(--sh-ink-soft); font-size: .78rem; line-height: 1.3; margin-top: .1rem; }
   .rk-tabela td.rk-turma {
     text-align: left;
     color: var(--sh-ink-soft);
@@ -335,20 +317,29 @@
     .rk-filtros { width: 100%; }
     .rk-campo, .rk-modos { flex: 1 1 auto; }
     .rk-campo--turma { max-width: none; }
-    .rk-podio { padding: 1.25rem .5rem 0; }
-    .rk-medalha { width: 44px; height: 44px; }
-    .rk-degrau--1 .rk-medalha { width: 52px; height: 52px; }
-    .rk-degrau-nome, .rk-degrau--1 .rk-degrau-nome { font-size: .84rem; }
-    .rk-degrau-turma { display: none; }
-    .rk-degrau--1 .rk-bloco { height: 112px; }
-    .rk-degrau--2 .rk-bloco { height: 92px; }
-    .rk-degrau--3 .rk-bloco { height: 78px; }
+    /* Classificação: a turma desce para baixo do nome e a tabela cabe na
+       tela — presenças e porcentagem ficavam escondidas à direita. */
+    /* Layout automático: com a turma escondida, as larguras fixas das
+       <col> cairiam na coluna errada. */
+    .rk-tabela { min-width: 0; font-size: .86rem; table-layout: auto; }
+    .rk-tabela col { width: auto !important; }
+    .rk-tabela td.rk-num { width: 1%; }
+    .rk-tabela th:nth-child(3), .rk-tabela td.rk-turma { display: none; }
+    .rk-tabela td, .rk-tabela th { padding-left: .4rem; padding-right: .4rem; }
+    .rk-avatar { display: none; }
+    .rk-aluno { display: block; }
+    .rk-aluno-turma { display: block; }
+    .rk-freq-barra { display: none; }
+    /* "Aproveitamento"/"Presença no período" não cabe sobre a coluna do %. */
+    .rk-tabela th:last-child { font-size: 0; }
+    .rk-tabela th:last-child::after { content: "%"; font-size: .68rem; }
+    .rk-tabela th:nth-child(4) { white-space: nowrap; }
     .rk-rail { position: static; }
   }
 
   /* A folha impressa é o ranking: lateral, topo e filtros não vão junto. */
   @media print {
-    .sh__side, .sh__top, .sh__acoes, .sh__overlay, .rk-acao, .rk-busca, .toast-container { display: none !important; }
+    .sh__side, .sh__top, .sh__acoes, .sh__overlay, .rk-acao, .rk-busca, .rk-filtros, .toast-container { display: none !important; }
     .sh__main { margin-left: 0; }
     .sh__conteudo { padding: 0; max-width: none; }
     .sh__cabecalho { margin-bottom: 1rem; }
@@ -391,31 +382,31 @@
     <span class="rk-caixa-titulo">Pódio</span>
     <span class="rk-caixa-nota">{{ ranking.periodo_rotulo }}{% if turma_sel %} · turma filtrada{% endif %}</span>
   </div>
-  <div class="rk-podio">
-    {% for pos, aluno in [(2, p2), (1, p1), (3, p3)] %}
-    <div class="rk-degrau rk-degrau--{{ pos }} {% if not aluno %}is-vazio{% endif %}">
+  {# Os três primeiros no desenho da tela: células brancas com divisória,
+     número grande à direita — o mesmo vocabulário da faixa de indicadores.
+     O 1º se distingue pela marca escura, não por cor de medalha. #}
+  <div class="rk-top">
+    {% for pos, aluno in [(1, p1), (2, p2), (3, p3)] %}
+    <div class="rk-top__item rk-top__item--{{ pos }}{% if not aluno %} is-vazio{% endif %}">
+      <span class="rk-top__pos">{{ pos }}º</span>
       {% if aluno %}
-      <div class="rk-degrau-topo">
-        {% if aluno.foto %}
-        <img src="{{ url_for('static', filename='uploads/' ~ aluno.foto) }}" alt="" class="rk-medalha">
-        {% else %}
-        <span class="rk-medalha">{{ iniciais(aluno.nome) }}</span>
-        {% endif %}
-        <span class="rk-degrau-nome">{{ aluno.nome }}</span>
-        <span class="rk-degrau-turma">{{ aluno.turma_nome }}</span>
-      </div>
-      <div class="rk-bloco">
-        <span class="rk-bloco-pos">{{ pos }}º</span>
-        {% set pct_p = aluno.frequencia_periodo if ordenar != 'aproveitamento' else aluno.frequencia %}
-        {% set base_p = aluno.chamadas_periodo if ordenar != 'aproveitamento' else aluno.aulas %}
-        <div class="rk-bloco-freq {{ tom_freq(pct_p) }}">{{ pct_p }}%</div>
-        <span class="rk-bloco-det">{{ aluno.presencas }} de {{ base_p }} aulas</span>
-      </div>
+      {% if aluno.foto %}
+      <img src="{{ url_for('static', filename='uploads/' ~ aluno.foto) }}" alt="" class="rk-top__foto">
       {% else %}
-      <div class="rk-bloco">
-        <span class="rk-bloco-pos">{{ pos }}º</span>
-        <span class="rk-bloco-det">sem aluno</span>
-      </div>
+      <span class="rk-top__foto">{{ iniciais(aluno.nome) }}</span>
+      {% endif %}
+      <span class="rk-top__txt">
+        <a class="rk-top__nome" href="{{ url_for('alunos.ficha_aluno', aluno_id=aluno.aluno_id) }}">{{ aluno.nome }}</a>
+        <span class="rk-top__turma">{{ aluno.turma_nome }}</span>
+      </span>
+      {% set pct_p = aluno.frequencia_periodo if ordenar != 'aproveitamento' else aluno.frequencia %}
+      {% set base_p = aluno.chamadas_periodo if ordenar != 'aproveitamento' else aluno.aulas %}
+      <span class="rk-top__num">
+        <span class="rk-top__pct {{ tom_freq(pct_p) }}">{{ pct_p }}%</span>
+        <span class="rk-top__det">{{ aluno.presencas }} de {{ base_p }} aulas</span>
+      </span>
+      {% else %}
+      <span class="rk-top__txt rk-top__turma">Sem aluno nesta posição</span>
       {% endif %}
     </div>
     {% endfor %}
@@ -429,7 +420,7 @@
       <span class="rk-caixa-titulo">Classificação</span>
       <span class="rk-busca">
         <i class="bi bi-search"></i>
-        <input type="text" id="rkBusca" placeholder="Buscar aluno ou turma" autocomplete="off">
+        <input type="text" id="rkBusca" placeholder="Buscar aluno ou turma" autocomplete="off" aria-label="Buscar aluno ou turma">
       </span>
       <span class="rk-caixa-nota" id="rkContagem">{{ ranking.alunos|length }} aluno{{ 's' if ranking.alunos|length != 1 }}</span>
     </div>
@@ -467,6 +458,7 @@
                 {% endif %}
                 <a class="rk-nome" href="{{ url_for('alunos.ficha_aluno', aluno_id=aluno.aluno_id) }}"
                    title="{{ aluno.nome }}">{{ aluno.nome }}</a>
+                <span class="rk-aluno-turma">{{ aluno.turma_nome }}</span>
               </div>
             </td>
             <td class="rk-turma" title="{{ aluno.turma_nome }}">{{ aluno.turma_nome }}</td>

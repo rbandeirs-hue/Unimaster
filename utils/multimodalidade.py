@@ -111,22 +111,48 @@ def multimodal(academia_id):
 # ------------------------------------------------------------------
 # O contexto em si
 # ------------------------------------------------------------------
+def _permitidas_do_usuario(academia_id):
+    """Modalidades que o usuário logado pode ver nesta academia (MM-13), ou
+    None quando pode ver todas. Aluno/responsável não passam por aqui."""
+    try:
+        from utils import acesso_academia as acs
+        return acs.modalidades_permitidas(academia_id)
+    except Exception:
+        return None
+
+
+def modalidades_do_usuario(academia_id):
+    """Modalidades da academia que o usuário logado pode escolher no seletor."""
+    todas = modalidades_da_academia(academia_id)
+    permitidas = _permitidas_do_usuario(academia_id)
+    if permitidas is None:
+        return todas
+    return [m for m in todas if m["id"] in permitidas]
+
+
 def contexto_id(academia_id=None):
     """Modalidade escolhida, ou None para "Todas".
 
     A validação contra a academia é o que impede o contexto de vazar de uma
     academia para outra quando o gestor troca de escopo.
+
+    Usuário com acesso restrito a algumas modalidades (MM-13) não tem "Todas":
+    o contexto fica sempre numa modalidade dele — é isso que faz cada tela
+    mostrar só o que ele pode ver, sem cada tela precisar saber disso.
     """
     from flask import has_request_context, session
     if not has_request_context():
         return None
     valor = session.get(CHAVE_SESSAO)
-    if not valor:
-        return None
     if academia_id is None:
         academia_id = (session.get("academia_gerenciamento_id")
                        or session.get("finance_academia_id"))
     if not academia_id:
+        return None
+    permitidas = _permitidas_do_usuario(academia_id)
+    if permitidas is not None:
+        return valor if valor in permitidas else min(permitidas)
+    if not valor:
         return None
     if not any(m["id"] == valor for m in modalidades_da_academia(academia_id)):
         return None
@@ -143,6 +169,12 @@ def definir_contexto(valor, academia_id=None):
     if academia_id is None:
         academia_id = (session.get("academia_gerenciamento_id")
                        or session.get("finance_academia_id"))
+    permitidas = _permitidas_do_usuario(academia_id)
+    if permitidas is not None:
+        # Restrito: só entre as dele, e "Todas" não existe.
+        valor = valor if valor in permitidas else min(permitidas)
+        session[CHAVE_SESSAO] = valor
+        return valor
     if valor and any(m["id"] == valor for m in modalidades_da_academia(academia_id)):
         session[CHAVE_SESSAO] = valor
         return valor
@@ -234,9 +266,15 @@ def filtro_cobrancas_sql(alias="ma", academia_id=None, modalidade_id=None):
     mid = modalidade_id or contexto_id(academia_id)
     if not mid:
         return "", ()
-    return (f" AND EXISTS (SELECT 1 FROM mensalidade_modalidade mm_cob"
+    # Plano ainda sem modalidade não pertence a recorte nenhum — esconder a
+    # cobrança dele fazia a mensalidade sumir em toda modalidade e só aparecer
+    # em "Todas" (caso da The Brother Ibura antes de vincular os planos).
+    # Fica visível em qualquer recorte, como na escolha de plano (utils/planos_modalidade).
+    return (f" AND (EXISTS (SELECT 1 FROM mensalidade_modalidade mm_cob"
             f" WHERE mm_cob.mensalidade_id = {alias}.mensalidade_id"
-            f" AND mm_cob.modalidade_id = %s)", (mid,))
+            f" AND mm_cob.modalidade_id = %s)"
+            f" OR NOT EXISTS (SELECT 1 FROM mensalidade_modalidade mm_sem"
+            f" WHERE mm_sem.mensalidade_id = {alias}.mensalidade_id))", (mid,))
 
 
 def filtro_precadastro_sql(alias="pc", academia_id=None, modalidade_id=None):
@@ -392,8 +430,8 @@ def modalidades_do_professor(usuario_id, academia_id):
                FROM professor_modalidade pm
                JOIN professores p ON p.id = pm.professor_id
                WHERE pm.ativo = 1 AND p.id_academia = %s
-                 AND (p.usuario_id = %s OR p.id = %s)""",
-            (academia_id, usuario_id, usuario_id))
+                 AND p.usuario_id = %s""",
+            (academia_id, usuario_id))
         permitidas = {r[0] for r in cur.fetchall() or []}
     except Exception:
         return todas
@@ -406,16 +444,157 @@ def modalidades_do_professor(usuario_id, academia_id):
 
 
 def filtro_eventos_sql(alias="e", academia_id=None, modalidade_id=None):
-    """Eventos da modalidade em foco.
+    """Lançamentos do calendário que pertencem à modalidade em foco.
 
-    O evento só pertence a uma modalidade quando está preso a uma turma. Feriado,
-    competição e aviso geral não têm turma e continuam aparecendo em qualquer
-    recorte — esconder feriado do professor de ginástica não ajudaria ninguém.
+    Duas fontes, nesta ordem:
+
+    1. `modalidade_id` no próprio evento (MM-08) — é a resposta explícita, dada
+       por quem criou o lançamento. NULL significa "geral": feriado, reunião,
+       aviso da associação. Geral aparece em qualquer recorte, sempre.
+    2. Sem resposta explícita, a turma decide — aula de outra modalidade sai.
+
+    Ou seja: só some da tela o que declaradamente é de outra modalidade.
     """
     mid = modalidade_id or contexto_id(academia_id)
     if not mid:
         return "", ()
-    return (f" AND ({alias}.turma_id IS NULL OR EXISTS ("
-            f"SELECT 1 FROM turma_modalidades tm_ev"
+    return (f" AND ({alias}.modalidade_id = %s"
+            f" OR ({alias}.modalidade_id IS NULL AND ({alias}.turma_id IS NULL"
+            f" OR EXISTS (SELECT 1 FROM turma_modalidades tm_ev"
             f" WHERE tm_ev.turma_id = {alias}.turma_id"
-            f" AND tm_ev.modalidade_id = %s))", (mid,))
+            f" AND tm_ev.modalidade_id = %s))))", (mid, mid))
+
+
+def filtro_eventos_por_modalidades(alias="e", modalidade_ids=()):
+    """Variação para quem pratica mais de uma coisa (aluno, responsável).
+
+    O aluno não escolhe contexto — ele tem as modalidades que tem. O calendário
+    dele mostra o que é geral mais o que é de alguma delas.
+    """
+    ids = [int(i) for i in (modalidade_ids or []) if i]
+    if not ids:
+        return "", ()
+    marcas = ", ".join(["%s"] * len(ids))
+    return (f" AND ({alias}.modalidade_id IS NULL"
+            f" OR {alias}.modalidade_id IN ({marcas}))", tuple(ids))
+
+
+# ------------------------------------------------------------------
+# O que o aluno pratica — para esconder o que é de outra modalidade
+# ------------------------------------------------------------------
+def modalidades_do_aluno(aluno_id):
+    """Nomes das modalidades ativas do aluno, em minúsculas e sem acento.
+
+    Serve para as telas do próprio aluno e do responsável deixarem de oferecer
+    o que é de outra modalidade: categoria de peso e Zempo são do judô (vêm da
+    CBJ), e um aluno de jiu-jitsu não tem o que fazer com eles.
+    """
+    if not aluno_id:
+        return set()
+    import unicodedata
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            """SELECT md.nome FROM matricula_modalidade mm
+               JOIN modalidade md ON md.id = mm.modalidade_id
+               WHERE mm.aluno_id = %s AND mm.status = 'ativa'""", (aluno_id,))
+        nomes = set()
+        for (nome,) in cur.fetchall() or []:
+            sem = unicodedata.normalize("NFKD", nome or "")
+            nomes.add("".join(c for c in sem if not unicodedata.combining(c)).lower())
+        return nomes
+    except Exception:
+        # Sem a informação, não esconde nada: tirar item de quem tem direito é
+        # pior do que mostrar um a mais.
+        return set()
+    finally:
+        cur.close()
+        conn.close()
+
+
+def modalidades_das_turmas(turma_ids):
+    """{turma_id: [nomes das modalidades]} — para documentos que saem por turma.
+
+    A ata de presença é uma folha por turma: a marca impressa tem de ser a da
+    turma daquela folha, não a da academia. Numa academia que dá judô e
+    jiu-jitsu, a mesma impressão sai com cabeçalhos diferentes, e é isso que
+    está certo.
+    """
+    ids = [int(i) for i in (turma_ids or []) if i]
+    if not ids:
+        return {}
+    marcas = ", ".join(["%s"] * len(ids))
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            f"""SELECT tm.turma_id, md.nome
+                FROM turma_modalidades tm
+                JOIN modalidade md ON md.id = tm.modalidade_id
+                WHERE tm.turma_id IN ({marcas})
+                ORDER BY md.nome""", tuple(ids))
+        saida = {}
+        for tid, nome in cur.fetchall() or []:
+            saida.setdefault(tid, []).append(nome)
+        return saida
+    except Exception:
+        return {}
+    finally:
+        cur.close()
+        conn.close()
+
+
+def nomes_modalidades_do_aluno(aluno_id):
+    """Nomes como estão cadastrados — para imprimir, não para comparar.
+
+    `modalidades_do_aluno` devolve tudo em minúscula e sem acento, o que serve
+    para decidir o que esconder e não serve para sair num documento.
+    """
+    if not aluno_id:
+        return []
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            """SELECT md.nome FROM matricula_modalidade mm
+               JOIN modalidade md ON md.id = mm.modalidade_id
+               WHERE mm.aluno_id = %s AND mm.status = 'ativa'
+               ORDER BY md.nome""", (aluno_id,))
+        return [n for (n,) in cur.fetchall() or [] if n]
+    except Exception:
+        return []
+    finally:
+        cur.close()
+        conn.close()
+
+
+def modalidades_ids_do_aluno(aluno_id):
+    """Ids das modalidades ativas do aluno.
+
+    Lista vazia quer dizer "não sei" — e quem chama trata isso como "mostra
+    tudo". O calendário do aluno usa isso para não esconder a agenda de quem
+    ainda está com a matrícula em ajuste.
+    """
+    if not aluno_id:
+        return []
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            """SELECT mm.modalidade_id FROM matricula_modalidade mm
+               WHERE mm.aluno_id = %s AND mm.status = 'ativa'""", (aluno_id,))
+        return [r[0] for r in cur.fetchall() or [] if r[0]]
+    except Exception:
+        return []
+    finally:
+        cur.close()
+        conn.close()
+
+
+def pratica_judo(aluno_id):
+    """True quando o aluno faz judô — ou quando não dá para saber."""
+    mods = modalidades_do_aluno(aluno_id)
+    if not mods:
+        return True
+    return any("judo" in m for m in mods)

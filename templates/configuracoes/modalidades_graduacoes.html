@@ -1,26 +1,18 @@
 {% extends "base_app.html" %}
+{% set back_url = back_url or get_back_url_default() %}
 {% block title %}Graduações — {{ modalidade.nome }}{% endblock %}
+{% block pagina_titulo %}Graduações da modalidade: {{ modalidade.nome }}{% endblock %}
+{% block pagina_subtitulo %}Cadastre e edite as graduações específicas desta modalidade.{% endblock %}
+{% block pagina_acoes %}
+<a href="{{ url_voltar(back_url) }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Voltar</a>
+<a href="{{ url_for('configuracoes.modalidades_editar', modalidade_id=modalidade.id, academia_id=academia_contexto_id) }}" class="sh__btn"><i class="bi bi-pencil-square"></i> Editar modalidade</a>
+{% endblock %}
 {% block content %}
 <div class="container my-4">
-    {% set back_url = back_url or get_back_url_default() %}
-{% include 'components/botao_voltar.html' %}
-
-    <div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-3">
-        <div>
-            <h2 class="h4 fw-bold text-dark mb-1">Graduações da modalidade: {{ modalidade.nome }}</h2>
-            <p class="text-muted small mb-0">Cadastre e edite as graduações específicas desta modalidade.</p>
-        </div>
-        <div class="d-flex gap-2 flex-wrap">
-            <a href="{{ url_for('configuracoes.modalidades_editar', modalidade_id=modalidade.id, academia_id=academia_contexto_id) }}" class="btn btn-outline-secondary">
-                <i class="bi bi-pencil-square me-1"></i> Editar modalidade
-            </a>
-        </div>
-    </div>
-
     <div class="card shadow-sm border-0">
         <div class="card-header bg-light d-flex justify-content-between align-items-center flex-wrap gap-2">
             <span class="small text-muted">Edite as existentes e adicione novas linhas abaixo.</span>
-            <button type="button" class="btn btn-outline-primary btn-sm" id="btn_add_nova_graduacao">
+            <button type="button" class="u-btn u-btn--pequeno" id="btn_add_nova_graduacao">
                 <i class="bi bi-plus-circle me-1"></i> Adicionar outra graduação
             </button>
         </div>
@@ -43,7 +35,7 @@
                             {% for g in graduacoes %}
                             <tr data-grad-id="{{ g.id }}" class="{% if not g.ativo %}grad-inativa{% endif %}">
                                 <td>
-                                  <input type="number" class="form-control form-control-sm text-center"
+                                  <input type="number" class="u-campo__controle text-center"
                                          name="ordem" min="0" step="1"
                                          value="{{ g.ordem or g.id }}"
                                          title="Posição na lista (menor = primeiro)">
@@ -52,12 +44,11 @@
                                     #{{ g.id }}
                                     <input type="hidden" name="id" value="{{ g.id }}">
                                 </td>
-                                <td><input class="form-control form-control-sm" name="faixa" value="{{ g.faixa or '' }}"></td>
-                                <td><input class="form-control form-control-sm" name="graduacao" value="{{ g.graduacao or '' }}"></td>
-                                <td><input class="form-control form-control-sm" name="categoria" value="{{ g.categoria or '' }}"></td>
+                                <td><input class="u-campo__controle" name="faixa" value="{{ g.faixa or '' }}"></td>
+                                <td><input class="u-campo__controle" name="graduacao" value="{{ g.graduacao or '' }}"></td>
+                                <td><input class="u-campo__controle" name="categoria" value="{{ g.categoria or '' }}"></td>
                                 <td class="text-center">
-                                  <button type="button" class="btn btn-sm btn-toggle-grad
-                                          {{ 'btn-success' if g.ativo else 'btn-outline-secondary' }}"
+                                  <button type="button" class="u-btn u-btn--pequeno btn-toggle-grad {{ 'btn-success' if g.ativo else 'btn-outline-secondary' }}"
                                           data-grad-id="{{ g.id }}"
                                           data-ativo="{{ '1' if g.ativo else '0' }}"
                                           title="Clique para ativar/inativar">
@@ -72,13 +63,13 @@
                             {% endfor %}
                             <tr class="table-success-subtle nova-graduacao-row">
                                 <td>
-                                  <input type="number" class="form-control form-control-sm text-center"
-                                         name="nova_ordem" min="0" step="1" placeholder="auto">
+                                  <input type="number" class="u-campo__controle text-center"
+                                         name="nova_ordem" min="0" step="1" placeholder="auto" aria-label="auto">
                                 </td>
                                 <td><strong>Novo</strong></td>
-                                <td><input class="form-control form-control-sm" name="nova_faixa" placeholder="Ex: Faixa Azul"></td>
-                                <td><input class="form-control form-control-sm" name="nova_graduacao" placeholder="Ex: 1º Kyu"></td>
-                                <td><input class="form-control form-control-sm" name="nova_categoria" placeholder="Opcional"></td>
+                                <td><input class="u-campo__controle" name="nova_faixa" placeholder="Ex: Faixa Azul" aria-label="Ex: Faixa Azul"></td>
+                                <td><input class="u-campo__controle" name="nova_graduacao" placeholder="Ex: 1º Kyu" aria-label="Ex: 1º Kyu"></td>
+                                <td><input class="u-campo__controle" name="nova_categoria" placeholder="Opcional" aria-label="Opcional"></td>
                                 <td class="text-center text-muted small">criado ativo</td>
                             </tr>
                         </tbody>
@@ -101,8 +92,8 @@
                 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mt-3">
                     <span class="small text-muted">Dica: você pode adicionar várias linhas e salvar tudo de uma vez.</span>
                     <div class="d-flex gap-2 flex-wrap">
-                    <button type="submit" class="btn btn-primary">Salvar graduações</button>
-                    <a href="{{ url_for('configuracoes.modalidades_lista', academia_id=academia_contexto_id) }}" class="btn btn-outline-secondary">Voltar para modalidades</a>
+                    <button type="submit" class="u-btn u-btn--primario">Salvar graduações</button>
+                    <a href="{{ url_for('configuracoes.modalidades_lista', academia_id=academia_contexto_id) }}" class="u-btn">Voltar para modalidades</a>
                     </div>
                 </div>
             </form>

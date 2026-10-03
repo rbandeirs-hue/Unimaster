@@ -183,9 +183,10 @@ def cadastro_usuario():
     # Academias para vínculo
     academias_disponiveis = []
     if current_user.has_role("admin"):
-        # Admin: todas as academias ou as suas vinculadas
-        cursor.execute("SELECT academia_id FROM usuarios_academias WHERE usuario_id = %s", (current_user.id,))
-        vinculadas = [r["academia_id"] for r in cursor.fetchall()]
+        # Admin vê TODAS. Antes filtrava pelas vinculadas, e quem administra o
+        # sistema deixava de enxergar academia que ele mesmo tinha acabado de
+        # cadastrar só por não estar ligado a ela.
+        vinculadas = []
         if vinculadas:
             ph = ",".join(["%s"] * len(vinculadas))
             cursor.execute(f"SELECT id, nome FROM academias WHERE id IN ({ph}) ORDER BY nome", tuple(vinculadas))
@@ -268,12 +269,15 @@ def cadastro_usuario():
         )
         user_id = cursor.lastrowid
 
-        # Inserir roles
-        for role_id in roles_escolhidas:
-            cursor.execute("""
-                INSERT INTO roles_usuario (usuario_id, role_id)
-                VALUES (%s, %s)
-            """, (user_id, role_id))
+        # Inserir roles — só as que quem cadastra pode atribuir (o servidor não
+        # confia no formulário).
+        from utils.acesso_academia import inserir_papeis_novo_usuario, roles_atribuiveis
+        _pode_dar = roles_atribuiveis(cursor)
+        # Papel de academia vale em cada academia escolhida (MM-14).
+        inserir_papeis_novo_usuario(
+            cursor, user_id,
+            [r for r in roles_escolhidas if str(r).isdigit() and int(r) in _pode_dar],
+            academias_escolhidas)
 
         # Inserir academias vinculadas
         for aid in academias_escolhidas:
@@ -343,6 +347,28 @@ def cadastro_usuario():
 # ======================================================
 # 🔹 EDITAR USUÁRIO
 # ======================================================
+def _papel_secao():
+    """Papéis do usuário editado que valem na academia aberta (MM-14)."""
+    from utils.acesso_academia import academia_atual, sql_papel_na_academia
+    aid = academia_atual()
+    return sql_papel_na_academia("ru", str(int(aid))) if aid else ""
+
+
+def _academia_dos_papeis_da_tela(cur, user_id):
+    """Academia cujos papéis a tela de usuário edita (MM-14): a aberta no modo
+    academia/professor; fora deles, a única academia do usuário. None = papéis
+    globais (comportamento de antes)."""
+    from utils.acesso_academia import academia_dos_papeis, tem_papel_por_academia
+    if not tem_papel_por_academia(cur):
+        return None
+    aid = academia_dos_papeis()
+    if aid:
+        return aid
+    cur.execute("SELECT academia_id FROM usuarios_academias WHERE usuario_id = %s", (user_id,))
+    ids = [r["academia_id"] for r in cur.fetchall()]
+    return ids[0] if len(ids) == 1 else None
+
+
 def _pode_editar_usuario(usuario):
     """Verifica se o usuário logado pode editar o usuário informado."""
     try:
@@ -365,7 +391,10 @@ def _pode_editar_usuario(usuario):
             cur.close()
             db.close()
             return ok
-        if current_user.has_role("gestor_academia") or current_user.has_role("professor"):
+        # Professor não edita usuários (podia promover alguém a gestor); o
+        # gestor de academia sim, e o que é só do principal a guarda de
+        # app.py já barrou antes de chegar aqui.
+        if current_user.has_role("gestor_academia"):
             db = get_db_connection()
             cur = db.cursor(dictionary=True)
             try:
@@ -475,13 +504,14 @@ def editar_usuario(user_id):
         cursor.execute("SELECT aluno_id FROM responsavel_alunos WHERE usuario_id = %s", (user_id,))
         responsavel_aluno_ids = [r["aluno_id"] for r in cursor.fetchall()]
 
-    # Carregar roles do usuário
-    cursor.execute("""
-        SELECT role_id 
-        FROM roles_usuario 
-        WHERE usuario_id=%s
-    """, (user_id,))
-    roles_do_usuario = [r["role_id"] for r in cursor.fetchall()]
+    # Carregar roles do usuário — os que valem na academia desta tela (MM-14).
+    from utils.acesso_academia import papeis_na_academia
+    academia_papeis = _academia_dos_papeis_da_tela(cursor, user_id)
+    roles_do_usuario = sorted(papeis_na_academia(cursor, user_id, academia_papeis))
+    academia_papeis_nome = None
+    if academia_papeis:
+        cursor.execute("SELECT nome FROM academias WHERE id = %s", (academia_papeis,))
+        academia_papeis_nome = (cursor.fetchone() or {}).get("nome")
 
     # Academias vinculadas: admin e gestor_associacao editam; gestor_academia vê bloqueado (somente leitura)
     mostrar_academias = (
@@ -490,8 +520,10 @@ def editar_usuario(user_id):
         current_user.has_role("gestor_academia")
     )
     # Bloquear academias apenas quando no modo academia; no modo associação pode alterar
+    # Admin nunca fica travado: ele costuma acumular gestor_academia.
     academias_bloqueadas = (
         session.get("modo_painel") == "academia" and current_user.has_role("gestor_academia")
+        and not current_user.has_role("admin")
     )
     academias_vinculadas = []
     academias_disponiveis = []
@@ -510,8 +542,14 @@ def editar_usuario(user_id):
             academias_vinculadas = []
 
         ids_permitidos = []
+        # Admin vê TODAS — inclusive academia sem associação. Ele também costuma
+        # ser gestor de associação, e o ramo de baixo vinha antes: o admin só
+        # enxergava as academias da associação dele.
+        if current_user.has_role("admin"):
+            cursor.execute("SELECT id FROM academias")
+            ids_permitidos = [r["id"] for r in cursor.fetchall()]
         # gestor_associacao: sempre todas as academias da associação
-        if current_user.has_role("gestor_associacao") and getattr(current_user, "id_associacao", None):
+        elif current_user.has_role("gestor_associacao") and getattr(current_user, "id_associacao", None):
             cursor.execute("SELECT id FROM academias WHERE id_associacao = %s ORDER BY nome", (current_user.id_associacao,))
             ids_permitidos = [r["id"] for r in cursor.fetchall()]
         elif current_user.has_role("gestor_academia"):
@@ -524,7 +562,7 @@ def editar_usuario(user_id):
                 vinculadas = [r["academia_id"] for r in cursor.fetchall()]
             except Exception:
                 vinculadas = []
-            if vinculadas:
+            if vinculadas and not current_user.has_role("admin"):
                 ids_permitidos = vinculadas
             elif current_user.has_role("admin"):
                 cursor.execute("SELECT id FROM academias")
@@ -610,21 +648,19 @@ def editar_usuario(user_id):
             if r.get("id") is not None:
                 roles_visiveis_ids.append(r["id"])
 
-        if roles_visiveis_ids:
-            ph = ",".join(["%s"] * len(roles_visiveis_ids))
-            cursor.execute(
-                f"DELETE FROM roles_usuario WHERE usuario_id=%s AND role_id IN ({ph})",
-                (user_id, *roles_visiveis_ids),
-            )
+        # Só mexe nos papéis que quem edita pode atribuir: o gestor de
+        # associação editando um admin não pode apagar o papel de admin dele.
+        from utils.acesso_academia import roles_atribuiveis
+        _pode_dar = {str(x) for x in roles_atribuiveis(cursor)}
+        roles_visiveis_ids = [rid for rid in roles_visiveis_ids if str(rid) in _pode_dar]
 
-        # Insere apenas as que foram efetivamente marcadas E estavam no escopo do form
-        ids_visiveis_set = set(str(rid) for rid in roles_visiveis_ids)
-        for role_id in roles_novas:
-            if not ids_visiveis_set or str(role_id) in ids_visiveis_set:
-                cursor.execute("""
-                    INSERT IGNORE INTO roles_usuario (usuario_id, role_id)
-                    VALUES (%s, %s)
-                """, (user_id, role_id))
+        # Papel por academia (MM-14): os papéis de academia marcados aqui valem
+        # só na academia desta tela — gestor numa e aluno noutra não se misturam.
+        from utils.acesso_academia import gravar_papeis
+        gravar_papeis(cursor, user_id,
+                      [r for r in roles_novas if str(r) in _pode_dar],
+                      roles_visiveis_ids,
+                      academia_id=_academia_dos_papeis_da_tela(cursor, user_id))
 
         # Academias vinculadas (não atualiza se bloqueado para gestor_academia)
         if mostrar_academias and academias_disponiveis and not academias_bloqueadas:
@@ -638,10 +674,19 @@ def editar_usuario(user_id):
                 except (ValueError, TypeError):
                     pass
 
-            cursor.execute("DELETE FROM usuarios_academias WHERE usuario_id = %s", (user_id,))
+            # Sem apagar e recriar: o vínculo guarda o acesso do usuário naquela
+            # academia (gestor principal, áreas, modalidades — MM-13). Só sai o
+            # vínculo desmarcado, e só entre as academias que esta tela mostra.
+            _fora = [a for a in ids_permitidos if a not in academias_escolhidas]
+            if _fora:
+                _ph = ",".join(["%s"] * len(_fora))
+                cursor.execute(
+                    f"DELETE FROM usuarios_academias WHERE usuario_id = %s AND academia_id IN ({_ph})",
+                    (user_id, *_fora),
+                )
             for aid in academias_escolhidas:
                 cursor.execute(
-                    "INSERT INTO usuarios_academias (usuario_id, academia_id) VALUES (%s, %s)",
+                    "INSERT IGNORE INTO usuarios_academias (usuario_id, academia_id) VALUES (%s, %s)",
                     (user_id, aid),
                 )
             id_academia = academias_escolhidas[0] if academias_escolhidas else None
@@ -755,6 +800,33 @@ def editar_usuario(user_id):
                     except (ValueError, TypeError):
                         pass
 
+        # Acesso nesta academia (MM-13): gestor principal, áreas e modalidades.
+        if request.form.get("acesso_presente"):
+            from utils import acesso_academia as acs
+            # A academia da seção vem do formulário (botões "Acesso em …").
+            _sec = acs.secao_da_tela(cursor, user_id, request.form.get("acesso_academia_id"))
+            if _sec:
+                _aid = _sec["academia_id"]
+                _principal = bool(request.form.get("acesso_principal")) if _sec["eh_gestor"] else False
+                if (_sec["atual"]["principal"] and not _principal
+                        and acs.outros_principais(cursor, _aid, user_id) == 0):
+                    _principal = True
+                    flash("A academia precisa de pelo menos um gestor principal: este continua como principal.",
+                          "warning")
+                _todas = request.form.get("acesso_modalidades_todas") == "1"
+                _mods = [] if _todas else request.form.getlist("acesso_modalidades")
+                if _principal:
+                    # Principal vê tudo (a tela desabilita as caixas, que nem vêm no
+                    # envio): grava tudo liberado, para não sobrar restrição se um
+                    # dia ele deixar de ser principal.
+                    acs.gravar(cursor, user_id, _aid, principal=True,
+                               financeiro=True, academico=True, modalidades=[])
+                else:
+                    acs.gravar(cursor, user_id, _aid, principal=False,
+                               financeiro=bool(request.form.get("acesso_financeiro")),
+                               academico=bool(request.form.get("acesso_academico")),
+                               modalidades=_mods)
+
         db.commit()
         flash("Usuário atualizado com sucesso!", "success")
         redirect_url = request.form.get("next") or back_url
@@ -774,9 +846,23 @@ def editar_usuario(user_id):
             continue
         roles_filtradas.append(r)
 
+    # Seção "Acesso nesta academia": só para quem é principal (ou admin/associação)
+    # editando um gestor ou professor da academia aberta.
+    acesso_secao = None
+    try:
+        from utils import acesso_academia as acs
+        _db2 = get_db_connection()
+        _c2 = _db2.cursor(dictionary=True)
+        try:
+            acesso_secao = acs.secao_da_tela(_c2, user_id, request.args.get("acesso_academia"))
+        finally:
+            _c2.close()
+            _db2.close()
+    except Exception:
+        current_app.logger.exception("Seção de acesso do usuário")
     return render_template(
         "usuarios/editar_usuario.html",
-        usuario=usuario,
+        usuario=usuario, acesso_secao=acesso_secao, academia_papeis_nome=academia_papeis_nome,
         roles=roles_filtradas,
         roles_do_usuario=roles_do_usuario,
         back_url=back_url,

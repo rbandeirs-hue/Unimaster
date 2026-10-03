@@ -1,0 +1,81 @@
+    {# Par do _faixas_modalidade.html: mostra o seletor de cada modalidade
+       marcada, mantém o `graduacao_id` (faixa principal) e a regra da branca. #}
+    const GRADUACAO_OBRIGATORIA = {{ 'true' if 'graduacao_id' in obrig else 'false' }};
+    const _principalInicial = (document.getElementById('graduacao_id') || {}).value || '';
+
+    function _modalidadesMarcadas() {
+        // Checkboxes marcados e as enviadas como hidden (modo só-leitura).
+        return Array.from(document.querySelectorAll('input[name="aluno_modalidade_ids"]'))
+            .filter(el => el.type !== 'checkbox' || el.checked)
+            .map(el => String(el.value));
+    }
+
+    /* Faixa principal: a da modalidade que já era a principal, se ainda marcada
+       e preenchida; senão a primeira modalidade marcada com faixa. */
+    function _seletorPrincipal() {
+        const visiveis = Array.from(document.querySelectorAll('.fx-mod'))
+            .filter(d => !d.hidden).map(d => d.querySelector('.fx-sel'))
+            .filter(s => s && s.value);
+        return visiveis.find(s => s.value === _principalInicial)
+            || visiveis.find(s => Array.from(s.options).some(o => o.value === _principalInicial && o.value))
+            || visiveis[0] || null;
+    }
+
+    /* Data de cada faixa: some na branca (não é graduação) e sem faixa. */
+    function _atualizarDataDaModalidade(d) {
+        const sel = d.querySelector('.fx-sel');
+        const data = d.querySelector('.fx-data');
+        const aviso = d.querySelector('.fx-branca');
+        if (!sel || !data) return;
+        const opt = sel.options[sel.selectedIndex];
+        const branca = !!(opt && opt.dataset.branca === '1');
+        const semFaixa = !sel.value;
+        const esconder = branca || semFaixa || d.hidden;
+        if (branca) data.value = '';
+        data.hidden = branca || semFaixa;
+        data.disabled = esconder;
+        data.required = !esconder && data.dataset.obrigatorio === '1';
+        if (aviso) aviso.classList.toggle('d-none', !branca || d.hidden);
+    }
+
+    /* O campo único "Data da última graduação" vira espelho da faixa principal:
+       escondido, sem `required` próprio (cada modalidade cobra a sua). */
+    function atualizarDataPorFaixa() {
+        document.querySelectorAll('.fx-mod').forEach(_atualizarDataDaModalidade);
+        const sel = _seletorPrincipal();
+        const oculto = document.getElementById('graduacao_id');
+        if (oculto) oculto.value = sel ? sel.value : '';
+        const cont = document.getElementById('ultimo_exame_container');
+        const data = document.getElementById('ultimo_exame_faixa');
+        if (cont) cont.hidden = true;
+        if (data) {
+            const dataMod = sel ? sel.closest('.fx-mod').querySelector('.fx-data') : null;
+            data.required = false;
+            data.disabled = false;
+            data.value = (dataMod && !dataMod.disabled) ? dataMod.value : '';
+        }
+    }
+    document.querySelectorAll('.fx-data').forEach(i => i.addEventListener('change', atualizarDataPorFaixa));
+
+    function atualizarGraduacoesPorModalidade() {
+        const marcadas = _modalidadesMarcadas();
+        let visiveis = 0;
+        document.querySelectorAll('.fx-mod').forEach(function (d) {
+            const mostrar = marcadas.includes(d.dataset.modalidadeId);
+            d.hidden = !mostrar;
+            const sel = d.querySelector('.fx-sel');
+            // Escondido não vai no envio nem trava o `required`.
+            sel.disabled = !mostrar;
+            sel.required = mostrar && GRADUACAO_OBRIGATORIA;
+            if (mostrar) visiveis += 1;
+        });
+        const hint = document.getElementById('graduacao_empty_hint');
+        if (hint) hint.classList.toggle('d-none', visiveis > 0);
+        atualizarDataPorFaixa();
+    }
+
+    document.querySelectorAll('.fx-sel').forEach(s => s.addEventListener('change', atualizarDataPorFaixa));
+    document.querySelectorAll('input[name="aluno_modalidade_ids"]').forEach(function (el) {
+        el.addEventListener('change', atualizarGraduacoesPorModalidade);
+    });
+    atualizarGraduacoesPorModalidade();

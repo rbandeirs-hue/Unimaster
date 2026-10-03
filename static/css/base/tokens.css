@@ -59,6 +59,12 @@
   --u-space-2:        .5rem;
   --u-space-3:        1rem;
   --u-space-4:        1.5rem;
+  /* Degraus acima de 24px, que faltavam e viravam valor solto no CSS de
+     área. A escala salta 8 -> 16 de propósito: 12px (.75rem) aparece 19
+     vezes no projeto sem razão estrutural e deve migrar para .5 ou 1rem. */
+  --u-space-5:        2rem;
+  --u-space-6:        3rem;
+  --u-space-7:        4rem;
 
   /* ---- Tipografia ----------------------------------------------------- */
   --u-font:           'Poppins', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -67,17 +73,43 @@
   --u-fs-sm:          .82rem;
   --u-fs-base:        1rem;
   --u-fs-lg:          1.15rem;
+  /* Degraus de título e de rótulo de coluna, que faltavam: sem eles cada
+     tela inventava o próprio tamanho — são 77 valores distintos no projeto. */
+  --u-fs-xl:          1.5rem;
+  --u-fs-display:     2rem;
+  --u-fs-label:       .66rem;
+  --u-ls-label:       .08em;
   --u-fw-medium:      500;
   --u-fw-semibold:    600;
   --u-fw-bold:        700;
+
+  /* ---- Modalidade -----------------------------------------------------
+     A cor de cada modalidade vive em `modalidade.cor` no banco, porque o
+     gestor pode trocá-la. Estes são os PADRÕES de fábrica, usados quando a
+     consulta falha e como referência para quem escreve CSS. O shell já os
+     aplica redefinindo --sh-red no <body>. ------------------------------ */
+  --u-mod-judo:       #e4001b;
+  --u-mod-jiujitsu:   #1d4ed8;
+  --u-mod-ginastica:  #7c3aed;
 
   /* ---- Movimento ------------------------------------------------------ */
   --u-transition:     .2s ease;
 
   /* ---- Breakpoints (referência; media query não lê variável) ---------
-     celular  < 576px  |  tablet  576–991.98px  |  desktop  >= 992px
-     O corte principal do sistema é 767.98px.
-     -------------------------------------------------------------------- */
+     Quatro cortes, no lugar dos ~36 valores espalhados pelo CSS:
+
+       < 560px        uma coluna; lista mostra nome e ação
+       560 – 1024px   lateral recolhida; colunas essenciais
+       1024 – 1400px  lateral aberta; lista completa
+       > 1400px       conteúdo limitado, não estica
+
+     ATENÇÃO ao escrever media query: o limite mede a JANELA, mas o conteúdo
+     é ~300px menor por causa da lateral — é daí que vem a lista quebrando
+     antes da hora. Em componente novo, prefira `@container`, que mede o
+     espaço real do próprio bloco. -------------------------------------- */
+  --u-bp-sm:          560px;
+  --u-bp-md:          1024px;
+  --u-bp-lg:          1400px;
 }
 
 /* Modo noturno: o gatilho continua sendo .dark-mode no <html>, aplicado pelo
@@ -94,4 +126,9 @@
   --u-text-faint:     #7a7a7a;
   --u-shadow-sm:      0 1px 3px rgba(0, 0, 0, .4);
   --u-shadow:         0 4px 12px rgba(0, 0, 0, .5);
+  /* As cores de modalidade clareiam no escuro: o vermelho e o azul cheios
+     não têm contraste suficiente sobre #1a1a1a. */
+  --u-mod-judo:       #ff3b52;
+  --u-mod-jiujitsu:   #6d97ff;
+  --u-mod-ginastica:  #b07bff;
 }

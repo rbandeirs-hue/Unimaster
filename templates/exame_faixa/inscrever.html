@@ -1,0 +1,72 @@
+{% extends "base_app.html" %}
+{% block conteudo_classe %}exf-tela{% endblock %}
+{% from 'exame_faixa/_macros.html' import obi, promo, pill with context %}
+{% set menu_ativo = 'eventos' %}
+{% block title %}Inscrição — {{ ev.nome }}{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{{ asset('css/exame_faixa.css') }}">{% endblock %}
+
+{% block pagina_titulo %}{{ ev.nome }}{% endblock %}
+{% block pagina_subtitulo %}Inscrição no exame de faixa{% if data_exame %} · prova em {{ data_exame|data_br }}{% if hora_prova %} às {{ hora_prova }}{% endif %}{% endif %}{% if ev.data_fim %} · confirmar até {{ ev.data_fim|data_br }}{% endif %}{% endblock %}
+{% block pagina_acoes %}
+<a href="{{ url_for('eventos_competicoes.disponiveis', aluno_id=aluno.id) }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Eventos</a>
+{% endblock %}
+
+{% block content %}
+{% include 'exame_faixa/_seletor_aluno.html' %}
+{% if ev.descricao %}<p class="u-muted">{{ ev.descricao }}</p>{% endif %}
+
+{% if sit.promocao %}
+{% set st = status_rotulo[sit.status] %}
+<div class="exf-cab">
+  <div>
+    <p class="exf-cab__titulo">{{ promo(sit.promocao) }}</p>
+    <span class="u-muted u-fs-sm">{{ aluno.nome }} · {{ sit.idade if sit.idade is not none else '—' }} anos na data da prova</span>
+  </div>
+  <dl class="exf-dados">
+    <div><dt>Idade permitida</dt><dd>{{ sit.promocao.idade_txt }}</dd></div>
+    <div><dt>Carência</dt><dd>{{ sit.promocao.carencia_txt }}</dd></div>
+    <div><dt>Valor</dt><dd>{{ sit.promocao.valor_fmt }}</dd></div>
+    <div><dt>Situação</dt><dd>{{ pill(st[0], st[1]) }}</dd></div>
+  </dl>
+</div>
+{% endif %}
+
+{% if bloqueio %}
+<div class="alert alert-danger">{{ bloqueio }}</div>
+{% else %}
+{% if sit.pendencias or sit.avisos %}
+<div class="alert alert-warning py-2"><ul class="exf-lista-aviso mb-0">
+  {% for m in sit.pendencias + sit.avisos %}<li>{{ m }}</li>{% endfor %}
+  {% if sit.status == 'verificar' %}<li>A academia confere esses dados antes da prova.</li>{% endif %}
+</ul></div>
+{% endif %}
+
+<form method="POST" class="lst-quadro p-3">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="aluno_id" value="{{ aluno.id }}">
+  <p class="mb-3">Considerando o judô um subsídio da educação, o departamento técnico pede as informações abaixo.</p>
+  <div class="row g-3">
+    {% for chave, rotulo, tipo in campos %}
+    <div class="col-md-6">
+      <label class="u-campo d-block"><span class="u-campo__rotulo">{{ rotulo }}</span>
+        <input type="{{ tipo }}" name="{{ chave }}" class="u-campo__controle" maxlength="200" value="{{ iniciais.get(chave, '') }}"></label>
+    </div>
+    {% endfor %}
+    <div class="col-12">
+      <label class="u-campo d-block"><span class="u-campo__rotulo">Notas do colégio em cada matéria</span>
+        <textarea name="notas_colegio" class="u-campo__controle" rows="3" maxlength="1000" placeholder="Ex.: Português 8,5 · Matemática 7,0 · Ciências 9,0"></textarea></label>
+    </div>
+    <div class="col-12">
+      <span class="u-campo__rotulo d-block mb-1">Comportamento</span>
+      {% for v, r in [('bom', 'Bom'), ('regular', 'Regular'), ('ruim', 'Ruim')] %}
+      <label class="exf-alternar me-3"><input type="radio" class="form-check-input" name="comportamento" value="{{ v }}"> {{ r }}</label>
+      {% endfor %}
+    </div>
+  </div>
+  <p class="u-muted u-fs-sm mt-3 mb-3">O judoca deve estar em dia com a mensalidade.
+    {% if gera_fatura and sit.promocao and sit.promocao.valor %}Ao confirmar, é gerada a fatura <strong>“Exame de faixa — {{ sit.promocao.de }} → {{ sit.promocao.para }}”</strong> de {{ sit.promocao.valor_fmt }}, com vencimento em {{ prazo|data_br }}, em <em>Minhas mensalidades</em>.{% endif %}
+    Depois de confirmar, você vê tudo o que será cobrado na prova.</p>
+  <button type="submit" class="sh__btn sh__btn--forte"><i class="bi bi-check-lg"></i> Confirmar inscrição{% if sit.promocao %} · {{ sit.promocao.valor_fmt }}{% endif %}</button>
+</form>
+{% endif %}
+{% endblock %}

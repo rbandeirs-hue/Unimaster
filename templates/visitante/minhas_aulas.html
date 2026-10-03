@@ -3,20 +3,13 @@
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/visitante/responsive.css') }}">
 {% endblock %}
+{% block pagina_titulo %}Minhas aulas experimentais{% endblock %}
+{% block pagina_acoes %}
+<a href="{{ url_voltar(url_for('visitante.painel')) }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Voltar</a>
+<a href="{{ url_for('visitante.solicitar_aula') }}" class="sh__btn sh__btn--forte"><i class="bi bi-plus-circle"></i> Nova aula</a>
+{% endblock %}
 {% block content %}
 <div class="container mt-4">
-    <div class="mb-4">
-        {% set back_url = url_for('visitante.painel') %}
-        {% include 'components/botao_voltar.html' %}
-    </div>
-
-    <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4 gap-3">
-        <h2 class="h4 fw-bold mb-0">Minhas Aulas Experimentais</h2>
-        <a href="{{ url_for('visitante.solicitar_aula') }}" class="btn btn-primary w-100 w-md-auto">
-            <i class="bi bi-plus-circle me-2"></i>Nova Aula
-        </a>
-    </div>
-
     {% if aulas %}
     <!-- Desktop: Tabela -->
     <div class="card shadow-sm border-0 d-none d-md-block">
@@ -87,7 +80,7 @@
                                     </span>
                                     <br>
                                     <a href="{{ url_for('visitante.pagar_diaria', pagamento_id=aula.pagamento_id) }}" 
-                                       class="btn btn-sm btn-primary mt-1">
+                                       class="u-btn u-btn--pequeno u-btn--primario mt-1">
                                         <i class="bi bi-upload me-1"></i>Enviar Comprovante
                                     </a>
                                     {% endif %}
@@ -97,7 +90,7 @@
                             </td>
                             <td>
                                 {% if aula.status_aula == 'agendada' or aula.status_aula == 'hoje' %}
-                                <button type="button" class="btn btn-sm btn-outline-danger" 
+                                <button type="button" class="u-btn u-btn--pequeno" 
                                         onclick="cancelarAula({{ aula.id }})">
                                     <i class="bi bi-x-circle me-1"></i>Cancelar
                                 </button>
@@ -179,7 +172,7 @@
                         </span>
                     </div>
                     <a href="{{ url_for('visitante.pagar_diaria', pagamento_id=aula.pagamento_id) }}" 
-                       class="btn btn-primary w-100">
+                       class="u-btn u-btn--primario w-100">
                         <i class="bi bi-upload me-1"></i>Enviar Comprovante
                     </a>
                     {% endif %}
@@ -188,7 +181,7 @@
                 
                 {% if aula.status_aula == 'agendada' or aula.status_aula == 'hoje' %}
                 <div class="border-top pt-3 mt-3">
-                    <button type="button" class="btn btn-outline-danger w-100" 
+                    <button type="button" class="u-btn w-100" 
                             onclick="cancelarAula({{ aula.id }})">
                         <i class="bi bi-x-circle me-1"></i>Cancelar Aula
                     </button>
@@ -204,7 +197,7 @@
             <i class="bi bi-calendar-x display-1 text-muted mb-3"></i>
             <h5 class="text-muted">Nenhuma aula experimental</h5>
             <p class="text-muted mb-3">Você ainda não possui aulas experimentais agendadas.</p>
-            <a href="{{ url_for('visitante.solicitar_aula') }}" class="btn btn-primary">
+            <a href="{{ url_for('visitante.solicitar_aula') }}" class="u-btn u-btn--primario">
                 <i class="bi bi-plus-circle me-2"></i>Solicitar Primeira Aula
             </a>
         </div>
@@ -213,8 +206,8 @@
 </div>
 
 <script>
-function cancelarAula(aulaId) {
-    if (!confirm('Deseja realmente cancelar esta aula experimental?')) {
+async function cancelarAula(aulaId) {
+    if (!await Dialogo.confirmar('Deseja realmente cancelar esta aula experimental?')) {
         return;
     }
     
@@ -228,10 +221,9 @@ function cancelarAula(aulaId) {
     .then(response => response.json())
     .then(data => {
         if (data.ok) {
-            alert(data.msg);
-            location.reload();
+            Dialogo.alerta(data.msg, { tom: 'ok' }).then(function () { location.reload(); });
         } else {
-            alert('Erro: ' + data.msg);
+            Dialogo.alerta(data.msg, { tom: 'perigo', titulo: 'Não deu certo' });
         }
     })
     .catch(error => {

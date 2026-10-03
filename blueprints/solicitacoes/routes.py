@@ -28,7 +28,11 @@ def _get_academias_ids():
         cur = conn.cursor(dictionary=True)
         cur.execute("SELECT academia_id FROM usuarios_academias WHERE usuario_id = %s ORDER BY academia_id", (current_user.id,))
         vinculadas = [r["academia_id"] for r in cur.fetchall()]
-        if vinculadas:
+        # Admin não é limitado pelo vínculo explícito: ter sido ligado a três
+        # academias não pode esconder as outras nove. Foi o que aconteceu ao
+        # cadastrar uma academia independente — ela ficava invisível para quem
+        # administra o sistema.
+        if vinculadas and not current_user.has_role("admin"):
             cur.close()
             conn.close()
             return vinculadas

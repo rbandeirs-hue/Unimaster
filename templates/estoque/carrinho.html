@@ -1,0 +1,133 @@
+{% extends "base_app.html" %}
+{% from 'components/ui.html' import vazio, voltar %}
+{% set menu_ativo = 'loja' %}
+{% block title %}Carrinho{% endblock %}
+
+{% block pagina_titulo %}Carrinho{% endblock %}
+{% block pagina_subtitulo %}
+  Confira as quantidades e envie. Nada é reservado agora — o item sai do
+  estoque quando a recepção confirmar.
+{% endblock %}
+
+{% block pagina_acoes %}
+  {{ voltar(url_for('estoque.loja'), 'Continuar comprando') }}
+{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ asset('css/painel/estoque.css') }}">
+{% endblock %}
+
+{% block content %}
+
+{% if linhas %}
+<form method="POST">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+  <section class="lst-quadro">
+    <header class="lst-quadro__topo">
+      <h2 class="lst-quadro__titulo">Itens</h2>
+      <span class="lst-quadro__meta">{{ linhas|length }} produto(s)</span>
+    </header>
+
+    <div style="padding:.25rem 1rem 1rem">
+      {% for l in linhas %}
+      <div class="car-linha">
+        <span class="car-linha__foto">
+          {% if l.imagem %}
+          <img src="{{ url_for('static', filename='uploads/estoque/' ~ l.imagem) }}" alt="">
+          {% else %}<i class="bi bi-box-seam"></i>{% endif %}
+        </span>
+
+        <div class="lst-corta">
+          <span class="lst-nome">{{ l.produto }}</span>
+          {% if l.variacao != 'Único' %}<span class="lst-sub"> · {{ l.variacao }}</span>{% endif %}
+          <br>
+          <span class="lst-sub">
+            R$ {{ '%.2f'|format(l.preco|float)|replace('.', ',') }} cada ·
+            {{ l.saldo }} disponível(is)
+          </span>
+        </div>
+
+        <input type="number" name="qtd_{{ l.id }}" min="0" max="{{ l.saldo }}"
+               value="{{ l.quantidade }}"
+               aria-label="Quantidade de {{ l.produto }} {{ l.variacao }}">
+
+        <div class="car-linha__valor car-col-valor">
+          R$ {{ '%.2f'|format(l.subtotal|float)|replace('.', ',') }}
+        </div>
+
+        <div class="lst-acoes">
+          <button type="submit" name="acao" value="atualizar" hidden></button>
+          <button type="button" class="lst-acao lst-acao--perigo js-remover"
+                  data-url="{{ url_for('estoque.carrinho_por', variacao_id=l.id) }}"
+                  title="Remover {{ l.produto }}"
+                  aria-label="Remover {{ l.produto }} do carrinho">
+            <i class="bi bi-trash"></i>
+          </button>
+        </div>
+      </div>
+      {% endfor %}
+
+      <div class="est-total">
+        <small>Total</small>
+        <span>R$ {{ '%.2f'|format(total|float)|replace('.', ',') }}</span>
+      </div>
+    </div>
+
+    <div class="lst-paginacao" style="gap:.5rem; flex-wrap:wrap">
+      <button type="submit" name="acao" value="atualizar" class="u-btn">
+        <i class="bi bi-arrow-repeat"></i> Atualizar quantidades
+      </button>
+      <button type="submit" name="acao" value="limpar" class="u-btn u-btn--fantasma"
+              data-confirmar="Esvaziar o carrinho?">
+        Esvaziar
+      </button>
+    </div>
+  </section>
+
+  <section class="lst-quadro mt-3">
+    <header class="lst-quadro__topo">
+      <h2 class="lst-quadro__titulo">Enviar pedido</h2>
+      <span class="lst-quadro__meta">Retirada e pagamento na academia</span>
+    </header>
+    <div class="lst-filtros" style="border:0">
+      <label class="lst-campo lst-campo--largo">
+        <span class="lst-campo__rotulo">Observação para a recepção</span>
+        <input type="text" name="observacao" maxlength="255"
+               placeholder="Ex.: retiro na terça à noite">
+      </label>
+    </div>
+    <div class="lst-paginacao">
+      <button type="submit" name="acao" value="fechar" class="u-btn u-btn--forte">
+        <i class="bi bi-bag-check"></i> Enviar pedido
+      </button>
+      <span class="lst-sub">
+        A recepção confirma, separa os itens e o estoque baixa nesse momento.
+      </span>
+    </div>
+  </section>
+</form>
+
+{# Remover é um POST próprio, com o seu CSRF: pendurar a remoção no formulário
+   grande faria o botão enviar também as quantidades, e a linha sumiria com um
+   "atualizar" implícito que ninguém pediu. #}
+<form method="POST" id="formRemover" style="display:none">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="acao" value="remover">
+</form>
+<script>
+document.querySelectorAll('.js-remover').forEach(function (b) {
+  b.addEventListener('click', function () {
+    var f = document.getElementById('formRemover');
+    f.action = b.dataset.url;
+    f.submit();
+  });
+});
+</script>
+
+{% else %}
+{{ vazio('Seu carrinho está vazio.',
+         href=url_for('estoque.loja'), acao='Ver a loja', icone='bi-cart3') }}
+{% endif %}
+
+{% endblock %}

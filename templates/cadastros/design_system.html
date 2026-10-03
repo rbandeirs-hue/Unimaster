@@ -1,0 +1,155 @@
+{% extends "base_app.html" %}
+{% from 'components/ui.html' import btn, campo, campo_livre, skeleton, vazio, pill, secao %}
+{% set menu_ativo = 'cadastros' %}
+{% block title %}Design System — Unimaster{% endblock %}
+
+{% block pagina_titulo %}Design System{% endblock %}
+{% block pagina_subtitulo %}O que já existe, para não inventar o quarto botão{% endblock %}
+
+{% block extra_css %}
+<style>
+  .ds-sec { margin-bottom: var(--u-space-5); }
+  .ds-grade { display: grid; gap: var(--u-space-3);
+              grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+  .ds-amostra { border: 1px solid var(--u-border); border-radius: var(--u-radius);
+                background: var(--u-surface); overflow: hidden; }
+  .ds-amostra .cor { height: 46px; }
+  .ds-amostra .meta { padding: .4rem .6rem; }
+  .ds-amostra b { display: block; font-size: var(--u-fs-sm); }
+  .ds-amostra code { font-size: var(--u-fs-xs); color: var(--u-text-faint); }
+  .ds-palco { border: 1px solid var(--u-border); border-radius: var(--u-radius);
+              background: var(--u-surface); padding: var(--u-space-3);
+              display: flex; flex-wrap: wrap; gap: var(--u-space-2); align-items: center; }
+  .ds-uso { font-family: var(--u-font-mono); font-size: var(--u-fs-xs);
+            color: var(--u-text-muted); background: var(--u-surface-alt);
+            padding: .5rem .7rem; border-radius: var(--u-radius-sm);
+            margin-top: .5rem; overflow-x: auto; white-space: pre; }
+  .ds-esc div { display: flex; align-items: baseline; gap: var(--u-space-3);
+                padding: .25rem 0; border-bottom: 1px solid var(--u-border-soft); }
+  .ds-esc code { min-width: 130px; font-size: var(--u-fs-xs); color: var(--u-text-faint); }
+  .ds-esp { display: flex; gap: var(--u-space-3); align-items: flex-end; flex-wrap: wrap; }
+  .ds-esp span { display: block; background: var(--u-primary); border-radius: 3px; }
+  .ds-esp p { font-family: var(--u-font-mono); font-size: var(--u-fs-xs);
+              color: var(--u-text-faint); text-align: center; margin: .3rem 0 0; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="ds-sec">
+  {{ secao('Cor por papel', 'bi-palette') }}
+  <div class="ds-grade">
+    {% for nome, tok in [('Primária','--u-primary'), ('Sucesso','--u-success'),
+                         ('Alerta','--u-warning'), ('Perigo','--u-danger'),
+                         ('Informação','--u-info')] %}
+    <div class="ds-amostra">
+      <div class="cor" style="background: var({{ tok }})"></div>
+      <div class="meta"><b>{{ nome }}</b><code>{{ tok }}</code></div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="ds-sec">
+  {{ secao('Cor por modalidade', 'bi-diagram-3') }}
+  <p class="u-muted u-fs-sm">Padrão de fábrica. O valor real vem de
+    <code>modalidade.cor</code>, porque o gestor pode trocar.</p>
+  <div class="ds-grade">
+    {% for nome, tok in [('Judô','--u-mod-judo'), ('Jiu-Jitsu','--u-mod-jiujitsu'),
+                         ('Ginástica','--u-mod-ginastica')] %}
+    <div class="ds-amostra">
+      <div class="cor" style="background: var({{ tok }})"></div>
+      <div class="meta"><b>{{ nome }}</b><code>{{ tok }}</code></div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="ds-sec">
+  {{ secao('Tipografia', 'bi-type') }}
+  <div class="ds-palco" style="display:block">
+    <div class="ds-esc">
+      <div><code>--u-fs-display</code><span style="font-size:var(--u-fs-display);font-weight:700">Título de página</span></div>
+      <div><code>--u-fs-xl</code><span style="font-size:var(--u-fs-xl);font-weight:700">Seção</span></div>
+      <div><code>--u-fs-lg</code><span style="font-size:var(--u-fs-lg);font-weight:600">Cartão, subtítulo</span></div>
+      <div><code>--u-fs-base</code><span style="font-size:var(--u-fs-base)">Corpo, leitura padrão</span></div>
+      <div><code>--u-fs-sm</code><span style="font-size:var(--u-fs-sm)">Tabela, formulário</span></div>
+      <div><code>--u-fs-xs</code><span style="font-size:var(--u-fs-xs)">Auxiliar, texto de ajuda</span></div>
+      <div><code>--u-fs-label</code><span style="font-size:var(--u-fs-label);letter-spacing:var(--u-ls-label);text-transform:uppercase;font-weight:600">Rótulo de coluna</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="ds-sec">
+  {{ secao('Espaçamento', 'bi-rulers') }}
+  <div class="ds-palco">
+    {% for tok, px in [('--u-space-1','4'), ('--u-space-2','8'), ('--u-space-3','16'),
+                       ('--u-space-4','24'), ('--u-space-5','32'), ('--u-space-6','48'),
+                       ('--u-space-7','64')] %}
+    <div class="ds-esp"><div>
+      <span style="width: var({{ tok }}); height: var({{ tok }})"></span>
+      <p>{{ px }}</p>
+    </div></div>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="ds-sec">
+  {{ secao('Botão', 'bi-hand-index') }}
+  <div class="ds-palco">
+    {{ btn('Salvar', variante='forte') }}
+    {{ btn('Primária', variante='primario') }}
+    {{ btn('Neutro') }}
+    {{ btn('Excluir', variante='perigo') }}
+    {{ btn('Cancelar', variante='fantasma') }}
+    {{ btn('Pequeno', extra='u-btn--pequeno') }}
+    {{ btn(icone='bi-trash', variante='perigo', rotulo_acessivel='Excluir aluno') }}
+  </div>
+  <div class="ds-uso">{{ "{{ btn('Salvar', variante='forte') }}
+{{ btn(icone='bi-trash', variante='perigo', rotulo_acessivel='Excluir aluno') }}" }}</div>
+  <p class="u-muted u-fs-sm">Botão só com ícone <strong>exige</strong>
+    <code>rotulo_acessivel</code>. É o que impede o botão mudo voltar.</p>
+</div>
+
+<div class="ds-sec">
+  {{ secao('Campo', 'bi-input-cursor-text') }}
+  <div class="ds-palco" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr))">
+    {{ campo('Nome do aluno', 'exemplo_nome', valor='Ana Clara Botelho', obrigatorio=True) }}
+    {{ campo('Telefone', 'exemplo_tel', placeholder='(81) 90000-0000',
+             ajuda='Usado para a cobrança automática.') }}
+    {{ campo('CPF', 'exemplo_cpf', valor='123', erro='CPF inválido. Verifique os 11 dígitos.') }}
+    {% call campo_livre('Modalidade', obrigatorio=True) %}
+      <select><option>Judô</option><option>Jiu-Jitsu</option><option>Ginástica</option></select>
+    {% endcall %}
+  </div>
+  <div class="ds-uso">{{ "{{ campo('Nome do aluno', 'nome', valor=aluno.nome, obrigatorio=True) }}
+{% call campo_livre('Modalidade') %}<select>…</select>{% endcall %}" }}</div>
+  <p class="u-muted u-fs-sm">O rótulo é o primeiro argumento: não dá para montar
+    campo sem ele. O erro aparece <strong>no campo</strong>, não só num aviso no topo.</p>
+</div>
+
+<div class="ds-sec">
+  {{ secao('Etiqueta de estado', 'bi-tag') }}
+  <div class="ds-palco">
+    {{ pill('Em dia', 'success') }}
+    {{ pill('A vencer', 'warning') }}
+    {{ pill('Vencido', 'danger') }}
+    {{ pill('Informação', 'info') }}
+  </div>
+</div>
+
+<div class="ds-sec">
+  {{ secao('Carregando', 'bi-hourglass-split') }}
+  <div class="ds-palco" style="display:block">{{ skeleton(linhas=3, titulo=True) }}</div>
+  <div class="ds-uso">{{ "{{ skeleton(linhas=3, titulo=True) }}" }}</div>
+</div>
+
+<div class="ds-sec">
+  {{ secao('Vazio', 'bi-inbox') }}
+  <div class="ds-palco" style="display:block">
+    {{ vazio('Nenhum aluno nesta turma ainda.', href='#', acao='Matricular aluno') }}
+  </div>
+  <div class="ds-uso">{{ "{{ vazio('Nenhum aluno nesta turma ainda.', href=url, acao='Matricular') }}" }}</div>
+</div>
+
+{% endblock %}

@@ -63,12 +63,20 @@ def _get_academias_ids():
         cur = conn.cursor(dictionary=True)
         cur.execute("SELECT academia_id FROM usuarios_academias WHERE usuario_id = %s ORDER BY academia_id", (current_user.id,))
         vinculadas = [r["academia_id"] for r in cur.fetchall()]
-        if vinculadas:
+        # Admin não é limitado pelo vínculo explícito: ter sido ligado a três
+        # academias não pode esconder as outras nove. Foi o que aconteceu ao
+        # cadastrar uma academia independente — ela ficava invisível para quem
+        # administra o sistema.
+        if vinculadas and not current_user.has_role("admin"):
             cur.close()
             conn.close()
             return vinculadas
         # Modo academia: gestor_academia/professor só veem academias de usuarios_academias (não id_academia)
-        if session.get("modo_painel") == "academia" and (current_user.has_role("gestor_academia") or current_user.has_role("professor")):
+        # Admin fica de fora: ele costuma acumular o papel de gestor_academia,
+        # e esta trava o deixava sem academia nenhuma no modo academia.
+        if (session.get("modo_painel") == "academia"
+                and not current_user.has_role("admin")
+                and (current_user.has_role("gestor_academia") or current_user.has_role("professor"))):
             cur.close()
             conn.close()
             return []
@@ -104,6 +112,24 @@ def get_user_profile():
 # 🔹 Página principal do módulo Turmas (Painel de Opções)
 # Corrigido para passar a variável 'perfil'
 # ======================================================
+@bp_turmas.app_template_global("planos_da_academia_turma")
+def planos_da_academia_turma(academia_id):
+    """Planos que a turma pode cobrar — usado pelo campo no cadastro/edição."""
+    if not academia_id:
+        return []
+    from utils.turma_plano import planos_da_academia
+    from utils.planos_modalidade import anotar
+    db = get_db_connection()
+    cur = db.cursor(dictionary=True)
+    try:
+        return anotar(cur, planos_da_academia(cur, int(academia_id)))
+    except Exception:
+        return []
+    finally:
+        cur.close()
+        db.close()
+
+
 @bp_turmas.route('/turmas/painel', methods=['GET'])
 @login_required
 def painel_turmas():
@@ -406,6 +432,9 @@ def cadastro_turma():
                 "INSERT INTO turma_modalidades (turma_id, modalidade_id) VALUES (%s, %s)",
                 (turma_id, int(modalidade_id)),
             )
+        # Plano da turma: é o valor que a matrícula pública cobra por ela.
+        from utils.turma_plano import gravar_plano
+        gravar_plano(cursor, turma_id, id_academia, request.form.get("mensalidade_id"))
         db.commit()
         db.close()
         flash("Turma cadastrada com sucesso!", "success")
@@ -679,6 +708,8 @@ def editar_turma(turma_id):
                     "INSERT INTO turma_modalidades (turma_id, modalidade_id) VALUES (%s, %s)",
                     (turma_id, int(modalidade_id)),
                 )
+        from utils.turma_plano import gravar_plano
+        gravar_plano(cursor, turma_id, id_academia, request.form.get("mensalidade_id"))
         db.commit()
         db.close()
         flash("Turma atualizada com sucesso!", "success")

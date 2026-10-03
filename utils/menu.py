@@ -57,6 +57,12 @@ def _tem(*papeis):
 
 # ---------------------------------------------------------------- academia
 def _menu_academia(ctx):
+    # Modalidades da academia: definem o que faz sentido oferecer no menu.
+    # Sem a informação, `_tem_judo` fica True e nada é escondido.
+    _mods = ctx.get("academia_modalidades") or []
+    _tem_judo = ctx.get("academia_tem_judo")
+    if _tem_judo is None:
+        _tem_judo = (not _mods) or any("jud" in (m.get("nome") or "").lower() for m in _mods)
     aid = ctx.get("academia_id")
     # Duas condições diferentes: o PAPEL do usuário permite ver financeiro, e a
     # ACADEMIA usa o módulo. Academia que só faz o acadêmico não mostra a seção
@@ -80,6 +86,8 @@ def _menu_academia(ctx):
                  _rota("presencas.painel_presenca", academia_id=aid)),
             Item("turmas", "bi-collection", "Turmas",
                  _rota("turmas.lista_turmas", academia_id=aid)),
+            Item("aulas_particulares", "bi-person-workspace", "Aulas particulares",
+                 _rota("aula_particular.lista", academia_id=aid)),
             Item("ranking", "bi-trophy", "Ranking de frequência",
                  _rota("presencas.ranking_frequencia_pagina")),
             Item("solicitacoes", "bi-inbox", "Aprovar Solicitações",
@@ -103,23 +111,45 @@ def _menu_academia(ctx):
             Item("financeiro", "bi-cash-coin", "Financeiro",
                  _rota("financeiro.dashboard", academia_id=aid) if pode_financeiro else None),
         ] if academia_usa_financeiro else []),
+        # Relatórios ficam fora de Financeiro de propósito: o catálogo cruza
+        # alunos, frequência, graduação e cadastro, não só dinheiro.
+        ("Relatórios", [
+            Item("relatorios", "bi-file-earmark-bar-graph", "Relatórios",
+                 _rota("relatorios.hub", academia_id=aid)),
+        ]),
         ("Eventos", [
             Item("eventos", "bi-calendar-event", "Eventos",
                  _rota("eventos_competicoes.lista_eventos", academia_id=aid)),
             Item("competicoes", "bi-trophy-fill", "Competições",
                  _rota("eventos_competicoes.lista_competicoes", academia_id=aid)),
+            # Programa, preços, aptos e banca do exame de faixa (kyu do judô).
+            Item("exame_faixa", "bi-award", "Exame de faixa",
+                 _rota("exame_faixa.alunos", academia_id=aid) if _tem_judo else None),
             Item("calendario", "bi-calendar3", "Calendário",
                  _rota("calendario.index")),
         ]),
+        ("Estoque", [
+            # O módulo é opcional por academia: sem ele ligado, a seção some.
+            # `tem_estoque` é resolvido no context processor, junto do resto do
+            # escopo, para o menu não consultar banco.
+            Item("estoque", "bi-box-seam", "Estoque",
+                 _rota("estoque.painel") if ctx.get("tem_estoque") else None),
+        ]),
         ("Academia", [
+            # Locais de treino e Modalidades acompanham o Zempo: são telas da
+            # operação do judô. Academia de jiu-jitsu não as vê.
             Item("locais", "bi-geo-alt", "Locais de treino",
-                 _rota("academia.locais_treino", academia_id=aid)),
+                 _rota("academia.locais_treino", academia_id=aid)
+                 if _tem_judo else None),
             Item("modalidades", "bi-diagram-3", "Modalidades",
-                 _rota("configuracoes.modalidades_lista", academia_id=aid)),
+                 _rota("configuracoes.modalidades_lista", academia_id=aid)
+                 if _tem_judo else None),
             Item("whatsapp", "bi-whatsapp", "WhatsApp",
                  _rota("academia.whatsapp_config", academia_id=aid)),
+            # Zempo é o registro nacional do JUDÔ (CBJ). Academia que não dá
+            # judô não tem o que fazer com ele.
             Item("zempo", "bi-person-vcard", "Cadastro no Zempo",
-                 _rota("zempo.solicitar", academia_id=aid)),
+                 _rota("zempo.solicitar", academia_id=aid) if _tem_judo else None),
             Item("configuracoes", "bi-gear", "Configurações",
                  _rota("academia.configuracoes_academia", academia_id=aid)),
         ]),
@@ -137,6 +167,11 @@ def _menu_admin(ctx):
             Item("federacoes", "bi-flag", "Federações", _rota("federacao.lista_federacoes")),
             Item("associacoes", "bi-diagram-3", "Associações", _rota("federacao.lista_associacoes")),
             Item("academias", "bi-house-door", "Academias", _rota("associacao.lista_academias")),
+            # Atalho direto: a academia independente não pertence a associação
+            # nenhuma, então procurá-la dentro de "Associações" é o caminho
+            # errado. Quem administra o sistema cadastra a partir daqui.
+            Item("academia_nova", "bi-plus-circle", "Nova academia",
+                 _rota("associacao.cadastro_academia")),
         ]),
         ("Pessoas", [
             Item("alunos", "bi-people", "Alunos", _rota("alunos.lista_alunos")),
@@ -149,6 +184,7 @@ def _menu_admin(ctx):
                  _rota("eventos_competicoes.lista_eventos")),
             Item("competicoes", "bi-trophy-fill", "Competições",
                  _rota("eventos_competicoes.lista_competicoes")),
+            Item("exame_faixa", "bi-award", "Exame de faixa", _rota("exame_faixa.exames")),
             Item("calendario", "bi-calendar3", "Calendário", _rota("calendario.index")),
         ]),
         ("Sistema", [
@@ -157,7 +193,16 @@ def _menu_admin(ctx):
             Item("categorias", "bi-tags", "Categorias", _rota("cadastros.gerenciar_categorias")),
             Item("modalidades", "bi-diagram-3", "Modalidades",
                  _rota("configuracoes.modalidades_lista")),
+            # Liga/desliga de cada item da lateral por modalidade: é aqui que
+            # "isto é do judô" deixa de ser uma decisão de código.
+            Item("menu_modalidade", "bi-toggles", "Menu por modalidade",
+                 _rota("configuracoes.menu_modalidade")),
+            Item("modulo_estoque", "bi-box-seam", "Módulo de estoque",
+                 _rota("configuracoes.modulo_estoque")),
             Item("formularios", "bi-ui-checks", "Formulários", _rota("formularios.lista")),
+            # Catálogo vivo dos componentes: quem for criar tela nova vê aqui
+            # o que já existe, em vez de inventar o quarto botão.
+            Item("design", "bi-palette", "Design System", _rota("cadastros.design_system")),
             Item("zempo", "bi-person-vcard", "Zempo", _rota("zempo.migracoes")),
             Item("configuracoes", "bi-gear", "Configurações", _rota("configuracoes.hub")),
         ]),
@@ -215,7 +260,12 @@ def _menu_associacao(ctx):
                  _rota("eventos_competicoes.lista_eventos")),
             Item("competicoes", "bi-trophy-fill", "Competições",
                  _rota("eventos_competicoes.lista_competicoes")),
+            Item("exame_faixa", "bi-award", "Exame de faixa", _rota("exame_faixa.exames")),
             Item("calendario", "bi-calendar3", "Calendário", _rota("calendario.index")),
+        ]),
+        ("Estoque", [
+            Item("estoque", "bi-box-seam", "Estoque",
+                 _rota("estoque.painel") if ctx.get("tem_estoque") else None),
         ]),
         ("Associação", [
             Item("categorias", "bi-tags", "Categorias", _rota("associacao.gerenciar_categorias")),
@@ -244,6 +294,8 @@ def _menu_professor(ctx):
                  _rota("presencas.historico_presenca_lista")),
             Item("ata", "bi-file-text", "Ata de presença", _rota("presencas.ata_presenca")),
             Item("turmas", "bi-collection", "Minhas turmas", _rota("professor.minha_turma")),
+            Item("aulas_particulares", "bi-person-workspace", "Aulas particulares",
+                 _rota("aula_particular.lista")),
             Item("ranking", "bi-trophy", "Ranking de frequência",
                  _rota("presencas.ranking_frequencia_pagina")),
         ]),
@@ -253,6 +305,8 @@ def _menu_professor(ctx):
         ("Eventos", [
             Item("eventos", "bi-calendar-event", "Eventos",
                  _rota("eventos_competicoes.lista_eventos", academia_id=aid)),
+            Item("exame_faixa", "bi-award", "Exame de faixa",
+                 _rota("exame_faixa.alunos", academia_id=aid)),
             Item("calendario", "bi-calendar3", "Calendário", _rota("calendario.index")),
         ]),
     ]
@@ -271,11 +325,22 @@ def _menu_aluno(ctx):
                  _rota("painel_aluno.minhas_presencas")),
             Item("ranking", "bi-trophy", "Ranking de frequência",
                  _rota("presencas.ranking_frequencia_pagina")),
-            Item("curriculo", "bi-award", "Meu currículo", _rota("painel_aluno.curriculo")),
+            # Currículo de atleta e simuladores são do judô: o currículo sai do
+            # registro da federação e a categoria vem da tabela de pesos da CBJ.
+            # Aluno só de jiu-jitsu não tem o que fazer com eles.
+            Item("curriculo", "bi-award", "Meu currículo",
+                 _rota("painel_aluno.curriculo") if ctx.get("pratica_judo", True) else None),
+            # Material do próximo exame e das faixas anteriores, e o histórico
+            # de exames com as notas.
+            Item("exame_estudo", "bi-journal-text", "Exame de faixa — estudo",
+                 _rota("exame_faixa.estudo") if ctx.get("pratica_judo", True) else None),
         ]),
         ("Financeiro", [
             Item("financeiro", "bi-cash-coin", "Minhas mensalidades",
                  _rota("painel_aluno.minhas_mensalidades")),
+        ]),
+        ("Loja", [
+            Item("loja", "bi-shop", "Loja da academia", _rota("estoque.loja")),
         ]),
         ("Eventos", [
             Item("eventos", "bi-calendar-event", "Eventos disponíveis",
@@ -284,9 +349,11 @@ def _menu_aluno(ctx):
         ]),
         ("Simuladores", [
             Item("sim_graduacao", "bi-graph-up", "Graduação prevista",
-                 _rota("painel_aluno.simular_graduacao_prevista")),
+                 _rota("painel_aluno.simular_graduacao_prevista")
+                 if ctx.get("pratica_judo", True) else None),
             Item("sim_categoria", "bi-tags", "Categoria de competição",
-                 _rota("painel_aluno.simular_categorias")),
+                 _rota("painel_aluno.simular_categorias")
+                 if ctx.get("pratica_judo", True) else None),
             Item("associacao", "bi-diagram-3", "Treinar em outra academia",
                  _rota("painel_aluno.associacao")),
         ]),
@@ -304,11 +371,17 @@ def _menu_responsavel(ctx):
             Item("turmas", "bi-collection", "Turma", _rota("painel_responsavel.minha_turma")),
             Item("presencas", "bi-clipboard-check", "Presenças",
                  _rota("painel_responsavel.minhas_presencas")),
-            Item("curriculo", "bi-award", "Currículo", _rota("painel_responsavel.curriculo")),
+            Item("curriculo", "bi-award", "Currículo",
+                 _rota("painel_responsavel.curriculo") if ctx.get("pratica_judo", True) else None),
+            Item("exame_estudo", "bi-journal-text", "Exame de faixa — estudo",
+                 _rota("exame_faixa.estudo") if ctx.get("pratica_judo", True) else None),
         ]),
         ("Financeiro", [
             Item("financeiro", "bi-cash-coin", "Mensalidades",
                  _rota("painel_responsavel.minhas_mensalidades")),
+        ]),
+        ("Loja", [
+            Item("loja", "bi-shop", "Loja da academia", _rota("estoque.loja")),
         ]),
         ("Eventos", [
             Item("eventos", "bi-calendar-event", "Eventos disponíveis",
@@ -318,9 +391,11 @@ def _menu_responsavel(ctx):
         ]),
         ("Simuladores", [
             Item("sim_graduacao", "bi-graph-up", "Graduação prevista",
-                 _rota("painel_responsavel.simular_graduacao_prevista")),
+                 _rota("painel_responsavel.simular_graduacao_prevista")
+                 if ctx.get("pratica_judo", True) else None),
             Item("sim_categoria", "bi-tags", "Categoria de competição",
-                 _rota("painel_responsavel.simular_categorias")),
+                 _rota("painel_responsavel.simular_categorias")
+                 if ctx.get("pratica_judo", True) else None),
             Item("associacao", "bi-diagram-3", "Treinar em outra academia",
                  _rota("painel_responsavel.associacao")),
         ]),
@@ -359,11 +434,88 @@ _POR_MODO = {
 
 
 def menu_do_modo(modo, ctx=None):
-    """Grupos visíveis da lateral para `modo`, já sem itens sem rota."""
+    """Grupos visíveis da lateral para `modo`.
+
+    Duas camadas, nesta ordem: o código monta o menu como sempre montou, e em
+    cima dele vêm as exceções por modalidade que o administrador configurou.
+    Ligar explicitamente devolve um item que o código esconderia; desligar tira
+    um que ele mostraria. Sem exceção nenhuma, o resultado é o de antes.
+    """
+    ctx = ctx or {}
     montar = _POR_MODO.get(modo or "", _menu_academia)
+    try:
+        from utils.menu_modalidade import decisoes
+        ligados, desligados = decisoes(modo, ctx.get("menu_modalidade_ids"))
+    except Exception:
+        ligados, desligados = set(), set()
+
+    # Acesso do usuário nesta academia (MM-13): área sem permissão e itens só
+    # do gestor principal saem do menu. A guarda das rotas bloqueia de verdade.
+    bloqueados = set()
+    if modo in ("academia", "professor"):
+        try:
+            from utils import acesso_academia as acs
+            ac = acs.acesso(ctx.get("academia_id") or acs.academia_atual())
+            for area, chaves in acs.MENU_AREA.items():
+                if not ac.get(area, True):
+                    bloqueados |= chaves
+            if not ac["principal"]:
+                bloqueados |= acs.MENU_SO_PRINCIPAL
+        except Exception:
+            bloqueados = set()
+
     grupos = []
-    for rotulo, itens in montar(ctx or {}):
-        visiveis = [i for i in itens if i.href]
+    for rotulo, itens in montar(ctx):
+        visiveis = []
+        for it in itens:
+            if it.chave in desligados or it.chave in bloqueados:
+                continue
+            if it.href:
+                visiveis.append(it)
+            elif it.chave in ligados:
+                # O código escondeu, o administrador pediu de volta. Só entra
+                # se a rota existir de verdade — item sem destino é pior que
+                # item ausente.
+                href = _href_do_item(modo, it.chave, ctx)
+                if href:
+                    visiveis.append(it._replace(href=href))
         if visiveis:
             grupos.append((rotulo, visiveis))
     return grupos
+
+
+def _href_do_item(modo, chave, ctx):
+    """Monta o menu com o contexto permissivo só para recuperar uma rota.
+
+    Chamado apenas quando o administrador ligou um item que o código esconde —
+    situação rara, então montar o menu uma segunda vez não pesa.
+    """
+    permissivo = dict(ctx)
+    permissivo["pratica_judo"] = True
+    permissivo["academia_tem_judo"] = True
+    montar = _POR_MODO.get(modo or "", _menu_academia)
+    try:
+        for _rotulo, itens in montar(permissivo):
+            for it in itens:
+                if it.chave == chave:
+                    return it.href
+    except Exception:
+        return None
+    return None
+
+
+def catalogo(modo, ctx=None):
+    """Todos os itens de `modo`, escondidos inclusive — para a tela do admin.
+
+    Devolve [(grupo, [Item, ...])] sem filtrar por rota nem por modalidade: a
+    tela precisa listar o que existe, não o que este usuário veria.
+    """
+    permissivo = dict(ctx or {})
+    permissivo["pratica_judo"] = True
+    permissivo["academia_tem_judo"] = True
+    permissivo["menu_modalidade_ids"] = []
+    montar = _POR_MODO.get(modo or "", _menu_academia)
+    try:
+        return [(rotulo, list(itens)) for rotulo, itens in montar(permissivo) if itens]
+    except Exception:
+        return []

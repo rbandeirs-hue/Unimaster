@@ -13,13 +13,23 @@
 {% set menu_ativo = 'financeiro' %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/painel/financeiro.css') }}">
+{# asset() e não url_for: com 3 workers e cache de navegador, o CSS antigo
+   continuava sendo servido depois do deploy. #}
+<link rel="stylesheet" href="{{ asset('css/painel/financeiro.css') }}">
 {% block fin_css %}{% endblock %}
 {% endblock %}
 
 {% block content %}
 {% set _a = {'academia_id': academia_id} if academia_id else {} %}
-<nav class="lst-abas fin-abas">
+{# As 17 abas numa linha só, com um passador de cada lado. Os botões aparecem
+   apenas quando há o que passar, e a aba ativa é trazida para a vista ao
+   abrir a tela — senão quem entra no "Monitor de cobrança" não vê onde está. #}
+<div class="fin-abas-caixa" data-fin-abas>
+  <button type="button" class="fin-passador fin-passador--esq" data-fin-passar="-1"
+          aria-label="Ver abas anteriores" hidden>
+    <i class="bi bi-chevron-left"></i>
+  </button>
+  <nav class="lst-abas fin-abas" data-fin-tira>
   {% for chave, rotulo, endpoint in [
       ('dashboard',    'Dashboard',           'financeiro_painel.dashboard'),
       ('mensalidades', 'Mensalidades',        'financeiro_painel.mensalidades'),
@@ -42,7 +52,50 @@
   <a href="{{ url_for(endpoint, **_a) }}"
      class="lst-aba {% if (fin_aba or ativo) == chave %}is-ativa{% endif %}">{{ rotulo }}</a>
   {% endfor %}
-</nav>
+  </nav>
+  <button type="button" class="fin-passador fin-passador--dir" data-fin-passar="1"
+          aria-label="Ver mais abas" hidden>
+    <i class="bi bi-chevron-right"></i>
+  </button>
+</div>
+
+<script>
+(function () {
+  var caixa = document.querySelector('[data-fin-abas]');
+  if (!caixa) return;
+  var tira = caixa.querySelector('[data-fin-tira]');
+  var botoes = caixa.querySelectorAll('[data-fin-passar]');
+
+  function atualizar() {
+    // 1px de folga: larguras fracionárias fazem scrollWidth passar o
+    // clientWidth por uma fração mesmo quando cabe tudo.
+    var passa = tira.scrollWidth - tira.clientWidth > 1;
+    var fim = tira.scrollLeft + tira.clientWidth >= tira.scrollWidth - 1;
+    botoes.forEach(function (b) {
+      var paraDireita = b.dataset.finPassar === '1';
+      b.hidden = !passa;
+      b.disabled = paraDireita ? fim : tira.scrollLeft <= 0;
+    });
+    caixa.classList.toggle('tem-passador', passa);
+  }
+
+  botoes.forEach(function (b) {
+    b.addEventListener('click', function () {
+      var salto = Math.max(160, Math.round(tira.clientWidth * 0.7));
+      var suave = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      tira.scrollBy({ left: salto * Number(b.dataset.finPassar),
+                      behavior: suave ? 'smooth' : 'auto' });
+    });
+  });
+
+  tira.addEventListener('scroll', atualizar, { passive: true });
+  window.addEventListener('resize', atualizar);
+
+  var ativa = tira.querySelector('.lst-aba.is-ativa');
+  if (ativa) ativa.scrollIntoView({ inline: 'center', block: 'nearest' });
+  atualizar();
+})();
+</script>
 
 {% if gateway_erro %}
 {# Recusa do gateway é silenciosa em todos os caminhos de cobrança: sem este

@@ -1,0 +1,60 @@
+{# Diálogo "Liberar para o exame": o responsável da academia passa por cima de
+   idade mínima e carência. Abre por botões com data-exf-liberar e:
+     data-url         rota exame_faixa.liberar_aluno do aluno
+     data-nome        nome do aluno
+     data-pendencias  o que ele ainda não cumpre
+     data-liberado    "1" se já está liberado (o diálogo vira "desfazer")
+     data-motivo      motivo salvo #}
+<dialog class="exf-dialogo" id="exf-liberar" aria-labelledby="exf-liberar-titulo">
+  <form method="POST" action="" id="exf-liberar-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="voltar" value="{{ request.full_path }}">
+    {% if esc and esc.academia_id %}<input type="hidden" name="academia_id" value="{{ esc.academia_id }}">{% endif %}
+    <input type="hidden" name="desfazer" value="">
+    <header class="exf-dialogo__topo">
+      <h2 id="exf-liberar-titulo">Liberar para o exame</h2>
+      <span class="u-muted u-fs-sm" data-l-nome></span>
+    </header>
+    <div class="exf-dialogo__corpo">
+      <p class="exf-dialogo__regra" data-l-pend-linha>Ainda não cumpre: <strong data-l-pend></strong></p>
+      <label class="u-campo mb-0"><span class="u-campo__rotulo">Motivo</span>
+        <input type="text" name="motivo" class="u-campo__controle" maxlength="160" required
+               placeholder="Ex.: completa 8 anos no mês seguinte ao exame"></label>
+      <p class="u-muted u-fs-sm mb-0">O aluno passa a contar como apto e pode ser inscrito — pela academia ou por ele mesmo. A pendência continua registrada na inscrição. Vale enquanto ele estiver na faixa atual.</p>
+    </div>
+    <footer class="exf-dialogo__rodape">
+      <button type="button" class="sh__btn" data-l-fechar>Cancelar</button>
+      <button type="submit" class="sh__btn" data-l-desfazer hidden><i class="bi bi-lock"></i> Desfazer liberação</button>
+      <button type="submit" class="sh__btn sh__btn--forte" data-l-salvar><i class="bi bi-unlock"></i> Liberar</button>
+    </footer>
+  </form>
+</dialog>
+<script>
+(function () {
+  var dlg = document.getElementById('exf-liberar');
+  if (!dlg || !dlg.showModal) return;
+  var form = document.getElementById('exf-liberar-form');
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-exf-liberar]');
+    if (!b) return;
+    var liberado = b.getAttribute('data-liberado') === '1';
+    var pend = b.getAttribute('data-pendencias') || '';
+    form.action = b.getAttribute('data-url');
+    form.desfazer.value = '';
+    form.motivo.value = b.getAttribute('data-motivo') || '';
+    dlg.querySelector('[data-l-nome]').textContent = b.getAttribute('data-nome') || '';
+    dlg.querySelector('[data-l-pend]').textContent = pend;
+    dlg.querySelector('[data-l-pend-linha]').hidden = !pend;
+    dlg.querySelector('[data-l-desfazer]').hidden = !liberado;
+    dlg.querySelector('[data-l-salvar]').innerHTML = '<i class="bi bi-unlock"></i> ' + (liberado ? 'Salvar motivo' : 'Liberar');
+    dlg.showModal();
+  });
+  // Desfazer não pede motivo.
+  dlg.querySelector('[data-l-desfazer]').addEventListener('click', function () {
+    form.desfazer.value = '1';
+    form.motivo.required = false;
+  });
+  dlg.querySelector('[data-l-salvar]').addEventListener('click', function () { form.motivo.required = true; });
+  dlg.querySelector('[data-l-fechar]').addEventListener('click', function () { dlg.close(); });
+})();
+</script>

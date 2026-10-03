@@ -1,0 +1,115 @@
+{% extends "base_app.html" %}
+{% block conteudo_classe %}exf-tela{% endblock %}
+{% from 'exame_faixa/_macros.html' import pill with context %}
+{% set menu_ativo = 'exame_faixa' %}
+{% set base = {'academia_id': esc.academia_id} if esc.academia_id else {} %}
+{% set MESES = ['JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV','DEZ'] %}
+{% block title %}Exame de faixa — exames{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{{ asset('css/exame_faixa.css') }}">{% endblock %}
+
+{% block pagina_titulo %}Exame de faixa{% endblock %}
+{% block pagina_subtitulo %}Exames marcados pela associação, inscritos e o andamento de cada banca.{% endblock %}
+{% block pagina_acoes %}
+{% if esc.pode_criar %}
+<a href="{{ url_for('exame_faixa.editar_exame') }}" class="sh__btn sh__btn--forte">
+  <i class="bi bi-plus-lg"></i> Novo exame de faixa</a>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+{% set seletor_academia = true %}
+{% include 'exame_faixa/_abas.html' %}
+
+{% if not eventos %}
+<section class="lst-quadro exf-vazio">
+  <i class="bi bi-calendar2-check" aria-hidden="true"></i>
+  <strong>Nenhum exame de faixa marcado</strong>
+  {% if esc.pode_criar %}
+  <p>Marque o exame com o dia da prova, o período de inscrição e o prazo de pagamento. As inscrições abrem para {{ 'os alunos de todas as academias' if esc.ve_todas else 'os alunos da academia' }}, cada inscrição gera a fatura com o PIX, e no dia a banca aplica a prova aluno por aluno.</p>
+  <a href="{{ url_for('exame_faixa.editar_exame') }}" class="sh__btn sh__btn--forte"><i class="bi bi-plus-lg"></i> Novo exame de faixa</a>
+  {% else %}
+  <p>O exame é marcado pela associação ou pela gestão da academia. Quando houver, ele aparece aqui.</p>
+  <a href="{{ url_for('exame_faixa.alunos', **base) }}" class="sh__btn">Ver alunos aptos</a>
+  {% endif %}
+</section>
+{% endif %}
+
+{% if ativos %}
+<h2 class="exf-secao-titulo">Em andamento</h2>
+{% for ev in ativos %}
+{% set d = ev.data_exame %}
+<article class="exf-exame{{ ' exf-exame--pendente' if not ev.aderiu }}">
+  <div class="exf-data exf-data--g{{ ' is-escura' if ev.fase[1] == 'success' }}" aria-hidden="true">
+    {% if d %}<span class="exf-data__mes">{{ MESES[d.month - 1] }}</span><span class="exf-data__dia">{{ '%02d'|format(d.day) }}</span>
+    {% if ev.hora_prova %}<span class="exf-data__hora">{{ ev.hora_prova }}</span>{% endif %}{% else %}<span class="exf-data__dia">—</span>{% endif %}
+  </div>
+
+  <div class="exf-exame__corpo">
+    <div>
+      {{ pill(ev.fase[0], ev.fase[1]) }}
+      <span class="lst-tag">{{ 'Academia ' ~ ev.dono_nome if ev.dono_nome else 'Associação · todas as academias' }}</span>
+      {% if not esc.ve_todas and not ev.aderiu %}<span class="lst-tag lst-tag--alerta">academia ainda não aderiu</span>{% endif %}
+      <h3 class="exf-exame__nome"><a href="{{ url_for('exame_faixa.banca', evento_id=ev.id, **base) }}">{{ ev.nome }}</a></h3>
+    </div>
+    <ol class="exf-etapas">
+      {% for t in ev.etapas %}
+      <li class="is-{{ t.estado }}"><span class="exf-etapas__nome">{{ t.nome }}</span><span class="exf-etapas__txt">{{ t.txt }}</span></li>
+      {% endfor %}
+    </ol>
+  </div>
+
+  <div class="exf-exame__lado">
+    <dl class="exf-nums">
+      <div><dt>Inscritos</dt><dd>{{ ev.inscritos }}</dd></div>
+      <div><dt>Faturas pagas</dt><dd>{{ ev.pagos }}</dd></div>
+      <div><dt>{{ 'Aprovados' if ev.avaliados else 'Avaliados' }}</dt><dd>{{ ev.aprovados if ev.avaliados else 0 }}</dd></div>
+    </dl>
+    <div class="exf-exame__acoes">
+      {% if ev.abertos %}<span class="exf-exame__alerta"><i class="bi bi-exclamation-circle"></i> {{ ev.abertos }} fatura{{ 's' if ev.abertos != 1 }} em aberto</span>{% endif %}
+      {% if not esc.ve_todas and not ev.aderiu and not ev.encerrado %}
+      <form method="POST" action="{{ url_for('eventos_competicoes.aderir', evento_id=ev.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="academia_id" value="{{ esc.academia_id }}">
+        <button type="submit" class="sh__btn"><i class="bi bi-plus-lg"></i> Aderir ao exame</button>
+      </form>
+      {% elif not ev.encerrado and not ev.nao_abriu %}
+      <a href="{{ url_for('exame_faixa.alunos', status='apto', **base) }}" class="sh__btn">Inscrever aptos</a>
+      {% endif %}
+      {% if ev.pode_editar %}<a href="{{ url_for('exame_faixa.editar_exame', evento_id=ev.id) }}" class="sh__btn" title="Editar exame" aria-label="Editar {{ ev.nome }}"><i class="bi bi-pencil"></i></a>{% endif %}
+      <a href="{{ url_for('exame_faixa.banca', evento_id=ev.id, **base) }}" class="sh__btn sh__btn--forte">
+        <i class="bi bi-clipboard-check"></i> {{ 'Continuar banca' if ev.avaliados else 'Abrir banca' }}</a>
+    </div>
+  </div>
+</article>
+{% endfor %}
+{% endif %}
+
+{% if encerrados %}
+<h2 class="exf-secao-titulo">Encerrados</h2>
+<section class="lst-quadro">
+  <div class="lst-rolagem">
+    <div class="lst-largura" style="--lst-min:520px">
+      <div class="lst-linha lin-exames lst-cab">
+        <div>Exame</div>
+        <div>Prova</div>
+        <div class="col-n lst-num">Inscritos</div>
+        <div class="col-prazo">Aprovação</div>
+        <div class="lst-num">A promover</div>
+        <div class="lst-fim"></div>
+      </div>
+      {% for ev in encerrados %}
+      {% set pct = ((ev.aprovados * 100 / ev.avaliados)|round|int) if ev.avaliados else 0 %}
+      <div class="lst-linha lin-exames lst-item">
+        <div class="lst-corta"><a class="lst-nome" href="{{ url_for('exame_faixa.banca', evento_id=ev.id, **base) }}">{{ ev.nome }}</a></div>
+        <div>{{ ev.data_exame|data_br if ev.data_exame else '—' }}</div>
+        <div class="col-n lst-num">{{ ev.inscritos }}</div>
+        <div class="col-prazo exf-req"><span class="exf-barrinha"><span class="is-ok" style="width:{{ pct }}%"></span></span>{{ ev.aprovados }} de {{ ev.avaliados }}</div>
+        <div class="lst-num">{% if ev.a_promover %}<strong class="exf-alerta">{{ ev.a_promover }}</strong>{% else %}—{% endif %}</div>
+        <div class="lst-fim"><a href="{{ url_for('exame_faixa.banca', evento_id=ev.id, **base) }}" class="sh__btn">Ver resultado</a></div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endif %}
+{% endblock %}

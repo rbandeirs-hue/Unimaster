@@ -1,0 +1,57 @@
+{% extends "estoque/_base.html" %}
+{% from 'components/ui.html' import vazio %}
+{% set est_aba = 'pedidos' %}
+{% block title %}Pedidos — Estoque{% endblock %}
+
+{% block pagina_titulo %}Pedidos a atender{% endblock %}
+{% block pagina_subtitulo %}
+  Pedidos feitos pelos alunos na loja. Confirmar separa a mercadoria, baixa o
+  estoque e lança o pagamento.
+{% endblock %}
+
+{% block est_conteudo %}
+{% if pedidos %}
+<div class="est-alertas">
+  {% for p in pedidos %}
+  <div class="est-alerta">
+    <div class="est-alerta__titulo">
+      {{ p.aluno_nome or p.comprador_nome or 'Cliente' }} ·
+      {{ p.criado_em.strftime('%d/%m %H:%M') if p.criado_em }}
+    </div>
+    <p class="lst-sub">{{ p.local }}{% if p.origem == 'autoatendimento' %} · pedido pelo app{% endif %}</p>
+    <div class="est-alerta__lista">
+      {% for i in p.itens %}
+      <span class="est-alerta__item">
+        <span>{{ i.quantidade }}× {{ i.produto }}{% if i.variacao != 'Único' %} · {{ i.variacao }}{% endif %}</span>
+        <span class="est-alerta__qtd">
+          R$ {{ '%.2f'|format((i.preco_unitario * i.quantidade)|float)|replace('.', ',') }}
+        </span>
+      </span>
+      {% endfor %}
+    </div>
+    <div class="est-total" style="font-size:var(--u-fs-base)">
+      <small>Total</small>
+      <span>R$ {{ '%.2f'|format(p.valor_total|float)|replace('.', ',') }}</span>
+    </div>
+    <div class="d-flex gap-2 mt-2 flex-wrap">
+      <form method="POST" action="{{ url_for('estoque.pedido_decidir', pedido_id=p.id, acao='confirmar') }}"
+            class="d-flex gap-2" style="flex:1 1 200px">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="text" name="forma_pagamento" placeholder="Forma de pagamento"
+               class="u-campo__controle" style="flex:1" aria-label="Forma de pagamento">
+        <button type="submit" class="u-btn u-btn--forte u-btn--pequeno">Confirmar</button>
+      </form>
+      <form method="POST" action="{{ url_for('estoque.pedido_decidir', pedido_id=p.id, acao='cancelar') }}"
+            data-confirmar="Cancelar este pedido?">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="u-btn u-btn--pequeno u-btn--fantasma">Cancelar</button>
+      </form>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+{{ vazio('Nenhum pedido esperando. Os que os alunos fizerem na loja aparecem aqui.',
+         icone='bi-bag-check') }}
+{% endif %}
+{% endblock %}

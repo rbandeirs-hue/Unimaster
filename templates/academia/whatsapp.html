@@ -236,7 +236,7 @@
         <div style="padding:18px 22px;">
           <p class="auto-desc" style="margin-top:0;">Envia o modelo escolhido para um número, sem registrar no histórico do aluno.</p>
           <div class="lbl" style="margin-bottom:6px;">Número</div>
-          <input type="text" class="fld" id="telTeste" placeholder="(81) 99999-9999" style="margin-bottom:14px;">
+          <input type="text" class="fld" id="telTeste" placeholder="(81) 99999-9999" style="margin-bottom:14px;" aria-label="(81) 99999-9999">
           <div class="lbl" style="margin-bottom:6px;">Modelo</div>
           <select class="fld" id="modeloTeste" style="margin-bottom:16px;">
             <option value="">Mensagem de teste padrão</option>
@@ -334,8 +334,8 @@
   if(btnTestarConexao) btnTestarConexao.addEventListener('click', function(){ location.reload(); });
 
   var btnDesc = document.getElementById('btnDesconectar');
-  if(btnDesc) btnDesc.addEventListener('click', function(){
-    if(!confirm('Desconectar o WhatsApp desta academia?')) return;
+  if(btnDesc) btnDesc.addEventListener('click', async function (){
+    if(!await Dialogo.confirmar('Desconectar o WhatsApp desta academia?')) return;
     post("{{ url_for('academia.whatsapp_desconectar', academia_id=academia_id) }}")
       .then(function(){ location.reload(); });
   });

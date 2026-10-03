@@ -1,12 +1,13 @@
 {% extends "base_app.html" %}
 {% block title %}Meu perfil — Editar cadastro e senha{% endblock %}
+{% block pagina_titulo %}Configurações de usuário{% endblock %}
 {% block extra_css %}
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/photo-cropper.css') }}">
 {% endblock %}
 {% block content %}
 <style>
-  #miniaturaMeuPerfil { width: 120px; height: 120px; object-fit: cover; border-radius: 50%; border: 3px solid #0d6efd; }
+  #miniaturaMeuPerfil { width: 120px; height: 120px; object-fit: cover; border-radius: 50%; border: 3px solid #1c1c1c; }
   .camera-modal-meu-perfil { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; justify-content: center; align-items: center; background: rgba(0,0,0,.9); z-index: 9999; padding: 10px; }
   .camera-content-meu-perfil { width: 90%; max-width: 480px; text-align: center; }
   .camera-content-meu-perfil video, .camera-content-meu-perfil canvas { 
@@ -24,18 +25,12 @@
     .camera-modal-meu-perfil { padding: 10px; }
     .camera-content-meu-perfil { width: 100%; max-width: 100%; }
     .camera-content-meu-perfil video, .camera-content-meu-perfil canvas { max-height: 60vh; }
-    .camera-content-meu-perfil .btn { flex: 1 1 auto; min-width: 80px; font-size: 0.85rem; padding: 0.4rem; margin: 3px; }
+    .camera-content-meu-perfil .btn, .camera-content-meu-perfil .u-btn { flex: 1 1 auto; min-width: 80px; font-size: 0.85rem; padding: 0.4rem; margin: 3px; }
     .camera-content-meu-perfil > div { display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; }
   }
 </style>
 <div class="container mt-4">
-  <div class="card shadow-sm border-0 mx-auto" style="max-width: 550px;">
-
-    <div class="card-header bg-primary text-white py-3">
-      <h5 class="mb-0 fw-bold">
-        <i class="bi bi-person-gear me-2"></i> Configurações de usuário
-      </h5>
-    </div>
+  <div class="card shadow-sm border-0 mx-auto">
 
     <div class="card-body p-4">
       {% include 'components/push_teste_notificacao.html' %}
@@ -60,19 +55,19 @@
               <input type="hidden" name="foto" id="fotoInputMeuPerfil">
             </div>
             <div class="flex-grow-1">
-              <button type="button" class="btn btn-primary btn-sm mb-2" id="btnAbrirCameraMeuPerfil">
+              <button type="button" class="u-btn u-btn--primario u-btn--pequeno mb-2" id="btnAbrirCameraMeuPerfil">
                 <i class="bi bi-camera-fill me-1"></i> Tirar da câmera
               </button>
               <div class="mb-2">
                 <label class="form-label small mb-0">ou escolher arquivo</label>
-                <input type="file" name="foto_arquivo" class="form-control form-control-sm" accept="image/*" id="fotoArquivoMeuPerfil">
+                <input type="file" name="foto_arquivo" class="u-campo__controle" accept="image/*" id="fotoArquivoMeuPerfil" aria-label="ou escolher arquivo">
               </div>
               {% if aluno_vinculado and aluno_vinculado.foto %}
               <div class="mt-2 p-2 border rounded bg-light">
                 <small class="text-muted d-block mb-1">
                   <i class="bi bi-info-circle me-1"></i> Você possui um aluno vinculado com foto cadastrada
                 </small>
-                <button type="button" class="btn btn-success btn-sm" id="btnSincronizarFoto">
+                <button type="button" class="u-btn u-btn--ok u-btn--pequeno" id="btnSincronizarFoto">
                   <i class="bi bi-arrow-repeat me-1"></i> Sincronizar foto do aluno
                 </button>
               </div>
@@ -83,20 +78,20 @@
 
         <div class="mb-3">
           <label class="form-label fw-semibold">Nome</label>
-          <input type="text" name="nome" class="form-control" value="{{ usuario.nome or '' }}" required placeholder="Seu nome">
+          <input type="text" name="nome" class="u-campo__controle" value="{{ usuario.nome or '' }}" required placeholder="Seu nome" aria-label="Nome">
         </div>
 
         <div class="mb-3">
           <label class="form-label fw-semibold">E-mail</label>
-          <input type="email" name="email" class="form-control" value="{{ usuario.email or '' }}"
-                 required autocomplete="off" placeholder="seu@email.com">
+          <input type="email" name="email" class="u-campo__controle" value="{{ usuario.email or '' }}"
+                 required autocomplete="off" placeholder="seu@email.com" aria-label="E-mail">
         </div>
 
         <div class="mb-3">
           <label for="cpf" class="form-label fw-semibold">CPF (login)
             {% if not usuario.cpf %}<span class="badge bg-warning text-dark ms-2">Pendente</span>{% endif %}
           </label>
-          <input type="text" inputmode="numeric" name="cpf" id="cpf" class="form-control"
+          <input type="text" inputmode="numeric" name="cpf" id="cpf" class="u-campo__controle"
                  value="{{ usuario.cpf or '' }}" placeholder="000.000.000-00" maxlength="14"
                  {% if usuario.cpf %}readonly{% else %}required{% endif %} autocomplete="off">
           <div class="form-text">
@@ -112,14 +107,14 @@
           <label class="form-label fw-semibold">Nova senha <span class="text-muted fw-normal">(opcional)</span></label>
           {# "new-password": impede o Chrome de injetar uma senha salva aqui e
              trocar a senha de quem só queria corrigir o telefone. #}
-          <input type="password" name="senha" id="senha" class="form-control"
-                 autocomplete="new-password" placeholder="Deixe em branco para manter a atual">
+          <input type="password" name="senha" id="senha" class="u-campo__controle"
+                 autocomplete="new-password" placeholder="Deixe em branco para manter a atual" aria-label="Nova senha (opcional)">
         </div>
 
         <div class="d-flex justify-content-between gap-2">
           {% set back_url = back_url or get_back_url_default() %}
           {% include 'components/botao_voltar.html' %}
-          <button type="submit" class="btn btn-primary">
+          <button type="submit" class="u-btn u-btn--primario">
             <i class="bi bi-check-lg me-1"></i> Salvar
           </button>
         </div>
@@ -143,13 +138,13 @@
     <video id="cameraVideoMeuPerfil" autoplay playsinline></video>
     <canvas id="cameraCanvasMeuPerfil" style="display:none;"></canvas>
     <div>
-      <button type="button" class="btn btn-success btn-sm" id="btnCapturarMeuPerfil">Capturar</button>
-      <button type="button" class="btn btn-primary btn-sm" id="btnConfirmarFotoMeuPerfil" style="display:none;">Confirmar</button>
-      <button type="button" class="btn btn-warning btn-sm" id="btnTirarNovamenteMeuPerfil" style="display:none;">Refazer</button>
-      <button type="button" class="btn btn-info btn-sm text-white" id="btnTrocarCameraMeuPerfil" style="display:none;">
+      <button type="button" class="u-btn u-btn--ok u-btn--pequeno" id="btnCapturarMeuPerfil">Capturar</button>
+      <button type="button" class="u-btn u-btn--primario u-btn--pequeno" id="btnConfirmarFotoMeuPerfil" style="display:none;">Confirmar</button>
+      <button type="button" class="u-btn u-btn--alerta u-btn--pequeno" id="btnTirarNovamenteMeuPerfil" style="display:none;">Refazer</button>
+      <button type="button" class="u-btn u-btn--pequeno text-white" id="btnTrocarCameraMeuPerfil" style="display:none;">
         <span id="btnTrocarCameraTextMeuPerfil">Trocar Câmera</span>
       </button>
-      <button type="button" class="btn btn-danger btn-sm" id="btnFecharCameraMeuPerfil">Fechar</button>
+      <button type="button" class="u-btn u-btn--perigo u-btn--pequeno" id="btnFecharCameraMeuPerfil">Fechar</button>
     </div>
   </div>
 </div>
@@ -591,8 +586,8 @@ document.addEventListener('DOMContentLoaded', function() {
   // Botão de sincronizar foto do aluno
   var btnSincronizar = document.getElementById('btnSincronizarFoto');
   if (btnSincronizar) {
-    btnSincronizar.addEventListener('click', function() {
-      if (confirm('Deseja sincronizar a foto do seu cadastro de aluno para o seu perfil de usuário?')) {
+    btnSincronizar.addEventListener('click', async function () {
+      if (await Dialogo.confirmar('Deseja sincronizar a foto do seu cadastro de aluno para o seu perfil de usuário?')) {
         var formSincronizar = document.getElementById('formSincronizarFoto');
         if (formSincronizar) {
           formSincronizar.submit();

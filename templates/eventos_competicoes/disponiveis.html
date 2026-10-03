@@ -1,13 +1,13 @@
 {% extends "base_app.html" %}
+{% set back_url = back_url or get_back_url_default() %}
 {% block title %}Eventos para Inscrição{% endblock %}
+{% block pagina_titulo %}Eventos e competições — inscrições{% endblock %}
+{% block pagina_subtitulo %}Eventos ativos e finalizados. Eventos ativos permitem inscrição.{% endblock %}
+{% block pagina_acoes %}
+<a href="{{ url_voltar(back_url) }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Voltar</a>
+{% endblock %}
 {% block content %}
-<div class="container mt-5">
-    <div class="mb-4">
-        {% set back_url = back_url or get_back_url_default() %}
-{% include 'components/botao_voltar.html' %}
-        <h2 class="h4 fw-bold text-primary">Eventos e Competições — Inscrições</h2>
-        <p class="text-muted mb-0">Eventos ativos e finalizados. Eventos ativos permitem inscrição.</p>
-    </div>
+<div class="container">
 
     <!-- Filtros -->
     <div class="card shadow-sm mb-4">
@@ -16,7 +16,7 @@
                 {% if alunos|length > 1 %}
                 <div class="col-auto">
                     <label class="form-label small mb-1">Aluno</label>
-                    <select name="aluno_id" class="form-select form-select-sm">
+                    <select name="aluno_id" class="u-campo__controle" aria-label="Aluno">
                         {% for a in alunos %}
                         <option value="{{ a.id }}" {% if (request.args.get('aluno_id')|default('')|string == a.id|string) or (not request.args.get('aluno_id') and loop.first) %}selected{% endif %}>{{ a.nome }}</option>
                         {% endfor %}
@@ -25,7 +25,7 @@
                 {% endif %}
                 <div class="col-auto">
                     <label class="form-label small mb-1">Status</label>
-                    <select name="status" class="form-select form-select-sm">
+                    <select name="status" class="u-campo__controle" aria-label="Status">
                         <option value="" {% if not filtro_status %}selected{% endif %}>Todos</option>
                         <option value="ativo" {% if filtro_status == 'ativo' %}selected{% endif %}>Ativos</option>
                         <option value="finalizado" {% if filtro_status == 'finalizado' %}selected{% endif %}>Finalizados</option>
@@ -33,7 +33,7 @@
                 </div>
                 <div class="col-auto">
                     <label class="form-label small mb-1">Mês</label>
-                    <select name="mes" class="form-select form-select-sm">
+                    <select name="mes" class="u-campo__controle" aria-label="Mês">
                         <option value="" {% if not filtro_mes %}selected{% endif %}>Todos</option>
                         <option value="1" {% if filtro_mes == '1' %}selected{% endif %}>Janeiro</option>
                         <option value="2" {% if filtro_mes == '2' %}selected{% endif %}>Fevereiro</option>
@@ -51,7 +51,7 @@
                 </div>
                 <div class="col-auto">
                     <label class="form-label small mb-1">Ano</label>
-                    <select name="ano" class="form-select form-select-sm">
+                    <select name="ano" class="u-campo__controle" aria-label="Ano">
                         <option value="" {% if not filtro_ano %}selected{% endif %}>Todos</option>
                         {% for a in anos_disponiveis %}
                         <option value="{{ a }}" {% if filtro_ano == a|string %}selected{% endif %}>{{ a }}</option>
@@ -59,8 +59,8 @@
                     </select>
                 </div>
                 <div class="col-auto">
-                    <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-funnel me-1"></i> Filtrar</button>
-                    <a href="{{ request.path }}" class="btn btn-outline-secondary btn-sm">Limpar</a>
+                    <button type="submit" class="u-btn u-btn--primario u-btn--pequeno"><i class="bi bi-funnel me-1"></i> Filtrar</button>
+                    <a href="{{ request.path }}" class="u-btn u-btn--pequeno">Limpar</a>
                 </div>
             </form>
         </div>
@@ -75,7 +75,7 @@
                     <div class="d-flex justify-content-between align-items-start mb-2">
                         <h5 class="card-title mb-0 flex-grow-1 pr-2">{{ ev.nome }}</h5>
                         <div class="d-flex flex-column align-items-end gap-1">
-                            <button type="button" class="btn btn-sm btn-outline-info p-1" 
+                            <button type="button" class="u-btn u-btn--pequeno p-1" 
                                     data-bs-toggle="modal" 
                                     data-bs-target="#modalEvento{{ ev.id }}" 
                                     title="Ver informações completas"
@@ -92,7 +92,7 @@
                             {% endif %}
                         </div>
                     </div>
-                    <p class="small text-muted mb-2">{{ ev.tipo }} • Data fim: {% if ev.data_fim %}{{ ev.data_fim|data_br }}{% set _s = ev.data_fim|string %}{% if _s|length > 10 %} {{ _s[11:16] }}{% endif %}{% else %}-{% endif %}</p>
+                    <p class="small text-muted mb-2">{{ 'Exame de faixa' if ev.exame_faixa else ev.tipo }} • Data fim: {% if ev.data_fim %}{{ ev.data_fim|data_br }}{% set _s = ev.data_fim|string %}{% if _s|length > 10 %} {{ _s[11:16] }}{% endif %}{% else %}-{% endif %}</p>
                     {% if ev.descricao %}
                     <p class="small mb-2">{{ ev.descricao[:100] }}{% if ev.descricao|length > 100 %}...{% endif %}</p>
                     {% endif %}
@@ -103,7 +103,7 @@
                             {% for anexo in ev.anexos %}
                             <div class="mb-1">
                                 <a href="{{ url_for('eventos_competicoes.download_anexo', anexo_id=anexo.id) }}{% if request.args.get('aluno_id') %}?aluno_id={{ request.args.get('aluno_id') }}{% endif %}" 
-                                   class="btn btn-sm btn-outline-primary text-decoration-none" 
+                                   class="u-btn u-btn--pequeno text-decoration-none" 
                                    title="{{ anexo.nome_arquivo }}">
                                     <i class="bi bi-download me-1"></i>{{ anexo.nome_arquivo[:25] }}{% if anexo.nome_arquivo|length > 25 %}...{% endif %}
                                     {% if anexo.tamanho_formatado %}
@@ -116,11 +116,16 @@
                     </div>
                     {% endif %}
                     {% set aid = (request.args.get('aluno_id') or (alunos[0].id if alunos else '')) %}
+                    {% if ev.exame_faixa and ev.ja_inscrito and aid %}
+                    <a href="{{ url_for('exame_faixa.meu_exame', evento_id=ev.id, aluno_id=aid) }}" class="u-btn u-btn--primario u-btn--pequeno me-2">
+                        <i class="bi bi-journal-check"></i> Ver meu exame
+                    </a>
+                    {% endif %}
                     {% if not ev.encerrado %}
                         {% if ev.ja_inscrito %}
                         <span class="text-success small"><i class="bi bi-check-circle-fill"></i> Você já está inscrito neste evento</span>
                         {% else %}
-                        <a href="{{ url_for('eventos_competicoes.inscrever', evento_id=ev.id, academia_id=academia_id, aluno_id=aid) if aid else '#' }}" class="btn btn-primary btn-sm">
+                        <a href="{{ url_for('eventos_competicoes.inscrever', evento_id=ev.id, academia_id=academia_id, aluno_id=aid) if aid else '#' }}" class="u-btn u-btn--primario u-btn--pequeno">
                             <i class="bi bi-pencil-square"></i> Realizar inscrição
                         </a>
                         {% endif %}
@@ -152,7 +157,7 @@
                             {% else %}
                             <span class="badge bg-success">Ativo</span>
                             {% endif %}
-                            <span class="badge bg-info">{{ ev.tipo }}</span>
+                            <span class="badge bg-info">{{ 'Exame de faixa' if ev.exame_faixa else ev.tipo }}</span>
                             {% if ev.ja_inscrito %}
                             <span class="badge bg-info"><i class="bi bi-check-circle-fill"></i> Inscrito</span>
                             {% endif %}
@@ -209,7 +214,7 @@
                                             {% endif %}
                                         </div>
                                         <a href="{{ url_for('eventos_competicoes.download_anexo', anexo_id=anexo.id) }}{% if request.args.get('aluno_id') %}?aluno_id={{ request.args.get('aluno_id') }}{% endif %}" 
-                                           class="btn btn-sm btn-outline-primary" 
+                                           class="u-btn u-btn--pequeno" 
                                            title="Baixar {{ anexo.nome_arquivo }}">
                                             <i class="bi bi-download"></i> Baixar
                                         </a>
@@ -223,19 +228,24 @@
                 </div>
                 <div class="modal-footer">
                     {% set aid = (request.args.get('aluno_id') or (alunos[0].id if alunos else '')) %}
+                    {% if ev.exame_faixa and ev.ja_inscrito and aid %}
+                    <a href="{{ url_for('exame_faixa.meu_exame', evento_id=ev.id, aluno_id=aid) }}" class="u-btn u-btn--primario u-btn--pequeno me-2">
+                        <i class="bi bi-journal-check"></i> Ver meu exame
+                    </a>
+                    {% endif %}
                     {% if not ev.encerrado %}
                         {% if ev.ja_inscrito %}
                         <span class="text-success me-auto"><i class="bi bi-check-circle-fill"></i> Você já está inscrito neste evento</span>
                         {% else %}
                         <a href="{{ url_for('eventos_competicoes.inscrever', evento_id=ev.id, academia_id=academia_id, aluno_id=aid) if aid else '#' }}" 
-                           class="btn btn-primary">
+                           class="u-btn u-btn--primario">
                             <i class="bi bi-pencil-square me-1"></i> Realizar inscrição
                         </a>
                         {% endif %}
                     {% else %}
                     <span class="text-muted me-auto"><i class="bi bi-lock"></i> Inscrições encerradas</span>
                     {% endif %}
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+                    <button type="button" class="u-btn" data-bs-dismiss="modal">Fechar</button>
                 </div>
             </div>
         </div>

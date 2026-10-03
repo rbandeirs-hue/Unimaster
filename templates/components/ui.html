@@ -23,12 +23,18 @@
    tom: primary | success | danger | warning | info | muted
    moeda=True apenas reduz o corpo do número (valores em R$ são mais longos).
    rodape aceita HTML já formatado (ex.: o comparativo com o mês anterior). #}
-{% macro kpi(valor, rotulo, tom='primary', rodape=None, moeda=False, attrs='') %}
-<div class="u-kpi u-kpi--{{ tom }}" {{ attrs|safe }}>
+{% macro kpi(valor, rotulo, tom='primary', rodape=None, moeda=False, attrs='',
+             href=None, acao=None) %}
+{#- Com `href`, o indicador vira caminho: número sem para onde ir não é
+    informação, é só ansiedade. Sem `href`, segue exatamente como antes. -#}
+{%- set _tag = 'a' if href else 'div' -%}
+<{{ _tag }} class="u-kpi u-kpi--{{ tom }} {{ 'u-kpi--link' if href }}"
+   {% if href %}href="{{ href }}"{% endif %} {{ attrs|safe }}>
   <div class="u-kpi__valor {% if moeda %}u-kpi__valor--moeda{% endif %}">{{ valor }}</div>
   <div class="u-kpi__rotulo">{{ rotulo }}</div>
   {% if rodape %}<div class="u-kpi__rodape">{{ rodape|safe }}</div>{% endif %}
-</div>
+  {% if href and acao %}<div class="u-kpi__acao">{{ acao }} <i class="bi bi-arrow-right"></i></div>{% endif %}
+</{{ _tag }}>
 {% endmacro %}
 
 
@@ -157,4 +163,63 @@
     </div>
   </div>
 </div>
+{% endmacro %}
+
+
+{# Botão. Ex.:  {{ btn('Salvar', tipo='submit', variante='forte') }}
+   Só-ícone exige `rotulo_acessivel` — é o que impede o botão mudo voltar. #}
+{% macro btn(texto=None, href=None, variante='', tipo='button', icone=None,
+             rotulo_acessivel=None, extra='', attrs='') %}
+{%- set classes = 'u-btn ' ~ (('u-btn--' ~ variante) if variante else '') ~ ' '
+                  ~ ('u-btn--icone' if (icone and not texto) else '') ~ ' ' ~ extra -%}
+{%- set rotulo = rotulo_acessivel or texto -%}
+{% if href %}
+<a href="{{ href }}" class="{{ classes | trim }}"
+   {% if not texto %}aria-label="{{ rotulo }}"{% endif %} {{ attrs | safe }}>
+  {%- if icone %}<i class="bi {{ icone }}"></i>{% endif %}{% if texto %}{{ texto }}{% endif -%}
+</a>
+{% else %}
+<button type="{{ tipo }}" class="{{ classes | trim }}"
+        {% if not texto %}aria-label="{{ rotulo }}"{% endif %} {{ attrs | safe }}>
+  {%- if icone %}<i class="bi {{ icone }}"></i>{% endif %}{% if texto %}{{ texto }}{% endif -%}
+</button>
+{% endif %}
+{% endmacro %}
+
+
+{# Campo de formulário com rótulo obrigatório.
+   Ex.:  {{ campo('Nome do aluno', 'nome', valor=aluno.nome, obrigatorio=True) }}
+   Para select e textarea, use {% call campo_livre(...) %} e passe o controle. #}
+{% macro campo(rotulo, nome, valor='', tipo='text', obrigatorio=False,
+               ajuda=None, erro=None, placeholder='', extra='', attrs='') %}
+{%- set id_campo = 'f_' ~ nome | replace('[', '') | replace(']', '') -%}
+<label class="u-campo {{ 'is-erro' if erro }} {{ extra }}" for="{{ id_campo }}">
+  <span class="u-campo__rotulo">{{ rotulo }}{% if obrigatorio %}<span class="req">*</span>{% endif %}</span>
+  <input type="{{ tipo }}" id="{{ id_campo }}" name="{{ nome }}" value="{{ valor }}"
+         placeholder="{{ placeholder }}" {% if obrigatorio %}required{% endif %} {{ attrs | safe }}>
+  {% if ajuda and not erro %}<span class="u-campo__ajuda">{{ ajuda }}</span>{% endif %}
+  {% if erro %}<span class="u-campo__erro">{{ erro }}</span>{% endif %}
+</label>
+{% endmacro %}
+
+
+{# Campo para controle próprio (select, textarea, grupo). O <label> envolve o
+   controle, então ele fica rotulado sem depender de id. #}
+{% macro campo_livre(rotulo, obrigatorio=False, ajuda=None, erro=None, extra='') %}
+<label class="u-campo {{ 'is-erro' if erro }} {{ extra }}">
+  <span class="u-campo__rotulo">{{ rotulo }}{% if obrigatorio %}<span class="req">*</span>{% endif %}</span>
+  {{ caller() }}
+  {% if ajuda and not erro %}<span class="u-campo__ajuda">{{ ajuda }}</span>{% endif %}
+  {% if erro %}<span class="u-campo__erro">{{ erro }}</span>{% endif %}
+</label>
+{% endmacro %}
+
+
+{# Espera de carregamento. `linhas` controla a altura aparente da lista. #}
+{% macro skeleton(linhas=3, titulo=False) %}
+<div class="u-skeleton-bloco" aria-hidden="true">
+  {% if titulo %}<div class="u-skeleton u-skeleton--titulo"></div>{% endif %}
+  {% for _ in range(linhas) %}<div class="u-skeleton u-skeleton--linha"></div>{% endfor %}
+</div>
+<span class="visually-hidden" role="status">Carregando…</span>
 {% endmacro %}

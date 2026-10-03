@@ -1,0 +1,169 @@
+{% extends "base_app.html" %}
+{% block title %}{{ d.nome }} — Relatórios{% endblock %}
+
+{% block conteudo_classe %}sh__conteudo--relatorios{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ asset('css/pages/relatorios.css') }}">
+{% endblock %}
+
+{% block content %}
+
+{# Caminho de volta: o catálogo tem dez áreas, e sem a trilha a pessoa não
+   sabe de qual delas veio. #}
+<nav class="rel-trilha nao-imprime" aria-label="Onde você está">
+  <a href="{{ url_for('relatorios.hub', **filtros) }}">Relatórios</a>
+  <span aria-hidden="true">›</span>
+  <span>{{ secao_titulo }}</span>
+  <span aria-hidden="true">›</span>
+  <span class="rel-trilha__aqui">{{ d.nome }}</span>
+</nav>
+
+<div class="rel-cabecalho">
+  <div class="rel-cabecalho__txt">
+    <h1 class="rel-titulo">{{ d.nome }}</h1>
+    <p class="rel-sub">
+      {% if base_total %}{{ linhas|length }} de {{ base_total }} alunos ativos. {% endif %}{{ d.descricao }}
+    </p>
+  </div>
+  <div class="rel-acoes nao-imprime">
+    <a class="sh__btn" href="{{ url_for('relatorios.excel', rid=d.id, **filtros) }}">
+      <i class="bi bi-file-earmark-excel" style="color:#1c6b35;"></i> Excel
+    </a>
+    <a class="sh__btn" href="{{ url_for('relatorios.pdf', rid=d.id, **filtros) }}">
+      <i class="bi bi-file-earmark-pdf" style="color:#c40017;"></i> PDF
+    </a>
+    <button type="button" class="sh__btn" onclick="window.print()">
+      <i class="bi bi-printer"></i> Imprimir
+    </button>
+  </div>
+</div>
+
+{# Cabeçalho que só existe no papel: na tela isso está no shell e nas fichas. #}
+<div class="rel-so-papel">
+  <strong style="font-size:1.1rem;">{{ d.nome }}</strong><br>
+  {{ rec.academia_nome }} · {{ rec.rotulo() }}
+</div>
+
+<div class="rel-fichas nao-imprime">
+  <span class="rel-ficha">
+    <i class="bi bi-calendar3" aria-hidden="true"></i>
+    {% if d.secao == 'cadastro' %}Alunos ativos hoje{% else %}{{ rec.rotulo() }}{% endif %}
+  </span>
+  <span class="rel-ficha">
+    <i class="bi bi-diagram-3" aria-hidden="true"></i>
+    {{ modalidade_nome or 'Todas as modalidades' }}
+    {% if rec.modalidade_id %}<a href="{{ url_for('relatorios.ver', rid=d.id, p=rec.atalho, turma_id=rec.turma_id) }}"
+       aria-label="Tirar o filtro de modalidade"><i class="bi bi-x"></i></a>{% endif %}
+  </span>
+  {% if rec.turma_id %}
+  <span class="rel-ficha">
+    <i class="bi bi-easel" aria-hidden="true"></i>
+    {{ turma_nome or 'Turma' }}
+    <a href="{{ url_for('relatorios.ver', rid=d.id, p=rec.atalho, modalidade_id=rec.modalidade_id) }}"
+       aria-label="Tirar o filtro de turma"><i class="bi bi-x"></i></a>
+  </span>
+  {% endif %}
+  <span class="rel-fichas__espaco"></span>
+  <span class="rel-fichas__nota">{{ rec.academia_nome }}</span>
+</div>
+
+<div class="rel-tabela-caixa">
+  {% if not linhas %}
+  <p class="rel-vazio">Nada encontrado neste recorte. Tente um período maior ou tire o filtro de turma.</p>
+  {% else %}
+  <table class="rel-tabela">
+    <thead>
+      <tr>
+        {% for c in d.colunas %}
+        <th class="{% if c.tipo in ('numero','moeda','percentual') %}num{% elif c.tipo == 'acao' %}acao nao-imprime{% endif %}">{{ c.rotulo }}</th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for l in linhas %}
+      <tr>
+        {% for c in d.colunas %}
+        {% set v = l.get(c.chave) %}
+        {% if c.tipo == 'pessoa' %}
+        <td>
+          <span class="rel-pessoa">
+            <span class="rel-pessoa__ini" aria-hidden="true">{{ l.get('_iniciais', '?') }}</span>
+            <span class="rel-pessoa__txt">
+              <span class="rel-pessoa__nome">{{ v }}</span>
+              {% if l.get('_sub') %}<span class="rel-pessoa__sub">{{ l['_sub'] }}</span>{% endif %}
+            </span>
+          </span>
+        </td>
+        {% elif c.tipo == 'acao' %}
+        <td class="acao nao-imprime">
+          {% if l.get('_aluno_id') %}
+          <a class="rel-corrigir"
+             href="{{ url_for('alunos.editar_aluno', aluno_id=l['_aluno_id'], next=request.full_path) }}">{{ v or 'Corrigir' }}</a>
+          {% endif %}
+        </td>
+        {% else %}
+        <td class="{% if c.tipo in ('numero','moeda','percentual') %}num{% endif %}">
+          {%- if v is none or v == '' -%}
+            —
+          {%- elif c.tipo == 'moeda' -%}
+            R$ {{ '{:,.2f}'.format(v).replace(',', 'X').replace('.', ',').replace('X', '.') if v is number else v }}
+          {%- elif c.tipo == 'percentual' -%}
+            {{ '%.1f'|format(v) }}%
+          {%- elif c.tipo == 'data' and v.strftime is defined -%}
+            {{ v.strftime('%d/%m/%Y') }}
+          {%- else -%}
+            {{ v }}
+          {%- endif -%}
+        </td>
+        {% endif %}
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+    {% if totais %}
+    <tfoot>
+      <tr>
+        {% for c in d.colunas %}
+        <td class="{% if c.tipo in ('numero','moeda','percentual') %}num{% elif c.tipo == 'acao' %}nao-imprime{% endif %}">
+          {%- if loop.first and c.chave not in totais -%}
+            Total
+          {%- elif c.chave in totais -%}
+            {%- set v = totais[c.chave] -%}
+            {%- if c.tipo == 'moeda' -%}
+              R$ {{ '{:,.2f}'.format(v).replace(',', 'X').replace('.', ',').replace('X', '.') }}
+            {%- else -%}
+              {{ v if v is not number or v == v|int else '%.1f'|format(v) }}
+            {%- endif -%}
+          {%- endif -%}
+        </td>
+        {% endfor %}
+      </tr>
+    </tfoot>
+    {% endif %}
+  </table>
+
+  <div class="rel-rodape nao-imprime">
+    <span>Mostrando {{ linhas|length }} linha{{ 's' if linhas|length != 1 }}</span>
+    <span class="rel-rodape__nota">Emitido em {{ hoje_br }}{% if current_user.nome %} · {{ current_user.nome }}{% endif %}</span>
+  </div>
+  {% endif %}
+</div>
+
+{% if d.criterio %}
+<p class="rel-criterio">
+  <i class="bi bi-info-circle" aria-hidden="true"></i>
+  <span><strong>O que entra nesta conta:</strong> {{ d.criterio }}</span>
+</p>
+{% endif %}
+
+{% if tem_ficha %}
+<p class="rel-criterio nao-imprime">
+  <i class="bi bi-lightbulb" aria-hidden="true"></i>
+  <span>O Excel sai com uma coluna a mais — <strong>o link direto da ficha de cada aluno</strong> —
+    para quem for corrigir em lote não ter que procurar um por um. O PDF e a impressão saem sem a
+    coluna de ação, que em papel não serve para nada.</span>
+</p>
+{% endif %}
+
+{% endblock %}

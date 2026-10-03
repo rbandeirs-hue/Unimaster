@@ -17,19 +17,30 @@
             <form method="GET" class="row g-3">
                 <div class="col-auto">
                     <label class="form-label small">Filtrar:</label>
-                    <select name="filtro" class="form-select form-select-sm">
+                    <select name="filtro" class="u-campo__controle" aria-label="Filtrar">
                         <option value="ativos" {% if filtro == 'ativos' %}selected{% endif %}>Ativos</option>
                         <option value="cancelados" {% if filtro == 'cancelados' %}selected{% endif %}>Cancelados</option>
                         <option value="todos" {% if filtro == 'todos' %}selected{% endif %}>Todos</option>
                     </select>
                 </div>
+                {% if modalidades_cal and modalidades_cal|length > 1 %}
+                <div class="col-auto">
+                    <label class="form-label small">Modalidade:</label>
+                    <select name="modalidade" class="u-campo__controle" aria-label="Modalidade">
+                        <option value="">Todas</option>
+                        {% for m in modalidades_cal %}
+                        <option value="{{ m.id }}" {% if modalidade_filtro == m.id %}selected{% endif %}>{{ m.nome }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {% endif %}
                 <div class="col-auto">
                     <label class="form-label small">Ano:</label>
-                    <input type="number" name="ano" class="form-control form-control-sm" value="{{ ano or '' }}" placeholder="Todos" min="2020" max="2030">
+                    <input type="number" name="ano" class="u-campo__controle" value="{{ ano or '' }}" placeholder="Todos" min="2020" max="2030" aria-label="Ano">
                 </div>
                 <div class="col-auto">
                     <label class="form-label small">Mês:</label>
-                    <select name="mes" class="form-select form-select-sm">
+                    <select name="mes" class="u-campo__controle" aria-label="Mês">
                         <option value="">Todos</option>
                         {% for m in range(1, 13) %}
                         <option value="{{ m }}" {% if mes == m %}selected{% endif %}>{{ ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][m-1] }}</option>
@@ -37,7 +48,7 @@
                     </select>
                 </div>
                 <div class="col-auto d-flex align-items-end">
-                    <button type="submit" class="btn btn-primary btn-sm">Filtrar</button>
+                    <button type="submit" class="u-btn u-btn--primario u-btn--pequeno">Filtrar</button>
                 </div>
             </form>
         </div>
@@ -69,6 +80,7 @@
                             <td>
                                 <strong>{{ ev.titulo }}</strong>
                                 {% if ev.recorrente %}<span class="badge bg-info ms-1">Recorrente</span>{% endif %}
+                                {% if ev.modalidade_nome %}<span class="u-pill ms-1">{{ ev.modalidade_nome }}</span>{% endif %}
                                 {% if ev.descricao %}<br><small class="text-muted">{{ ev.descricao[:80] }}{% if ev.descricao|length > 80 %}...{% endif %}</small>{% endif %}
                             </td>
                             <td>
@@ -84,11 +96,11 @@
                             <td class="text-end">
                                 {% if ev.status == 'ativo' and not ev.feriado_nacional and ev.tipo != 'feriado' %}
                                 {% if ev.recorrente and ev.tipo == 'aula' %}
-                                <a href="{{ url_for('calendario.criar_excecao', evento_id=ev.id) }}" class="btn btn-outline-warning btn-sm" title="Cancelar aula em data específica">
+                                <a href="{{ url_for('calendario.criar_excecao', evento_id=ev.id) }}" class="u-btn u-btn--pequeno" title="Cancelar aula em data específica">
                                     <i class="bi bi-calendar-x"></i> Exceção
                                 </a>
                                 {% else %}
-                                <button type="button" class="btn btn-outline-danger btn-sm" data-bs-toggle="modal" data-bs-target="#modalCancelar{{ ev.id }}" title="Cancelar evento avulso">
+                                <button type="button" class="u-btn u-btn--pequeno" data-bs-toggle="modal" data-bs-target="#modalCancelar{{ ev.id }}" title="Cancelar evento avulso">
                                     <i class="bi bi-x-circle"></i> Cancelar
                                 </button>
                                 {% endif %}
@@ -121,12 +133,12 @@
                                             {% endif %}
                                             <div class="mb-2">
                                                 <label for="motivo{{ ev.id }}" class="form-label small">Motivo (opcional):</label>
-                                                <textarea name="motivo" id="motivo{{ ev.id }}" class="form-control form-control-sm" rows="2"></textarea>
+                                                <textarea name="motivo" id="motivo{{ ev.id }}" class="u-campo__controle" rows="2"></textarea>
                                             </div>
                                         </div>
                                         <div class="modal-footer">
-                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Não</button>
-                                            <button type="submit" class="btn btn-danger"><i class="bi bi-x-circle"></i> Sim, cancelar</button>
+                                            <button type="button" class="u-btn" data-bs-dismiss="modal">Não</button>
+                                            <button type="submit" class="u-btn u-btn--perigo"><i class="bi bi-x-circle"></i> Sim, cancelar</button>
                                         </div>
                                     </form>
                                 </div>

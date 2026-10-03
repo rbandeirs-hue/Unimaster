@@ -1,0 +1,136 @@
+{% extends "base_app.html" %}
+{% block conteudo_classe %}exf-tela{% endblock %}
+{% from 'exame_faixa/_macros.html' import obi, promo, pill with context %}
+{% set menu_ativo = 'exame_faixa' if gestao else 'exame_estudo' %}
+{% block title %}Histórico de exames — {{ aluno.nome }}{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{{ asset('css/exame_faixa.css') }}">{% endblock %}
+
+{% block pagina_titulo %}{{ 'Histórico de exames' if gestao else 'Meus exames de faixa' }}{% endblock %}
+{% block pagina_subtitulo %}{{ aluno.nome }}{% if aluno.faixa %} · faixa atual {{ aluno.faixa|title }}{% endif %}{% if gestao and aluno.academia_nome %} · {{ aluno.academia_nome }}{% endif %}{% endblock %}
+{% block pagina_acoes %}
+{% if gestao %}
+<a href="{{ url_for('alunos.ficha_aluno', aluno_id=aluno.id) }}" class="sh__btn"><i class="bi bi-person"></i> Ficha do aluno</a>
+{% else %}
+<a href="{{ url_for('exame_faixa.estudo', aluno_id=aluno.id) }}" class="sh__btn"><i class="bi bi-journal-text"></i> Modo estudo</a>
+{% endif %}
+<button type="button" class="sh__btn" onclick="window.print()"><i class="bi bi-printer"></i> Imprimir</button>
+{% endblock %}
+
+{% block content %}
+{% if gestao %}{% include 'exame_faixa/_abas.html' %}{% else %}{% include 'exame_faixa/_seletor_aluno.html' %}{% endif %}
+
+{% if gestao and sit %}
+<section class="lst-quadro mb-3">
+  <header class="lst-quadro__topo"><h2 class="lst-quadro__titulo">Próximo exame</h2>
+    {% if sit.status in status_rotulo %}<span class="lst-quadro__meta">{{ pill(status_rotulo[sit.status][0], status_rotulo[sit.status][1]) }}</span>{% endif %}</header>
+  <div class="p-3">
+    {% if sit.promocao %}
+    <p class="mb-1">{{ promo(sit.promocao) }}</p>
+    <p class="u-muted u-fs-sm mb-2">{{ sit.promocao.idade_txt }} · carência {{ sit.promocao.carencia_txt }} · {{ sit.promocao.valor_fmt }}
+      {% if sit.promocao.salto %}· sem o salto seria {{ sit.promocao.promocao_normal }}{% endif %}</p>
+    {% if sit.pendencias %}<p class="u-fs-sm mb-2">{{ sit.pendencias|join(' · ') }}</p>{% endif %}
+    <p class="mb-3 exf-nao-imprime">
+      {% if sit.promocao.escolha %}<span class="exf-tag-escolha">escolha do professor</span>{% if destino and destino.motivo %} {{ destino.motivo }} ·{% endif %} pela regra seria {{ sit.pela_regra }}. {% endif %}
+      <button type="button" class="sh__btn" data-exf-destino
+              data-url="{{ url_for('exame_faixa.definir_destino', aluno_id=aluno.id) }}" data-nome="{{ aluno.nome }}"
+              data-natural="{{ sit.indice_natural }}" data-regra="{{ sit.pela_regra }}"
+              data-atual="{{ sit.promocao.id if sit.promocao.escolha else '' }}" data-motivo="{{ (destino.motivo or '') if destino and sit.promocao.escolha else '' }}">
+        <i class="bi bi-pencil-square"></i> Mudar a faixa do exame</button>
+    </p>
+    {% else %}<p class="u-muted mb-2">Sem exame kyu previsto para a faixa atual.</p>{% endif %}
+    <form method="POST" action="{{ url_for('exame_faixa.marcar_inicio_laranja', aluno_id=aluno.id) }}" class="d-flex flex-wrap align-items-end gap-2 exf-nao-imprime">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      {% if esc.academia_id %}<input type="hidden" name="academia_id" value="{{ esc.academia_id }}">{% endif %}
+      <label class="u-campo mb-0"><span class="u-campo__rotulo">Primeiro exame direto para Laranja</span>
+        <select name="motivo" class="u-campo__controle">
+          <option value="">Não se aplica</option>
+          {% for m in motivos_laranja %}<option value="{{ m }}" {% if laranja == m %}selected{% endif %}>{{ m }}</option>{% endfor %}
+        </select></label>
+      <button type="submit" class="sh__btn">Salvar</button>
+      <span class="u-muted u-fs-sm">Faixa preta de jiu-jitsu ou formado em Educação Física — o professor identifica.</span>
+    </form>
+  </div>
+</section>
+{% endif %}
+
+<div class="sh__faixa mb-3">
+  <div class="sh__faixa-item"><span class="sh__faixa-rotulo">Exames</span><span class="sh__faixa-valor">{{ resumo.exames }}</span></div>
+  <div class="sh__faixa-item"><span class="sh__faixa-rotulo">Aprovações</span><span class="sh__faixa-valor">{{ resumo.aprovados }}</span></div>
+  <div class="sh__faixa-item"><span class="sh__faixa-rotulo">Média dos exames</span><span class="sh__faixa-valor">{{ resumo.media|nota_br }}</span></div>
+  <div class="sh__faixa-item"><span class="sh__faixa-rotulo">Graduações registradas</span><span class="sh__faixa-valor">{{ graduacoes|length }}</span></div>
+</div>
+
+{% for x in itens %}
+<section class="lst-quadro mb-3">
+  <header class="lst-quadro__topo">
+    <h2 class="lst-quadro__titulo">
+      <span class="exf-promo">{{ obi(x.cores_de) }} {{ x.de }} <span class="exf-promo__seta">→</span> {{ obi(x.cores_para) }} <strong>{{ x.para }}</strong></span>
+    </h2>
+    <span class="lst-quadro__meta">{{ x.evento_nome }}{% if x.data %} · {{ x.data|data_br }}{% endif %}</span>
+  </header>
+  <div class="p-3">
+    <dl class="exf-dados mb-3">
+      <div><dt>Resultado</dt><dd>{{ pill(x.resultado_rotulo, x.resultado_cor) }}</dd></div>
+      <div><dt>Média geral</dt><dd>{{ x.av.media_geral|nota_br if x.av else '—' }}</dd></div>
+      {% for pt in x.partes %}
+      <div><dt>{{ pt.parte.nome }}</dt><dd>{{ pt.media|nota_br }}</dd></div>
+      {% endfor %}
+      <div><dt>Valor</dt><dd>{{ x.valor_fmt }}</dd></div>
+      {% if x.pagamento %}<div><dt>Fatura</dt><dd>{{ pill(x.pagamento.rotulo, x.pagamento.cor) }}</dd></div>{% endif %}
+      {% if x.promovido %}<div><dt>Faixa</dt><dd>{{ pill('Registrada', 'success') }}</dd></div>{% endif %}
+      {% if gestao and x.av and x.av.avaliador_nome %}<div><dt>Banca</dt><dd>{{ x.av.avaliador_nome }}</dd></div>{% endif %}
+    </dl>
+
+    {% if x.partes %}
+    <details>
+      <summary class="u-fs-sm" style="cursor:pointer">Ver nota de cada técnica</summary>
+      <div class="exf-grade mt-2">
+        {% for pt in x.partes %}
+        <section class="exf-cartao">
+          <h3>{{ pt.parte.nome }}<span>{{ pt.media|nota_br }}</span></h3>
+          {% for gr in pt.grupos %}
+          {% if pt.grupos|length > 1 %}<p class="u-muted u-fs-sm mt-2 mb-1">{{ gr.grupo.nome }}</p>{% endif %}
+          <ul class="list-unstyled mb-0">
+            {% for it in gr.itens %}
+            <li class="d-flex justify-content-between gap-2"><span>{{ it.rotulo }}</span><strong class="u-num">{{ it.nota|nota_br }}</strong></li>
+            {% endfor %}
+          </ul>
+          {% endfor %}
+        </section>
+        {% endfor %}
+      </div>
+    </details>
+    {% elif not x.av %}
+    <p class="u-muted mb-0">{{ 'Inscrito — a prova ainda não foi aplicada.' if gestao else 'Inscrito. As notas aparecem aqui quando a banca fechar a ficha.' }}
+      {% if gestao and x.evento_id %}<a href="{{ url_for('exame_faixa.avaliar', evento_id=x.evento_id, inscricao_id=x.inscricao_id) }}">Aplicar prova</a>{% endif %}</p>
+    {% endif %}
+    {% if gestao and x.a_promover %}
+    <form method="POST" action="{{ url_for('exame_faixa.promover') }}" class="mt-2 exf-nao-imprime"
+          data-confirmar="Registrar a faixa {{ x.para }} para {{ aluno.nome }}?" data-confirmar-tom="aviso" data-confirmar-acao="Promover">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="avaliacao_id" value="{{ x.avaliacao_id }}">
+      <input type="hidden" name="voltar" value="{{ request.full_path }}">
+      <button type="submit" class="sh__btn sh__btn--forte"><i class="bi bi-award"></i> Promover para {{ x.para }}</button>
+    </form>
+    {% endif %}
+    {% if x.av and x.av.observacao %}<p class="mt-2 mb-0"><strong>Observação da banca:</strong> {{ x.av.observacao }}</p>{% endif %}
+  </div>
+</section>
+{% else %}
+<div class="lst-quadro mb-3"><div class="lst-vazio">Nenhum exame de faixa registrado ainda.</div></div>
+{% endfor %}
+
+{% if graduacoes %}
+<section class="lst-quadro">
+  <header class="lst-quadro__topo"><h2 class="lst-quadro__titulo">Linha do tempo de graduação</h2></header>
+  {% for g in graduacoes %}
+  <div class="lst-linha lst-item" style="grid-template-columns:110px minmax(0,1fr) minmax(0,1fr)">
+    <div>{{ g.data|data_br }}</div>
+    <div><span class="exf-promo">{{ obi(g.cores) }} <strong>{{ g.faixa_nome }}</strong>{% if g.grau %} <span class="u-muted">{{ g.grau }}</span>{% endif %}</span></div>
+    <div class="lst-corta"><span class="lst-sub">{{ g.origem }}{% if g.observacao %} · {{ g.observacao }}{% endif %}</span></div>
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
+{% if gestao and sit and sit.promocao %}{% include 'exame_faixa/_destino_dialogo.html' %}{% endif %}
+{% endblock %}

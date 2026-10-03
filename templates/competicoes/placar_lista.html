@@ -1,5 +1,15 @@
 {% extends "base_app.html" %}
 {% block title %}Placar — {{ evento.nome }}{% endblock %}
+{% block pagina_titulo %}Placar de judô{% endblock %}
+{% block pagina_subtitulo %}{{ evento.nome }}{% endblock %}
+{% block pagina_acoes %}
+<a href="{{ url_voltar(back_url) }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Voltar</a>
+<a href="{{ url_for('eventos_competicoes.placar_judo_monitor_evento', evento_id=evento.id) }}" target="_blank" class="sh__btn" title="Uma TV para toda a competição"><i class="bi bi-tv"></i> Monitor</a>
+<a href="{{ url_for('competicoes.chave_visual_evento', evento_id=evento.id) }}" target="_blank" class="sh__btn" title="Chave eliminatória: clique na luta para abrir o placar; o vencedor aparece na próxima rodada"><i class="bi bi-diagram-3-fill"></i> Chave interativa</a>
+<a href="{{ url_for('externo.placar_chaves_monitor', evento_id=evento.id) }}" target="_blank" class="sh__btn" title="Exibir chaves no monitor/TV"><i class="bi bi-diagram-3"></i> Chaves (TV)</a>
+<a href="{{ url_for('externo.index', evento_id=evento.id) }}" target="_blank" class="sh__btn" title="Link externo sem login"><i class="bi bi-box-arrow-up-right"></i> Acesso externo</a>
+<a href="{{ url_for('competicoes.placar_nova_luta', evento_id=evento.id) }}" class="sh__btn sh__btn--forte"><i class="bi bi-plus-circle"></i> Nova luta</a>
+{% endblock %}
 {% block content %}
 <style>
   .placar-atleta-vencedor { font-weight: 600; }
@@ -9,22 +19,6 @@
 <div class="container mt-4">
     {% set menu_secao_ativa = 'placar' %}
     {% include 'components/menu_competicao.html' %}
-    <div class="mb-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <div>
-            <h2 class="h4 fw-bold text-primary">🥋 Placar de Judô</h2>
-            <p class="text-muted mb-0">{{ evento.nome }}</p>
-        </div>
-        <div class="d-flex gap-2 flex-wrap">
-        <a href="{{ url_for('eventos_competicoes.placar_judo_monitor_evento', evento_id=evento.id) }}" target="_blank" class="btn btn-outline-primary btn-sm" title="Uma TV para toda a competição"><i class="bi bi-tv"></i> Monitor</a>
-        <a href="{{ url_for('competicoes.chave_visual_evento', evento_id=evento.id) }}" target="_blank" class="btn btn-warning btn-sm" title="Chave eliminatória: clique na luta para abrir o placar; o vencedor aparece na próxima rodada"><i class="bi bi-diagram-3-fill"></i> Chave interativa</a>
-        <a href="{{ url_for('externo.placar_chaves_monitor', evento_id=evento.id) }}" target="_blank" class="btn btn-outline-info btn-sm" title="Exibir chaves no monitor/TV"><i class="bi bi-diagram-3"></i> Chaves (TV)</a>
-        <a href="{{ url_for('externo.index', evento_id=evento.id) }}" target="_blank" class="btn btn-outline-success btn-sm" title="Link externo sem login"><i class="bi bi-box-arrow-up-right"></i> Acesso externo</a>
-        <a href="{{ url_for('competicoes.placar_nova_luta', evento_id=evento.id) }}" class="btn btn-primary">
-            <i class="bi bi-plus-circle"></i> Nova Luta
-        </a>
-        </div>
-    </div>
-
     {% if lutas_por_categoria %}
     {% for cat_nome, lista in lutas_por_categoria.items() %}
     <section class="mb-4">
@@ -57,8 +51,8 @@
                         <div class="alert alert-info py-2 mb-2"><small><strong>Vencedor:</strong> {{ (luta.atleta_branco_nome if luta.vencedor == 'branco' else luta.atleta_azul_nome) or luta.vencedor|title }} ({{ luta.tipo_vitoria|replace('_', ' ')|title }})</small></div>
                         {% endif %}
                         <div class="d-flex gap-2">
-                            <a href="{{ url_for('eventos_competicoes.placar_judo_controle', luta_id=luta.id) }}" class="btn btn-sm btn-primary flex-fill"><i class="bi bi-gear"></i> Controle</a>
-                            <a href="{{ url_for('eventos_competicoes.placar_judo_monitor_evento', evento_id=evento.id) }}" target="_blank" class="btn btn-sm btn-outline-secondary"><i class="bi bi-tv"></i> TV</a>
+                            <a href="{{ url_for('eventos_competicoes.placar_judo_controle', luta_id=luta.id) }}" class="u-btn u-btn--pequeno u-btn--primario flex-fill"><i class="bi bi-gear"></i> Controle</a>
+                            <a href="{{ url_for('eventos_competicoes.placar_judo_monitor_evento', evento_id=evento.id) }}" target="_blank" class="u-btn u-btn--pequeno"><i class="bi bi-tv"></i> TV</a>
                         </div>
                     </div>
                 </div>
@@ -83,8 +77,8 @@
                     <div class="alert alert-info py-2 mb-2"><small><strong>Vencedor:</strong> {{ (luta.atleta_branco_nome if luta.vencedor == 'branco' else luta.atleta_azul_nome) or luta.vencedor|title }} ({{ luta.tipo_vitoria|replace('_', ' ')|title }})</small></div>
                     {% endif %}
                     <div class="d-flex gap-2">
-                        <a href="{{ url_for('eventos_competicoes.placar_judo_controle', luta_id=luta.id) }}" class="btn btn-sm btn-primary flex-fill"><i class="bi bi-gear"></i> Controle</a>
-                        <a href="{{ url_for('eventos_competicoes.placar_judo_monitor_evento', evento_id=evento.id) }}" target="_blank" class="btn btn-sm btn-outline-secondary"><i class="bi bi-tv"></i> TV</a>
+                        <a href="{{ url_for('eventos_competicoes.placar_judo_controle', luta_id=luta.id) }}" class="u-btn u-btn--pequeno u-btn--primario flex-fill"><i class="bi bi-gear"></i> Controle</a>
+                        <a href="{{ url_for('eventos_competicoes.placar_judo_monitor_evento', evento_id=evento.id) }}" target="_blank" class="u-btn u-btn--pequeno"><i class="bi bi-tv"></i> TV</a>
                     </div>
                 </div>
             </div>
@@ -97,9 +91,5 @@
         <a href="{{ url_for('competicoes.placar_nova_luta', evento_id=evento.id) }}">Criar primeira luta</a>
     </div>
     {% endif %}
-
-    <div class="mt-4">
-        <a href="{{ url_voltar(back_url) }}" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Voltar</a>
-    </div>
 </div>
 {% endblock %}

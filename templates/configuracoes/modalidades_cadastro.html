@@ -1,23 +1,23 @@
 {% extends "base_app.html" %}
+{% set back_url = back_url or get_back_url_default() %}
 {% block title %}Cadastrar Modalidade{% endblock %}
+{% block pagina_titulo %}Cadastrar modalidade{% endblock %}
+{% block pagina_acoes %}
+<a href="{{ url_voltar(back_url) }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Voltar</a>
+{% endblock %}
 {% block content %}
 <div class="container my-4" style="max-width: 640px;">
-    {% set back_url = back_url or get_back_url_default() %}
-{% include 'components/botao_voltar.html' %}
     <div class="card shadow-sm">
-        <div class="card-header bg-warning text-dark">
-            <h5 class="mb-0"><i class="bi bi-collection-fill me-2"></i> Cadastrar Modalidade</h5>
-        </div>
         <div class="card-body p-4">
             <form method="POST">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="mb-3">
                     <label for="nome" class="form-label fw-semibold">Nome <span class="text-danger">*</span></label>
-                    <input type="text" class="form-control" id="nome" name="nome" required placeholder="Ex: Judô, Jiu-Jitsu" value="{{ request.form.get('nome', '') }}">
+                    <input type="text" class="u-campo__controle" id="nome" name="nome" required placeholder="Ex: Judô, Jiu-Jitsu" value="{{ request.form.get('nome', '') }}">
                 </div>
                 <div class="mb-3">
                     <label for="descricao" class="form-label fw-semibold">Descrição</label>
-                    <textarea class="form-control" id="descricao" name="descricao" rows="3" placeholder="Opcional">{{ request.form.get('descricao', '') }}</textarea>
+                    <textarea class="u-campo__controle" id="descricao" name="descricao" rows="3" placeholder="Opcional">{{ request.form.get('descricao', '') }}</textarea>
                 </div>
                 <div class="mb-3">
                     <div class="form-check">
@@ -50,7 +50,7 @@
                     <label class="form-label fw-semibold">Restringir a</label>
                     <div class="row">
                         <div class="col-md-6 mb-2">
-                            <select name="id_associacao" id="id_associacao" class="form-select form-select-sm">
+                            <select name="id_associacao" id="id_associacao" class="u-campo__controle" aria-label="Restringir a">
                                 <option value="">— Associação (nenhuma) —</option>
                                 {% for a in associacoes %}
                                 <option value="{{ a.id }}">{{ a.nome }}</option>
@@ -58,7 +58,7 @@
                             </select>
                         </div>
                         <div class="col-md-6">
-                            <select name="id_academia" id="id_academia" class="form-select form-select-sm">
+                            <select name="id_academia" id="id_academia" class="u-campo__controle">
                                 <option value="">— Academia (nenhuma) —</option>
                                 {% for ac in academias %}
                                 <option value="{{ ac.id }}">{{ ac.nome }}</option>
@@ -84,8 +84,8 @@
                 </div>
                 {% endif %}
                 <div class="d-flex gap-2">
-                    <button type="submit" class="btn btn-primary">Salvar</button>
-                    <a href="{{ url_for('configuracoes.modalidades_lista', academia_id=academia_contexto_id) }}" class="btn btn-outline-secondary">Cancelar</a>
+                    <button type="submit" class="u-btn u-btn--primario">Salvar</button>
+                    <a href="{{ url_for('configuracoes.modalidades_lista', academia_id=academia_contexto_id) }}" class="u-btn">Cancelar</a>
                 </div>
             </form>
         </div>

@@ -1,0 +1,242 @@
+/* =======================================================================
+   Estoque — peças próprias do módulo
+   =======================================================================
+   Reusa `fin-abas` (as abas com passador) e as listas de base/listas.css.
+   Aqui ficam só o aviso de contexto, os cartões de alerta e a linha de item
+   da venda.
+   ======================================================================= */
+
+.est-aviso {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--u-space-3); flex-wrap: wrap;
+  padding: .7rem 1rem; margin-bottom: var(--u-space-3);
+  background: var(--u-surface-alt);
+  border: 1px solid var(--u-border);
+  border-radius: var(--u-radius);
+  font-size: var(--u-fs-sm);
+}
+
+/* Alertas de estoque: o número é o que importa, então ele domina o cartão. */
+.est-alertas {
+  display: grid; gap: var(--u-space-3);
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+.est-alerta {
+  background: var(--u-surface); border: 1px solid var(--u-border);
+  border-radius: var(--u-radius); padding: var(--u-space-3);
+}
+.est-alerta__titulo {
+  font-size: var(--u-fs-xs); text-transform: uppercase;
+  letter-spacing: var(--u-ls-label); color: var(--u-text-muted);
+  margin-bottom: .4rem;
+}
+.est-alerta__lista { display: flex; flex-direction: column; gap: .3rem; }
+.est-alerta__item {
+  display: flex; justify-content: space-between; gap: .75rem;
+  font-size: var(--u-fs-sm); padding: .2rem 0;
+  border-bottom: 1px solid var(--u-border);
+}
+.est-alerta__item:last-child { border-bottom: 0; }
+.est-alerta__qtd { font-variant-numeric: tabular-nums; color: var(--u-text-muted); }
+
+/* Linha da venda: produto, quantidade, preço. */
+.est-item-linha {
+  display: grid; gap: .5rem;
+  grid-template-columns: minmax(0, 1fr) 90px 120px 34px;
+  align-items: center; padding: .4rem 0;
+  border-bottom: 1px solid var(--u-border);
+}
+.est-item-linha:last-of-type { border-bottom: 0; }
+.est-item-linha input, .est-item-linha select {
+  width: 100%; padding: .42rem .5rem; font: inherit; font-size: var(--u-fs-sm);
+  border: 1px solid var(--u-border); border-radius: var(--u-radius-sm);
+}
+.est-item-linha input[type=number] { text-align: right; font-variant-numeric: tabular-nums; }
+@media (max-width: 620px) {
+  .est-item-linha { grid-template-columns: minmax(0, 1fr) 72px 34px; }
+  .est-col-preco { display: none; }
+}
+
+.est-total {
+  display: flex; align-items: baseline; justify-content: flex-end;
+  gap: .6rem; padding-top: var(--u-space-3);
+  font-size: var(--u-fs-lg); font-weight: var(--u-fw-semibold);
+  font-variant-numeric: tabular-nums;
+}
+.est-total small { font-size: var(--u-fs-xs); color: var(--u-text-muted); font-weight: 400; }
+
+.lin-mov { grid-template-columns: 132px 70px minmax(0,1.4fr) minmax(0,1fr) 78px 110px 44px; }
+@media (max-width: 1100px) {
+  .lin-mov { grid-template-columns: 132px 70px minmax(0,1.4fr) 78px 44px; }
+  .col-local, .col-quem { display: none !important; }
+}
+@media (max-width: 680px) {
+  .lin-mov { grid-template-columns: 100px minmax(0,1.4fr) 78px; }
+  .col-sentido, .col-acao { display: none !important; }
+}
+
+.lin-prod { grid-template-columns: minmax(0,1.6fr) minmax(0,1fr) 90px 90px 90px 70px; }
+@media (max-width: 900px) {
+  .lin-prod { grid-template-columns: minmax(0,1.6fr) 90px 90px 70px; }
+  .col-categoria, .col-custo { display: none !important; }
+}
+
+/* =======================================================================
+   Catálogo da loja
+   =======================================================================
+   O cartão tem altura própria e a foto tem proporção fixa: sem isso, um
+   produto com descrição longa estica a linha inteira da grade e o catálogo
+   fica com buracos.
+   ======================================================================= */
+
+.cat-grade {
+  display: grid; gap: var(--u-space-3);
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+}
+.cat-card {
+  display: flex; flex-direction: column;
+  background: var(--u-surface);
+  border: 1px solid var(--u-border);
+  border-radius: var(--u-radius);
+  overflow: hidden;
+}
+.cat-card__foto {
+  aspect-ratio: 4 / 3; width: 100%;
+  background: var(--u-surface-alt);
+  display: grid; place-items: center;
+  overflow: hidden;
+}
+.cat-card__foto img { width: 100%; height: 100%; object-fit: cover; }
+.cat-card__sem-foto { font-size: 2rem; color: var(--u-border); }
+
+.cat-card__corpo {
+  display: flex; flex-direction: column; gap: .3rem;
+  padding: var(--u-space-3); flex: 1;
+}
+.cat-card__cat {
+  font-size: var(--u-fs-xs); text-transform: uppercase;
+  letter-spacing: var(--u-ls-label); color: var(--u-text-muted);
+}
+.cat-card__nome {
+  margin: 0; font-size: var(--u-fs-base);
+  font-weight: var(--u-fw-semibold); line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+.cat-card__desc { margin: 0; font-size: var(--u-fs-sm); color: var(--u-text-muted); }
+.cat-card__preco {
+  font-size: var(--u-fs-lg); font-weight: var(--u-fw-semibold);
+  font-variant-numeric: tabular-nums; margin-top: .2rem;
+}
+.cat-card__vars {
+  display: flex; flex-direction: column; gap: .3rem;
+  margin-top: auto; padding-top: var(--u-space-2);
+}
+.cat-var {
+  display: flex; align-items: center; gap: .5rem;
+  padding-top: .35rem; border-top: 1px solid var(--u-border);
+}
+.cat-var__nome { flex: 1; min-width: 0; font-size: var(--u-fs-sm); }
+.cat-var__preco { display: block; font-size: var(--u-fs-xs); color: var(--u-text-muted); }
+.cat-var__saldo {
+  font-size: var(--u-fs-xs); color: var(--u-text-muted);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+
+/* Selo com a contagem do carrinho, no botão do topo. */
+.cat-selo {
+  display: inline-grid; place-items: center;
+  min-width: 20px; height: 20px; padding: 0 5px;
+  margin-left: .35rem; border-radius: 999px;
+  background: #fff; color: var(--sh-ink);
+  font-size: .72rem; font-weight: 700; line-height: 1;
+}
+
+/* Barra fixa no rodapé: com o catálogo longo, o botão do topo sai da tela
+   justamente enquanto se escolhe. */
+.cat-barra {
+  position: sticky; bottom: 0; z-index: 3;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--u-space-3); flex-wrap: wrap;
+  margin-top: var(--u-space-3);
+  padding: .75rem 1rem;
+  background: var(--u-surface);
+  border: 1px solid var(--u-border);
+  border-radius: var(--u-radius);
+  box-shadow: 0 -2px 10px rgba(15, 23, 42, .06);
+}
+
+/* Carrinho */
+.car-linha {
+  display: grid; gap: .75rem;
+  grid-template-columns: 64px minmax(0,1fr) 96px 110px 40px;
+  align-items: center; padding: .6rem 0;
+  border-bottom: 1px solid var(--u-border);
+}
+.car-linha:last-of-type { border-bottom: 0; }
+.car-linha__foto {
+  width: 64px; aspect-ratio: 1; border-radius: var(--u-radius-sm);
+  background: var(--u-surface-alt); display: grid; place-items: center;
+  overflow: hidden; color: var(--u-border);
+}
+.car-linha__foto img { width: 100%; height: 100%; object-fit: cover; }
+.car-linha input[type=number] {
+  width: 100%; padding: .4rem .5rem; text-align: right; font: inherit;
+  border: 1px solid var(--u-border); border-radius: var(--u-radius-sm);
+  font-variant-numeric: tabular-nums;
+}
+.car-linha__valor { text-align: right; font-variant-numeric: tabular-nums; }
+@media (max-width: 620px) {
+  .car-linha { grid-template-columns: 52px minmax(0,1fr) 80px 40px; }
+  .car-col-valor { display: none; }
+}
+
+/* Abas com passador — mesmo componente do financeiro (copiado de
+   painel/financeiro.css, que o estoque não carrega). Sem isto as setas
+   apareciam soltas, uma acima e outra abaixo das abas, no celular. */
+.fin-abas-caixa {
+  display: flex;
+  align-items: stretch;
+  gap: .25rem;
+  border-bottom: 1px solid var(--sh-line);
+  margin-bottom: var(--u-space-3);
+}
+
+.fin-abas {
+  flex: 1;
+  min-width: 0;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  gap: 1.1rem;
+  border-bottom: 0;      /* a linha agora é da caixa, para não cortar sob os botões */
+  margin-bottom: 0;
+  /* Sem `scroll-behavior` aqui: a rolagem suave é pedida em cada clique, pelo
+     JS. No elemento, ela também animaria o posicionamento inicial da aba
+     ativa, e a tela abriria deslizando sozinha. */
+  scrollbar-width: none;      /* Firefox */
+  -ms-overflow-style: none;   /* Edge antigo */
+}
+.fin-abas::-webkit-scrollbar { width: 0; height: 0; }
+.fin-abas .lst-aba { white-space: nowrap; }
+
+.fin-passador {
+  flex: none;
+  width: 30px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: -1px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--sh-ink-soft);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.fin-abas-caixa.tem-passador .fin-passador { display: inline-flex; }
+/* Vence a regra acima: `hidden` do HTML não pode ser derrubado por classe. */
+.fin-passador[hidden] { display: none; }
+.fin-passador:hover:not(:disabled) { color: var(--sh-ink); }
+.fin-passador:disabled { opacity: .25; cursor: default; }
+.fin-passador:focus-visible { outline: 2px solid var(--sh-red); outline-offset: -2px; }

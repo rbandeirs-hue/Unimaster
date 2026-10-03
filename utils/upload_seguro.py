@@ -24,6 +24,23 @@ _SIGNATURES: list[tuple[bytes, str, str]] = [
     (b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1","xls",  "XLS"),
 ]
 
+# HEIC/HEIF é o formato padrão da câmera do iPhone. Não entra na whitelist —
+# o navegador não exibe em <img> fora do Safari, e converter exigiria uma
+# dependência nova. Mas é reconhecido aqui para a mensagem dizer o que fazer,
+# em vez de um "tipo não permitido" que não ajuda ninguém.
+_HEIC_MARCAS = (b"ftypheic", b"ftypheix", b"ftyphevc", b"ftypmif1", b"ftypmsf1")
+
+
+MENSAGEM_HEIC = (
+    "Esta foto está no formato HEIC, do iPhone, que o navegador não exibe. "
+    "No iPhone, vá em Ajustes › Câmera › Formatos e escolha "
+    "\u201cMais Compatível\u201d, ou compartilhe a foto como JPEG."
+)
+
+
+def _eh_heic(header: bytes) -> bool:
+    return any(marca in header[:24] for marca in _HEIC_MARCAS)
+
 # Categorias pré-definidas de tipos permitidos
 _CATEGORIAS: dict[str, set[str]] = {
     "imagem":    {"jpg", "jpeg", "png", "gif", "webp"},
@@ -52,10 +69,49 @@ def _detectar_extensao_real(header: bytes) -> str | None:
     return None
 
 
+# As telas prometem "até 5 MB". Sem esta checagem a promessa era só texto: não
+# havia limite nenhum, nem aqui nem no Flask, e uma foto de 40 MB entrava.
+#
+# O limite é POR CATEGORIA, e não um número só: foto de cadastro em 5 MB é
+# generoso, mas o mesmo teto derrubaria o calendário da federação em PDF e a
+# planilha de inscrições, que passam disso com facilidade e sempre passaram.
+TAMANHO_MAX_MB = 5
+
+_LIMITE_POR_CATEGORIA: dict[str, float] = {
+    "imagem": 5,
+    "comprovante": 10,
+    "documento": 25,
+    "pdf": 25,
+    "planilha": 25,
+}
+
+
+def _limite_das_categorias(categorias: list[str] | None) -> float:
+    """O maior limite entre as categorias aceitas.
+
+    Maior, e não menor: quem aceita comprovante em JPG ou PDF não deve recusar
+    o PDF de 8 MB por causa do teto da foto.
+    """
+    valores = [_LIMITE_POR_CATEGORIA[c] for c in (categorias or [])
+               if c in _LIMITE_POR_CATEGORIA]
+    return max(valores) if valores else TAMANHO_MAX_MB
+
+
+def _tamanho_mb(file_storage) -> float:
+    """Tamanho do upload, sem carregar o arquivo na memória."""
+    fluxo = file_storage.stream
+    posicao = fluxo.tell()
+    fluxo.seek(0, os.SEEK_END)
+    tamanho = fluxo.tell()
+    fluxo.seek(posicao)
+    return tamanho / (1024 * 1024)
+
+
 def validar_upload(
     file_storage,
     categorias: list[str] | None = None,
     extensoes_extras: set[str] | None = None,
+    tamanho_max_mb: float | None = None,
 ) -> str:
     """
     Valida o arquivo enviado pelo usuário.
@@ -74,6 +130,14 @@ def validar_upload(
     if not safe_name:
         raise UploadInvalido("Nome de arquivo inválido.")
 
+    limite = (_limite_das_categorias(categorias) if tamanho_max_mb is None
+              else tamanho_max_mb)
+    tamanho = _tamanho_mb(file_storage)
+    if tamanho > limite:
+        raise UploadInvalido(
+            f"Arquivo de {tamanho:.1f} MB — o limite é {limite:.0f} MB. "
+            "Reduza o arquivo e tente de novo.")
+
     # Extensão declarada
     _, raw_ext = os.path.splitext(safe_name)
     ext_declarada = raw_ext.lstrip(".").lower()
@@ -91,11 +155,17 @@ def validar_upload(
         raise UploadInvalido("Nenhuma categoria de arquivo definida.")
 
     if ext_declarada not in permitidas:
+        # HEIC primeiro: é o padrão da câmera do iPhone e responder só
+        # "extensão não permitida" deixa a pessoa sem saber o que fazer.
+        if ext_declarada in ("heic", "heif"):
+            raise UploadInvalido(MENSAGEM_HEIC)
         lista = ", ".join(sorted(permitidas))
         raise UploadInvalido(f"Extensão '.{ext_declarada}' não permitida. Use: {lista}.")
 
     # Ler os primeiros 16 bytes para magic bytes (sem consumir o stream)
-    cabecalho = file_storage.stream.read(16)
+    # 32 bytes: o JPEG se identifica nos 3 primeiros, mas o HEIC guarda o
+    # "ftyp" a partir do byte 4 e precisa de mais folga.
+    cabecalho = file_storage.stream.read(32)
     file_storage.stream.seek(0)
 
     if not cabecalho:
@@ -110,6 +180,8 @@ def validar_upload(
         # Aceitar se for extensão de texto/formato sem assinatura binária e estiver na whitelist
         if ext_declarada in _SEM_MAGIC and ext_declarada in permitidas:
             return ext_declarada
+        if _eh_heic(cabecalho) or ext_declarada in ("heic", "heif"):
+            raise UploadInvalido(MENSAGEM_HEIC)
         raise UploadInvalido("Tipo de arquivo não reconhecido ou não permitido.")
 
     # Normalizar jpeg→jpg para comparação

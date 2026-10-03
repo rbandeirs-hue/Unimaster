@@ -16,6 +16,7 @@ import re # Necessário para o histórico/ajax se mantiver a lógica original
 
 # ⚠️ O nome 'presencas' será usado para referenciar as rotas: url_for('presencas.registro_presenca')
 from utils.permissoes import somente_gestao
+from utils.graduacao_modalidade import sql_join_faixa as _join_faixa
 bp_presencas = Blueprint("presencas", __name__)
 
 # Aluno, responsável e visitante não entram aqui nem digitando a URL:
@@ -222,10 +223,10 @@ def _merge_extras_sessao_registro_chamada(
         if aid in ids_alunos_tela:
             continue
         params = [aid, turma_selecionada, turma_selecionada]
-        q = """
+        q = f"""
             SELECT a.id, a.nome, a.foto, g.faixa AS faixa_aluno, t_origem.Nome AS turma_origem_nome
             FROM alunos a
-                       LEFT JOIN graduacao g ON g.id = a.graduacao_id
+                       {_join_faixa()}
             LEFT JOIN turmas t_origem ON t_origem.TurmaID = a.TurmaID
             WHERE a.id = %s
               AND (a.ativo IS NULL OR a.ativo = 1)
@@ -443,7 +444,11 @@ def _get_academias_presenca():
         ids = []
         cur.execute("SELECT academia_id FROM usuarios_academias WHERE usuario_id = %s ORDER BY academia_id", (current_user.id,))
         vinculadas = [r["academia_id"] for r in cur.fetchall()]
-        if vinculadas:
+        # Admin não é limitado pelo vínculo explícito: ter sido ligado a três
+        # academias não pode esconder as outras nove. Foi o que aconteceu ao
+        # cadastrar uma academia independente — ela ficava invisível para quem
+        # administra o sistema.
+        if vinculadas and not current_user.has_role("admin"):
             cur.close()
             conn.close()
             conn = get_db_connection()
@@ -463,7 +468,11 @@ def _get_academias_presenca():
                 session["academia_gerenciamento_id"] = aid
                 session["finance_academia_id"] = aid
             return aid, academias
-        if session.get("modo_painel") == "academia" and (current_user.has_role("gestor_academia") or current_user.has_role("professor")):
+        # Admin fica de fora: ele costuma acumular o papel de gestor_academia,
+        # e esta trava o deixava sem academia nenhuma no modo academia.
+        if (session.get("modo_painel") == "academia"
+                and not current_user.has_role("admin")
+                and (current_user.has_role("gestor_academia") or current_user.has_role("professor"))):
             cur.close()
             conn.close()
             return None, []
@@ -669,6 +678,7 @@ def ranking_frequencia_pagina():
     academia = None
     academias = []
     back_url = url_for("painel.home")
+    periodo_aviso = None
 
     def _filtrar_turmas_dd(cursor, turmas_info):
         """Retorna apenas turmas que têm presença no período atual."""
@@ -785,6 +795,7 @@ def ranking_frequencia_pagina():
             data_inicio_val=data_inicio_val,
             data_fim_val=data_fim_val,
             tipo_filtro=tipo_filtro,
+            periodo_aviso=periodo_aviso,
             mes_atual=hoje.month,
             ano_atual=hoje.year,
         )
@@ -828,6 +839,35 @@ def ranking_frequencia_pagina():
                 turmas_query = [t for t in turmas_query if t["TurmaID"] == turma_filtro]
             else:
                 turma_sel_val = None
+
+            # O aluno tem poucas turmas: mostra todas de uma vez.
+            if "per_page" not in request.args:
+                per_page = 12
+
+            # No começo do mês o mês corrente ainda não tem chamada, e a tela
+            # abria com o pódio vazio. Sem mês pedido na URL, cai no último
+            # mês que teve presença nas turmas do aluno.
+            if (
+                tipo_filtro == "mes"
+                and "mes" not in request.args
+                and not _turmas_com_presenca_ids(cur, list(allowed_turma_ids), mes_sel, ano_sel, "mes")
+            ):
+                cur.execute(
+                    f"SELECT MAX(p.data_presenca) AS ultima "
+                    f"FROM presencas p INNER JOIN alunos a ON a.id = p.aluno_id "
+                    f"WHERE p.presente = 1 AND COALESCE(p.turma_id, a.TurmaID) IN ({ph}) "
+                    f"AND {SQL_MATRICULADO_NA_TURMA_DA_PRESENCA}",
+                    tuple(allowed_turma_ids),
+                )
+                ultima = (cur.fetchone() or {}).get("ultima")
+                if ultima:
+                    from utils.ranking_frequencia import MES_COMPLETO
+
+                    periodo_aviso = (
+                        f"Ainda não há presenças em {MES_COMPLETO[mes_sel]} de {ano_sel}. "
+                        f"Mostrando {MES_COMPLETO[ultima.month]} de {ultima.year}."
+                    )
+                    mes_sel, ano_sel = ultima.month, ultima.year
 
             from utils.ranking_frequencia import ranking_completo_por_turmas as _rcp
             full = ranking_frequencia_por_turmas(
@@ -1823,7 +1863,7 @@ def registro_presenca():
                     f"""
                     SELECT a.id, a.nome, a.foto, g.faixa AS faixa_aluno, a.TurmaID AS turma_origem_id, t_origem.Nome AS turma_origem_nome
                     FROM alunos a
-                       LEFT JOIN graduacao g ON g.id = a.graduacao_id
+                       {_join_faixa()}
                     LEFT JOIN turmas t_origem ON t_origem.TurmaID = a.TurmaID
                     WHERE a.id IN ({ph_snapshot})
                     ORDER BY a.nome
@@ -1839,8 +1879,8 @@ def registro_presenca():
                 ids_alunos_turma = set()
             elif academia_id:
                 cursor.execute(
-                    """SELECT a.id, a.nome, a.foto, g.faixa AS faixa_aluno FROM alunos a
-                       LEFT JOIN graduacao g ON g.id = a.graduacao_id
+                    f"""SELECT a.id, a.nome, a.foto, g.faixa AS faixa_aluno FROM alunos a
+                       {_join_faixa()}
                        LEFT JOIN aluno_turmas at ON at.aluno_id = a.id AND at.TurmaID = %s
                        WHERE (at.TurmaID IS NOT NULL OR a.TurmaID = %s) AND a.id_academia = %s
                        ORDER BY a.nome""",
@@ -1860,7 +1900,7 @@ def registro_presenca():
                         SELECT a.id, a.nome, a.foto, g.faixa AS faixa_aluno, s.id AS solicitacao_id, ac_dest.nome AS academia_destino_nome, 
                                s.turma_id AS turma_destino_id, s.academia_destino_id
                         FROM alunos a
-                       LEFT JOIN graduacao g ON g.id = a.graduacao_id
+                       {_join_faixa()}
                         INNER JOIN solicitacoes_aprovacao s ON s.aluno_id = a.id
                         INNER JOIN academias ac_dest ON ac_dest.id = s.academia_destino_id
                         WHERE a.id IN ({placeholders}) AND s.data_visita = %s AND s.status = 'aprovado_destino' 
@@ -1901,7 +1941,7 @@ def registro_presenca():
                     cursor.execute(f"""
                         SELECT a.id, a.nome, a.foto, g.faixa AS faixa_aluno, s.id AS solicitacao_id, ac_orig.nome AS academia_origem_nome
                         FROM alunos a
-                       LEFT JOIN graduacao g ON g.id = a.graduacao_id
+                       {_join_faixa()}
                         INNER JOIN solicitacoes_aprovacao s ON s.aluno_id = a.id
                         INNER JOIN academias ac_orig ON ac_orig.id = s.academia_origem_id
                         WHERE s.turma_id = %s AND s.data_visita = %s AND s.academia_destino_id = %s
@@ -1911,10 +1951,10 @@ def registro_presenca():
                     """, (turma_selecionada, data_presenca, academia_id) + tuple(ids_alunos_turma))
                 else:
                     # Se não há alunos da turma, buscar todos os alunos em visita
-                    cursor.execute("""
+                    cursor.execute(f"""
                         SELECT a.id, a.nome, a.foto, g.faixa AS faixa_aluno, s.id AS solicitacao_id, ac_orig.nome AS academia_origem_nome
                         FROM alunos a
-                       LEFT JOIN graduacao g ON g.id = a.graduacao_id
+                       {_join_faixa()}
                         INNER JOIN solicitacoes_aprovacao s ON s.aluno_id = a.id
                         INNER JOIN academias ac_orig ON ac_orig.id = s.academia_origem_id
                         WHERE s.turma_id = %s AND s.data_visita = %s AND s.academia_destino_id = %s
@@ -1997,10 +2037,10 @@ def registro_presenca():
             # Busca por nome para incluir aluno de outra turma na chamada
             if busca_aluno_nome:
                 params_busca = [f"%{busca_aluno_nome}%", turma_selecionada, turma_selecionada]
-                query_busca = """
+                query_busca = f"""
                     SELECT a.id, a.nome, a.foto, g.faixa AS faixa_aluno, t_origem.Nome AS turma_origem_nome
                     FROM alunos a
-                       LEFT JOIN graduacao g ON g.id = a.graduacao_id
+                       {_join_faixa()}
                     LEFT JOIN turmas t_origem ON t_origem.TurmaID = a.TurmaID
                     WHERE a.nome LIKE %s
                       AND (a.ativo IS NULL OR a.ativo = 1)
@@ -2912,6 +2952,37 @@ def historico_presenca_lista():
                            academia=academia,
                            academia_id=academia_id)
 
+def _marca_documento(nomes, academia_id):
+    """A modalidade impressa no cabeçalho do documento.
+
+    Ordem: o que o próprio registro diz (a turma da ata, as matrículas do
+    aluno), depois a modalidade em foco, depois a única modalidade da academia.
+    Quando nada responde, sai só "Unimaster".
+
+    Não usa `identidade()` de propósito: lá o último recurso é "Judô", que faz
+    sentido para a marca do shell e é exatamente o defeito aqui — foi assim que
+    o relatório de um aluno de jiu-jitsu saiu escrito "Unimaster Judô".
+    """
+    nomes = [n for n in (nomes or []) if n]
+    if nomes:
+        return " · ".join(nomes)
+    if not academia_id:
+        return ""
+    try:
+        from utils.multimodalidade import contexto_id, modalidades_da_academia
+        modalidades = modalidades_da_academia(academia_id)
+        atual = contexto_id(academia_id)
+        if atual:
+            for m in modalidades:
+                if m["id"] == atual:
+                    return m["nome"]
+        if len(modalidades) == 1:
+            return modalidades[0]["nome"]
+    except Exception:
+        pass
+    return ""
+
+
 # ======================================================
 # 🔹 Ata de presença — documento para impressão (uma folha por turma)
 # ======================================================
@@ -2975,6 +3046,14 @@ def ata_presenca_impressao():
             academia = None
     db.close()
 
+    # Cada folha da ata é de uma turma, então a marca sai da turma.
+    try:
+        from utils.multimodalidade import modalidades_das_turmas
+        mods_turma = modalidades_das_turmas(
+            {r.get("turma_id") for r in registros if r.get("turma_id")})
+    except Exception:
+        mods_turma = {}
+
     # turma -> {nome, professor, horario, datas ordenadas, alunos, marcas}
     turmas_doc = {}
     for r in registros:
@@ -3030,6 +3109,7 @@ def ata_presenca_impressao():
         marcados = sum(1 for c in t["marcas"].values() if c in ("P", "F"))
         documentos.append({
             "turma": t["nome"],
+            "marca": _marca_documento(mods_turma.get(t["id"]), academia_id),
             "professor": t["professor"],
             "horario": " / ".join(sorted(t["horarios"])),
             "colunas": [{"dia": d.strftime("%d"), "semana": DIAS_CURTOS[d.weekday()]} for d in datas],
@@ -3074,11 +3154,11 @@ def relatorio_presenca_aluno(aluno_id):
     db = get_db_connection()
     cursor = db.cursor(dictionary=True)
     cursor.execute(
-        """SELECT a.id, a.nome, a.id_academia, a.data_matricula,
+        f"""SELECT a.id, a.nome, a.id_academia, a.data_matricula,
                   g.faixa AS faixa, g.graduacao AS graduacao,
                   ac.nome AS academia_nome, ac.cidade AS academia_cidade, ac.uf AS academia_uf
            FROM alunos a
-           LEFT JOIN graduacao g ON g.id = a.graduacao_id
+           {_join_faixa()}
            LEFT JOIN academias ac ON ac.id = a.id_academia
            WHERE a.id = %s""",
         (aluno_id,),
@@ -3133,9 +3213,18 @@ def relatorio_presenca_aluno(aluno_id):
         contagem[chave] = contagem.get(chave, 0) + 1
     turma_nome, turma_horario, professor = max(contagem, key=contagem.get) if contagem else ("", "", "")
 
+    # A marca do documento é a do aluno: quem faz jiu-jitsu não recebe uma
+    # folha escrita "Judô".
+    try:
+        from utils.multimodalidade import nomes_modalidades_do_aluno
+        _mods_aluno = nomes_modalidades_do_aluno(aluno_id)
+    except Exception:
+        _mods_aluno = []
+    marca = _marca_documento(_mods_aluno, (aluno or {}).get("id_academia"))
+
     return render_template(
         "presencas/relatorio_presenca_aluno.html",
-        aluno=aluno, aulas=aulas, resumo=resumo,
+        aluno=aluno, aulas=aulas, resumo=resumo, marca=marca,
         turma_nome=turma_nome, turma_horario=turma_horario, professor=professor,
         mes=mes, ano=ano, meses=MESES_PT,
         periodo_label=(f"{MESES_PT[mes]} de {ano}" if mes else str(ano)),
@@ -3295,12 +3384,12 @@ def buscar_alunos_outra_academia_ajax():
         # Excluir só quem já está matriculado nesta turma (aluno_turmas ou TurmaID legado).
         # ativo: mesmo critério da lista de alunos (NULL = ativo).
         params = [f"%{termo}%", turma_id, turma_id]
-        query = """
+        query = f"""
             SELECT a.id, a.nome, a.foto, g.faixa AS faixa_aluno,
                    ac.nome AS academia_nome,
                    t.Nome  AS turma_nome
             FROM alunos a
-                       LEFT JOIN graduacao g ON g.id = a.graduacao_id
+                       {_join_faixa()}
             LEFT JOIN academias ac ON ac.id = a.id_academia
             LEFT JOIN turmas t     ON t.TurmaID = a.TurmaID
             WHERE a.nome LIKE %s

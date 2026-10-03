@@ -73,6 +73,17 @@
 </style>
 
 <div class="wa">
+  {# O interruptor "Avisos gerais" fica na tela de WhatsApp. Sem este aviso, a
+     pessoa escreve o recado inteiro e só descobre no clique que estava
+     desligado — foi assim que avisos saíram com ele desmarcado. #}
+  {% if not avisos_ligados %}
+  <div class="card2" style="border-color:#f0c9cd; background:#fdf2f3; color:#8f1d27; padding:12px 16px; margin-bottom:18px; font-size:.9rem;">
+    <i class="bi bi-megaphone me-1"></i>
+    Os <strong>avisos gerais</strong> estão desligados para esta academia — nada será enviado.
+    <a href="{{ url_for('academia.whatsapp_config', academia_id=academia_id) }}"
+       style="color:inherit; text-decoration:underline">Ligar em WhatsApp</a>.
+  </div>
+  {% endif %}
   {% if not conectado %}
   <div class="card2" style="border-color:#f0c9cd; background:#fdf2f3; color:#8f1d27; padding:12px 16px; margin-bottom:18px; font-size:.9rem;">
     <i class="bi bi-exclamation-triangle me-1"></i> O WhatsApp da academia não está conectado. Conecte antes de enviar avisos.
@@ -93,7 +104,7 @@
           </select>
         </div>
         <div style="padding:16px 20px 0;">
-          <textarea class="ta" id="msg" placeholder="Olá {nome}, não haverá treino na sexta-feira (feriado). Bons treinos!"></textarea>
+          <textarea class="ta" id="msg" placeholder="Olá {nome}, não haverá treino na sexta-feira (feriado). Bons treinos!" aria-label="Olá {nome}, não haverá treino na sexta-feira (feriado). Bons treinos!"></textarea>
         </div>
         <div class="chips">
           <span class="lbl" style="letter-spacing:.04em; text-transform:none; color:var(--muted2); margin-right:2px;">Inserir:</span>
@@ -122,7 +133,7 @@
         </div>
 
         <div id="boxSelecionar" style="display:none;">
-          <div class="pick-busca"><input type="text" class="fld" id="buscaAluno" placeholder="Buscar aluno…"></div>
+          <div class="pick-busca"><input type="text" class="fld" id="buscaAluno" placeholder="Buscar aluno…" aria-label="Buscar aluno…"></div>
           <div class="picker" id="pickerAlunos">
             {% for a in alunos %}
             <label class="pick-item {{ '' if a.tem_tel else 'sem' }}" data-nome="{{ a.nome|lower }}">
@@ -220,12 +231,15 @@
 
     var btn = document.getElementById('btnEnviar');
     var txt = document.getElementById('btnEnviarTxt');
-    var pronto = texto.length > 0 && recebem > 0 {% if not conectado %}&& false{% endif %};
+    var pronto = texto.length > 0 && recebem > 0
+      {% if not conectado %}&& false{% endif %}
+      {% if not avisos_ligados %}&& false{% endif %};
     btn.disabled = !pronto;
     btn.classList.toggle('pronto', pronto);
     btn.querySelector('i').className = pronto ? 'bi bi-send' : 'bi bi-slash-circle';
     if(!texto){ txt.textContent = 'Escreva a mensagem'; }
-    {% if not conectado %}else if(true){ txt.textContent = 'WhatsApp desconectado'; }{% endif %}
+    {% if not avisos_ligados %}else if(true){ txt.textContent = 'Avisos desligados'; }
+    {% elif not conectado %}else if(true){ txt.textContent = 'WhatsApp desconectado'; }{% endif %}
     else if(recebem === 0){ txt.textContent = 'Nenhum destinatário'; }
     else { txt.textContent = 'Enviar aviso (' + recebem + ')'; }
   }
@@ -275,7 +289,7 @@
   });
 
   // enviar
-  document.getElementById('btnEnviar').addEventListener('click', function(){
+  document.getElementById('btnEnviar').addEventListener('click', async function(){
     var btn = this;
     var texto = (msg.value||'').trim();
     if(!texto) return;
@@ -291,9 +305,9 @@
     if(destino === 'selecionados'){
       var sel = root.querySelectorAll('.js-aluno-chk:checked');
       if(!sel.length){ document.getElementById('envRes').innerHTML = '<span style="color:#c1121f;">Selecione ao menos um aluno.</span>'; return; }
-      sel.forEach(function(c){ fd.append('aluno_ids', c.value); });
+      sel.forEach(function (c){ fd.append('aluno_ids', c.value); });
     }
-    if(!confirm('Enviar este aviso agora?')) return;
+    if(!await Dialogo.confirmar('Enviar este aviso agora?')) return;
     btn.disabled = true;
     document.getElementById('btnEnviarTxt').textContent = 'Enviando…';
     document.getElementById('envRes').innerHTML = '<span style="color:#8a8681;">Disparando mensagens…</span>';

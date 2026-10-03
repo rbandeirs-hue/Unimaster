@@ -13,6 +13,7 @@ from extensions import csrf
 from config import get_db_connection
 from math import ceil
 from werkzeug.security import generate_password_hash
+from urllib.parse import quote
 
 from utils.permissoes import somente_gestao
 # Dias para pagar a matrícula, contados da inscrição. É o vencimento que a
@@ -115,12 +116,20 @@ def _get_academias_ids():
         cur = conn.cursor(dictionary=True)
         cur.execute("SELECT academia_id FROM usuarios_academias WHERE usuario_id = %s ORDER BY academia_id", (current_user.id,))
         vinculadas = [r["academia_id"] for r in cur.fetchall()]
-        if vinculadas:
+        # Admin não é limitado pelo vínculo explícito: ter sido ligado a três
+        # academias não pode esconder as outras nove. Foi o que aconteceu ao
+        # cadastrar uma academia independente — ela ficava invisível para quem
+        # administra o sistema.
+        if vinculadas and not current_user.has_role("admin"):
             cur.close()
             conn.close()
             return vinculadas
         # Modo academia: gestor_academia/professor só veem academias de usuarios_academias (não id_academia)
-        if session.get("modo_painel") == "academia" and (current_user.has_role("gestor_academia") or current_user.has_role("professor")):
+        # Admin fica de fora: ele costuma acumular o papel de gestor_academia,
+        # e esta trava o deixava sem academia nenhuma no modo academia.
+        if (session.get("modo_painel") == "academia"
+                and not current_user.has_role("admin")
+                and (current_user.has_role("gestor_academia") or current_user.has_role("professor"))):
             cur.close()
             conn.close()
             return []
@@ -183,6 +192,7 @@ def lista():
     origem_filtro = (request.args.get("origem") or "").strip().lower()
     if origem_filtro not in ("precadastro", "aula_experimental", "matricula"):
         origem_filtro = ""
+    modalidade_filtro = request.args.get("modalidade", type=int)
     page = int(request.args.get("page", 1))
     por_pagina = 15
     offset = (page - 1) * por_pagina
@@ -207,6 +217,10 @@ def lista():
     if origem_filtro:
         where += f" AND {origem_sql} = %s"
         params.append(origem_filtro)
+    if modalidade_filtro:
+        # modalidades_ids é "1,7": FIND_IN_SET acha o id na lista.
+        where += " AND FIND_IN_SET(%s, REPLACE(COALESCE(modalidades_ids,''), ' ', ''))"
+        params.append(str(modalidade_filtro))
 
     cur.execute(f"SELECT COUNT(*) AS total FROM pre_cadastro WHERE {where}", params)
     total = cur.fetchone()["total"]
@@ -219,7 +233,7 @@ def lista():
                      WHEN aula_experimental = 1 THEN 'aula_experimental'
                      ELSE 'precadastro'
                    END) AS origem,
-               matricula_status,
+               matricula_status, modalidades_ids, TurmaID, matricula_valor,
                (matricula_link IS NOT NULL OR matricula_qrcode IS NOT NULL) AS tem_pagamento
         FROM pre_cadastro
         WHERE {where}
@@ -227,6 +241,24 @@ def lista():
         LIMIT %s OFFSET %s
     """, params + [por_pagina, offset])
     precadastros = cur.fetchall()
+
+    # Nome das modalidades e da turma de cada interessado.
+    cur.execute(
+        """SELECT m.id, m.nome, m.cor FROM modalidade m
+           JOIN academia_modalidades am ON am.modalidade_id = m.id
+           WHERE am.academia_id = %s ORDER BY m.nome""", (academia_id,))
+    modalidades_academia = cur.fetchall()
+    _mod_nome = {m["id"]: m for m in modalidades_academia}
+    _turmas_ids = {p["TurmaID"] for p in precadastros if p.get("TurmaID")}
+    _turma_nome = {}
+    if _turmas_ids:
+        cur.execute("SELECT TurmaID, Nome FROM turmas WHERE TurmaID IN (%s)"
+                    % ",".join(["%s"] * len(_turmas_ids)), tuple(_turmas_ids))
+        _turma_nome = {r["TurmaID"]: r["Nome"] for r in cur.fetchall()}
+    for p in precadastros:
+        ids = [int(x) for x in str(p.get("modalidades_ids") or "").split(",") if x.strip().isdigit()]
+        p["modalidades"] = [_mod_nome[i] for i in ids if i in _mod_nome]
+        p["turma_nome"] = _turma_nome.get(p.get("TurmaID"))
 
     # Indicadores do topo: contam a academia inteira, não a página nem o filtro.
     stats = {"precadastro": 0, "aula_experimental": 0, "matricula": 0, "promovidos": 0,
@@ -295,7 +327,6 @@ def lista():
     link_publico = url_for("precadastro.form_publico", academia_slug=academia_slug or academia_id, _external=True)
     link_aula_experimental = url_for("precadastro.aula_experimental_publica", academia_slug=academia_slug or academia_id, _external=True)
     link_matricula = url_for("precadastro.matricula_publica", academia_slug=academia_slug or academia_id, _external=True)
-    link_landing = url_for("precadastro.landing", academia_slug=academia_slug or academia_id, _external=True)
 
     # Sem gateway configurado a matrícula vira pagamento avulso — a tela precisa
     # dizer qual dos dois caminhos o aluno vai encontrar.
@@ -312,9 +343,11 @@ def lista():
         gateway_ativo=gateway_ativo,
         busca=busca,
         origem_filtro=origem_filtro,
+        modalidade_filtro=modalidade_filtro,
+        modalidades_academia=modalidades_academia,
         stats=stats,
         total=total,
-        filtrado=bool(busca or origem_filtro),
+        filtrado=bool(busca or origem_filtro or modalidade_filtro),
         pagina_atual=page,
         total_paginas=total_paginas,
         academias=academias,
@@ -323,7 +356,6 @@ def lista():
         link_publico=link_publico,
         link_aula_experimental=link_aula_experimental,
         link_matricula=link_matricula,
-        link_landing=link_landing,
         valor_matricula=valor_matricula,
     )
 
@@ -358,6 +390,90 @@ def salvar_valor_matricula():
         cur.close()
         conn.close()
     return redirect(url_for("precadastro.lista", academia_id=academia_id))
+
+
+# Textos das mensagens que levam cada link público. Ficam aqui, e não em
+# whatsapp_templates, porque não são disparo automático: quem envia é a
+# secretaria, um número por vez, da própria tela de pré-cadastro.
+_LINKS_PUBLICOS = {
+    "precadastro": (
+        "precadastro.form_publico",
+        "Pré-cadastro",
+        "Olá! 👋 Faça seu pré-cadastro na *{academia}* pelo link abaixo:\n{link}",
+    ),
+    "aula_experimental": (
+        "precadastro.aula_experimental_publica",
+        "Aula experimental",
+        "Olá! 👋 Agende sua aula experimental na *{academia}* pelo link abaixo:\n{link}",
+    ),
+    "matricula": (
+        "precadastro.matricula_publica",
+        "Matrícula",
+        "Olá! 👋 Faça sua matrícula na *{academia}* pelo link abaixo:\n{link}",
+    ),
+}
+
+
+def _tel_digitos(valor):
+    return re.sub(r"\D", "", valor or "")
+
+
+@bp_precadastro.route("/enviar-link", methods=["POST"])
+@login_required
+def enviar_link_whatsapp():
+    """Envia um dos links públicos por WhatsApp para o número informado.
+
+    O link é remontado aqui a partir da academia e do tipo — o que vem do
+    navegador é só o telefone. Se o microserviço estiver fora ou a academia
+    não estiver pareada, devolve `wa` (link wa.me) para a tela oferecer o
+    envio manual em vez de só dizer que falhou.
+    """
+    academia_id, _ = _get_academia_filtro()
+    if not academia_id:
+        return jsonify({"ok": False, "erro": "Selecione uma academia."}), 400
+
+    tipo = (request.form.get("tipo") or "").strip()
+    if tipo not in _LINKS_PUBLICOS:
+        return jsonify({"ok": False, "erro": "Link desconhecido."}), 400
+
+    telefone = _tel_digitos(request.form.get("telefone"))
+    # 10 dígitos = fixo com DDD; 13 = com o 55 na frente. Fora dessa faixa é
+    # engano de digitação, e mandar assim vira mensagem para um número alheio.
+    if not (10 <= len(telefone) <= 13):
+        return jsonify({"ok": False, "erro": "Número inválido. Use DDD + número."}), 400
+
+    ac = _resolver_academia_por_slug(str(academia_id)) or {}
+    endpoint, rotulo, modelo = _LINKS_PUBLICOS[tipo]
+    # Link de uma modalidade só: o formulário abre com ela escolhida e travada.
+    _kw = {}
+    mod = request.form.get("modalidade", type=int)
+    if mod:
+        _c = get_db_connection(); _k = _c.cursor()
+        try:
+            _k.execute("SELECT 1 FROM academia_modalidades WHERE academia_id = %s AND modalidade_id = %s",
+                       (academia_id, mod))
+            if _k.fetchone():
+                _kw["modalidade"] = mod
+        finally:
+            _k.close(); _c.close()
+    link = url_for(endpoint, academia_slug=ac.get("slug") or academia_id, _external=True, **_kw)
+    mensagem = modelo.format(academia=ac.get("nome") or "nossa academia", link=link)
+
+    from utils import whatsapp as wpp
+    from utils import whatsapp_log as wlog
+
+    ok, info = wpp.enviar(academia_id, telefone, mensagem)
+    wlog.registrar(academia_id, "link_publico", "entregue" if ok else "falha",
+                   telefone=telefone,
+                   erro=(info or {}).get("erro") if isinstance(info, dict) else None)
+
+    resposta = {"ok": ok, "rotulo": rotulo}
+    if not ok:
+        resposta["erro"] = ((info or {}).get("erro") if isinstance(info, dict) else None) \
+            or "Não foi possível enviar. O WhatsApp da academia está conectado?"
+        tel_wa = telefone if telefone.startswith("55") else "55" + telefone
+        resposta["wa"] = "https://wa.me/%s?text=%s" % (tel_wa, quote(mensagem))
+    return jsonify(resposta), 200 if ok else 502
 
 
 # =====================================================================
@@ -508,6 +624,18 @@ def validar_cupom_publico(academia_slug):
         return jsonify({"valido": False, "mensagem": "Academia não encontrada."})
     codigo = (request.form.get("codigo") or request.json.get("codigo") if request.is_json else request.form.get("codigo")) or ""
     valor_base = ac.get("valor_matricula") or 0
+    # Com turma escolhida, o cupom desconta da mensalidade dela (o mesmo valor
+    # que a matrícula vai cobrar).
+    turma_id = request.form.get("turma_id", type=int)
+    if turma_id:
+        from utils import turma_plano
+        _c = get_db_connection(); _k = _c.cursor(dictionary=True)
+        try:
+            _t = next((t for t in turma_plano.opcoes(_k, ac["id"])["turmas"] if t["id"] == turma_id), None)
+        finally:
+            _k.close(); _c.close()
+        if _t and _t.get("plano_valor") is not None:
+            valor_base = float(_t["plano_valor"])
     conn = get_db_connection(); cur = conn.cursor(dictionary=True)
     try:
         c, desc, final, msg = _aplicar_cupom(cur, ac["id"], codigo, valor_base)
@@ -558,25 +686,22 @@ def form_publico(academia_slug):
         cur.close()
         conn.close()
 
-    conn_grad = get_db_connection()
-    cur_grad = conn_grad.cursor(dictionary=True)
-    graduacoes = []
+    # Modalidades, turmas e faixas da academia: o candidato escolhe a
+    # modalidade e só vê o que é dela (antes vinham as faixas de todas as
+    # modalidades do sistema misturadas, e nenhuma turma).
+    from utils import turma_plano
+    conn_op = get_db_connection()
+    cur_op = conn_op.cursor(dictionary=True)
     try:
-        cur_grad.execute("SHOW COLUMNS FROM graduacao LIKE 'ativo'")
-        tem_coluna_ativo = cur_grad.fetchone() is not None
-        if tem_coluna_ativo:
-            cur_grad.execute(
-                "SELECT id, faixa, graduacao, modalidade_id FROM graduacao WHERE ativo = 1 ORDER BY faixa, graduacao"
-            )
-        else:
-            cur_grad.execute(
-                "SELECT id, faixa, graduacao, modalidade_id FROM graduacao ORDER BY faixa, graduacao"
-            )
-        graduacoes = cur_grad.fetchall() or []
+        op = turma_plano.opcoes(cur_op, academia_id)
     except Exception as e:
-        current_app.logger.warning("Pré-cadastro: não foi possível listar graduações: %s", e)
-    cur_grad.close()
-    conn_grad.close()
+        current_app.logger.warning("Pré-cadastro: não foi possível listar modalidades/turmas: %s", e)
+        op = {"modalidades": [], "turmas": [], "graduacoes": []}
+    finally:
+        cur_op.close()
+        conn_op.close()
+    graduacoes = op["graduacoes"]
+    travada = turma_plano.modalidade_do_link(op, request.args.get("modalidade"))
 
     def _render_form(form_data, sucesso=False):
         _logo_url = None
@@ -585,6 +710,7 @@ def form_publico(academia_slug):
             _logo_url = buscar_logo_url("academia", academia_id)
         except Exception:
             _logo_url = None
+        _sel = form_data.getlist("modalidade_ids") if hasattr(form_data, "getlist") else []
         return render_template(
             "precadastro/form_publico.html",
             academia_id=academia_id,
@@ -594,6 +720,9 @@ def form_publico(academia_slug):
             sucesso=sucesso,
             graduacoes=graduacoes,
             logo_url=_logo_url,
+            op=op, travada=travada,
+            sel_mods=[int(x) for x in _sel if str(x).isdigit()],
+            sel_turma=(form_data.get("turma_id") if form_data else None),
         )
 
     if request.method == "POST":
@@ -604,6 +733,10 @@ def form_publico(academia_slug):
             return _render_form(form, sucesso=False)
         graduacao_id_raw = (form.get("graduacao_id") or "").strip()
         graduacao_id = int(graduacao_id_raw) if graduacao_id_raw.isdigit() else None
+        mods_escolhidas, turma_escolhida, erro_mod = turma_plano.ler_escolha(form, op)
+        if erro_mod:
+            flash(erro_mod, "danger")
+            return _render_form(form, sucesso=False)
         email = (form.get("email") or "").strip() or None
         if not email:
             flash("E-mail é obrigatório (será usado para recuperação de senha).", "danger")
@@ -720,6 +853,10 @@ def form_publico(academia_slug):
             if tem_graduacao:
                 colunas.append("graduacao_id")
                 valores.append(graduacao_id)
+            # Modalidade e turma escolhidas: a promoção a aluno já parte delas.
+            colunas.extend(["modalidades_ids", "TurmaID"])
+            valores.extend([",".join(str(m) for m in mods_escolhidas) or None,
+                            turma_escolhida["id"] if turma_escolhida else None])
             if tem_acesso:
                 colunas.extend(["acesso_sistema", "responsavel_eh_proprio", "email_acesso"])
                 valores.extend([acesso_sistema, responsavel_eh_proprio, email_acesso])
@@ -873,6 +1010,25 @@ def matricula_publica(academia_slug):
     academia_slug = ac.get("slug") or str(academia_id)
     valor_matricula = ac.get("valor_matricula")
 
+    # Modalidade e turma: a matrícula cobra a mensalidade da turma escolhida
+    # (plano da turma). Turma sem plano cai no valor fixo da academia.
+    from utils import turma_plano
+    _cop = get_db_connection(); _ccop = _cop.cursor(dictionary=True)
+    try:
+        op = turma_plano.opcoes(_ccop, academia_id)
+    except Exception:
+        op = {"modalidades": [], "turmas": [], "graduacoes": []}
+    finally:
+        _ccop.close(); _cop.close()
+    travada = turma_plano.modalidade_do_link(op, request.args.get("modalidade"))
+    turma_link = request.args.get("turma", type=int)
+    tem_valor = bool(valor_matricula) or any(t.get("plano_valor") for t in op["turmas"])
+
+    def _valor_da_turma(turma):
+        if turma and turma.get("plano_valor") is not None:
+            return float(turma["plano_valor"])
+        return float(valor_matricula or 0)
+
     # Cupons visíveis para o aluno (ativos, dentro da vigência, marcados para mostrar)
     cupons_visiveis = []
     try:
@@ -903,6 +1059,10 @@ def matricula_publica(academia_slug):
             "precadastro/matricula_publica.html",
             academia_id=academia_id, academia_nome=academia_nome, academia_slug=academia_slug,
             valor_matricula=valor_matricula, form=form_data or {}, resultado=resultado,
+            op=op, travada=travada, tem_valor=tem_valor,
+            sel_mods=[int(x) for x in (form_data.getlist("modalidade_ids")
+                                       if hasattr(form_data, "getlist") else []) if str(x).isdigit()],
+            sel_turma=((form_data or {}).get("turma_id") if form_data else turma_link),
             cupons_visiveis=cupons_visiveis, logo_url=_logo_mat,
         )
 
@@ -939,14 +1099,25 @@ def matricula_publica(academia_slug):
     if not resp_nome:
         flash("Informe o nome do responsável financeiro (ou marque 'próprio aluno').", "danger")
         return _render(form)
+    # O celular é o único canal da cobrança e dos lembretes, e é ele que vira o
+    # telefone do aluno quando a matrícula é aprovada. Sem ele o cadastro nasce mudo.
+    if not telefone or len(re.sub(r"\D", "", telefone)) not in (10, 11):
+        flash("Informe o celular do responsável financeiro — DDD + número.", "danger")
+        return _render(form)
     # E-mail é por onde sai o recibo da matrícula e o acesso do aluno.
     if not email or "@" not in email or "." not in email.split("@")[-1]:
         flash("Informe um e-mail válido — é para onde vai o recibo da matrícula.", "danger")
         return _render(form)
 
+    mods_escolhidas, turma_escolhida, erro_mod = turma_plano.ler_escolha(
+        form, op, exigir_turma=bool(op["turmas"]))
+    if erro_mod:
+        flash(erro_mod, "danger")
+        return _render(form)
+
     # Cupom de desconto (opcional)
     cupom_codigo = (form.get("cupom") or "").strip().upper() or None
-    valor_base = float(valor_matricula or 0)
+    valor_base = _valor_da_turma(turma_escolhida)
     valor_final = valor_base
     desconto = 0.0
     cupom_obj = None
@@ -970,15 +1141,17 @@ def matricula_publica(academia_slug):
                 responsavel_financeiro_nome, responsavel_financeiro_cpf,
                 matricula_valor, matricula_valor_original, matricula_desconto, matricula_cupom,
                 matricula_vencimento,
-                cep, numero, rua, bairro, cidade, origem)
-               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'matricula')""",
+                cep, numero, rua, bairro, cidade, modalidades_ids, TurmaID, origem)
+               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'matricula')""",
             (academia_id, nome, email, telefone, data_nascimento, sexo, cpf_aluno,
              resp_nome, resp_cpf_raw,
              valor_final, valor_base, desconto, (cupom_codigo if cupom_obj else None),
              # Prazo para pagar a matrícula. É esta data que coloca a matrícula na
              # régua de cobrança: sem ela não há "faltam 3 dias" nem "venceu há 10".
              date.today() + timedelta(days=PRAZO_MATRICULA_DIAS),
-             cep, numero, rua, bairro, cidade),
+             cep, numero, rua, bairro, cidade,
+             ",".join(str(m) for m in mods_escolhidas) or None,
+             turma_escolhida["id"] if turma_escolhida else None),
         )
         precad_id = cur.lastrowid
         # Consome o cupom (registra uso — para uso único, bloqueia reutilização)
@@ -1034,7 +1207,7 @@ def matricula_publica(academia_slug):
                 try:
                     from utils.email_utils import enviar_email_link_pagamento
                     enviar_email_link_pagamento(email, resp_nome or nome, academia_nome,
-                                                r.get("boleto_url"), valor_matricula, r.get("pix_copia_cola"))
+                                                r.get("boleto_url"), valor_final, r.get("pix_copia_cola"))
                 except Exception as _e:
                     current_app.logger.error(f"Matrícula: envio de e-mail falhou (precad {precad_id}): {_e}")
     except Exception as e:
@@ -1487,6 +1660,13 @@ def aula_experimental_publica(academia_slug):
         (academia_id,),
     )
     turmas = cur.fetchall()
+    # Modalidade de cada turma, para o visitante filtrar pela que quer experimentar.
+    from utils import turma_plano
+    op = turma_plano.opcoes(cur, academia_id)
+    _mods_turma = {t["id"]: t["modalidades"] for t in op["turmas"]}
+    for t in turmas:
+        t["modalidades"] = _mods_turma.get(t["turma_id"], [])
+    travada = turma_plano.modalidade_do_link(op, request.args.get("modalidade"))
 
     _logo_ae = None
     try:
@@ -1503,6 +1683,7 @@ def aula_experimental_publica(academia_slug):
             academia_nome=academia_nome,
             academia_slug=academia_slug,
             turmas=turmas,
+            op=op, travada=travada, sel_mods=[], sel_turma=None,
             form=form_data or {},
             sucesso=sucesso,
             logo_url=_logo_ae,
@@ -1599,6 +1780,31 @@ def aula_experimental_publica(academia_slug):
         return _render(sucesso=True)
 
     return _render(request.form)
+
+
+@bp_precadastro.route("/aula-experimental/<int:aula_id>/pos-aula", methods=["POST"])
+@login_required
+def enviar_pos_aula(aula_id):
+    """Botão "Pedir feedback": manda o pós-aula de uma aula experimental agora.
+
+    A rotina de hora em hora já faz isso sozinha no dia seguinte; o botão
+    serve para mandar antes ou reenviar.
+    """
+    destino = request.referrer or url_for("precadastro.lista")
+    conn = get_db_connection(); cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute("""SELECT v.id_academia FROM aulas_experimentais ae
+                       JOIN visitantes v ON v.id = ae.visitante_id WHERE ae.id = %s""", (aula_id,))
+        r = cur.fetchone()
+    finally:
+        cur.close(); conn.close()
+    if not r or r["id_academia"] not in (_get_academias_ids() or []):
+        flash("Aula experimental não encontrada.", "danger")
+        return redirect(destino)
+    from utils import whatsapp_lembretes as lem
+    ok, msg = lem.enviar_pos_aula(aula_id, r["id_academia"], forcar=bool(request.form.get("forcar")))
+    flash(("Feedback pedido: " if ok else "") + msg, "success" if ok else "warning")
+    return redirect(destino)
 
 
 @bp_precadastro.route("/verificar-email", methods=["POST"])
@@ -1776,6 +1982,22 @@ def editar(precadastro_id):
                         precadastro_id,
                     ),
                 )
+            # Modalidade e turma: a secretaria pode corrigir o que o interessado
+            # escolheu (ou preencher quem veio antes de o formulário perguntar).
+            if request.form.get("pc_modalidade_presente"):
+                from utils import turma_plano
+                _k = conn.cursor(dictionary=True)
+                try:
+                    _op = turma_plano.opcoes(_k, academia_id)
+                    _mods, _turma, _erro = turma_plano.ler_escolha(request.form, _op)
+                    if _turma is None and (request.form.get("turma_id") or "").strip():
+                        flash(_erro or "Turma inválida — mantida a anterior.", "warning")
+                    else:
+                        _k.execute("UPDATE pre_cadastro SET modalidades_ids = %s, TurmaID = %s WHERE id = %s",
+                                   (",".join(str(m) for m in _mods) or None,
+                                    _turma["id"] if _turma else None, precadastro_id))
+                finally:
+                    _k.close()
             conn.commit()
             cur.close()
             conn.close()
@@ -1824,6 +2046,21 @@ def editar(precadastro_id):
         academia_nome=academia_nome,
         form=form,
     )
+
+
+@bp_precadastro.app_template_global("opcoes_modalidade_turma")
+def opcoes_modalidade_turma(academia_id):
+    """Modalidades, turmas e faixas da academia para a tela de edição do pré-cadastro."""
+    from utils import turma_plano
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        return turma_plano.opcoes(cur, academia_id)
+    except Exception:
+        return {"modalidades": [], "turmas": [], "graduacoes": []}
+    finally:
+        cur.close()
+        conn.close()
 
 
 @bp_precadastro.route("/<int:precadastro_id>/excluir", methods=["POST"])
@@ -2134,10 +2371,8 @@ def promover(precadastro_id):
                 # pela lista do servidor — nunca por um id que veio no POST.
                 for _r in roles_disponiveis:
                     if _r.get("chave") == "responsavel" and str(_r.get("id")) in roles_escolhidas:
-                        cur.execute(
-                            "INSERT IGNORE INTO roles_usuario (usuario_id, role_id) VALUES (%s, %s)",
-                            (usuario_id, _r["id"]),
-                        )
+                        from utils.acesso_academia import inserir_papel
+                        inserir_papel(cur, usuario_id, _r["id"], academia_id)
                 cur.execute(
                     "INSERT IGNORE INTO usuarios_academias (usuario_id, academia_id) VALUES (%s, %s)",
                     (usuario_id, academia_id),
@@ -2152,8 +2387,9 @@ def promover(precadastro_id):
                 usuario_id = cur.lastrowid
 
                 # Vincular roles
+                from utils.acesso_academia import inserir_papel
                 for rid in roles_escolhidas:
-                    cur.execute("INSERT INTO roles_usuario (usuario_id, role_id) VALUES (%s, %s)", (usuario_id, rid))
+                    inserir_papel(cur, usuario_id, rid, academia_id)   # papel desta academia (MM-14)
 
                 # Vincular academia
                 cur.execute("INSERT INTO usuarios_academias (usuario_id, academia_id) VALUES (%s, %s)", (usuario_id, academia_id))
@@ -2174,7 +2410,7 @@ def promover(precadastro_id):
             if cpf_digits and len(cpf_digits) >= 11:
                 cur.execute(
                     """
-                    SELECT id, nome FROM alunos
+                    SELECT id, nome, data_nascimento FROM alunos
                     WHERE REPLACE(REPLACE(REPLACE(COALESCE(cpf,''), '.', ''), '-', ''), ' ', '') = %s
                     """,
                     (cpf_digits,),
@@ -2199,6 +2435,50 @@ def promover(precadastro_id):
                         "UPDATE alunos SET usuario_id = %s WHERE id = %s AND (usuario_id IS NULL OR usuario_id = %s)",
                         (usuario_id, aluno_id, usuario_id),
                     )
+                # O telefone do pré-cadastro também serve a quem já estava na
+                # base sem número: só preenche o que está vazio, nunca sobrescreve.
+                _tel_pc = (pc.get("telefone") or pc.get("tel_celular") or "").strip()
+                if _tel_pc:
+                    cur.execute(
+                        """UPDATE alunos
+                              SET telefone = COALESCE(NULLIF(TRIM(telefone), ''), %s),
+                                  tel_celular = COALESCE(NULLIF(TRIM(tel_celular), ''), %s),
+                                  responsavel_financeiro_telefone =
+                                      COALESCE(NULLIF(TRIM(responsavel_financeiro_telefone), ''), %s)
+                            WHERE id = %s""",
+                        (_tel_pc, _tel_pc, _tel_pc, aluno_id),
+                    )
+                # Uma pessoa, várias matrículas: quem já tem cadastro (outra academia
+                # ou outra modalidade) é matriculado aqui, sem duplicar a pessoa.
+                # O pré-cadastro é público: só liga se nome e nascimento conferem
+                # com o CPF — senão alguém poderia puxar dados alheios pelo CPF.
+                from utils.alunos_academias import (aluno_vinculado_a_academia,
+                                                    matricular_pessoa_existente, mesma_pessoa)
+                _ja_aqui = aluno_vinculado_a_academia(cur, aluno_id, academia_id)
+                _confere = ("data_nascimento" not in aluno_existente
+                            or mesma_pessoa(aluno_existente, pc.get("nome"), pc.get("data_nascimento")))
+                if not _confere:
+                    flash("Este CPF já tem cadastro com outro nome ou data de nascimento. O pré-cadastro "
+                          "foi aprovado, mas o aluno NÃO foi matriculado nesta academia: confira os "
+                          "dados com ele antes de matricular.", "warning")
+                else:
+                    _mods = [int(x) for x in str(pc.get("modalidades_ids") or "")
+                             .replace(";", ",").split(",") if x.strip().isdigit()]
+                    _turma = pc.get("TurmaID")
+                    _grad = pc.get("graduacao_id")
+                    _faixas = {}
+                    if _grad and str(_grad).isdigit():
+                        cur.execute("SELECT modalidade_id FROM graduacao WHERE id = %s", (int(_grad),))
+                        _gm = (cur.fetchone() or {}).get("modalidade_id")
+                        if _gm:
+                            _faixas = {int(_gm): int(_grad)}
+                    _ok_m, _msg_m = matricular_pessoa_existente(
+                        cur, aluno_id, academia_id, modalidades_ids=_mods,
+                        turma_ids=[_turma] if _turma and str(_turma).isdigit() else [],
+                        faixas=_faixas, usuario_id=getattr(current_user, "id", None))
+                    if _ok_m and not _ja_aqui:
+                        flash(f'{aluno_existente["nome"]} já tinha cadastro: foi matriculado(a) nesta '
+                              "academia, sem duplicar a pessoa.", "info")
             else:
                 # Criar novo aluno automaticamente a partir do pré-cadastro
                 # Função auxiliar para limpar valores e converter para None
@@ -2234,6 +2514,16 @@ def promover(precadastro_id):
                     turma_id = None
 
                 telefone_principal = _clean_value(pc.get("telefone") or pc.get("tel_celular"))
+                # O pré-cadastro guarda um telefone só, e ele é obrigatório no
+                # formulário público. Sem espalhá-lo aqui o aluno nascia com o
+                # número apenas em `telefone`: a ficha pedia "Telefone celular" e
+                # "Telefone do responsável financeiro" em branco, e a cobrança e o
+                # lembrete de WhatsApp ficavam sem destino. Quem já veio com o
+                # campo preenchido (pré-cadastro editado na secretaria) manda.
+                tel_celular = _clean_value(pc.get("tel_celular")) or telefone_principal
+                tel_resp_financeiro = (
+                    _clean_value(pc.get("responsavel_financeiro_telefone")) or telefone_principal
+                )
                 
                 # Limpar peso - converter para float ou None
                 peso_val = _clean_value(pc.get("peso"))
@@ -2254,11 +2544,12 @@ def promover(precadastro_id):
                         nacionalidade, rg, orgao_emissor, rg_data_emissao,
                         cep, rua, numero, complemento, bairro, cidade, estado,
                         tel_residencial, tel_comercial, tel_celular, tel_outro,
-                        responsavel_financeiro_nome, responsavel_financeiro_cpf, foto, usuario_id
+                        responsavel_financeiro_nome, responsavel_financeiro_cpf,
+                        responsavel_financeiro_telefone, foto, usuario_id
                     )
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                         %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                        %s, %s, %s, %s, %s, %s, %s, %s)
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """,
                     (
                         _clean_value(pc.get("nome")),
@@ -2296,10 +2587,11 @@ def promover(precadastro_id):
                         _clean_value(pc.get("estado")),
                         _clean_value(pc.get("tel_residencial")),
                         _clean_value(pc.get("tel_comercial")),
-                        _clean_value(pc.get("tel_celular")),
+                        tel_celular,
                         _clean_value(pc.get("tel_outro")),
                         _clean_value(pc.get("responsavel_financeiro_nome")),
                         _clean_value(pc.get("responsavel_financeiro_cpf")),
+                        tel_resp_financeiro,
                         f"{UPLOAD_PRECAD}/{pc['foto']}" if pc.get("foto") else None,
                         # Só vincula o usuário ao aluno se a role escolhida for "aluno".
                         # Quando é só responsável, o aluno fica sem usuário (aluno não loga).
@@ -2341,11 +2633,28 @@ def promover(precadastro_id):
                         "INSERT IGNORE INTO aluno_modalidades (aluno_id, modalidade_id) VALUES (%s, %s)",
                         (aluno_id, _mid),
                     )
+                # A faixa escolhida no pré-cadastro vai para a modalidade dela
+                # (graduação por modalidade: judô e jiu-jitsu não se misturam).
+                if graduacao_id:
+                    from utils import graduacao_modalidade as grad_mod
+                    grad_mod.registrar(cur, aluno_id, graduacao_id,
+                                       _clean_value(pc.get("ultimo_exame_faixa")))
                 if turma_id:
                     cur.execute(
                         "INSERT IGNORE INTO aluno_turmas (aluno_id, TurmaID) VALUES (%s, %s)",
                         (aluno_id, turma_id),
                     )
+                    # O plano da turma vira o plano padrão do aluno: a tela de
+                    # matrícula, logo adiante, já abre com a mensalidade certa.
+                    try:
+                        cur.execute("SELECT mensalidade_id FROM turmas WHERE TurmaID = %s", (turma_id,))
+                        _pl = (cur.fetchone() or {}).get("mensalidade_id")
+                        if _pl:
+                            cur.execute(
+                                "UPDATE alunos SET plano_mensalidade_id = %s "
+                                "WHERE id = %s AND plano_mensalidade_id IS NULL", (_pl, aluno_id))
+                    except Exception:
+                        pass
 
                 # Garantir vínculo correto (aluno só recebe usuario_id se for aluno)
                 if usuario_id and tem_role_aluno:

@@ -1,0 +1,35 @@
+{# Peças do exame de faixa. Importar com contexto (usa url_for):
+   {% from 'exame_faixa/_macros.html' import obi, promo, trilha, pill with context %} #}
+
+{% macro obi(cores, grande=false) -%}
+<span class="exf-obi{{ ' exf-obi--g' if grande }}" aria-hidden="true">
+  {%- for c in cores %}<span style="background:{{ c }}"></span>{% endfor -%}
+</span>
+{%- endmacro %}
+
+{% macro promo(p, forte=true) -%}
+<span class="exf-promo">{{ obi(p.cores_de) }} {{ p.de }}
+  <span class="exf-promo__seta" aria-label="para">→</span>
+  {{ obi(p.cores_para) }} {% if forte %}<strong>{{ p.para }}</strong>{% else %}{{ p.para }}{% endif %}
+  {%- if p.salto %} <span class="lst-tag" title="{{ p.salto_motivo }}">salto de faixa</span>{% endif %}</span>
+{%- endmacro %}
+
+{% macro pill(rotulo, cor) -%}
+<span class="u-pill u-pill--{{ cor }}">{{ rotulo }}</span>
+{%- endmacro %}
+
+{# Uma aba por faixa. `alvo` marca a promoção que o aluno vai fazer. #}
+{% macro trilha(lista, idx, endpoint, kw, alvo=none) -%}
+<nav class="exf-trilha exf-nao-imprime" aria-label="Faixas do programa">
+  {% for p in lista %}
+  {% set i = loop.index0 %}
+  <a href="{{ url_for(endpoint, p=i, **kw) }}"
+     class="exf-trilha__item{% if i == idx %} is-ativa{% endif %}{% if alvo is not none and i == alvo %} is-alvo{% endif %}"
+     {% if i == idx %}aria-current="page"{% endif %}>
+    {% if alvo is not none and i == alvo %}<span class="exf-trilha__marca">Próximo exame</span>{% endif %}
+    {{ obi(p.cores_para, true) }}
+    <span>{{ p.para }}<br><small>vindo da {{ p.de }}</small></span>
+  </a>
+  {% endfor %}
+</nav>
+{%- endmacro %}

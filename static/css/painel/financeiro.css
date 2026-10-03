@@ -6,10 +6,62 @@
    da faixa do aluno e os valores monetários.
    ======================================================================= */
 
-/* São oito abas: em tela estreita viram uma tira que rola, em vez de
-   quebrar em três linhas e empurrar o conteúdo para baixo. */
-.fin-abas { flex-wrap: nowrap; overflow-x: auto; gap: 1.1rem; }
+/* São dezessete abas, todas numa linha só, com um passador de cada lado.
+
+   A barra de rolagem fica escondida de propósito: os botões são a
+   affordance, e a barra do sistema desenhava uma faixa grossa colada no
+   menu. `overflow-y: hidden` é obrigatório — declarando só `overflow-x`,
+   o CSS calcula `overflow-y: auto` sozinho e o navegador desenha uma
+   segunda barra, vertical, na ponta direita. */
+.fin-abas-caixa {
+  display: flex;
+  align-items: stretch;
+  gap: .25rem;
+  border-bottom: 1px solid var(--sh-line);
+  margin-bottom: var(--u-space-3);
+}
+
+.fin-abas {
+  flex: 1;
+  min-width: 0;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  gap: 1.1rem;
+  border-bottom: 0;      /* a linha agora é da caixa, para não cortar sob os botões */
+  margin-bottom: 0;
+  /* Sem `scroll-behavior` aqui: a rolagem suave é pedida em cada clique, pelo
+     JS. No elemento, ela também animaria o posicionamento inicial da aba
+     ativa, e a tela abriria deslizando sozinha. */
+  scrollbar-width: none;      /* Firefox */
+  -ms-overflow-style: none;   /* Edge antigo */
+}
+.fin-abas::-webkit-scrollbar { width: 0; height: 0; }
 .fin-abas .lst-aba { white-space: nowrap; }
+
+.fin-passador {
+  flex: none;
+  width: 30px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: -1px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--sh-ink-soft);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.fin-abas-caixa.tem-passador .fin-passador { display: inline-flex; }
+/* Vence a regra acima: `hidden` do HTML não pode ser derrubado por classe. */
+.fin-passador[hidden] { display: none; }
+.fin-passador:hover:not(:disabled) { color: var(--sh-ink); }
+.fin-passador:disabled { opacity: .25; cursor: default; }
+.fin-passador:focus-visible { outline: 2px solid var(--sh-red); outline-offset: -2px; }
+
+
 
 /* ------------------------------------------------------- competência */
 /* Os meses ficam como botões porque a escolha é sempre entre poucos e
@@ -175,6 +227,12 @@
 .fin-plano__nome { font-weight: 600; }
 .fin-plano__desc { margin: .25rem 0 0; color: var(--sh-ink-soft); font-size: .88rem; }
 .fin-plano__dir { display: flex; align-items: center; gap: var(--u-space-3); flex: none; }
+/* Celular: valor e botões ocupam a linha de baixo e os botões quebram —
+   com flex:none o "Excluir" passava da borda e o quadro cortava. */
+@media (max-width: 767.98px) {
+  .fin-plano__dir { flex: 1 1 100%; flex-wrap: wrap; justify-content: space-between; }
+  .fin-plano__dir .lst-filtros__acoes { flex-wrap: wrap; }
+}
 .fin-plano__valor { font-size: 1.35rem; font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; }
 
 /* Navegação mês a mês no cabeçalho da página. */

@@ -8,7 +8,7 @@
 {% block fin_css %}
 <style>
   .fam-card { border:1px solid var(--lst-borda, #e5e7eb); border-radius:14px; padding:1rem 1.1rem; margin-bottom:.85rem; }
-  .fam-card.is-ativa { border-color:#0d6efd33; background:#0d6efd08; }
+  .fam-card.is-ativa { border-color:#1c1c1c33; background:#1c1c1c08; }
   .fam-topo { display:flex; flex-wrap:wrap; gap:.75rem; align-items:flex-start; justify-content:space-between; }
   .fam-nome { font-weight:600; }
   .fam-alunos { font-size:.86rem; opacity:.75; margin-top:.15rem; }
@@ -96,7 +96,7 @@
       </p>
       {% elif g.link %}
       <div class="fam-link">
-        <input type="text" class="form-control" id="link{{ g.id }}" value="{{ g.link }}" readonly>
+        <input type="text" class="u-campo__controle" id="link{{ g.id }}" value="{{ g.link }}" readonly>
         <button type="button" class="sh__btn" onclick="copiarFam('link{{ g.id }}', this)">Copiar</button>
         <a class="sh__btn" href="{{ g.link }}" target="_blank" rel="noopener">Abrir</a>
       </div>
@@ -137,7 +137,7 @@
           </form>
 
           <form method="POST" action="{{ url_for('financeiro_painel.familias_baixar', grupo_id=g.id) }}"
-                onsubmit="return confirm('Marcar como paga a cobrança de {{ fmt_moeda(g.valor_total) }} e dar baixa nas {{ g.itens|length }} mensalidades?');">
+                data-confirmar="Marcar como paga a cobrança de {{ fmt_moeda(g.valor_total) }} e dar baixa nas {{ g.itens|length }} mensalidades?">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
             <input type="hidden" name="mes" value="{{ mes_chave }}">
@@ -146,7 +146,7 @@
           {% endif %}
 
           <form method="POST" action="{{ url_for('financeiro_painel.familias_desativar', familia_id=f.familia_id) }}"
-                onsubmit="return confirm('Voltar esta família para cobrança individual? A cobrança única em aberto será cancelada.');">
+                data-confirmar="Voltar esta família para cobrança individual? A cobrança única em aberto será cancelada.">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
             <input type="hidden" name="mes" value="{{ mes_chave }}">

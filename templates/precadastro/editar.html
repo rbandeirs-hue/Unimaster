@@ -1,5 +1,10 @@
 {% extends "base_app.html" %}
+{% set back_url = back_url or get_back_url_default() %}
 {% block title %}Editar pré-cadastro — {{ p.nome }}{% endblock %}
+{% block pagina_titulo %}Editar pré-cadastro — {{ p.nome }}{% endblock %}
+{% block pagina_acoes %}
+<a href="{{ url_voltar(back_url) }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Voltar</a>
+{% endblock %}
 {% block extra_css %}
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/photo-cropper.css') }}">
@@ -10,16 +15,11 @@
 .camera-modal.show{display:flex;}
 .camera-content{width:90%;max-width:480px;text-align:center;}
 .camera-content video,.camera-content canvas{width:100%;border-radius:10px;border:2px solid #ddd;margin-bottom:10px;}
-#miniatura{width:120px;height:120px;object-fit:cover;border-radius:50%;border:3px solid #0d6efd;}
+#miniatura{width:120px;height:120px;object-fit:cover;border-radius:50%;border:3px solid #1c1c1c;}
 .cam-btns button{margin:4px;}
 </style>
 <div class="container my-4">
-  {% set back_url = back_url or get_back_url_default() %}
-{% include 'components/botao_voltar.html' %}
   <div class="card shadow">
-    <div class="card-header bg-primary text-white">
-      <h5 class="mb-0"><i class="bi bi-pencil-square me-2"></i> Editar pré-cadastro — {{ p.nome }}</h5>
-    </div>
     <div class="card-body p-4">
       {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
@@ -31,19 +31,28 @@
       {% endwith %}
       <form method="POST" enctype="multipart/form-data" id="formPrecad">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <h6 class="border-bottom pb-2 mb-3 text-secondary fw-bold"><i class="bi bi-diagram-3 me-1"></i> Modalidade e turma</h6>
+        <input type="hidden" name="pc_modalidade_presente" value="1">
+        {% set _ids = (p.modalidades_ids or '')|string %}
+        {% with op=opcoes_modalidade_turma(academia_id), travada=none,
+                sel_mods=_ids.replace(' ', '').split(',')|select|map('int')|list,
+                sel_turma=(form.get('turma_id') or p.TurmaID),
+                com_turma=true, turma_obrig=false, com_valor=true, mod_obrig=false %}
+        <div class="mb-4">{% include 'precadastro/_modalidade_turma.html' %}</div>
+        {% endwith %}
         <h6 class="border-bottom pb-2 mb-3 text-secondary fw-bold"><i class="bi bi-person-badge me-1"></i> Dados do aluno</h6>
         <div class="row g-2">
           <div class="col-md-12 mb-3">
             <label class="form-label fw-semibold">Nome completo *</label>
-            <input type="text" class="form-control" name="nome" required value="{{ form.get('nome','') }}">
+            <input type="text" class="u-campo__controle" name="nome" required value="{{ form.get('nome','') }}" aria-label="Nome completo">
           </div>
           <div class="col-md-6 mb-3">
             <label class="form-label fw-semibold">Data de nascimento</label>
-            <input type="date" class="form-control" name="data_nascimento" id="dataNasc" value="{{ form.get('data_nascimento','') }}">
+            <input type="date" class="u-campo__controle" name="data_nascimento" id="dataNasc" value="{{ form.get('data_nascimento','') }}" aria-label="Data de nascimento">
           </div>
           <div class="col-md-6 mb-3">
             <label class="form-label fw-semibold">Sexo</label>
-            <select class="form-select" name="sexo">
+            <select class="u-campo__controle" name="sexo" aria-label="Sexo">
               <option value="">Selecione</option>
               <option value="M" {% if form.get('sexo')=='M' %}selected{% endif %}>Masculino</option>
               <option value="F" {% if form.get('sexo')=='F' %}selected{% endif %}>Feminino</option>
@@ -52,15 +61,15 @@
           </div>
           <div class="col-md-6 mb-3">
             <label class="form-label fw-semibold">CPF do aluno</label>
-            <input type="text" class="form-control" name="cpf" id="cpfAluno" data-mask="cpf" placeholder="000.000.000-00" value="{{ form.get('cpf','') }}">
+            <input type="text" class="u-campo__controle" name="cpf" id="cpfAluno" data-mask="cpf" placeholder="000.000.000-00" value="{{ form.get('cpf','') }}" aria-label="CPF do aluno">
           </div>
           <div class="col-md-6 mb-3">
             <label class="form-label fw-semibold">Telefone</label>
-            <input type="text" class="form-control" name="telefone" id="telAluno" data-mask="phone" placeholder="(11) 99999-9999" value="{{ form.get('telefone','') }}">
+            <input type="text" class="u-campo__controle" name="telefone" id="telAluno" data-mask="phone" placeholder="(11) 99999-9999" value="{{ form.get('telefone','') }}" aria-label="Telefone">
           </div>
           <div class="col-md-6 mb-3">
             <label class="form-label fw-semibold">E-mail</label>
-            <input type="email" class="form-control" name="email" placeholder="email@exemplo.com" value="{{ form.get('email','') }}">
+            <input type="email" class="u-campo__controle" name="email" placeholder="email@exemplo.com" value="{{ form.get('email','') }}" aria-label="E-mail">
           </div>
         </div>
 
@@ -68,13 +77,13 @@
         <p class="small text-muted mb-2">{% if p.foto %}Há foto cadastrada; envie outra apenas se quiser substituir.{% else %}Obrigatória: câmera ou arquivo.{% endif %}</p>
         <div class="d-flex align-items-center gap-3 mb-3">
           <div class="position-relative" style="width:120px;height:120px;flex-shrink:0;">
-            <img id="miniatura" src="{% if p.foto %}{{ url_for('static', filename='uploads/precadastro/' ~ p.foto) }}{% endif %}" alt="" class="position-absolute top-0 start-0 rounded-circle {% if not p.foto %}d-none{% endif %}" style="width:120px;height:120px;object-fit:cover;border:3px solid #0d6efd;">
+            <img id="miniatura" src="{% if p.foto %}{{ url_for('static', filename='uploads/precadastro/' ~ p.foto) }}{% endif %}" alt="" class="position-absolute top-0 start-0 rounded-circle {% if not p.foto %}d-none{% endif %}" style="width:120px;height:120px;object-fit:cover;border:3px solid #1c1c1c;">
             <div id="miniaturaPlaceholder" class="position-absolute top-0 start-0 rounded-circle bg-secondary d-flex align-items-center justify-content-center text-white {% if p.foto %}d-none{% endif %}" style="width:120px;height:120px;"><i class="bi bi-person-fill fs-1"></i></div>
           </div>
           <div class="flex-grow-1">
             <input type="hidden" name="foto" id="fotoInput">
-            <button type="button" class="btn btn-primary btn-sm mb-2" id="btnCamera"><i class="bi bi-camera-fill me-1"></i> Câmera</button>
-            <input type="file" class="form-control form-control-sm" name="foto_arquivo" id="fotoArquivoPrecadEditar" accept="image/*" capture="environment">
+            <button type="button" class="u-btn u-btn--primario u-btn--pequeno mb-2" id="btnCamera"><i class="bi bi-camera-fill me-1"></i> Câmera</button>
+            <input type="file" class="u-campo__controle" name="foto_arquivo" id="fotoArquivoPrecadEditar" accept="image/*">
           </div>
         </div>
 
@@ -91,7 +100,7 @@
         </div>
         <div id="blocoEmailAcesso" class="mb-3" style="display:{% if form.get('acesso_sistema')=='responsavel' %}block{% else %}none{% endif %};">
           <label class="form-label fw-semibold">E-mail para criar acesso *</label>
-          <input type="email" class="form-control" name="email_acesso" id="emailAcesso" placeholder="email@exemplo.com" value="{{ form.get('email_acesso', form.get('email','')) }}">
+          <input type="email" class="u-campo__controle" name="email_acesso" id="emailAcesso" placeholder="email@exemplo.com" value="{{ form.get('email_acesso', form.get('email','')) }}" aria-label="E-mail para criar acesso">
         </div>
 
         <h6 class="border-bottom pb-2 mb-3 mt-4 text-secondary fw-bold"><i class="bi bi-cash-coin me-1"></i> Responsável financeiro</h6>
@@ -103,23 +112,23 @@
           <div class="row g-2">
             <div class="col-md-6 mb-3">
               <label class="form-label fw-semibold">Nome do responsável financeiro</label>
-              <input type="text" class="form-control" name="responsavel_financeiro_nome" id="respNome" value="{{ form.get('responsavel_financeiro_nome','') }}">
+              <input type="text" class="u-campo__controle" name="responsavel_financeiro_nome" id="respNome" value="{{ form.get('responsavel_financeiro_nome','') }}" aria-label="Nome do responsável financeiro">
             </div>
             <div class="col-md-6 mb-3">
               <label class="form-label fw-semibold">CPF do responsável financeiro</label>
-              <input type="text" class="form-control" name="responsavel_financeiro_cpf" id="respCpf" data-mask="cpf" placeholder="000.000.000-00" value="{{ form.get('responsavel_financeiro_cpf','') }}">
+              <input type="text" class="u-campo__controle" name="responsavel_financeiro_cpf" id="respCpf" data-mask="cpf" placeholder="000.000.000-00" value="{{ form.get('responsavel_financeiro_cpf','') }}" aria-label="CPF do responsável financeiro">
             </div>
           </div>
         </div>
 
         <div class="mb-3">
           <label class="form-label fw-semibold">Observações</label>
-          <textarea class="form-control" name="observacoes" rows="2">{{ form.get('observacoes','') }}</textarea>
+          <textarea class="u-campo__controle" name="observacoes" rows="2" aria-label="Observações">{{ form.get('observacoes','') }}</textarea>
         </div>
 
         <div class="d-flex gap-2">
-          <a href="{{ url_for('precadastro.lista', academia_id=academia_id) }}" class="btn btn-outline-secondary">Cancelar</a>
-          <button type="submit" class="btn btn-primary">
+          <a href="{{ url_for('precadastro.lista', academia_id=academia_id) }}" class="u-btn">Cancelar</a>
+          <button type="submit" class="u-btn u-btn--primario">
             <i class="bi bi-check-lg me-2"></i> Salvar alterações
           </button>
         </div>
@@ -133,10 +142,10 @@
     <video id="cameraVideo" autoplay playsinline></video>
     <canvas id="cameraCanvas" style="display:none;"></canvas>
     <div class="cam-btns">
-      <button type="button" class="btn btn-success" id="btnCapturar"><i class="bi bi-camera me-1"></i> Capturar</button>
-      <button type="button" class="btn btn-primary d-none" id="btnConfirmar"><i class="bi bi-check me-1"></i> Confirmar</button>
-      <button type="button" class="btn btn-warning d-none" id="btnRefazer"><i class="bi bi-arrow-clockwise me-1"></i> Refazer</button>
-      <button type="button" class="btn btn-danger" id="btnFechar"><i class="bi bi-x me-1"></i> Fechar</button>
+      <button type="button" class="u-btn u-btn--ok" id="btnCapturar"><i class="bi bi-camera me-1"></i> Capturar</button>
+      <button type="button" class="u-btn u-btn--primario d-none" id="btnConfirmar"><i class="bi bi-check me-1"></i> Confirmar</button>
+      <button type="button" class="u-btn u-btn--alerta d-none" id="btnRefazer"><i class="bi bi-arrow-clockwise me-1"></i> Refazer</button>
+      <button type="button" class="u-btn u-btn--perigo" id="btnFechar"><i class="bi bi-x me-1"></i> Fechar</button>
     </div>
   </div>
 </div>

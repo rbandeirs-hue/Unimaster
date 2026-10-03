@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Login - Unimaster Judô</title>
+    <title>Entrar - Unimaster</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%23C8102E'/%3E%3Cpath d='M50 20 L60 40 L50 50 L40 40 Z' fill='white'/%3E%3Cpath d='M30 60 L50 50 L70 60 L50 80 Z' fill='white'/%3E%3C/svg%3E">
 
     <!-- Fontes e Bootstrap -->
@@ -14,87 +14,109 @@
     <!-- Design system (tokens) + folha própria do login -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/base/tokens.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/login/auth.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/base/dialogo.css') }}">
 </head>
 
 <body class="auth">
     <main class="auth__card">
 
-        <div class="auth__marca">
-            <span class="auth__marca-icone"><i class="bi bi-shield-fill-check"></i></span>
-            <span class="auth__marca-texto">Unimaster <em>Judô</em></span>
-        </div>
+        {# Coluna escura: quem é o sistema. Em telas médias ela vira faixa no
+           topo do cartão; no celular sai do cartão e se funde ao fundo. #}
+        <aside class="auth__lado">
+            <div class="auth__marca">
+                <span class="auth__marca-icone"><i class="bi bi-shield-fill-check"></i></span>
+                <span class="auth__marca-texto">Unimaster</span>
+            </div>
 
-        <h1 class="auth__titulo">Acesso ao sistema</h1>
-        <p class="auth__sub">Gestão de matrículas, turmas, presenças e financeiro.</p>
+            {# Miolo: frase e lista andam juntas. Abaixo de 900px este bloco
+               vira `display: contents` e os dois viram itens da faixa. #}
+            <div class="auth__lado-meio">
+                <p class="auth__pitch">Uma academia, todas as modalidades.</p>
+                <ul class="auth__lista">
+                    <li><i class="bi bi-people-fill" aria-hidden="true"></i> Matrículas e turmas</li>
+                    <li><i class="bi bi-calendar2-check-fill" aria-hidden="true"></i> Presenças e graduações</li>
+                    <li><i class="bi bi-credit-card-fill" aria-hidden="true"></i> Mensalidades e cobrança</li>
+                </ul>
+            </div>
 
-        <!-- Mensagens Flash -->
-        {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-            <div class="auth__flash">
-                {% for category, message in messages %}
-                    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
-                        <i class="bi bi-{% if category == 'success' %}check-circle{% elif category == 'danger' %}exclamation-triangle{% elif category == 'warning' %}exclamation-circle{% else %}info-circle{% endif %}-fill me-2"></i>
-                        {{ message }}
-                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fechar"></button>
+            <span class="auth__lado-rodape">&copy; {{ current_year }} Unimaster</span>
+        </aside>
+
+        {# Coluna clara: o formulário. #}
+        <div class="auth__form-lado">
+
+            <h1 class="auth__titulo">Entrar</h1>
+            <p class="auth__sub">Use o CPF ou o e-mail cadastrado na sua academia.</p>
+
+            <!-- Mensagens Flash -->
+            {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="auth__flash">
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                            <i class="bi bi-{% if category == 'success' %}check-circle{% elif category == 'danger' %}exclamation-triangle{% elif category == 'warning' %}exclamation-circle{% else %}info-circle{% endif %}-fill" aria-hidden="true"></i>
+                            <span>{{ message }}</span>
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fechar"></button>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+            {% endwith %}
+
+            <form method="POST" class="login-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                {# O campo aceita os dois: o rótulo diz isso, e a dica embaixo
+                   cobre o primeiro acesso de quem ainda não tem CPF. #}
+                <div class="auth__campo">
+                    <label for="cpf" class="auth__label">CPF ou e-mail</label>
+                    <input
+                        type="text"
+                        inputmode="numeric"
+                        class="auth__input"
+                        id="cpf"
+                        name="cpf"
+                        required
+                        placeholder="000.000.000-00"
+                        autocomplete="username"
+                    >
+                    <small class="auth__dica">Primeiro acesso? Use o seu e-mail.</small>
+                </div>
+
+                <div class="auth__campo auth__campo--senha">
+                    <div class="auth__rotulo-linha">
+                        <label for="senha" class="auth__label">Senha</label>
+                        <a href="{{ url_for('auth.esqueci_senha') }}" class="auth__esqueci">Esqueci minha senha</a>
                     </div>
-                {% endfor %}
-            </div>
-        {% endif %}
-        {% endwith %}
+                    <input
+                        type="password"
+                        class="auth__input"
+                        id="senha"
+                        name="senha"
+                        required
+                        placeholder="Digite sua senha"
+                        autocomplete="current-password"
+                    >
+                    <button type="button" class="auth__olho" id="verSenha"
+                            aria-label="Mostrar senha" aria-pressed="false">
+                        <i class="bi bi-eye" aria-hidden="true"></i>
+                    </button>
+                </div>
 
-        <form method="POST" class="login-form">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-
-            <div class="auth__campo">
-                <label for="cpf" class="auth__label">CPF</label>
-                <input
-                    type="text"
-                    inputmode="numeric"
-                    class="auth__input"
-                    id="cpf"
-                    name="cpf"
-                    required
-                    placeholder="000.000.000-00"
-                    autocomplete="username"
-                    maxlength="14"
-                >
-                <small class="auth__ajuda">
-                    Primeiro acesso sem CPF? Informe seu e-mail neste campo para cadastrar o CPF.
-                </small>
-            </div>
-
-            <div class="auth__campo auth__campo--senha">
-                <label for="senha" class="auth__label">Senha</label>
-                <input
-                    type="password"
-                    class="auth__input"
-                    id="senha"
-                    name="senha"
-                    required
-                    placeholder="Digite sua senha"
-                    autocomplete="current-password"
-                >
-                <button type="button" class="auth__olho" id="verSenha"
-                        aria-label="Mostrar senha" aria-pressed="false">
-                    <i class="bi bi-eye" aria-hidden="true"></i>
+                <button type="submit" class="auth__botao btn-login">
+                    <span class="btn-text">Entrar</span>
                 </button>
-            </div>
+            </form>
 
-            <button type="submit" class="auth__botao btn-login">
-                <span class="btn-text">Entrar</span>
-            </button>
-        </form>
+            <p class="auth__seguro">
+                <i class="bi bi-lock-fill" aria-hidden="true"></i>
+                Conexão segura e criptografada
+            </p>
 
-        <a href="{{ url_for('auth.esqueci_senha') }}" class="auth__esqueci">Esqueci minha senha</a>
-
-        <hr class="auth__divisor">
-        <p class="auth__seguro mb-0">
-            <i class="bi bi-lock-fill" aria-hidden="true"></i>
-            Conexão segura e criptografada
-        </p>
+        </div>
     </main>
 
-    <p class="auth__copy">&copy; {{ current_year }} Unimaster Judô. Todos os direitos reservados.</p>
+    <p class="auth__copy">&copy; {{ current_year }} Unimaster. Todos os direitos reservados.</p>
 
     <!-- JavaScript Bootstrap -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
@@ -150,5 +172,6 @@
             });
         }
     </script>
+    <script src="{{ url_for('static', filename='js/base/dialogo.js') }}"></script>
 </body>
 </html>

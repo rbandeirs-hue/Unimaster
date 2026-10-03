@@ -1,0 +1,76 @@
+{% extends "base_app.html" %}
+{% block conteudo_classe %}exf-tela{% endblock %}
+{% set menu_ativo = 'exame_faixa' %}
+{# Valor de cada campo: o que veio no POST com erro, senão o do exame, senão vazio. #}
+{% macro v(campo, valor_ev, fmt=None) -%}
+{%- if form -%}{{ form.get(campo, '') }}{%- elif valor_ev -%}{{ valor_ev.strftime(fmt) if fmt else valor_ev }}{%- endif -%}
+{%- endmacro %}
+{% block title %}{{ 'Editar exame de faixa' if ev else 'Novo exame de faixa' }}{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{{ asset('css/exame_faixa.css') }}">{% endblock %}
+
+{% block pagina_titulo %}{{ 'Editar exame de faixa' if ev else 'Novo exame de faixa' }}{% endblock %}
+{% block pagina_subtitulo %}Datas da inscrição, da prova e do pagamento. Programa, preços e regras de idade são os da associação.{% endblock %}
+{% block pagina_acoes %}
+<a href="{{ voltar }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Exames</a>
+{% endblock %}
+
+{% block content %}
+{% include 'exame_faixa/_abas.html' %}
+
+<form method="POST" class="exf-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+  <section class="lst-quadro exf-form__bloco">
+    <h2 class="exf-form__titulo">O exame</h2>
+    <div class="exf-form__grade">
+      <label class="u-campo exf-form__largo"><span class="u-campo__rotulo">Nome *</span>
+        <input type="text" name="nome" class="u-campo__controle" maxlength="255" required
+               value="{{ v('nome', ev.nome if ev else '') }}" placeholder="Ex.: Exame de faixa — 2º semestre 2026"></label>
+      <label class="u-campo"><span class="u-campo__rotulo">Para quem</span>
+        {% if ev %}
+        <input type="text" class="u-campo__controle" disabled value="{{ 'Só a academia' if ev.exame_academia_id else 'Todas as academias da associação' }}">
+        {% else %}
+        <select name="dono" class="u-campo__controle">
+          {% for o in opcoes %}
+          <option value="{{ o.id }}" {% if form and form.get('dono') == o.id|string %}selected{% elif not form and o.id == (esc.academia_id if not esc.ve_todas else '') %}selected{% endif %}>{{ o.nome }}</option>
+          {% endfor %}
+        </select>
+        {% endif %}
+        <small class="u-muted">{{ 'A associação abre para todas as academias ou marca para uma só.' if esc.ve_todas else 'O exame da academia aparece só para os alunos dela.' }}</small></label>
+      <label class="u-campo exf-form__largo"><span class="u-campo__rotulo">Descrição</span>
+        <textarea name="descricao" class="u-campo__controle" rows="2" placeholder="Local, horário de chegada, o que levar…">{{ v('descricao', ev.descricao if ev else '') }}</textarea></label>
+    </div>
+  </section>
+
+  <section class="lst-quadro exf-form__bloco">
+    <h2 class="exf-form__titulo">Datas</h2>
+    <ol class="exf-form__linha">
+      <li><label class="u-campo"><span class="u-campo__rotulo">1 · Inscrições abrem</span>
+        <input type="datetime-local" name="inscricoes_inicio" class="u-campo__controle" value="{{ v('inscricoes_inicio', ev.data_inicio if ev else none, '%Y-%m-%dT%H:%M') }}">
+        <small class="u-muted">Em branco: abrem agora.</small></label></li>
+      <li><label class="u-campo"><span class="u-campo__rotulo">2 · Inscrições encerram (prazo de adesão) *</span>
+        <input type="datetime-local" name="inscricoes_fim" class="u-campo__controle" required value="{{ v('inscricoes_fim', ev.data_fim if ev else none, '%Y-%m-%dT%H:%M') }}"></label></li>
+      <li><label class="u-campo"><span class="u-campo__rotulo">3 · Prazo de pagamento</span>
+        <input type="date" name="prazo_pagamento" class="u-campo__controle" value="{{ v('prazo_pagamento', ev.exame_prazo_pagamento if ev else none, '%Y-%m-%d') }}">
+        <small class="u-muted">Vencimento da fatura. Em branco: o dia da prova.</small></label></li>
+      <li><label class="u-campo"><span class="u-campo__rotulo">4 · Dia e hora da prova *</span>
+        <input type="datetime-local" name="data_prova" class="u-campo__controle" required value="{{ v('data_prova', ev.exame_data_prova if ev else none, '%Y-%m-%dT%H:%M') }}">
+        <small class="u-muted">Entra no calendário. Idade e carência são conferidas neste dia.</small></label></li>
+    </ol>
+  </section>
+
+  <section class="lst-quadro exf-form__bloco">
+    <h2 class="exf-form__titulo">Pagamento</h2>
+    <label class="exf-alternar">
+      <input type="checkbox" class="form-check-input" name="gera_fatura" value="1"
+             {% if (form and form.get('gera_fatura')) or (not form and (not ev or ev.exame_gera_fatura is none or ev.exame_gera_fatura)) %}checked{% endif %}>
+      Cada inscrição gera a fatura do exame, no valor da tabela de preços, com PIX pelo gateway da academia</label>
+    <p class="u-muted u-fs-sm mt-2 mb-0">Quem não pagar até o prazo fica com a prova travada na banca — a banca pode liberar se o aluno pagar na hora ou for isento.</p>
+  </section>
+
+  <div class="exf-rodape">
+    <span class="u-muted u-fs-sm">{{ 'Alterações não mudam as faturas já geradas.' if ev else 'Depois de marcar, a banca do exame abre para acompanhar inscrições e pagamentos.' }}</span>
+    <button type="submit" class="sh__btn sh__btn--forte"><i class="bi bi-check-lg"></i> {{ 'Salvar exame' if ev else 'Marcar exame' }}</button>
+  </div>
+</form>
+{% endblock %}

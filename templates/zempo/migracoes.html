@@ -1,22 +1,13 @@
 {% extends "base_app.html" %}
 {% block title %}Migrações para o Zempo{% endblock %}
+{% block pagina_titulo %}Migração para o Zempo{% endblock %}
+{% block pagina_subtitulo %}Solicitações das academias. Marque quem você quer cadastrar no Zempo.{% endblock %}
+{% block pagina_acoes %}
+<a href="{{ url_for('zempo.solicitar') }}" class="sh__btn">Alunos</a>
+<a href="{{ url_for('zempo.configuracao') }}" class="sh__btn"><i class="bi bi-gear"></i> Credenciais</a>
+{% endblock %}
 {% block content %}
-<div class="container-fluid" style="max-width:1280px;">
-
-  <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
-    <div>
-      <h1 class="h4 mb-1"><i class="bi bi-cloud-upload-fill text-primary me-2"></i>Migração para o Zempo</h1>
-      <p class="text-muted small mb-0">
-        Solicitações das academias. Marque quem você quer cadastrar no Zempo.
-      </p>
-    </div>
-    <div class="d-flex gap-2">
-      <a href="{{ url_for('zempo.solicitar') }}" class="btn btn-sm btn-outline-secondary">Alunos</a>
-      <a href="{{ url_for('zempo.configuracao') }}" class="btn btn-sm btn-outline-secondary">
-        <i class="bi bi-gear me-1"></i>Credenciais
-      </a>
-    </div>
-  </div>
+<div class="container-fluid px-0">
 
   {# Padrão: só o que ainda exige ação. Migrados e rejeitados viram histórico. #}
   <div class="d-flex flex-wrap gap-1 mb-3">
@@ -33,7 +24,7 @@
       {% set n = contagem.get(chave, 0) %}
       {% if n or chave in ('pendentes', 'todos') %}
       <a href="{{ url_for('zempo.migracoes', status=chave) }}"
-         class="btn btn-sm {{ 'btn-' ~ cor if status_filtro == chave else 'btn-outline-' ~ cor }}">
+         class="u-btn u-btn--pequeno {{ 'btn-' ~ cor if status_filtro == chave else 'btn-outline-' }}">
         {{ rotulo }}
         <span class="badge bg-light text-dark ms-1">{{ n }}</span>
       </a>
@@ -128,14 +119,14 @@
     </div>
 
     <div class="mt-3 d-flex flex-wrap gap-2">
-      <button type="submit" class="btn btn-primary"
-              onclick="return confirm('Isso cria os cadastros diretamente no Zempo da CBJ. Confirmar?');">
+      <button type="submit" class="u-btn u-btn--primario"
+              data-confirmar="Isso cria os cadastros diretamente no Zempo da CBJ. Confirmar?">
         <i class="bi bi-cloud-upload me-1"></i> Migrar selecionados
       </button>
-      <button type="submit" class="btn btn-outline-danger"
+      <button type="submit" class="u-btn"
               formaction="{{ url_for('zempo.excluir_solicitacoes') }}"
               formnovalidate
-              onclick="return confirm('Excluir as solicitações selecionadas da fila? O aluno e o cadastro no Zempo não são afetados.');">
+              data-confirmar="Excluir as solicitações selecionadas da fila? O aluno e o cadastro no Zempo não são afetados.">
         <i class="bi bi-trash me-1"></i> Excluir da fila
       </button>
     </div>

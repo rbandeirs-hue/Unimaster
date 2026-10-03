@@ -178,7 +178,7 @@
 .oa-info { flex: 1; min-width: 0; }
 .oa-nome { font-weight: 600; font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .oa-sub { font-size: 0.75rem; color: #6c757d; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.card-externo { border: 2px dashed #0d6efd !important; position: relative; }
+.card-externo { border: 2px dashed #1c1c1c !important; position: relative; }
 .card-externo .badge-externo { position: absolute; top: 6px; left: 6px; font-size: 0.6rem; z-index: 1; pointer-events: none; }
 .card-externo .form-check-input { z-index: 2; }
 
@@ -377,7 +377,7 @@
           {% if excluir_aluno_tela_param %}<input type="hidden" name="excluir_aluno_tela" value="{{ excluir_aluno_tela_param }}">{% endif %}
           <div class="col-md-4">
             <label for="turma_id" class="form-label">Selecionar Turma</label>
-            <select name="turma_id" id="turma_id" class="form-select" onchange="this.form.submit()">
+            <select name="turma_id" id="turma_id" class="u-campo__controle" onchange="this.form.submit()">
               <option value="">-- Escolha a turma --</option>
               {% for turma in turmas %}
                 <option value="{{ turma.TurmaID }}" {% if turma_selecionada == turma.TurmaID %}selected{% endif %}>
@@ -388,12 +388,12 @@
           </div>
           <div class="col-md-4">
             <label for="data_presenca" class="form-label">Data da Aula</label>
-            <input type="date" class="form-control" name="data_presenca" id="data_presenca"
+            <input type="date" class="u-campo__controle" name="data_presenca" id="data_presenca"
                    value="{{ data_presenca }}" onchange="this.form.submit()">
           </div>
           <div class="col-md-4">
             <label for="horario_aula" class="form-label">Horário da Aula</label>
-            <input type="time" class="form-control" name="horario_aula" id="horario_aula"
+            <input type="time" class="u-campo__controle" name="horario_aula" id="horario_aula"
                    value="{{ horario_aula or '00:00' }}" onchange="this.form.submit()">
           </div>
           {% if turma_selecionada %}
@@ -403,10 +403,10 @@
                 <i class="bi bi-person-plus-fill me-1"></i>Incluir aluno na chamada
               </div>
               <div class="registro-acoes-rapidas">
-                <button type="button" class="btn btn-primary registro-acao-btn" data-bs-toggle="modal" data-bs-target="#modalBuscaUnificada">
+                <button type="button" class="u-btn u-btn--primario registro-acao-btn" data-bs-toggle="modal" data-bs-target="#modalBuscaUnificada">
                   <i class="bi bi-search"></i>Buscar aluno
                 </button>
-                <button type="button" class="btn btn-outline-secondary registro-acao-btn" data-bs-toggle="modal" data-bs-target="#modalPresencaAvulsa">
+                <button type="button" class="u-btn registro-acao-btn" data-bs-toggle="modal" data-bs-target="#modalPresencaAvulsa">
                   <i class="bi bi-person-plus"></i>Registro avulso
                 </button>
               </div>
@@ -505,7 +505,7 @@
                   {% if aluno.academia_destino_nome %}<div class="small text-muted mt-1"><i class="bi bi-building me-1"></i>{{ aluno.academia_destino_nome }}</div>{% endif %}
                   {% endif %}
                   {% if aluno.id is number %}
-                  <button type="button" class="btn btn-sm btn-outline-primary mt-2 w-100"
+                  <button type="button" class="u-btn u-btn--pequeno mt-2 w-100"
                           data-bs-toggle="modal"
                           data-bs-target="#modalObservacaoAluno"
                           onclick="event.preventDefault(); event.stopPropagation(); abrirModalObsAluno({{ aluno.id }}, {{ (aluno.nome or '')|tojson }}, {{ (aluno.observacao_privada_aluno or '')|tojson }});">
@@ -514,12 +514,12 @@
                   {% endif %}
                   {% if aluno.aluno_outra_turma and turma_selecionada %}
                   <a href="{{ url_registro_remover_aluno_outra_turma(aluno.id) }}"
-                     class="btn btn-sm btn-outline-danger mt-2 w-100"
+                     class="u-btn u-btn--pequeno mt-2 w-100"
                      onclick="event.stopPropagation(); if (window.salvarRascunhoPresencaCheckboxes) window.salvarRascunhoPresencaCheckboxes();">Remover da chamada</a>
                   {% endif %}
                   {% if aluno.presenca_avulsa %}
                   <a href="{{ url_registro_remover_presenca_avulsa(aluno.avulso_db_id) }}"
-                     class="btn btn-sm btn-outline-danger mt-2 w-100"
+                     class="u-btn u-btn--pequeno mt-2 w-100"
                      onclick="event.stopPropagation(); if (window.salvarRascunhoPresencaCheckboxes) window.salvarRascunhoPresencaCheckboxes();">Remover avulso</a>
                   {% endif %}
                 </label>
@@ -530,14 +530,14 @@
 
           <div class="registro-acoes-rodape">
             <div class="registro-acoes-esq">
-              <button type="button" class="btn btn-outline-secondary d-flex align-items-center gap-2" data-bs-toggle="modal" data-bs-target="#modalObservacaoAula" id="btnAbrirObservacao">
+              <button type="button" class="u-btn d-flex align-items-center gap-2" data-bs-toggle="modal" data-bs-target="#modalObservacaoAula" id="btnAbrirObservacao">
                 <i class="bi bi-journal-text"></i><span>Observação da aula</span>
               </button>
-              <button type="button" class="btn btn-outline-secondary d-flex align-items-center gap-2" data-bs-toggle="modal" data-bs-target="#modalPlanoAulaTexto" id="btnAbrirPlanoTexto">
+              <button type="button" class="u-btn d-flex align-items-center gap-2" data-bs-toggle="modal" data-bs-target="#modalPlanoAulaTexto" id="btnAbrirPlanoTexto">
                 <i class="bi bi-book"></i><span>Plano de aula</span>
               </button>
             </div>
-            <button type="submit" class="btn btn-registrar">
+            <button type="submit" class="u-btn btn-registrar">
               <i class="bi bi-check-lg me-1"></i>Registrar Presença
             </button>
           </div>
@@ -551,11 +551,11 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
               </div>
               <div class="modal-body">
-                <textarea class="form-control" name="observacao_aula" form="formRegistroPresenca" id="observacao_aula_field" rows="10"
-                  placeholder="Registre observações importantes desta aula...">{{ observacao_aula or '' }}</textarea>
+                <textarea class="u-campo__controle" name="observacao_aula" form="formRegistroPresenca" id="observacao_aula_field" rows="10"
+                  placeholder="Registre observações importantes desta aula..." aria-label="Registre observações importantes desta aula...">{{ observacao_aula or '' }}</textarea>
               </div>
               <div class="modal-footer">
-                <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Pronto</button>
+                <button type="button" class="u-btn u-btn--primario" data-bs-dismiss="modal">Pronto</button>
               </div>
             </div>
           </div>
@@ -570,10 +570,10 @@
               </div>
               <div class="modal-body">
                 <label class="form-label" for="plano_aula_texto_field">Texto</label>
-                <textarea class="form-control mb-3" name="plano_aula_texto" form="formRegistroPresenca" id="plano_aula_texto_field" rows="12"
+                <textarea class="u-campo__controle mb-3" name="plano_aula_texto" form="formRegistroPresenca" id="plano_aula_texto_field" rows="12"
                   placeholder="Descreva o plano de aula, objetivos, atividades, etc...">{{ plano_aula_texto or '' }}</textarea>
                 <label class="form-label" for="plano_aula_arquivo">Arquivo (opcional)</label>
-                <input class="form-control" type="file" id="plano_aula_arquivo" name="plano_aula_arquivo" form="formRegistroPresenca"
+                <input class="u-campo__controle" type="file" id="plano_aula_arquivo" name="plano_aula_arquivo" form="formRegistroPresenca"
                        accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.gif,.txt,.zip,.rar">
                 {% if plano_aula_arquivo %}
                 <div class="form-text mt-2">
@@ -585,7 +585,7 @@
                 {% endif %}
               </div>
               <div class="modal-footer">
-                <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Pronto</button>
+                <button type="button" class="u-btn u-btn--primario" data-bs-dismiss="modal">Pronto</button>
               </div>
             </div>
           </div>
@@ -610,12 +610,12 @@
                 <div class="modal-body">
                   <p class="small text-muted mb-2">Esta mensagem aparece apenas para o aluno em <strong>Minhas presenças</strong>, nesta data e horário de aula.</p>
                   <label class="form-label" for="obsAlunoTextarea">Texto</label>
-                  <textarea class="form-control" name="observacao_aluno" id="obsAlunoTextarea" rows="6" maxlength="2000" placeholder="Feedback, orientações, elogios…"></textarea>
+                  <textarea class="u-campo__controle" name="observacao_aluno" id="obsAlunoTextarea" rows="6" maxlength="2000" placeholder="Feedback, orientações, elogios…"></textarea>
                   <div class="form-text">Deixe em branco e salve para remover a observação.</div>
                 </div>
                 <div class="modal-footer">
-                  <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
-                  <button type="submit" class="btn btn-primary">Salvar</button>
+                  <button type="button" class="u-btn" data-bs-dismiss="modal">Cancelar</button>
+                  <button type="submit" class="u-btn u-btn--primario">Salvar</button>
                 </div>
               </form>
             </div>
@@ -648,18 +648,18 @@
                     <label for="foto_presenca_avulsa" class="avulso-foto-label">
                       <i class="bi bi-camera-fill"></i> Tirar foto ou escolher arquivo
                     </label>
-                    <input type="file" class="d-none" id="foto_presenca_avulsa" name="foto_presenca_avulsa" accept="image/*" capture="environment">
+                    <input type="file" class="d-none" id="foto_presenca_avulsa" name="foto_presenca_avulsa" accept="image/*">
                     <span class="text-muted small" id="avulsoFotoNome">Opcional · JPG, PNG, GIF ou WebP</span>
                   </div>
                   <!-- Nome -->
                   <div class="mb-1">
                     <label for="nome_presenca_avulsa" class="form-label fw-semibold">Nome <span class="text-danger">*</span></label>
-                    <input type="text" class="form-control form-control-lg" id="nome_presenca_avulsa" name="nome_presenca_avulsa" required maxlength="200" placeholder="Nome completo do visitante">
+                    <input type="text" class="u-campo__controle" id="nome_presenca_avulsa" name="nome_presenca_avulsa" required maxlength="200" placeholder="Nome completo do visitante">
                   </div>
                 </div>
                 <div class="modal-footer border-0 pt-0">
-                  <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal" id="btnCancelarPresencaAvulsa">Cancelar</button>
-                  <button type="submit" class="btn btn-primary px-4" id="btnSubmitPresencaAvulsa">
+                  <button type="button" class="u-btn" data-bs-dismiss="modal" id="btnCancelarPresencaAvulsa">Cancelar</button>
+                  <button type="submit" class="u-btn u-btn--primario px-4" id="btnSubmitPresencaAvulsa">
                     <i class="bi bi-check-lg me-1"></i>Incluir na chamada
                   </button>
                 </div>
@@ -679,8 +679,8 @@
               <div class="modal-body pb-2 px-3">
                 <div class="input-group mb-3">
                   <span class="input-group-text bg-white"><i class="bi bi-search text-muted"></i></span>
-                  <input type="text" class="form-control border-start-0 ps-0" id="buscaUnificada"
-                         placeholder="Nome do aluno…" autocomplete="off" autofocus>
+                  <input type="text" class="u-campo__controle border-start-0 ps-0" id="buscaUnificada"
+                         placeholder="Nome do aluno…" autocomplete="off" autofocus aria-label="Nome do aluno…">
                   <span class="input-group-text bg-white" id="buscaUnificadaSpinner" style="display:none">
                     <span class="spinner-border spinner-border-sm text-secondary"></span>
                   </span>
@@ -691,7 +691,7 @@
               </div>
               <div class="modal-footer justify-content-between border-top">
                 <span class="small text-muted" id="buscaUnificadaContador">Nenhum selecionado</span>
-                <button type="button" class="btn btn-primary" id="btnBuscaUnificadaAdicionar" disabled>
+                <button type="button" class="u-btn u-btn--primario" id="btnBuscaUnificadaAdicionar" disabled>
                   <i class="bi bi-plus-lg me-1"></i>Adicionar
                 </button>
               </div>
@@ -856,7 +856,7 @@ function abrirModalObsAluno(alunoId, nome, texto) {
           <span class="registro-aluno-nome small fw-semibold">${item.nome}</span>
           <span class="badge bg-info mt-1" style="font-size:.65rem">Outra academia</span>
           <div class="small text-muted mt-1"><i class="bi bi-building me-1"></i>${item.academia}</div>
-          <button type="button" class="btn btn-outline-danger btn-remover-externo mt-2 w-100 btn-sm" onclick="removerCardExterno(this,'${item.id}')"><i class="bi bi-x me-1"></i>Remover</button>
+          <button type="button" class="u-btn btn-remover-externo mt-2 w-100 u-btn--pequeno" onclick="removerCardExterno(this,'${item.id}')"><i class="bi bi-x me-1"></i>Remover</button>
         </div>`;
         grid.appendChild(col);
       }

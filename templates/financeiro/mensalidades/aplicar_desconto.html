@@ -184,7 +184,7 @@
             <i class="bi bi-pencil"></i>
           </button>
           <form method="POST"
-                onsubmit="return confirm('Cancelar este desconto? As mensalidades não pagas voltarão ao valor normal; as marcadas como paga por desconto 100% voltarão para pendente.');">
+                data-confirmar="Cancelar este desconto? As mensalidades não pagas voltarão ao valor normal; as marcadas como paga por desconto 100% voltarão para pendente.">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="acao" value="cancelar">
             <input type="hidden" name="aluno_id" value="{{ v.aluno_id }}">
@@ -226,7 +226,7 @@
                 <div class="modal-body">
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Desconto</label>
-                        <select name="novo_desconto_id" class="form-select" required>
+                        <select name="novo_desconto_id" class="u-campo__controle" required aria-label="Desconto">
                             {% for d in descontos %}
                             <option value="{{ d.id }}" {% if d.id == v.desconto_id %}selected{% endif %}>{{ d.nome }} — {% if d.tipo == 'percentual' %}{{ "%.0f"|format(d.valor|float) }}%{% else %}R$ {{ "%.2f"|format(d.valor|float) }}{% endif %}</option>
                             {% endfor %}
@@ -234,11 +234,11 @@
                     </div>
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Início vigência</label>
-                        <input type="date" name="data_inicio" class="form-control" value="{{ (v.data_inicio|string)[:10] if v.data_inicio else '' }}">
+                        <input type="date" name="data_inicio" class="u-campo__controle" value="{{ (v.data_inicio|string)[:10] if v.data_inicio else '' }}" aria-label="Início vigência">
                     </div>
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Fim vigência</label>
-                        <input type="date" name="data_fim" class="form-control" value="{{ (v.data_fim|string)[:10] if v.data_fim else '' }}">
+                        <input type="date" name="data_fim" class="u-campo__controle" value="{{ (v.data_fim|string)[:10] if v.data_fim else '' }}" aria-label="Fim vigência">
                     </div>
                     {% if pacotes_mensalidades and pacotes_mensalidades|length > 0 %}
                     <div class="mb-3 js-edit-pacotes-modal">
@@ -268,8 +268,8 @@
                     {% endif %}
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
-                    <button type="submit" class="btn btn-primary">Salvar</button>
+                    <button type="button" class="u-btn" data-bs-dismiss="modal">Fechar</button>
+                    <button type="submit" class="u-btn u-btn--primario">Salvar</button>
                 </div>
             </form>
         </div>

@@ -1,0 +1,17 @@
+{# Ficha de cada técnica (tradução, família, resumo e passo a passo).
+   Na tela fica escondida e abre na janela de ficha; no papel sai impressa. #}
+<div class="exf-ficha-dados">
+  {% for p in t.partes if p.ficha %}
+  <div class="exf-tec-ficha">
+    {% if t.sep %}<span class="exf-tec-ficha__alvo">{{ p.nome }}</span>{% endif %}
+    <span class="exf-tec-ficha__sub">{{ p.ficha.traducao }}{% if p.familia %} · {{ p.familia }}{% endif %}{% if p.ficha.serie %} · {{ p.ficha.serie }}{% endif %}</span>
+    <p>{{ p.ficha.resumo }}</p>
+    {% if p.ficha.passos %}
+    <details class="exf-passos">
+      <summary>Como se faz</summary>
+      <ol>{% for s in p.ficha.passos %}<li>{{ s }}</li>{% endfor %}</ol>
+    </details>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>

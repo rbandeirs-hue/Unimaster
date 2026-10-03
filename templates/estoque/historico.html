@@ -1,0 +1,116 @@
+{% extends "estoque/_base.html" %}
+{% from 'components/ui.html' import vazio %}
+{% set est_aba = 'historico' %}
+{% block title %}Histórico — Estoque{% endblock %}
+
+{% block pagina_titulo %}Histórico{% endblock %}
+{% block pagina_subtitulo %}
+  Toda movimentação, sem exceção. Correção é estorno — nada é apagado daqui.
+{% endblock %}
+
+{% block est_conteudo %}
+
+<form method="GET" class="lst-filtros">
+  <label class="lst-campo lst-campo--curto">
+    <span class="lst-campo__rotulo">Período</span>
+    <select name="dias" onchange="this.form.submit()">
+      {% for d in [7, 30, 90, 365] %}
+      <option value="{{ d }}" {% if dias == d %}selected{% endif %}>Últimos {{ d }} dias</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label class="lst-campo lst-campo--curto">
+    <span class="lst-campo__rotulo">Operação</span>
+    <select name="sentido" onchange="this.form.submit()">
+      <option value="">Todas</option>
+      <option value="E" {% if filtros.sentido == 'E' %}selected{% endif %}>Entradas</option>
+      <option value="S" {% if filtros.sentido == 'S' %}selected{% endif %}>Saídas</option>
+    </select>
+  </label>
+  <label class="lst-campo lst-campo--curto">
+    <span class="lst-campo__rotulo">Local</span>
+    <select name="local_id" onchange="this.form.submit()">
+      <option value="">Todos</option>
+      {% for l in locais %}
+      <option value="{{ l.id }}" {% if filtros.local_id == l.id %}selected{% endif %}>{{ l.nome }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label class="lst-campo lst-campo--largo">
+    <span class="lst-campo__rotulo">Produto</span>
+    <select name="variacao_id" onchange="this.form.submit()">
+      <option value="">Todos</option>
+      {% for i in itens %}
+      <option value="{{ i.id }}" {% if filtros.variacao_id == i.id %}selected{% endif %}>
+        {{ i.produto }}{% if i.variacao != 'Único' %} · {{ i.variacao }}{% endif %}
+      </option>
+      {% endfor %}
+    </select>
+  </label>
+  <a class="u-btn u-btn--fantasma" href="{{ url_for('estoque.historico') }}">Limpar</a>
+</form>
+
+<section class="lst-quadro mt-3">
+  <header class="lst-quadro__topo">
+    <h2 class="lst-quadro__titulo">Movimentações</h2>
+    <span class="lst-quadro__meta">{{ movimentos|length }} registro(s)</span>
+  </header>
+
+  {% if movimentos %}
+  <div class="lst-rolagem">
+    <div class="lst-largura" style="--lst-min:680px">
+      <div class="lst-linha lin-mov lst-cab">
+        <div>Quando</div>
+        <div class="col-sentido">Tipo</div>
+        <div>Produto</div>
+        <div class="col-local">Local</div>
+        <div class="lst-fim">Qtd</div>
+        <div class="col-quem">Quem</div>
+        <div class="col-acao lst-fim">Ações</div>
+      </div>
+      {% for m in movimentos %}
+      <div class="lst-linha lin-mov lst-item {% if m.estorna_movimento_id %}u-muted{% endif %}">
+        <div>{{ m.criado_em.strftime('%d/%m/%Y %H:%M') if m.criado_em else '—' }}</div>
+        <div class="col-sentido">
+          <span class="lst-tag">{{ 'Entrada' if m.sentido == 'E' else 'Saída' }}</span>
+        </div>
+        <div class="lst-corta">
+          <span class="lst-nome">{{ m.produto }}</span>
+          {% if m.variacao != 'Único' %}<span class="lst-sub"> · {{ m.variacao }}</span>{% endif %}
+          <br><span class="lst-sub">
+            {{ m.motivo|replace('_', ' ')|capitalize }}
+            {%- if m.aluno %} · {{ m.aluno }}{% endif -%}
+            {%- if m.observacao %} · {{ m.observacao }}{% endif -%}
+          </span>
+        </div>
+        <div class="col-local lst-corta">{{ m.local }}</div>
+        <div class="lst-fim">
+          {{ '+' if m.sentido == 'E' else '−' }}{{ m.quantidade }}
+          <br><span class="lst-sub">saldo {{ m.saldo_depois }}</span>
+        </div>
+        <div class="col-quem lst-corta">{{ m.usuario or '—' }}</div>
+        <div class="col-acao lst-acoes">
+          {% if pode_estornar and not m.estorna_movimento_id %}
+          <form method="POST"
+                action="{{ url_for('estoque.estornar', movimento_id=m.id) }}"
+                data-confirmar="Estornar este movimento? O original continua no histórico.">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="lst-acao" title="Estornar movimento"
+                    aria-label="Estornar movimento {{ m.id }}">
+              <i class="bi bi-arrow-counterclockwise"></i>
+            </button>
+          </form>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% else %}
+  <div style="padding:1rem 1.1rem">
+    {{ vazio('Nenhuma movimentação no período escolhido.', icone='bi-clock-history') }}
+  </div>
+  {% endif %}
+</section>
+
+{% endblock %}

@@ -1,18 +1,16 @@
 {% extends "base_app.html" %}
 {% block title %}Cadastro — Planos de Mensalidade{% endblock %}
+{% set back_url = url_for('financeiro.painel_mensalidades', academia_id=academia_id) if academia_id else url_for('financeiro.painel_mensalidades') %}
+{% block pagina_titulo %}Cadastro — planos de mensalidade{% endblock %}
+{% block pagina_acoes %}
+<a href="{{ url_voltar(back_url) }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Voltar</a>
+<a href="{{ url_for('financeiro.cadastrar_mensalidade') }}{% if academia_id %}?academia_id={{ academia_id }}{% endif %}" class="sh__btn sh__btn--forte"><i class="bi bi-plus-lg"></i> Nova mensalidade</a>
+{% endblock %}
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/financeiro/responsive.css') }}?v=1">
 {% endblock %}
 {% block content %}
 <div class="container mt-4">
-    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-        {% set back_url = url_for('financeiro.painel_mensalidades', academia_id=academia_id) if academia_id else url_for('financeiro.painel_mensalidades') %}
-        {% include 'components/botao_voltar.html' %}
-        <a href="{{ url_for('financeiro.cadastrar_mensalidade') }}{% if academia_id %}?academia_id={{ academia_id }}{% endif %}" class="btn btn-primary">
-            <i class="bi bi-plus-lg me-1"></i> Nova Mensalidade
-        </a>
-    </div>
-    <h2 class="h4 fw-bold mb-3">Cadastro — Planos de Mensalidade</h2>
 
     <div class="card border-0 shadow-sm">
         <div class="card-body">
@@ -34,7 +32,7 @@
                             <td>R$ {{ "%.2f" % (m.valor or 0) }}</td>
                             <td>{% if m.get('aplicar_juros_multas') %}<span class="badge bg-success">Sim</span>{% else %}<span class="badge bg-secondary">Não</span>{% endif %}</td>
                             <td>
-                                <a href="{{ url_for('financeiro.editar_mensalidade', mensalidade_id=m.id) }}{% if academia_id %}?academia_id={{ academia_id }}{% endif %}" class="btn btn-sm btn-outline-primary">Editar</a>
+                                <a href="{{ url_for('financeiro.editar_mensalidade', mensalidade_id=m.id) }}{% if academia_id %}?academia_id={{ academia_id }}{% endif %}" class="u-btn u-btn--pequeno">Editar</a>
                             </td>
                         </tr>
                         {% endfor %}

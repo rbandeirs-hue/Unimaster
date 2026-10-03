@@ -1,0 +1,101 @@
+{% extends "estoque/_base.html" %}
+{% set est_aba = 'config' %}
+{% block title %}Configurações — Estoque{% endblock %}
+
+{% block pagina_titulo %}Configurações do estoque{% endblock %}
+{% block pagina_subtitulo %}Locais, categorias e tabelas de preço de {{ ctx.nome }}.{% endblock %}
+
+{% block est_conteudo %}
+
+<div class="est-alertas">
+
+  <div class="est-alerta">
+    <div class="est-alerta__titulo">Locais · {{ locais|length }}</div>
+    <p class="lst-sub">Onde a mercadoria fica guardada. Transferir só faz sentido com dois ou mais.</p>
+    <div class="est-alerta__lista">
+      {% for l in locais %}
+      <span class="est-alerta__item">
+        <span>{{ l.nome }}</span>
+        <span class="est-alerta__qtd">{{ 'padrão' if l.padrao else '' }}</span>
+      </span>
+      {% else %}
+      <span class="lst-vazio-celula">Nenhum local ainda.</span>
+      {% endfor %}
+    </div>
+    <form method="POST" class="d-flex gap-2 mt-2">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="acao" value="local">
+      <input type="text" name="nome" required placeholder="Nome do local"
+             class="u-campo__controle" aria-label="Nome do local">
+      <button type="submit" class="u-btn u-btn--pequeno">Criar</button>
+    </form>
+  </div>
+
+  <div class="est-alerta">
+    <div class="est-alerta__titulo">Categorias · {{ categorias|length }}</div>
+    <p class="lst-sub">Agrupam o catálogo. Opcionais.</p>
+    <div class="est-alerta__lista">
+      {% for c in categorias %}
+      <span class="est-alerta__item"><span>{{ c.nome }}</span></span>
+      {% else %}
+      <span class="lst-vazio-celula">Nenhuma categoria ainda.</span>
+      {% endfor %}
+    </div>
+    <form method="POST" class="d-flex gap-2 mt-2">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="acao" value="categoria">
+      <input type="text" name="nome" required placeholder="Nome da categoria"
+             class="u-campo__controle" aria-label="Nome da categoria">
+      <button type="submit" class="u-btn u-btn--pequeno">Criar</button>
+    </form>
+  </div>
+
+  <div class="est-alerta">
+    <div class="est-alerta__titulo">Tabelas de preço · {{ tabelas|length }}</div>
+    <p class="lst-sub">
+      Um preço por público. O perfil liga a tabela ao tipo de comprador — é o
+      que faz o aluno ver o preço de aluno sozinho.
+    </p>
+    <div class="est-alerta__lista">
+      {% for t in tabelas %}
+      <span class="est-alerta__item">
+        <span>{{ t.nome }}{% if t.perfil %} <span class="lst-sub">· {{ t.perfil }}</span>{% endif %}</span>
+        <span class="est-alerta__qtd">{{ 'padrão' if t.padrao else '' }}</span>
+      </span>
+      {% else %}
+      <span class="lst-vazio-celula">Nenhuma tabela ainda — sem ela não há venda.</span>
+      {% endfor %}
+    </div>
+    <form method="POST" class="mt-2">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="acao" value="tabela">
+      <div class="d-flex gap-2 flex-wrap">
+        <input type="text" name="nome" required placeholder="Nome (ex.: Aluno)"
+               class="u-campo__controle" style="flex:1 1 120px" aria-label="Nome da tabela">
+        <select name="perfil" class="u-campo__controle" style="flex:0 0 130px"
+                aria-label="Perfil da tabela">
+          <option value="">Sem perfil</option>
+          <option value="aluno">Aluno</option>
+          <option value="professor">Professor</option>
+        </select>
+      </div>
+      <label class="d-flex align-items-center gap-2 lst-sub mt-2">
+        <input type="checkbox" name="padrao" value="1"> Usar como padrão
+      </label>
+      <button type="submit" class="u-btn u-btn--pequeno mt-2">Criar tabela</button>
+    </form>
+  </div>
+
+</div>
+
+{% if ctx.tipo == 'associacao' %}
+<div class="est-aviso mt-3">
+  <span>
+    <i class="bi bi-info-circle"></i>
+    A tabela com perfil <strong>professor</strong> é a que define quanto cada
+    academia passa a dever ao revender o seu estoque.
+  </span>
+</div>
+{% endif %}
+
+{% endblock %}

@@ -1,0 +1,152 @@
+{% extends "base_app.html" %}
+{% set menu_ativo = 'aulas_particulares' %}
+{% block title %}Aulas particulares{% endblock %}
+{% block extra_css %}
+<style>
+  .ap-dia { display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
+  .lin-hoje { grid-template-columns: 110px minmax(0,1.6fr) minmax(0,1fr) minmax(0,2fr); }
+  .lin-todas { grid-template-columns: minmax(0,1.6fr) minmax(0,1.2fr) 130px minmax(0,1fr) 110px; }
+  .ap-agenda { display:grid; grid-template-columns: repeat(7, minmax(0,1fr)); gap:.5rem; }
+  .ap-agenda__dia { border:1px solid var(--u-border); border-radius:var(--u-radius-sm); background:var(--u-surface); min-height:110px; }
+  .ap-agenda__dia h3 { font-size:var(--u-fs-label); letter-spacing:var(--u-ls-label); text-transform:uppercase;
+                       color:var(--u-text-muted); font-weight:600; margin:0; padding:.5rem .6rem; border-bottom:1px solid var(--u-border-soft); }
+  .ap-agenda__aula { display:block; padding:.4rem .6rem; border-bottom:1px solid var(--u-border-soft); font-size:var(--u-fs-sm);
+                     color:var(--u-text); text-decoration:none; }
+  .ap-agenda__aula:hover { background:var(--u-surface-alt); }
+  .ap-agenda__aula b { font-variant-numeric:tabular-nums; }
+  .ap-registro { display:flex; flex-wrap:wrap; gap:.4rem; align-items:center; }
+  .ap-registro input[type=text] { flex:1 1 180px; min-width:0; padding:.35rem .5rem; border:1px solid var(--u-border);
+                                  border-radius:6px; font:inherit; font-size:var(--u-fs-sm); }
+  @media (max-width: 1024px) { .ap-agenda { grid-template-columns: repeat(2, minmax(0,1fr)); } }
+  @media (max-width: 900px) {
+    .lin-hoje { grid-template-columns: 90px minmax(0,1fr); }
+    .lin-hoje .col-prof { display:none !important; }
+    .lin-hoje .col-reg { grid-column: 1 / -1; }
+    .lin-todas { grid-template-columns: minmax(0,1.4fr) 120px 100px; }
+    .lin-todas .col-prof, .lin-todas .col-local { display:none !important; }
+  }
+</style>
+{% endblock %}
+
+{% block pagina_titulo %}Aulas particulares{% endblock %}
+{% block pagina_subtitulo %}{{ esc.academia.nome }} · o combinado de cada aluno e o registro de cada aula.{% endblock %}
+{% block pagina_acoes %}
+<a href="{{ url_for('aula_particular.editar') }}" class="sh__btn sh__btn--forte"><i class="bi bi-plus-lg"></i> Nova aula particular</a>
+{% endblock %}
+
+{% block content %}
+{% if esc.gestor and esc.professores|length > 1 %}
+<form method="GET" class="lst-filtros">
+  <label class="lst-campo lst-campo--curto">
+    <span class="lst-campo__rotulo">Professor</span>
+    <select name="professor_id" onchange="this.form.submit()">
+      <option value="">Todos</option>
+      {% for p in esc.professores %}<option value="{{ p.id }}" {% if prof_filtro == p.id %}selected{% endif %}>{{ p.nome }}</option>{% endfor %}
+    </select>
+  </label>
+</form>
+{% endif %}
+
+<div class="sh__faixa mb-3">
+  <div class="sh__faixa-item"><span class="sh__faixa-rotulo">Particulares ativas</span><span class="sh__faixa-valor">{{ ativas|length }}</span></div>
+  <div class="sh__faixa-item"><span class="sh__faixa-rotulo">{{ 'Hoje' if dia == hoje else nome_dia ~ ' ' ~ dia.strftime('%d/%m') }}</span><span class="sh__faixa-valor">{{ do_dia|length }}</span><span class="lst-sub">aula{{ 's' if do_dia|length != 1 }} prevista{{ 's' if do_dia|length != 1 }}</span></div>
+  <div class="sh__faixa-item"><span class="sh__faixa-rotulo">Dadas no mês</span><span class="sh__faixa-valor">{{ realizadas_mes }}</span></div>
+</div>
+
+{# ------------------------------------------------------------ do dia #}
+<section class="lst-quadro mb-3">
+  <header class="lst-quadro__topo">
+    <h2 class="lst-quadro__titulo ap-dia">
+      <a class="lst-acao" href="{{ url_for('aula_particular.lista', dia=dia_anterior.isoformat(), professor_id=prof_filtro) }}" title="Dia anterior" aria-label="Dia anterior"><i class="bi bi-chevron-left"></i></a>
+      {{ 'Hoje' if dia == hoje else nome_dia }}, {{ dia.strftime('%d/%m/%Y') }}
+      <a class="lst-acao" href="{{ url_for('aula_particular.lista', dia=dia_seguinte.isoformat(), professor_id=prof_filtro) }}" title="Próximo dia" aria-label="Próximo dia"><i class="bi bi-chevron-right"></i></a>
+      {% if dia != hoje %}<a class="sh__btn" href="{{ url_for('aula_particular.lista', professor_id=prof_filtro) }}">Hoje</a>{% endif %}
+    </h2>
+    <span class="lst-quadro__meta">Marque cada aula ao terminar</span>
+  </header>
+  <div class="lst-rolagem"><div class="lst-largura" style="--lst-min:420px">
+    {% for ap in do_dia %}
+    <div class="lst-linha lin-hoje lst-item">
+      <div><b class="u-num">{{ ap.inicio }}–{{ ap.fim }}</b>{% if ap.local %}<span class="lst-sub">{{ ap.local }}</span>{% endif %}</div>
+      <div class="lst-corta"><a class="lst-nome" href="{{ url_for('aula_particular.historico', ap_id=ap.id) }}">{{ ap.aluno }}</a>
+        <span class="lst-sub">{{ ap.modalidade_nome or 'Aula particular' }}{% if not ap.aluno_id %} · de fora{% endif %}</span></div>
+      <div class="col-prof lst-corta">{{ ap.professor_nome }}</div>
+      <div class="col-reg">
+        {% if ap.registro %}
+          <span class="u-pill u-pill--{{ STATUS[ap.registro.status][1] }}">{{ STATUS[ap.registro.status][0] }}</span>
+          {% if ap.registro.conteudo %}<span class="lst-sub">{{ ap.registro.conteudo }}</span>{% endif %}
+        {% elif dia <= hoje %}
+        <form method="POST" action="{{ url_for('aula_particular.registrar', ap_id=ap.id) }}" class="ap-registro">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="data" value="{{ dia.isoformat() }}">
+          <input type="hidden" name="voltar" value="{{ request.full_path }}">
+          <input type="text" name="conteudo" placeholder="O que foi trabalhado (opcional)" aria-label="Conteúdo da aula de {{ ap.aluno }}">
+          <button type="submit" name="status" value="realizada" class="sh__btn sh__btn--forte" style="padding:.35rem .7rem"><i class="bi bi-check-lg"></i> Dada</button>
+          <button type="submit" name="status" value="falta" class="sh__btn" style="padding:.35rem .7rem">Faltou</button>
+          <button type="submit" name="status" value="cancelada" class="lst-acao" title="Cancelada" aria-label="Cancelada"><i class="bi bi-x-lg"></i></button>
+        </form>
+        {% else %}<span class="lst-sub">Prevista</span>{% endif %}
+      </div>
+    </div>
+    {% else %}
+    <div class="lst-vazio">Nenhuma aula particular neste dia.</div>
+    {% endfor %}
+  </div></div>
+</section>
+
+{# ------------------------------------------------------------ semana #}
+<section class="mb-3">
+  <h2 class="lst-quadro__titulo mb-2">Agenda da semana</h2>
+  <div class="ap-agenda">
+    {% for d in agenda %}
+    <div class="ap-agenda__dia">
+      <h3>{{ d.nome }}</h3>
+      {% for ap in d.aulas %}
+      <a class="ap-agenda__aula" href="{{ url_for('aula_particular.historico', ap_id=ap.id) }}">
+        <b>{{ ap.inicio }}</b> {{ ap.aluno }}{% if esc.gestor and not prof_filtro %}<span class="lst-sub">{{ ap.professor_nome }}</span>{% endif %}
+      </a>
+      {% endfor %}
+    </div>
+    {% endfor %}
+  </div>
+</section>
+
+{% if esc.gestor and ativas %}
+<form method="POST" action="{{ url_for('aula_particular.cobrar_mes') }}" class="lst-filtros"
+      data-confirmar="Gerar na conta de cada aluno a cobrança de aula particular do mês escolhido? Mensal: o valor do mês. Por aula: as aulas dadas × valor. Quem já tem cobrança do mês não é cobrado de novo." data-confirmar-tom="aviso" data-confirmar-acao="Gerar">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <label class="lst-campo lst-campo--curto">
+    <span class="lst-campo__rotulo">Cobranças do mês</span>
+    <select name="competencia">
+      {% for c in competencias %}{% set _a, _m = c.split('-') %}<option value="{{ c }}" {% if loop.last %}selected{% endif %}>{{ MESES[_m|int] }}/{{ _a }}</option>{% endfor %}
+    </select>
+  </label>
+  <div class="lst-filtros__acoes"><button type="submit" class="sh__btn"><i class="bi bi-receipt"></i> Gerar cobranças</button></div>
+</form>
+{% endif %}
+
+{# ------------------------------------------------------------ todas #}
+<section class="lst-quadro">
+  <header class="lst-quadro__topo">
+    <h2 class="lst-quadro__titulo">Particulares ativas</h2>
+    <span class="lst-quadro__meta">{{ ativas|length }}</span>
+  </header>
+  <div class="lst-rolagem"><div class="lst-largura" style="--lst-min:420px">
+    <div class="lst-linha lin-todas lst-cab">
+      <div>Aluno</div><div class="col-prof">Professor</div><div>Dias e horário</div><div class="col-local">Local</div><div class="lst-fim">Cobrança</div>
+    </div>
+    {% for ap in ativas %}
+    <div class="lst-linha lin-todas lst-item">
+      <div class="lst-corta"><a class="lst-nome" href="{{ url_for('aula_particular.historico', ap_id=ap.id) }}">{{ ap.aluno }}</a>
+        <span class="lst-sub">{{ ap.modalidade_nome or '—' }}{% if ap.data_fim %} · até {{ ap.data_fim|data_br }}{% endif %}</span></div>
+      <div class="col-prof lst-corta">{{ ap.professor_nome }}</div>
+      <div>{{ ap.dias_txt }}<span class="lst-sub u-num">{{ ap.inicio }}–{{ ap.fim }}</span></div>
+      <div class="col-local lst-corta">{{ ap.local or '—' }}</div>
+      <div class="lst-fim u-num">{{ ap.valor_txt }}</div>
+    </div>
+    {% else %}
+    <div class="lst-vazio">Nenhuma aula particular cadastrada. Use <strong>Nova aula particular</strong>.</div>
+    {% endfor %}
+  </div></div>
+</section>
+{% endblock %}

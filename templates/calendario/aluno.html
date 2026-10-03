@@ -1,19 +1,16 @@
 {% extends "base_app.html" %}
+{% set back_url = url_for('painel_aluno.meu_perfil') %}
 {% block title %}Calendário — {{ academia.nome }}{% endblock %}
+{% block pagina_titulo %}Meu calendário{% endblock %}
+{% block pagina_subtitulo %}{{ academia.nome }}{% endblock %}
+{% block pagina_acoes %}
+<a href="{{ url_voltar(back_url) }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Voltar</a>
+{% endblock %}
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/calendario.css') }}">
 {% endblock %}
 {% block content %}
 <div class="container-fluid px-2 px-md-3 mt-3 mt-md-4 calendario-page">
-    <div class="mb-3 d-flex justify-content-between align-items-start">
-        <div>
-            <h2 class="h5 fw-bold text-primary mb-1">Meu Calendário</h2>
-            <p class="text-muted small mb-0">{{ academia.nome }}</p>
-        </div>
-        {% set back_url = url_for('painel_aluno.meu_perfil') %}
-        {% include 'components/botao_voltar.html' %}
-    </div>
-
     <!-- Navegação de mês -->
     <div class="card shadow-sm mb-3">
         <div class="card-body py-3">
@@ -24,7 +21,7 @@
                 {% set ano_proximo = ano if mes < 12 else ano + 1 %}
                 
                 <a href="{{ url_for('calendario.aluno', mes=mes_anterior, ano=ano_anterior) }}" 
-                   class="btn btn-outline-secondary btn-sm">
+                   class="u-btn u-btn--pequeno" aria-label="Mês anterior">
                     <i class="bi bi-chevron-left"></i>
                 </a>
                 
@@ -36,7 +33,7 @@
                 </h4>
                 
                 <a href="{{ url_for('calendario.aluno', mes=mes_proximo, ano=ano_proximo) }}" 
-                   class="btn btn-outline-secondary btn-sm">
+                   class="u-btn u-btn--pequeno" aria-label="Próximo mês">
                     <i class="bi bi-chevron-right"></i>
                 </a>
             </div>

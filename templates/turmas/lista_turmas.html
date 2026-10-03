@@ -155,6 +155,7 @@
   }
   .tur-vazio i { font-size: 2.6rem; display: block; margin-bottom: .75rem; color: #cfcbc4; }
   .tur-vazio strong { display: block; color: var(--sh-ink); font-weight: 600; margin-bottom: .5rem; }
+  .tur-vazio__dica { font-size: var(--u-fs-sm); color: var(--sh-ink-soft); }
 
   @media (max-width: 575.98px) {
     .tur-grade { grid-template-columns: 1fr; }
@@ -217,13 +218,13 @@
     <i class="bi bi-search"></i>
     <input type="text" name="busca" id="inputBuscaTurmas"
            placeholder="Buscar por nome, professor ou horário…"
-           value="{{ busca or '' }}" autocomplete="off">
+           value="{{ busca or '' }}" autocomplete="off" aria-label="Buscar por nome, professor ou horário…">
     <button type="button" class="tur-limpar {% if busca %}is-visivel{% endif %}" id="btnLimparBusca" title="Limpar">
       <i class="bi bi-x-circle-fill"></i>
     </button>
   </div>
   {% if academias|length > 1 %}
-  <select name="academia_id" class="form-select" onchange="this.form.submit()" aria-label="Academia">
+  <select name="academia_id" class="u-campo__controle" onchange="this.form.submit()" aria-label="Academia">
     {% for ac in academias %}
     <option value="{{ ac.id }}" {% if ac.id == academia_id %}selected{% endif %}>{{ ac.nome }}</option>
     {% endfor %}
@@ -331,10 +332,10 @@
   {% if busca %}
   <a href="{{ url_for('turmas.lista_turmas', academia_id=academia_id) }}" class="sh__btn">Limpar busca</a>
   {% else %}
-  <a href="{{ url_for('turmas.cadastro_turma', academia_id=academia_id, next=request.full_path) if academia_id else url_for('turmas.cadastro_turma', next=request.full_path) }}"
-     class="sh__btn sh__btn--forte">
-    <i class="bi bi-plus-lg"></i> Cadastrar primeira turma
-  </a>
+  {# Sem botão aqui: "Nova Turma" já está no cabeçalho da tela, e um segundo
+     botão grande no meio do vazio repetia a mesma ação com mais peso visual
+     do que a própria mensagem. #}
+  <span class="tur-vazio__dica">Use <strong>Nova Turma</strong>, no topo da tela.</span>
   {% endif %}
 </div>
 {% endif %}
@@ -349,10 +350,10 @@
       </div>
       <div class="modal-body">
         <div class="d-flex gap-2 mb-3">
-          <button type="button" class="btn btn-sm btn-outline-secondary active" id="btnModoNormal" onclick="alternarModoMatricula('normal')">
+          <button type="button" class="u-btn u-btn--pequeno active" id="btnModoNormal" onclick="alternarModoMatricula('normal')">
             <i class="bi bi-list-check"></i> Normal
           </button>
-          <button type="button" class="btn btn-sm btn-outline-warning" id="btnModoExcecao" onclick="alternarModoMatricula('excecao')">
+          <button type="button" class="u-btn u-btn--pequeno" id="btnModoExcecao" onclick="alternarModoMatricula('excecao')">
             <i class="bi bi-exclamation-triangle"></i> Exceção
           </button>
         </div>
@@ -360,7 +361,7 @@
           <label class="form-label small fw-semibold">Buscar aluno por nome:</label>
           <div class="input-group">
             <span class="input-group-text"><i class="bi bi-search"></i></span>
-            <input type="text" class="form-control" id="inputBuscaAluno" placeholder="Digite o nome do aluno…" autocomplete="off">
+            <input type="text" class="u-campo__controle" id="inputBuscaAluno" placeholder="Digite o nome do aluno…" autocomplete="off" aria-label="Buscar aluno por nome">
           </div>
           <small class="text-muted">Busca dinâmica · ignora limite de idade.</small>
         </div>
@@ -431,7 +432,7 @@ document.addEventListener('DOMContentLoaded', function () {
     // Excluir turma
     var urlExcluirTurma = "{{ url_for('turmas.excluir_turma', turma_id=999) }}";
     document.querySelectorAll('.btn-excluir-turma').forEach(function (btn) {
-        btn.addEventListener('click', function () {
+        btn.addEventListener('click', async function () {
             var id = btn.dataset.turmaId;
             var nome = btn.dataset.turmaNome || 'esta turma';
             var matriculas = parseInt(btn.dataset.turmaMatriculas || '0', 10);
@@ -439,7 +440,7 @@ document.addEventListener('DOMContentLoaded', function () {
             if (matriculas > 0) {
                 msg += '\n\nATENÇÃO: ' + matriculas + ' aluno' + (matriculas > 1 ? 's serão removidos' : ' será removido') + ' das matrículas desta turma.';
             }
-            if (!confirm(msg)) return;
+            if (!await Dialogo.confirmar(msg)) return;
             btn.disabled = true;
             var card = btn.closest('.tur-card');
             fetch(urlExcluirTurma.replace('999', id), {
@@ -510,11 +511,11 @@ document.addEventListener('DOMContentLoaded', function () {
             ? '<img src="' + a.foto_url + '" class="foto-mini" alt="">'
             : '<div class="foto-mini-placeholder"><i class="bi bi-person-fill"></i></div>';
         card.innerHTML = foto + '<span class="nome-mini">' + (a.nome || '-') + '</span>' +
-            '<button type="button" class="btn-remover-turma btn btn-sm btn-outline-danger" title="Remover da turma"><i class="bi bi-x-lg"></i></button>';
+            '<button type="button" class="btn-remover-turma u-btn u-btn--pequeno" title="Remover da turma"><i class="bi bi-x-lg"></i></button>';
         var btn = card.querySelector('.btn-remover-turma');
-        btn.addEventListener('click', function (e) {
+        btn.addEventListener('click', async function (e) {
             e.stopPropagation();
-            if (!confirm('Remover ' + (a.nome || 'este aluno') + ' desta turma?')) return;
+            if (!await Dialogo.confirmar('Remover ' + (a.nome || 'este aluno') + ' desta turma?')) return;
             btn.disabled = true;
             fetch(urlRemoverBase.replace('999', turmaId).replace('888', a.id), {
                 method: 'POST',
@@ -593,8 +594,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
                 lista.style.display = '';
                 alunos.forEach(function(a) {
-                    var el = renderAlunoCard(a, function(aluno) {
-                        if (!confirm('Matricular ' + (aluno.nome || 'este aluno') + ' nesta turma? (Exceção - sem verificação de idade)')) return;
+                    var el = renderAlunoCard(a, async function (aluno) {
+                        if (!await Dialogo.confirmar('Matricular ' + (aluno.nome || 'este aluno') + ' nesta turma? (Exceção - sem verificação de idade)')) return;
                         matricularAlunoExcecao(turmaIdAtual, aluno.id, el, lista, vazio);
                     }, false);
                     lista.appendChild(el);
@@ -620,8 +621,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
                 document.getElementById('modalMatricularLista').style.display = '';
                 alunos.forEach(function (a) {
-                    var el = renderAlunoCard(a, function (aluno) {
-                        if (!confirm('Matricular ' + (aluno.nome || 'este aluno') + ' nesta turma?')) return;
+                    var el = renderAlunoCard(a, async function (aluno) {
+                        if (!await Dialogo.confirmar('Matricular ' + (aluno.nome || 'este aluno') + ' nesta turma?')) return;
                         matricularAlunoNormal(turmaId, aluno.id, el, lista);
                     }, false);
                     lista.appendChild(el);

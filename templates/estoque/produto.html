@@ -1,0 +1,127 @@
+{% extends "estoque/_base.html" %}
+{% from 'components/ui.html' import voltar %}
+{% set est_aba = 'produtos' %}
+{% block title %}{{ produto.nome }} — Estoque{% endblock %}
+
+{% block pagina_titulo %}{{ produto.nome }}{% endblock %}
+{% block pagina_subtitulo %}
+  {% if produto.categoria %}{{ produto.categoria }} · {% endif %}
+  custo R$ {{ '%.2f'|format(produto.custo|float)|replace('.', ',') }} ·
+  mínimo {{ produto.estoque_min }} por variação
+{% endblock %}
+
+{% block pagina_acoes %}
+  {{ voltar(url_for('estoque.produtos')) }}
+  <a href="{{ url_for('estoque.movimentar') }}" class="sh__btn sh__btn--forte">
+    <i class="bi bi-arrow-left-right"></i> Movimentar
+  </a>
+{% endblock %}
+
+{% block est_conteudo %}
+
+<section class="lst-quadro">
+  <header class="lst-quadro__topo">
+    <h2 class="lst-quadro__titulo">Foto do catálogo</h2>
+    <span class="lst-quadro__meta">É o que o aluno vê na loja</span>
+  </header>
+  <form method="POST" enctype="multipart/form-data"
+        action="{{ url_for('estoque.produto_imagem', produto_id=produto.id) }}"
+        class="d-flex align-items-center gap-3 flex-wrap" style="padding:1rem">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <span class="car-linha__foto" style="width:96px">
+      {% if produto.imagem %}
+      <img src="{{ url_for('static', filename='uploads/estoque/' ~ produto.imagem) }}" alt="">
+      {% else %}<i class="bi bi-box-seam"></i>{% endif %}
+    </span>
+    <input type="file" name="imagem" accept="image/*" class="u-campo__controle"
+           style="flex:1 1 200px" aria-label="Nova foto do produto">
+    <button type="submit" class="u-btn u-btn--pequeno">Salvar foto</button>
+  </form>
+</section>
+
+<section class="lst-quadro mt-3">
+  <header class="lst-quadro__topo">
+    <h2 class="lst-quadro__titulo">Variações e saldo</h2>
+    <span class="lst-quadro__meta">{{ variacoes|length }} variação(ões)</span>
+  </header>
+  <div class="lst-rolagem">
+    <div class="lst-largura" style="--lst-min:420px">
+      <div class="lst-linha lst-cab" style="grid-template-columns:minmax(0,1.6fr) 100px 100px 100px">
+        <div>Variação</div><div>Tamanho</div><div>Cor</div><div class="lst-fim">Saldo</div>
+      </div>
+      {% for v in variacoes %}
+      <div class="lst-linha lst-item" style="grid-template-columns:minmax(0,1.6fr) 100px 100px 100px">
+        <div class="lst-corta"><span class="lst-nome">{{ v.nome }}</span></div>
+        <div>{{ v.tamanho or '—' }}</div>
+        <div>{{ v.cor or '—' }}</div>
+        <div class="lst-fim">
+          {% if v.saldo|int <= 0 %}<strong style="color: var(--sh-red)">0</strong>
+          {% elif v.saldo|int <= produto.estoque_min|int %}<strong>{{ v.saldo }}</strong>
+          {% else %}{{ v.saldo }}{% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+{# -------------------------------------------------------------- preços #}
+{% if tabelas %}
+<div class="sh__secao">Preços</div>
+<div class="est-alertas">
+  {% for t in tabelas %}
+  <form method="POST" action="{{ url_for('estoque.produto_preco', produto_id=produto.id) }}"
+        class="est-alerta">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="tabela_id" value="{{ t.id }}">
+    <div class="est-alerta__titulo">
+      {{ t.nome }}{% if t.padrao %} · padrão{% endif %}
+    </div>
+    {% for v in variacoes %}
+    {% set atual = precos | selectattr('id', 'equalto', t.id)
+                          | selectattr('variacao_id', 'equalto', v.id)
+                          | map(attribute='preco') | first %}
+    <label class="est-alerta__item" style="border:0; padding:.25rem 0">
+      <span>{{ v.nome }}</span>
+      <input type="number" step="0.01" min="0" name="preco_{{ v.id }}"
+             value="{{ '%.2f'|format(atual|float) if atual is not none else '' }}"
+             placeholder="—" style="width:96px; text-align:right"
+             aria-label="Preço de {{ v.nome }} na tabela {{ t.nome }}">
+    </label>
+    {% endfor %}
+    <button type="submit" class="u-btn u-btn--pequeno mt-2">Salvar</button>
+    <p class="lst-sub mt-2 mb-0">Em branco: não é vendido por esta tabela.</p>
+  </form>
+  {% endfor %}
+</div>
+{% else %}
+<div class="est-aviso mt-3">
+  <span>Nenhuma tabela de preço criada ainda — sem ela, o produto não pode ser vendido.</span>
+  <a href="{{ url_for('estoque.config') }}" class="u-btn u-btn--pequeno">Criar tabela</a>
+</div>
+{% endif %}
+
+{% if historico %}
+<section class="lst-quadro mt-3">
+  <header class="lst-quadro__topo">
+    <h2 class="lst-quadro__titulo">Movimentações deste produto</h2>
+  </header>
+  <div class="lst-rolagem">
+    <div class="lst-largura" style="--lst-min:460px">
+      <div class="lst-linha lst-cab" style="grid-template-columns:130px 90px minmax(0,1fr) 80px">
+        <div>Quando</div><div>Tipo</div><div>Local</div><div class="lst-fim">Qtd</div>
+      </div>
+      {% for m in historico %}
+      <div class="lst-linha lst-item" style="grid-template-columns:130px 90px minmax(0,1fr) 80px">
+        <div>{{ m.criado_em.strftime('%d/%m %H:%M') if m.criado_em else '—' }}</div>
+        <div><span class="lst-tag">{{ 'Entrada' if m.sentido == 'E' else 'Saída' }}</span></div>
+        <div class="lst-corta">{{ m.local }}</div>
+        <div class="lst-fim">{{ '+' if m.sentido == 'E' else '−' }}{{ m.quantidade }}</div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endif %}
+
+{% endblock %}

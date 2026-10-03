@@ -1,211 +1,239 @@
 {% extends "base_app.html" %}
+{% from 'components/ui.html' import voltar with context %}
 {% block title %}Cadastro de Academia{% endblock %}
+
+{% block pagina_titulo %}Cadastrar Academia{% endblock %}
+{% block pagina_subtitulo %}{% if modo_associacao|default(False) and associacao_nome %} Nova academia em {{ associacao_nome }}. {% elif pode_independente %} Vincule a uma associação ou deixe como <strong>independente</strong> — academia que não pertence a federação nenhuma. {% else %} Preencha os dados para registrar uma nova academia. {% endif %}{% endblock %}
+
+{% block pagina_acoes %}{{ voltar(back_url or get_back_url_default()) }}{% endblock %}
+
 {% block extra_css %}
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/photo-cropper.css') }}">
 {% endblock %}
 {% block content %}
-<div class="container mt-5">
-    <div class="mb-4 text-center">
-        <h2 class="display-6 fw-bold text-primary">Cadastrar Academia</h2>
-        <p class="lead text-muted">
-            {% if modo_associacao|default(False) and associacao_nome %}
-                Nova academia em {{ associacao_nome }}.
-            {% else %}
-                Preencha os dados para registrar uma nova academia.
-            {% endif %}
-        </p>
-    </div>
-
-    <div class="card shadow-lg mx-auto" style="max-width: 850px; border-radius: 1rem;">
-        <div class="card-header bg-info text-white" style="border-radius: 1rem 1rem 0 0;">
-            <h5 class="mb-0"><i class="bi bi-house-fill me-2"></i> Dados da Academia</h5>
-        </div>
-        <div class="card-body p-4">
-            <form method="POST" enctype="multipart/form-data">
+{% set back_url = back_url or get_back_url_default() %}
+<form method="POST" enctype="multipart/form-data" class="frm">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <input type="hidden" name="next" value="{{ back_url }}">
-                <div class="mb-4">
-                    <label for="logo" class="form-label fw-semibold">Logo da Academia</label>
-                    <div class="d-flex align-items-center gap-3 mb-2">
-                        <div class="position-relative" style="width:80px;height:80px;flex-shrink:0;">
-                            <img id="logoPreview" alt="Prévia da logo"
-                                 class="position-absolute top-0 start-0 rounded-circle d-none"
-                                 style="width:80px;height:80px;object-fit:cover;border:3px solid #0dcaf0;">
-                            <div id="logoPlaceholder" class="position-absolute top-0 start-0 rounded-circle bg-light d-flex align-items-center justify-content-center text-muted" style="width:80px;height:80px;">
-                                <i class="bi bi-building fs-2"></i>
-                            </div>
-                        </div>
-                        <div class="flex-grow-1">
-                            <input type="hidden" name="logo_base64" id="logoBase64">
-                            <label class="form-label small mb-0">Escolher logo</label>
-                            <input type="file" id="logo" name="logo" class="form-control form-control-sm" accept="image/*">
-                            <small class="text-muted">Envie a logo (PNG, JPG ou GIF). Você poderá ajustar a área e o zoom.</small>
-                        </div>
-                    </div>
+    <input type="hidden" name="next" value="{{ back_url }}">
+
+    {# ===== Identificação ===== #}
+    <section class="frm__secao">
+        <div class="frm__titulo"><i class="bi bi-house-door"></i> Identificação</div>
+
+        <div class="row">
+            <div class="col-md-12 mb-3">
+                <label for="nome" class="form-label">Nome da Academia <span class="text-danger">*</span></label>
+                <input type="text" id="nome" name="nome" class="u-campo__controle" required placeholder="Ex: Academia Central">
+            </div>
+        </div>
+
+        <label class="form-label">Logo da academia</label>
+        <div class="frm__arquivo">
+            <div class="frm__arquivo-face">
+                <img id="logoPreview" alt="Prévia da logo" class="d-none">
+                <i class="bi bi-building" id="logoPlaceholder"></i>
+            </div>
+            <div class="frm__arquivo-corpo">
+                <input type="hidden" name="logo_base64" id="logoBase64">
+                <input type="file" id="logo" name="logo" accept="image/*">
+                <label for="logo" class="sh__btn"><i class="bi bi-upload"></i> Escolher logo</label>
+                <div class="form-text">PNG, JPG ou GIF. Você ajusta a área e o zoom depois de escolher.</div>
+            </div>
+        </div>
+    </section>
+
+    {# ===== Gestor ===== #}
+    {# Contato da academia: NÃO é digitado, é puxado do gestor. #}
+    <input type="hidden" name="responsavel" id="responsavel">
+    <input type="hidden" name="telefone" id="telefone">
+    <input type="hidden" name="email" id="email">
+    <input type="hidden" name="gestor_usuario_id" id="gestor_usuario_id" value="">
+
+    <section class="frm__secao">
+        <div class="frm__titulo"><i class="bi bi-person-badge"></i> Gestor da academia</div>
+        <p class="frm__ajuda">Responsável, telefone e e-mail da academia são os mesmos do gestor. Busque um usuário já cadastrado ou crie um novo.</p>
+
+        <div class="frm__modos mb-3">
+            <input type="radio" name="gestor_modo" id="gestorModoExistente" value="existente" autocomplete="off" checked>
+            <label class="frm__modo" for="gestorModoExistente"><i class="bi bi-search"></i> Usuário existente</label>
+            <input type="radio" name="gestor_modo" id="gestorModoNovo" value="novo" autocomplete="off">
+            <label class="frm__modo" for="gestorModoNovo"><i class="bi bi-person-plus"></i> Novo gestor</label>
+        </div>
+
+        <!-- Busca de usuário já cadastrado -->
+        <div id="gestorBuscaWrap">
+            {# Escolhido o gestor, o campo de busca sai de cena inteiro — rótulo
+               e ajuda incluídos: rótulo sem campo embaixo confunde. #}
+            <div id="gestorBuscaCampo">
+                <label for="gestorBuscaInput" class="form-label">Buscar gestor no cadastro de usuários</label>
+                <div class="frm__busca">
+                    <input type="text" id="gestorBuscaInput" class="u-campo__controle" placeholder="Digite nome, e-mail ou CPF..." autocomplete="off">
+                    <div id="gestorBuscaResultados" class="frm__achados" hidden></div>
                 </div>
-                <div class="row">
-                    <div class="col-md-12 mb-3">
-                        <label for="nome" class="form-label fw-semibold">Nome da Academia <span class="text-danger">*</span></label>
-                        <input type="text" id="nome" name="nome" class="form-control" required placeholder="Ex: Academia Central">
-                    </div>
+                <div class="form-text">Os dados de contato da academia serão os mesmos do usuário selecionado.</div>
+            </div>
+            <div id="gestorSelecionado" class="frm__pessoa" hidden>
+                <span class="frm__pessoa-ico"><i class="bi bi-person-check"></i></span>
+                <span class="frm__pessoa-corpo">
+                    <span class="frm__pessoa-nome" id="gestorSelecionadoNome"></span>
+                    <span class="frm__pessoa-sub" id="gestorSelecionadoSub"></span>
+                </span>
+                <button type="button" class="frm__pessoa-sair" id="gestorLimparSelecao" aria-label="Remover gestor selecionado">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Dados de novo gestor -->
+        <div id="gestorNovoWrap" hidden>
+            <div class="row">
+                <div class="col-md-8 mb-3">
+                    <label for="gestor_nome" class="form-label">Nome do Gestor <span class="text-danger">*</span></label>
+                    <input type="text" id="gestor_nome" name="gestor_nome" class="u-campo__controle" placeholder="Nome completo do gestor" autocomplete="off" value="">
                 </div>
-
-                <!-- ===== Gestor da Academia (definido primeiro: o contato da academia vem do gestor) ===== -->
-                <!-- Contato da academia: NÃO é digitado, é puxado do gestor -->
-                <input type="hidden" name="responsavel" id="responsavel">
-                <input type="hidden" name="telefone" id="telefone">
-                <input type="hidden" name="email" id="email">
-                <input type="hidden" name="gestor_usuario_id" id="gestor_usuario_id" value="">
-
-                <div class="mb-3">
-                    <h6 class="fw-semibold mb-0"><i class="bi bi-person-badge me-2"></i>Gestor da Academia</h6>
-                    <p class="small text-muted mb-0">O responsável, telefone e e-mail da academia serão os mesmos do gestor. Busque um usuário já cadastrado ou crie um novo gestor.</p>
+                <div class="col-md-4 mb-3">
+                    <label for="gestor_cpf" class="form-label">CPF do Gestor <span class="text-danger">*</span></label>
+                    <input type="text" id="gestor_cpf" name="gestor_cpf" class="u-campo__controle" placeholder="000.000.000-00" maxlength="14" autocomplete="off" data-mask="cpf" value="">
+                    <div class="form-text">Será usado para login no sistema.</div>
                 </div>
-
-                <div class="btn-group mb-3" role="group" aria-label="Tipo de gestor">
-                    <input type="radio" class="btn-check" name="gestor_modo" id="gestorModoExistente" value="existente" autocomplete="off" checked>
-                    <label class="btn btn-outline-primary btn-sm" for="gestorModoExistente"><i class="bi bi-search me-1"></i>Buscar usuário existente</label>
-                    <input type="radio" class="btn-check" name="gestor_modo" id="gestorModoNovo" value="novo" autocomplete="off">
-                    <label class="btn btn-outline-primary btn-sm" for="gestorModoNovo"><i class="bi bi-person-plus me-1"></i>Criar novo gestor</label>
+            </div>
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <label for="gestor_telefone" class="form-label">Telefone do Gestor <span class="text-danger">*</span></label>
+                    <input type="text" id="gestor_telefone" name="gestor_telefone" class="u-campo__controle" placeholder="(11) 99999-9999" autocomplete="off" data-mask="phone" value="">
                 </div>
-
-                <!-- Busca de usuário já cadastrado -->
-                <div id="gestorBuscaWrap" class="mb-3">
-                    <label for="gestorBuscaInput" class="form-label fw-semibold">Buscar gestor no cadastro de usuários</label>
-                    <div class="position-relative">
-                        <input type="text" id="gestorBuscaInput" class="form-control" placeholder="Digite nome, e-mail ou CPF..." autocomplete="off">
-                        <div id="gestorBuscaResultados" class="list-group position-absolute w-100 shadow-sm" style="z-index:1050; max-height:260px; overflow-y:auto; display:none;"></div>
-                    </div>
-                    <small class="text-muted">Os dados de contato da academia serão os mesmos do usuário selecionado.</small>
-                    <div id="gestorSelecionado" class="alert alert-success d-flex justify-content-between align-items-center mt-2 mb-0 py-2 px-3" style="display:none;">
-                        <span><i class="bi bi-person-check me-1"></i><span id="gestorSelecionadoTexto"></span></span>
-                        <button type="button" class="btn-close" id="gestorLimparSelecao" aria-label="Remover"></button>
-                    </div>
+                <div class="col-md-4 mb-3">
+                    <label for="gestor_email" class="form-label">E-mail do Gestor <span class="text-danger">*</span></label>
+                    <input type="email" id="gestor_email" name="gestor_email" class="u-campo__controle" placeholder="email@exemplo.com" autocomplete="off" value="">
                 </div>
-
-                <!-- Dados de novo gestor -->
-                <div id="gestorNovoWrap" style="display:none;">
-                    <div class="row">
-                        <div class="col-md-8 mb-3">
-                            <label for="gestor_nome" class="form-label fw-semibold">Nome do Gestor <span class="text-danger">*</span></label>
-                            <input type="text" id="gestor_nome" name="gestor_nome" class="form-control" placeholder="Nome completo do gestor" autocomplete="off" value="">
-                        </div>
-                        <div class="col-md-4 mb-3">
-                            <label for="gestor_cpf" class="form-label fw-semibold">CPF do Gestor <span class="text-danger">*</span></label>
-                            <input type="text" id="gestor_cpf" name="gestor_cpf" class="form-control" placeholder="000.000.000-00" maxlength="14" autocomplete="off" data-mask="cpf" value="">
-                            <small class="text-muted">Será usado para login no sistema.</small>
-                        </div>
-                    </div>
-                    <div class="row">
-                        <div class="col-md-4 mb-3">
-                            <label for="gestor_telefone" class="form-label fw-semibold">Telefone do Gestor <span class="text-danger">*</span></label>
-                            <input type="text" id="gestor_telefone" name="gestor_telefone" class="form-control" placeholder="(11) 99999-9999" autocomplete="off" data-mask="phone" value="">
-                        </div>
-                        <div class="col-md-4 mb-3">
-                            <label for="gestor_email" class="form-label fw-semibold">E-mail do Gestor <span class="text-danger">*</span></label>
-                            <input type="email" id="gestor_email" name="gestor_email" class="form-control" placeholder="email@exemplo.com" autocomplete="off" value="">
-                        </div>
-                        <div class="col-md-4 mb-3">
-                            <label for="gestor_senha" class="form-label fw-semibold">Senha do Gestor <span class="text-danger">*</span></label>
-                            <input type="password" id="gestor_senha" name="gestor_senha" class="form-control" placeholder="Mínimo 6 caracteres" minlength="6" autocomplete="new-password" value="">
-                        </div>
-                    </div>
+                <div class="col-md-4 mb-3">
+                    <label for="gestor_senha" class="form-label">Senha do Gestor <span class="text-danger">*</span></label>
+                    <input type="password" id="gestor_senha" name="gestor_senha" class="u-campo__controle" placeholder="Mínimo 6 caracteres" minlength="6" autocomplete="new-password" value="">
                 </div>
+            </div>
+        </div>
+    </section>
 
-                <hr class="my-4">
-                <h6 class="fw-semibold mb-3"><i class="bi bi-geo-alt me-2"></i>Endereço</h6>
+    {# ===== Endereço ===== #}
+    <section class="frm__secao">
+        <div class="frm__titulo"><i class="bi bi-geo-alt"></i> Endereço</div>
 
-                <div class="row">
-                    <div class="col-md-4 mb-3">
-                        <label for="cep" class="form-label fw-semibold">CEP</label>
-                        <div class="input-group">
-                            <input type="text" id="cep" name="cep" class="form-control" placeholder="00000-000" maxlength="10">
-                            <button type="button" class="btn btn-outline-secondary" id="btnBuscarCEP" title="Buscar endereço pelo CEP">
-                                <i class="bi bi-search"></i>
-                            </button>
-                        </div>
-                    </div>
-                    <div class="col-md-8 mb-3">
-                        <label for="rua" class="form-label fw-semibold">Rua/Logradouro</label>
-                        <input type="text" id="rua" name="rua" class="form-control" placeholder="Nome da rua">
-                    </div>
-                </div>
-
-                <div class="row">
-                    <div class="col-md-3 mb-3">
-                        <label for="numero" class="form-label fw-semibold">Número</label>
-                        <input type="text" id="numero" name="numero" class="form-control" placeholder="123">
-                    </div>
-                    <div class="col-md-5 mb-3">
-                        <label for="complemento" class="form-label fw-semibold">Complemento</label>
-                        <input type="text" id="complemento" name="complemento" class="form-control" placeholder="Apto, Bloco, etc.">
-                    </div>
-                    <div class="col-md-4 mb-3">
-                        <label for="bairro" class="form-label fw-semibold">Bairro</label>
-                        <input type="text" id="bairro" name="bairro" class="form-control" placeholder="Nome do bairro">
-                    </div>
-                </div>
-
-                <div class="row">
-                    <div class="col-md-8 mb-3">
-                        <label for="cidade" class="form-label fw-semibold">Cidade</label>
-                        <input type="text" id="cidade" name="cidade" class="form-control" placeholder="Ex: São Paulo">
-                    </div>
-                    <div class="col-md-4 mb-3">
-                        <label for="uf" class="form-label fw-semibold">UF</label>
-                        <input type="text" id="uf" name="uf" class="form-control" maxlength="2" placeholder="SP" style="text-transform: uppercase;">
-                    </div>
-                </div>
-
-                <div class="mb-4">
-                    {% if modo_associacao|default(False) and associacao_nome %}
-                    <label class="form-label fw-semibold">Associação</label>
-                    <input type="hidden" name="id_associacao" value="{{ id_associacao_selecionada }}">
-                    <div class="form-control bg-light" readonly>{{ associacao_nome }}</div>
-                    <small class="text-muted">A academia será vinculada à sua associação.</small>
-                    {% else %}
-                    <label for="id_associacao" class="form-label fw-semibold">Associação <span class="text-danger">*</span></label>
-                    {% if associacoes %}
-                    <select id="id_associacao" name="id_associacao" class="form-select" required>
-                        <option value="" disabled {% if not id_associacao_selecionada %}selected{% endif %}>Selecione a associação</option>
-                        {% for associacao in associacoes %}
-                        <option value="{{ associacao.id }}" {% if associacao.id == id_associacao_selecionada %}selected{% endif %}>
-                            {{ associacao.nome }}
-                        </option>
-                        {% endfor %}
-                    </select>
-                    {% else %}
-                    <div class="alert alert-warning mb-0">Nenhuma associação disponível para vincular.</div>
-                    {% endif %}
-                    {% endif %}
-                </div>
-
-                <div class="mb-4">
-                    <label class="form-label fw-semibold">Modalidades ofertadas</label>
-                    <p class="small text-muted">{% if modo_associacao|default(False) %}Apenas modalidades vinculadas à sua associação.{% else %}Selecione as modalidades que a academia ofertará.{% endif %}</p>
-                    <div class="d-flex flex-wrap gap-2">
-                        {% for m in modalidades %}
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" name="modalidade_ids" value="{{ m.id }}" id="mod_acad_{{ m.id }}">
-                            <label class="form-check-label" for="mod_acad_{{ m.id }}">{{ m.nome }}</label>
-                        </div>
-                        {% endfor %}
-                    </div>
-                    {% if not modalidades %}<small class="text-muted">Nenhuma modalidade cadastrada. Cadastre em Configurações.</small>{% endif %}
-                </div>
-
-                <div class="d-flex justify-content-between pt-2">
-                    {% set back_url = back_url or get_back_url_default() %}
-{% include 'components/botao_voltar.html' %}
-                    <button type="submit" class="btn btn-success btn-lg">
-                        <i class="bi bi-save-fill me-2"></i> Salvar Academia
+        <div class="row">
+            <div class="col-md-4 mb-3">
+                <label for="cep" class="form-label">CEP</label>
+                <div class="frm__grupo">
+                    <input type="text" id="cep" name="cep" class="u-campo__controle" placeholder="00000-000" maxlength="10">
+                    <button type="button" class="sh__btn" id="btnBuscarCEP" title="Buscar endereço pelo CEP">
+                        <i class="bi bi-search"></i>
                     </button>
                 </div>
-            </form>
+                <div class="form-text">Preenche rua, bairro, cidade e UF.</div>
+            </div>
+            <div class="col-md-8 mb-3">
+                <label for="rua" class="form-label">Rua/Logradouro</label>
+                <input type="text" id="rua" name="rua" class="u-campo__controle" placeholder="Nome da rua">
+            </div>
         </div>
+
+        <div class="row">
+            <div class="col-md-3 mb-3">
+                <label for="numero" class="form-label">Número</label>
+                <input type="text" id="numero" name="numero" class="u-campo__controle" placeholder="123">
+            </div>
+            <div class="col-md-5 mb-3">
+                <label for="complemento" class="form-label">Complemento</label>
+                <input type="text" id="complemento" name="complemento" class="u-campo__controle" placeholder="Apto, Bloco, etc.">
+            </div>
+            <div class="col-md-4 mb-3">
+                <label for="bairro" class="form-label">Bairro</label>
+                <input type="text" id="bairro" name="bairro" class="u-campo__controle" placeholder="Nome do bairro">
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-8 mb-md-0 mb-3">
+                <label for="cidade" class="form-label">Cidade</label>
+                <input type="text" id="cidade" name="cidade" class="u-campo__controle" placeholder="Ex: São Paulo">
+            </div>
+            <div class="col-md-4">
+                <label for="uf" class="form-label">UF</label>
+                <input type="text" id="uf" name="uf" class="u-campo__controle" maxlength="2" placeholder="SP" style="text-transform: uppercase;">
+            </div>
+        </div>
+    </section>
+
+    {# ===== Vínculo e modalidades ===== #}
+    <section class="frm__secao">
+        <div class="frm__titulo"><i class="bi bi-diagram-3"></i> Vínculo e modalidades</div>
+
+        <div class="mb-4">
+            {% if modo_associacao|default(False) and associacao_nome %}
+            <label class="form-label">Associação</label>
+            <input type="hidden" name="id_associacao" value="{{ id_associacao_selecionada }}">
+            <div class="u-campo__controle" style="background:#f4f2ee;">{{ associacao_nome }}</div>
+            <div class="form-text">A academia será vinculada à sua associação.</div>
+            {% else %}
+            {# Quem administra o sistema pode cadastrar academia INDEPENDENTE,
+               sem associação nenhuma — é o caso de quem compra o sistema sem
+               pertencer a federação. O gestor de associação continua obrigado
+               a vincular à própria associação. #}
+            <label for="id_associacao" class="form-label">
+                Associação
+                {% if not pode_independente %}<span class="text-danger">*</span>{% endif %}
+            </label>
+            {% if associacoes or pode_independente %}
+            <select id="id_associacao" name="id_associacao" class="u-campo__controle"
+                    {% if not pode_independente %}required{% endif %}>
+                {% if pode_independente %}
+                <option value="" {% if not id_associacao_selecionada %}selected{% endif %}>
+                    Independente — sem associação
+                </option>
+                {% else %}
+                <option value="" disabled {% if not id_associacao_selecionada %}selected{% endif %}>Selecione a associação</option>
+                {% endif %}
+                {% for associacao in associacoes %}
+                <option value="{{ associacao.id }}" {% if associacao.id == id_associacao_selecionada %}selected{% endif %}>
+                    {{ associacao.nome }}
+                </option>
+                {% endfor %}
+            </select>
+            {% if pode_independente %}
+            <div class="form-text">
+                A academia independente não aparece para federação nem associação:
+                quem a administra é o gestor vinculado a ela.
+            </div>
+            {% endif %}
+            {% else %}
+            <div class="alert alert-warning mb-0">Nenhuma associação disponível para vincular.</div>
+            {% endif %}
+            {% endif %}
+        </div>
+
+        <label class="form-label">Modalidades ofertadas</label>
+        <p class="form-text mb-2">{% if modo_associacao|default(False) %}Apenas modalidades vinculadas à sua associação.{% else %}Selecione as modalidades que a academia ofertará.{% endif %}</p>
+        {% if modalidades %}
+        <div class="frm__opcoes" data-opcoes>
+            {% for m in modalidades %}
+            <label class="frm__opcao" for="mod_acad_{{ m.id }}">
+                <input type="checkbox" name="modalidade_ids" value="{{ m.id }}" id="mod_acad_{{ m.id }}">
+                <span class="frm__opcao-marca"><i class="bi bi-check-lg"></i></span>
+                <span>{{ m.nome }}</span>
+            </label>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="form-text">Nenhuma modalidade cadastrada. Cadastre em Configurações.</div>
+        {% endif %}
+    </section>
+
+    {# O "Voltar" fica no cabeçalho do shell; aqui só a ação que conclui. #}
+    <div class="frm__acoes">
+        <button type="submit" class="sh__btn sh__btn--forte">
+            <i class="bi bi-save"></i> Salvar academia
+        </button>
     </div>
-</div>
+</form>
 {% endblock %}
 {% block extra_js %}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
@@ -224,6 +252,16 @@
       aspectRatio: 1
     });
   }
+})();
+
+// Caixas de modalidade: o quadrado marcado é desenho nosso, então o estado
+// precisa ir para a classe — o input em si está escondido.
+(function () {
+    document.querySelectorAll('[data-opcoes] .frm__opcao input').forEach(function (inp) {
+        function pintar() { inp.closest('.frm__opcao').classList.toggle('is-marcada', inp.checked); }
+        inp.addEventListener('change', pintar);
+        pintar();
+    });
 })();
 
 // Máscara de telefone
@@ -331,9 +369,11 @@ if (cepInput) {
     var novoWrap = document.getElementById('gestorNovoWrap');
     var hiddenId = document.getElementById('gestor_usuario_id');
     var input = document.getElementById('gestorBuscaInput');
+    var buscaCampo = document.getElementById('gestorBuscaCampo');
     var resultados = document.getElementById('gestorBuscaResultados');
     var selecionado = document.getElementById('gestorSelecionado');
-    var selecionadoTexto = document.getElementById('gestorSelecionadoTexto');
+    var selecionadoNome = document.getElementById('gestorSelecionadoNome');
+    var selecionadoSub = document.getElementById('gestorSelecionadoSub');
     var btnLimpar = document.getElementById('gestorLimparSelecao');
     var camposNovo = ['gestor_nome', 'gestor_cpf', 'gestor_telefone', 'gestor_email', 'gestor_senha'];
     var form = hiddenId ? hiddenId.closest('form') : null;
@@ -354,59 +394,69 @@ if (cepInput) {
 
     function aplicarModo() {
         var modo = modoAtual();
-        if (modo === 'novo') {
-            novoWrap.style.display = '';
-            buscaWrap.style.display = 'none';
-            setRequiredNovo(true);
-            limparSelecao();
-        } else {
-            novoWrap.style.display = 'none';
-            buscaWrap.style.display = '';
-            setRequiredNovo(false);
-        }
+        novoWrap.hidden = (modo !== 'novo');
+        buscaWrap.hidden = (modo === 'novo');
+        setRequiredNovo(modo === 'novo');
+        if (modo === 'novo') limparSelecao();
     }
 
     function limparSelecao() {
         if (hiddenId) hiddenId.value = '';
-        if (selecionado) selecionado.style.display = 'none';
-        if (input) input.style.display = '';
+        if (selecionado) selecionado.hidden = true;
+        if (buscaCampo) buscaCampo.hidden = false;
     }
 
     function esconderResultados() {
-        if (resultados) { resultados.style.display = 'none'; resultados.innerHTML = ''; }
+        if (resultados) { resultados.hidden = true; resultados.innerHTML = ''; }
     }
 
     function selecionarUsuario(u) {
         if (hiddenId) hiddenId.value = u.id;
-        var desc = u.nome || 'Usuário';
-        if (u.email) desc += ' — ' + u.email;
-        if (selecionadoTexto) selecionadoTexto.textContent = desc;
-        if (selecionado) selecionado.style.display = 'flex';
-        if (input) { input.value = ''; input.style.display = 'none'; }
+        if (selecionadoNome) selecionadoNome.textContent = u.nome || 'Usuário';
+        if (selecionadoSub) {
+            var sub = [];
+            if (u.email) sub.push(u.email);
+            if (u.cpf) sub.push('CPF: ' + u.cpf);
+            selecionadoSub.textContent = sub.join(' · ');
+        }
+        if (selecionado) selecionado.hidden = false;
+        if (input) input.value = '';
+        if (buscaCampo) buscaCampo.hidden = true;
         esconderResultados();
     }
 
     function renderResultados(usuarios) {
         if (!resultados) return;
+        resultados.innerHTML = '';
         if (!usuarios || !usuarios.length) {
-            resultados.innerHTML = '<div class="list-group-item small text-muted">Nenhum usuário encontrado.</div>';
-            resultados.style.display = 'block';
+            var vazio = document.createElement('div');
+            vazio.className = 'frm__achados-vazio';
+            vazio.textContent = 'Nenhum usuário encontrado.';
+            resultados.appendChild(vazio);
+            resultados.hidden = false;
             return;
         }
-        resultados.innerHTML = '';
         usuarios.forEach(function (u) {
             var item = document.createElement('button');
             item.type = 'button';
-            item.className = 'list-group-item list-group-item-action';
+            item.className = 'frm__achado';
+            var nome = document.createElement('div');
+            nome.className = 'frm__achado-nome';
+            nome.textContent = u.nome || '';
+            item.appendChild(nome);
             var sub = [];
             if (u.email) sub.push(u.email);
             if (u.cpf) sub.push('CPF: ' + u.cpf);
-            item.innerHTML = '<div class="fw-semibold">' + (u.nome || '') + '</div>'
-                + (sub.length ? '<div class="small text-muted">' + sub.join(' · ') + '</div>' : '');
+            if (sub.length) {
+                var linha = document.createElement('div');
+                linha.className = 'frm__achado-sub';
+                linha.textContent = sub.join(' · ');
+                item.appendChild(linha);
+            }
             item.addEventListener('click', function () { selecionarUsuario(u); });
             resultados.appendChild(item);
         });
-        resultados.style.display = 'block';
+        resultados.hidden = false;
     }
 
     var timer = null;

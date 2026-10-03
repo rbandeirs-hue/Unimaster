@@ -1,13 +1,9 @@
 {% extends "base_app.html" %}
 {% block title %}Integração Zempo{% endblock %}
+{% block pagina_titulo %}Integração Zempo{% endblock %}
+{% block pagina_subtitulo %}Credenciais do clube no Zempo (CBJ) para {{ associacao.nome }}. Elas valem para todas as academias desta associação.{% endblock %}
 {% block content %}
-<div class="container-fluid" style="max-width:760px;">
-
-  <h1 class="h4 mb-1"><i class="bi bi-gear-fill text-primary me-2"></i>Integração Zempo</h1>
-  <p class="text-muted small">
-    Credenciais do clube no Zempo (CBJ) para {{ associacao.nome }}.
-    Elas valem para todas as academias desta associação.
-  </p>
+<div class="container-fluid px-0">
 
   {% set identificador = associacao.slug or associacao.zempo_form_token %}
   {% if identificador %}
@@ -22,11 +18,11 @@
         já existe e destaca o que falta. Depois a academia confere e você aprova.
       </p>
       <div class="input-group">
-        <input type="text" class="form-control" id="link_publico" readonly value="{{ link_publico }}">
-        <button class="btn btn-outline-primary" type="button" onclick="copiarLink()">
+        <input type="text" class="u-campo__controle" id="link_publico" readonly value="{{ link_publico }}">
+        <button class="u-btn" type="button" onclick="copiarLink()">
           <i class="bi bi-clipboard me-1"></i>Copiar
         </button>
-        <a class="btn btn-outline-secondary" href="{{ link_publico }}" target="_blank" rel="noopener">Abrir</a>
+        <a class="u-btn" href="{{ link_publico }}" target="_blank" rel="noopener">Abrir</a>
       </div>
       <div class="form-text" id="copiado" style="display:none;color:#198754;">Link copiado.</div>
     </div>
@@ -48,26 +44,26 @@
     <div class="row g-3">
       <div class="col-md-6">
         <label class="form-label">Código de acesso</label>
-        <input type="text" name="zempo_codigo" class="form-control"
-               value="{{ associacao.zempo_codigo or '' }}" placeholder="CL00947">
+        <input type="text" name="zempo_codigo" class="u-campo__controle"
+               value="{{ associacao.zempo_codigo or '' }}" placeholder="CL00947" aria-label="Código de acesso">
         <div class="form-text">O mesmo que você usa para entrar em zempo.com.br.</div>
       </div>
       <div class="col-md-6">
         <label class="form-label">Senha</label>
-        <input type="password" name="zempo_senha" class="form-control" autocomplete="new-password"
-               placeholder="{% if senha_definida %}•••••••• (deixe em branco para manter){% else %}senha do Zempo{% endif %}">
+        <input type="password" name="zempo_senha" class="u-campo__controle" autocomplete="new-password"
+               placeholder="{% if senha_definida %}•••••••• (deixe em branco para manter){% else %}senha do Zempo{% endif %}" aria-label="Senha">
       </div>
 
       <div class="col-md-6">
         <label class="form-label">ID do clube no Zempo</label>
-        <input type="text" name="zempo_clube_id" class="form-control"
-               value="{{ associacao.zempo_clube_id or '' }}" placeholder="947">
+        <input type="text" name="zempo_clube_id" class="u-campo__controle"
+               value="{{ associacao.zempo_clube_id or '' }}" placeholder="947" aria-label="ID do clube no Zempo">
         <div class="form-text">Parte numérica do código (CL00<strong>947</strong>).</div>
       </div>
       <div class="col-md-6">
         <label class="form-label">ID da federação no Zempo</label>
-        <input type="text" name="zempo_federacao_id" class="form-control"
-               value="{{ associacao.zempo_federacao_id or '' }}" placeholder="25">
+        <input type="text" name="zempo_federacao_id" class="u-campo__controle"
+               value="{{ associacao.zempo_federacao_id or '' }}" placeholder="25" aria-label="ID da federação no Zempo">
         <div class="form-text">25 = FPJU/PE.</div>
       </div>
 
@@ -83,11 +79,11 @@
     </div>
 
     <div class="mt-4 d-flex flex-wrap gap-2">
-      <button type="submit" class="btn btn-primary">Salvar</button>
-      <button type="submit" name="testar" value="1" class="btn btn-outline-secondary">
+      <button type="submit" class="u-btn u-btn--primario">Salvar</button>
+      <button type="submit" name="testar" value="1" class="u-btn">
         <i class="bi bi-plug me-1"></i> Salvar e testar conexão
       </button>
-      <a href="{{ url_for('zempo.migracoes') }}" class="btn btn-link">Voltar</a>
+      <a href="{{ url_for('zempo.migracoes') }}" class="u-btn u-btn--fantasma">Voltar</a>
     </div>
   </form>
 </div>

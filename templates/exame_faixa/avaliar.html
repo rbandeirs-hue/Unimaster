@@ -1,0 +1,221 @@
+{% extends "base_app.html" %}
+{% block conteudo_classe %}exf-tela{% endblock %}
+{% from 'exame_faixa/_macros.html' import obi, promo, pill with context %}
+{% set menu_ativo = 'exame_faixa' %}
+{% set travada = av and av.aluno_graduacao_id %}
+{% block title %}Prova — {{ insc.nome }}{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{{ asset('css/exame_faixa.css') }}">{% endblock %}
+
+{% block pagina_titulo %}{{ insc.nome }}{% endblock %}
+{% block pagina_subtitulo %}{{ ev.nome }}{% if data_exame %} · {{ data_exame|data_br }}{% endif %} · {{ insc.academia_nome }}{% endblock %}
+{% block pagina_acoes %}
+<a href="{{ url_for('exame_faixa.banca', evento_id=ev.id, **voltar_kw) }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Banca</a>
+<a href="{{ url_for('exame_faixa.historico_aluno', aluno_id=insc.aluno_id, **voltar_kw) }}" class="sh__btn"><i class="bi bi-clock-history"></i> Histórico</a>
+{% if av %}<button type="button" class="sh__btn" onclick="window.print()"><i class="bi bi-printer"></i> Imprimir ficha</button>{% endif %}
+{% endblock %}
+
+{% block content %}
+{% set partes_nome = (insc.nome or '?').split() %}
+<div class="exf-cab">
+  <span class="exf-avatar exf-avatar--g" aria-hidden="true">{{ partes_nome[0][:1] }}{{ partes_nome[-1][:1] if partes_nome|length > 1 }}</span>
+  <div class="exf-cab__corpo">
+    <p class="exf-cab__titulo">{{ promo(promocao) }}</p>
+    <span class="u-muted u-fs-sm">A prova cobra o conteúdo desta faixa{% if not av or av.escopo == 'cumulativo' %} e das anteriores{% endif %}.</span>
+  </div>
+  <dl class="exf-dados">
+    <div><dt>Idade no exame</dt><dd>{{ idade if idade is not none else '—' }}</dd></div>
+    <div><dt>Exigido</dt><dd>{{ promocao.idade_txt }}</dd></div>
+    {% if pagamento %}<div><dt>Fatura</dt><dd>{{ pill(pagamento.rotulo, pagamento.cor) }}</dd></div>{% endif %}
+    <div><dt>Resultado</dt><dd>{{ pill(av.resultado_rotulo, av.resultado_cor) if av else pill('Sem sorteio', 'info') }}</dd></div>
+    {% if posicao %}<div><dt>Na banca</dt><dd>{{ posicao }} de {{ total_banca }}</dd></div>{% endif %}
+  </dl>
+</div>
+
+{% if not travada %}
+{% set n_itens = namespace(n=0) %}
+{% for pf in partes_ficha %}{% for gr in pf.grupos %}{% set n_itens.n = n_itens.n + gr.itens|length %}{% endfor %}{% endfor %}
+<details class="lst-quadro mb-3 exf-nao-imprime exf-sorteio" {% if not av %}open{% endif %}>
+  <summary class="lst-quadro__topo">
+    <h2 class="lst-quadro__titulo"><i class="bi bi-shuffle"></i> {{ 'Sortear técnicas da prova' if not av else 'Refazer o sorteio' }}</h2>
+    <span class="lst-quadro__meta">{% if av %}Sorteio {{ 'cumulativo' if av.escopo == 'cumulativo' else 'só desta faixa' }} · {{ n_itens.n }} ite{{ 'ns' if n_itens.n != 1 else 'm' }} · pesos {% for pt in partes %}{{ av.pesos.get(pt.chave, 0)|nota_br }}{{ ' / ' if not loop.last }}{% endfor %}{% else %}Metade da faixa em exame + metade das anteriores{% endif %}</span>
+  </summary>
+  <form method="POST" class="p-3" {% if av %}data-confirmar="Refazer o sorteio apaga as notas já lançadas nesta ficha. Continuar?"{% endif %}>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="acao" value="sortear">
+    <div class="exf-config mb-3">
+      <span class="exf-config__rotulo">Escopo</span>
+      <label class="exf-alternar" style="flex-direction:row"><input type="radio" name="escopo" value="cumulativo" {% if not av or av.escopo != 'faixa' %}checked{% endif %}> Cumulativo (com as faixas anteriores)</label>
+      <label class="exf-alternar" style="flex-direction:row"><input type="radio" name="escopo" value="faixa" {% if av and av.escopo == 'faixa' %}checked{% endif %}> Só desta faixa</label>
+    </div>
+    {% for pt in partes %}
+    <div class="exf-config mb-3">
+      <span class="exf-config__rotulo">{{ pt.nome }} — quantidade a sortear</span>
+      {% for gc in pt.grupos %}
+      {% set g = grupo_por_chave(gc) %}
+      <label>{{ g.nome if gc != 'teoria' else 'Perguntas' }} <span class="u-muted">(máx. {{ disp.cumulativo[gc] }})</span>
+        <input type="number" name="qtd_{{ gc }}" min="0" max="{{ disp.cumulativo[gc] }}" value="{{ [qtds[gc], disp.cumulativo[gc]]|min }}"></label>
+      {% endfor %}
+      <label>Peso da parte
+        <input type="number" name="peso_{{ pt.chave }}" min="0" max="10" step="0.5" value="{{ pesos[pt.chave] }}"></label>
+    </div>
+    {% endfor %}
+    <button type="submit" class="sh__btn sh__btn--forte"><i class="bi bi-shuffle"></i> Sortear técnicas</button>
+  </form>
+</details>
+{% endif %}
+
+{% if av %}
+<form method="POST" id="exf-ficha">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="acao" value="salvar">
+  <div class="exf-ficha">
+    <div class="exf-ficha__notas">
+      {% for pf in partes_ficha %}
+      <section class="exf-ficha-grupo" data-parte="{{ pf.parte.chave }}" data-peso="{{ av.pesos.get(pf.parte.chave, 0) }}">
+        <div class="exf-ficha-grupo__topo">
+          <span>{{ pf.parte.nome }} <span class="u-muted u-fs-sm fw-normal">· {{ pf.parte.sub }} · peso {{ av.pesos.get(pf.parte.chave, 0) }}</span></span>
+          <span class="exf-ficha-grupo__media" data-media-parte>{{ ('média ' ~ (pf.media|nota_br)) if pf.media is not none else '—' }}</span>
+        </div>
+        {% for gr in pf.grupos %}
+        {% if pf.grupos|length > 1 %}<div class="exf-nota-sub">{{ gr.grupo.nome }}</div>{% endif %}
+        {% for it in gr.itens %}
+        <div class="exf-nota-linha">
+          <span class="exf-nota-linha__rotulo">{{ it.rotulo }}</span>
+          <div class="exf-nota-linha__campos">
+            {% if not travada %}
+            <div class="exf-rapidas exf-nao-imprime" role="group" aria-label="Nota rápida de {{ it.rotulo }}">
+              {% for v in range(11) %}<button type="button" class="exf-rapida" data-v="{{ v }}" tabindex="-1">{{ v }}</button>{% endfor %}
+            </div>
+            {% endif %}
+            <input type="number" class="exf-nota" name="nota_{{ gr.grupo.chave }}_{{ it.i }}" min="0" max="10" step="0.5"
+                   inputmode="decimal" value="{{ it.nota if it.nota is not none }}" placeholder="—"
+                   aria-label="Nota de {{ it.rotulo }}" {% if travada %}disabled{% endif %}>
+          </div>
+        </div>
+        {% endfor %}
+        {% endfor %}
+      </section>
+      {% endfor %}
+
+      <label class="u-campo d-block mb-3">
+        <span class="u-campo__rotulo">Observação da banca</span>
+        <textarea name="observacao" class="u-campo__controle" rows="3" maxlength="500" placeholder="Opcional — aparece no histórico do aluno" {% if travada %}disabled{% endif %}>{{ av.observacao or '' }}</textarea>
+      </label>
+    </div>
+
+    <aside class="exf-ficha__lado">
+      <section class="exf-placar" id="exf-placar">
+        <span class="exf-rotulo">Média geral</span>
+        <div class="exf-placar__nota"><span id="exf-geral">{{ av.media_geral|nota_br if av.media_geral is not none else '—' }}</span><small>/10</small></div>
+        <div id="exf-selo">{{ pill(av.resultado_rotulo, av.resultado_cor) }}</div>
+        <div class="exf-placar__barra" style="--corte:{{ corte * 10 }}%">
+          <span id="exf-barra" class="{{ 'is-ok' if av.media_geral is not none and av.media_geral >= corte else 'is-nao' }}" style="width:{{ (av.media_geral or 0) * 10 }}%"></span>
+          <i aria-hidden="true"></i>
+        </div>
+        <div class="exf-placar__detalhe" id="exf-falta">Nota de corte {{ corte|nota_br }}</div>
+        <ul class="exf-placar__partes">
+          {% for pf in partes_ficha %}
+          <li><span>{{ pf.parte.nome|replace('Prática — ', '') }}</span><strong data-placar-parte="{{ pf.parte.chave }}">{{ pf.media|nota_br if pf.media is not none else '—' }}</strong></li>
+          {% endfor %}
+        </ul>
+        <div class="exf-placar__detalhe"><span id="exf-lancadas">0</span> de <span id="exf-total">0</span> notas lançadas</div>
+      </section>
+
+      {% if travada %}
+      <p class="u-muted u-fs-sm">Graduação para {{ promocao.para }} registrada a partir desta ficha — as notas ficam travadas.</p>
+      {% else %}
+      <label class="exf-alternar exf-ficha__promover"><input type="checkbox" class="form-check-input" name="promover" value="1">
+        Se aprovado, já registrar a faixa {{ promocao.para }}</label>
+      <div class="exf-ficha__botoes exf-nao-imprime">
+        <button type="submit" name="proximo" value="1" class="sh__btn sh__btn--forte"><i class="bi bi-check-lg"></i> Salvar e ir para o próximo</button>
+        <button type="submit" name="banca" value="1" class="sh__btn">Salvar e voltar à banca</button>
+        <button type="submit" class="sh__btn">Salvar ficha</button>
+        <button type="submit" form="exf-ausente" class="sh__btn exf-btn-ausente"><i class="bi bi-person-x"></i> Marcar ausente</button>
+      </div>
+      {% endif %}
+    </aside>
+  </div>
+</form>
+
+{% if not travada %}
+<form method="POST" id="exf-ausente" class="d-none" data-confirmar="Marcar {{ insc.nome }} como ausente?" data-confirmar-tom="aviso">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="acao" value="ausente">
+</form>
+{% endif %}
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+{% if av %}
+<script>
+/* Recalcula na hora, com a mesma regra do servidor: média de cada parte =
+   média das técnicas da parte; geral = média ponderada das partes com nota.
+   Os botões 0–10 só preenchem o campo — meio ponto se digita no campo. */
+(function () {
+  var ficha = document.getElementById('exf-ficha');
+  if (!ficha) return;
+  var CORTE = {{ corte }};
+  function fmt(n) { return (Math.round(n * 10) / 10).toFixed(1).replace('.', ','); }
+  function pill(txt, cor) { return '<span class="u-pill u-pill--' + cor + '">' + txt + '</span>'; }
+  function marcaRapidas(inp) {
+    var linha = inp.closest('.exf-nota-linha');
+    linha.querySelectorAll('.exf-rapida').forEach(function (b) {
+      var on = inp.value !== '' && parseFloat(inp.value) === parseFloat(b.getAttribute('data-v'));
+      b.classList.toggle('is-sel', on);
+      b.classList.toggle('is-baixa', on && parseFloat(inp.value) < CORTE);
+    });
+  }
+  function recalc() {
+    var somaP = 0, somaMP = 0, lanc = 0, total = 0;
+    ficha.querySelectorAll('[data-parte]').forEach(function (sec) {
+      var vals = [];
+      sec.querySelectorAll('.exf-nota').forEach(function (i) {
+        total++;
+        if (i.value !== '' && !isNaN(parseFloat(i.value))) { vals.push(Math.max(0, Math.min(10, parseFloat(i.value)))); lanc++; }
+        marcaRapidas(i);
+      });
+      var chave = sec.getAttribute('data-parte');
+      var el = sec.querySelector('[data-media-parte]');
+      var lado = document.querySelector('[data-placar-parte="' + chave + '"]');
+      if (!vals.length) { el.textContent = '—'; if (lado) lado.textContent = '—'; return; }
+      var m = vals.reduce(function (a, b) { return a + b; }, 0) / vals.length;
+      el.textContent = 'média ' + fmt(m);
+      if (lado) lado.textContent = fmt(m);
+      var p = parseFloat(sec.getAttribute('data-peso')) || 0;
+      somaP += p; somaMP += m * p;
+    });
+    var g = somaP ? somaMP / somaP : null;
+    document.getElementById('exf-geral').textContent = g === null ? '—' : fmt(g);
+    document.getElementById('exf-lancadas').textContent = lanc;
+    document.getElementById('exf-total').textContent = total;
+    var barra = document.getElementById('exf-barra');
+    barra.style.width = (g === null ? 0 : g * 10) + '%';
+    barra.className = g !== null && g >= CORTE ? 'is-ok' : 'is-nao';
+    var falta = document.getElementById('exf-falta');
+    var selo = document.getElementById('exf-selo');
+    var fechada = lanc === total;
+    if (g === null) {
+      selo.innerHTML = pill('Aguardando prova', 'warning');
+      falta.textContent = 'Nota de corte ' + fmt(CORTE) + ' · lance as notas para ver a média';
+    } else if (g >= CORTE) {
+      selo.innerHTML = pill(fechada ? 'Aprovado' : 'Aprovado até agora', 'success');
+      falta.textContent = 'Nota de corte ' + fmt(CORTE) + ' · ' + fmt(g - CORTE) + ' acima';
+    } else {
+      selo.innerHTML = pill(fechada ? 'Não aprovado' : 'Abaixo do corte até agora', 'danger');
+      falta.textContent = 'Nota de corte ' + fmt(CORTE) + ' · faltam ' + fmt(CORTE - g);
+    }
+  }
+  ficha.addEventListener('click', function (e) {
+    var b = e.target.closest('.exf-rapida');
+    if (!b) return;
+    var inp = b.closest('.exf-nota-linha').querySelector('.exf-nota');
+    inp.value = (b.classList.contains('is-sel')) ? '' : b.getAttribute('data-v');
+    recalc();
+  });
+  ficha.addEventListener('input', function (e) { if (e.target.classList.contains('exf-nota')) recalc(); });
+  recalc();
+})();
+</script>
+{% endif %}
+{% endblock %}

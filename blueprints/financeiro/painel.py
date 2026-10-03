@@ -17,11 +17,13 @@ from flask import (Blueprint, render_template, request, redirect, url_for,
 from flask_login import login_required, current_user
 
 from config import get_db_connection
+from utils.planos_modalidade import filtrar_contexto as filtrar_planos
 from utils.contexto_logo import buscar_logo_url
 from blueprints.financeiro.routes import (_get_academia_id, _status_efetivo,
                                           _registrar_pagamento_e_receita,
                                           _ma_enriquecer_exibicao,
                                           _gateway_config_academia, _gateway_ativo)
+from utils.graduacao_modalidade import sql_join_faixa as _join_faixa
 
 bp_financeiro_painel = Blueprint(
     "financeiro_painel", __name__, url_prefix="/financeiro/painel"
@@ -408,13 +410,13 @@ def dashboard():
     cur = conn.cursor(dictionary=True)
     try:
         cur.execute(
-            """SELECT ma.id, ma.valor, ma.status, ma.status_pagamento, ma.data_vencimento,
+            f"""SELECT ma.id, ma.valor, ma.status, ma.status_pagamento, ma.data_vencimento,
                       a.id AS aluno_id, a.nome AS aluno_nome, a.telefone AS aluno_telefone,
                       g.faixa AS faixa, g.graduacao AS graduacao
                FROM mensalidade_aluno ma
                JOIN alunos a ON a.id = ma.aluno_id
                JOIN mensalidades mp ON mp.id = ma.mensalidade_id
-               LEFT JOIN graduacao g ON g.id = a.graduacao_id
+               {_join_faixa()}
                WHERE mp.id_academia = %s AND ma.status <> 'cancelado'
                  AND YEAR(ma.data_vencimento) = %s AND MONTH(ma.data_vencimento) = %s""",
             (academia_id, ano, mes),
@@ -432,9 +434,9 @@ def dashboard():
         receita_anterior = float((cur.fetchone() or {}).get("total") or 0)
 
         cur.execute(
-            """SELECT a.id, a.nome, g.faixa
+            f"""SELECT a.id, a.nome, g.faixa
                FROM alunos a
-               LEFT JOIN graduacao g ON g.id = a.graduacao_id
+               {_join_faixa()}
                WHERE a.id_academia = %s AND COALESCE(a.ativo, 1) = 1""",
             (academia_id,),
         )
@@ -578,13 +580,13 @@ def alunos():
     cur = conn.cursor(dictionary=True)
     try:
         cur.execute(
-            """SELECT a.id, a.nome, a.email, a.telefone, a.tel_celular, a.data_matricula,
+            f"""SELECT a.id, a.nome, a.email, a.telefone, a.tel_celular, a.data_matricula,
                       COALESCE(a.ativo, 1) AS ativo, g.faixa,
                       (SELECT ma.valor FROM mensalidade_aluno ma
                         WHERE ma.aluno_id = a.id AND ma.status <> 'cancelado'
                         ORDER BY ma.data_vencimento DESC LIMIT 1) AS mensalidade
                FROM alunos a
-               LEFT JOIN graduacao g ON g.id = a.graduacao_id
+               {_join_faixa()}
                WHERE a.id_academia = %s""",
             (academia_id,),
         )
@@ -643,19 +645,41 @@ def planos():
             """SELECT id, nome, descricao, valor, COALESCE(ativo, 0) AS ativo, criado_em,
                       COALESCE(aplicar_juros_multas, 0) AS aplicar_juros_multas,
                       COALESCE(percentual_multa_mes, 2) AS percentual_multa_mes,
-                      COALESCE(percentual_juros_dia, 0.0333) AS percentual_juros_dia
+                      COALESCE(percentual_juros_dia, 0.0333) AS percentual_juros_dia,
+                      COALESCE(periodicidade, 'mensal') AS periodicidade
                FROM mensalidades WHERE id_academia = %s ORDER BY ativo DESC, nome""",
             (academia_id,),
         )
         lista = cur.fetchall()
+        # Modalidades de cada plano e a divisão do valor (PM-01).
+        from utils import planos_modalidade as pmod
+        pmod.anotar(cur, lista)
+        cur.execute("""SELECT m.id, m.nome, m.cor FROM modalidade m
+                       JOIN academia_modalidades am ON am.modalidade_id = m.id
+                       WHERE am.academia_id = %s AND m.ativo = 1 ORDER BY m.nome""", (academia_id,))
+        modalidades_academia = cur.fetchall()
     finally:
         conn.close()
 
-    em_edicao = next((p for p in lista if p["id"] == editar), None) if editar else None
+    pendencias = {
+        "sem_modalidade": [p for p in lista if p["ativo"] and not p["modalidades_plano"]],
+        "sem_divisao": [p for p in lista if p["ativo"] and p["modalidades_plano"] and not p["rateio_ok"]],
+    }
+    # Filtro: o da tela, ou a modalidade em foco no topo do sistema.
+    from utils.multimodalidade import contexto_id
+    filtro_mod = request.args.get("modalidade", type=int)
+    if filtro_mod is None and "modalidade" not in request.args:
+        filtro_mod = contexto_id(academia_id)
+    lista_completa = lista
+    if filtro_mod:
+        lista = [p for p in lista if not p["modalidades_plano"] or any(m["id"] == filtro_mod for m in p["modalidades_plano"])]
+
+    em_edicao = next((p for p in lista_completa if p["id"] == editar), None) if editar else None
 
     ctx = _ctx_base(academia_id)
     ctx.update(
-        ativo="planos", lista=lista,
+        ativo="planos", lista=lista, modalidades_academia=modalidades_academia,
+        pendencias=pendencias, filtro_mod=filtro_mod,
         n_ativos=sum(1 for p in lista if p["ativo"]),
         n_inativos=sum(1 for p in lista if not p["ativo"]),
         mostrar_form=bool(novo or em_edicao), em_edicao=em_edicao,
@@ -679,10 +703,27 @@ def planos_salvar():
     aplicar_juros = 1 if str(request.form.get("aplicar_juros_multas") or "0") == "1" else 0
     pct_multa = _dec(request.form.get("percentual_multa_mes"), "2") if aplicar_juros else Decimal("2")
     pct_juros_dia = _dec(request.form.get("percentual_juros_dia"), "0.0333") if aplicar_juros else Decimal("0.0333")
+    periodicidade = "diaria" if request.form.get("periodicidade") == "diaria" else "mensal"
 
     if not nome or valor <= 0:
         flash("Informe o nome do plano e um valor maior que zero.", "danger")
         return _volta("financeiro_painel.planos", academia_id, novo=1)
+
+    # Modalidades do plano e a parte de cada uma no valor (obrigatória no combo).
+    from utils import planos_modalidade as pmod
+    _c = get_db_connection(); _k = _c.cursor(dictionary=True)
+    try:
+        _k.execute("""SELECT m.id, m.nome FROM modalidade m JOIN academia_modalidades am ON am.modalidade_id = m.id
+                      WHERE am.academia_id = %s AND m.ativo = 1""", (academia_id,))
+        mods_academia = _k.fetchall()
+    finally:
+        _k.close(); _c.close()
+    linhas_mod, erros_mod = pmod.ler_form(request.form, mods_academia, valor)
+    if erros_mod:
+        for e in erros_mod:
+            flash(e, "danger")
+        return (_volta("financeiro_painel.planos", academia_id, editar=plano_id) if plano_id
+                else _volta("financeiro_painel.planos", academia_id, novo=1))
 
     conn = get_db_connection()
     cur = conn.cursor()
@@ -690,20 +731,27 @@ def planos_salvar():
         if plano_id:
             cur.execute(
                 """UPDATE mensalidades SET nome=%s, descricao=%s, valor=%s, ativo=%s,
-                          aplicar_juros_multas=%s, percentual_multa_mes=%s, percentual_juros_dia=%s
+                          aplicar_juros_multas=%s, percentual_multa_mes=%s, percentual_juros_dia=%s,
+                          periodicidade=%s
                    WHERE id=%s AND id_academia=%s""",
                 (nome, descricao, valor, ativo, aplicar_juros, pct_multa, pct_juros_dia,
-                 plano_id, academia_id),
+                 periodicidade, plano_id, academia_id),
             )
+            cur.execute("SELECT 1 FROM mensalidades WHERE id = %s AND id_academia = %s",
+                        (plano_id, academia_id))
+            if cur.fetchone():
+                pmod.gravar(cur, plano_id, linhas_mod)
             flash("Plano atualizado.", "success")
         else:
             cur.execute(
                 """INSERT INTO mensalidades (nome, descricao, valor, id_academia, ativo,
-                                            aplicar_juros_multas, percentual_multa_mes, percentual_juros_dia)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
+                                            aplicar_juros_multas, percentual_multa_mes, percentual_juros_dia,
+                                            periodicidade)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
                 (nome, descricao, valor, academia_id, ativo,
-                 aplicar_juros, pct_multa, pct_juros_dia),
+                 aplicar_juros, pct_multa, pct_juros_dia, periodicidade),
             )
+            pmod.gravar(cur, cur.lastrowid, linhas_mod)
             flash("Plano cadastrado.", "success")
         conn.commit()
     except Exception as e:
@@ -1200,12 +1248,12 @@ def cobrancas():
                       d.nome AS desconto_nome, d.tipo AS desconto_tipo, d.valor AS desconto_valor
                FROM mensalidade_aluno ma
                JOIN alunos a ON a.id = ma.aluno_id
-               LEFT JOIN graduacao g ON g.id = a.graduacao_id
+               {join_faixa}
                LEFT JOIN descontos d ON d.id = ma.id_desconto
                WHERE a.id_academia = %s
                  AND YEAR(ma.data_vencimento) = %s AND MONTH(ma.data_vencimento) = %s
                  {trecho_modalidade}
-               ORDER BY a.nome""".format(trecho_modalidade=_trecho_mod),
+               ORDER BY a.nome""".format(join_faixa=_join_faixa(), trecho_modalidade=_trecho_mod),
             (academia_id, ano, mes) + tuple(_params_mod),
         )
         do_mes = cur.fetchall()
@@ -1215,12 +1263,12 @@ def cobrancas():
         # Cobranças avulsas do mesmo mês entram na lista: sem elas a tela dá a
         # impressão de que a cobrança sumiu (ela só vivia na tela antiga).
         cur.execute(
-            """SELECT ca.id, ca.valor, ca.status, ca.data_vencimento, ca.descricao,
+            f"""SELECT ca.id, ca.valor, ca.status, ca.data_vencimento, ca.descricao,
                       ca.created_at AS criado_em,
                       a.id AS aluno_id, a.nome AS aluno_nome, g.faixa
                FROM cobranca_avulsa ca
                JOIN alunos a ON a.id = ca.aluno_id
-               LEFT JOIN graduacao g ON g.id = a.graduacao_id
+               {_join_faixa()}
                WHERE ca.id_academia = %s
                  AND YEAR(ca.data_vencimento) = %s AND MONTH(ca.data_vencimento) = %s
                ORDER BY a.nome""",
@@ -1268,9 +1316,9 @@ def cobrancas():
             current_app.logger.info("Marcação de cobrança familiar indisponível (%s)", e)
 
         cur.execute(
-            """SELECT a.id, a.nome, g.faixa
+            f"""SELECT a.id, a.nome, g.faixa
                FROM alunos a
-               LEFT JOIN graduacao g ON g.id = a.graduacao_id
+               {_join_faixa()}
                WHERE a.id_academia = %s AND COALESCE(a.ativo, 1) = 1
                ORDER BY a.nome""",
             (academia_id,),
@@ -1279,10 +1327,10 @@ def cobrancas():
 
         cur.execute(
             """SELECT id, nome, valor FROM mensalidades
-               WHERE id_academia=%s AND COALESCE(ativo,0)=1 ORDER BY nome""",
+               WHERE id_academia=%s AND COALESCE(ativo,0)=1 AND COALESCE(periodicidade,'mensal') <> 'diaria' ORDER BY nome""",
             (academia_id,),
         )
-        planos_ativos = cur.fetchall()
+        planos_ativos = filtrar_planos(cur, cur.fetchall(), academia_id)
 
         cur.execute(
             """SELECT id, nome, tipo, valor FROM descontos
@@ -1395,11 +1443,15 @@ def cobrancas_gerar():
                     aluno_id, academia_id, valor_original, vencimento)
             aplicado = valor_original - valor_final
 
-            # Não duplica: um aluno já cobrado no mês é ignorado.
+            # Não duplica: um aluno já cobrado no mês é ignorado. A mensalidade
+            # de aula particular não conta — é cobrança à parte da mensalidade
+            # da turma, e sem esta exceção ela impediria a do mês de sair.
             cur.execute(
-                """SELECT id FROM mensalidade_aluno
-                   WHERE aluno_id=%s AND status <> 'cancelado'
-                     AND YEAR(data_vencimento)=%s AND MONTH(data_vencimento)=%s""",
+                """SELECT ma.id FROM mensalidade_aluno ma
+                   WHERE ma.aluno_id=%s AND ma.status <> 'cancelado'
+                     AND YEAR(ma.data_vencimento)=%s AND MONTH(ma.data_vencimento)=%s
+                     AND NOT EXISTS (SELECT 1 FROM aula_particular_cobranca apc
+                                     WHERE apc.mensalidade_aluno_id = ma.id)""",
                 (aluno_id, ano, mes),
             )
             if cur.fetchone():
@@ -1475,7 +1527,7 @@ def mensalidades():
     cur = conn.cursor(dictionary=True)
     try:
         cur.execute(
-            """SELECT ma.id, ma.aluno_id, ma.valor, ma.valor_pago, ma.status, ma.status_pagamento,
+            f"""SELECT ma.id, ma.aluno_id, ma.valor, ma.valor_pago, ma.status, ma.status_pagamento,
                       ma.data_vencimento, ma.data_pagamento, ma.id_desconto,
                       ma.valor_original, ma.desconto_aplicado,
                       COALESCE(ma.remover_juros, 0) AS remover_juros,
@@ -1486,7 +1538,7 @@ def mensalidades():
                FROM mensalidade_aluno ma
                JOIN alunos a ON a.id = ma.aluno_id
                JOIN mensalidades m ON m.id = ma.mensalidade_id
-               LEFT JOIN graduacao g ON g.id = a.graduacao_id
+               {_join_faixa()}
                LEFT JOIN formas_pagamento fp ON fp.id = ma.id_forma_pagamento
                WHERE a.id_academia = %s AND ma.status <> 'cancelado'
                  AND YEAR(ma.data_vencimento) = %s AND MONTH(ma.data_vencimento) = %s
@@ -1702,17 +1754,25 @@ def mensalidades_notificar_atrasados():
     if not academia_id:
         return _sem_academia()
     mes_chave = (request.form.get("mes") or "").strip()
+    # De onde veio o clique. O painel da academia também dispara isto, e cair
+    # na tela de mensalidades depois de cobrar faz o gestor perder o lugar.
+    voltar = (request.form.get("voltar") or "").strip()
+
+    def _fim(**kw):
+        if voltar.startswith("/") and not voltar.startswith("//"):
+            return redirect(voltar)
+        return _volta("financeiro_painel.mensalidades", academia_id, **kw)
 
     from utils import whatsapp as wpp
     from utils import whatsapp_lembretes as lem
 
     if not wpp.disponivel():
         flash("O serviço de WhatsApp está fora do ar — nenhuma mensagem foi enviada.", "danger")
-        return _volta("financeiro_painel.mensalidades", academia_id, mes=mes_chave)
+        return _fim(mes=mes_chave)
     if not wpp.conectado(academia_id):
         flash("O WhatsApp desta academia não está conectado. Leia o QR Code em "
               "Academia → WhatsApp e tente de novo.", "warning")
-        return _volta("financeiro_painel.mensalidades", academia_id, mes=mes_chave)
+        return _fim(mes=mes_chave)
 
     r = lem.enviar_lote(academia_id, somente_ativadas=False, somente_atrasadas=True)
 
@@ -1727,7 +1787,7 @@ def mensalidades_notificar_atrasados():
         if r.get("desativado"):
             partes.append(f"{r['desativado']} com modelo desativado")
         flash(" · ".join(partes) + ".", "success" if r.get("enviados") else "warning")
-    return _volta("financeiro_painel.mensalidades", academia_id, mes=mes_chave)
+    return _fim(mes=mes_chave)
 
 
 @bp_financeiro_painel.route("/mensalidades/atualizar-links", methods=["POST"])

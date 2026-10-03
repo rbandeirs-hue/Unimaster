@@ -1,0 +1,88 @@
+{# Apostilas em lote — uma por aluno, cada uma com o nome dele e o material da
+   faixa do próximo exame dele. Na tela só o resumo; no papel, uma apostila
+   atrás da outra, cada uma começando em folha nova.
+   Contexto: apostilas [{aluno, atual, conhecimento, tecnicas, ...}], marca, voltar. #}
+{% extends "base_app.html" %}
+{% block conteudo_classe %}exf-tela{% endblock %}
+{% from 'exame_faixa/_macros.html' import obi, promo with context %}
+{% set menu_ativo = 'exame_faixa' %}
+{% block title %}Apostilas para impressão{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{{ asset('css/exame_faixa.css') }}">
+<style media="print">
+  @page { @top-left { content: "{{ (marca.nome or 'Unimaster')|replace('"', '')|replace('<', '')|replace('\\', '')|safe }}"; font: 7.5pt Inter, sans-serif; color: #666; }
+          @top-right { content: "Apostila de estudo"; font: 7.5pt Inter, sans-serif; color: #666; } }
+  .exf-apostila-folha + .exf-apostila-folha { break-before: page; }
+  .exf-apostilas-resumo { display: none !important; }
+</style>
+{% endblock %}
+
+{% block pagina_titulo %}Apostilas para impressão{% endblock %}
+{% block pagina_subtitulo %}{{ apostilas|length }} apostila{{ 's' if apostilas|length != 1 }}, cada uma com o nome do aluno e o material da faixa do próximo exame dele.{% endblock %}
+{% block pagina_acoes %}
+<a href="{{ voltar }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Voltar</a>
+<button type="button" class="sh__btn sh__btn--forte" onclick="window.print()"><i class="bi bi-printer"></i> Imprimir</button>
+{% endblock %}
+
+{% block content %}
+<section class="lst-quadro exf-apostilas-resumo">
+  <div class="lst-quadro__topo">
+    <span class="lst-quadro__titulo">Alunos</span>
+    <span class="lst-quadro__meta">a impressão abre sozinha</span>
+  </div>
+  {% for ap in apostilas %}
+  <div class="lst-linha lst-item" style="grid-template-columns: minmax(0, 1fr) auto">
+    <span class="lst-nome lst-corta">{{ ap.aluno.nome }}</span>
+    <span class="lst-sub">{{ promo(ap.atual) }}</span>
+  </div>
+  {% endfor %}
+</section>
+
+{% if marca.logo %}<img class="exf-so-papel exf-marca-dagua" src="{{ marca.logo }}" alt="">{% endif %}
+{% for ap in apostilas %}
+<div class="exf-so-papel exf-apostila-folha">
+  <header class="exf-so-papel exf-apostila-cab">
+    {% if marca.logo %}<img class="exf-apostila-cab__logo" src="{{ marca.logo }}" alt="Logo {{ marca.nome or '' }}">{% endif %}
+    <div class="exf-apostila-cab__tit">
+      {% if marca.nome %}<span class="exf-apostila-cab__acad">{{ marca.nome }}</span>{% endif %}
+      <span class="exf-rotulo">Apostila de estudo · edição {{ ap.atual.edicao or '—' }}</span>
+      <h1>{{ promo(ap.atual) }}</h1>
+      <p>Idade {{ ap.atual.idade_txt }} · carência {{ ap.atual.carencia_txt }}</p>
+    </div>
+    <div class="exf-apostila-cab__meta">
+      <span>Aluno: <strong>{{ ap.aluno.nome }}</strong></span>
+      <span>Impresso em {{ hoje_txt }}</span>
+    </div>
+  </header>
+  <p class="exf-so-papel exf-apostila-leg">Aponte a câmera do celular para o QR code para ver o vídeo da técnica</p>
+  <div class="exf-programa">
+    <div class="exf-programa__corpo exf-numerado">
+      {% with atual=ap.atual, acumulado=ap.acumulado, conhecimento=ap.conhecimento, tecnicas=ap.tecnicas,
+              anteriores=ap.anteriores, mostra_katas=ap.mostra_katas, katas_cobrados=ap.katas_cobrados,
+              katas_extra=ap.katas_extra, documentos=ap.documentos, quiz=false, sem_pede=true %}
+        {% include 'exame_faixa/_apostila_corpo.html' %}
+      {% endwith %}
+    </div>
+  </div>
+</div>
+{% endfor %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+/* Igual à tela do programa: o passo a passo de cada técnica sai aberto no papel. */
+(function () {
+  var abertos = [];
+  window.addEventListener('beforeprint', function () {
+    abertos = [];
+    document.querySelectorAll('details.exf-passos:not([open])').forEach(function (d) {
+      abertos.push(d); d.open = true;
+    });
+  });
+  window.addEventListener('afterprint', function () {
+    abertos.forEach(function (d) { d.open = false; });
+    abertos = [];
+  });
+  window.addEventListener('load', function () { window.print(); });
+})();
+</script>
+{% endblock %}

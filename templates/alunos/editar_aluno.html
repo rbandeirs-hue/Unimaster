@@ -62,6 +62,11 @@
 {% block cabecalho %}{% endblock %}
 
 {% block content %}
+{# Campos obrigatórios da academia do aluno, já no critério da edição: só o
+   que estava preenchido (não pode ser apagado) e o que a edição sempre exigiu.
+   Ver utils/campos_obrigatorios_aluno.py — o servidor aplica o mesmo. #}
+{% set obrig = obrigatorios if obrigatorios is defined else ['nome', 'data_nascimento', 'responsavel_financeiro_telefone'] %}
+{% macro marca(chave) %}{% if chave in obrig %} <span class="text-danger obrigatorio">*</span>{% endif %}{% endmacro %}
 
 <style>
     /* ------------------------------------------------- barra de contexto */
@@ -135,34 +140,34 @@
       margin-bottom: .35rem;
     }
     .editar-aluno-page .form-control,
-    .editar-aluno-page .form-select {
+    .editar-aluno-page .form-select, .editar-aluno-page .u-campo__controle {
       min-height: 46px;
       border: 1px solid var(--sh-line);
       border-radius: var(--u-radius-sm);
       color: var(--sh-ink);
       font-size: .95rem;
     }
-    .editar-aluno-page textarea.form-control { min-height: 92px; }
+    .editar-aluno-page textarea.form-control, .editar-aluno-page textarea.u-campo__controle { min-height: 92px; }
     .editar-aluno-page .form-control:focus,
-    .editar-aluno-page .form-select:focus {
+    .editar-aluno-page .form-select:focus, .editar-aluno-page .u-campo__controle:focus {
       border-color: #cfcbc4;
       box-shadow: 0 0 0 3px rgba(28, 28, 28, .06);
     }
-    .editar-aluno-page .form-control::placeholder { color: #b3afa8; }
+    .editar-aluno-page .form-control::placeholder, .editar-aluno-page .u-campo__controle::placeholder { color: #b3afa8; }
     .editar-aluno-page h6.border-bottom { display: none; }  /* o título agora é a aba */
 
     .editar-aluno-page .btn-primary,
-    .editar-aluno-page .btn-success {
+    .editar-aluno-page .btn-success{
       background: var(--sh-ink); border-color: var(--sh-ink); color: #fff;
     }
     .editar-aluno-page .btn-primary:hover,
-    .editar-aluno-page .btn-success:hover { background: #000; border-color: #000; }
+    .editar-aluno-page .btn-success:hover{ background: #000; border-color: #000; }
     .editar-aluno-page .btn-outline-primary,
-    .editar-aluno-page .btn-outline-secondary {
+    .editar-aluno-page .btn-outline-secondary, .editar-aluno-page .u-btn {
       border-color: var(--sh-line); color: var(--sh-ink);
     }
     .editar-aluno-page .btn-outline-primary:hover,
-    .editar-aluno-page .btn-outline-secondary:hover { background: #f4f2ee; color: var(--sh-ink); }
+    .editar-aluno-page .btn-outline-secondary:hover, .editar-aluno-page .u-btn:hover { background: #f4f2ee; color: var(--sh-ink); }
 
     /* Foto ao lado dos dados, como no restante do sistema. */
     .ed-foto { display: flex; gap: 1.5rem; align-items: flex-start; flex-wrap: wrap; }
@@ -217,7 +222,7 @@
 
     /* O seletor ocupa a linha e o botão fica encostado nele, como nos filtros. */
     .ed-vincular { display: flex; gap: .6rem; align-items: stretch; flex-wrap: wrap; }
-    .ed-vincular .form-select { flex: 1 1 320px; }
+    .ed-vincular .form-select, .ed-vincular .u-campo__controle { flex: 1 1 320px; }
     .ed-vincular .sh__btn { flex: 0 0 auto; }
 
     /* --------------------------------------------------- turmas e opções */
@@ -282,7 +287,7 @@
       gap: 1rem;
       padding: 1.1rem 1rem;
     }
-    .editar-aluno-page .form-control:disabled { background: #f4f2ee; color: #a5a29c; }
+    .editar-aluno-page .form-control:disabled, .editar-aluno-page .u-campo__controle:disabled { background: #f4f2ee; color: #a5a29c; }
 
     /* Marcação em vermelho, como o resto dos estados do sistema. */
     .editar-aluno-page .form-check-input { width: 1.15rem; height: 1.15rem; }
@@ -347,13 +352,13 @@
         .editar-aluno-page .card-body { padding: 1rem !important; }
         .editar-aluno-page .display-6 { font-size: 1.35rem; }
         .editar-aluno-page .lead { font-size: 0.9rem; }
-        .editar-aluno-page .btn-lg { width: 100%; margin-top: 0.5rem; }
+        .editar-aluno-page .btn-lg, .editar-aluno-page .u-btn--grande { width: 100%; margin-top: 0.5rem; }
         .editar-aluno-page .d-flex.justify-content-between.mt-4 { flex-direction: column-reverse; gap: 0.5rem; }
-        .editar-aluno-page .d-flex.justify-content-between.mt-4 .btn { width: 100%; margin: 0 !important; }
+        .editar-aluno-page .d-flex.justify-content-between.mt-4 .btn, .editar-aluno-page .d-flex.justify-content-between.mt-4 .u-btn { width: 100%; margin: 0 !important; }
         .editar-aluno-page .form-check { margin-bottom: 0.5rem; }
         .editar-aluno-page .d-flex.flex-wrap.gap-3 { flex-direction: column; gap: 0.5rem !important; }
         .editar-aluno-page .d-flex.flex-wrap.gap-2 { flex-direction: column; gap: 0.35rem !important; }
-        .editar-aluno-page .input-group .btn { min-width: 44px; }
+        .editar-aluno-page .input-group .btn, .editar-aluno-page .input-group .u-btn { min-width: 44px; }
         .editar-aluno-page #btnMesmoResponsavelFinanceiro { margin-top: 0 !important; }
         .editar-aluno-page .align-items-end .col-md-2 { margin-top: 0.5rem; }
         .editar-aluno-page #miniatura { width: 100px; height: 100px; }
@@ -460,7 +465,7 @@
                         <i class="bi bi-upload"></i>
                       </button>
                     </div>
-                    <input type="file" name="foto_arquivo" id="fotoArquivoEditarAluno" accept="image/*" capture="environment">
+                    <input type="file" name="foto_arquivo" id="fotoArquivoEditarAluno" accept="image/*">
                     <span class="ed-foto-dica">JPG ou PNG, até 5 MB</span>
                   </div>
 
@@ -469,44 +474,32 @@
                 <div class="row">
                     <div class="col-md-12 mb-3">
                         <label class="form-label fw-semibold">Nome completo *</label>
-                        <input type="text" class="form-control" name="nome" required
+                        <input type="text" class="u-campo__controle" name="nome" required
                                placeholder="Nome completo"
-                               value="{{ aluno.nome }}">
+                               value="{{ aluno.nome }}" aria-label="Nome completo">
                     </div>
 
                     <div class="col-md-4 mb-3">
                         <label class="form-label fw-semibold">Data de nascimento *</label>
-                        <input type="date" class="form-control" name="data_nascimento"
+                        <input type="date" class="u-campo__controle" name="data_nascimento"
                                placeholder="Selecione a data"
-                               value="{{ aluno.data_nascimento }}" required>
+                               value="{{ aluno.data_nascimento }}" required aria-label="Data de nascimento">
                     </div>
 
                     <div class="col-md-4 mb-3">
-                        <label class="form-label fw-semibold">Nacionalidade</label>
-                        <input type="text" class="form-control" name="nacionalidade"
+                        <label class="form-label fw-semibold">Nacionalidade{{ marca('nacionalidade') }}</label>
+                        <input type="text" class="u-campo__controle" name="nacionalidade"
                                placeholder="Nacionalidade"
-                               value="{{ aluno.nacionalidade or '' }}">
+                               value="{{ aluno.nacionalidade or '' }}" aria-label="Nacionalidade"{% if 'nacionalidade' in obrig %} required{% endif %}>
                     </div>
 
-                    <div class="col-md-4 mb-3" id="graduacao_container">
-                        <label class="form-label fw-semibold">Graduação</label>
-                        <select class="form-control" name="graduacao_id" id="graduacao_id">
-                            <option value="">Selecione</option>
-                            {% for g in graduacoes %}
-                            <option value="{{ g.id }}" data-modalidade-id="{{ g.modalidade_id if g.modalidade_id is defined and g.modalidade_id is not none else '' }}"
-                                {% if aluno.graduacao_id == g.id %}selected{% endif %}>
-                                {{ g.get('faixa', '') }} - {{ g.get('graduacao', '') }}{% if g.get('categoria') %} - {{ g.get('categoria') }}{% endif %}
-                            </option>
-                            {% endfor %}
-                        </select>
-                        <small class="text-muted d-none" id="graduacao_empty_hint">Nenhuma graduação disponível para a(s) modalidade(s) selecionada(s).</small>
-                    </div>
+                    {% with faixas_atuais=faixas_atuais, principal_id=aluno.graduacao_id %}{% include 'alunos/_faixas_modalidade.html' %}{% endwith %}
                 </div>
 
                 <div class="row">
                     <div class="col-md-4 mb-3">
-                        <label class="form-label fw-semibold">Sexo</label>
-                        <select class="form-control" name="sexo">
+                        <label class="form-label fw-semibold">Sexo{{ marca('sexo') }}</label>
+                        <select class="u-campo__controle" name="sexo" aria-label="Sexo"{% if 'sexo' in obrig %} required{% endif %}>
                             <option value="" selected>Selecione</option>
                             <option value="M" {% if aluno.sexo == 'M' %}selected{% endif %}>Masculino</option>
                             <option value="F" {% if aluno.sexo == 'F' %}selected{% endif %}>Feminino</option>
@@ -515,12 +508,12 @@
                     </div>
 
                     <div class="col-md-4 mb-3">
-                        <label class="form-label fw-semibold">Peso</label>
+                        <label class="form-label fw-semibold">Peso{{ marca('peso') }}</label>
                         {# Sem peso o campo fica vazio: `{{ aluno.peso }}` cru imprimia
                            value="None" quando a coluna era nula. #}
-                        <input type="number" step="0.1" min="0" class="form-control" name="peso"
+                        <input type="number" step="0.1" min="0" class="u-campo__controle" name="peso"
                                placeholder="Peso (kg)"
-                               value="{{ aluno.peso if aluno.peso is not none else '' }}">
+                               value="{{ aluno.peso if aluno.peso is not none else '' }}" aria-label="Peso"{% if 'peso' in obrig %} required{% endif %}>
                     </div>
                 </div>
 
@@ -540,18 +533,21 @@
                     <i class="bi bi-diagram-3 me-1"></i> Vínculos
                 </h6>
 
+                {# Sem associação vinculada (academia independente) o campo some. #}
                 <div class="row">
-                    <div class="col-md-6 mb-3">
+                    <div class="{{ 'col-md-6' if aluno.associacao_nome else 'col-12' }} mb-3">
                         <label class="form-label fw-semibold">Academia</label>
-                        <input type="text" class="form-control" placeholder="Academia"
-                               value="{{ aluno.academia_nome }}" readonly>
+                        <input type="text" class="u-campo__controle" placeholder="Academia"
+                               value="{{ aluno.academia_nome }}" readonly aria-label="Academia">
                     </div>
 
+                    {% if aluno.associacao_nome %}
                     <div class="col-md-6 mb-3">
                         <label class="form-label fw-semibold">Associação</label>
-                        <input type="text" class="form-control" placeholder="Associação"
-                               value="{{ aluno.associacao_nome }}" readonly>
+                        <input type="text" class="u-campo__controle" placeholder="Associação"
+                               value="{{ aluno.associacao_nome }}" readonly aria-label="Associação">
                     </div>
+                    {% endif %}
                 </div>
 
                 {% if academias_vinculadas %}
@@ -574,13 +570,13 @@
                     {% elif pode_vincular_academia %}
                       <button type="submit" class="ed-vinculo-acao"
                               form="principal_{{ ac.id }}" title="Tornar academia principal"
-                              onclick="return confirm('Tornar {{ ac.nome }} a academia principal deste aluno?');">
+                              data-confirmar="Tornar {{ ac.nome }} a academia principal deste aluno?">
                         tornar principal
                       </button>
                       <button type="submit" class="ed-vinculo-remover"
                               form="desvincular_{{ ac.id }}" title="Remover vínculo"
                               aria-label="Remover vínculo com {{ ac.nome }}"
-                              onclick="return confirm('Remover o vínculo com {{ ac.nome }}?');">
+                              data-confirmar="Remover o vínculo com {{ ac.nome }}?">
                         <i class="bi bi-x-lg"></i>
                       </button>
                     {% endif %}
@@ -590,7 +586,7 @@
 
                 {% if pode_vincular_academia and academias_para_vincular %}
                 <div class="ed-vincular">
-                  <select name="academia_id" class="form-select" form="vincular_academia" aria-label="Academia para vincular">
+                  <select name="academia_id" class="u-campo__controle" form="vincular_academia" aria-label="Academia para vincular">
                     <option value="">Vincular a outra academia…</option>
                     {% for ac in academias_para_vincular %}
                       <option value="{{ ac.id }}">{{ ac.nome }}</option>
@@ -622,17 +618,17 @@
 
                 <div class="row">
                     <div class="col-md-6 mb-3">
-                        <label class="form-label fw-semibold">Nome do Pai</label>
-                        <input type="text" class="form-control" name="nome_pai"
+                        <label class="form-label fw-semibold">Nome do Pai{{ marca('nome_pai') }}</label>
+                        <input type="text" class="u-campo__controle" name="nome_pai"
                                placeholder="Nome do pai"
-                               value="{{ aluno.nome_pai }}">
+                               value="{{ aluno.nome_pai }}" aria-label="Nome do Pai"{% if 'nome_pai' in obrig %} required{% endif %}>
                     </div>
 
                     <div class="col-md-6 mb-3">
-                        <label class="form-label fw-semibold">Nome da Mãe</label>
-                        <input type="text" class="form-control" name="nome_mae"
+                        <label class="form-label fw-semibold">Nome da Mãe{{ marca('nome_mae') }}</label>
+                        <input type="text" class="u-campo__controle" name="nome_mae"
                                placeholder="Nome da mãe"
-                               value="{{ aluno.nome_mae }}">
+                               value="{{ aluno.nome_mae }}" aria-label="Nome da Mãe"{% if 'nome_mae' in obrig %} required{% endif %}>
                     </div>
                 </div>
 
@@ -685,13 +681,28 @@
                             <input class="form-check-input" type="checkbox"
                                    name="aluno_modalidade_ids"
                                    value="{{ m.id }}"
-                                   {% if m.id in aluno.modalidades_ids %}checked{% endif %}>
+                                   {# Academia de uma modalidade só: já vem marcada. #}
+                                   {% if m.id in aluno.modalidades_ids or (modalidades|length == 1 and not aluno.modalidades_ids) %}checked{% endif %}>
                             <span>{{ m.nome }}</span>
                         </label>
                         {% endfor %}
                     </div>
                 </div>
 
+                {# Zempo é o registro nacional do JUDÔ (CBJ). Pedir número de
+                   registro de judô a um aluno de jiu-jitsu confunde quem
+                   cadastra, então o bloco só aparece onde faz sentido.
+
+                   Vale a modalidade DO ALUNO; enquanto ele não tiver nenhuma
+                   marcada — caso do cadastro recém-criado — vale o que a
+                   ACADEMIA oferece. Academia que não dá judô nunca precisa do
+                   campo, mesmo com o aluno ainda em branco. #}
+                {% set _mods_aluno = (modalidades | selectattr('id', 'in', aluno.modalidades_ids or [])
+                                      | map(attribute='nome') | join(' ') | lower) %}
+                {% set _mods_academia = (modalidades | map(attribute='nome') | join(' ') | lower) %}
+                {% set _tem_judo = ('jud' in _mods_aluno) if aluno.modalidades_ids
+                                   else ('jud' in _mods_academia) %}
+                {% if _tem_judo or not modalidades %}
                 <div class="ed-zempo">
                     <label class="ed-zempo-barra" for="cadastro_zempo_gestor">
                         <input class="form-check-input" type="checkbox" id="cadastro_zempo_gestor" name="cadastro_zempo" value="1"
@@ -702,35 +713,39 @@
                     <div class="ed-zempo-campos">
                         <div>
                             <label class="form-label fw-semibold">Registro Zempo nº</label>
-                            <input type="text" class="form-control" name="zempo" id="zempo_gestor"
+                            <input type="text" class="u-campo__controle" name="zempo" id="zempo_gestor"
                                    placeholder="Número do registro Zempo"
-                                   value="{{ aluno.zempo or '' }}">
+                                   value="{{ aluno.zempo or '' }}" aria-label="Registro Zempo nº">
                         </div>
                         <div>
                             <label class="form-label fw-semibold">Data de cadastro Zempo</label>
-                            <input type="date" class="form-control" name="data_cadastro_zempo" id="data_cadastro_zempo_gestor"
+                            <input type="date" class="u-campo__controle" name="data_cadastro_zempo" id="data_cadastro_zempo_gestor"
                                    placeholder="Data de cadastro"
-                                   value="{{ aluno.data_cadastro_zempo or '' }}">
+                                   value="{{ aluno.data_cadastro_zempo or '' }}" aria-label="Data de cadastro Zempo">
                         </div>
                     </div>
                     {# Peso mora no passo "Dados pessoais". Ele precisa ser enviado
                        sempre: o POST faz `form.get("peso") or None` e gravaria nulo
                        se o campo faltasse. #}
                 </div>
+                {% endif %}
                 {% else %}
                 {# Aluno e responsável: exibem turma e modalidades somente leitura, e podem editar Zempo e Peso #}
                 <div class="row">
                     <div class="col-md-6 mb-3">
                         <label class="form-label fw-semibold">Turma(s)</label>
-                        <input type="text" class="form-control" readonly
-                               value="{{ turmas_display or '—' }}">
+                        <input type="text" class="u-campo__controle" readonly
+                               value="{{ turmas_display or '—' }}" aria-label="Turma(s)">
                     </div>
                     <div class="col-md-6 mb-3">
                         <label class="form-label fw-semibold">Modalidades</label>
-                        <input type="text" class="form-control" readonly
-                               value="{{ modalidades_display or '—' }}">
+                        <input type="text" class="u-campo__controle" readonly
+                               value="{{ modalidades_display or '—' }}" aria-label="Modalidades">
                     </div>
                 </div>
+                {# Mesmo critério do bloco acima, agora na versão que o
+                   próprio aluno enxerga. #}
+                {% if _tem_judo or not modalidades %}
                 <div class="form-check mb-3">
                     <input class="form-check-input" type="checkbox" id="cadastro_zempo" name="cadastro_zempo" value="1"
                            {% if aluno.zempo or aluno.data_cadastro_zempo %}checked{% endif %}>
@@ -739,20 +754,22 @@
                 <div class="row">
                     <div class="col-md-4 mb-3">
                         <label class="form-label fw-semibold">Registro Zempo nº</label>
-                        <input type="text" class="form-control" name="zempo" id="zempo_editar"
+                        <input type="text" class="u-campo__controle" name="zempo" id="zempo_editar"
                                placeholder="Número do registro Zempo"
-                               value="{{ aluno.zempo or '' }}">
+                               value="{{ aluno.zempo or '' }}" aria-label="Registro Zempo nº">
                     </div>
                     <div class="col-md-4 mb-3">
                         <label class="form-label fw-semibold">Data de Cadastro Zempo</label>
-                        <input type="date" class="form-control" name="data_cadastro_zempo" id="data_cadastro_zempo_editar"
+                        <input type="date" class="u-campo__controle" name="data_cadastro_zempo" id="data_cadastro_zempo_editar"
                                placeholder="Data de cadastro"
-                               value="{{ aluno.data_cadastro_zempo or '' }}">
+                               value="{{ aluno.data_cadastro_zempo or '' }}" aria-label="Data de Cadastro Zempo">
                     </div>
                     {# Peso mora no passo "Dados pessoais". Ele precisa ser enviado
                        sempre: o POST faz `form.get("peso") or None` e gravaria nulo
                        se o campo faltasse. #}
                 </div>
+                {% endif %}
+                {% endif %}
                 {# Campos hidden para manter turmas e modalidades ao enviar o form (não alteram) #}
                 {% for tid in (aluno.turmas_ids or []) %}
                 <input type="hidden" name="turmas_ids" value="{{ tid }}">
@@ -763,7 +780,6 @@
                 {% for mid in (aluno.modalidades_ids or []) %}
                 <input type="hidden" name="aluno_modalidade_ids" value="{{ mid }}">
                 {% endfor %}
-                {% endif %}
 
                 <!-- ===================================================== -->
                 </div></div></div>
@@ -780,41 +796,45 @@
                 </h6>
 
                 <div class="row">
-                    <div class="col-md-4 mb-3">
-                        <label class="form-label fw-semibold">Data da Última Graduação</label>
-                        <input type="date" class="form-control" name="ultimo_exame_faixa"
+                    {# Faixa branca não é graduação — o aluno começa nela —, então não
+                       tem data: com a branca escolhida o campo some e fica o aviso.
+                       O servidor grava NULL de qualquer jeito. #}
+                    <div class="col-md-4 mb-3" id="ultimo_exame_container">
+                        <label class="form-label fw-semibold">Data da Última Graduação{{ marca('ultimo_exame_faixa') }}</label>
+                        <input type="date" class="u-campo__controle" name="ultimo_exame_faixa" id="ultimo_exame_faixa"
                                placeholder="Data da última graduação"
-                               value="{{ aluno.ultimo_exame_faixa or '' }}">
+                               value="{{ aluno.ultimo_exame_faixa or '' }}" aria-label="Data da Última Graduação"{% if 'ultimo_exame_faixa' in obrig %} required data-obrigatorio="1"{% endif %}>
+                        <div class="text-muted small d-none" id="ultimo_exame_branca">Faixa branca — sem data de graduação</div>
                     </div>
                 </div>
 
                 <div class="row">
                     <div class="col-md-4 mb-3">
-                        <label class="form-label fw-semibold">CPF</label>
-                        <input type="text" class="form-control" name="cpf"
+                        <label class="form-label fw-semibold">CPF{{ marca('cpf') }}</label>
+                        <input type="text" class="u-campo__controle" name="cpf"
                                placeholder="CPF"
-                               value="{{ aluno.cpf }}" data-mask="cpf">
+                               value="{{ aluno.cpf }}" data-mask="cpf" aria-label="CPF"{% if 'cpf' in obrig %} required{% endif %}>
                     </div>
 
                     <div class="col-md-4 mb-3">
-                        <label class="form-label fw-semibold">RG</label>
-                        <input type="text" class="form-control" name="rg"
+                        <label class="form-label fw-semibold">RG{{ marca('rg') }}</label>
+                        <input type="text" class="u-campo__controle" name="rg"
                                placeholder="RG"
-                               value="{{ aluno.rg }}">
+                               value="{{ aluno.rg }}" aria-label="RG"{% if 'rg' in obrig %} required{% endif %}>
                     </div>
 
                     <div class="col-md-4 mb-3">
-                        <label class="form-label fw-semibold">Órgão Emissor / UF</label>
-                        <input type="text" class="form-control" name="orgao_emissor"
+                        <label class="form-label fw-semibold">Órgão Emissor / UF{{ marca('orgao_emissor') }}</label>
+                        <input type="text" class="u-campo__controle" name="orgao_emissor"
                                placeholder="Ex: SDS/PE"
-                               value="{{ aluno.orgao_emissor }}">
+                               value="{{ aluno.orgao_emissor }}" aria-label="Órgão Emissor / UF"{% if 'orgao_emissor' in obrig %} required{% endif %}>
                     </div>
 
                     <div class="col-md-4 mb-3">
-                        <label class="form-label fw-semibold">Data de emissão</label>
-                        <input type="date" class="form-control" name="rg_data_emissao"
+                        <label class="form-label fw-semibold">Data de emissão{{ marca('rg_data_emissao') }}</label>
+                        <input type="date" class="u-campo__controle" name="rg_data_emissao"
                                placeholder="Data de emissão"
-                               value="{{ aluno.rg_data_emissao }}">
+                               value="{{ aluno.rg_data_emissao }}" aria-label="Data de emissão"{% if 'rg_data_emissao' in obrig %} required{% endif %}>
                     </div>
                 </div>
 
@@ -834,59 +854,59 @@
 
                 <div class="row">
                     <div class="col-md-3 mb-3">
-                        <label class="form-label fw-semibold">CEP</label>
+                        <label class="form-label fw-semibold">CEP{{ marca('cep') }}</label>
                         <div class="input-group">
-                            <input type="text" class="form-control" name="cep" id="cep" data-mask="cep"
+                            <input type="text" class="u-campo__controle" name="cep" id="cep" data-mask="cep"
                                    placeholder="00000-000"
-                                   value="{{ aluno.cep }}">
-                            <button class="btn btn-outline-primary" type="button" id="btnBuscarCEP">
+                                   value="{{ aluno.cep }}" aria-label="CEP"{% if 'cep' in obrig %} required{% endif %}>
+                            <button class="u-btn" type="button" id="btnBuscarCEP" aria-label="Buscar">
                                 <i class="bi bi-search"></i>
                             </button>
                         </div>
                     </div>
 
                     <div class="col-md-6 mb-3">
-                        <label class="form-label fw-semibold">Endereço</label>
-                        <input type="text" class="form-control" name="endereco"
+                        <label class="form-label fw-semibold">Endereço{{ marca('endereco') }}</label>
+                        <input type="text" class="u-campo__controle" name="endereco"
                                placeholder="Endereço completo"
-                               id="endereco" value="{{ aluno.endereco }}">
+                               id="endereco" value="{{ aluno.endereco }}" aria-label="Endereço"{% if 'endereco' in obrig %} required{% endif %}>
                     </div>
 
                     <div class="col-md-3 mb-3">
-                        <label class="form-label fw-semibold">Número</label>
-                        <input type="text" class="form-control" name="numero" placeholder="Número"
-                               value="{{ aluno.numero }}">
+                        <label class="form-label fw-semibold">Número{{ marca('numero') }}</label>
+                        <input type="text" class="u-campo__controle" name="numero" placeholder="Número"
+                               value="{{ aluno.numero }}" aria-label="Número"{% if 'numero' in obrig %} required{% endif %}>
                     </div>
                 </div>
 
                 <div class="row">
                     <div class="col-md-4 mb-3">
-                        <label class="form-label fw-semibold">Bairro</label>
-                        <input type="text" class="form-control" name="bairro" id="bairro"
+                        <label class="form-label fw-semibold">Bairro{{ marca('bairro') }}</label>
+                        <input type="text" class="u-campo__controle" name="bairro" id="bairro"
                                placeholder="Bairro"
-                               value="{{ aluno.bairro }}">
+                               value="{{ aluno.bairro }}" aria-label="Bairro"{% if 'bairro' in obrig %} required{% endif %}>
                     </div>
 
                     <div class="col-md-4 mb-3">
-                        <label class="form-label fw-semibold">Cidade</label>
-                        <input type="text" class="form-control" name="cidade" id="cidade"
+                        <label class="form-label fw-semibold">Cidade{{ marca('cidade') }}</label>
+                        <input type="text" class="u-campo__controle" name="cidade" id="cidade"
                                placeholder="Cidade"
-                               value="{{ aluno.cidade }}">
+                               value="{{ aluno.cidade }}" aria-label="Cidade"{% if 'cidade' in obrig %} required{% endif %}>
                     </div>
 
                     <div class="col-md-4 mb-3">
-                        <label class="form-label fw-semibold">Estado</label>
-                        <input type="text" class="form-control" name="estado" id="estado"
+                        <label class="form-label fw-semibold">Estado{{ marca('estado') }}</label>
+                        <input type="text" class="u-campo__controle" name="estado" id="estado"
                                placeholder="UF"
-                               value="{{ aluno.estado }}">
+                               value="{{ aluno.estado }}" aria-label="Estado"{% if 'estado' in obrig %} required{% endif %}>
                     </div>
                 </div>
 
                 <div class="mb-3">
-                    <label class="form-label fw-semibold">Complemento</label>
-                    <input type="text" class="form-control" name="complemento"
+                    <label class="form-label fw-semibold">Complemento{{ marca('complemento') }}</label>
+                    <input type="text" class="u-campo__controle" name="complemento"
                            placeholder="Complemento"
-                           value="{{ aluno.complemento }}">
+                           value="{{ aluno.complemento }}" aria-label="Complemento"{% if 'complemento' in obrig %} required{% endif %}>
                 </div>
 
                 <!-- ===================================================== -->
@@ -906,7 +926,7 @@
                 <div class="row">
                     <div class="col-md-6 mb-3">
                         <label class="form-label fw-semibold">Grau de parentesco</label>
-                        <select class="form-control" name="responsavel_grau_parentesco" id="responsavel_grau_parentesco">
+                        <select class="u-campo__controle" name="responsavel_grau_parentesco" id="responsavel_grau_parentesco" aria-label="Grau de parentesco">
                             <option value="" {% if not aluno.responsavel_parentesco %}selected{% endif %}>Selecione</option>
                             <option value="Pai" {% if aluno.responsavel_parentesco == 'Pai' %}selected{% endif %}>Pai</option>
                             <option value="Mãe" {% if aluno.responsavel_parentesco == 'Mãe' %}selected{% endif %}>Mãe</option>
@@ -916,62 +936,62 @@
 
                     <div class="col-md-6 mb-3">
                         <label class="form-label fw-semibold">Responsável (menor)</label>
-                        <input type="text" class="form-control" name="responsavel_nome" id="responsavel_nome"
+                        <input type="text" class="u-campo__controle" name="responsavel_nome" id="responsavel_nome"
                                placeholder="Nome do responsável"
-                               value="{{ aluno.responsavel_nome }}" readonly>
+                               value="{{ aluno.responsavel_nome }}" readonly aria-label="Responsável (menor)">
                     </div>
                 </div>
 
                 <div class="row" id="responsavel_tipo_wrapper" style="display: none;">
                     <div class="col-md-6 mb-3">
                         <label class="form-label fw-semibold">Tipo</label>
-                        <input type="text" class="form-control" name="responsavel_parentesco" id="responsavel_parentesco"
+                        <input type="text" class="u-campo__controle" name="responsavel_parentesco" id="responsavel_parentesco"
                                placeholder="Ex: Tio, Avó, Avô..."
-                               value="{% if aluno.responsavel_parentesco and aluno.responsavel_parentesco not in ['Pai','Mãe'] %}{{ aluno.responsavel_parentesco }}{% endif %}">
+                               value="{% if aluno.responsavel_parentesco and aluno.responsavel_parentesco not in ['Pai','Mãe'] %}{{ aluno.responsavel_parentesco }}{% endif %}" aria-label="Tipo">
                     </div>
                 </div>
 
                 <div class="row">
                     <div class="col-md-6 mb-3">
-                        <label class="form-label fw-semibold">Email *</label>
-                        <input type="email" class="form-control" name="email"
+                        <label class="form-label fw-semibold">Email{{ marca('email') }}</label>
+                        <input type="email" class="u-campo__controle" name="email"
                                placeholder="email@exemplo.com"
-                               value="{{ aluno.email }}" required>
+                               value="{{ aluno.email }}" aria-label="Email"{% if 'email' in obrig %} required{% endif %}>
                     </div>
 
                     <div class="col-md-6 mb-3">
-                        <label class="form-label fw-semibold">Telefone Celular *</label>
-                        <input type="text" class="form-control" data-mask="phone"
+                        <label class="form-label fw-semibold">Telefone Celular{{ marca('telefone_celular') }}</label>
+                        <input type="text" class="u-campo__controle" data-mask="phone"
                                placeholder="(00) 00000-0000"
-                               name="telefone_celular" value="{{ aluno.tel_celular or aluno.telefone or '' }}">
+                               name="telefone_celular" value="{{ aluno.tel_celular or aluno.telefone or '' }}" aria-label="Telefone Celular"{% if 'telefone_celular' in obrig %} required{% endif %}>
                     </div>
 
                     <div class="col-md-4 mb-3">
                         <label class="form-label fw-semibold">Telefone Residencial</label>
-                        <input type="text" class="form-control" data-mask="phone"
+                        <input type="text" class="u-campo__controle" data-mask="phone"
                                placeholder="(00) 0000-0000"
-                               name="telefone_residencial" value="{{ aluno.tel_residencial or '' }}">
+                               name="telefone_residencial" value="{{ aluno.tel_residencial or '' }}" aria-label="Telefone Residencial">
                     </div>
 
                     <div class="col-md-4 mb-3">
                         <label class="form-label fw-semibold">Telefone Comercial</label>
-                        <input type="text" class="form-control" data-mask="phone"
+                        <input type="text" class="u-campo__controle" data-mask="phone"
                                placeholder="(00) 0000-0000"
-                               name="telefone_comercial" value="{{ aluno.tel_comercial or '' }}">
+                               name="telefone_comercial" value="{{ aluno.tel_comercial or '' }}" aria-label="Telefone Comercial">
                     </div>
 
                     <div class="col-md-4 mb-3">
                         <label class="form-label fw-semibold">Outro Telefone</label>
-                        <input type="text" class="form-control" data-mask="phone"
+                        <input type="text" class="u-campo__controle" data-mask="phone"
                                placeholder="(00) 0000-0000"
-                               name="telefone_outro" value="{{ aluno.tel_outro or '' }}">
+                               name="telefone_outro" value="{{ aluno.tel_outro or '' }}" aria-label="Outro Telefone">
                     </div>
                 </div>
 
                 <div class="mb-3">
                     <label class="form-label fw-semibold">Observações</label>
-                    <textarea class="form-control" name="observacoes" rows="3"
-                              placeholder="Observações adicionais">{{ aluno.observacoes }}</textarea>
+                    <textarea class="u-campo__controle" name="observacoes" rows="3"
+                              placeholder="Observações adicionais" aria-label="Observações">{{ aluno.observacoes }}</textarea>
                 </div>
 
                 <!-- ===================================================== -->
@@ -990,19 +1010,19 @@
 
                 <div class="row align-items-end">
                     <div class="col-md-4 mb-3">
-                        <label class="form-label fw-semibold">Nome</label>
-                        <input type="text" class="form-control" name="responsavel_financeiro_nome"
+                        <label class="form-label fw-semibold">Nome{{ marca('responsavel_financeiro_nome') }}</label>
+                        <input type="text" class="u-campo__controle" name="responsavel_financeiro_nome"
                                id="responsavel_financeiro_nome"
                                placeholder="Nome do responsável financeiro"
-                               value="{{ aluno.responsavel_financeiro_nome }}">
+                               value="{{ aluno.responsavel_financeiro_nome }}" aria-label="Nome"{% if 'responsavel_financeiro_nome' in obrig %} required{% endif %}>
                     </div>
 
                     <div class="col-md-3 mb-3">
-                        <label class="form-label fw-semibold">CPF</label>
-                        <input type="text" class="form-control" data-mask="cpf"
+                        <label class="form-label fw-semibold">CPF{{ marca('responsavel_financeiro_cpf') }}</label>
+                        <input type="text" class="u-campo__controle" data-mask="cpf"
                                placeholder="CPF do responsável financeiro"
                                name="responsavel_financeiro_cpf"
-                               value="{{ aluno.responsavel_financeiro_cpf }}">
+                               value="{{ aluno.responsavel_financeiro_cpf }}" aria-label="CPF"{% if 'responsavel_financeiro_cpf' in obrig %} required{% endif %}>
                     </div>
 
                     <div class="col-md-3 mb-3">
@@ -1010,20 +1030,20 @@
                            online e no lembrete de WhatsApp — sem ele a mensalidade
                            não chega a ninguém. #}
                         <label class="form-label fw-semibold" for="responsavel_financeiro_telefone">
-                          Telefone <span class="text-danger">*</span>
+                          Telefone{{ marca('responsavel_financeiro_telefone') }}
                         </label>
-                        <input type="text" class="form-control" data-mask="phone" required
+                        <input type="text" class="u-campo__controle" data-mask="phone"
                                placeholder="(00) 00000-0000"
                                id="responsavel_financeiro_telefone"
                                name="responsavel_financeiro_telefone"
-                               value="{{ aluno.responsavel_financeiro_telefone or '' }}">
+                               value="{{ aluno.responsavel_financeiro_telefone or '' }}"{% if 'responsavel_financeiro_telefone' in obrig %} required{% endif %}>
                         <small class="text-muted">Usado na cobrança online e no lembrete de WhatsApp.</small>
                         {% set _tel_aluno = aluno.tel_celular or aluno.telefone %}
                         {% if _tel_aluno and not aluno.responsavel_financeiro_telefone %}
                         {# A maior parte dos cadastros antigos nasceu sem este campo;
                            sem um atalho, torná-lo obrigatório emperraria qualquer
                            correção nessas fichas. #}
-                        <button type="button" class="btn btn-link btn-sm p-0 mt-1"
+                        <button type="button" class="u-btn u-btn--fantasma u-btn--pequeno p-0 mt-1"
                                 id="btnUsarTelefoneAluno" data-tel="{{ _tel_aluno }}">
                           Usar o telefone do aluno ({{ _tel_aluno }})
                         </button>
@@ -1031,7 +1051,7 @@
                     </div>
 
                     <div class="col-md-2 mb-3 d-grid">
-                        <button type="button" class="btn btn-outline-primary mt-md-4"
+                        <button type="button" class="u-btn mt-md-4"
                                 id="btnMesmoResponsavelFinanceiro">
                             <i class="bi bi-person-check"></i>
                             Mesmo aluno
@@ -1051,12 +1071,12 @@
                 <a href="{{ url_voltar(back_url) }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Voltar</a>
                 {% if aluno.ativo %}
                 <button type="submit" form="formStatusAluno" class="sh__btn ed-perigo"
-                        onclick="return confirm('Desativar {{ aluno.nome }}? O aluno sai das listagens ativas.');">
+                        data-confirmar="Desativar {{ aluno.nome }}? O aluno sai das listagens ativas.">
                     Desativar aluno
                 </button>
                 {% else %}
                 <button type="submit" form="formStatusAluno" class="sh__btn"
-                        onclick="return confirm('Reativar {{ aluno.nome }}?');">
+                        data-confirmar="Reativar {{ aluno.nome }}?">
                     Reativar aluno
                 </button>
                 {% endif %}
@@ -1102,13 +1122,13 @@
         <canvas id="cameraCanvas" style="display:none;"></canvas>
 
         <div class="camera-buttons">
-            <button class="btn btn-success" id="btnCapturar">Capturar</button>
-            <button class="btn btn-primary" id="btnConfirmarFoto" style="display:none;">Confirmar</button>
-            <button class="btn btn-warning" id="btnTirarNovamente" style="display:none;">Refazer</button>
-            <button class="btn btn-info text-white" id="btnTrocarCameraModal">
+            <button class="u-btn u-btn--ok" id="btnCapturar">Capturar</button>
+            <button class="u-btn u-btn--primario" id="btnConfirmarFoto" style="display:none;">Confirmar</button>
+            <button class="u-btn u-btn--alerta" id="btnTirarNovamente" style="display:none;">Refazer</button>
+            <button class="u-btn text-white" id="btnTrocarCameraModal">
                 <i class="bi bi-arrow-repeat"></i> <span id="btnTrocarCameraText">Trocar Câmera</span>
             </button>
-            <button class="btn btn-danger" id="btnFecharModal">Fechar</button>
+            <button class="u-btn u-btn--perigo" id="btnFecharModal">Fechar</button>
         </div>
     </div>
 </div>
@@ -1598,44 +1618,7 @@
     atualizarCamposZempo();
 
     // Preservar a graduação que o aluno já tinha (independentemente das modalidades).
-    // Sem isso, abrir + salvar a ficha apaga a graduação se a modalidade não bater.
-    const _gradSelectInicial = document.getElementById('graduacao_id');
-    const _graduacaoInicialId = _gradSelectInicial ? _gradSelectInicial.value : '';
-
-    function atualizarGraduacoesPorModalidade() {
-        const gradContainer = document.getElementById('graduacao_container');
-        const gradSelect = document.getElementById('graduacao_id');
-        if (!gradContainer || !gradSelect) return;
-        const hint = document.getElementById('graduacao_empty_hint');
-        // Conta modalidades marcadas (checkboxes) E as enviadas como hidden (modo só-leitura),
-        // senão a faixa não aparece quando as modalidades não são checkboxes editáveis.
-        const modalidadesMarcadas = Array.from(document.querySelectorAll('input[name="aluno_modalidade_ids"]'))
-            .filter(el => el.type !== 'checkbox' || el.checked)
-            .map(el => String(el.value));
-        let visiveis = 0;
-        Array.from(gradSelect.options).forEach((opt) => {
-            if (!opt.value) return;
-            const modId = opt.dataset.modalidadeId || '';
-            // A graduação atual do aluno fica SEMPRE visível, mesmo que a modalidade
-            // não esteja marcada (preserva o histórico já cadastrado).
-            const ehAtualDoAluno = _graduacaoInicialId && opt.value === _graduacaoInicialId;
-            const mostrar = ehAtualDoAluno
-                || (modalidadesMarcadas.length > 0 && (!modId || modalidadesMarcadas.includes(modId)));
-            opt.hidden = !mostrar;
-            if (mostrar) visiveis += 1;
-            // NUNCA limpar uma seleção existente automaticamente — o usuário decide.
-        });
-        // O container fica visível enquanto houver opção visível (incluindo a atual do aluno).
-        const exibir = visiveis > 0;
-        gradContainer.style.display = exibir ? '' : 'none';
-        gradSelect.required = false;
-        if (hint) hint.classList.toggle('d-none', exibir || modalidadesMarcadas.length === 0);
-    }
-
-    document.querySelectorAll('input[name="aluno_modalidade_ids"]').forEach(function(el) {
-        el.addEventListener('change', atualizarGraduacoesPorModalidade);
-    });
-    atualizarGraduacoesPorModalidade();
+    {% include 'alunos/_faixas_modalidade_js.html' %}
 
 </script>
 {% endblock %}

@@ -120,7 +120,7 @@
 .sh__modo-opcao.is-atual { color: #fff; font-weight: 600; }
 .sh__modo-opcao .bi-check2 { color: var(--sh-red); }
 
-/* Só a lista de itens rola; marca, modo e usuário ficam fixos. */
+/* Só a lista de itens rola; marca e modo de acesso ficam fixos no topo. */
 .sh__side-rolagem {
   flex: 1;
   overflow-y: auto;
@@ -133,36 +133,6 @@
 .sh__side-rolagem::-webkit-scrollbar { width: 6px; }
 .sh__side-rolagem::-webkit-scrollbar-track { background: transparent; }
 .sh__side-rolagem::-webkit-scrollbar-thumb { background: #3a3a3a; border-radius: 3px; }
-
-/* Usuário no rodapé da lateral. */
-.sh__side-usuario {
-  display: flex;
-  align-items: center;
-  gap: .7rem;
-  padding: .9rem 1.25rem;
-  border-top: 1px solid rgba(255, 255, 255, .08);
-}
-.sh__side-avatar {
-  width: 36px; height: 36px;
-  flex: 0 0 36px;
-  display: grid; place-items: center;
-  border-radius: 50%;
-  background: #3a3a3a;
-  color: #d6d4d1;
-  object-fit: cover;
-}
-.sh__side-usuario-txt { min-width: 0; flex: 1; text-decoration: none; display: block; }
-.sh__side-usuario-nome {
-  display: block;
-  color: #fff;
-  font-size: .9rem;
-  font-weight: 600;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.sh__side-usuario-link { display: block; color: var(--sh-side-label); font-size: .78rem; }
-.sh__side-usuario-txt:hover .sh__side-usuario-link { color: #fff; }
-.sh__side-sair { color: var(--sh-side-label); font-size: 1.1rem; text-decoration: none; }
-.sh__side-sair:hover { color: var(--sh-red); }
 
 /* Busca no topo. */
 /* `flex: 1` com `min-width: 0` para a busca encolher no celular em vez de
@@ -286,11 +256,19 @@
 .sh__usuario-papel { font-size: .76rem; color: var(--sh-ink-soft); }
 
 /* ----------------------------------------------------------- conteúdo */
-.sh__conteudo { flex: 1; padding: 2rem; max-width: 1320px; width: 100%; }
+/* Conteúdo na largura toda ao lado da barra lateral. Antes o padrão era
+   1320px e sobrava uma faixa vazia à direita em tela grande. */
+.sh__conteudo { flex: 1; padding: 2rem; max-width: none; width: 100%; min-width: 0; }
+/* O `.container` do Bootstrap prende a largura por breakpoint (até 1320px);
+   dentro do shell quem manda é o conteúdo. */
+body.sh .sh__conteudo .container,
+body.sh .sh__conteudo .container-sm, body.sh .sh__conteudo .container-md,
+body.sh .sh__conteudo .container-lg, body.sh .sh__conteudo .container-xl,
+body.sh .sh__conteudo .container-xxl { max-width: none; padding-left: 0; padding-right: 0; }
 /* Telas de tabela larga (lista de alunos, por exemplo) pedem mais que a
    largura de leitura. Opt-in pelo bloco `conteudo_classe` do base_academia:
    quem não pedir continua nos 1320px. */
-.sh__conteudo--largo { max-width: 1600px; }
+.sh__conteudo--largo { max-width: none; }
 
 .sh__cabecalho {
   display: flex;
@@ -522,23 +500,31 @@
   border-color: #cfcbc4;
   box-shadow: 0 0 0 3px rgba(28, 28, 28, .06);
 }
-.sh .modal .form-control-lg { height: 52px; font-size: 1rem; }
+.sh .modal .form-control-lg, .sh .modal .u-campo__controle-lg { height: 52px; font-size: 1rem; }
 
 /* Ação principal e confirmação de gravação: pretas, como o botão de ação das
    telas. Secundária: contornada. */
 .sh .modal .btn-primary,
-.sh .modal .btn-success {
+.sh .modal .btn-success{
   background: var(--sh-ink);
   border-color: var(--sh-ink);
   color: #fff;
 }
 .sh .modal .btn-primary:hover,
-.sh .modal .btn-success:hover { background: #000; border-color: #000; }
-.sh .modal .btn-outline-secondary {
+.sh .modal .btn-success:hover{ background: #000; border-color: #000; }
+.sh .modal .btn-outline-secondary, .sh .modal .u-btn {
   border-color: var(--sh-line);
   color: var(--sh-ink);
 }
-.sh .modal .btn-outline-secondary:hover { background: #f4f2ee; color: var(--sh-ink); }
+.sh .modal .btn-outline-secondary:hover, .sh .modal .u-btn:hover { background: #f4f2ee; color: var(--sh-ink); }
+/* A regra acima é para o botão contornado; sem isto ela pinta de tinta escura
+   o texto das variantes cheias e o botão principal fica preto sobre preto. */
+.sh .modal .u-btn--forte { background: var(--sh-ink); border-color: var(--sh-ink); color: #fff; }
+.sh .modal .u-btn--forte:hover { background: #000; border-color: #000; color: #fff; }
+.sh .modal .u-btn--primario, .sh .modal .u-btn--perigo, .sh .modal .u-btn--ok { color: #fff; }
+.sh .modal .u-btn--primario:hover { background: var(--u-primary-hover); color: #fff; }
+.sh .modal .u-btn--perigo:hover { background: var(--u-danger); color: #fff; }
+.sh .modal .u-btn--ok:hover { background: var(--u-success); color: #fff; }
 
 /* ------------------------------------------------------- responsivo */
 /* Tablet: lateral vira gaveta, aberta pelo botão do topo. */

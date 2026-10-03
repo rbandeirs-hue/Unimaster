@@ -27,6 +27,19 @@ def buscar_logo_url(prefixo, entidade_id):
     return None
 
 
+def buscar_logo_arquivo(prefixo, entidade_id):
+    """Caminho no disco da logo, ou None. O PDF precisa do arquivo: a URL
+    daria uma volta pela rede para buscar algo que está aqui do lado."""
+    if not entidade_id:
+        return None
+    pasta = os.path.join(current_app.root_path, "static", "uploads", "logos")
+    for ext in LOGO_EXTENSOES:
+        caminho = os.path.join(pasta, f"{prefixo}_{entidade_id}{ext}")
+        if os.path.isfile(caminho):
+            return caminho
+    return None
+
+
 def get_contexto_logo_e_nome(current_user, session):
     """
     Retorna (logo_url, nome, tipo) do contexto atual do usuário.

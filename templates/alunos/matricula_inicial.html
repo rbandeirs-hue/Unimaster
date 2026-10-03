@@ -174,9 +174,9 @@
         <div class="mat-grade">
           <div>
             <label class="form-label" for="mensalidade_id">Plano</label>
-            <select class="form-select" name="mensalidade_id" id="mensalidade_id">
+            <select class="u-campo__controle" name="mensalidade_id" id="mensalidade_id">
               {% for p in planos %}
-              <option value="{{ p.id }}" data-valor="{{ '%.2f'|format(p.valor or 0) }}">
+              <option value="{{ p.id }}" data-valor="{{ '%.2f'|format(p.valor or 0) }}" data-mods="{{ p.mod_ids or '' }}">
                 {{ p.nome }} — R$ {{ '%.2f'|format(p.valor or 0) | replace('.', ',') }}
               </option>
               {% endfor %}
@@ -184,14 +184,14 @@
           </div>
           <div>
             <label class="form-label" for="escopo_mensalidade">Período</label>
-            <select class="form-select" name="escopo_mensalidade" id="escopo_mensalidade">
+            <select class="u-campo__controle" name="escopo_mensalidade" id="escopo_mensalidade">
               <option value="mes">Só o mês inicial</option>
               <option value="ano">Do mês inicial até dezembro</option>
             </select>
           </div>
           <div>
             <label class="form-label" for="mes_inicial">Mês inicial</label>
-            <select class="form-select" name="mes_inicial" id="mes_inicial">
+            <select class="u-campo__controle" name="mes_inicial" id="mes_inicial">
               {% for n, rot in meses %}
               <option value="{{ n }}" {% if n == mes_atual %}selected{% endif %}>{{ rot }}</option>
               {% endfor %}
@@ -199,12 +199,12 @@
           </div>
           <div>
             <label class="form-label" for="ano_ref">Ano</label>
-            <input class="form-control" type="number" name="ano_ref" id="ano_ref"
+            <input class="u-campo__controle" type="number" name="ano_ref" id="ano_ref"
                    value="{{ ano_atual }}" min="2000" max="2100">
           </div>
           <div>
             <label class="form-label" for="dia_vencimento">Dia do vencimento</label>
-            <input class="form-control" type="number" name="dia_vencimento" id="dia_vencimento"
+            <input class="u-campo__controle" type="number" name="dia_vencimento" id="dia_vencimento"
                    value="10" min="1" max="31">
           </div>
         </div>
@@ -215,7 +215,7 @@
            criado — e aluno recém-promovido nunca tem. #}
         <div style="margin-top:.75rem">
           <label class="form-label" for="desconto_id">Desconto / bolsa</label>
-          <select class="form-select" name="desconto_id" id="desconto_id">
+          <select class="u-campo__controle" name="desconto_id" id="desconto_id">
             <option value="">Sem desconto</option>
             {% for d in descontos %}
             <option value="{{ d.id }}"
@@ -255,6 +255,7 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="{{ asset('js/planos_por_modalidade.js') }}"></script>
 <script>
 (function () {
   var form = document.querySelector('form.frm');
@@ -363,5 +364,14 @@
   });
   revisarMensalidade();
 })();
+
+  // Plano pela(s) modalidade(s) marcada(s) acima.
+  (function () {
+    var caixas = document.querySelectorAll('input[name="modalidade_ids"]');
+    var gat = Array.prototype.slice.call(caixas).concat(Array.prototype.slice.call(document.querySelectorAll('input[name="turma_ids"], select[name="turma_id"]')));
+    PlanosPorModalidade(document.getElementById('mensalidade_id'), function () {
+      return Array.prototype.filter.call(caixas, function (c) { return c.checked; }).map(function (c) { return c.value; });
+    }, gat);
+  })();
 </script>
 {% endblock %}

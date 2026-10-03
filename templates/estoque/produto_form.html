@@ -1,0 +1,108 @@
+{% extends "estoque/_base.html" %}
+{% from 'components/ui.html' import voltar %}
+{% set est_aba = 'produtos' %}
+{% block title %}Novo produto — Estoque{% endblock %}
+
+{% block pagina_titulo %}Novo produto{% endblock %}
+{% block pagina_subtitulo %}
+  Produto que varia por tamanho ou cor precisa de uma linha por variação: é o que
+  permite saber que faltam A3 mesmo sobrando A2.
+{% endblock %}
+
+{% block pagina_acoes %}
+  {{ voltar(url_for('estoque.produtos')) }}
+{% endblock %}
+
+{% block est_conteudo %}
+<form method="POST" enctype="multipart/form-data">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+  <section class="lst-quadro">
+    <header class="lst-quadro__topo">
+      <h2 class="lst-quadro__titulo">Dados do produto</h2>
+    </header>
+    <div class="lst-filtros" style="border:0">
+      <label class="lst-campo lst-campo--largo">
+        <span class="lst-campo__rotulo">Nome *</span>
+        <input type="text" name="nome" required placeholder="Ex.: Kimono trançado">
+      </label>
+      <label class="lst-campo lst-campo--curto">
+        <span class="lst-campo__rotulo">Código</span>
+        <input type="text" name="sku" placeholder="Opcional">
+      </label>
+      <label class="lst-campo lst-campo--curto">
+        <span class="lst-campo__rotulo">Categoria</span>
+        <select name="categoria_id">
+          <option value="">Sem categoria</option>
+          {% for c in categorias %}<option value="{{ c.id }}">{{ c.nome }}</option>{% endfor %}
+        </select>
+      </label>
+      <label class="lst-campo lst-campo--curto">
+        <span class="lst-campo__rotulo">Unidade</span>
+        <input type="text" name="unidade" value="un" maxlength="12">
+      </label>
+      <label class="lst-campo lst-campo--curto">
+        <span class="lst-campo__rotulo">Custo (R$)</span>
+        <input type="number" step="0.01" min="0" name="custo" value="0">
+      </label>
+      <label class="lst-campo lst-campo--curto">
+        <span class="lst-campo__rotulo">Estoque mínimo</span>
+        <input type="number" min="0" name="estoque_min" value="0">
+      </label>
+      <label class="lst-campo lst-campo--curto">
+        <span class="lst-campo__rotulo">Estoque máximo</span>
+        <input type="number" min="0" name="estoque_max" placeholder="Opcional">
+      </label>
+      <label class="lst-campo lst-campo--largo">
+        <span class="lst-campo__rotulo">Descrição</span>
+        <input type="text" name="descricao" placeholder="Aparece no catálogo da loja">
+      </label>
+      <label class="lst-campo lst-campo--curto">
+        <span class="lst-campo__rotulo">Foto</span>
+        <input type="file" name="imagem" accept="image/*">
+      </label>
+    </div>
+  </section>
+
+  <section class="lst-quadro mt-3">
+    <header class="lst-quadro__topo">
+      <h2 class="lst-quadro__titulo">Variações</h2>
+      <span class="lst-quadro__meta">Deixe em branco se o produto não varia</span>
+    </header>
+    <div style="padding:.5rem 1rem 1rem">
+      <div id="listaVar">
+        {% for i in range(3) %}
+        <div class="est-item-linha">
+          <input type="text" name="var_nome" placeholder="Nome da variação (ex.: A2)">
+          <input type="text" name="var_tamanho" placeholder="Tamanho">
+          <input type="text" name="var_cor" placeholder="Cor">
+          <span></span>
+        </div>
+        {% endfor %}
+      </div>
+      <button type="button" class="u-btn mt-2" id="addVar">
+        <i class="bi bi-plus-lg"></i> Mais uma linha
+      </button>
+      <p class="lst-sub mt-2 mb-0">
+        Sem nenhuma variação preenchida, o produto é criado com uma chamada
+        <strong>Único</strong> — o saldo aponta sempre para uma variação real.
+      </p>
+    </div>
+    <div class="lst-paginacao">
+      <button type="submit" class="u-btn u-btn--forte">
+        <i class="bi bi-check-lg"></i> Cadastrar produto
+      </button>
+    </div>
+  </section>
+</form>
+
+<script>
+document.getElementById('addVar').addEventListener('click', function () {
+  var lista = document.getElementById('listaVar');
+  var nova = lista.firstElementChild.cloneNode(true);
+  nova.querySelectorAll('input').forEach(function (i) { i.value = ''; });
+  lista.appendChild(nova);
+  nova.querySelector('input').focus();
+});
+</script>
+{% endblock %}

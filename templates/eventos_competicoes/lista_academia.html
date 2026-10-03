@@ -164,6 +164,12 @@
         <div class="lst-num">{{ e.inscritos if e.aderido else '—' }}</div>
 
         <div class="lst-acoes">
+          {% if e.exame_faixa and e.aderido %}
+          <a class="lst-acao" title="Banca do exame de faixa" aria-label="Banca de {{ e.nome }}"
+             href="{{ url_for('exame_faixa.banca', evento_id=e.id, academia_id=academia_id) }}">
+            <i class="bi bi-clipboard-check"></i>
+          </a>
+          {% endif %}
           {% if e.aderido %}
           <a class="lst-acao" title="Inscritos em {{ e.nome }}" aria-label="Inscritos em {{ e.nome }}"
              href="{{ url_for('eventos_competicoes.inscritos', evento_id=e.id, academia_id=academia_id) }}">
@@ -174,7 +180,7 @@
           {# Adesão altera dados: segue em POST com CSRF, como nas telas antigas. #}
           <form method="POST" style="display:contents"
                 action="{{ url_for('eventos_competicoes.desaderir' if e.aderido else 'eventos_competicoes.aderir', evento_id=e.id) }}"
-                {% if e.aderido %}onsubmit="return confirm('Remover a adesão a {{ 'esta competição' if not ehEventos else 'este evento' }}?');"{% endif %}>
+                {% if e.aderido %}data-confirmar="Remover a adesão a {{ 'esta competição' if not ehEventos else 'este evento' }}?"{% endif %}>
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="academia_id" value="{{ academia_id }}">
             {% if e.aderido %}

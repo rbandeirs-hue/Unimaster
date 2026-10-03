@@ -35,9 +35,15 @@ def _link(row, academia_id=None):
     bruto = _link_gateway(row)
     if not bruto:
         return None
+    # O token curto aponta para UMA tabela: com o id de uma avulsa e a origem
+    # "mensalidade", o link abria a mensalidade de mesmo número — de outro
+    # aluno. Origens sem link curto (grupo, matrícula) vão com a URL crua.
+    origem = row.get("origem") or "mensalidade"
+    if origem not in ("mensalidade", "avulsa"):
+        return bruto
     try:
         from utils.links_curtos import encurtar
-        curto = encurtar("mensalidade", row.get("id"), academia_id)
+        curto = encurtar(origem, row.get("id"), academia_id)
         if curto:
             return curto
     except Exception:
@@ -68,11 +74,13 @@ def garantir_cobranca_online(row, academia_id, forcar=False):
     reaproveita o mesmo link em vez de emitir outra. Tolerante a falha: se não
     houver gateway ativo ou a emissão der erro, devolve o que já existia.
     """
-    # Só mensalidade: a emissão grava o link em `mensalidade_aluno` pelo `id` da
-    # linha. Com a régua lendo também avulsa, matrícula e cobrança familiar, um
-    # registro de outra tabela com o mesmo id sobrescreveria o link da
-    # mensalidade alheia — cobrando o aluno errado pelo valor errado.
-    if (row.get("origem") or "mensalidade") != "mensalidade":
+    # Mensalidade e avulsa, cada uma gravando na SUA tabela pelo `id` da linha.
+    # Matrícula e cobrança familiar têm emissão própria: um registro de outra
+    # tabela com o mesmo id sobrescreveria o link de uma cobrança alheia.
+    origem = row.get("origem") or "mensalidade"
+    if origem == "avulsa":
+        return _garantir_cobranca_avulsa(row, academia_id, forcar)
+    if origem != "mensalidade":
         return row
     if _link_gateway(row) and not forcar:
         return row
@@ -168,6 +176,66 @@ def garantir_cobranca_online(row, academia_id, forcar=False):
     return row
 
 
+def _garantir_cobranca_avulsa(row, academia_id, forcar=False):
+    """Mesma ideia de `garantir_cobranca_online`, para `cobranca_avulsa`.
+
+    Emite PIX no gateway da academia quando a avulsa ainda não tem link e grava
+    em `cobranca_avulsa` — igual ao botão "Gerar cobrança" da tela.
+    """
+    if _link_gateway(row) and not forcar:
+        return row
+    av_id = row.get("id")
+    if not av_id or float(row.get("valor") or 0) <= 0:
+        return row
+    try:
+        from blueprints.financeiro.routes import (
+            _gateway_config_academia, _gateway_ativo, _emitir_cobranca_online,
+            _dados_pagador, _endereco_aluno,
+        )
+        cfg = _gateway_config_academia(academia_id)
+        if not _gateway_ativo(cfg):
+            return row
+        conn = get_db_connection(); cur = conn.cursor(dictionary=True)
+        try:
+            cur.execute(
+                """SELECT ca.descricao, a.nome, a.cpf, a.email, a.telefone, a.tel_celular,
+                          a.responsavel_financeiro_nome, a.responsavel_financeiro_cpf,
+                          a.responsavel_financeiro_telefone,
+                          a.cep, a.rua, a.numero, a.complemento, a.bairro, a.cidade, a.estado
+                   FROM cobranca_avulsa ca JOIN alunos a ON a.id = ca.aluno_id
+                   WHERE ca.id = %s AND ca.id_academia = %s""", (av_id, academia_id))
+            aluno = cur.fetchone()
+            if not aluno:
+                return row
+            pag_nome, pag_cpf, pag_tel = _dados_pagador(aluno)
+            if not pag_cpf:
+                return row
+            venc = row.get("data_vencimento") or date.today()
+            if venc < date.today():
+                venc = date.today()  # gateways recusam vencimento no passado
+            r = _emitir_cobranca_online(
+                cfg, "PIX", nome=pag_nome, cpf=pag_cpf, email=aluno.get("email"),
+                telefone=pag_tel, valor=float(row.get("valor") or 0), vencimento=venc,
+                descricao=f"{aluno.get('descricao') or 'Cobrança avulsa'} - {aluno.get('nome')}",
+                origem="avulsa", registro_id=av_id, endereco=_endereco_aluno(aluno),
+            )
+            cur.execute(
+                """UPDATE cobranca_avulsa
+                   SET asaas_payment_id=%s, asaas_tipo=%s, asaas_boleto_url=%s,
+                       asaas_pix_qrcode=%s, asaas_pix_copia_cola=%s, gateway=%s
+                   WHERE id=%s""",
+                (r["payment_id"], r["tipo"], r["boleto_url"], r["pix_qrcode"],
+                 r["pix_copia_cola"], r["gateway"], av_id))
+            conn.commit()
+            row = dict(row, asaas_boleto_url=r["boleto_url"], asaas_pix_copia_cola=r["pix_copia_cola"])
+        finally:
+            cur.close(); conn.close()
+    except Exception as e:
+        logging.getLogger(__name__).warning(
+            "Lembrete: falha ao gerar cobrança online da avulsa %s: %s", av_id, e)
+    return row
+
+
 def _limpar_placeholders_vazios(texto):
     """Remove a linha do link e o rótulo acima dela quando não houve link.
 
@@ -213,6 +281,7 @@ def _ctx_mensagem(row, academia_nome, academia_id=None, extra=None):
         "quantidade_pendencias": "1",
         "valor_total": _reais(row.get("valor")),
         "lista": "",
+        "descricao": row.get("descricao") or "",
     }
     if extra:
         ctx.update(extra)
@@ -229,6 +298,8 @@ def montar_mensagem(row, academia_nome, academia_id=None, texto_custom=None):
     from utils import whatsapp_templates as tpl
     tipo = "lembrete_atraso" if (row.get("data_vencimento")
                                  and row["data_vencimento"] < date.today()) else "lembrete_vencimento"
+    if (row.get("origem") or "") == "avulsa":
+        tipo = "lembrete_avulsa"
     if texto_custom:
         texto = texto_custom
     else:
@@ -340,13 +411,19 @@ def _fora_de_grupo_sql(cur, origem="mensalidade", alias="ma"):
                             AND g.status IN ('pendente','atrasado'))""" % (origem, alias))
 
 
-def buscar_pendentes(cur, academia_id, dias_antes=3, somente_atrasadas=False):
+def buscar_pendentes(cur, academia_id, dias_antes=3, somente_atrasadas=False,
+                     aluno_id=None):
     """Mensalidades pendentes/atrasadas com vencimento até hoje+dias_antes.
 
     Com `somente_atrasadas`, traz só o que já venceu — é o que alimenta o botão
     "Notificar atrasados" do painel.
+
+    Com `aluno_id`, recorta num aluno só. É o que a tela de mensalidades usa
+    quando está filtrada por uma pessoa: sem esse recorte, o botão daquela tela
+    disparava para a academia inteira.
     """
     _sem_grupo = _fora_de_grupo_sql(cur)
+    _so_aluno = " AND ma.aluno_id = %s" if aluno_id else ""
     if somente_atrasadas:
         cur.execute(
             f"""
@@ -362,10 +439,10 @@ def buscar_pendentes(cur, academia_id, dias_antes=3, somente_atrasadas=False):
               AND ma.status IN ('pendente','atrasado')
               AND ma.data_vencimento IS NOT NULL
               AND ma.data_vencimento < CURDATE()
-              AND ma.valor > 0{_sem_grupo}
+              AND ma.valor > 0{_sem_grupo}{_so_aluno}
             ORDER BY ma.data_vencimento
             """,
-            (academia_id,),
+            (academia_id,) + ((aluno_id,) if aluno_id else ()),
         )
         return cur.fetchall()
     cur.execute(
@@ -382,10 +459,10 @@ def buscar_pendentes(cur, academia_id, dias_antes=3, somente_atrasadas=False):
           AND ma.status IN ('pendente','atrasado')
           AND ma.data_vencimento IS NOT NULL
           AND ma.data_vencimento <= DATE_ADD(CURDATE(), INTERVAL %s DAY)
-          AND ma.valor > 0{_sem_grupo}
+          AND ma.valor > 0{_sem_grupo}{_so_aluno}
         ORDER BY ma.data_vencimento
         """,
-        (academia_id, dias_antes),
+        (academia_id, dias_antes) + ((aluno_id,) if aluno_id else ()),
     )
     return cur.fetchall()
 
@@ -430,6 +507,166 @@ def enviar_um(academia_id, ma_id):
     if ok:
         return True, "Lembrete enviado."
     return False, (info.get("erro") if isinstance(info, dict) else "Falha no envio") or "Falha no envio"
+
+
+def enviar_um_avulsa(academia_id, av_id):
+    """Envia o lembrete de uma cobrança avulsa. Retorna (ok, mensagem).
+
+    Mesmo caminho do lembrete da mensalidade (`enviar_um`): WhatsApp da
+    academia, modelo configurável e link de pagamento emitido se faltar.
+    """
+    conn = get_db_connection(); cur = conn.cursor(dictionary=True)
+    try:
+        acad = _nome_academia(cur, academia_id)
+        cur.execute(
+            """SELECT 'avulsa' AS origem, ca.id, ca.aluno_id, ca.data_vencimento, ca.valor,
+                      ca.status, ca.descricao, ca.asaas_boleto_url, ca.asaas_pix_copia_cola,
+                      a.nome, a.telefone, a.tel_celular,
+                      a.responsavel_financeiro_nome, a.responsavel_financeiro_telefone
+               FROM cobranca_avulsa ca JOIN alunos a ON a.id = ca.aluno_id
+               WHERE ca.id = %s AND ca.id_academia = %s""",
+            (av_id, academia_id),
+        )
+        row = cur.fetchone()
+    finally:
+        cur.close(); conn.close()
+    if not row:
+        return False, "Cobrança não encontrada."
+    if row.get("status") not in ("pendente", "atrasado"):
+        return False, "Esta cobrança não está em aberto."
+    if float(row.get("valor") or 0) <= 0:
+        return False, "Cobrança sem valor a cobrar."
+    try:
+        from utils.cobranca_familia import grupo_da_mensalidade
+        if grupo_da_mensalidade(row["id"], origem="avulsa"):
+            return False, ("Esta cobrança está numa cobrança familiar — envie o link do "
+                           "grupo em Financeiro › Famílias, senão a família recebe duas cobranças.")
+    except (ImportError, TypeError):
+        pass
+    tel = _telefone(row)
+    if not tel:
+        return False, "Aluno sem telefone cadastrado."
+    texto = montar_mensagem(row, acad.get("nome") or "", academia_id)
+    if texto is None:
+        return False, "O modelo “Lembrete de cobrança avulsa” está desativado (Mensagens do WhatsApp)."
+    ok, info = wpp.enviar(academia_id, tel, texto)
+    if ok:
+        return True, "Lembrete enviado."
+    return False, (info.get("erro") if isinstance(info, dict) else "Falha no envio") or "Falha no envio"
+
+
+# ---------------------------------------------------------------------
+# Pós-aula experimental: feedback + convite para a matrícula
+# ---------------------------------------------------------------------
+# Janela da rotina automática: a mensagem sai a partir do dia seguinte à aula
+# e só até uma semana depois — quem fez aula há um mês não recebe "como foi?".
+POS_AULA_DIAS_MAX = 7
+
+
+def _link_matricula_turma(cur, academia_id, turma_id):
+    """Link da matrícula pública já na turma em que a pessoa fez a aula."""
+    from utils.links_curtos import base_url
+    cur.execute("SELECT slug FROM academias WHERE id = %s", (academia_id,))
+    slug = (cur.fetchone() or {}).get("slug") or academia_id
+    base = base_url()
+    if not base:
+        return ""
+    url = f"{base}/precadastro/matricula/{slug}?turma={turma_id}"
+    cur.execute("SELECT modalidade_id FROM turma_modalidades WHERE turma_id = %s", (turma_id,))
+    mods = [r["modalidade_id"] for r in cur.fetchall()]
+    if len(mods) == 1:
+        url += f"&modalidade={mods[0]}"
+    return url
+
+
+def enviar_pos_aula(aula_id, academia_id=None, forcar=False):
+    """Manda o pós-aula de uma aula experimental. Retorna (ok, mensagem).
+
+    `forcar` reenvia mesmo já tendo enviado (botão manual "Enviar de novo").
+    Grava `pos_aula_enviado_em`, que é a trava da rotina automática.
+    """
+    conn = get_db_connection(); cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute(
+            """SELECT ae.id, ae.turma_id, ae.data_aula, ae.presente, ae.pos_aula_enviado_em,
+                      v.nome, v.telefone, v.id_academia, t.Nome AS turma_nome
+               FROM aulas_experimentais ae
+               JOIN visitantes v ON v.id = ae.visitante_id
+               JOIN turmas t ON t.TurmaID = ae.turma_id
+               WHERE ae.id = %s""", (aula_id,))
+        aula = cur.fetchone()
+        if not aula or (academia_id and aula["id_academia"] != academia_id):
+            return False, "Aula experimental não encontrada."
+        academia_id = aula["id_academia"]
+        if aula.get("pos_aula_enviado_em") and not forcar:
+            return False, "A mensagem pós-aula já foi enviada."
+        if aula["data_aula"] and aula["data_aula"] > date.today():
+            return False, "A aula ainda não aconteceu."
+        if not aula.get("presente"):
+            return False, "O visitante não compareceu a esta aula."
+        tel = (aula.get("telefone") or "").strip()
+        if not tel:
+            return False, "Visitante sem telefone cadastrado."
+        from utils import whatsapp_templates as tpl
+        texto, ativo = tpl.obter(academia_id, "pos_aula_experimental")
+        if not ativo:
+            return False, "O modelo “Pós-aula experimental” está desativado (Mensagens do WhatsApp)."
+        acad = _nome_academia(cur, academia_id)
+        ctx = {
+            "nome": _PRIMEIRO_NOME(aula.get("nome")),
+            "responsavel": aula.get("nome") or "",
+            "aluno": aula.get("nome") or "",
+            "turma": aula.get("turma_nome") or "",
+            "academia": acad.get("nome") or "",
+            "link": _link_matricula_turma(cur, academia_id, aula["turma_id"]),
+        }
+        mensagem = _limpar_placeholders_vazios(tpl.render(texto, ctx))
+        ok, info = wpp.enviar(academia_id, tel, mensagem)
+        if ok:
+            cur.execute("UPDATE aulas_experimentais SET pos_aula_enviado_em = NOW() WHERE id = %s",
+                        (aula_id,))
+            conn.commit()
+            return True, "Mensagem enviada."
+        return False, (info.get("erro") if isinstance(info, dict) else "Falha no envio") or "Falha no envio"
+    finally:
+        cur.close(); conn.close()
+
+
+def processar_pos_aula(academia_id):
+    """Rotina diária: pós-aula de quem fez aula experimental de ontem até 7 dias atrás.
+
+    Fica de fora quem faltou, quem já recebeu e quem já virou aluno (mesmo
+    telefone num aluno ativo da academia) — convidar para matrícula quem já
+    está matriculado é ruído. Retorna {enviados, falhas, total}.
+    """
+    resumo = {"enviados": 0, "falhas": 0, "total": 0}
+    conn = get_db_connection(); cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute(
+            """SELECT ae.id FROM aulas_experimentais ae
+               JOIN visitantes v ON v.id = ae.visitante_id
+               WHERE v.id_academia = %s AND ae.presente = 1
+                 AND ae.pos_aula_enviado_em IS NULL
+                 AND ae.data_aula < CURDATE()
+                 AND ae.data_aula >= DATE_SUB(CURDATE(), INTERVAL %s DAY)
+                 AND COALESCE(v.telefone, '') <> ''
+                 AND NOT EXISTS (
+                     SELECT 1 FROM alunos a
+                     WHERE a.id_academia = v.id_academia AND a.ativo = 1
+                       AND REGEXP_REPLACE(COALESCE(a.tel_celular, a.telefone, ''), '[^0-9]', '')
+                           = REGEXP_REPLACE(v.telefone, '[^0-9]', ''))""",
+            (academia_id, POS_AULA_DIAS_MAX))
+        ids = [r["id"] for r in cur.fetchall()]
+    except Exception:
+        logging.getLogger(__name__).exception("Pós-aula: falha ao listar aulas")
+        ids = []
+    finally:
+        cur.close(); conn.close()
+    resumo["total"] = len(ids)
+    for aid in ids:
+        ok, _msg = enviar_pos_aula(aid, academia_id)
+        resumo["enviados" if ok else "falhas"] += 1
+    return resumo
 
 
 def enviar_evento(academia_id, tipo, telefone, ctx):
@@ -623,6 +860,71 @@ def _marcar_enviado(conn, cur, academia_id, tipo, referencia_id, dia):
             pass
 
 
+# ------------------------------------------------ parabéns agendado
+TIPO_AGENDADO = "aniversario_agendado"
+
+
+def ja_parabenizado_recente(cur, academia_id, aluno_id, dia, janela_dias=40):
+    """Já recebeu o parabéns deste aniversário (enviado antes do dia, pela tela)?
+
+    O job do dia só olhava o próprio dia: quem foi parabenizado adiantado pela
+    tela recebia de novo no aniversário.
+    """
+    try:
+        cur.execute(
+            """SELECT 1 FROM whatsapp_envios
+               WHERE id_academia = %s AND tipo = 'aniversario' AND referencia_id = %s
+                 AND data_ref BETWEEN DATE_SUB(%s, INTERVAL %s DAY) AND %s LIMIT 1""",
+            (academia_id, aluno_id, dia, janela_dias, dia))
+        return cur.fetchone() is not None
+    except Exception:
+        return False
+
+
+def agendar_aniversario(academia_id, aluno_id, dia):
+    """Agenda o parabéns do aluno para `dia` (o aniversário). Idempotente."""
+    conn = get_db_connection(); cur = conn.cursor()
+    try:
+        cur.execute(
+            """INSERT IGNORE INTO whatsapp_envios (id_academia, tipo, referencia_id, data_ref)
+               VALUES (%s, %s, %s, %s)""", (academia_id, TIPO_AGENDADO, aluno_id, dia))
+        conn.commit()
+        return True
+    except Exception:
+        conn.rollback()
+        return False
+    finally:
+        cur.close(); conn.close()
+
+
+def cancelar_agendamento_aniversario(academia_id, aluno_id, dia):
+    conn = get_db_connection(); cur = conn.cursor()
+    try:
+        cur.execute(
+            """DELETE FROM whatsapp_envios WHERE id_academia = %s AND tipo = %s
+               AND referencia_id = %s AND data_ref = %s""", (academia_id, TIPO_AGENDADO, aluno_id, dia))
+        conn.commit()
+        return True
+    except Exception:
+        conn.rollback()
+        return False
+    finally:
+        cur.close(); conn.close()
+
+
+def agendados_aniversario(cur, academia_id, ano, mes):
+    """{aluno_id: data} dos parabéns agendados no mês."""
+    try:
+        cur.execute(
+            """SELECT referencia_id, data_ref FROM whatsapp_envios
+               WHERE id_academia = %s AND tipo = %s AND YEAR(data_ref) = %s AND MONTH(data_ref) = %s""",
+            (academia_id, TIPO_AGENDADO, ano, mes))
+        return {r["referencia_id"] if isinstance(r, dict) else r[0]:
+                r["data_ref"] if isinstance(r, dict) else r[1] for r in cur.fetchall()}
+    except Exception:
+        return {}
+
+
 def enviar_aniversariantes(academia_id, somente_ativadas=True, dia=None):
     """Parabeniza no WhatsApp os aniversariantes do dia.
 
@@ -640,9 +942,21 @@ def enviar_aniversariantes(academia_id, somente_ativadas=True, dia=None):
             (academia_id,),
         )
         acad = cur.fetchone() or {}
-        if somente_ativadas and not acad.get("ligado"):
-            resumo["motivo"] = "automacao_desligada"
-            return resumo
+        # Automação desligada: só sai quem a secretaria agendou para hoje.
+        so_agendados = bool(somente_ativadas and not acad.get("ligado"))
+        agendados_hoje = set()
+        if so_agendados:
+            try:
+                cur.execute(
+                    """SELECT referencia_id FROM whatsapp_envios
+                       WHERE id_academia = %s AND tipo = %s AND data_ref = %s""",
+                    (academia_id, TIPO_AGENDADO, dia))
+                agendados_hoje = {r["referencia_id"] for r in cur.fetchall()}
+            except Exception:
+                agendados_hoje = set()
+            if not agendados_hoje:
+                resumo["motivo"] = "automacao_desligada"
+                return resumo
 
         from utils import whatsapp_templates as tpl
         texto, ativo = tpl.obter(academia_id, "aniversario")
@@ -664,7 +978,11 @@ def enviar_aniversariantes(academia_id, somente_ativadas=True, dia=None):
         nome_acad = acad.get("nome") or ""
 
         for al in alunos:
-            if _ja_enviado(cur, academia_id, "aniversario", al["id"], dia):
+            if so_agendados and al["id"] not in agendados_hoje:
+                continue
+            # Já parabenizado hoje ou adiantado pela tela: não manda de novo.
+            if (_ja_enviado(cur, academia_id, "aniversario", al["id"], dia)
+                    or ja_parabenizado_recente(cur, academia_id, al["id"], dia)):
                 resumo["repetidos"] += 1
                 continue
             tel = _telefone(al)
@@ -804,9 +1122,49 @@ def enviar_boas_vindas_aluno(aluno_id):
         return False
 
 
-def enviar_lote(academia_id, dias_antes=3, somente_ativadas=True, somente_atrasadas=False):
-    """Envia lembretes para todas as mensalidades pendentes/atrasadas da academia.
-    Retorna resumo {enviados, falhas, sem_telefone, total}."""
+def buscar_avulsas_pendentes(cur, academia_id, dias_antes=3, aluno_id=None):
+    """Cobranças avulsas em aberto vencendo até hoje+dias_antes (ou vencidas).
+
+    Mesma janela de `buscar_pendentes`, para o botão manual de lembrete cobrar
+    também o que não é mensalidade (taxa, uniforme, exame de faixa).
+    """
+    _sem_grupo = _fora_de_grupo_sql(cur, "avulsa", "ca")
+    _so_aluno = " AND ca.aluno_id = %s" if aluno_id else ""
+    try:
+        cur.execute(
+            f"""
+            SELECT 'avulsa' AS origem, ca.id, ca.aluno_id, ca.data_vencimento, ca.valor,
+                   ca.status, ca.descricao, ca.asaas_boleto_url, ca.asaas_pix_copia_cola,
+                   a.nome, a.telefone, a.tel_celular,
+                   a.responsavel_financeiro_nome, a.responsavel_financeiro_telefone
+            FROM cobranca_avulsa ca
+            JOIN alunos a ON a.id = ca.aluno_id
+            WHERE ca.id_academia = %s
+              AND ca.status IN ('pendente','atrasado')
+              AND ca.data_vencimento IS NOT NULL
+              AND ca.data_vencimento <= DATE_ADD(CURDATE(), INTERVAL %s DAY)
+              AND ca.valor > 0{_sem_grupo}{_so_aluno}
+            ORDER BY ca.data_vencimento
+            """,
+            (academia_id, dias_antes) + ((aluno_id,) if aluno_id else ()),
+        )
+        return cur.fetchall() or []
+    except Exception:
+        logging.getLogger(__name__).exception("Lembrete: falha ao ler cobranças avulsas")
+        return []
+
+
+def enviar_lote(academia_id, dias_antes=3, somente_ativadas=True,
+                somente_atrasadas=False, aluno_id=None, incluir_avulsas=False):
+    """Envia lembretes para as mensalidades pendentes/atrasadas da academia.
+
+    Com `aluno_id`, fala só com aquele aluno. O parâmetro existe porque a tela
+    de mensalidades pode estar filtrada numa pessoa, e o botão de lembrete dali
+    disparava para todo mundo — quem abria a mensalidade de um aluno acabava
+    cobrando a academia inteira.
+
+    Retorna resumo {enviados, falhas, sem_telefone, total}.
+    """
     conn = get_db_connection(); cur = conn.cursor(dictionary=True)
     resumo = {"enviados": 0, "falhas": 0, "sem_telefone": 0, "total": 0}
     try:
@@ -821,7 +1179,10 @@ def enviar_lote(academia_id, dias_antes=3, somente_ativadas=True, somente_atrasa
         if somente_ativadas and not acad.get("whatsapp_lembrete_mensalidade"):
             resumo["motivo"] = "automacao_desligada"
             return resumo
-        rows = buscar_pendentes(cur, academia_id, dias_antes, somente_atrasadas)
+        rows = buscar_pendentes(cur, academia_id, dias_antes, somente_atrasadas,
+                                aluno_id=aluno_id)
+        if incluir_avulsas and not somente_atrasadas:
+            rows = list(rows) + buscar_avulsas_pendentes(cur, academia_id, dias_antes, aluno_id)
         resumo["total"] = len(rows)
         nome_acad = acad.get("nome") or ""
         for row in rows:
@@ -906,7 +1267,7 @@ def buscar_em_aberto(cur, academia_id):
         cur.execute(
             f"""
             SELECT 'avulsa' AS origem,
-                   ca.id, ca.aluno_id, ca.data_vencimento, ca.valor, ca.status,
+                   ca.id, ca.aluno_id, ca.data_vencimento, ca.valor, ca.status, ca.descricao,
                    NULL AS status_pagamento, NULL AS valor_original,
                    0 AS desconto_aplicado, NULL AS id_desconto,
                    ca.asaas_boleto_url, NULL AS cora_boleto_url, NULL AS inter_boleto_url,

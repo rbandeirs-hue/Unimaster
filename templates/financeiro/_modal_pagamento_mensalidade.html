@@ -33,7 +33,7 @@
                       <div class="row g-2 align-items-end">
                         <div class="col-12 col-md-6">
                           <label class="form-label small fw-semibold mb-1">Desconto <span class="text-muted fw-normal">— se o aluno tiver direito</span></label>
-                          <select class="form-select form-select-sm js-fin-pag-desc-sel" name="desconto_id_pagamento">
+                          <select class="u-campo__controle js-fin-pag-desc-sel" name="desconto_id_pagamento" aria-label="Desconto — se o aluno tiver direito">
                             <option value="">Sem desconto</option>
                             {% for d in descontos or [] %}
                             <option value="{{ d.id }}" data-tipo="{{ d.tipo }}" data-valor="{{ '%.2f'|format(d.valor or 0) }}">{{ d.nome }} — {% if d.tipo == 'percentual' %}{{ '%.0f'|format(d.valor|float) }}%{% else %}R$ {{ '%.2f'|format(d.valor|float) }}{% endif %}</option>
@@ -42,13 +42,13 @@
                           </select>
                         </div>
                         <div class="col-4 col-md-2 js-fin-pag-desc-avulso" style="display:none;">
-                          <select class="form-select form-select-sm js-fin-pag-desc-tipo">
+                          <select class="u-campo__controle js-fin-pag-desc-tipo">
                             <option value="percentual">%</option>
                             <option value="valor_fixo">R$</option>
                           </select>
                         </div>
                         <div class="col-8 col-md-4 js-fin-pag-desc-avulso" style="display:none;">
-                          <input type="text" class="form-control form-control-sm js-fin-pag-desc-valor" placeholder="Valor do desconto" inputmode="decimal">
+                          <input type="text" class="u-campo__controle js-fin-pag-desc-valor" placeholder="Valor do desconto" inputmode="decimal" aria-label="Valor do desconto">
                         </div>
                       </div>
                       <input type="hidden" name="desconto_flat" value="" class="js-fin-pag-desc-flat">
@@ -63,7 +63,7 @@
                           <label class="form-label small fw-semibold mb-1" for="finPagVenc">
                             Vencimento <span class="text-muted fw-normal">— desta cobrança</span>
                           </label>
-                          <input type="date" class="form-control form-control-sm js-fin-pag-venc" id="finPagVenc" name="novo_vencimento">
+                          <input type="date" class="u-campo__controle js-fin-pag-venc" id="finPagVenc" name="novo_vencimento">
                         </div>
                         {% set _planos_pag = planos_cobranca | default([]) %}
                         {% if _planos_pag | length > 1 %}
@@ -71,7 +71,7 @@
                           <label class="form-label small fw-semibold mb-1" for="finPagPlano">
                             Pacote <span class="text-muted fw-normal">— trocar de plano</span>
                           </label>
-                          <select class="form-select form-select-sm js-fin-pag-plano" id="finPagPlano" name="novo_plano_id">
+                          <select class="u-campo__controle js-fin-pag-plano" id="finPagPlano" name="novo_plano_id">
                             {% for pl in _planos_pag %}
                             <option value="{{ pl.id }}">{{ pl.nome }} — R$ {{ '%.2f'|format(pl.valor|float)|replace('.', ',') }}</option>
                             {% endfor %}
@@ -129,7 +129,7 @@
                       <div class="row g-2 align-items-end js-fin-pag-cart-row" style="display:none;">
                         <div class="col-6 col-md-4">
                           <label class="form-label small mb-1">Valor do crédito (R$)</label>
-                          <input type="text" class="form-control form-control-sm js-fin-pag-cart-valor" inputmode="decimal" autocomplete="off">
+                          <input type="text" class="u-campo__controle js-fin-pag-cart-valor" inputmode="decimal" autocomplete="off" aria-label="Valor do crédito (R$)">
                         </div>
                         <div class="col-6 col-md-8 small text-muted pb-2">O crédito abate do total; o restante é pago nas formas acima.</div>
                       </div>
@@ -148,8 +148,8 @@
                     <input type="hidden" name="registro_id" value="" class="js-fin-pag-reg-inp" disabled>
                 </div>
                 <div class="modal-footer border-0 bg-light">
-                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-success btn-sm js-fin-pag-submit">
+                    <button type="button" class="u-btn u-btn--pequeno u-btn--fantasma" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="u-btn u-btn--pequeno u-btn--forte js-fin-pag-submit">
                         <i class="bi bi-check-lg me-1"></i>Confirmar pagamento
                     </button>
                 </div>
@@ -337,19 +337,19 @@
         div.className = 'row g-2 mb-2 align-items-end js-fin-pag-linha';
         div.innerHTML =
             '<div class="col-md-5 col-12"><label class="small text-muted mb-0">Forma de pagamento</label>' +
-            '<select class="form-select form-select-sm js-fin-sel-fp"><option value="">Selecione…</option>' +
+            '<select class="u-campo__controle js-fin-sel-fp" aria-label="Forma de pagamento"><option value="">Selecione…</option>' +
             opts +
             '</select></div>' +
             '<div class="col-md-3 col-6"><label class="small text-muted mb-0">Valor (R$)</label>' +
-            '<input type="text" class="form-control form-control-sm js-fin-inp-valor" inputmode="decimal" autocomplete="off" required value="' +
+            '<input type="text" class="u-campo__controle js-fin-inp-valor" inputmode="decimal" autocomplete="off" required value="' +
             vd +
-            '"></div>' +
+            '" aria-label="Valor (R$)"></div>' +
             '<div class="col-md-3 col-6"><label class="small text-muted mb-0">Data do pagamento</label>' +
-            '<input type="date" class="form-control form-control-sm js-fin-inp-data" required value="' +
+            '<input type="date" class="u-campo__controle js-fin-inp-data" required value="' +
             (dataDefault || '') +
-            '"></div>' +
+            '" aria-label="Data do pagamento"></div>' +
             '<div class="col-md-1 col-12 text-md-end pb-md-2">' +
-            '<button type="button" class="btn btn-outline-danger btn-sm js-fin-pag-del-line mt-3 mt-md-0" title="Remover esta forma e voltar o valor total à primeira linha"><i class="bi bi-x-lg"></i></button></div>';
+            '<button type="button" class="u-btn u-btn--pequeno u-btn--perigo js-fin-pag-del-line mt-3 mt-md-0" title="Remover esta forma e voltar o valor total à primeira linha"><i class="bi bi-x-lg"></i></button></div>';
         var linhas = modalPag.querySelector('.js-fin-pag-linhas');
         if (linhas) linhas.appendChild(div);
         atualizaSomaPag(modalPag);
@@ -981,9 +981,11 @@
                 // Recarregar em silêncio fazia a falha parecer sucesso: a tela
                 // voltava igual e ninguém sabia que nada tinha sido gravado.
                 if (subBtn) subBtn.disabled = false;
-                alert('Não foi possível registrar o pagamento. ' + (erro && erro.message ? erro.message : '')
-                      + '\nA tela será recarregada para você conferir.');
-                window.location.reload();
+                // A recarga espera o aviso ser lido: o diálogo do sistema não
+                // trava a página como o `alert()` travava.
+                Dialogo.alerta('Não foi possível registrar o pagamento. ' + (erro && erro.message ? erro.message : ''),
+                               { tom: 'perigo', confirmar: 'Recarregar a tela' })
+                       .then(function () { window.location.reload(); });
             })
             .finally(function () {
                 if (subBtn) subBtn.disabled = false;

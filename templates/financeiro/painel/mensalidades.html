@@ -40,7 +40,9 @@
 
 {% block pagina_acoes %}
   <form method="POST" action="{{ url_for('financeiro_painel.mensalidades_notificar_atrasados') }}"
-        onsubmit="return confirm('Enviar lembrete de WhatsApp para os {{ atrasados_geral }} atrasados?\n\nQuem ainda não tem cobrança online vai ter uma gerada agora.')">
+        data-confirmar="Enviar lembrete de WhatsApp para os {{ atrasados_geral }} atrasados?
+
+Quem ainda não tem cobrança online vai ter uma gerada agora.">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
     <input type="hidden" name="mes" value="{{ mes_chave }}">
@@ -93,7 +95,9 @@
     <h2 class="lst-quadro__titulo">Cobranças mensais</h2>
     <div class="lst-filtros__acoes">
       <form method="POST" action="{{ url_for('financeiro_painel.mensalidades_atualizar_links') }}"
-            onsubmit="return confirm('Reemitir a cobrança online das mensalidades em aberto de {{ mes_label }}?\n\nUse quando o link estiver com valor ou endereço desatualizado. O link curto continua o mesmo.')">
+            data-confirmar="Reemitir a cobrança online das mensalidades em aberto de {{ mes_label }}?
+
+Use quando o link estiver com valor ou endereço desatualizado. O link curto continua o mesmo.">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
         <input type="hidden" name="mes" value="{{ mes_chave }}">
@@ -103,7 +107,9 @@
         </button>
       </form>
       <form method="POST" action="{{ url_for('financeiro_painel.mensalidades_notificar_atrasados') }}"
-            onsubmit="return confirm('Enviar lembrete de WhatsApp para os {{ atrasados_geral }} atrasados?\n\nQuem ainda não tem cobrança online vai ter uma gerada agora.')">
+            data-confirmar="Enviar lembrete de WhatsApp para os {{ atrasados_geral }} atrasados?
+
+Quem ainda não tem cobrança online vai ter uma gerada agora.">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
         <input type="hidden" name="mes" value="{{ mes_chave }}">
@@ -180,7 +186,7 @@
           {% else %}
             {# Pago: permite desfazer, para corrigir baixa lançada por engano. #}
             <form method="POST" action="{{ url_for('financeiro.cancelar_pagamento') }}" style="display:inline"
-                  onsubmit="return confirm('Cancelar o pagamento desta mensalidade? O status volta para pendente e a receita lançada é excluída.')">
+                  data-confirmar="Cancelar o pagamento desta mensalidade? O status volta para pendente e a receita lançada é excluída.">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <input type="hidden" name="tipo" value="mensalidade_aluno">
               <input type="hidden" name="registro_id" value="{{ r.id }}">

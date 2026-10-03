@@ -11,6 +11,7 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 import json
 from config import get_db_connection
+from utils.planos_modalidade import filtrar_contexto as filtrar_planos
 from utils.financeiro_core import registrar_entrada_de_pagamento
 from utils.alunos_academias import filtro_alunos_da_academia, aluno_vinculado_a_academia
 from extensions import csrf
@@ -742,11 +743,19 @@ def _academias_ids_financeiro_brutas():
     try:
         cur.execute("SELECT academia_id FROM usuarios_academias WHERE usuario_id = %s ORDER BY academia_id", (current_user.id,))
         vinculadas = [r["academia_id"] for r in cur.fetchall()]
-        if vinculadas:
+        # Admin não é limitado pelo vínculo explícito: ter sido ligado a três
+        # academias não pode esconder as outras nove. Foi o que aconteceu ao
+        # cadastrar uma academia independente — ela ficava invisível para quem
+        # administra o sistema.
+        if vinculadas and not current_user.has_role("admin"):
             conn.close()
             return vinculadas
         # Modo academia: sem vínculo em usuarios_academias, usar sessão / usuário (senão IN () quebra e financeiro falha)
-        if session.get("modo_painel") == "academia" and (current_user.has_role("gestor_academia") or current_user.has_role("professor")):
+        # Admin fica de fora: ele costuma acumular o papel de gestor_academia,
+        # e esta trava o deixava sem academia nenhuma no modo academia.
+        if (session.get("modo_painel") == "academia"
+                and not current_user.has_role("admin")
+                and (current_user.has_role("gestor_academia") or current_user.has_role("professor"))):
             aid = session.get("academia_gerenciamento_id") or session.get("finance_academia_id") or getattr(current_user, "id_academia", None)
             conn.close()
             try:
@@ -1559,15 +1568,15 @@ def lista_planos_mensalidades():
     cur = conn.cursor(dictionary=True)
     try:
         cur.execute(
-            "SELECT id, nome, valor, COALESCE(aplicar_juros_multas, 0) AS aplicar_juros_multas FROM mensalidades WHERE id_academia = %s AND ativo = 1 ORDER BY nome",
+            "SELECT id, nome, valor, COALESCE(aplicar_juros_multas, 0) AS aplicar_juros_multas FROM mensalidades WHERE id_academia = %s AND ativo = 1 AND COALESCE(periodicidade,'mensal') <> 'diaria' ORDER BY nome",
             (academia_id,),
         )
     except Exception:
         cur.execute(
-            "SELECT id, nome, valor FROM mensalidades WHERE id_academia = %s AND ativo = 1 ORDER BY nome",
+            "SELECT id, nome, valor FROM mensalidades WHERE id_academia = %s AND ativo = 1 AND COALESCE(periodicidade,'mensal') <> 'diaria' ORDER BY nome",
             (academia_id,),
         )
-    mensalidades = cur.fetchall()
+    mensalidades = filtrar_planos(cur, cur.fetchall(), academia_id)
     conn.close()
     return render_template(
         "financeiro/mensalidades/lista_planos_mensalidades.html",
@@ -4396,6 +4405,22 @@ def lembrete_whatsapp_individual(ma_id):
     return jsonify({"ok": ok, "msg": msg})
 
 
+@bp_financeiro.route("/cobranca-avulsa/<int:av_id>/lembrete-whatsapp", methods=["POST"])
+@login_required
+def lembrete_whatsapp_avulsa(av_id):
+    """Envia o lembrete de uma cobrança avulsa pelo WhatsApp da academia.
+
+    Igual ao da mensalidade: mesmo canal, link de pagamento emitido se faltar,
+    e o modelo "Lembrete de cobrança avulsa", que diz o que está sendo cobrado.
+    """
+    academia_id = _get_academia_id()
+    if not academia_id:
+        return jsonify({"ok": False, "erro": "academia não definida"}), 400
+    from utils import whatsapp_lembretes as lem
+    ok, msg = lem.enviar_um_avulsa(academia_id, av_id)
+    return jsonify({"ok": ok, "msg": msg})
+
+
 @bp_financeiro.route("/mensalidades/lembretes-whatsapp", methods=["POST"])
 @login_required
 def lembretes_whatsapp_lote():
@@ -4407,9 +4432,26 @@ def lembretes_whatsapp_lote():
         dias = int(request.form.get("dias", 3))
     except (TypeError, ValueError):
         dias = 3
+    # Recorte por aluno: quando a tela está filtrada numa pessoa, o botão fala
+    # só com ela. Sem isto, abrir a mensalidade de um aluno e clicar em
+    # "Lembretes" cobrava a academia inteira.
+    aluno_id = request.form.get("aluno_id", type=int)
+    if aluno_id:
+        db = get_db_connection()
+        cur = db.cursor()
+        try:
+            cur.execute("SELECT 1 FROM alunos WHERE id = %s AND id_academia = %s",
+                        (aluno_id, academia_id))
+            if not cur.fetchone():
+                return jsonify({"ok": False, "erro": "aluno não é desta academia"}), 403
+        finally:
+            cur.close()
+            db.close()
     from utils import whatsapp_lembretes as lem
     # botão manual ignora o toggle (envia mesmo se a automação diária estiver off)
-    resumo = lem.enviar_lote(academia_id, dias_antes=dias, somente_ativadas=False)
+    resumo = lem.enviar_lote(academia_id, dias_antes=dias, somente_ativadas=False,
+                             aluno_id=aluno_id, incluir_avulsas=True)
+    resumo["aluno_id"] = aluno_id
     return jsonify({"ok": True, "resumo": resumo})
 
 
@@ -4828,7 +4870,9 @@ def mensalidades_alunos():
         except Exception:
             dia_vencimento_atual = None
         try:
-            _pac_id, _pac_nome = _pacote_atual_do_aluno(cur, aluno_filtro, ids)
+            # Mesmas academias que a prévia do modal usa, para o texto do topo e
+            # o "Pacote: X → Y" da prévia não divergirem.
+            _pac_id, _pac_nome = _pacote_atual_do_aluno(cur, aluno_filtro, _get_academias_ids())
             pacote_atual_id, pacote_atual_nome = _pac_id, _pac_nome
         except Exception:
             pacote_atual_id, pacote_atual_nome = None, ""
@@ -5711,10 +5755,10 @@ def aplicar_desconto():
     pacotes_mensalidades = []
     try:
         cur.execute(
-            "SELECT id, nome FROM mensalidades WHERE id_academia = %s AND COALESCE(ativo, 1) = 1 ORDER BY nome",
+            "SELECT id, nome FROM mensalidades WHERE id_academia = %s AND COALESCE(ativo, 1) = 1 AND COALESCE(periodicidade,'mensal') <> 'diaria' ORDER BY nome",
             (academia_id,),
         )
-        pacotes_mensalidades = cur.fetchall()
+        pacotes_mensalidades = filtrar_planos(cur, cur.fetchall(), academia_id)
     except Exception:
         try:
             cur.execute(
@@ -7351,10 +7395,10 @@ def _planos_ativos_academia(academia_id):
     cur = conn.cursor(dictionary=True)
     try:
         cur.execute(
-            "SELECT id, nome, valor FROM mensalidades WHERE id_academia = %s AND ativo = 1 ORDER BY nome",
+            "SELECT id, nome, valor FROM mensalidades WHERE id_academia = %s AND ativo = 1 AND COALESCE(periodicidade,'mensal') <> 'diaria' ORDER BY nome",
             (academia_id,),
         )
-        return cur.fetchall() or []
+        return filtrar_planos(cur, cur.fetchall() or [], academia_id)
     except Exception:
         return []
     finally:
@@ -8768,10 +8812,10 @@ def _render_gerar_cobranca(academias, academia_id, academia_sel, turma_id=None, 
     alunos_iniciais = []
     try:
         cur.execute(
-            "SELECT id, nome, valor FROM mensalidades WHERE id_academia = %s AND ativo = 1 ORDER BY nome",
+            "SELECT id, nome, valor FROM mensalidades WHERE id_academia = %s AND ativo = 1 AND COALESCE(periodicidade,'mensal') <> 'diaria' ORDER BY nome",
             (academia_sel,),
         )
-        planos = cur.fetchall()
+        planos = filtrar_planos(cur, cur.fetchall(), academia_sel)
     except Exception:
         pass
     try:

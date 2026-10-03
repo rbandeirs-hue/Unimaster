@@ -1,29 +1,31 @@
 {% extends "base_app.html" %}
 {% block title %}Formas de pagamento{% endblock %}
+{% block pagina_titulo %}Formas de pagamento{% endblock %}
+{% block pagina_subtitulo %}
+    {% if use_catalog and modo_catalogo_associacao %}
+    Defina aqui as formas disponíveis para <strong>todas as academias</strong> desta associação. Cada academia escolhe depois quais ficam <strong>ativas</strong> nas configurações.
+    {% elif use_catalog and formas_modo_contexto == 'academia' %}
+    Apenas formas cadastradas pela <strong>associação</strong> aparecem aqui. Ative as que esta unidade aceita ao receber mensalidades; as <strong>desativadas</strong> não aparecem ao registrar pagamento.
+    {% else %}
+    Por academia: cadastre e gerencie dinheiro, PIX, boleto etc. (modo sem catálogo central — execute a migração <code>add_formas_pagamento_catalogo.sql</code> para associacao+academia.)
+    {% endif %}
+{% endblock %}
+{% block pagina_acoes %}
+<a href="{{ url_voltar(back_url if back_url is defined else None) }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Voltar</a>
+{% endblock %}
 {% block content %}
 <div class="container mt-4">
     <div class="mb-3">
         {% if academias|length > 1 %}
         <form method="GET" class="mb-2">
             <label class="form-label small fw-semibold">Academia</label>
-            <select name="academia_id" class="form-select form-select-sm d-inline-block w-auto" onchange="this.form.submit()">
+            <select name="academia_id" class="u-campo__controle d-inline-block w-auto" onchange="this.form.submit()" aria-label="Academia">
                 {% for ac in academias %}
                 <option value="{{ ac.id }}" {% if ac.id == academia_id %}selected{% endif %}>{{ ac.nome }}</option>
                 {% endfor %}
             </select>
         </form>
         {% endif %}
-        {% include 'components/botao_voltar.html' %}
-        <h1 class="h4 fw-bold text-primary mb-1">Formas de pagamento</h1>
-        <p class="text-muted mb-0 small">
-            {% if use_catalog and modo_catalogo_associacao %}
-            Defina aqui as formas disponíveis para <strong>todas as academias</strong> desta associação. Cada academia escolhe depois quais ficam <strong>ativas</strong> nas configurações.
-            {% elif use_catalog and formas_modo_contexto == 'academia' %}
-            Apenas formas cadastradas pela <strong>associação</strong> aparecem aqui. Ative as que esta unidade aceita ao receber mensalidades; as <strong>desativadas</strong> não aparecem ao registrar pagamento.
-            {% else %}
-            Por academia: cadastre e gerencie dinheiro, PIX, boleto etc. (modo sem catálogo central — execute a migração <code>add_formas_pagamento_catalogo.sql</code> para associacao+academia.)
-            {% endif %}
-        </p>
     </div>
 
     {% if use_catalog and modo_catalogo_associacao %}
@@ -39,10 +41,10 @@
                 {% endif %}
                 <div class="col-md-8">
                     <label class="form-label small mb-0">Nome</label>
-                    <input type="text" name="nome" class="form-control" maxlength="80" placeholder="Ex.: Cartão débito" required>
+                    <input type="text" name="nome" class="u-campo__controle" maxlength="80" placeholder="Ex.: Cartão débito" required aria-label="Nome">
                 </div>
                 <div class="col-md-4">
-                    <button type="submit" class="btn btn-primary w-100"><i class="bi bi-plus-lg me-1"></i>Adicionar ao catálogo</button>
+                    <button type="submit" class="u-btn u-btn--primario w-100"><i class="bi bi-plus-lg me-1"></i>Adicionar ao catálogo</button>
                 </div>
             </form>
         </div>
@@ -67,14 +69,14 @@
                         <tr>
                             <td>{{ f.nome }}</td>
                             <td class="text-end">
-                                <form method="POST" class="d-inline" onsubmit="return confirm('Remover esta forma do catálogo? As academias deixam de vê-la.');">
+                                <form method="POST" class="d-inline" data-confirmar="Remover esta forma do catálogo? As academias deixam de vê-la.">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                     <input type="hidden" name="acao" value="excluir_catalogo">
                                     <input type="hidden" name="catalogo_id" value="{{ f.id }}">
                                     {% if current_user.has_role('admin') and id_associacao %}
                                     <input type="hidden" name="associacao_id" value="{{ id_associacao }}">
                                     {% endif %}
-                                    <button type="submit" class="btn btn-sm btn-outline-danger">Excluir</button>
+                                    <button type="submit" class="u-btn u-btn--pequeno">Excluir</button>
                                 </form>
                             </td>
                         </tr>
@@ -130,9 +132,9 @@
                                         <input type="hidden" name="fp_id" value="{{ f.fp_id }}">
                                         {% endif %}
                                         {% if (f.ativo|default(0))|int == 1 %}
-                                        <button type="submit" class="btn btn-sm btn-outline-secondary">Desativar</button>
+                                        <button type="submit" class="u-btn u-btn--pequeno">Desativar</button>
                                         {% else %}
-                                        <button type="submit" class="btn btn-sm btn-outline-success">Ativar</button>
+                                        <button type="submit" class="u-btn u-btn--pequeno">Ativar</button>
                                         {% endif %}
                                     </form>
                                 </div>
@@ -161,10 +163,10 @@
                 {% endif %}
                 <div class="col-md-8">
                     <label class="form-label small mb-0">Nome</label>
-                    <input type="text" name="nome" class="form-control" maxlength="80" placeholder="Ex.: Cartão débito" required>
+                    <input type="text" name="nome" class="u-campo__controle" maxlength="80" placeholder="Ex.: Cartão débito" required aria-label="Nome">
                 </div>
                 <div class="col-md-4">
-                    <button type="submit" class="btn btn-primary w-100"><i class="bi bi-plus-lg me-1"></i>Adicionar</button>
+                    <button type="submit" class="u-btn u-btn--primario w-100"><i class="bi bi-plus-lg me-1"></i>Adicionar</button>
                 </div>
             </form>
         </div>
@@ -197,9 +199,9 @@
                                     <input type="hidden" name="academia_id" value="{{ academia_id }}">
                                     {% endif %}
                                     {% if f.ativo %}
-                                    <button type="submit" class="btn btn-sm btn-outline-secondary">Ativa — desativar</button>
+                                    <button type="submit" class="u-btn u-btn--pequeno">Ativa — desativar</button>
                                     {% else %}
-                                    <button type="submit" class="btn btn-sm btn-outline-success">Inativa — ativar</button>
+                                    <button type="submit" class="u-btn u-btn--pequeno">Inativa — ativar</button>
                                     {% endif %}
                                 </form>
                             </td>

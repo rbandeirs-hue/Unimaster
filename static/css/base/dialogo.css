@@ -1,0 +1,167 @@
+/* =======================================================================
+   Diálogos — alerta e confirmação com a cara do sistema
+   =======================================================================
+   O `alert()` e o `confirm()` do navegador quebravam o desenho em toda
+   tela: fonte do sistema operacional, botão em inglês em alguns aparelhos,
+   e nenhuma forma de dizer que a ação é destrutiva. Aqui o mesmo papel é
+   cumprido pelo vocabulário do shell — tokens, raio, sombra e botões.
+
+   Vocabulário:
+     .dlg-fundo      camada escura que cobre a tela
+     .dlg            caixa branca
+     .dlg__ico       ladrilho do ícone (muda de cor com o tom)
+     .dlg__acoes     barra de botões
+     .dlg--perigo    tom da ação que apaga ou cancela algo
+   ======================================================================= */
+
+.dlg-fundo {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: grid;
+  place-items: center;
+  padding: 1.5rem;
+  background: rgba(20, 20, 20, .48);
+  opacity: 0;
+  transition: opacity .16s ease;
+}
+.dlg-fundo.is-aberto { opacity: 1; }
+
+.dlg {
+  width: 100%;
+  max-width: 440px;
+  box-sizing: border-box;
+  padding: 1.5rem;
+  background: #fff;
+  border: 1px solid var(--sh-line, #e6e4e0);
+  border-radius: var(--u-radius, 12px);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, .3);
+  transform: translateY(8px) scale(.99);
+  transition: transform .16s ease;
+}
+.dlg-fundo.is-aberto .dlg { transform: none; }
+
+.dlg__topo { display: flex; align-items: flex-start; gap: .9rem; }
+
+.dlg__ico {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  font-size: 1.1rem;
+  background: #f4f2ee;
+  color: var(--sh-ink, #1c1c1c);
+}
+.dlg--perigo .dlg__ico { background: #fdf1f2; color: #c40017; }
+.dlg--aviso  .dlg__ico { background: #fdf6e7; color: #8a5600; }
+.dlg--ok     .dlg__ico { background: #eef7f0; color: #1c6b35; }
+
+.dlg__corpo { min-width: 0; flex-grow: 1; }
+
+.dlg__titulo {
+  margin: 2px 0 .35rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--sh-ink, #1c1c1c);
+}
+
+/* `pre-line` porque as mensagens antigas usavam \n para separar o aviso
+   principal da consequência — e essa quebra é a hierarquia da frase. */
+.dlg__texto {
+  margin: 0;
+  font-size: .9rem;
+  line-height: 1.55;
+  color: var(--sh-ink-soft, #6b6862);
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.dlg__acoes {
+  display: flex;
+  justify-content: flex-end;
+  gap: .6rem;
+  margin-top: 1.5rem;
+}
+
+.dlg__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .4rem;
+  min-height: 44px;
+  padding: .6rem 1.1rem;
+  font-family: inherit;
+  font-size: .9rem;
+  font-weight: 500;
+  color: var(--sh-ink, #1c1c1c);
+  background: #fff;
+  border: 1px solid var(--sh-line, #e6e4e0);
+  border-radius: var(--u-radius-sm, 8px);
+  cursor: pointer;
+  transition: background .15s, border-color .15s;
+}
+.dlg__btn:hover { background: #f4f2ee; border-color: #d8d5d0; }
+.dlg__btn:focus-visible { outline: 3px solid rgba(28, 28, 28, .18); outline-offset: 1px; }
+
+.dlg__btn--forte {
+  font-weight: 600;
+  color: #fff;
+  background: var(--sh-ink, #1c1c1c);
+  border-color: var(--sh-ink, #1c1c1c);
+}
+.dlg__btn--forte:hover { background: #000; border-color: #000; }
+
+/* Vermelho só quando a ação apaga, cancela ou estorna: é o que o
+   `confirm()` do navegador nunca conseguiu dizer. */
+.dlg__btn--perigo {
+  font-weight: 600;
+  color: #fff;
+  background: #c40017;
+  border-color: #c40017;
+}
+.dlg__btn--perigo:hover { background: #a80014; border-color: #a80014; }
+
+/* ---------------------------------------------------------------- celular */
+@media (max-width: 480px) {
+  .dlg-fundo { place-items: end center; padding: 0; }
+  .dlg {
+    max-width: none;
+    padding: 1.25rem 1.15rem 1.5rem;
+    border-radius: var(--u-radius, 12px) var(--u-radius, 12px) 0 0;
+    border-bottom: 0;
+  }
+  .dlg-fundo .dlg { transform: translateY(12px); }
+  .dlg__acoes { flex-direction: column-reverse; margin-top: 1.35rem; }
+  .dlg__btn { width: 100%; }
+}
+
+/* ---------------------------------------------------------- modo noturno */
+.dark-mode .dlg {
+  background-color: var(--dark-mode-card, #2d2d2d) !important;
+  border-color: var(--dark-mode-border, #404040) !important;
+  color: var(--dark-mode-text, #e0e0e0) !important;
+}
+.dark-mode .dlg__titulo { color: var(--dark-mode-text, #e0e0e0) !important; }
+.dark-mode .dlg__texto { color: #b9b7b4 !important; }
+.dark-mode .dlg__ico { background: #3a3a3a; color: var(--dark-mode-text, #e0e0e0); }
+.dark-mode .dlg--perigo .dlg__ico { background: #402024; color: #ff8a96; }
+.dark-mode .dlg--aviso  .dlg__ico { background: #3d3222; color: #ffcf7a; }
+.dark-mode .dlg--ok     .dlg__ico { background: #23372a; color: #8fd3a4; }
+.dark-mode .dlg__btn {
+  background-color: var(--dark-mode-surface, #2d2d2d) !important;
+  border-color: var(--dark-mode-border, #404040) !important;
+  color: var(--dark-mode-text, #e0e0e0) !important;
+}
+.dark-mode .dlg__btn:hover { background-color: #3a3a3a !important; }
+.dark-mode .dlg__btn--forte {
+  background-color: var(--dark-mode-text, #e0e0e0) !important;
+  border-color: var(--dark-mode-text, #e0e0e0) !important;
+  color: #1a1a1a !important;
+}
+.dark-mode .dlg__btn--perigo {
+  background-color: #e0334a !important;
+  border-color: #e0334a !important;
+  color: #1a1a1a !important;
+}

@@ -1,0 +1,28 @@
+{# Abas da gestão do exame de faixa + seletor de academia, na mesma linha.
+   Espera `esc` (escopo) e `abas` ({ativa, kw}). #}
+<div class="exf-topo exf-nao-imprime">
+  <nav class="lst-abas exf-topo__abas">
+    {% for chave, nome, endpoint in [
+        ('alunos',   'Alunos aptos',     'exame_faixa.alunos'),
+        ('exames',   'Exames',           'exame_faixa.exames'),
+        ('programa', 'Programa',         'exame_faixa.programa'),
+        ('precos',   'Tabela de preços', 'exame_faixa.precos')] %}
+    <a href="{{ url_for(endpoint, **abas.kw) }}" class="lst-aba{% if abas.ativa == chave %} is-ativa{% endif %}">{{ nome }}{% if chave == 'alunos' and contagem is defined and contagem.apto %} <span class="lst-aba__n">{{ contagem.apto }}</span>{% endif %}</a>
+    {% endfor %}
+  </nav>
+
+  {% if seletor_academia and esc.academias|length > 1 %}
+  <form method="GET" class="exf-topo__academia">
+    <label for="exf-academia"><i class="bi bi-building" aria-hidden="true"></i> Academia</label>
+    <select id="exf-academia" name="academia_id" onchange="this.form.submit()">
+      {% if esc.ve_todas %}<option value="">Todas as academias</option>{% endif %}
+      {% for ac in esc.academias %}
+      <option value="{{ ac.id }}" {% if ac.id == esc.academia_id %}selected{% endif %}>{{ ac.nome }}</option>
+      {% endfor %}
+    </select>
+    {% for k, v in request.args.items() if k not in ('academia_id',) %}
+    <input type="hidden" name="{{ k }}" value="{{ v }}">
+    {% endfor %}
+  </form>
+  {% endif %}
+</div>

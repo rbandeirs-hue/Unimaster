@@ -1,0 +1,61 @@
+{# Faixa por modalidade: um seletor "Faixa — Judô", "Faixa — Jiu-Jitsu"… para
+   cada modalidade marcada. Judô e jiu-jitsu não se misturam: cada seletor só
+   oferece as faixas daquela modalidade (e as genéricas).
+
+   O `graduacao_id` escondido é a faixa da modalidade principal — é ele que a
+   validação de campo obrigatório e a regra da faixa branca leem, e é o que as
+   telas antigas mostram.
+
+   Cada faixa tem a sua data de graduação ao lado (some na branca, que não é
+   graduação). O campo único "Data da última graduação" fica escondido e
+   recebe a data da faixa principal.
+
+   Espera: modalidades, graduacoes, faixas_atuais {modalidade_id: graduacao_id},
+           datas_atuais {modalidade_id: date}, principal_id, obrig. #}
+<div class="col-md-4 mb-3" id="graduacao_container">
+  <input type="hidden" name="graduacao_id" id="graduacao_id" value="{{ principal_id or '' }}">
+  {% for m in modalidades %}
+  {# Modalidade sem faixas cadastradas (ex.: ginástica) não tem o que escolher. #}
+  {% set _tem = namespace(n=0) %}
+  {% for g in graduacoes %}{% if (g.modalidade_id if g.modalidade_id is defined else none) == m.id %}{% set _tem.n = _tem.n + 1 %}{% endif %}{% endfor %}
+  {% if _tem.n %}
+  {# Valor reenviado (erro de validação) manda; senão a faixa gravada. #}
+  {% set _fd = form_data.get('graduacao_mod_' ~ m.id, '') if form_data is defined and form_data else '' %}
+  {% set _sel = (_fd or (faixas_atuais or {}).get(m.id) or '')|string %}
+  {% set _dd = form_data.get('data_graduacao_mod_' ~ m.id, '') if form_data is defined and form_data else '' %}
+  {% set _data = _dd or ((datas_atuais or {}).get(m.id) or '')|string %}
+  <div class="fx-mod mb-2" data-modalidade-id="{{ m.id }}">
+    <label class="form-label fw-semibold" for="graduacao_mod_{{ m.id }}">
+      Faixa — {{ m.nome }}{% if 'graduacao_id' in obrig %} <span class="text-danger">*</span>{% endif %}
+    </label>
+    <div class="fx-par">
+    <select class="u-campo__controle fx-sel" name="graduacao_mod_{{ m.id }}" id="graduacao_mod_{{ m.id }}"
+            data-modalidade-id="{{ m.id }}" aria-label="Faixa em {{ m.nome }}">
+      <option value="">Não informada</option>
+      {% for g in graduacoes %}
+      {% set g_mod = g.modalidade_id if g.modalidade_id is defined else none %}
+      {% if g_mod is none or g_mod == m.id %}
+      <option value="{{ g.id }}" data-branca="{{ 1 if g.branca else 0 }}"
+              {% if _sel == g.id|string %}selected{% endif %}>
+        {{ [g.faixa, g.graduacao, g.categoria] | reject('none') | map('string') | map('trim') | reject('in', ['', '.', '-']) | join(' - ') }}
+      </option>
+      {% endif %}
+      {% endfor %}
+    </select>
+    <input type="date" class="u-campo__controle fx-data" name="data_graduacao_mod_{{ m.id }}"
+           value="{{ _data[:10] }}" aria-label="Data da última graduação em {{ m.nome }}"
+           title="Data da última graduação em {{ m.nome }}"
+           {% if 'ultimo_exame_faixa' in obrig %}data-obrigatorio="1"{% endif %}>
+    </div>
+    <small class="text-muted fx-branca d-none">Branca — sem data de graduação</small>
+  </div>
+  {% endif %}
+  {% endfor %}
+  <style>
+    .fx-par { display: flex; gap: .4rem; }
+    .fx-par .fx-sel { flex: 1 1 60%; min-width: 0; }
+    .fx-par .fx-data { flex: 0 1 40%; min-width: 0; }
+    #graduacao_container { flex: 0 0 auto; width: 100%; max-width: 560px; }
+  </style>
+  <small class="text-muted d-none" id="graduacao_empty_hint">Marque a modalidade para informar a faixa dela.</small>
+</div>

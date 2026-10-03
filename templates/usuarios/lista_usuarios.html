@@ -1,43 +1,33 @@
 {% extends "base_app.html" %}
 {% block title %}Lista de Usuários{% endblock %}
 
+{% block pagina_titulo %}Usuários{% endblock %}
+{% block pagina_subtitulo %}Quem tem acesso ao sistema e com qual papel.{% endblock %}
+
+{% block pagina_acoes %}
+  <a class="u-btn u-btn--forte"
+     href="{{ url_for('usuarios.cadastro_usuario', next=request.full_path) }}">
+    <i class="bi bi-plus-lg"></i> Novo usuário
+  </a>
+{% endblock %}
+
 {% block content %}
-<div class="container my-4 my-md-5">
+<div class="container">
 
-    <div class="d-flex flex-column flex-md-row justify-content-between align-items-center mb-4 gap-3">
-        <div class="d-flex flex-column flex-sm-row align-items-center gap-2">
-            {% set back_url = back_url or get_back_url_default() %}
-{% include 'components/botao_voltar.html' %}
-
-            <h2 class="h4 fw-bold text-dark m-0 text-center text-md-start">
-                <i class="bi bi-person-lines-fill me-2"></i> Usuários Cadastrados
-            </h2>
-        </div>
-
-        <a href="{{ url_for('usuarios.cadastro_usuario', next=request.full_path) }}" class="btn btn-success btn-lg w-100 w-md-auto">
-            <i class="bi bi-person-plus-fill me-1"></i> Novo Usuário
-        </a>
-    </div>
-
-    <div class="card shadow-sm mb-4 border-0">
-        <div class="card-body py-3">
-            <form method="GET" action="{{ url_for('usuarios.lista_usuarios') }}"
-                class="row g-2 g-md-3 align-items-center">
-                <div class="col-12 col-md-8">
-                    <input type="text" class="form-control" id="busca" name="busca"
-                        placeholder="Buscar por nome ou email..." value="{{ busca if busca else '' }}">
-                </div>
-                <div class="col-12 col-md-4">
-                    <button type="submit" class="btn btn-primary w-100">
-                        <i class="bi bi-search me-1"></i> Buscar
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
+    <form method="GET" action="{{ url_for('usuarios.lista_usuarios') }}" class="lst-filtros">
+        <label class="lst-campo lst-campo--largo">
+            <span class="lst-campo__rotulo">Buscar</span>
+            <input type="text" id="busca" name="busca" value="{{ busca if busca else '' }}"
+                   placeholder="Nome ou e-mail">
+        </label>
+        <button type="submit" class="u-btn"><i class="bi bi-search"></i> Buscar</button>
+        {% if busca %}
+        <a class="u-btn u-btn--fantasma" href="{{ url_for('usuarios.lista_usuarios') }}">Limpar</a>
+        {% endif %}
+    </form>
 
     <div class="table-container">
-        <table class="table table-hover align-middle shadow-sm rounded-3 overflow-hidden">
+        <table class="table table-hover align-middle shadow-sm rounded-3 overflow-hidden u-tabela-cards">
             <thead class="table-dark d-none d-sm-table-header-group">
                 <tr class="text-center text-sm-start">
                     <th class="text-center" style="width: 50px;">ID</th>
@@ -52,7 +42,7 @@
                 {% if usuarios %}
                 {% for usuario in usuarios %}
                 <tr class="user-row">
-                    <td class="text-center user-data-cell" data-label="ID">{{ usuario.id }}</td>
+                    <td class="text-center user-data-cell u-muted u-fs-xs" data-label="ID">{{ usuario.id }}</td>
                     
                     <td class="user-data-cell" data-label="Nome">
                         <div class="d-flex align-items-center gap-2">
@@ -76,23 +66,23 @@
                     
                     <td class="user-data-cell" data-label="Perfil">
                         {% for nivel in usuario.niveis_acesso %}
-                        <span class="badge bg-secondary me-1">{{ nivel }}</span>
+                        <span class="u-pill">{{ nivel }}</span>
                         {% endfor %}
                     </td>
                     
                     <td class="text-center user-data-cell" data-label="Status">
                         {% if usuario.ativo %}
-                        <span class="badge bg-success"><i class="bi bi-check-circle-fill"></i> Ativo</span>
+                        <span class="u-pill u-pill--success">Ativo</span>
                         {% else %}
-                        <span class="badge bg-danger"><i class="bi bi-x-circle-fill"></i> Inativo</span>
+                        <span class="u-pill u-pill--danger">Inativo</span>
                         {% endif %}
                     </td>
                     
                     <td class="text-center user-actions-cell" data-label="Ações">
-                        <div class="d-flex justify-content-center gap-2 flex-wrap">
+                        <div class="d-flex justify-content-center gap-1 flex-nowrap">
                             {% if usuario.aluno_id %}
                             <button type="button"
-                                    class="btn btn-sm btn-outline-secondary"
+                                    class="u-btn u-btn--pequeno"
                                     title="Ver aluno vinculado"
                                     data-bs-toggle="modal"
                                     data-bs-target="#modalAlunoUsuario{{ usuario.id }}">
@@ -100,10 +90,10 @@
                             </button>
                             {% endif %}
                             <a href="{{ url_for('usuarios.editar_usuario', user_id=usuario.id, next=request.full_path) }}"
-                                class="btn btn-sm btn-outline-primary" title="Editar Usuário">
+                                class="u-btn u-btn--pequeno" title="Editar Usuário">
                                 <i class="bi bi-pencil-square"></i>
                             </a>
-                            <button type="button" class="btn btn-sm btn-outline-danger" title="Excluir Usuário"
+                            <button type="button" class="u-btn u-btn--pequeno" title="Excluir Usuário"
                                 onclick="confirmDelete('{{ usuario.id }}', '{{ usuario.nome }}')">
                                 <i class="bi bi-trash"></i>
                             </button>
@@ -177,7 +167,7 @@
             </p>
           </div>
           <div class="modal-footer d-flex justify-content-end">
-            <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Fechar</button>
+            <button type="button" class="u-btn u-btn--pequeno" data-bs-dismiss="modal">Fechar</button>
           </div>
         </div>
       </div>
@@ -198,10 +188,10 @@
                 <small class="text-muted">Esta ação é irreversível.</small>
             </div>
             <div class="modal-footer d-flex justify-content-center">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="u-btn" data-bs-dismiss="modal">Cancelar</button>
                 <form id="deleteUserForm" method="POST" style="display:inline;">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button type="submit" class="btn btn-danger px-4">Excluir</button>
+                    <button type="submit" class="u-btn u-btn--perigo px-4">Excluir</button>
                 </form>
             </div>
         </div>

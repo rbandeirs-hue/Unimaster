@@ -1,0 +1,198 @@
+/* =======================================================================
+   Escolher academia — o portão da sessão
+   =======================================================================
+   Vivia como um <style> dentro do template. Saiu para cá junto com o
+   redesenho: topo próprio (a barra do sistema não serve a uma tela onde o
+   sistema ainda não começou), logo de cada academia e a última escolhida
+   em primeiro lugar.
+   ======================================================================= */
+
+/* ----------------------------------------------------------- topo de portão */
+/* Substitui `.sh__top` via `{% block topo %}`: aqui não há sino, modo noturno
+   nem menu de perfil, porque nenhum deles tem para onde ir antes da escolha. */
+.esc-topo {
+  height: 64px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0 1.75rem;
+  background: #fff;
+  border-bottom: 1px solid var(--sh-line);
+}
+.esc-topo__marca {
+  width: 32px; height: 32px;
+  flex: none;
+  display: grid; place-items: center;
+  background: var(--sh-red);
+  color: #fff;
+  border-radius: 8px;
+}
+.esc-topo__nome {
+  flex-grow: 1;
+  font-size: .82rem;
+  font-weight: 700;
+  letter-spacing: .14em;
+  color: var(--sh-ink);
+}
+.esc-topo__quem { font-size: .82rem; color: var(--sh-ink-soft); }
+.esc-topo__risco { width: 1px; height: 18px; background: var(--sh-line); }
+.esc-topo__sair {
+  display: inline-flex;
+  align-items: center;
+  gap: .45rem;
+  font-size: .82rem;
+  font-weight: 500;
+  color: var(--sh-ink);
+  text-decoration: none;
+}
+.esc-topo__sair:hover { color: #000; text-decoration: underline; }
+
+/* ------------------------------------------------------------------ miolo */
+.esc-wrap {
+  width: 100%;
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 2.5rem 1rem 3rem;
+}
+
+.esc-titulo {
+  font-size: 1.85rem;
+  font-weight: 600;
+  letter-spacing: -.02em;
+  margin: 0 0 .6rem;
+}
+.esc-sub {
+  font-size: .88rem;
+  line-height: 1.6;
+  color: var(--sh-ink-soft);
+  margin: 0 0 1.75rem;
+}
+
+.esc-rotulo {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: .6rem;
+}
+.esc-rotulo__titulo {
+  font-size: .7rem;
+  font-weight: 700;
+  letter-spacing: .1em;
+  color: var(--sh-ink-soft);
+}
+.esc-rotulo__conta { font-size: .78rem; color: var(--sh-ink-soft); }
+
+/* ------------------------------------------------------------------ busca */
+/* Só aparece a partir de 9 academias: abaixo disso a lista inteira cabe na
+   tela e um campo a mais seria um passo a mais. */
+.esc-busca { position: relative; margin-bottom: 1.15rem; }
+.esc-busca i {
+  position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+  color: var(--sh-ink-soft); pointer-events: none;
+}
+.esc-busca input {
+  width: 100%;
+  height: 50px;
+  padding: 0 1rem 0 2.6rem;
+  font-size: .95rem;
+  color: var(--sh-ink);
+  background: #fff;
+  border: 1px solid var(--sh-line);
+  border-radius: 10px;
+}
+.esc-busca input:focus {
+  outline: none;
+  border-color: var(--sh-ink);
+  box-shadow: 0 0 0 3px rgba(28, 28, 28, .08);
+}
+
+/* ------------------------------------------------------------------ lista */
+.esc-lista { display: grid; gap: .65rem; }
+.esc-lista form { margin: 0; }
+
+.esc-item {
+  display: flex;
+  align-items: center;
+  gap: .9rem;
+  width: 100%;
+  padding: .9rem 1rem;
+  background: #fff;
+  border: 1px solid var(--sh-line);
+  border-radius: var(--u-radius);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .15s, box-shadow .15s, transform .15s;
+}
+.esc-item:hover {
+  border-color: var(--sh-ink);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, .07);
+  transform: translateY(-1px);
+}
+.esc-item:focus-visible { outline: 3px solid rgba(28, 28, 28, .15); }
+
+/* A de ontem: borda firme, sem cor de estado — ela é a mais provável, não
+   um alerta. */
+.esc-item--ultima { border: 1.5px solid var(--sh-ink); }
+
+.esc-ic {
+  width: 46px; height: 46px;
+  flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  overflow: hidden;
+  background: #f4f2ee;
+  color: var(--sh-ink);
+  border-radius: 10px;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+.esc-ic img { width: 100%; height: 100%; object-fit: cover; }
+.esc-item--ultima .esc-ic:not(:has(img)) { background: var(--sh-ink); color: #fff; }
+
+.esc-corpo { flex-grow: 1; min-width: 0; }
+.esc-nome-linha { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.esc-nome { font-size: 1rem; font-weight: 600; color: var(--sh-ink); }
+.esc-marca-ultima {
+  padding: 2px 8px;
+  font-size: .7rem;
+  font-weight: 600;
+  color: var(--sh-ink);
+  background: #f4f2ee;
+  border-radius: var(--u-radius-pill);
+}
+.esc-meta {
+  display: block;
+  margin-top: 2px;
+  font-size: .82rem;
+  color: var(--sh-ink-soft);
+}
+.esc-seta { flex: none; color: var(--sh-ink-soft); }
+.esc-item--ultima .esc-seta { color: var(--sh-ink); }
+
+.esc-vazio {
+  padding: 1.25rem;
+  text-align: center;
+  font-size: .88rem;
+  color: var(--sh-ink-soft);
+  background: #fff;
+  border: 1px dashed var(--sh-line);
+  border-radius: var(--u-radius);
+}
+
+/* ---------------------------------------------------------------- celular */
+@media (max-width: 575.98px) {
+  .esc-topo { height: 58px; padding: 0 1rem; }
+  .esc-topo__quem, .esc-topo__risco { display: none; }
+  /* O alvo de toque do "Sair" não pode depender do texto. */
+  .esc-topo__sair { min-width: 44px; min-height: 44px; justify-content: center; }
+  .esc-topo__sair span { display: none; }
+
+  .esc-wrap { padding: 1.5rem 1rem 2rem; }
+  .esc-titulo { font-size: 1.35rem; }
+  .esc-sub { font-size: .82rem; margin-bottom: 1.35rem; }
+  .esc-nome { font-size: .95rem; }
+  .esc-meta { font-size: .78rem; }
+  /* 16px evita o zoom automático do iOS ao focar o campo. */
+  .esc-busca input { font-size: 16px; }
+}

@@ -8,6 +8,7 @@ from flask_login import login_required, current_user
 from config import get_db_connection
 from datetime import datetime, date
 from functools import wraps
+from utils.acesso_academia import sql_papel_na_academia as _papel_acad
 
 # Importar helpers do painel do aluno para reutilizar lógica
 from blueprints.aluno.painel import (
@@ -152,15 +153,14 @@ def _enriquecer_aluno_painel(aluno):
         modalidades_list = [r["nome"] for r in cur.fetchall()]
         aluno["modalidades"] = modalidades_list
         aluno["modalidades_nomes"] = ", ".join(modalidades_list) if modalidades_list else "-"
-        aluno["proxima_faixa"] = "—"
-        cur.execute("SELECT id, faixa, graduacao FROM graduacao ORDER BY id")
-        faixas = cur.fetchall()
-        gid = aluno.get("graduacao_id")
-        for i, f in enumerate(faixas):
-            if f["id"] == gid and i + 1 < len(faixas):
-                proxima = faixas[i + 1]
-                aluno["proxima_faixa"] = f"{proxima.get('faixa', '')} {proxima.get('graduacao', '')}".strip() or "—"
-                break
+        # Próxima faixa na MESMA modalidade e a faixa de cada modalidade
+        # (judô e jiu-jitsu separados), igual ao modo aluno.
+        from utils import graduacao_modalidade as grad_mod
+        aluno["proxima_faixa"] = grad_mod.proxima_faixa(cur, aluno.get("graduacao_id"))
+        aluno["faixas_modalidade"] = [
+            dict(f, proxima=grad_mod.proxima_faixa(cur, f["graduacao_id"]))
+            for f in grad_mod.faixas_por_modalidade(cur, [aluno["id"]]).get(aluno["id"], [])
+        ]
     except Exception:
         pass
     finally:
@@ -639,14 +639,10 @@ def curriculo(aluno):
     aluno["classe_categoria"] = {"infantil": "Infantil", "juvenil": "Juvenil", "adulto": "Adulto"}.get(tipo, "")
     aluno["proxima_faixa"] = "—"
     try:
-        cur.execute("SELECT id, faixa, graduacao FROM graduacao ORDER BY id")
-        faixas = cur.fetchall()
-        gid = aluno.get("graduacao_id")
-        for i, f in enumerate(faixas):
-            if f["id"] == gid and i + 1 < len(faixas):
-                proxima = faixas[i + 1]
-                aluno["proxima_faixa"] = f"{proxima.get('faixa', '')} {proxima.get('graduacao', '')}".strip() or "—"
-                break
+        # Próxima faixa na mesma modalidade (antes: id seguinte na tabela inteira).
+        from utils import graduacao_modalidade as grad_mod
+        aluno["proxima_faixa"] = grad_mod.proxima_faixa(cur, aluno.get("graduacao_id"))
+        aluno["faixas_modalidade"] = grad_mod.faixas_por_modalidade(cur, [aluno["id"]]).get(aluno["id"], [])
     except Exception:
         pass
     aluno["modalidades"] = []
@@ -880,11 +876,11 @@ def associacao(aluno):
                 for acad in academias:
                     try:
                         # Primeiro tentar buscar por gestor_academia
-                        cur.execute("""
+                        cur.execute(f"""
                             SELECT u.nome, u.email
                             FROM usuarios u
                             INNER JOIN usuarios_academias ua ON ua.usuario_id = u.id
-                            INNER JOIN roles_usuario ru ON ru.usuario_id = u.id
+                            INNER JOIN roles_usuario ru ON ru.usuario_id = u.id {_papel_acad()}
                             INNER JOIN roles r ON r.id = ru.role_id
                             WHERE ua.academia_id = %s 
                               AND (
@@ -899,11 +895,11 @@ def associacao(aluno):
                         
                         # Se não encontrou gestor, buscar professor
                         if not gestor:
-                            cur.execute("""
+                            cur.execute(f"""
                                 SELECT u.nome, u.email
                                 FROM usuarios u
                                 INNER JOIN usuarios_academias ua ON ua.usuario_id = u.id
-                                INNER JOIN roles_usuario ru ON ru.usuario_id = u.id
+                                INNER JOIN roles_usuario ru ON ru.usuario_id = u.id {_papel_acad()}
                                 INNER JOIN roles r ON r.id = ru.role_id
                                 WHERE ua.academia_id = %s 
                                   AND (

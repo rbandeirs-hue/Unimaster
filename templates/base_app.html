@@ -37,6 +37,8 @@
   <link rel="stylesheet" href="{{ asset('css/base/listas.css') }}">
   <link rel="stylesheet" href="{{ asset('css/base/formularios.css') }}">
   <link rel="stylesheet" href="{{ asset('css/base/theme.css') }}">
+  <link rel="stylesheet" href="{{ asset('css/base/legado.css') }}">
+  <link rel="stylesheet" href="{{ asset('css/base/dialogo.css') }}">
   <link rel="stylesheet" href="{{ asset('css/components/botao_voltar.css') }}">
   {% block extra_css %}{% endblock %}
   <meta name="csrf-token" content="{{ csrf_token() }}">
@@ -122,21 +124,10 @@
     {% endfor %}
     </div>
 
-    {# Usuário no rodapé da lateral, com atalho para o cadastro e para sair. #}
-    <div class="sh__side-usuario">
-      {% if current_user.foto %}
-      <img src="{{ url_for('static', filename='uploads/' ~ current_user.foto) }}" alt="" class="sh__side-avatar">
-      {% else %}
-      <span class="sh__side-avatar"><i class="bi bi-person-fill"></i></span>
-      {% endif %}
-      <a href="{{ url_for('usuarios.meu_perfil') }}" class="sh__side-usuario-txt">
-        <span class="sh__side-usuario-nome">{{ current_user.nome }}</span>
-        <span class="sh__side-usuario-link">Editar cadastro</span>
-      </a>
-      <a href="{{ url_for('auth.logout') }}" class="sh__side-sair" title="Sair" aria-label="Sair">
-        <i class="bi bi-box-arrow-right"></i>
-      </a>
-    </div>
+    {# Sem bloco de usuário aqui: o mesmo nome, foto, "Meu perfil" e "Sair"
+       já estão no menu do topo. Dois lugares para a mesma coisa, um em cada
+       canto da tela, é o tipo de repetição que faz o usuário duvidar se são
+       contas diferentes. #}
   </aside>
   <div class="sh__overlay d-none" id="shOverlay"></div>
   {% endif %}
@@ -152,17 +143,6 @@
         <button class="sh__menu-botao" id="shMenuBotao" type="button" aria-label="Abrir menu">
           <i class="bi bi-list"></i>
         </button>
-        {% endif %}
-        {# Busca leva à lista de alunos filtrada — a rota já aceita `busca`.
-           Só aparece para quem administra alunos: aluno, responsável e
-           visitante não têm lista para buscar, e a caixa ficaria decorativa. #}
-        {% if modo_shell in ('academia', 'admin', 'federacao', 'associacao', 'professor') %}
-        <form method="GET" action="{{ url_for('alunos.lista_alunos') }}" class="sh__busca" role="search">
-          {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
-          <i class="bi bi-search"></i>
-          <input type="search" name="busca" class="sh__busca-input"
-                 placeholder="Buscar aluno" aria-label="Buscar aluno">
-        </form>
         {% endif %}
         {% if academias and academias|length > 1 %}
         {# Indica onde o usuário está trabalhando e leva à troca de academia,
@@ -186,7 +166,7 @@
           <i class="bi bi-diagram-3"></i>
           <select name="modalidade_id" onchange="this.form.submit()"
                   aria-label="Modalidade em foco">
-            <option value="">Todas as modalidades</option>
+            {% if not modalidade_sem_todas %}<option value="">Todas as modalidades</option>{% endif %}
             {% for m in modalidades_contexto %}
             <option value="{{ m.id }}" {% if m.id == modalidade_contexto_id %}selected{% endif %}>
               {{ m.nome }}
@@ -265,24 +245,6 @@
       {% endif %}
       {% endblock %}
 
-      {# Com uma modalidade em foco, o que não pertence a nenhuma some da lista.
-         Dizer quantos são evita que a tela pareça ter perdido cadastro. #}
-      {% if modalidade_contexto_id and modalidade_pendencias
-            and (modalidade_pendencias.alunos or modalidade_pendencias.turmas) %}
-      <p class="sh__aviso-contexto">
-        <i class="bi bi-info-circle"></i>
-        Vendo só <strong>{{ modalidade_contexto_nome }}</strong>.
-        Fora deste recorte:
-        {% if modalidade_pendencias.alunos %}
-        {{ modalidade_pendencias.alunos }} aluno{{ 's' if modalidade_pendencias.alunos != 1 }}
-        {%- endif %}
-        {%- if modalidade_pendencias.alunos and modalidade_pendencias.turmas %} e{% endif %}
-        {% if modalidade_pendencias.turmas %}
-        {{ modalidade_pendencias.turmas }} turma{{ 's' if modalidade_pendencias.turmas != 1 }}
-        {%- endif %}
-        sem modalidade cadastrada.
-      </p>
-      {% endif %}
 
       {% block content %}{% endblock %}
     </main>

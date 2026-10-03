@@ -89,7 +89,7 @@
     margin: 0; display: flex; align-items: center; gap: .35rem;
   }
   .cfg-academia-select label i { color: var(--c-primary); }
-  .cfg-academia-select .form-select-sm {
+  .cfg-academia-select .form-select-sm, .cfg-academia-select .u-campo__controle {
     border-radius: 10px; border: 1px solid var(--c-border);
     background: #f9fafb; flex: 1; max-width: 340px; min-width: 200px;
   }
@@ -135,13 +135,17 @@
     display: flex; align-items: center; justify-content: center;
     font-size: 1.2rem; flex-shrink: 0;
   }
-  .cfg-item__icon--blue   { background: #eff6ff; color: #2563eb; }
-  .cfg-item__icon--green  { background: #ecfdf5; color: #059669; }
-  .cfg-item__icon--orange { background: #fff7ed; color: #ea580c; }
-  .cfg-item__icon--purple { background: #f5f3ff; color: #7c3aed; }
-  .cfg-item__icon--teal   { background: #f0fdfa; color: #0d9488; }
-  .cfg-item__icon--rose   { background: #fdf2f8; color: #db2777; }
-  .cfg-item__icon--indigo { background: #eef2ff; color: #4f46e5; }
+  /* Eram sete cores pastel, uma por item, sem significado nenhum: o azul de
+     "Dados" não queria dizer nada diferente do rosa de "Professores". A cor
+     disputava atenção com o nome, que é o que o gestor lê. Agora o ícone é
+     neutro e ganha a cor da academia só ao passar o mouse. */
+  .cfg-item__icon--blue, .cfg-item__icon--green, .cfg-item__icon--orange,
+  .cfg-item__icon--purple, .cfg-item__icon--teal, .cfg-item__icon--rose,
+  .cfg-item__icon--indigo {
+    background: var(--u-surface-alt);
+    color: var(--sh-ink-soft);
+  }
+  .cfg-card-link:hover .cfg-item__icon { color: var(--sh-red); }
 
   .cfg-item__body { flex: 1; min-width: 0; }
   .cfg-item__name { font-size: .98rem; font-weight: 700; color: var(--c-text); margin: 0 0 .12rem; }
@@ -154,7 +158,7 @@
   .cfg-panel__head {
     display: flex; align-items: center; gap: .95rem;
     padding: 1.1rem 1.2rem; border-bottom: 1px solid #f1f5f9;
-    background: linear-gradient(180deg, #fcfdff, #ffffff);
+    background: #fff;
   }
   .cfg-panel__head .cfg-item__body { flex: 1; }
   .cfg-panel__body { padding: 1.2rem; }
@@ -168,22 +172,22 @@
   .cfg-badge .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
 
   .cfg-form-label { font-size: .8rem; font-weight: 700; color: #374151; margin-bottom: .4rem; display: block; }
-  .cfg-panel .form-control, .cfg-panel .form-select, .cfg-panel .input-group-text {
+  .cfg-panel .form-control, .cfg-panel .form-select, .cfg-panel .input-group-text, .cfg-panel .u-campo__controle, .cfg-panel .u-campo__controle {
     border-radius: 11px; border: 1px solid var(--c-border); font-size: .92rem; padding: .6rem .85rem;
   }
-  .cfg-panel .form-control, .cfg-panel .form-select { background: #f9fafb; }
-  .cfg-panel .form-control:focus, .cfg-panel .form-select:focus {
+  .cfg-panel .form-control, .cfg-panel .form-select, .cfg-panel .u-campo__controle, .cfg-panel .u-campo__controle { background: #f9fafb; }
+  .cfg-panel .form-control:focus, .cfg-panel .form-select:focus, .cfg-panel .u-campo__controle:focus, .cfg-panel .u-campo__controle:focus {
     border-color: var(--c-primary); box-shadow: 0 0 0 3.5px rgba(79,70,229,.14); background: #fff;
   }
   .cfg-panel .input-group-text { background: #f1f5f9; color: var(--c-muted); border-radius: 11px 0 0 11px; }
-  .cfg-panel .input-group .form-control { border-radius: 0 11px 11px 0; }
+  .cfg-panel .input-group .form-control, .cfg-panel .input-group .u-campo__controle { border-radius: 0 11px 11px 0; }
   .cfg-panel .form-text { font-size: .76rem; color: #9ca3af; margin-top: .4rem; }
-  .cfg-panel code { background: #f1f5f9; color: #4f46e5; padding: .12rem .4rem; border-radius: 6px; font-size: .82em; }
+  .cfg-panel code { background: #f4f2ee; color: #1c1c1c; padding: .12rem .4rem; border-radius: 6px; font-size: .82em; }
 
   .cfg-btn-save {
     display: inline-flex; align-items: center; gap: .45rem;
     padding: .64rem 1.4rem; font-size: .9rem; font-weight: 700;
-    background: linear-gradient(135deg, #4f46e5, #6366f1); color: #fff;
+    background: #1c1c1c; color: #fff;
     border: none; border-radius: 11px; cursor: pointer;
     box-shadow: 0 4px 14px rgba(79,70,229,.32);
     transition: box-shadow .16s, transform .16s, filter .16s;
@@ -286,6 +290,9 @@
         </div>
         <i class="bi bi-chevron-right cfg-item__arrow"></i>
       </a>
+      {# Mesma regra do menu: academia de uma modalidade só não tem o que
+         gerenciar aqui. #}
+      {% if (academia_modalidades | default([])) | length != 1 %}
       <a href="{{ url_for('configuracoes.modalidades_lista', academia_id=academia.id) }}" class="cfg-card-link">
         <div class="cfg-item__icon cfg-item__icon--purple"><i class="bi bi-collection-fill"></i></div>
         <div class="cfg-item__body">
@@ -294,6 +301,7 @@
         </div>
         <i class="bi bi-chevron-right cfg-item__arrow"></i>
       </a>
+      {% endif %}
       <a href="{{ url_for('professores.lista', academia_id=academia.id) }}" class="cfg-card-link">
         <div class="cfg-item__icon cfg-item__icon--rose"><i class="bi bi-mortarboard-fill"></i></div>
         <div class="cfg-item__body">
@@ -311,6 +319,49 @@
         <i class="bi bi-chevron-right cfg-item__arrow"></i>
       </a>
     </div>
+
+    {# Cada academia escolhe o que o cadastro interno do aluno exige. Sem salvar
+       aqui, vale o padrão de sempre (utils/campos_obrigatorios_aluno.py). Os
+       campos que o sistema precisa para funcionar não aparecem como opção. #}
+    {% if campos_obrig_grupos is defined and pode_campos_obrig %}
+    <div class="cfg-panel mt-3" id="campos-obrigatorios">
+      <div class="cfg-panel__head">
+        <div class="cfg-item__icon cfg-item__icon--indigo"><i class="bi bi-ui-checks"></i></div>
+        <div class="cfg-item__body">
+          <p class="cfg-item__name">Campos obrigatórios no cadastro do aluno</p>
+          <p class="cfg-item__desc">Marque o que a secretaria precisa preencher para cadastrar um aluno.</p>
+        </div>
+      </div>
+      <div class="cfg-panel__body">
+        <form method="POST" action="{{ url_for('academia.configuracoes_academia', academia_id=academia.id) }}#campos-obrigatorios">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="secao" value="campos_obrigatorios">
+          <div class="row g-3">
+            {% for grupo, campos in campos_obrig_grupos %}
+            <div class="col-sm-6 col-lg-4">
+              <p class="cfg-form-label mb-2">{{ grupo }}</p>
+              {% for c in campos %}
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="campos_obrigatorios"
+                       value="{{ c.chave }}" id="co_{{ c.chave }}"
+                       {% if c.chave in campos_obrig_ativos %}checked{% endif %}>
+                <label class="form-check-label" for="co_{{ c.chave }}">{{ c.rotulo }}</label>
+              </div>
+              {% endfor %}
+            </div>
+            {% endfor %}
+          </div>
+          <div class="form-text mt-3 mb-3">
+            Sempre obrigatórios: {{ campos_obrig_sempre|map(attribute=1)|join(', ')|lower }} — o sistema
+            depende deles (identificação do aluno, trava contra cadastro duplicado e as listas por modalidade).
+            Na edição de um aluno antigo, campo vazio não impede salvar; só não dá para apagar um campo
+            obrigatório que já estava preenchido. Faixa branca nunca pede data de graduação.
+          </div>
+          <button type="submit" class="cfg-btn-save"><i class="bi bi-check-lg"></i> Salvar</button>
+        </form>
+      </div>
+    </div>
+    {% endif %}
   </div>
   <!-- /Aba Geral -->
 
@@ -428,24 +479,24 @@
             <!-- Asaas -->
             <div class="gw-bloco" data-gw="asaas" style="{% if gw_atual != 'asaas' %}display:none{% endif %}">
               <p class="gw-bloco__title"><i class="bi bi-key-fill"></i> Credenciais Asaas
-                <button type="button" class="btn btn-outline-danger ms-auto" style="font-size:.68rem;padding:.12rem .55rem" onclick="limparGateway('asaas','Asaas')"><i class="bi bi-eraser"></i> Limpar dados</button></p>
+                <button type="button" class="u-btn ms-auto" style="font-size:.68rem;padding:.12rem .55rem" onclick="limparGateway('asaas','Asaas')"><i class="bi bi-eraser"></i> Limpar dados</button></p>
               <div class="row g-3">
                 <div class="col-sm-6">
                   <label for="asaas_ambiente" class="cfg-form-label">Ambiente</label>
-                  <select class="form-select" id="asaas_ambiente" name="asaas_ambiente">
+                  <select class="u-campo__controle" id="asaas_ambiente" name="asaas_ambiente">
                     <option value="sandbox" {% if (academia.asaas_ambiente or 'sandbox') != 'production' %}selected{% endif %}>Sandbox (testes)</option>
                     <option value="production" {% if academia.asaas_ambiente == 'production' %}selected{% endif %}>Produção</option>
                   </select>
                 </div>
                 <div class="col-sm-6">
                   <label for="asaas_api_key" class="cfg-form-label">Chave de API (access token)</label>
-                  <input type="password" class="form-control" id="asaas_api_key" name="asaas_api_key" autocomplete="off"
+                  <input type="password" class="u-campo__controle" id="asaas_api_key" name="asaas_api_key" autocomplete="off"
                          placeholder="{% if asaas_chave_definida %}•••••••• (já configurada){% else %}Cole a chave da conta Asaas{% endif %}">
                   <div class="form-text">{% if asaas_chave_definida %}Deixe em branco para manter a atual.{% endif %}</div>
                 </div>
                 <div class="col-12">
                   <label for="asaas_webhook_token" class="cfg-form-label">Token do webhook (opcional)</label>
-                  <input type="text" class="form-control" id="asaas_webhook_token" name="asaas_webhook_token"
+                  <input type="text" class="u-campo__controle" id="asaas_webhook_token" name="asaas_webhook_token"
                          value="{{ academia.asaas_webhook_token or '' }}" placeholder="Token de segurança do webhook">
                   <div class="form-text">Webhook a configurar no Asaas: <code>{{ base_url }}/financeiro/webhook/asaas</code></div>
                 </div>
@@ -455,11 +506,11 @@
             <!-- Mercado Pago -->
             <div class="gw-bloco" data-gw="mercadopago" style="{% if gw_atual != 'mercadopago' %}display:none{% endif %}">
               <p class="gw-bloco__title"><i class="bi bi-key-fill"></i> Credenciais Mercado Pago
-                <button type="button" class="btn btn-outline-danger ms-auto" style="font-size:.68rem;padding:.12rem .55rem" onclick="limparGateway('mercadopago','Mercado Pago')"><i class="bi bi-eraser"></i> Limpar dados</button></p>
+                <button type="button" class="u-btn ms-auto" style="font-size:.68rem;padding:.12rem .55rem" onclick="limparGateway('mercadopago','Mercado Pago')"><i class="bi bi-eraser"></i> Limpar dados</button></p>
               <div class="row g-3">
                 <div class="col-12">
                   <label for="mercadopago_access_token" class="cfg-form-label">Access Token</label>
-                  <input type="password" class="form-control" id="mercadopago_access_token" name="mercadopago_access_token" autocomplete="off"
+                  <input type="password" class="u-campo__controle" id="mercadopago_access_token" name="mercadopago_access_token" autocomplete="off"
                          placeholder="{% if mp_token_definido %}•••••••• (já configurado){% else %}Cole o Access Token do Mercado Pago{% endif %}">
                   <div class="form-text">
                     {% if mp_token_definido %}Deixe em branco para manter o atual. {% endif %}
@@ -472,11 +523,11 @@
             <!-- InfinitePay -->
             <div class="gw-bloco" data-gw="infinitepay" style="{% if gw_atual != 'infinitepay' %}display:none{% endif %}">
               <p class="gw-bloco__title"><i class="bi bi-key-fill"></i> Configuração InfinitePay
-                <button type="button" class="btn btn-outline-danger ms-auto" style="font-size:.68rem;padding:.12rem .55rem" onclick="limparGateway('infinitepay','InfinitePay')"><i class="bi bi-eraser"></i> Limpar dados</button></p>
+                <button type="button" class="u-btn ms-auto" style="font-size:.68rem;padding:.12rem .55rem" onclick="limparGateway('infinitepay','InfinitePay')"><i class="bi bi-eraser"></i> Limpar dados</button></p>
               <div class="row g-3">
                 <div class="col-12">
                   <label for="infinitepay_handle" class="cfg-form-label">Handle (InfiniteTag)</label>
-                  <input type="text" class="form-control" id="infinitepay_handle" name="infinitepay_handle"
+                  <input type="text" class="u-campo__controle" id="infinitepay_handle" name="infinitepay_handle"
                          value="{{ academia.infinitepay_handle or '' }}" placeholder="Ex: $suaempresa">
                   <div class="form-text">Sua tag da InfinitePay (sem espaços). O aluno é direcionado ao checkout da InfinitePay (PIX/cartão). O webhook é configurado automaticamente.</div>
                 </div>
@@ -486,36 +537,36 @@
             <!-- EFÍ (Gerencianet) -->
             <div class="gw-bloco" data-gw="efi" style="{% if gw_atual != 'efi' %}display:none{% endif %}">
               <p class="gw-bloco__title"><i class="bi bi-key-fill"></i> Credenciais EFÍ (Gerencianet) — API Pix
-                <button type="button" class="btn btn-outline-danger ms-auto" style="font-size:.68rem;padding:.12rem .55rem" onclick="limparGateway('efi','EFÍ')"><i class="bi bi-eraser"></i> Limpar dados</button></p>
+                <button type="button" class="u-btn ms-auto" style="font-size:.68rem;padding:.12rem .55rem" onclick="limparGateway('efi','EFÍ')"><i class="bi bi-eraser"></i> Limpar dados</button></p>
               <div class="row g-3">
                 <div class="col-sm-6">
                   <label for="efi_client_id" class="cfg-form-label">Client ID</label>
-                  <input type="text" class="form-control" id="efi_client_id" name="efi_client_id"
+                  <input type="text" class="u-campo__controle" id="efi_client_id" name="efi_client_id"
                          value="{{ academia.efi_client_id or '' }}" placeholder="Client_Id_xxxxxxxx"
                          autocomplete="off" data-lpignore="true" data-1p-ignore data-form-type="other" spellcheck="false">
                 </div>
                 <div class="col-sm-6">
                   <label for="efi_ambiente" class="cfg-form-label">Ambiente</label>
-                  <select class="form-select" id="efi_ambiente" name="efi_ambiente">
+                  <select class="u-campo__controle" id="efi_ambiente" name="efi_ambiente">
                     <option value="homologacao" {% if (academia.efi_ambiente or 'homologacao') != 'producao' %}selected{% endif %}>Homologação (testes)</option>
                     <option value="producao" {% if academia.efi_ambiente == 'producao' %}selected{% endif %}>Produção</option>
                   </select>
                 </div>
                 <div class="col-sm-6">
                   <label for="efi_client_secret" class="cfg-form-label">Client Secret</label>
-                  <input type="password" class="form-control" id="efi_client_secret" name="efi_client_secret" autocomplete="off"
+                  <input type="password" class="u-campo__controle" id="efi_client_secret" name="efi_client_secret" autocomplete="off"
                          placeholder="{% if efi_secret_definido %}•••••••• (já configurado){% else %}Client_Secret_xxxxxxxx{% endif %}">
                   <div class="form-text">{% if efi_secret_definido %}Deixe em branco para manter o atual.{% endif %}</div>
                 </div>
                 <div class="col-sm-6">
                   <label for="efi_pix_key" class="cfg-form-label">Chave Pix recebedora</label>
-                  <input type="text" class="form-control" id="efi_pix_key" name="efi_pix_key"
+                  <input type="text" class="u-campo__controle" id="efi_pix_key" name="efi_pix_key"
                          value="{{ academia.efi_pix_key or '' }}" placeholder="CPF/CNPJ, e-mail, telefone ou chave aleatória">
                   <div class="form-text">Chave Pix da conta EFÍ que vai <strong>receber</strong>.</div>
                 </div>
                 <div class="col-12">
                   <label for="efi_certificate" class="cfg-form-label">Certificado (PEM)</label>
-                  <textarea class="form-control" id="efi_certificate" name="efi_certificate" rows="4" autocomplete="off"
+                  <textarea class="u-campo__controle" id="efi_certificate" name="efi_certificate" rows="4" autocomplete="off"
                             placeholder="{% if efi_cert_definido %}•••••• (já configurado) — cole novamente para substituir{% else %}-----BEGIN CERTIFICATE-----{% endif %}" style="font-family:monospace;font-size:.8rem;"></textarea>
                   <div class="form-text">
                     {% if efi_cert_definido %}Deixe em branco para manter o atual. {% endif %}
@@ -529,11 +580,11 @@
             <!-- Cora -->
             <div class="gw-bloco" data-gw="cora" style="{% if gw_atual != 'cora' %}display:none{% endif %}">
               <p class="gw-bloco__title"><i class="bi bi-key-fill"></i> Credenciais Cora
-                <button type="button" class="btn btn-outline-danger ms-auto" style="font-size:.68rem;padding:.12rem .55rem" onclick="limparGateway('cora','Cora')"><i class="bi bi-eraser"></i> Limpar dados</button></p>
+                <button type="button" class="u-btn ms-auto" style="font-size:.68rem;padding:.12rem .55rem" onclick="limparGateway('cora','Cora')"><i class="bi bi-eraser"></i> Limpar dados</button></p>
               <div class="row g-3">
                 <div class="col-sm-6">
                   <label for="cora_ambiente" class="cfg-form-label">Ambiente</label>
-                  <select class="form-select" id="cora_ambiente" name="cora_ambiente" onchange="mostrarAmbienteCora(this.value)">
+                  <select class="u-campo__controle" id="cora_ambiente" name="cora_ambiente" onchange="mostrarAmbienteCora(this.value)">
                     <option value="stage" {% if (academia.cora_ambiente or 'stage') != 'production' %}selected{% endif %}>Stage (testes)</option>
                     <option value="production" {% if academia.cora_ambiente == 'production' %}selected{% endif %}>Produção</option>
                   </select>
@@ -545,20 +596,20 @@
                   <div class="row g-3">
                     <div class="col-12">
                       <label for="cora_client_id" class="cfg-form-label">Client ID (Stage)</label>
-                      <input type="text" class="form-control" id="cora_client_id" name="cora_client_id"
+                      <input type="text" class="u-campo__controle" id="cora_client_id" name="cora_client_id"
                              value="{{ academia.cora_client_id or '' }}" placeholder="int-xxxxxxxx... (Client ID de stage)"
                              autocomplete="off" data-lpignore="true" data-1p-ignore data-form-type="other"
                              inputmode="text" spellcheck="false">
                     </div>
                     <div class="col-12">
                       <label for="cora_certificate" class="cfg-form-label">Certificado (PEM) — Stage</label>
-                      <textarea class="form-control" id="cora_certificate" name="cora_certificate" rows="4" autocomplete="off"
+                      <textarea class="u-campo__controle" id="cora_certificate" name="cora_certificate" rows="4" autocomplete="off"
                                 placeholder="{% if cora_cert_definido %}•••••• (já configurado) — cole novamente para substituir{% else %}-----BEGIN CERTIFICATE-----{% endif %}" style="font-family:monospace;font-size:.8rem;"></textarea>
                       <div class="form-text">{% if cora_cert_definido %}Deixe em branco para manter o atual. {% endif %}Conteúdo do <code>certificate.pem</code> gerado no painel de testes do Cora. Se o arquivo trouxer certificado <em>e</em> chave juntos, cole ele inteiro aqui — o sistema separa os dois.</div>
                     </div>
                     <div class="col-12">
                       <label for="cora_private_key" class="cfg-form-label">Chave privada (PEM) — Stage</label>
-                      <textarea class="form-control" id="cora_private_key" name="cora_private_key" rows="4" autocomplete="off"
+                      <textarea class="u-campo__controle" id="cora_private_key" name="cora_private_key" rows="4" autocomplete="off"
                                 placeholder="{% if cora_key_definida %}•••••• (já configurada) — cole novamente para substituir{% else %}-----BEGIN PRIVATE KEY-----{% endif %}" style="font-family:monospace;font-size:.8rem;"></textarea>
                       <div class="form-text">{% if cora_key_definida %}Deixe em branco para manter a atual. {% endif %}Conteúdo do <code>private-key.key</code>. Guardado de forma sigilosa.</div>
                     </div>
@@ -570,20 +621,20 @@
                   <div class="row g-3">
                     <div class="col-12">
                       <label for="cora_client_id_prod" class="cfg-form-label">Client ID (Produção)</label>
-                      <input type="text" class="form-control" id="cora_client_id_prod" name="cora_client_id_prod"
+                      <input type="text" class="u-campo__controle" id="cora_client_id_prod" name="cora_client_id_prod"
                              value="{{ academia.cora_client_id_prod or '' }}" placeholder="int-xxxxxxxx... (Client ID de produção)"
                              autocomplete="off" data-lpignore="true" data-1p-ignore data-form-type="other"
                              inputmode="text" spellcheck="false">
                     </div>
                     <div class="col-12">
                       <label for="cora_certificate_prod" class="cfg-form-label">Certificado (PEM) — Produção</label>
-                      <textarea class="form-control" id="cora_certificate_prod" name="cora_certificate_prod" rows="4" autocomplete="off"
+                      <textarea class="u-campo__controle" id="cora_certificate_prod" name="cora_certificate_prod" rows="4" autocomplete="off"
                                 placeholder="{% if cora_cert_prod_definido %}•••••• (já configurado) — cole novamente para substituir{% else %}-----BEGIN CERTIFICATE-----{% endif %}" style="font-family:monospace;font-size:.8rem;"></textarea>
                       <div class="form-text">{% if cora_cert_prod_definido %}Deixe em branco para manter o atual. {% endif %}Gere em <strong>Conta → Integrações via APIs</strong> na conta real do Cora — a credencial de stage não funciona aqui. Se o arquivo trouxer certificado <em>e</em> chave juntos, cole ele inteiro aqui — o sistema separa os dois.</div>
                     </div>
                     <div class="col-12">
                       <label for="cora_private_key_prod" class="cfg-form-label">Chave privada (PEM) — Produção</label>
-                      <textarea class="form-control" id="cora_private_key_prod" name="cora_private_key_prod" rows="4" autocomplete="off"
+                      <textarea class="u-campo__controle" id="cora_private_key_prod" name="cora_private_key_prod" rows="4" autocomplete="off"
                                 placeholder="{% if cora_key_prod_definida %}•••••• (já configurada) — cole novamente para substituir{% else %}-----BEGIN PRIVATE KEY-----{% endif %}" style="font-family:monospace;font-size:.8rem;"></textarea>
                       <div class="form-text">{% if cora_key_prod_definida %}Deixe em branco para manter a atual. {% endif %}Conteúdo do <code>private-key.key</code> de produção. Guardado de forma sigilosa.</div>
                     </div>
@@ -598,7 +649,7 @@
                       <strong>Baixa automática (webhook)</strong> — o Cora não tem tela para cadastrar a URL: o registro é feito por API, um cadastro por ambiente.</p>
                     <div class="form-text mb-2">URL registrada: <code>{{ base_url }}/financeiro/webhook/cora</code> · evento <code>invoice.paid</code>.
                       Salve as credenciais primeiro e repita este passo ao trocar de <strong>Stage</strong> para <strong>Produção</strong>.</div>
-                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="registrarWebhookCora({{ academia.id }})">
+                    <button type="button" class="u-btn u-btn--pequeno" onclick="registrarWebhookCora({{ academia.id }})">
                       <i class="bi bi-cloud-arrow-up"></i> Registrar webhook no Cora</button>
                   </div>
                 </div>
@@ -615,13 +666,13 @@
                   <p class="mb-2 text-success"><i class="bi bi-check-circle-fill me-1"></i>
                     Conta conectada{% if academia.sumup_merchant_code %} (merchant <strong>{{ academia.sumup_merchant_code }}</strong>){% endif %}.</p>
                   <div class="d-flex gap-2 align-items-center" style="flex-wrap:wrap">
-                    <a href="{{ url_for('financeiro.sumup_oauth_conectar', academia_id=academia.id) }}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-repeat"></i> Reconectar</a>
-                    <button type="button" class="btn btn-sm btn-outline-danger" onclick="desconectarSumup({{ academia.id }})"><i class="bi bi-x-circle"></i> Desconectar</button>
+                    <a href="{{ url_for('financeiro.sumup_oauth_conectar', academia_id=academia.id) }}" class="u-btn u-btn--pequeno"><i class="bi bi-arrow-repeat"></i> Reconectar</a>
+                    <button type="button" class="u-btn u-btn--pequeno" onclick="desconectarSumup({{ academia.id }})"><i class="bi bi-x-circle"></i> Desconectar</button>
                   </div>
                 {% else %}
                   <p class="form-text mb-2">A academia autoriza a SumUp uma vez — sem precisar colar a chave secreta.</p>
                   {% if sumup_oauth_app_ok %}
-                    <a href="{{ url_for('financeiro.sumup_oauth_conectar', academia_id=academia.id) }}" class="btn btn-sm" style="background:#1d1d1b;color:#fff"><i class="bi bi-link-45deg me-1"></i> Conectar conta SumUp</a>
+                    <a href="{{ url_for('financeiro.sumup_oauth_conectar', academia_id=academia.id) }}" class="u-btn u-btn--pequeno" style="background:#1d1d1b;color:#fff"><i class="bi bi-link-45deg me-1"></i> Conectar conta SumUp</a>
                   {% else %}
                     <div class="alert alert-warning py-2 px-3 mb-0" style="font-size:.8rem">
                       O app OAuth da SumUp ainda não foi configurado no servidor (variáveis <code>SUMUP_OAUTH_CLIENT_ID</code> / <code>SUMUP_OAUTH_CLIENT_SECRET</code>). Use a Opção 2 abaixo, ou configure o app OAuth para habilitar este botão.
@@ -633,25 +684,25 @@
               <div class="text-center text-muted mb-3" style="font-size:.75rem">— OU —</div>
 
               <p class="gw-bloco__title"><i class="bi bi-key-fill"></i> Opção 2 — Chave secreta manual
-                <button type="button" class="btn btn-outline-danger ms-auto" style="font-size:.68rem;padding:.12rem .55rem" onclick="limparGateway('sumup','SumUp')"><i class="bi bi-eraser"></i> Limpar dados</button></p>
+                <button type="button" class="u-btn ms-auto" style="font-size:.68rem;padding:.12rem .55rem" onclick="limparGateway('sumup','SumUp')"><i class="bi bi-eraser"></i> Limpar dados</button></p>
               <div class="row g-3">
                 <div class="col-sm-6">
                   <label for="sumup_merchant_code" class="cfg-form-label">Merchant code</label>
-                  <input type="text" class="form-control" id="sumup_merchant_code" name="sumup_merchant_code"
+                  <input type="text" class="u-campo__controle" id="sumup_merchant_code" name="sumup_merchant_code"
                          value="{{ academia.sumup_merchant_code or '' }}" placeholder="Ex: MXXXXXXX"
                          autocomplete="off" spellcheck="false">
                   <div class="form-text">Código da sua conta SumUp (perfil / dashboard).</div>
                 </div>
                 <div class="col-sm-6">
                   <label for="sumup_ambiente" class="cfg-form-label">Ambiente</label>
-                  <select class="form-select" id="sumup_ambiente" name="sumup_ambiente">
+                  <select class="u-campo__controle" id="sumup_ambiente" name="sumup_ambiente">
                     <option value="producao" {% if (academia.sumup_ambiente or 'producao') != 'sandbox' %}selected{% endif %}>Produção</option>
                     <option value="sandbox" {% if academia.sumup_ambiente == 'sandbox' %}selected{% endif %}>Sandbox (testes)</option>
                   </select>
                 </div>
                 <div class="col-12">
                   <label for="sumup_api_key" class="cfg-form-label">Chave secreta (API key)</label>
-                  <input type="password" class="form-control" id="sumup_api_key" name="sumup_api_key" autocomplete="off"
+                  <input type="password" class="u-campo__controle" id="sumup_api_key" name="sumup_api_key" autocomplete="off"
                          placeholder="{% if sumup_chave_definida %}•••••••• (já configurada){% else %}sup_sk_...{% endif %}">
                   <div class="form-text">
                     {% if sumup_chave_definida %}Deixe em branco para manter a atual. {% endif %}
@@ -687,7 +738,7 @@
                        mesmos 11 dígitos, e adivinhar gerava um código que o
                        banco recusa dizendo que a chave não existe. #}
                     <label for="pix_tipo" class="cfg-form-label">Tipo da chave</label>
-                    <select class="form-select" id="pix_tipo" name="pix_tipo">
+                    <select class="u-campo__controle" id="pix_tipo" name="pix_tipo">
                       <option value="">Selecione…</option>
                       {% for _v, _r in [('cpf','CPF'), ('cnpj','CNPJ'), ('telefone','Telefone'),
                                         ('email','E-mail'), ('aleatoria','Chave aleatória')] %}
@@ -697,7 +748,7 @@
                   </div>
                   <div class="col-sm-8">
                     <label for="pix_chave" class="cfg-form-label">Chave PIX</label>
-                    <input type="text" class="form-control" id="pix_chave" name="pix_chave"
+                    <input type="text" class="u-campo__controle" id="pix_chave" name="pix_chave"
                            value="{{ academia.pix_chave or '' }}" autocomplete="off"
                            placeholder="CPF/CNPJ, e-mail, telefone ou chave aleatória">
                     <div class="form-text">
@@ -719,14 +770,14 @@
                   </div>
                   <div class="col-sm-7">
                     <label for="pix_beneficiario" class="cfg-form-label">Nome do recebedor</label>
-                    <input type="text" class="form-control" id="pix_beneficiario" name="pix_beneficiario"
+                    <input type="text" class="u-campo__controle" id="pix_beneficiario" name="pix_beneficiario"
                            value="{{ academia.pix_beneficiario or '' }}" maxlength="25" autocomplete="off"
                            placeholder="Como aparece na conta">
                     <div class="form-text">Até 25 caracteres — é o limite do padrão do PIX.</div>
                   </div>
                   <div class="col-sm-5">
                     <label for="pix_cidade" class="cfg-form-label">Cidade</label>
-                    <input type="text" class="form-control" id="pix_cidade" name="pix_cidade"
+                    <input type="text" class="u-campo__controle" id="pix_cidade" name="pix_cidade"
                            value="{{ academia.pix_cidade or '' }}" maxlength="15" autocomplete="off"
                            placeholder="Recife">
                     <div class="form-text">Até 15 caracteres.</div>
@@ -760,7 +811,7 @@
           <div class="row g-3 mb-3">
             <div class="col-sm-6">
               <label for="aulas_experimentais_permitidas" class="cfg-form-label">Aulas gratuitas permitidas</label>
-              <input type="number" class="form-control"
+              <input type="number" class="u-campo__controle"
                      id="aulas_experimentais_permitidas" name="aulas_experimentais_permitidas"
                      value="{{ academia.aulas_experimentais_permitidas if academia.aulas_experimentais_permitidas is not none else '' }}"
                      min="0" placeholder="Ilimitado">
@@ -770,7 +821,7 @@
               <label for="valor_diaria_visitante" class="cfg-form-label">Valor da diária (após o limite)</label>
               <div class="input-group">
                 <span class="input-group-text">R$</span>
-                <input type="number" class="form-control"
+                <input type="number" class="u-campo__controle"
                        id="valor_diaria_visitante" name="valor_diaria_visitante"
                        value="{{ academia.valor_diaria_visitante if academia.valor_diaria_visitante else '' }}"
                        step="0.01" min="0" placeholder="0,00">
@@ -818,8 +869,8 @@
   }
 
   // ── Limpar dados de um gateway ────────────────────────
-  function limparGateway(gw, label) {
-    if (!confirm('Limpar TODAS as credenciais do ' + label + '? Os dados salvos serão apagados e a cobrança online por esse gateway será desativada.')) return;
+  async function limparGateway(gw, label) {
+    if (!await Dialogo.confirmar('Limpar TODAS as credenciais do ' + label + '? Os dados salvos serão apagados e a cobrança online por esse gateway será desativada.')) return;
     var csrf = (document.querySelector('input[name=csrf_token]') || {}).value || '';
     var f = document.createElement('form');
     f.method = 'POST';
@@ -832,8 +883,8 @@
   }
 
   // ── Cadastra o nosso webhook na conta Cora da academia ─
-  function registrarWebhookCora(academiaId) {
-    if (!confirm('Registrar o webhook de baixa automática na conta Cora desta academia (ambiente selecionado)?\n\nAs credenciais precisam estar salvas.')) return;
+  async function registrarWebhookCora(academiaId) {
+    if (!await Dialogo.confirmar('Registrar o webhook de baixa automática na conta Cora desta academia (ambiente selecionado)?\n\nAs credenciais precisam estar salvas.')) return;
     var csrf = (document.querySelector('input[name=csrf_token]') || {}).value || '';
     var f = document.createElement('form');
     f.method = 'POST';
@@ -844,8 +895,8 @@
     f.submit();
   }
 
-  function desconectarSumup(academiaId) {
-    if (!confirm('Desconectar a conta SumUp desta academia? As cobranças online por SumUp deixarão de funcionar até reconectar ou informar a chave manual.')) return;
+  async function desconectarSumup(academiaId) {
+    if (!await Dialogo.confirmar('Desconectar a conta SumUp desta academia? As cobranças online por SumUp deixarão de funcionar até reconectar ou informar a chave manual.')) return;
     var csrf = (document.querySelector('input[name=csrf_token]') || {}).value || '';
     var f = document.createElement('form');
     f.method = 'POST';

@@ -182,10 +182,12 @@ def consultar(token):
 
 def _buscar_no_sistema(cur, cpf_digitos, id_associacao):
     """Aluno da associação com este CPF (compara só os dígitos)."""
+    # Faixa de JUDÔ (o Zempo é de judô), não a principal.
+    from utils import graduacao_modalidade as grad_mod
     cur.execute(
-        """SELECT a.*, g.faixa AS faixa
+        f"""SELECT a.*, g.faixa AS faixa
            FROM alunos a
-           LEFT JOIN graduacao g ON g.id = a.graduacao_id
+           {grad_mod.sql_join_faixa(modalidade_id=grad_mod.id_modalidade_judo(cur))}
            LEFT JOIN academias ac ON ac.id = a.id_academia
            WHERE REPLACE(REPLACE(a.cpf, '.', ''), '-', '') = %s
              AND (ac.id_associacao = %s OR a.id_associacao = %s)
@@ -429,18 +431,19 @@ def _gravar_aluno(cur, aluno_id, valores, cpf_digitos, academia_id, id_associaca
     if nome_foto:
         dados["foto"] = nome_foto
 
-    # A faixa vira graduacao_id.
-    cur.execute("SELECT id FROM graduacao WHERE UPPER(faixa) = UPPER(%s) LIMIT 1",
-                (valores.get("faixa"),))
-    grad = cur.fetchone()
-    if grad:
-        dados["graduacao_id"] = grad["id"]
+    # A faixa vira graduacao_id — a de JUDÔ (o Zempo é de judô).
+    from utils import graduacao_modalidade as grad_mod
+    grad_id = grad_mod.graduacao_judo_por_nome(cur, valores.get("faixa"))
 
     if aluno_id:
+        # Aluno já cadastrado: a faixa vai para a modalidade judô dele.
         colunas = ", ".join(f"{c} = %s" for c in dados)
         cur.execute(f"UPDATE alunos SET {colunas} WHERE id = %s",
                     tuple(dados.values()) + (aluno_id,))
+        grad_mod.aplicar_faixa_importada(cur, aluno_id, grad_id)
         return aluno_id
+    if grad_id:
+        dados["graduacao_id"] = grad_id
 
     dados.update({"id_academia": academia_id, "id_associacao": id_associacao,
                   "ativo": 1, "status": "ativo", "data_matricula": datetime.now().date()})

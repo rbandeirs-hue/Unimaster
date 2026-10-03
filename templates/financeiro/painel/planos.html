@@ -12,6 +12,10 @@
 {% endblock %}
 
 {% block fin_conteudo %}
+<style>
+  .fin-mod-chip { display:inline-flex; gap:.3rem; align-items:center; padding:.1rem .5rem; border:1px solid var(--c); border-radius:999px;
+                  font-size:.78rem; margin:.15rem .25rem 0 0; }
+</style>
 {% if em_edicao or request.args.get('novo') %}
 {# O formulário só aparece quando há o que editar ou criar: fora disso a tela
    é a lista, que é o que o gestor abre no dia a dia. #}
@@ -29,8 +33,18 @@
       <input name="nome" required maxlength="120" value="{{ em_edicao.nome if em_edicao else '' }}"
              placeholder="Mensalidade padrão">
     </label>
+    {# Diária: o valor é por aula/dia — usado na aula particular (aulas dadas
+       × valor). Não aparece para gerar mensalidade comum, onde seria cobrado
+       como mês inteiro. #}
     <label class="lst-campo lst-campo--curto">
-      <span class="lst-campo__rotulo">Valor mensal (R$) *</span>
+      <span class="lst-campo__rotulo">Cobrança</span>
+      <select name="periodicidade" id="planoPeriodicidade">
+        <option value="mensal" {% if not em_edicao or (em_edicao.get('periodicidade') or 'mensal') == 'mensal' %}selected{% endif %}>Mensal</option>
+        <option value="diaria" {% if em_edicao and em_edicao.get('periodicidade') == 'diaria' %}selected{% endif %}>Diária (por aula/dia)</option>
+      </select>
+    </label>
+    <label class="lst-campo lst-campo--curto">
+      <span class="lst-campo__rotulo" id="planoRotuloValor">{{ 'Valor por aula/dia (R$) *' if em_edicao and em_edicao.get('periodicidade') == 'diaria' else 'Valor mensal (R$) *' }}</span>
       <input name="valor" type="number" min="0" step="0.01" required
              value="{{ '%.2f'|format(em_edicao.valor|float) if em_edicao else '' }}">
     </label>
@@ -63,13 +77,94 @@
       <input name="percentual_juros_dia" type="number" min="0" max="9.9999" step="0.0001"
              value="{{ '%.4f'|format((em_edicao.get('percentual_juros_dia') or 0.0333)|float) if em_edicao else '0.0333' }}">
     </label>
+    {# Modalidades do plano. Com mais de uma (combo), cada modalidade recebe a
+       sua parte do valor e as partes têm de fechar o total. #}
+    {% set _mods_plano = {} %}
+    {% if em_edicao %}{% for m in em_edicao.modalidades %}{% set _ = _mods_plano.update({m.id: m.valor}) %}{% endfor %}{% endif %}
+    <div class="lst-campo" style="flex:1 1 100%" id="planoModalidades">
+      <span class="lst-campo__rotulo">Modalidades do plano *</span>
+      <div class="d-flex flex-wrap gap-2 mt-1">
+        {% for m in modalidades_academia %}
+        <label class="fin-mod-opcao" style="--c:{{ m.cor or '#1b1b1b' }}">
+          <input type="checkbox" name="modalidade_ids" value="{{ m.id }}" {% if m.id in _mods_plano or (not em_edicao and filtro_mod == m.id) or (not em_edicao and modalidades_academia|length == 1) %}checked{% endif %}>
+          {{ m.nome }}
+          <span class="fin-mod-valor" hidden>R$ <input type="text" inputmode="decimal" name="valor_modalidade_{{ m.id }}" placeholder="0,00"
+                value="{{ '%.2f'|format(_mods_plano[m.id]|float)|replace('.', ',') if _mods_plano.get(m.id) is not none else '' }}" aria-label="Parte de {{ m.nome }}">
+                <small class="fin-mod-pct u-muted"></small></span>
+        </label>
+        {% else %}
+        <span class="lst-sub">A academia ainda não tem modalidades — cadastre em Academia › Modalidades.</span>
+        {% endfor %}
+      </div>
+      <span class="lst-sub" id="planoSoma"></span>
+    </div>
     <div class="lst-filtros__acoes">
       <button type="submit" class="sh__btn sh__btn--forte">{{ 'Salvar alterações' if em_edicao else 'Cadastrar plano' }}</button>
       <a class="sh__btn" href="{{ url_for('financeiro_painel.planos', academia_id=academia_id) }}">Cancelar</a>
     </div>
   </form>
 </section>
+<style>
+  .fin-mod-opcao { display:inline-flex; align-items:center; gap:.4rem; padding:.4rem .75rem; border:1px solid var(--sh-line, #ddd);
+                   border-radius:999px; cursor:pointer; font-weight:600; background:#fff; }
+  .fin-mod-opcao:has(input[type=checkbox]:checked) { border-color: var(--c); box-shadow: inset 0 0 0 1px var(--c); }
+  .fin-mod-opcao input[type=checkbox] { accent-color: var(--c); }
+  .fin-mod-valor input { width: 84px; padding:.2rem .4rem; border:1px solid #ccc; border-radius:6px; font:inherit; font-weight:400; }
+</style>
 <script>
+  // Combo: a parte de cada modalidade aparece e a soma tem de fechar o valor do plano.
+  // Marcar as modalidades (ou mudar o valor) divide o total em partes iguais —
+  // 2 modalidades = 50/50, 3 = um terço cada; os centavos que sobram vão para a
+  // primeira, para fechar o valor exato. Cada parte continua editável.
+  (function () {
+    var box = document.getElementById('planoModalidades');
+    if (!box) return;
+    var form = box.closest('form'), total = form.querySelector('input[name="valor"]'), aviso = document.getElementById('planoSoma');
+    function num(v) { v = (v || '').trim(); if (v.indexOf(',') >= 0) v = v.replace(/\./g, '').replace(',', '.'); return parseFloat(v) || 0; }
+    function fmt(n) { return 'R$ ' + n.toFixed(2).replace('.', ','); }
+    function br(n) { return n.toFixed(2).replace('.', ','); }
+    function marcadas() { return Array.prototype.slice.call(box.querySelectorAll('input[type=checkbox]:checked')); }
+    function campo(cb) { return cb.closest('label').querySelector('.fin-mod-valor input'); }
+    function pct(cb) { return cb.closest('label').querySelector('.fin-mod-pct'); }
+
+    function dividir() {
+      var m = marcadas();
+      if (m.length < 2) return;
+      var centavos = Math.round(num(total.value) * 100), n = m.length;
+      var parte = Math.floor(centavos / n), resto = centavos - parte * n;
+      m.forEach(function (cb, i) { campo(cb).value = br(((i === 0 ? parte + resto : parte)) / 100); });
+    }
+    function sync() {
+      var m = marcadas(), combo = m.length > 1, t = num(total.value);
+      box.querySelectorAll('.fin-mod-opcao').forEach(function (l) {
+        var cb = l.querySelector('input[type=checkbox]'), c = l.querySelector('.fin-mod-valor');
+        c.hidden = !(combo && cb.checked);
+        c.querySelector('input').required = combo && cb.checked;
+      });
+      if (!combo) { aviso.textContent = m.length ? 'Plano de uma modalidade: o valor inteiro é dela.' : 'Marque ao menos uma modalidade.'; aviso.style.color = ''; return true; }
+      var soma = 0;
+      m.forEach(function (cb) {
+        var v = num(campo(cb).value); soma += v;
+        var el = pct(cb); if (el) el.textContent = t ? '(' + (v / t * 100).toFixed(1).replace('.', ',').replace(',0', '') + '%)' : '';
+      });
+      var ok = Math.abs(soma - t) < 0.01;
+      aviso.textContent = 'Divisão: ' + fmt(soma) + ' de ' + fmt(t) + (ok ? ' ✓' : ' — falta ' + fmt(t - soma));
+      aviso.style.color = ok ? '#16713c' : '#a4131f';
+      return ok;
+    }
+    // Mudou a escolha de modalidades ou o valor do plano: refaz a divisão igual.
+    box.addEventListener('change', function (e) { if (e.target.type === 'checkbox') dividir(); sync(); });
+    total.addEventListener('input', function () { dividir(); sync(); });
+    // Editou uma parte à mão: só confere a soma.
+    box.addEventListener('input', function (e) { if (e.target.type !== 'checkbox') sync(); });
+    form.addEventListener('submit', function (e) {
+      if (!marcadas().length) { e.preventDefault(); alert('Escolha a modalidade do plano.'); return; }
+      if (!sync()) { e.preventDefault(); alert('A divisão entre as modalidades precisa fechar o valor do plano.'); }
+    });
+    // Combo antigo ainda sem divisão: já abre dividido em partes iguais.
+    if (marcadas().length > 1 && marcadas().every(function (cb) { return !campo(cb).value; })) dividir();
+    sync();
+  })();
   // Os percentuais só fazem sentido quando o plano cobra encargo: some com eles fora disso.
   (function () {
     var seletor = document.getElementById('plano-juros');
@@ -81,6 +176,22 @@
     });
   })();
 </script>
+{% endif %}
+
+{% if pendencias.sem_modalidade or pendencias.sem_divisao %}
+<div class="alert alert-warning py-2">
+  {% if pendencias.sem_modalidade %}<div><strong>Sem modalidade:</strong> {% for p in pendencias.sem_modalidade %}<a href="{{ url_for('financeiro_painel.planos', academia_id=academia_id, editar=p.id) }}">{{ p.nome }}</a>{{ ', ' if not loop.last }}{% endfor %} — vincule à modalidade para o plano aparecer no lugar certo.</div>{% endif %}
+  {% if pendencias.sem_divisao %}<div><strong>Combo sem divisão do valor:</strong> {% for p in pendencias.sem_divisao %}<a href="{{ url_for('financeiro_painel.planos', academia_id=academia_id, editar=p.id) }}">{{ p.nome }}</a>{{ ', ' if not loop.last }}{% endfor %} — informe quanto do valor é de cada modalidade.</div>{% endif %}
+</div>
+{% endif %}
+
+{% if modalidades_academia|length > 1 %}
+<nav class="lst-abas mb-2">
+  <a class="lst-aba{% if not filtro_mod %} is-ativa{% endif %}" href="{{ url_for('financeiro_painel.planos', academia_id=academia_id, modalidade='') }}">Todas</a>
+  {% for m in modalidades_academia %}
+  <a class="lst-aba{% if filtro_mod == m.id %} is-ativa{% endif %}" href="{{ url_for('financeiro_painel.planos', academia_id=academia_id, modalidade=m.id) }}">{{ m.nome }}</a>
+  {% endfor %}
+</nav>
 {% endif %}
 
 <section class="lst-quadro">
@@ -96,6 +207,12 @@
         <span class="fin-plano__nome">{{ p.nome }}</span>
         <span class="lst-situacao {% if p.ativo %}is-ativo{% endif %}" style="margin-left:.5rem"><i></i>{{ 'Ativo' if p.ativo else 'Inativo' }}</span>
         <p class="fin-plano__desc">{{ p.descricao or 'Sem descrição.' }}</p>
+        <div>
+          {% for m in p.modalidades %}
+          <span class="fin-mod-chip" style="--c:{{ m.cor or '#999' }}">{{ m.nome }}{% if p.modalidades|length > 1 %} · {{ fmt_moeda(m.valor) if m.valor is not none else 'sem valor' }}{% endif %}</span>
+          {% else %}<span class="lst-tag lst-tag--alerta">Sem modalidade</span>{% endfor %}
+          {% if p.modalidades|length > 1 and not p.rateio_ok %}<span class="lst-tag lst-tag--alerta">Divisão do valor pendente</span>{% endif %}
+        </div>
         <span class="lst-sub">
           {%- if p.get('aplicar_juros_multas') -%}
             Atraso: multa de {{ '%.2f'|format((p.get('percentual_multa_mes') or 2)|float)|replace('.', ',') }}% + juros de {{ '%.4f'|format((p.get('percentual_juros_dia') or 0.0333)|float)|replace('.', ',') }}% ao dia
@@ -107,7 +224,7 @@
       <div class="fin-plano__dir">
         <div>
           <div class="fin-plano__valor fin-valor">{{ fmt_moeda(p.valor) }}</div>
-          <span class="lst-sub" style="text-align:right; display:block">por mês</span>
+          <span class="lst-sub" style="text-align:right; display:block">{{ 'por aula/dia' if p.get('periodicidade') == 'diaria' else 'por mês' }}</span>
         </div>
         <div class="lst-filtros__acoes">
           <a class="sh__btn" href="{{ url_for('financeiro_painel.planos', academia_id=academia_id, editar=p.id) }}">Editar</a>
@@ -117,7 +234,7 @@
             <button type="submit" class="sh__btn">{{ 'Desativar' if p.ativo else 'Ativar' }}</button>
           </form>
           <form method="POST" action="{{ url_for('financeiro_painel.planos_excluir', plano_id=p.id) }}" style="display:inline"
-                onsubmit="return confirm('Excluir o plano {{ p.nome|e }}?')">
+                data-confirmar="Excluir o plano {{ p.nome|e }}?">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
             <button type="submit" class="sh__btn">Excluir</button>
@@ -130,4 +247,13 @@
     {% endfor %}
   </div>
 </section>
+<script>
+(function () {
+  var sel = document.getElementById('planoPeriodicidade'), rot = document.getElementById('planoRotuloValor');
+  if (!sel || !rot) return;
+  sel.addEventListener('change', function () {
+    rot.textContent = sel.value === 'diaria' ? 'Valor por aula/dia (R$) *' : 'Valor mensal (R$) *';
+  });
+})();
+</script>
 {% endblock %}

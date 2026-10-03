@@ -7,6 +7,7 @@ from config import get_db_connection
 from utils.modalidades import filtro_visibilidade_sql
 
 from utils.permissoes import somente_gestao
+from utils.acesso_academia import sql_papel_na_academia as _papel_acad
 bp_professores = Blueprint("professores", __name__, url_prefix="/professores")
 
 
@@ -218,7 +219,7 @@ def cadastrar(academia_id):
     # Filtrar apenas usuários vinculados à academia do usuário logado
     # Incluir telefone do aluno vinculado (se existir)
     cur.execute(
-        """
+        f"""
         SELECT DISTINCT u.id, u.nome, u.email,
                COALESCE(
                    a.telefone, 
@@ -227,7 +228,7 @@ def cadastrar(academia_id):
                    a.tel_comercial
                ) as telefone
         FROM usuarios u
-        INNER JOIN roles_usuario ru ON ru.usuario_id = u.id
+        INNER JOIN roles_usuario ru ON ru.usuario_id = u.id {_papel_acad()}
         INNER JOIN roles r ON r.id = ru.role_id
         INNER JOIN usuarios_academias ua ON ua.usuario_id = u.id AND ua.academia_id = %s
         LEFT JOIN alunos a ON a.usuario_id = u.id AND a.ativo = 1 AND a.id_academia = %s
@@ -352,10 +353,10 @@ def editar(professor_id):
     # Buscar usuários com role professor que ainda não têm registro na tabela professores (ou o próprio professor sendo editado)
     # Filtrar apenas usuários vinculados à academia
     cur.execute(
-        """
+        f"""
         SELECT DISTINCT u.id, u.nome, u.email 
         FROM usuarios u
-        INNER JOIN roles_usuario ru ON ru.usuario_id = u.id
+        INNER JOIN roles_usuario ru ON ru.usuario_id = u.id {_papel_acad()}
         INNER JOIN roles r ON r.id = ru.role_id
         INNER JOIN usuarios_academias ua ON ua.usuario_id = u.id AND ua.academia_id = %s
         WHERE u.ativo = 1

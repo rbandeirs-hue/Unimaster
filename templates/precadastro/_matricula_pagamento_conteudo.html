@@ -31,24 +31,24 @@
   {% if p.matricula_copia_cola %}
   <label class="form-label small fw-semibold d-block text-start">PIX copia e cola</label>
   <div class="input-group mb-3">
-    <input type="text" class="form-control" id="copiaCola" value="{{ p.matricula_copia_cola }}" readonly>
-    <button class="btn btn-outline-primary" type="button" onclick="copiar('copiaCola', this)"><i class="bi bi-clipboard"></i></button>
+    <input type="text" class="u-campo__controle" id="copiaCola" value="{{ p.matricula_copia_cola }}" readonly aria-label="PIX copia e cola">
+    <button class="u-btn" type="button" onclick="copiar('copiaCola', this)"><i class="bi bi-clipboard"></i></button>
   </div>
   {% endif %}
 
   {% if p.matricula_link %}
   <label class="form-label small fw-semibold d-block text-start">Link de pagamento</label>
   <div class="input-group mb-3">
-    <input type="text" class="form-control" id="linkPag" value="{{ p.matricula_link }}" readonly>
-    <button class="btn btn-outline-primary" type="button" onclick="copiar('linkPag', this)"><i class="bi bi-clipboard"></i></button>
+    <input type="text" class="u-campo__controle" id="linkPag" value="{{ p.matricula_link }}" readonly aria-label="Link de pagamento">
+    <button class="u-btn" type="button" onclick="copiar('linkPag', this)"><i class="bi bi-clipboard"></i></button>
   </div>
-  <a href="{{ p.matricula_link }}" target="_blank" rel="noopener" class="btn btn-success w-100 mb-2"><i class="bi bi-box-arrow-up-right me-1"></i> Abrir página de pagamento</a>
+  <a href="{{ p.matricula_link }}" target="_blank" rel="noopener" class="u-btn u-btn--ok w-100 mb-2"><i class="bi bi-box-arrow-up-right me-1"></i> Abrir página de pagamento</a>
   {% endif %}
 
   {% if p.matricula_status != 'pago' %}
   {# Quem pagou por fora (PIX direto na chave) precisa de baixa manual. #}
   <a href="{{ url_for('precadastro.matricula_registrar_pagamento', precad_id=p.id) }}"
-     class="btn btn-outline-dark w-100 mb-2 js-abre-baixa">
+     class="u-btn w-100 mb-2 js-abre-baixa">
     <i class="bi bi-cash-coin me-1"></i> Registrar pagamento recebido por fora
   </a>
 
@@ -67,10 +67,10 @@
       {% endif %}
     </div>
     <form method="POST" action="{{ url_for('precadastro.matricula_trocar_cupom', precad_id=p.id) }}"
-          onsubmit="return confirm('Trocar o cupom e reemitir o link de pagamento com o novo valor?');">
+          data-confirmar="Trocar o cupom e reemitir o link de pagamento com o novo valor?">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="input-group">
-        <select name="cupom" class="form-select">
+        <select name="cupom" class="u-campo__controle">
           <option value="">Sem cupom (valor cheio)</option>
           {% for c in (cupons_disp or []) %}
           <option value="{{ c.codigo }}" {{ 'selected' if p.matricula_cupom and c.codigo|upper == p.matricula_cupom|upper }}>
@@ -80,7 +80,7 @@
           </option>
           {% endfor %}
         </select>
-        <button type="submit" class="btn btn-primary"><i class="bi bi-check2 me-1"></i> Aplicar</button>
+        <button type="submit" class="u-btn u-btn--primario"><i class="bi bi-check2 me-1"></i> Aplicar</button>
       </div>
       <div class="form-text">O link e o QR são gerados de novo com o valor corrigido. O link antigo deixa de valer.</div>
     </form>
@@ -91,12 +91,12 @@
     {% if p.email %}
     <form method="POST" action="{{ url_for('precadastro.matricula_reenviar_email', precad_id=p.id) }}" class="flex-fill">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <button type="submit" class="btn btn-outline-primary w-100"><i class="bi bi-envelope me-1"></i> Reenviar por e-mail</button>
+      <button type="submit" class="u-btn w-100"><i class="bi bi-envelope me-1"></i> Reenviar por e-mail</button>
     </form>
     {% endif %}
     {% if p.telefone and p.matricula_link %}
     <a href="https://wa.me/55{{ p.telefone|replace('(','')|replace(')','')|replace('-','')|replace(' ','') }}?text={{ ('Link para pagamento da matrícula: ' ~ p.matricula_link) | urlencode }}"
-       target="_blank" rel="noopener" class="btn btn-outline-success flex-fill"><i class="bi bi-whatsapp me-1"></i> WhatsApp</a>
+       target="_blank" rel="noopener" class="u-btn flex-fill"><i class="bi bi-whatsapp me-1"></i> WhatsApp</a>
     {% endif %}
   </div>
   {% if p.email %}<p class="text-muted small mt-2 mb-0">E-mail cadastrado: {{ p.email }}</p>{% endif %}

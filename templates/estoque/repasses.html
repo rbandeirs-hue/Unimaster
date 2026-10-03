@@ -1,0 +1,117 @@
+{% extends "estoque/_base.html" %}
+{% from 'components/ui.html' import vazio %}
+{% set est_aba = 'repasses' %}
+{% block title %}Repasses — Estoque{% endblock %}
+
+{% block pagina_titulo %}Repasses{% endblock %}
+{% block pagina_subtitulo %}
+  {% if ctx.tipo == 'associacao' %}O que as academias devem pelas vendas do seu estoque.
+  {% else %}O que sua academia deve à associação pelas vendas do estoque dela.{% endif %}
+{% endblock %}
+
+{% block est_conteudo %}
+
+<div class="sh__faixa">
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Em aberto</span>
+    <span class="sh__faixa-valor">R$ {{ '%.2f'|format(dados.em_aberto|float)|replace('.', ',') }}</span>
+    <span class="lst-sub">Ainda não pago</span>
+  </div>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Lançamentos</span>
+    <span class="sh__faixa-valor">{{ dados.linhas|length }}</span>
+    <span class="lst-sub">Um por venda</span>
+  </div>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Faturas</span>
+    <span class="sh__faixa-valor">{{ faturas|length }}</span>
+    <span class="lst-sub">Fechamentos mensais</span>
+  </div>
+</div>
+
+{% if pode_fechar %}
+<form method="POST" action="{{ url_for('estoque.repasse_fechar') }}" class="lst-filtros mt-3">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <label class="lst-campo lst-campo--largo">
+    <span class="lst-campo__rotulo">Academia</span>
+    <select name="id_academia" required>
+      {% for l in dados.linhas | selectattr('status', 'equalto', 'aberto')
+                               | unique(attribute='id_academia') %}
+      <option value="{{ l.id_academia }}">{{ l.academia }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label class="lst-campo lst-campo--curto">
+    <span class="lst-campo__rotulo">Competência</span>
+    <input type="month" name="competencia" required>
+  </label>
+  <button type="submit" class="u-btn u-btn--forte">Fechar fatura do mês</button>
+</form>
+{% endif %}
+
+{% if faturas %}
+<section class="lst-quadro mt-3">
+  <header class="lst-quadro__topo">
+    <h2 class="lst-quadro__titulo">Faturas</h2>
+  </header>
+  <div class="lst-rolagem">
+    <div class="lst-largura" style="--lst-min:480px">
+      <div class="lst-linha lst-cab" style="grid-template-columns:110px minmax(0,1fr) 120px 100px 90px">
+        <div>Competência</div><div>Academia</div><div class="lst-fim">Valor</div>
+        <div>Situação</div><div class="lst-fim">Ações</div>
+      </div>
+      {% for f in faturas %}
+      <div class="lst-linha lst-item" style="grid-template-columns:110px minmax(0,1fr) 120px 100px 90px">
+        <div>{{ f.competencia }}</div>
+        <div class="lst-corta">{{ f.academia }}</div>
+        <div class="lst-fim">R$ {{ '%.2f'|format(f.valor|float)|replace('.', ',') }}</div>
+        <div><span class="lst-tag">{{ f.status|capitalize }}</span></div>
+        <div class="lst-acoes">
+          {% if f.status != 'paga' and pode_fechar %}
+          <form method="POST" action="{{ url_for('estoque.repasse_quitar', fatura_id=f.id) }}"
+                data-confirmar="Registrar o pagamento desta fatura? Vira despesa na academia e receita na associação.">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="lst-acao" title="Registrar pagamento"
+                    aria-label="Registrar pagamento da fatura {{ f.competencia }}">
+              <i class="bi bi-check2-circle"></i>
+            </button>
+          </form>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endif %}
+
+<section class="lst-quadro mt-3">
+  <header class="lst-quadro__topo">
+    <h2 class="lst-quadro__titulo">Débitos por venda</h2>
+    <span class="lst-quadro__meta">Um por venda consignada</span>
+  </header>
+  {% if dados.linhas %}
+  <div class="lst-rolagem">
+    <div class="lst-largura" style="--lst-min:480px">
+      <div class="lst-linha lst-cab" style="grid-template-columns:140px minmax(0,1fr) 120px 110px">
+        <div>Quando</div><div>Academia</div><div class="lst-fim">Valor</div><div>Situação</div>
+      </div>
+      {% for l in dados.linhas %}
+      <div class="lst-linha lst-item" style="grid-template-columns:140px minmax(0,1fr) 120px 110px">
+        <div>{{ l.criado_em.strftime('%d/%m/%Y %H:%M') if l.criado_em else '—' }}</div>
+        <div class="lst-corta">{{ l.academia }}</div>
+        <div class="lst-fim">R$ {{ '%.2f'|format(l.valor|float)|replace('.', ',') }}</div>
+        <div><span class="lst-tag">{{ l.status|capitalize }}</span></div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% else %}
+  <div style="padding:1rem 1.1rem">
+    {{ vazio('Nenhum repasse ainda. Eles nascem quando a academia vende o estoque da associação.',
+             icone='bi-arrow-left-right') }}
+  </div>
+  {% endif %}
+</section>
+
+{% endblock %}

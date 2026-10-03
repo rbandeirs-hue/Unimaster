@@ -85,6 +85,24 @@ def _registrar_falha(ip: str):
     session.modified = True
 
 
+def _mensagem_falha(ip: str) -> str:
+    """Erro de login dizendo quantas tentativas ainda restam.
+
+    O bloqueio de _MAX_TENTATIVAS/_BLOQUEIO_MINUTOS já existia, mas só se
+    anunciava depois de fechar a porta: quem errava a senha duas vezes não
+    tinha como saber que a quinta custava 15 minutos. O aviso só aparece nas
+    duas últimas, para não repetir ameaça a cada erro de digitação.
+    """
+    base = "CPF/e-mail ou senha incorretos."
+    tentativas = (session.get(_chave_brute(ip)) or {}).get("n", 0)
+    restantes = _MAX_TENTATIVAS - tentativas
+    if restantes == 1:
+        return f"{base} Resta 1 tentativa antes de o acesso ser bloqueado por {_BLOQUEIO_MINUTOS} minutos."
+    if restantes == 2:
+        return f"{base} Restam 2 tentativas antes de o acesso ser bloqueado por {_BLOQUEIO_MINUTOS} minutos."
+    return base
+
+
 def _limpar_falhas(ip: str):
     session.pop(_chave_brute(ip), None)
     session.modified = True
@@ -154,7 +172,7 @@ def login():
 
         if not usuario:
             _registrar_falha(ip)
-            flash("CPF ou senha incorretos!", "danger")
+            flash(_mensagem_falha(ip), "danger")
             cur.close()
             conn.close()
             return render_template("login.html")
@@ -170,7 +188,7 @@ def login():
         # --------------------------------------------
         if not check_password_hash(usuario["senha"], senha):
             _registrar_falha(ip)
-            flash("CPF ou senha incorretos!", "danger")
+            flash(_mensagem_falha(ip), "danger")
             cur.close()
             conn.close()
             return render_template("login.html")

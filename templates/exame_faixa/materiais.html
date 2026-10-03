@@ -1,0 +1,142 @@
+{% extends "base_app.html" %}
+{% block conteudo_classe %}exf-tela{% endblock %}
+{% set menu_ativo = 'exame_faixa' %}
+{% set ROTULO = {'nage': 'Nage-waza', 'katame': 'Katame-waza', 'kaeshi': 'Kaeshi-waza', 'renraku': 'Renraku-henka-waza', 'kata': 'Katas'} %}
+{% block title %}Exame de faixa — vídeos e documentos{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{{ asset('css/exame_faixa.css') }}">{% endblock %}
+
+{% block pagina_titulo %}Vídeos e documentos do programa{% endblock %}
+{% block pagina_subtitulo %}Um vídeo por técnica vale para todas as faixas em que ela aparece. Academias e alunos assistem no material de estudo.{% endblock %}
+{% block pagina_acoes %}
+<a href="{{ url_for('exame_faixa.programa') }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Programa</a>
+{% endblock %}
+
+{% block content %}
+{% include 'exame_faixa/_abas.html' %}
+
+<div class="sh__faixa mb-3">
+  {% for g in ['nage', 'katame', 'kaeshi', 'renraku', 'kata'] %}
+  {% set c = cobertura[g] %}
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">{{ ROTULO[g] }}</span>
+    <span class="sh__faixa-valor">{{ c[0] }} <small class="u-muted u-fs-sm">de {{ c[1] }}</small></span>
+    <span class="exf-barrinha exf-barrinha--larga"><span class="is-ok" style="width:{{ (c[0] * 100 / c[1])|round|int if c[1] else 0 }}%"></span></span>
+  </div>
+  {% endfor %}
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Documentos</span>
+    <span class="sh__faixa-valor">{{ documentos|length }}</span>
+    <span class="lst-sub">vinculados ao programa</span>
+  </div>
+</div>
+
+<nav class="lst-abas" aria-label="Grupos">
+  {% for chave, nome in [('nage', 'Nage-waza'), ('katame', 'Katame-waza'), ('kaeshi', 'Kaeshi-waza'), ('renraku', 'Renraku-henka-waza'), ('kata', 'Katas'), ('documentos', 'Documentos')] %}
+  <a href="{{ url_for('exame_faixa.materiais', aba=chave) }}" class="lst-aba{{ ' is-ativa' if aba == chave }}">{{ nome }}
+    <span class="lst-aba__n">{{ listas[chave]|length if chave in listas else documentos|length }}</span></a>
+  {% endfor %}
+</nav>
+
+{% if aba in ('nage', 'katame', 'kaeshi', 'renraku', 'kata') %}
+{% set lista = listas[aba] %}
+<div class="exf-barra">
+  <label class="exf-busca"><i class="bi bi-search" aria-hidden="true"></i>
+    <input type="search" id="exf-mat-busca" placeholder="Buscar técnica" aria-label="Buscar técnica" autocomplete="off"></label>
+  <div class="exf-chips">
+    <a href="{{ url_for('exame_faixa.materiais', aba=aba) }}" class="exf-chip{{ ' is-ativo' if filtro != 'sem' }}">Todas</a>
+    <a href="{{ url_for('exame_faixa.materiais', aba=aba, filtro='sem') }}" class="exf-chip{{ ' is-ativo' if filtro == 'sem' }}">Sem vídeo · {{ lista|rejectattr('video')|list|length }}</a>
+  </div>
+  <span class="exf-barra__conta">Cole o link do YouTube, Vimeo ou Google Drive e salve.</span>
+</div>
+
+<section class="lst-quadro exf-mat">
+  <div class="exf-mat__linha exf-mat__linha--cab">
+    <div>{{ 'Kata' if aba == 'kata' else ('Par de técnicas' if aba in ('kaeshi', 'renraku') else 'Técnica') }}</div><div>Link do vídeo</div><div>Observação</div><div>Situação</div><div></div>
+  </div>
+  {% for t in lista if filtro != 'sem' or not t.video %}
+  <form method="POST" class="exf-mat__linha" id="v-{{ t.chave }}" data-busca="{{ t.nome|lower }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="acao" value="video">
+    <input type="hidden" name="aba" value="{{ aba }}">
+    <input type="hidden" name="grupo" value="{{ aba }}">
+    <input type="hidden" name="nome" value="{{ t.nome }}">
+    <div class="exf-mat__tec">
+      <strong>{{ t.nome }}</strong>
+      <small>{{ ('Faixa' ~ ('s' if t.faixas|length > 1 else '') ~ ': ' ~ t.faixas|join(', ')) if aba != 'kata' else t.faixas[0] }}</small>
+    </div>
+    <label class="exf-in exf-in--url"><input type="url" name="url" value="{{ t.video.url if t.video else '' }}" placeholder="https://www.youtube.com/watch?v=…" aria-label="Link do vídeo de {{ t.nome }}"></label>
+    <label class="exf-in exf-in--url"><input type="text" name="observacao" maxlength="255" value="{{ t.video.observacao or '' if t.video else '' }}" placeholder="Opcional" aria-label="Observação do vídeo de {{ t.nome }}"></label>
+    <div>{% if t.video %}<span class="u-pill u-pill--success">Com vídeo</span>{% else %}<span class="u-pill u-pill--info">Sem vídeo</span>{% endif %}</div>
+    <div class="exf-mat__acoes">
+      {% if t.video %}<button type="button" class="lst-acao" data-exf-video data-embed="{{ t.video.embed or '' }}" data-url="{{ t.video.url }}" data-titulo="{{ t.nome }}" title="Assistir" aria-label="Assistir o vídeo de {{ t.nome }}"><i class="bi bi-play-fill"></i></button>{% endif %}
+      <button type="submit" class="sh__btn sh__btn--forte">Salvar</button>
+      {% if t.video %}<button type="submit" name="remover" value="1" class="lst-acao" title="Remover vídeo" aria-label="Remover o vídeo de {{ t.nome }}"
+              data-confirmar="Remover o vídeo de {{ t.nome }}?" ><i class="bi bi-trash"></i></button>{% endif %}
+    </div>
+  </form>
+  {% else %}
+  <div class="lst-vazio">{{ 'Todas as técnicas já têm vídeo.' if filtro == 'sem' else 'Nenhuma técnica neste grupo.' }}</div>
+  {% endfor %}
+</section>
+
+{% else %}
+<div class="exf-mat-docs">
+  <form method="POST" enctype="multipart/form-data" class="lst-quadro exf-mat-docs__form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="acao" value="documento">
+    <input type="hidden" name="aba" value="documentos">
+    <h2 class="exf-mat-docs__tit">Adicionar documento</h2>
+    <label class="u-campo"><span class="u-campo__rotulo">Título *</span>
+      <input type="text" name="titulo" class="u-campo__controle" maxlength="160" required placeholder="Ex.: Regulamento de graduação"></label>
+    <label class="u-campo"><span class="u-campo__rotulo">Arquivo</span>
+      <input type="file" name="arquivo" class="u-campo__controle" accept=".pdf,.jpg,.jpeg,.png,.webp,.xlsx,.xls">
+      <small class="u-muted">PDF, imagem ou planilha, até 25 MB.</small></label>
+    <label class="u-campo"><span class="u-campo__rotulo">ou link</span>
+      <input type="url" name="url" class="u-campo__controle" placeholder="https://…"></label>
+    <label class="u-campo"><span class="u-campo__rotulo">Vincular a</span>
+      <select name="programa_id" class="u-campo__controle">
+        <option value="">Todas as faixas (programa inteiro)</option>
+        {% for p in prog %}<option value="{{ p.id }}">{{ p.de }} → {{ p.para }}</option>{% endfor %}
+      </select></label>
+    <button type="submit" class="sh__btn sh__btn--forte"><i class="bi bi-upload"></i> Adicionar documento</button>
+  </form>
+
+  <section class="lst-quadro">
+    <header class="lst-quadro__topo"><h2 class="lst-quadro__titulo">Documentos vinculados</h2><span class="lst-quadro__meta">{{ documentos|length }}</span></header>
+    {% for d in documentos %}
+    {% set href = url_for('static', filename='uploads/' ~ pasta_docs ~ '/' ~ d.arquivo) if d.arquivo else d.url %}
+    <div class="exf-docs__linha">
+      <span class="exf-docs__tipo">{{ (d.arquivo.rsplit('.', 1)[-1] if d.arquivo else 'link')|upper }}</span>
+      <span class="exf-docs__txt"><a href="{{ href }}" target="_blank" rel="noopener">{{ d.titulo }}</a>
+        <small>{{ nome_promo.get(d.programa_id, 'Todas as faixas') if d.programa_id else 'Todas as faixas' }} · {{ d.criado_em|data_br }}</small></span>
+      <form method="POST" data-confirmar="Remover o documento “{{ d.titulo }}”?">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="acao" value="remover_documento">
+        <input type="hidden" name="aba" value="documentos">
+        <input type="hidden" name="documento_id" value="{{ d.id }}">
+        <button type="submit" class="lst-acao" title="Remover" aria-label="Remover {{ d.titulo }}"><i class="bi bi-trash"></i></button>
+      </form>
+    </div>
+    {% else %}
+    <div class="lst-vazio">Nenhum documento ainda. Regulamento, apostilas e fichas em branco são bons começos.</div>
+    {% endfor %}
+  </section>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+{% include 'exame_faixa/_video_dialogo.html' %}
+<script>
+(function () {
+  var b = document.getElementById('exf-mat-busca');
+  if (!b) return;
+  b.addEventListener('input', function () {
+    var q = b.value.trim().toLowerCase();
+    document.querySelectorAll('.exf-mat__linha[data-busca]').forEach(function (l) {
+      l.style.display = !q || l.getAttribute('data-busca').indexOf(q) >= 0 ? '' : 'none';
+    });
+  });
+})();
+</script>
+{% endblock %}

@@ -8,6 +8,8 @@ from math import ceil
 from blueprints.auth.user_model import Usuario
 
 from utils.permissoes import somente_gestao
+from utils.contexto_logo import buscar_logo_url
+from utils.graduacao_modalidade import sql_join_faixa as _join_faixa
 academia_bp = Blueprint("academia", __name__, url_prefix="/academia")
 
 
@@ -40,14 +42,32 @@ def _calcular_idade_visitante(data_nascimento):
 # ======================================================
 # 🔹 Lista de Visitantes (Histórico)
 # ======================================================
+_COOKIE_ULTIMA = "unimaster_ultima_academia"
+
+
+def _iniciais(nome):
+    """Duas letras para a academia sem logo: 'Dojo Vila Mariana' -> 'DV'."""
+    partes = [p for p in (nome or "").replace("-", " ").split() if p[:1].isalnum()]
+    if not partes:
+        return "?"
+    if len(partes) == 1:
+        return partes[0][:2].upper()
+    return (partes[0][:1] + partes[1][:1]).upper()
+
+
 @academia_bp.route("/escolher", methods=["GET", "POST"])
 @login_required
 def escolher_academia():
     """Escolha da academia na entrada, para quem administra mais de uma.
 
-    Vale para a sessão inteira: dentro do sistema não há troca de academia, o
-    que evitava o risco de lançar mensalidade, presença ou aluno na academia
-    errada sem perceber. Para trocar, sai e entra de novo.
+    Vale para a sessão inteira. A regra original era sair e entrar de novo
+    para trocar, mas o shell passou a oferecer o nome da academia no topo como
+    atalho para cá (`sh__academia-atual`), então a troca acontece por dentro
+    do sistema — o aviso em contrário, no rodapé desta tela, era resíduo.
+
+    A academia da última escolha vem em primeiro lugar, marcada: é quase
+    sempre a de hoje. Quem lembra dela é um cookie, não a sessão, que morre no
+    logout; ele não dá acesso a nada, porque quem decide continua sendo `ids`.
     """
     ids = _academias_ids_brutas() or []
     destino = (request.args.get("next") or request.form.get("next") or "").strip()
@@ -67,7 +87,16 @@ def escolher_academia():
             session["academia_gerenciamento_id"] = escolhida
             session["finance_academia_id"] = escolhida
             session["modo_painel"] = "academia"
-            return redirect(destino)
+            resposta = redirect(destino)
+            # A sessão morre no logout; o cookie sobrevive, e é ele que permite
+            # trazer para o topo da lista a academia de ontem — quase sempre a
+            # de hoje. Não dá acesso a nada: quem decide continua sendo `ids`.
+            resposta.set_cookie(
+                _COOKIE_ULTIMA, str(escolhida),
+                max_age=60 * 60 * 24 * 365, samesite="Lax",
+                secure=request.is_secure, httponly=False,
+            )
+            return resposta
         flash("Escolha uma das academias da lista.", "warning")
 
     conn = get_db_connection()
@@ -85,6 +114,17 @@ def escolher_academia():
     finally:
         cur.close()
         conn.close()
+
+    # A logo é o que faz achar a academia certa sem ler; sem ela, as iniciais.
+    ultima = request.cookies.get(_COOKIE_ULTIMA)
+    ultima_id = int(ultima) if (ultima or "").isdigit() else None
+    for a in academias:
+        a["logo_url"] = buscar_logo_url("academia", a["id"])
+        a["iniciais"] = _iniciais(a.get("nome"))
+        a["ultima"] = a["id"] == ultima_id
+
+    # A de ontem primeiro; o resto segue em ordem de nome, como já vinha.
+    academias.sort(key=lambda a: (not a["ultima"],))
 
     return render_template(
         "academia/escolher_academia.html",
@@ -901,10 +941,9 @@ def aprovar_solicitacao_mensalidade(solicitacao_id):
         cur.execute("SELECT id FROM roles WHERE chave = 'aluno' LIMIT 1")
         role_aluno = cur.fetchone()
         if role_aluno:
-            cur.execute("""
-                INSERT IGNORE INTO roles_usuario (usuario_id, role_id)
-                VALUES (%s, %s)
-            """, (solicitacao["usuario_id"], role_aluno["id"]))
+            # Aluno DESTA academia (MM-14), não de todas as do usuário.
+            from utils.acesso_academia import inserir_papel
+            inserir_papel(cur, solicitacao["usuario_id"], role_aluno["id"], academia_id)
         
         # Atualizar solicitação
         cur.execute("""
@@ -939,12 +978,44 @@ def _academias_ids_brutas():
     try:
         cur.execute("SELECT academia_id FROM usuarios_academias WHERE usuario_id = %s ORDER BY academia_id", (current_user.id,))
         vinculadas = [r["academia_id"] for r in cur.fetchall()]
-        if vinculadas:
+        # Papel por academia (MM-14): nos modos de equipe, só as academias em
+        # que a pessoa tem o papel daquele modo — gestor numa e aluno noutra
+        # não escolhe a segunda no modo academia.
+        _modo = session.get("modo_painel") or ""
+        if vinculadas and _modo in ("academia", "professor"):
+            try:
+                from utils import acesso_academia as _acs
+                if _acs.tem_papel_por_academia(cur) and not _acs.escopo_amplo():
+                    _papeis = ("gestor_academia",) if _modo == "academia" else ("gestor_academia", "professor")
+                    _ph = ",".join(["%s"] * len(_papeis))
+                    cur.execute(
+                        f"""SELECT DISTINCT ua.academia_id FROM usuarios_academias ua
+                            JOIN roles_usuario ru ON ru.usuario_id = ua.usuario_id
+                                 AND ru.academia_id IN (0, ua.academia_id)
+                            JOIN roles r ON r.id = ru.role_id AND r.chave IN ({_ph})
+                            WHERE ua.usuario_id = %s ORDER BY ua.academia_id""",
+                        (*_papeis, current_user.id))
+                    vinculadas = [r["academia_id"] for r in cur.fetchall()]
+                    if not vinculadas:
+                        cur.close()
+                        conn.close()
+                        return []
+            except Exception:
+                pass
+        # Admin não é limitado pelo vínculo explícito: ter sido ligado a três
+        # academias não pode esconder as outras nove. Foi o que aconteceu ao
+        # cadastrar uma academia independente — ela ficava invisível para quem
+        # administra o sistema.
+        if vinculadas and not current_user.has_role("admin"):
             cur.close()
             conn.close()
             return vinculadas
         # Modo academia: gestor_academia/professor só veem academias de usuarios_academias (não id_academia)
-        if session.get("modo_painel") == "academia" and (current_user.has_role("gestor_academia") or current_user.has_role("professor")):
+        # Admin fica de fora: ele costuma acumular o papel de gestor_academia,
+        # e esta trava o deixava sem academia nenhuma no modo academia.
+        if (session.get("modo_painel") == "academia"
+                and not current_user.has_role("admin")
+                and (current_user.has_role("gestor_academia") or current_user.has_role("professor"))):
             cur.close()
             conn.close()
             return []
@@ -1111,6 +1182,7 @@ def _painel_academia_resumo(academia_id):
         "alunos_ativos": 0, "turmas": 0, "modalidades": 0,
         "solicitacoes_pendentes": 0, "mensalidades_atraso": 0,
         "precadastros": 0, "aniversariantes": 0,
+        "sem_tel_resp": 0,
     }
     if not academia_id:
         return r
@@ -1164,6 +1236,13 @@ def _painel_academia_resumo(academia_id):
         "aniversariantes": (
             """SELECT COUNT(*) c FROM alunos
                WHERE id_academia=%s AND status='ativo' AND MONTH(data_nascimento)=MONTH(CURDATE())"""
+            + _f_alunos, (academia_id,) + tuple(_p_alunos)),
+        # Sem o telefone do responsável financeiro o aluno não recebe cobrança
+        # nem lembrete: o card leva direto a quem está nessa situação.
+        "sem_tel_resp": (
+            """SELECT COUNT(*) c FROM alunos
+               WHERE id_academia=%s AND status='ativo'
+                 AND TRIM(COALESCE(responsavel_financeiro_telefone, '')) = ''"""
             + _f_alunos, (academia_id,) + tuple(_p_alunos)),
     }
 
@@ -1279,6 +1358,21 @@ def _kpis_mes(cur, academia_id, ano, mes, filtro_cond="", filtro_params=()):
         (academia_id, ini, fim) + fp,
     )
     k["mens_previsto"] = float(cur.fetchone()["v"] or 0)
+    # Recebido é a contrapartida do previsto: das mensalidades que VENCEM no mês,
+    # quanto já foi pago. Antes contava por `data_pagamento`, e as duas metades da
+    # mesma barra mediam coisas diferentes — quem pagou outubro adiantado em
+    # setembro sumia de outubro ("R$ 0,00 de R$ 415,00") e engordava setembro,
+    # onde não havia previsto correspondente.
+    cur.execute(
+        f"""SELECT COALESCE(SUM(COALESCE(ma.valor_pago, ma.valor)),0) v FROM mensalidade_aluno ma
+            JOIN alunos a ON a.id = ma.aluno_id
+            WHERE a.id_academia=%s AND ma.status = 'pago'
+              AND ma.data_vencimento BETWEEN %s AND %s{filtro_cond}""",
+        (academia_id, ini, fim) + fp,
+    )
+    k["mens_recebido"] = float(cur.fetchone()["v"] or 0)
+    # Mesma soma pelo caixa (data do pagamento). Serve só para conciliar com a
+    # tabela `receitas`, que também é caixa.
     cur.execute(
         f"""SELECT COALESCE(SUM(COALESCE(ma.valor_pago, ma.valor)),0) v FROM mensalidade_aluno ma
             JOIN alunos a ON a.id = ma.aluno_id
@@ -1286,7 +1380,7 @@ def _kpis_mes(cur, academia_id, ano, mes, filtro_cond="", filtro_params=()):
               AND ma.data_pagamento BETWEEN %s AND %s{filtro_cond}""",
         (academia_id, ini, fim) + fp,
     )
-    k["mens_recebido"] = float(cur.fetchone()["v"] or 0)
+    k["mens_caixa"] = float(cur.fetchone()["v"] or 0)
     return k
 
 
@@ -1406,7 +1500,7 @@ def _get_academia_dashboard(academia_id, ano, mes, turma_id=None, modalidade_id=
              date(ano, mes, __import__("calendar").monthrange(ano, mes)[1])),
         )
         d["receitas_mensalidades"] = float(cur.fetchone()["v"] or 0)
-        d["conciliacao_dif"] = round(atual["mens_recebido"] - d["receitas_mensalidades"], 2)
+        d["conciliacao_dif"] = round(atual["mens_caixa"] - d["receitas_mensalidades"], 2)
         d["conciliacao_ok"] = abs(d["conciliacao_dif"]) < 0.01
 
         # Nome do mês anterior, para o comparativo dos indicadores ("vs julho").
@@ -1563,6 +1657,25 @@ def dash():
 
     stats = _get_academia_stats(academia_id)
     dash_data = _get_academia_dashboard(academia_id, ano, mes, turma_id, modalidade_id)
+
+    # Quantos alunos a cobrança por WhatsApp alcançaria, pelo MESMO critério que
+    # o envio usa. A lista de inadimplentes do painel mostra só os 10 maiores e
+    # segue o filtro da tela; anunciar aquele número no botão prometeria uma
+    # coisa e faria outra — o envio é da academia inteira.
+    dash_data["cobranca_alvo"] = 0
+    try:
+        from utils import whatsapp_lembretes as lem
+        _c = get_db_connection()
+        _cur = _c.cursor(dictionary=True)
+        try:
+            _linhas = lem.buscar_pendentes(_cur, academia_id, somente_atrasadas=True)
+            dash_data["cobranca_alvo"] = len({r["aluno_id"] for r in _linhas})
+            dash_data["cobranca_mensalidades"] = len(_linhas)
+        finally:
+            _cur.close()
+            _c.close()
+    except Exception:
+        pass
     # O shell (base_academia.html) usa `academia` para montar o menu lateral e o
     # rodapé; sem ele o item "Professores" some da navegação.
     academia = next((a for a in academias if a.get("id") == academia_id), None)
@@ -1648,9 +1761,9 @@ def painel_academia():
     try:
         from utils import zempo_mapper
         cur.execute(
-            """SELECT a.*, g.faixa AS faixa
+            f"""SELECT a.*, g.faixa AS faixa
                FROM alunos a
-               LEFT JOIN graduacao g ON g.id = a.graduacao_id
+               {_join_faixa()}
                WHERE a.id_academia = %s AND a.ativo = 1
                  AND (a.zempo IS NULL OR a.zempo = '')
                  AND NOT EXISTS (SELECT 1 FROM zempo_solicitacoes s
@@ -1692,6 +1805,13 @@ def painel_academia():
 # =====================================================
 # 🔹 Lista de Usuários da Academia
 # =====================================================
+def _papel_acad_lista(alias, academia_id=None):
+    """Filtro "papel valendo na academia" para a lista de usuários: a academia
+    informada ou, sem ela, a da linha (`ua.academia_id`)."""
+    from utils.acesso_academia import sql_papel_na_academia
+    return sql_papel_na_academia(alias, str(int(academia_id)) if academia_id else "ua.academia_id")
+
+
 @academia_bp.route("/usuarios")
 @login_required
 def lista_usuarios():
@@ -1759,7 +1879,10 @@ def lista_usuarios():
     if papel_id and papel_id in {p["id"] for p in papeis_opts}:
         sql_papel = (
             " AND EXISTS (SELECT 1 FROM roles_usuario ru2"
-            f" WHERE ru2.usuario_id = u.id AND ru2.role_id = {int(papel_id)})"
+            f" WHERE ru2.usuario_id = u.id AND ru2.role_id = {int(papel_id)}"
+            # Papel valendo na academia da linha (MM-14).
+            + _papel_acad_lista("ru2")
+            + ")"
         )
     else:
         papel_id = None
@@ -1964,6 +2087,10 @@ def lista_usuarios():
         if usuarios:
             ids_usuarios = [u["id"] for u in usuarios]
             ph = ",".join(["%s"] * len(ids_usuarios))
+            # Papéis DESTA academia (MM-14): na lista da academia A, quem é só
+            # aluno dela não aparece como gestor por ser gestor na B.
+            from utils.acesso_academia import sql_papel_na_academia as _papel_acad
+            _papel_lista = _papel_acad("ru", str(int(academia_id))) if academia_id else ""
             cur.execute(
                 f"""
                 SELECT ru.usuario_id,
@@ -1971,7 +2098,8 @@ def lista_usuarios():
                        COALESCE(r.chave, LOWER(REPLACE(r.nome,' ','_'))) AS role_chave
                 FROM roles_usuario ru
                 JOIN roles r ON r.id = ru.role_id
-                WHERE ru.usuario_id IN ({ph})
+                WHERE ru.usuario_id IN ({ph}){_papel_lista}
+                GROUP BY ru.usuario_id, r.id, r.nome, r.chave
                 ORDER BY r.nome
                 """,
                 tuple(ids_usuarios),
@@ -1984,6 +2112,40 @@ def lista_usuarios():
                 })
             for u in usuarios:
                 u["roles"] = roles_por_usuario.get(u["id"], [])
+
+            # Acesso de cada gestor/professor nesta academia (MM-13): a lista
+            # mostra quem é gestor principal e quem tem acesso restrito.
+            try:
+                from utils import acesso_academia as _acs
+                if academia_id and _acs.tem_estrutura(cur):
+                    cur.execute(
+                        f"""SELECT ua.usuario_id, ua.gestor_principal, ua.acesso_financeiro, ua.acesso_academico,
+                                   (SELECT COUNT(*) FROM usuario_academia_modalidade uam
+                                     WHERE uam.usuario_id = ua.usuario_id AND uam.academia_id = ua.academia_id) AS n_mod
+                            FROM usuarios_academias ua
+                            WHERE ua.academia_id = %s AND ua.usuario_id IN ({ph})""",
+                        (academia_id, *ids_usuarios))
+                    _ac = {r["usuario_id"]: r for r in cur.fetchall()}
+                    for u in usuarios:
+                        chaves = {r["chave"] for r in u["roles"]}
+                        v = _ac.get(u["id"])
+                        if not v or not (chaves & {"gestor_academia", "professor"}):
+                            continue
+                        if v["gestor_principal"] and "gestor_academia" in chaves:
+                            u["acesso_rotulo"] = "Gestor principal"
+                        elif not v["acesso_financeiro"] or not v["acesso_academico"] or v["n_mod"]:
+                            partes = []
+                            if not v["acesso_financeiro"]:
+                                partes.append("sem financeiro")
+                            if not v["acesso_academico"]:
+                                partes.append("sem acadêmico")
+                            if v["n_mod"]:
+                                partes.append(f"{v['n_mod']} modalidade{'s' if v['n_mod'] != 1 else ''}")
+                            u["acesso_rotulo"] = "Acesso restrito: " + ", ".join(partes)
+                        else:
+                            u["acesso_rotulo"] = "Acesso total"
+            except Exception:
+                pass
 
     except Exception as e:
         flash(f"Erro ao carregar usuários: {e}", "danger")
@@ -2265,6 +2427,20 @@ def configuracoes_academia():
 
                 if not cora_incompleto:
                     flash("Configuração de cobrança online salva com sucesso!", "success")
+            elif secao == "campos_obrigatorios":
+                # Quais campos o cadastro interno do aluno exige nesta academia.
+                # Só quem administra a academia decide: professor e gestores de
+                # associação/federação veem a tela de configurações, mas a ficha
+                # é da academia. A academia é a da sessão (validada acima por
+                # _get_academia_gerenciamento), nunca um id vindo do formulário.
+                if not (current_user.has_role("admin") or current_user.has_role("gestor_academia")):
+                    flash("Só o gestor da academia pode alterar os campos obrigatórios.", "danger")
+                else:
+                    from utils import campos_obrigatorios_aluno as _co
+                    marcados = [c for c in request.form.getlist("campos_obrigatorios")
+                                if c in _co.CHAVES_CONFIGURAVEIS]
+                    _co.salvar(academia_id, marcados, getattr(current_user, "id", None))
+                    flash("Campos obrigatórios do cadastro do aluno salvos.", "success")
             else:
                 aulas_permitidas = request.form.get("aulas_experimentais_permitidas", "").strip()
                 if aulas_permitidas == "":
@@ -2334,11 +2510,17 @@ def configuracoes_academia():
     import os as _os
     sumup_oauth_app_ok = bool(_os.environ.get("SUMUP_OAUTH_CLIENT_ID", "").strip()
                               and _os.environ.get("SUMUP_OAUTH_CLIENT_SECRET", "").strip())
+    from utils import campos_obrigatorios_aluno as _co
     return render_template(
         "painel/configuracoes_academia.html",
         academia=academia,
         academias=academias,
         academia_id=academia_id,
+        # Seção "Campos obrigatórios no cadastro do aluno".
+        campos_obrig_grupos=_co.catalogo_por_grupo(),
+        campos_obrig_ativos=_co.obrigatorios(academia_id),
+        campos_obrig_sempre=_co.SEMPRE_OBRIGATORIOS,
+        pode_campos_obrig=current_user.has_role("admin") or current_user.has_role("gestor_academia"),
         # Mostra na tela exatamente a chave que vai dentro do código PIX: é a
         # única forma de o gestor conferir sem precisar tentar pagar.
         chave_pix_normalizada=_chave_pix_normalizada(academia),
@@ -2492,12 +2674,14 @@ def cadastro_usuario():
             )
             user_id = cur.lastrowid
 
-            # Vincular roles
-            for role_id in roles_escolhidas:
-                cur.execute(
-                    "INSERT INTO roles_usuario (usuario_id, role_id) VALUES (%s, %s)",
-                    (user_id, role_id),
-                )
+            # Vincular roles — só as que quem cadastra pode atribuir.
+            from utils.acesso_academia import inserir_papeis_novo_usuario, roles_atribuiveis
+            _pode_dar = roles_atribuiveis(cur)
+            # Papel de academia vale em cada academia escolhida (MM-14).
+            inserir_papeis_novo_usuario(
+                cur, user_id,
+                [r for r in roles_escolhidas if str(r).isdigit() and int(r) in _pode_dar],
+                academias_escolhidas)
 
             # Vincular academias
             for aid in academias_escolhidas:
@@ -2850,6 +3034,28 @@ def whatsapp_teste():
     return jsonify({"ok": ok, "info": info})
 
 
+def _avisos_ligados(academia_id):
+    """A academia autorizou o envio de avisos em massa?
+
+    Na dúvida, False: é uma mensagem que sai para dezenas de pessoas de uma
+    vez, e o erro de mandar sem querer não tem desfazer.
+    """
+    if not academia_id:
+        return False
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT COALESCE(whatsapp_avisos, 0) FROM academias WHERE id = %s",
+                    (academia_id,))
+        r = cur.fetchone()
+        return bool(r and r[0])
+    except Exception:
+        return False
+    finally:
+        cur.close()
+        conn.close()
+
+
 @academia_bp.route("/whatsapp/avisos")
 @login_required
 def whatsapp_avisos():
@@ -2912,6 +3118,7 @@ def whatsapp_avisos():
         alunos=alunos, turmas=turmas, modelos=modelos,
         total_alunos=total_alunos, total_sem_tel=total_sem_tel,
         conectado=(st.get("status") == "open"),
+        avisos_ligados=_avisos_ligados(academia_id),
     )
 
 
@@ -2925,6 +3132,17 @@ def whatsapp_avisos_enviar():
     destino = (request.form.get("destino") or "todos").strip()
     if not mensagem:
         return jsonify({"ok": False, "erro": "Escreva a mensagem."}), 400
+
+    # O interruptor "Avisos gerais" da tela de WhatsApp existia e não era
+    # consultado em lugar nenhum: desligado, o sistema continuava disparando.
+    # A trava é aqui, no servidor — esconder o botão não basta, a chamada é
+    # um POST que qualquer um pode repetir.
+    if not _avisos_ligados(academia_id):
+        return jsonify({
+            "ok": False,
+            "erro": ("Os avisos gerais estão desligados para esta academia. "
+                     "Ligue em WhatsApp › Avisos gerais para poder enviar."),
+        }), 409
 
     conn = get_db_connection()
     cur = conn.cursor(dictionary=True)

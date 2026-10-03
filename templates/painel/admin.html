@@ -1,52 +1,48 @@
 {% extends "base_app.html" %}
+{% from 'components/ui.html' import kpi %}
 {% block title %}Painel — Administrador{% endblock %}
-{% block content %}
-<div class="container mt-4 painel-academia-dash">
-    {% set back_url = back_url or get_back_url_default() %}
-{% include 'components/botao_voltar.html' %}
 
-    <div class="row g-4">
-        <div class="col-12 col-sm-6 col-lg-4 col-xl-3">
-            <div class="card shadow-sm border-primary card-hover painel-atalho-card h-100">
-                <div class="card-body text-center py-4 px-4 d-flex flex-column align-items-center justify-content-center">
-                    <i class="bi bi-diagram-3 fs-1 mb-2 text-primary"></i>
-                    <h6 class="fw-bold mb-2">Federações</h6>
-                    <span class="display-4 fw-bold text-primary">{{ stats.get('federacoes', 0) if stats else 0 }}</span>
-                </div>
-            </div>
-        </div>
-        <div class="col-12 col-sm-6 col-lg-4 col-xl-3">
-            <div class="card shadow-sm border-success card-hover painel-atalho-card h-100">
-                <div class="card-body text-center py-4 px-4 d-flex flex-column align-items-center justify-content-center">
-                    <i class="bi bi-diagram-3-fill fs-1 mb-2 text-success"></i>
-                    <h6 class="fw-bold mb-2">Associações</h6>
-                    <span class="display-4 fw-bold text-success">{{ stats.get('associacoes', 0) if stats else 0 }}</span>
-                </div>
-            </div>
-        </div>
-        <div class="col-12 col-sm-6 col-lg-4 col-xl-3">
-            <div class="card shadow-sm border-info card-hover painel-atalho-card h-100">
-                <div class="card-body text-center py-4 px-4 d-flex flex-column align-items-center justify-content-center">
-                    <i class="bi bi-building fs-1 mb-2 text-info"></i>
-                    <h6 class="fw-bold mb-2">Academias</h6>
-                    <span class="display-4 fw-bold text-info">{{ stats.get('academias', 0) if stats else 0 }}</span>
-                </div>
-            </div>
-        </div>
-        <div class="col-12 col-sm-6 col-lg-4 col-xl-3">
-            <div class="card shadow-sm border-warning card-hover painel-atalho-card h-100">
-                <div class="card-body text-center py-4 px-4 d-flex flex-column align-items-center justify-content-center">
-                    <i class="bi bi-people-fill fs-1 mb-2 text-warning"></i>
-                    <h6 class="fw-bold mb-2">Alunos</h6>
-                    <span class="display-4 fw-bold text-warning">{{ stats.get('alunos', 0) if stats else 0 }}</span>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
+{% block pagina_titulo %}Administração do sistema{% endblock %}
+{% block pagina_subtitulo %}O tamanho da base hoje. Clique em qualquer número para ver a lista.{% endblock %}
+
+{% block extra_css %}
 <style>
-.painel-atalho-card { transition: 0.2s ease; min-height: 140px; }
-.painel-academia-dash .card { border-radius: 0.85rem; border-width: 2px; transition: 0.2s ease; }
-.painel-academia-dash .card:hover, .painel-academia-dash .card-hover:hover { transform: translateY(-6px); box-shadow: 0 0.75rem 1.5rem rgba(0,0,0,0.18) !important; }
+  /* Grid próprio, sem as colunas do Bootstrap: os cartões se acomodam pelo
+     espaço disponível em vez de por doze frações fixas. */
+  .adm-numeros {
+    display: grid;
+    gap: var(--u-space-3);
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  }
+  /* A cor aqui distingue os quatro itens entre si — não significa estado.
+     Estado (em dia / vencido) usa as cores semânticas e não aparece nesta tela. */
+  .adm-numeros .u-kpi { --u-kpi-cor: var(--u-text-muted); }
+  .adm-numeros .u-kpi:nth-child(1) { --u-kpi-cor: var(--u-accent-indigo); }
+  .adm-numeros .u-kpi:nth-child(2) { --u-kpi-cor: var(--u-accent-teal); }
+  .adm-numeros .u-kpi:nth-child(3) { --u-kpi-cor: var(--u-accent-orange); }
+  .adm-numeros .u-kpi:nth-child(4) { --u-kpi-cor: var(--u-primary); }
+  .adm-numeros .u-kpi__valor { font-variant-numeric: tabular-nums; }
 </style>
+{% endblock %}
+
+{% block pagina_acoes %}
+  <a class="u-btn u-btn--forte" href="{{ url_for('associacao.cadastro_academia') }}">
+    <i class="bi bi-plus-lg"></i> Nova academia
+  </a>
+{% endblock %}
+
+{% block content %}
+
+<div class="adm-numeros">
+  {{ kpi(stats.get('federacoes', 0) if stats else 0, 'Federações',
+         href=url_for('federacao.lista_federacoes'), acao='Ver federações') }}
+  {{ kpi(stats.get('associacoes', 0) if stats else 0, 'Associações',
+         href=url_for('federacao.lista_associacoes'), acao='Ver associações') }}
+  {{ kpi(stats.get('academias', 0) if stats else 0, 'Academias',
+         href=url_for('associacao.lista_academias'), acao='Ver academias') }}
+  {{ kpi(stats.get('alunos', 0) if stats else 0, 'Alunos cadastrados',
+         href=url_for('alunos.lista_alunos'), acao='Ver alunos',
+         rodape='Inclui inativos de todas as academias') }}
+</div>
+
 {% endblock %}

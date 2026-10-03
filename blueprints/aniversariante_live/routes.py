@@ -198,9 +198,17 @@ def _listar_aniversariantes_mes(mes: int, aluno_escopo: Optional[int] = None):
             conn.close()
         return _sort_rows(aniversariantes_do_mes_por_aluno_id(int(aluno_escopo), mes=mes) or [])
 
-    # Modo aluno: aniversariantes de todas as academias da associação do aluno
+    # Modo aluno: aniversariantes das academias do próprio aluno
     if modo == "aluno" and current_user.has_role("aluno"):
         return _sort_rows(aniversariantes_do_mes_aluno_associacao(current_user.id, mes=mes) or [])
+
+    # Modo academia: só a academia aberta no painel — para gestor, professor e
+    # admin. Antes o admin caía na regra de baixo e via todas as academias.
+    if modo == "academia" and _usuario_eh_staff_academia():
+        aid = _academia_do_painel() or (ids[0] if ids else None)
+        if not aid:
+            return []
+        return _sort_rows(aniversariantes_do_mes(current_user.id, "academia", mes=mes, academia_id=aid))
 
     # Admin e gestor de federação: todas as academias do escopo
     if current_user.has_role("admin") or current_user.has_role("gestor_federacao"):
@@ -211,21 +219,6 @@ def _listar_aniversariantes_mes(mes: int, aluno_escopo: Optional[int] = None):
             for row in aniversariantes_do_mes(current_user.id, "academia", mes=mes, academia_id=aid) or []:
                 out[row["id"]] = row
         return _sort_rows(list(out.values()))
-
-    # Modo academia: gestor vê só a academia ativa no painel
-    if (
-        modo == "academia"
-        and current_user.has_role("gestor_academia")
-        and not current_user.has_role("admin")
-    ):
-        from blueprints.academia.routes import _get_academia_gerenciamento
-
-        aid, _ = _get_academia_gerenciamento()
-        if not aid and ids:
-            aid = ids[0]
-        if not aid:
-            return []
-        return _sort_rows(aniversariantes_do_mes(current_user.id, "academia", mes=mes, academia_id=aid))
 
     # Gestor de academia em outros modos: mescla academias do escopo (comportamento anterior)
     if current_user.has_role("gestor_academia") and not current_user.has_role("admin"):
@@ -540,6 +533,15 @@ def _painel_academia_contexto(mes: int, aluno_sel_id):
         ids = [int(a["id"]) for a in itens if a.get("id")]
         enviados = _parabenizados_por_whatsapp(cur, academia_id, ano, mes)
         parabens_live = _contagem_parabens_live(cur, ref, ids)
+        # Parabéns agendados e automação diária: o "Agendar" dos próximos
+        # aniversários agenda de verdade (antes ele enviava na hora).
+        from utils.whatsapp_lembretes import agendados_aniversario
+        agendados = agendados_aniversario(cur, academia_id, ano, mes) if academia_id else {}
+        automatico = False
+        if academia_id:
+            cur.execute("SELECT COALESCE(whatsapp_aniversario, 0) AS a FROM academias WHERE id = %s",
+                        (academia_id,))
+            automatico = bool((cur.fetchone() or {}).get("a"))
 
         hoje_lista, proximos, passados = [], [], []
         for a in itens:
@@ -564,6 +566,9 @@ def _painel_academia_contexto(mes: int, aluno_sel_id):
                 "futuro": futuro,
                 "parabenizado": int(a["id"]) in enviados,
                 "parabens_live": parabens_live.get(int(a["id"]), 0),
+                "agendado": int(a["id"]) in agendados,
+                "automatico": automatico,
+                "data_curta": f"{dia:02d}/{mes:02d}",
             }
             if no_dia:
                 hoje_lista.append(item)
@@ -716,6 +721,49 @@ def api_whatsapp_parabens():
         "motivos": motivos,
         "resultados": resultados,
     })
+
+
+@bp_aniversariante_live.route("/api/whatsapp-agendar", methods=["POST"])
+@login_required
+def api_whatsapp_agendar():
+    """Agenda (ou cancela) o parabéns de um aluno para o dia do aniversário.
+
+    Quem envia é o job diário de WhatsApp, no dia — mesmo com a automação de
+    aniversário da academia desligada. Antes o botão "Agendar" disparava a
+    mensagem na hora do clique.
+    """
+    if not _usuario_eh_staff_academia():
+        return jsonify({"ok": False, "msg": "Sem permissão"}), 403
+    data = request.get_json(silent=True) or {}
+    try:
+        aluno_id = int(data.get("aluno_id"))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "msg": "aluno_id inválido"}), 400
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        if not aniv_msg._staff_may_access_aluno(cur, aluno_id)[0]:
+            return jsonify({"ok": False, "msg": "Sem permissão sobre este aluno."}), 403
+        cur.execute("SELECT data_nascimento, id_academia FROM alunos WHERE id = %s", (aluno_id,))
+        al = cur.fetchone() or {}
+    finally:
+        cur.close()
+        conn.close()
+    nasc = _parse_data_nascimento(al.get("data_nascimento"))
+    academia_id = _academia_do_painel() or al.get("id_academia")
+    if not nasc or not academia_id:
+        return jsonify({"ok": False, "msg": "Aluno sem data de nascimento."}), 400
+    hoje = date.today()
+    dia = _dia_aniversario_em_ano(nasc, hoje.year)
+    if dia <= hoje:
+        return jsonify({"ok": False, "msg": "O aniversário deste ano já chegou — use Parabenizar."}), 400
+    from utils.whatsapp_lembretes import agendar_aniversario, cancelar_agendamento_aniversario
+    if data.get("cancelar"):
+        ok = cancelar_agendamento_aniversario(academia_id, aluno_id, dia)
+        return jsonify({"ok": ok, "agendado": False, "msg": "Agendamento cancelado." if ok else "Não foi possível cancelar."})
+    ok = agendar_aniversario(academia_id, aluno_id, dia)
+    return jsonify({"ok": ok, "agendado": ok, "data": dia.strftime("%d/%m"),
+                    "msg": f"Parabéns agendado para {dia.strftime('%d/%m')}." if ok else "Não foi possível agendar."})
 
 
 @bp_aniversariante_live.route("/aniversariantes", methods=["GET"])

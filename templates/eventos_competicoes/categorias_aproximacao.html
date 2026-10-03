@@ -1,26 +1,30 @@
 {% extends "base_app.html" %}
 {% block title %}Categorias por aproximação — {{ evento.nome }}{% endblock %}
+{% block pagina_titulo %}{% if not layout_embed %}Categorias por aproximação{% endif %}{% endblock %}
+{% block pagina_subtitulo %}{% if not layout_embed %}{{ evento.nome }}{% endif %}{% endblock %}
+{% block pagina_acoes %}
+{% if not layout_embed %}
+<a href="{{ url_voltar(back_url) }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Voltar</a>
+{% endif %}
+{% endblock %}
 {% block content %}
 {% set _aprox_action = url_for('eventos_competicoes.evento_categorias_aproximacao', evento_id=evento.id, embed=1) if layout_embed else url_for('eventos_competicoes.evento_categorias_aproximacao', evento_id=evento.id) %}
 {% set _recalc_action = url_for('eventos_competicoes.recalcular_categorias_aproximacao', evento_id=evento.id, embed=1) if layout_embed else url_for('eventos_competicoes.recalcular_categorias_aproximacao', evento_id=evento.id) %}
 <div class="container {% if layout_embed %}mt-2{% else %}mt-4{% endif %}">
     {% if not layout_embed %}
-    <div class="mb-2">
-        <a href="{{ url_voltar(back_url) }}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left"></i> Voltar</a>
-    </div>
     {% set menu_secao_ativa = 'categorias' %}
     {% include 'components/menu_competicao.html' %}
     {% endif %}
     <div class="d-flex flex-wrap align-items-center justify-content-end gap-2 mb-3">
         <form method="POST" action="{{ _recalc_action }}" class="d-inline"
-              onsubmit="return confirm('Atualizar a categoria (por estas faixas) em todas as inscrições já feitas nesta competição? Inscrições sem data, sexo ou peso podem continuar sem categoria.');">
+              data-confirmar="Atualizar a categoria (por estas faixas) em todas as inscrições já feitas nesta competição? Inscrições sem data, sexo ou peso podem continuar sem categoria.">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             {% if layout_embed %}<input type="hidden" name="embed" value="1">{% endif %}
-            <button type="submit" class="btn btn-outline-primary">
+            <button type="submit" class="u-btn">
                 <i class="bi bi-arrow-repeat me-1"></i>Atualizar categorias nas inscrições
             </button>
         </form>
-        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalNovaFaixaCategoria">
+        <button type="button" class="u-btn u-btn--primario" data-bs-toggle="modal" data-bs-target="#modalNovaFaixaCategoria">
             <i class="bi bi-plus-lg me-1"></i>Nova faixa / categoria
         </button>
     </div>
@@ -61,7 +65,7 @@
                             {% endif %}
                         </td>
                         <td class="text-end text-nowrap">
-                            <button type="button" class="btn btn-sm btn-outline-secondary btn-edit-faixa me-1"
+                            <button type="button" class="u-btn u-btn--pequeno btn-edit-faixa me-1"
                                     title="Editar faixa"
                                     data-bs-toggle="modal" data-bs-target="#modalEditarFaixaCategoria"
                                     data-id="{{ c.id }}"
@@ -73,11 +77,11 @@
                                     data-peso-max="{{ c.get('peso_max_kg') if c.get('peso_max_kg') is not none else '' }}">
                                 <i class="bi bi-pencil"></i>
                             </button>
-                            <form method="POST" action="{{ _aprox_action }}" class="d-inline" onsubmit="return confirm('Remover esta faixa?');">
+                            <form method="POST" action="{{ _aprox_action }}" class="d-inline" data-confirmar="Remover esta faixa?">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 {% if layout_embed %}<input type="hidden" name="embed" value="1">{% endif %}
                                 <input type="hidden" name="delete_id" value="{{ c.id }}">
-                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Remover"><i class="bi bi-trash"></i></button>
+                                <button type="submit" class="u-btn u-btn--pequeno" title="Remover"><i class="bi bi-trash"></i></button>
                             </form>
                         </td>
                     </tr>
@@ -105,21 +109,21 @@
                         {% if layout_embed %}<input type="hidden" name="embed" value="1">{% endif %}
                         <div class="mb-3">
                             <label class="form-label">Nome <span class="text-danger">*</span></label>
-                            <input type="text" name="nome" class="form-control" required maxlength="200" placeholder="Ex: 2018–2019 masculino 30–35 kg">
+                            <input type="text" name="nome" class="u-campo__controle" required maxlength="200" placeholder="Ex: 2018–2019 masculino 30–35 kg" aria-label="Nome">
                         </div>
                         <div class="row g-2 mb-3">
                             <div class="col-md-6">
                                 <label class="form-label">Ano nasc. mín.</label>
-                                <input type="number" name="ano_nasc_min" class="form-control" min="1900" max="2100" placeholder="ex: 2018">
+                                <input type="number" name="ano_nasc_min" class="u-campo__controle" min="1900" max="2100" placeholder="ex: 2018" aria-label="Ano nasc. mín.">
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label">Ano nasc. máx.</label>
-                                <input type="number" name="ano_nasc_max" class="form-control" min="1900" max="2100" placeholder="ex: 2019">
+                                <input type="number" name="ano_nasc_max" class="u-campo__controle" min="1900" max="2100" placeholder="ex: 2019" aria-label="Ano nasc. máx.">
                             </div>
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Sexo</label>
-                            <select name="genero_aprox" class="form-select">
+                            <select name="genero_aprox" class="u-campo__controle" aria-label="Sexo">
                                 <option value="A">Qualquer</option>
                                 <option value="M">Masculino</option>
                                 <option value="F">Feminino</option>
@@ -129,16 +133,16 @@
                         <div class="row g-2 mb-3">
                             <div class="col-md-6">
                                 <label class="form-label">Peso mín. (kg)</label>
-                                <input type="text" name="peso_min_kg" class="form-control" inputmode="decimal" placeholder="ex: 30">
+                                <input type="text" name="peso_min_kg" class="u-campo__controle" inputmode="decimal" placeholder="ex: 30" aria-label="Peso mín. (kg)">
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label">Peso máx. (kg)</label>
-                                <input type="text" name="peso_max_kg" class="form-control" inputmode="decimal" placeholder="ex: 35">
+                                <input type="text" name="peso_max_kg" class="u-campo__controle" inputmode="decimal" placeholder="ex: 35" aria-label="Peso máx. (kg)">
                             </div>
                         </div>
                         <div class="d-flex gap-2 justify-content-end">
-                            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
-                            <button type="submit" class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>Adicionar</button>
+                            <button type="button" class="u-btn" data-bs-dismiss="modal">Cancelar</button>
+                            <button type="submit" class="u-btn u-btn--primario"><i class="bi bi-plus-lg me-1"></i>Adicionar</button>
                         </div>
                     </form>
                 </div>
@@ -161,21 +165,21 @@
                         <input type="hidden" name="update_id" id="edit_update_id" value="">
                         <div class="mb-3">
                             <label class="form-label">Nome <span class="text-danger">*</span></label>
-                            <input type="text" name="nome" id="edit_nome" class="form-control" required maxlength="200" placeholder="Ex: 2018–2019 masculino 30–35 kg">
+                            <input type="text" name="nome" id="edit_nome" class="u-campo__controle" required maxlength="200" placeholder="Ex: 2018–2019 masculino 30–35 kg" aria-label="Nome">
                         </div>
                         <div class="row g-2 mb-3">
                             <div class="col-md-6">
                                 <label class="form-label">Ano nasc. mín.</label>
-                                <input type="number" name="ano_nasc_min" id="edit_ano_nasc_min" class="form-control" min="1900" max="2100" placeholder="ex: 2018">
+                                <input type="number" name="ano_nasc_min" id="edit_ano_nasc_min" class="u-campo__controle" min="1900" max="2100" placeholder="ex: 2018" aria-label="Ano nasc. mín.">
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label">Ano nasc. máx.</label>
-                                <input type="number" name="ano_nasc_max" id="edit_ano_nasc_max" class="form-control" min="1900" max="2100" placeholder="ex: 2019">
+                                <input type="number" name="ano_nasc_max" id="edit_ano_nasc_max" class="u-campo__controle" min="1900" max="2100" placeholder="ex: 2019" aria-label="Ano nasc. máx.">
                             </div>
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Sexo</label>
-                            <select name="genero_aprox" id="edit_genero_aprox" class="form-select">
+                            <select name="genero_aprox" id="edit_genero_aprox" class="u-campo__controle" aria-label="Sexo">
                                 <option value="A">Qualquer</option>
                                 <option value="M">Masculino</option>
                                 <option value="F">Feminino</option>
@@ -185,16 +189,16 @@
                         <div class="row g-2 mb-3">
                             <div class="col-md-6">
                                 <label class="form-label">Peso mín. (kg)</label>
-                                <input type="text" name="peso_min_kg" id="edit_peso_min_kg" class="form-control" inputmode="decimal" placeholder="ex: 30">
+                                <input type="text" name="peso_min_kg" id="edit_peso_min_kg" class="u-campo__controle" inputmode="decimal" placeholder="ex: 30" aria-label="Peso mín. (kg)">
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label">Peso máx. (kg)</label>
-                                <input type="text" name="peso_max_kg" id="edit_peso_max_kg" class="form-control" inputmode="decimal" placeholder="ex: 35">
+                                <input type="text" name="peso_max_kg" id="edit_peso_max_kg" class="u-campo__controle" inputmode="decimal" placeholder="ex: 35" aria-label="Peso máx. (kg)">
                             </div>
                         </div>
                         <div class="d-flex gap-2 justify-content-end">
-                            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
-                            <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>Salvar alterações</button>
+                            <button type="button" class="u-btn" data-bs-dismiss="modal">Cancelar</button>
+                            <button type="submit" class="u-btn u-btn--primario"><i class="bi bi-check-lg me-1"></i>Salvar alterações</button>
                         </div>
                     </form>
                 </div>

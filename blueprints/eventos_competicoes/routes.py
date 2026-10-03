@@ -30,6 +30,7 @@ from werkzeug.utils import secure_filename
 from extensions import csrf
 from config import get_db_connection, DatabaseUnavailableError
 from utils.formularios_campos import CAMPOS_ALUNO_PADRAO, listar_campos_por_grupo, get_label
+from utils.acesso_academia import sql_papel_na_academia as _papel_acad
 
 # Import socketio de forma segura (evita import circular)
 _socketio_instance = None
@@ -962,6 +963,96 @@ def _rotulo_tipo_evento(ev):
     return "Competição" if ev.get("tipo") == "competicao" else "Evento"
 
 
+def _marcar_exames_faixa(cur, eventos):
+    """Marca `exame_faixa` nos eventos da lista (coluna da migração EXF-01).
+
+    Consulta à parte para não mexer nos SELECTs com fallback de esquema acima:
+    sem a coluna, nada é marcado e as telas seguem como antes.
+    """
+    for ev in eventos:
+        ev.setdefault("exame_faixa", 0)
+    ids = [ev["id"] for ev in eventos if ev.get("id")]
+    if not ids:
+        return eventos
+    try:
+        cur.execute("SELECT id FROM eventos_competicoes WHERE exame_faixa = 1 AND id IN (%s)"
+                    % ",".join(["%s"] * len(ids)), tuple(ids))
+        marcados = {r["id"] for r in cur.fetchall()}
+    except Exception:
+        return eventos
+    for ev in eventos:
+        if ev.get("id") in marcados:
+            ev["exame_faixa"] = 1
+            ev["tipo_label"] = "Exame de faixa"
+    return eventos
+
+
+def _dados_exame_do_form():
+    """Campos do exame de faixa vindos do formulário de evento.
+
+    No exame, `data_inicio`/`data_fim` são a abertura e o encerramento das
+    inscrições; a prova e o pagamento têm campos próprios.
+    """
+    def _dt(campo, fmt):
+        bruto = (request.form.get(campo) or "").strip()
+        if not bruto:
+            return None
+        try:
+            return datetime.strptime(bruto[:len(datetime.now().strftime(fmt))], fmt)
+        except ValueError:
+            return None
+    prova = _dt("exame_data_prova", "%Y-%m-%dT%H:%M")
+    prazo = _dt("exame_prazo_pagamento", "%Y-%m-%d")
+    return {
+        "data_prova": prova,
+        "prazo_pagamento": prazo.date() if prazo else None,
+        "gera_fatura": bool(request.form.get("exame_gera_fatura")),
+    }
+
+
+def _gravar_exame_faixa(cur, evento_id, marcado, dados=None):
+    """Liga/desliga o exame de faixa, grava prova/pagamento e ajusta o calendário.
+
+    No calendário o exame aparece como tipo 'exame' no DIA DA PROVA — as datas
+    do evento são o período de inscrição, que não interessa a quem olha a agenda.
+    """
+    dados = dados or {}
+    try:
+        cur.execute("UPDATE eventos_competicoes SET exame_faixa = %s WHERE id = %s",
+                    (1 if marcado else 0, evento_id))
+        if not marcado:
+            cur.execute("UPDATE eventos SET tipo = 'evento' WHERE evento_competicao_id = %s AND tipo = 'exame'",
+                        (evento_id,))
+            return True
+        try:
+            cur.execute(
+                """UPDATE eventos_competicoes
+                   SET exame_data_prova = %s, exame_prazo_pagamento = %s, exame_gera_fatura = %s
+                   WHERE id = %s""",
+                (dados.get("data_prova"), dados.get("prazo_pagamento"),
+                 1 if dados.get("gera_fatura") else 0, evento_id))
+        except Exception:
+            pass  # EXF-02 não aplicada: segue só com a marca
+        cur.execute("UPDATE eventos SET tipo = 'exame' WHERE evento_competicao_id = %s", (evento_id,))
+        # Exame de faixa abre as inscrições para todos os alunos: toda academia
+        # da associação já entra aderida, sem esperar alguém clicar em "Aderir".
+        cur.execute("""UPDATE eventos_competicoes_adesao SET aderiu = 1, data_adesao = COALESCE(data_adesao, NOW())
+                       WHERE evento_id = %s AND aderiu = 0""", (evento_id,))
+        prova = dados.get("data_prova")
+        if prova:
+            cur.execute(
+                """UPDATE eventos SET data_inicio = %s, data_fim = %s, hora_inicio = %s, hora_fim = NULL
+                   WHERE evento_competicao_id = %s""",
+                (prova.date(), prova.date(), prova.time(), evento_id))
+        else:
+            cur.execute(
+                """UPDATE eventos SET data_inicio = data_fim, hora_inicio = NULL, hora_fim = NULL
+                   WHERE evento_competicao_id = %s""", (evento_id,))
+        return True
+    except Exception:
+        return False
+
+
 def _url_lista_eventos_competicoes(tipo_filtro=None, academia_id=None):
     """URL da lista conforme o menu: eventos gerais, competições ou visão completa."""
     kwargs = {}
@@ -1627,10 +1718,10 @@ def _professores_responsavel_por_academia_para_link(cur, id_assoc, academias_per
     gestor_uid_por_academia = {}
     try:
         cur.execute(
-            """
+            f"""
             SELECT DISTINCT ua.academia_id, ua.usuario_id
             FROM usuarios_academias ua
-            INNER JOIN roles_usuario ru ON ru.usuario_id = ua.usuario_id
+            INNER JOIN roles_usuario ru ON ru.usuario_id = ua.usuario_id {_papel_acad()}
             INNER JOIN roles r ON r.id = ru.role_id
             INNER JOIN academias ac ON ac.id = ua.academia_id AND ac.id_associacao = %s
             WHERE (
@@ -1655,10 +1746,10 @@ def _professores_responsavel_por_academia_para_link(cur, id_assoc, academias_per
     prof_uid_por_academia = {}
     try:
         cur.execute(
-            """
+            f"""
             SELECT DISTINCT ua.academia_id, ua.usuario_id
             FROM usuarios_academias ua
-            INNER JOIN roles_usuario ru ON ru.usuario_id = ua.usuario_id
+            INNER JOIN roles_usuario ru ON ru.usuario_id = ua.usuario_id {_papel_acad()}
             INNER JOIN roles r ON r.id = ru.role_id
             INNER JOIN academias ac ON ac.id = ua.academia_id AND ac.id_associacao = %s
             WHERE (
@@ -2108,7 +2199,7 @@ def _lista_eventos_competicoes_core(tipo_filtro):
                     """, (id_assoc,) + extra_params)
                 else:
                     raise
-            eventos = cur.fetchall()
+            eventos = _marcar_exames_faixa(cur, cur.fetchall())
             for ev in eventos:
                 if "natureza" not in ev:
                     ev["natureza"] = None
@@ -2185,6 +2276,7 @@ def _lista_eventos_competicoes_core(tipo_filtro):
                 ev["formulario"] = ev.get("formulario_nome")
                 ev["inscritos"] = int(ev.get("inscritos") or 0)
                 ev["tipo_label"] = _rotulo_tipo_evento(ev)
+            _marcar_exames_faixa(cur, todos)
 
             eventos = [ev for ev in todos if ev.get("tipo") != "competicao"]
             competicoes = [ev for ev in todos if ev.get("tipo") == "competicao"]
@@ -2244,11 +2336,19 @@ def _get_ids_academias(cur):
         SELECT academia_id FROM usuarios_academias WHERE usuario_id = %s ORDER BY academia_id
     """, (current_user.id,))
     vinculadas = [r["academia_id"] for r in cur.fetchall()]
-    if vinculadas:
+    # Admin não é limitado pelo vínculo explícito: ter sido ligado a três
+    # academias não pode esconder as outras nove. Foi o que aconteceu ao
+    # cadastrar uma academia independente — ela ficava invisível para quem
+    # administra o sistema.
+    if vinculadas and not current_user.has_role("admin"):
         return vinculadas
     
     # Modo academia: gestor_academia/professor só veem academias de usuarios_academias (não id_academia)
-    if session.get("modo_painel") == "academia" and (current_user.has_role("gestor_academia") or current_user.has_role("professor")):
+    # Admin fica de fora: ele costuma acumular o papel de gestor_academia,
+    # e esta trava o deixava sem academia nenhuma no modo academia.
+    if (session.get("modo_painel") == "academia"
+            and not current_user.has_role("admin")
+            and (current_user.has_role("gestor_academia") or current_user.has_role("professor"))):
         return []
     
     # Admin: todas as academias
@@ -2295,6 +2395,72 @@ def _back_por_tipo_e_modo(evento_id, tipo_filtro=None, cur=None):
             if ids:
                 aid = ids[0]
     return _url_lista_eventos_competicoes(tipo, academia_id=aid)
+
+
+def _evento_tem_modalidade(cur):
+    """A coluna eventos_competicoes.modalidade_id existe? (MM-12)"""
+    cur.execute("SHOW COLUMNS FROM eventos_competicoes LIKE 'modalidade_id'")
+    return bool(cur.fetchall())
+
+
+def _gravar_modalidade_evento(cur, evento_id, exame_faixa=False):
+    """Modalidade do campeonato (campo `modalidade_id` do formulário).
+
+    É ela que diz qual faixa do aluno vem na inscrição — judô e jiu-jitsu não
+    se misturam. Exame de faixa é sempre judô. Sem a MM-12, não faz nada.
+    """
+    if not _evento_tem_modalidade(cur):
+        return
+    if exame_faixa:
+        from utils import graduacao_modalidade as grad_mod
+        mid = grad_mod.id_modalidade_judo(cur)
+    elif "modalidade_id" in request.form:
+        v = (request.form.get("modalidade_id") or "").strip()
+        mid = int(v) if v.isdigit() else None
+    else:
+        return
+    cur.execute("UPDATE eventos_competicoes SET modalidade_id = %s WHERE id = %s", (mid, evento_id))
+
+
+def _modalidade_do_evento(cur, evento_id):
+    """modalidade_id do campeonato, ou None (sem a coluna ou sem modalidade)."""
+    if not evento_id or not _evento_tem_modalidade(cur):
+        return None
+    cur.execute("SELECT modalidade_id FROM eventos_competicoes WHERE id = %s", (evento_id,))
+    r = cur.fetchone()
+    return (r.get("modalidade_id") if isinstance(r, dict) else (r[0] if r else None)) if r else None
+
+
+def _graduacoes_do_evento(cur, evento_id, graduacoes, aluno=None):
+    """Campeonato com modalidade: só as faixas dela (e as genéricas) e, no aluno,
+    a faixa dele NAQUELA modalidade — inscrição de jiu-jitsu já vem com a faixa
+    de jiu-jitsu, não com a principal. Sem modalidade, nada muda."""
+    mid = _modalidade_do_evento(cur, evento_id)
+    if not mid:
+        return graduacoes
+    if aluno and aluno.get("id"):
+        from utils import graduacao_modalidade as grad_mod
+        f = grad_mod.faixa_na_modalidade(cur, aluno["id"], mid)
+        if f is not None:
+            aluno["graduacao_id"] = f.get("graduacao_id")
+    return [g for g in (graduacoes or []) if g.get("modalidade_id") in (None, mid)]
+
+
+@bp_eventos_competicoes.context_processor
+def _ctx_modalidades_evento():
+    """Lista de modalidades para o campo "Modalidade" do campeonato (só nas telas deste módulo)."""
+    def _lista():
+        conn = get_db_connection()
+        c = conn.cursor(dictionary=True)
+        try:
+            c.execute("SELECT id, nome FROM modalidade WHERE COALESCE(ativo, 1) = 1 ORDER BY nome")
+            return c.fetchall()
+        except Exception:
+            return []
+        finally:
+            c.close()
+            conn.close()
+    return {"modalidades_evento": _lista}
 
 
 @bp_eventos_competicoes.route("/cadastro", methods=["GET", "POST"])
@@ -2507,9 +2673,19 @@ def cadastro():
                 except Exception:
                     pass
 
+            exame_faixa = tipo == "evento" and bool(request.form.get("exame_faixa"))
+            if exame_faixa and not _gravar_exame_faixa(cur, evento_id, True, _dados_exame_do_form()):
+                exame_faixa = False
+                flash("Evento criado sem a marca de exame de faixa: rode migrations/executar_exf_01_exame_faixa.py.",
+                      "warning")
+            _gravar_modalidade_evento(cur, evento_id, exame_faixa=exame_faixa)
             conn.commit()
             if tipo == "competicao":
                 flash("Competição criada. Use Editar para o menu completo (inscrições, chaves, placar, etc.).", "success")
+            elif exame_faixa:
+                flash("Exame de faixa criado e aberto para todas as academias — os alunos se inscrevem pela promoção de cada um.",
+                      "success")
+                return redirect(url_for("exame_faixa.exames"))
             else:
                 flash("Evento criado. As academias podem aderir.", "success")
             return redirect(_url_lista_eventos_competicoes(tipo))
@@ -2640,6 +2816,13 @@ def editar(evento_id):
         if not evento:
             flash("Evento não encontrado.", "danger")
             return redirect(url_for("eventos_competicoes.lista"))
+        _marcar_exames_faixa(cur, [evento])
+        try:
+            cur.execute("""SELECT exame_data_prova, exame_prazo_pagamento, exame_gera_fatura
+                           FROM eventos_competicoes WHERE id = %s""", (evento_id,))
+            evento.update(cur.fetchone() or {})
+        except Exception:
+            pass
         if "natureza" not in evento:
             evento["natureza"] = None
         if "categorias_modo" not in evento:
@@ -2953,6 +3136,11 @@ def editar(evento_id):
                     (evento_id, ac_id, ader),
                 )
 
+            # Só mexe na marca quando o formulário trouxe o campo (tela de evento).
+            if tipo == "evento" and request.form.get("exame_faixa_presente"):
+                _gravar_exame_faixa(cur, evento_id, bool(request.form.get("exame_faixa")),
+                                    _dados_exame_do_form())
+            _gravar_modalidade_evento(cur, evento_id)
             conn.commit()
             if tipo == "competicao":
                 flash("Competição atualizada. O menu acima reúne inscrições, chaves, placar e demais opções.", "success")
@@ -4071,7 +4259,9 @@ def editar_inscricao(evento_id, inscricao_id):
             if not (cat_modo_ed == "aproximacao" and c.get("campo_chave") == "categoria")
         ]
 
-        cur.execute("SELECT id, faixa, graduacao, categoria FROM graduacao ORDER BY id")
+        cur.execute("""SELECT g.id, g.faixa, g.graduacao, g.categoria, g.modalidade_id, COALESCE(md.nome, 'Outras') AS modalidade
+               FROM graduacao g LEFT JOIN modalidade md ON md.id = g.modalidade_id
+               ORDER BY COALESCE(md.nome, 'Outras'), COALESCE(g.ordem, 0), g.id""")  # agrupadas por modalidade: judô e jiu-jitsu não se misturam
         graduacoes = cur.fetchall()
         cur.execute("SELECT TurmaID, Nome, Classificacao, DiasHorario FROM turmas WHERE id_academia = %s ORDER BY Nome", (academia_id,))
         turmas = cur.fetchall()
@@ -4081,6 +4271,7 @@ def editar_inscricao(evento_id, inscricao_id):
         if inscricao.get("aluno_id"):
             cur.execute("SELECT * FROM alunos WHERE id = %s", (inscricao["aluno_id"],))
             aluno_edit = cur.fetchone()
+        graduacoes = _graduacoes_do_evento(cur, evento_id, graduacoes, aluno_edit)
         
         # Buscar categorias disponíveis
         categorias_disponiveis = []
@@ -4411,8 +4602,11 @@ def incluir_avulso(evento_id):
             "SELECT campo_chave, label, obrigatorio, ordem FROM formularios_campos "
             "WHERE formulario_id = %s ORDER BY ordem", (ev.get("id_formulario") or 0,))
         campos_form = _merge_campos_form_faltantes_padrao_avulso(cur.fetchall())
-        cur.execute("SELECT id, faixa, graduacao FROM graduacao ORDER BY id")
+        cur.execute("""SELECT g.id, g.faixa, g.graduacao, g.categoria, g.modalidade_id, COALESCE(md.nome, 'Outras') AS modalidade
+               FROM graduacao g LEFT JOIN modalidade md ON md.id = g.modalidade_id
+               ORDER BY COALESCE(md.nome, 'Outras'), COALESCE(g.ordem, 0), g.id""")  # agrupadas por modalidade: judô e jiu-jitsu não se misturam
         graduacoes = cur.fetchall()
+        graduacoes = _graduacoes_do_evento(cur, evento_id, graduacoes)
 
         if request.method == "POST":
             aluno_id = request.form.get("aluno_id", type=int)
@@ -4480,6 +4674,16 @@ def inscrever(evento_id):
     """Aluno ou responsável realiza inscrição preenchendo o formulário."""
     academia_id = request.args.get("academia_id", type=int) or request.form.get("academia_id", type=int)
     aluno_id = request.args.get("aluno_id", type=int) or request.form.get("aluno_id", type=int)
+    # Exame de faixa tem inscrição própria: a promoção vem da faixa do aluno.
+    _c = get_db_connection()
+    _k = _c.cursor(dictionary=True)
+    try:
+        if _marcar_exames_faixa(_k, [{"id": evento_id}])[0].get("exame_faixa"):
+            return redirect(url_for("exame_faixa.inscrever", evento_id=evento_id,
+                                    **({"aluno_id": aluno_id} if aluno_id else {})))
+    finally:
+        _k.close()
+        _c.close()
     if not academia_id:
         flash("Academia não informada.", "danger")
         return redirect(url_for("painel.home"))
@@ -4609,8 +4813,11 @@ def inscrever(evento_id):
             if not (cat_modo_insc == "aproximacao" and c.get("campo_chave") == "categoria")
         ]
 
-        cur.execute("SELECT id, faixa, graduacao, categoria FROM graduacao ORDER BY id")
+        cur.execute("""SELECT g.id, g.faixa, g.graduacao, g.categoria, g.modalidade_id, COALESCE(md.nome, 'Outras') AS modalidade
+               FROM graduacao g LEFT JOIN modalidade md ON md.id = g.modalidade_id
+               ORDER BY COALESCE(md.nome, 'Outras'), COALESCE(g.ordem, 0), g.id""")  # agrupadas por modalidade: judô e jiu-jitsu não se misturam
         graduacoes = cur.fetchall()
+        graduacoes = _graduacoes_do_evento(cur, evento_id, graduacoes, aluno)
         cur.execute("SELECT TurmaID, Nome, Classificacao, DiasHorario FROM turmas WHERE id_academia = %s ORDER BY Nome", (academia_id,))
         turmas = cur.fetchall()
         
@@ -4796,6 +5003,15 @@ def inscrever(evento_id):
                         val = None
                 if val is not None:
                     try:
+                        if col == "graduacao_id":
+                            # A faixa da inscrição vai para a modalidade DELA: inscrever
+                            # num campeonato de jiu-jitsu não troca a faixa de judô.
+                            from utils import graduacao_modalidade as grad_mod
+                            if not grad_mod.tem_coluna(cur):
+                                cur.execute("UPDATE alunos SET graduacao_id = %s WHERE id = %s", (val, aluno_id))
+                            else:
+                                grad_mod.registrar(cur, aluno_id, val)
+                            continue
                         cur.execute(f"UPDATE alunos SET `{col}` = %s WHERE id = %s", (val, aluno_id))
                     except Exception:
                         pass
@@ -5122,10 +5338,12 @@ def disponiveis():
     cur = conn.cursor(dictionary=True, buffered=True)
     try:
         academia_id = None
+        aluno_filtro_id = None   # de quem são as modalidades que recortam a lista
         if current_user.has_role("aluno"):
             cur.execute("SELECT id_academia, id FROM alunos WHERE usuario_id = %s LIMIT 1", (current_user.id,))
             r = cur.fetchone()
             academia_id = r["id_academia"] if r else None
+            aluno_filtro_id = r["id"] if r else None
         elif current_user.has_role("responsavel"):
             aluno_id = request.args.get("aluno_id", type=int)
             if aluno_id:
@@ -5139,6 +5357,7 @@ def disponiveis():
                     # Garantir que o resultado foi totalmente consumido
                     cur.fetchall()  # Consumir qualquer resultado restante
                     academia_id = r["id_academia"] if r else None
+                    aluno_filtro_id = aluno_id if r else None
             if not academia_id:
                 cur.execute("SELECT a.id_academia FROM alunos a INNER JOIN responsavel_alunos ra ON ra.aluno_id = a.id AND ra.usuario_id = %s LIMIT 1", (current_user.id,))
                 r = cur.fetchone()
@@ -5186,9 +5405,18 @@ def disponiveis():
             except ValueError:
                 pass
 
+        # Aluno e responsável veem só os campeonatos da modalidade do aluno (ou
+        # sem modalidade). Aluno sem modalidade cadastrada continua vendo todos.
+        if aluno_filtro_id and _evento_tem_modalidade(cur):
+            query += (" AND (ec.modalidade_id IS NULL"
+                      " OR NOT EXISTS (SELECT 1 FROM aluno_modalidades amf WHERE amf.aluno_id = %s)"
+                      " OR ec.modalidade_id IN (SELECT amf.modalidade_id FROM aluno_modalidades amf"
+                      " WHERE amf.aluno_id = %s))")
+            params += [aluno_filtro_id, aluno_filtro_id]
+
         query += " ORDER BY ec.data_fim DESC"
         cur.execute(query, tuple(params))
-        eventos = cur.fetchall()
+        eventos = _marcar_exames_faixa(cur, cur.fetchall())
         
         # Buscar anexos para cada evento
         for ev in eventos:
@@ -7936,8 +8164,11 @@ def inscricao_academia(token):
                                    encerrado=True, evento=dados)
 
         campos = _campos_evento_para_form(cur, dados["id_formulario"])
-        cur.execute("SELECT id, faixa, graduacao FROM graduacao ORDER BY id")
+        cur.execute("""SELECT g.id, g.faixa, g.graduacao, g.categoria, g.modalidade_id, COALESCE(md.nome, 'Outras') AS modalidade
+               FROM graduacao g LEFT JOIN modalidade md ON md.id = g.modalidade_id
+               ORDER BY COALESCE(md.nome, 'Outras'), COALESCE(g.ordem, 0), g.id""")  # agrupadas por modalidade: judô e jiu-jitsu não se misturam
         graduacoes = cur.fetchall()
+        graduacoes = _graduacoes_do_evento(cur, dados.get("evento_id"), graduacoes)
         # Locais vinculados a ESTE evento. Se a academia não restringiu nenhum,
         # o formulário oferece todos os locais ativos dela — cadastrar já basta
         # para aparecer; a vinculação serve só para limitar a um subconjunto.

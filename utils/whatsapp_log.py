@@ -26,6 +26,7 @@ LABELS = {
     "confirmacao_matricula": "Pagamento da matrícula confirmado",
     "aviso": "Aviso geral",
     "teste": "Mensagem de teste",
+    "link_publico": "Link público por WhatsApp",
 }
 
 

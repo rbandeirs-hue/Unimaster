@@ -1,0 +1,91 @@
+{% extends "estoque/_base.html" %}
+{% from 'components/ui.html' import vazio %}
+{% set est_aba = 'produtos' %}
+{% block title %}Produtos — Estoque{% endblock %}
+
+{% block pagina_titulo %}Produtos{% endblock %}
+{% block pagina_subtitulo %}O catálogo de {{ ctx.nome }}.{% endblock %}
+
+{% block pagina_acoes %}
+  <a href="{{ url_for('estoque.produto_novo') }}" class="sh__btn sh__btn--forte">
+    <i class="bi bi-plus-lg"></i> Novo produto
+  </a>
+{% endblock %}
+
+{% block est_conteudo %}
+
+<form method="GET" class="lst-filtros">
+  <label class="lst-campo lst-campo--largo">
+    <span class="lst-campo__rotulo">Buscar</span>
+    <input type="text" name="busca" value="{{ busca }}" placeholder="Nome ou código">
+  </label>
+  <button type="submit" class="u-btn"><i class="bi bi-search"></i> Buscar</button>
+  {% if busca %}
+  <a class="u-btn u-btn--fantasma" href="{{ url_for('estoque.produtos') }}">Limpar</a>
+  {% endif %}
+</form>
+
+<section class="lst-quadro mt-3">
+  <header class="lst-quadro__topo">
+    <h2 class="lst-quadro__titulo">Catálogo</h2>
+    <span class="lst-quadro__meta">{{ produtos|length }} produto{{ 's' if produtos|length != 1 }}</span>
+  </header>
+
+  {% if produtos %}
+  <div class="lst-rolagem">
+    <div class="lst-largura" style="--lst-min:620px">
+      <div class="lst-linha lin-prod lst-cab">
+        <div>Produto</div>
+        <div class="col-categoria">Categoria</div>
+        <div class="col-custo lst-fim">Custo</div>
+        <div class="lst-fim">Mínimo</div>
+        <div class="lst-fim">Em estoque</div>
+        <div class="lst-fim">Abrir</div>
+      </div>
+      {% for p in produtos %}
+      <div class="lst-linha lin-prod lst-item {% if not p.ativo %}u-muted{% endif %}">
+        <div class="lst-corta">
+          <span class="lst-nome">{{ p.nome }}</span>
+          {% if p.sku %}<span class="lst-sub"> · {{ p.sku }}</span>{% endif %}
+          {% if p.variacoes > 1 %}
+          <span class="lst-sub"> · {{ p.variacoes }} variações</span>
+          {% endif %}
+          {% if not p.ativo %}<span class="lst-tag">Inativo</span>{% endif %}
+        </div>
+        <div class="col-categoria lst-corta">
+          {% if p.categoria %}{{ p.categoria }}
+          {% else %}<span class="lst-vazio-celula">Sem categoria</span>{% endif %}
+        </div>
+        <div class="col-custo lst-fim">R$ {{ '%.2f'|format(p.custo|float)|replace('.', ',') }}</div>
+        <div class="lst-fim">{{ p.estoque_min }}</div>
+        <div class="lst-fim">
+          {# O saldo é o número que o gestor procura, então ele ganha destaque
+             quando está no vermelho — e nada quando está normal. #}
+          {% if p.saldo|int <= 0 %}
+          <strong style="color: var(--sh-red)">0</strong>
+          {% elif p.saldo|int <= p.estoque_min|int %}
+          <strong>{{ p.saldo }}</strong>
+          {% else %}{{ p.saldo }}{% endif %}
+        </div>
+        <div class="lst-acoes">
+          <a class="lst-acao" href="{{ url_for('estoque.produto', produto_id=p.id) }}"
+             title="Abrir {{ p.nome }}" aria-label="Abrir {{ p.nome }}">
+            <i class="bi bi-chevron-right"></i>
+          </a>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% else %}
+  <div style="padding:1rem 1.1rem">
+    {{ vazio('Nenhum produto no catálogo ainda.' if not busca
+             else 'Nenhum produto com esse termo.',
+             href=url_for('estoque.produto_novo') if not busca else None,
+             acao='Cadastrar o primeiro' if not busca else None,
+             icone='bi-box-seam') }}
+  </div>
+  {% endif %}
+</section>
+
+{% endblock %}

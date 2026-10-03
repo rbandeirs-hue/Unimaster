@@ -75,6 +75,30 @@
     margin-bottom: var(--u-space-3);
     overflow: hidden;
   }
+  /* --------------------------------------------------------- mensagens */
+  .fa-msg-campos { display: flex; flex-direction: column; gap: .9rem; padding: 1.1rem 1.25rem; }
+  .fa-msg-rotulo {
+    display: block; font-size: .72rem; text-transform: uppercase;
+    letter-spacing: .06em; color: var(--sh-ink-soft); font-weight: 700;
+    margin-bottom: .3rem;
+  }
+  .fa-msg-campos select, .fa-msg-campos textarea {
+    width: 100%; padding: .55rem .7rem; font: inherit;
+    border: 1px solid var(--sh-line); border-radius: var(--u-radius-sm);
+  }
+  .fa-msg-campos textarea { min-height: 96px; resize: vertical; }
+  /* A prévia imita o balão do WhatsApp de propósito: o que aparece aqui é o
+     que a pessoa vai receber, com as variáveis já resolvidas. */
+  .fa-msg-previa {
+    white-space: pre-wrap; word-break: break-word;
+    background: #e7ffdb; border: 1px solid #cdebc0;
+    border-radius: 10px; padding: .8rem .9rem;
+    font-size: .92rem; min-height: 60px;
+  }
+  .fa-msg-previa.is-erro { background: #fdf2f3; border-color: #f0c9cd; color: #8f1d27; }
+  .fa-msg-pe { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
+  .fa-msg-dest { font-size: .85rem; color: var(--sh-ink-soft); }
+
   .fa-bloco-topo {
     display: flex; align-items: center; justify-content: space-between; gap: .6rem;
     padding: .9rem 1.25rem;
@@ -285,14 +309,35 @@
     <span class="fa-nota">sem chamada no mês</span>
     {% endif %}
   </div>
+  {# Mais de uma modalidade: uma faixa por modalidade, sem misturar. #}
+  {% if faixas_modalidade and faixas_modalidade|length > 1 %}
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Graduação</span>
+    {% for f in faixas_modalidade %}
+    <span class="fa-nota" style="font-size: .95rem; color: var(--sh-ink);">
+      <strong>{{ f.modalidade }}:</strong> {{ f.rotulo|capitalize if f.rotulo else 'faixa não informada' }}{% if f.rotulo and f.data_graduacao %} <span class="u-muted">· desde {{ f.data_graduacao|data_br }}</span>{% endif %}
+    </span>
+    {% endfor %}
+  </div>
+  {% elif faixas_modalidade and faixas_modalidade|length == 1 and faixas_modalidade[0].graduacao_id != aluno.graduacao_id %}
+  {# Modalidade em foco com faixa diferente da principal. #}
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Graduação · {{ faixas_modalidade[0].modalidade }}</span>
+    <span class="sh__faixa-valor" style="font-size: 1.4rem;">{{ (faixas_modalidade[0].rotulo or '—')|capitalize }}</span>
+    <span class="fa-nota">{% if faixas_modalidade[0].rotulo and faixas_modalidade[0].data_graduacao %}desde {{ faixas_modalidade[0].data_graduacao|data_br }}{% elif faixas_modalidade[0].rotulo %}faixa desta modalidade{% else %}faixa não informada{% endif %}</span>
+  </div>
+  {% else %}
   <div class="sh__faixa-item">
     <span class="sh__faixa-rotulo">Graduação</span>
     <span class="sh__faixa-valor" style="font-size: 1.4rem;">{{ (aluno.faixa or '—')|capitalize }}</span>
     <span class="fa-nota">
-      {%- if aluno.ultimo_exame_faixa %}desde {{ aluno.ultimo_exame_faixa.strftime('%d/%m/%Y') }}
+      {#- Branca é onde o aluno começa: não tem data de graduação. -#}
+      {%- if faixa_branca %}sem data de graduação
+      {%- elif aluno.ultimo_exame_faixa %}desde {{ aluno.ultimo_exame_faixa.strftime('%d/%m/%Y') }}
       {%- elif aluno.graduacao %}{{ aluno.graduacao }}{% else %}sem exame registrado{% endif -%}
     </span>
   </div>
+  {% endif %}
   {% if academia_usa_financeiro %}
   <div class="sh__faixa-item">
     <span class="sh__faixa-rotulo">Mensalidade</span>
@@ -318,11 +363,28 @@
 </div>
 
 {# ---------------------------------------------------------------- abas #}
+{# Aluno em mais de uma academia: turmas, presença e financeiro são da
+   academia escolhida aqui, nunca das duas somadas. #}
+{% if academias_ficha | length > 1 %}
+<div class="fa-academias" role="group" aria-label="Academia">
+  <span class="fa-nota">Dados da academia:</span>
+  {% for ac in academias_ficha %}
+  <a class="sh__btn {% if ac.id == academia_id %}sh__btn--forte{% endif %}"
+     {% if ac.id == academia_id %}aria-current="true"{% endif %}
+     href="{{ url_for('alunos.ficha_aluno', aluno_id=aluno.id, academia_id=ac.id, next=back_url) }}">{{ ac.nome }}</a>
+  {% endfor %}
+</div>
+<style>
+  .fa-academias { display: flex; align-items: center; gap: var(--u-space-2); flex-wrap: wrap; margin-bottom: var(--u-space-3); }
+</style>
+{% endif %}
+
 <div class="fa-abas" role="tablist">
   <button type="button" class="fa-aba is-ativa" data-painel="dados">Dados</button>
   <button type="button" class="fa-aba" data-painel="presenca">Presença</button>
   <button type="button" class="fa-aba" data-painel="financeiro">Financeiro</button>
   <button type="button" class="fa-aba" data-painel="eventos">Eventos</button>
+  <button type="button" class="fa-aba" data-painel="mensagens">Mensagens</button>
 </div>
 
 {# ------------------------------------------------------------ 1. dados #}
@@ -366,10 +428,24 @@
       <section class="fa-bloco">
         <div class="fa-bloco-topo">
           <span class="fa-bloco-titulo">Graduações</span>
+          <span class="d-flex gap-3">
+          <a class="fa-bloco-link" href="{{ url_for('exame_faixa.historico_aluno', aluno_id=aluno.id) }}">Exames e notas</a>
           <button type="button" class="fa-bloco-link" style="border:0;background:none;cursor:pointer;padding:0"
                   data-bs-toggle="modal" data-bs-target="#modalGraduacao{{ aluno.id }}">Registrar graduação</button>
+          </span>
         </div>
         <div class="fa-bloco-corpo">
+          {% for pend in exame_faixa_a_promover(aluno.id) %}
+          <form method="POST" action="{{ url_for('exame_faixa.promover') }}" class="d-flex flex-wrap align-items-center gap-2 py-2"
+                data-confirmar="Registrar a faixa {{ pend.para }} para {{ aluno.nome }}?" data-confirmar-tom="aviso" data-confirmar-acao="Promover">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="avaliacao_id" value="{{ pend.id }}">
+            <input type="hidden" name="voltar" value="{{ request.full_path }}">
+            <span class="u-pill u-pill--success">Aprovado</span>
+            <span>{{ pend.evento_nome }} — média {{ pend.media_geral|nota_br }}</span>
+            <button type="submit" class="sh__btn sh__btn--forte ms-auto">Promover para {{ pend.para }}</button>
+          </form>
+          {% endfor %}
           {% if graduacoes %}
             {% for g in graduacoes %}
             {# O marco de matrícula não afirma faixa: quem entrou já graduado não
@@ -451,7 +527,7 @@
                  Dados, e era o único lugar do sistema que mostrava a mensalidade
                  paga sem oferecer como corrigir. #}
               <form method="POST" action="{{ url_for('financeiro.cancelar_pagamento') }}" style="display:inline"
-                    onsubmit="return confirm({% if m.pago_auto %}'Cancelar o pagamento desta mensalidade? Como foi confirmado automaticamente pelo gateway, o valor vira crédito na carteira do aluno para quitar outras mensalidades.'{% else %}'Cancelar o pagamento desta mensalidade? Ela volta para pendente e a receita é cancelada. Depois você pode registrar de novo com os dados corretos.'{% endif %});">
+                    data-confirmar="{% if m.pago_auto %}Cancelar o pagamento desta mensalidade? Como foi confirmado automaticamente pelo gateway, o valor vira crédito na carteira do aluno para quitar outras mensalidades.{% else %}Cancelar o pagamento desta mensalidade? Ela volta para pendente e a receita é cancelada. Depois você pode registrar de novo com os dados corretos.{% endif %}">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="tipo" value="mensalidade_aluno">
                 <input type="hidden" name="registro_id" value="{{ m.id }}">
@@ -572,7 +648,7 @@
     {# Libera o aluno para outro pacote: cancela só o que está em aberto. #}
     <form method="POST" id="formCancelarPacote" style="display:none"
           action="{{ url_for('financeiro.cancelar_pacote_aluno', aluno_id=aluno.id) }}"
-          onsubmit="return confirm('Cancelar as {{ mensalidades_abertas }} cobranças em aberto deste aluno? As já pagas não são afetadas.')">
+          data-confirmar="Cancelar as {{ mensalidades_abertas }} cobranças em aberto deste aluno? As já pagas não são afetadas.">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="voltar" value="{{ request.full_path }}">
     </form>
@@ -594,7 +670,7 @@
           {% else %}<span class="fa-tag fa-tag--pendente">Pendente</span>{% endif %}
           {% if m.status == 'pago' and pode_baixar %}
           <form method="POST" action="{{ url_for('financeiro.cancelar_pagamento') }}" style="display:inline"
-                onsubmit="return confirm({% if m.pago_auto %}'Cancelar o pagamento desta mensalidade? Como foi confirmado automaticamente pelo gateway, o valor vira crédito na carteira do aluno para quitar outras mensalidades.'{% else %}'Cancelar o pagamento desta mensalidade? Ela volta para pendente e a receita é cancelada. Depois você pode registrar de novo com os dados corretos.'{% endif %});">
+                data-confirmar="{% if m.pago_auto %}Cancelar o pagamento desta mensalidade? Como foi confirmado automaticamente pelo gateway, o valor vira crédito na carteira do aluno para quitar outras mensalidades.{% else %}Cancelar o pagamento desta mensalidade? Ela volta para pendente e a receita é cancelada. Depois você pode registrar de novo com os dados corretos.{% endif %}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="tipo" value="mensalidade_aluno">
             <input type="hidden" name="registro_id" value="{{ m.id }}">
@@ -627,6 +703,77 @@
       <div class="fa-vazio">Nenhuma mensalidade lançada para este aluno.</div>
       {% endif %}
     </div>
+  </section>
+</div>
+
+{# --------------------------------------------------------- 5. mensagens #}
+<div class="fa-painel" id="painel-mensagens" hidden>
+  <section class="fa-bloco">
+    <div class="fa-bloco-topo">
+      <span class="fa-bloco-titulo">Enviar mensagem</span>
+      <span class="fa-msg-dest">
+        {% if msg_telefone %}Para <strong>{{ msg_destinatario }}</strong> &middot; {{ msg_telefone }}
+        {% else %}Sem telefone cadastrado{% endif %}
+      </span>
+    </div>
+
+    {% if not msg_telefone %}
+    <div class="fa-vazio">
+      Este aluno não tem telefone no cadastro. Inclua o número do responsável
+      financeiro ou o celular do aluno para poder enviar.
+    </div>
+    {% elif not msg_conectado %}
+    <div class="fa-vazio">
+      O WhatsApp desta academia não está conectado.
+      <a href="{{ url_for('academia.whatsapp_config', academia_id=aluno.id_academia) }}">Conectar</a>
+      para poder enviar.
+    </div>
+    {% else %}
+    <div class="fa-msg-campos" data-previa="{{ url_for('alunos.mensagem_previa', aluno_id=aluno.id) }}"
+         data-enviar="{{ url_for('alunos.mensagem_enviar', aluno_id=aluno.id) }}"
+         data-csrf="{{ csrf_token() }}">
+      <div>
+        <span class="fa-msg-rotulo">O que enviar</span>
+        <select id="msgTipo">
+          <option value="livre">Mensagem livre (escrever agora)</option>
+          <option value="ocorrencia">Ocorrência — comunicado sobre o aluno</option>
+          <option value="faltas">Aviso de faltas ({{ msg_faltas }} em {{ msg_periodo }})</option>
+          {% for m in msg_modelos %}
+          {% if m.tipo not in ('ocorrencia', 'faltas') %}
+          <option value="{{ m.tipo }}">{{ m.label }}</option>
+          {% endif %}
+          {% endfor %}
+        </select>
+      </div>
+
+      <div id="msgCampoOcorrencia" hidden>
+        <span class="fa-msg-rotulo">O que aconteceu</span>
+        <textarea id="msgOcorrencia" maxlength="900"
+                  placeholder="Ex.: chegou sem kimono hoje; conversamos sobre o horário."></textarea>
+      </div>
+
+      <div id="msgCampoTexto">
+        <span class="fa-msg-rotulo">Mensagem</span>
+        <textarea id="msgTexto" maxlength="1200"
+                  placeholder="Escreva aqui. Dá para usar {nome}, {aluno}, {turma} e {academia}."></textarea>
+      </div>
+
+      <div>
+        <span class="fa-msg-rotulo">Como vai chegar</span>
+        <div class="fa-msg-previa" id="msgPrevia">Escolha o que enviar.</div>
+      </div>
+
+      <div class="fa-msg-pe">
+        <button type="button" class="u-btn" id="msgAtualizar">
+          <i class="bi bi-arrow-repeat"></i> Atualizar prévia
+        </button>
+        <button type="button" class="u-btn u-btn--forte" id="msgEnviar" disabled>
+          <i class="bi bi-whatsapp"></i> Enviar
+        </button>
+        <span class="fa-msg-dest" id="msgAviso"></span>
+      </div>
+    </div>
+    {% endif %}
   </section>
 </div>
 
@@ -671,6 +818,95 @@ document.addEventListener('DOMContentLoaded', function () {
       });
     });
   });
+
+  // ---------------------------------------------------- mensagens ao aluno
+  // A prévia vem do servidor, não da tela: quem resolve {nome}, {faltas} e
+  // companhia é o mesmo código que vai enviar. Montar o texto aqui e outro lá
+  // seria a receita para a prévia mentir.
+  var msgBox = document.querySelector('.fa-msg-campos');
+  if (msgBox) {
+    var tipo = document.getElementById('msgTipo');
+    var texto = document.getElementById('msgTexto');
+    var ocorrencia = document.getElementById('msgOcorrencia');
+    var campoOco = document.getElementById('msgCampoOcorrencia');
+    var campoTexto = document.getElementById('msgCampoTexto');
+    var previa = document.getElementById('msgPrevia');
+    var aviso = document.getElementById('msgAviso');
+    var btnEnviar = document.getElementById('msgEnviar');
+    var btnPrevia = document.getElementById('msgAtualizar');
+    var CSRF = msgBox.dataset.csrf;
+    var pronta = '';
+
+    function corpo() {
+      var d = new FormData();
+      d.append('tipo', tipo.value);
+      d.append('texto', texto.value);
+      d.append('ocorrencia', ocorrencia ? ocorrencia.value : '');
+      return d;
+    }
+
+    function trocarCampos() {
+      var t = tipo.value;
+      campoOco.hidden = t !== 'ocorrencia';
+      // No modelo, o campo de texto vira "ajuste antes de enviar": fica em
+      // branco e, preenchido, substitui o modelo.
+      campoTexto.hidden = false;
+      texto.placeholder = t === 'livre'
+        ? 'Escreva aqui. Dá para usar {nome}, {aluno}, {turma} e {academia}.'
+        : 'Deixe em branco para usar o modelo, ou escreva para ajustar este envio.';
+      atualizar();
+    }
+
+    function atualizar() {
+      btnEnviar.disabled = true;
+      aviso.textContent = '';
+      fetch(msgBox.dataset.previa, {
+        method: 'POST', headers: { 'X-CSRFToken': CSRF }, body: corpo()
+      }).then(function (r) { return r.json(); }).then(function (d) {
+        previa.classList.toggle('is-erro', !d.ok);
+        previa.textContent = d.ok ? d.texto : (d.erro || 'Não dá para enviar.');
+        pronta = d.ok ? d.texto : '';
+        btnEnviar.disabled = !d.ok;
+      }).catch(function () {
+        previa.classList.add('is-erro');
+        previa.textContent = 'Erro de rede ao montar a prévia.';
+      });
+    }
+
+    tipo.addEventListener('change', trocarCampos);
+    if (btnPrevia) btnPrevia.addEventListener('click', atualizar);
+    [texto, ocorrencia].forEach(function (c) {
+      if (c) c.addEventListener('blur', atualizar);
+    });
+
+    btnEnviar.addEventListener('click', async function () {
+      if (!pronta) return;
+      if (!await Dialogo.confirmar('Enviar esta mensagem no WhatsApp?\n\n' + pronta)) return;
+      var orig = btnEnviar.innerHTML;
+      btnEnviar.disabled = true;
+      btnEnviar.innerHTML = 'Enviando…';
+      fetch(msgBox.dataset.enviar, {
+        method: 'POST', headers: { 'X-CSRFToken': CSRF }, body: corpo()
+      }).then(function (r) { return r.json(); }).then(function (d) {
+        btnEnviar.innerHTML = orig;
+        if (d.ok) {
+          aviso.textContent = 'Enviada.';
+          if (texto) texto.value = '';
+          if (ocorrencia) ocorrencia.value = '';
+          atualizar();
+        } else {
+          btnEnviar.disabled = false;
+          aviso.textContent = d.msg || d.erro || 'Falha no envio.';
+        }
+      }).catch(function () {
+        btnEnviar.innerHTML = orig;
+        btnEnviar.disabled = false;
+        aviso.textContent = 'Erro de rede.';
+      });
+    });
+
+    trocarCampos();
+  }
 });
 </script>
 
@@ -698,24 +934,24 @@ document.addEventListener('DOMContentLoaded', function () {
       <div class="modal-body">
         <div class="mb-3">
           <label class="form-label fw-semibold" for="edcValor">Valor da mensalidade</label>
-          <input type="number" step="0.01" min="0.01" class="form-control" id="edcValor" name="valor_original" required>
+          <input type="number" step="0.01" min="0.01" class="u-campo__controle" id="edcValor" name="valor_original" required>
           <div class="form-text">Valor cheio, antes do desconto.</div>
         </div>
         <div class="mb-3">
           <label class="form-label fw-semibold" for="edcDesconto">Desconto</label>
-          <input type="number" step="0.01" min="0" class="form-control" id="edcDesconto" name="desconto_aplicado" value="0">
+          <input type="number" step="0.01" min="0" class="u-campo__controle" id="edcDesconto" name="desconto_aplicado" value="0">
         </div>
         <div class="mb-3">
           <label class="form-label fw-semibold" for="edcVencimento">Data de vencimento</label>
-          <input type="date" class="form-control" id="edcVencimento" name="data_vencimento" required>
+          <input type="date" class="u-campo__controle" id="edcVencimento" name="data_vencimento" required>
         </div>
         <div class="alert alert-light border mb-0 py-2">
           Valor a cobrar: <strong id="edcLiquido">—</strong>
         </div>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Fechar</button>
-        <button type="submit" class="btn btn-dark">Salvar alterações</button>
+        <button type="button" class="u-btn" data-bs-dismiss="modal">Fechar</button>
+        <button type="submit" class="u-btn u-btn--forte">Salvar alterações</button>
       </div>
     </form>
   </div>
@@ -777,28 +1013,31 @@ document.addEventListener('DOMContentLoaded', function () {
           <p class="text-muted small">{{ aluno.nome }}</p>
           <div class="mb-3">
             <label class="form-label small fw-semibold" for="gradFaixa{{ aluno.id }}">Faixa <span class="text-danger">*</span></label>
-            <select class="form-select" id="gradFaixa{{ aluno.id }}" name="graduacao_id" required>
+            <select class="u-campo__controle" id="gradFaixa{{ aluno.id }}" name="graduacao_id" required>
               <option value="">Selecione a faixa</option>
               {% for f in faixas_catalogo or [] %}
               {# Parte do catálogo usa "." como grau vazio; sem isto a lista vira
                  "Branca — .", "Cinza — ." e por aí. #}
               {% set _grau = (f.graduacao or '')|trim %}
+              {# A modalidade vai no rótulo: nove nomes de faixa se repetem
+                 entre judô e jiu-jitsu, e sem isso "Branca" aparece duas vezes
+                 sem o gestor saber qual escolher. #}
               <option value="{{ f.id }}" {% if aluno.graduacao_id == f.id %}selected{% endif %}>
-                {{ f.faixa|capitalize }}{% if _grau and _grau != '.' %} — {{ _grau }}{% endif %}
+                {% if f.modalidade %}{{ f.modalidade }} · {% endif %}{{ f.faixa|capitalize }}{% if _grau and _grau != '.' %} — {{ _grau }}{% endif %}
               </option>
               {% endfor %}
             </select>
           </div>
           <div class="mb-3">
             <label class="form-label small fw-semibold" for="gradData{{ aluno.id }}">Data da graduação <span class="text-danger">*</span></label>
-            <input type="date" class="form-control" id="gradData{{ aluno.id }}" name="data"
+            <input type="date" class="u-campo__controle" id="gradData{{ aluno.id }}" name="data"
                    max="{{ hoje_iso }}" required>
             <div class="form-text">Se o aluno chegou já graduado, use a data em que ele recebeu a faixa —
             não a da matrícula.</div>
           </div>
           <div class="mb-3">
             <label class="form-label small fw-semibold" for="gradOrigem{{ aluno.id }}">Como foi</label>
-            <select class="form-select" id="gradOrigem{{ aluno.id }}" name="origem">
+            <select class="u-campo__controle" id="gradOrigem{{ aluno.id }}" name="origem">
               <option value="Exame de faixa">Exame de faixa</option>
               <option value="Graduação anterior">Graduação anterior (veio de outra academia)</option>
               <option value="Registro manual" selected>Registro manual</option>
@@ -806,13 +1045,13 @@ document.addEventListener('DOMContentLoaded', function () {
           </div>
           <div class="mb-1">
             <label class="form-label small fw-semibold" for="gradObs{{ aluno.id }}">Observação</label>
-            <input type="text" class="form-control" id="gradObs{{ aluno.id }}" name="observacao"
+            <input type="text" class="u-campo__controle" id="gradObs{{ aluno.id }}" name="observacao"
                    maxlength="255" placeholder="Ex.: avaliador, federação, nº do certificado">
           </div>
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
-          <button type="submit" class="btn btn-primary">Registrar</button>
+          <button type="button" class="u-btn" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="u-btn u-btn--primario">Registrar</button>
         </div>
       </form>
     </div>

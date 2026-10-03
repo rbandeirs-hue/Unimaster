@@ -1,0 +1,70 @@
+{# Player de vídeo das técnicas. Abre por botões com data-exf-video:
+     data-embed  endereço do player (YouTube/Vimeo/Drive); vazio = abre o link numa aba
+     data-url    link original
+     data-titulo nome da técnica #}
+<dialog class="exf-dialogo exf-video-dlg" id="exf-video" aria-labelledby="exf-video-titulo">
+  <header class="exf-dialogo__topo exf-video-dlg__topo">
+    <h2 id="exf-video-titulo">Vídeo</h2>
+    <button type="button" class="lst-acao" data-exf-video-fechar aria-label="Fechar vídeo"><i class="bi bi-x-lg"></i></button>
+  </header>
+  <div class="exf-video-dlg__tela"><iframe title="Vídeo da técnica" src="about:blank" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div>
+  <footer class="exf-dialogo__rodape"><a href="#" target="_blank" rel="noopener" data-exf-video-link class="sh__btn"><i class="bi bi-box-arrow-up-right"></i> Abrir no site do vídeo</a></footer>
+</dialog>
+<dialog class="exf-dialogo exf-ficha-dlg" id="exf-ficha" aria-labelledby="exf-ficha-titulo">
+  <header class="exf-dialogo__topo">
+    <h2 id="exf-ficha-titulo">Ficha da técnica</h2>
+    <button type="button" class="lst-acao" data-exf-ficha-fechar aria-label="Fechar ficha"><i class="bi bi-x-lg"></i></button>
+  </header>
+  <div class="exf-ficha-dlg__corpo"></div>
+  <footer class="exf-dialogo__rodape exf-ficha-dlg__vids"></footer>
+</dialog>
+<script>
+/* Ficha: copia os dados escondidos do card (ou do par) para a janela,
+   com o passo a passo aberto e os botões de vídeo da técnica. */
+(function () {
+  var dlg = document.getElementById('exf-ficha');
+  if (!dlg || !dlg.showModal) return;
+  var corpo = dlg.querySelector('.exf-ficha-dlg__corpo'), vids = dlg.querySelector('.exf-ficha-dlg__vids');
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-exf-ficha]');
+    if (!b) return;
+    var item = b.closest('li'), dados = item && item.querySelector('.exf-ficha-dados');
+    if (!dados) return;
+    dlg.querySelector('#exf-ficha-titulo').textContent = b.getAttribute('data-titulo') || 'Ficha da técnica';
+    corpo.innerHTML = dados.innerHTML || '<p class="u-muted">Ficha ainda não cadastrada.</p>';
+    corpo.querySelectorAll('details').forEach(function (d) { d.open = true; });
+    vids.innerHTML = '';
+    item.querySelectorAll('button[data-exf-video]').forEach(function (v) {
+      var c = document.createElement('button');
+      c.type = 'button'; c.className = 'sh__btn';
+      ['data-exf-video', 'data-embed', 'data-url', 'data-titulo'].forEach(function (a) { c.setAttribute(a, v.getAttribute(a) || ''); });
+      c.innerHTML = '<i class="bi bi-play-fill" aria-hidden="true"></i> Vídeo: ' + (v.getAttribute('data-titulo') || '');
+      vids.appendChild(c);
+    });
+    vids.hidden = !vids.children.length;
+    dlg.showModal();
+  });
+  dlg.querySelector('[data-exf-ficha-fechar]').addEventListener('click', function () { dlg.close(); });
+  /* o vídeo abre por cima: fecha a ficha antes */
+  vids.addEventListener('click', function () { dlg.close(); }, true);
+})();
+</script>
+<script>
+(function () {
+  var dlg = document.getElementById('exf-video');
+  if (!dlg) return;
+  var frame = dlg.querySelector('iframe'), link = dlg.querySelector('[data-exf-video-link]');
+  function fechar() { frame.src = 'about:blank'; if (dlg.open) dlg.close(); }
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-exf-video]');
+    if (!b) return;
+    var embed = b.getAttribute('data-embed'), url = b.getAttribute('data-url');
+    if (!embed || !dlg.showModal) { window.open(url, '_blank', 'noopener'); return; }
+    dlg.querySelector('#exf-video-titulo').textContent = b.getAttribute('data-titulo') || 'Vídeo';
+    frame.src = embed; link.href = url;
+    dlg.showModal();
+  });
+  dlg.querySelector('[data-exf-video-fechar]').addEventListener('click', fechar);
+  dlg.addEventListener('close', function () { frame.src = 'about:blank'; });
+})();
+</script>

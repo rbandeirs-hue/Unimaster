@@ -54,7 +54,9 @@
         <div class="col-md-6">
           {% if aluno.endereco_completo %}<p><strong>Endereço:</strong><br>{{ aluno.endereco_completo }}</p>{% endif %}
           {% if aluno.ultimo_exame_faixa_formatada %}<p><strong>Data da Última Graduação:</strong><br>{{ aluno.ultimo_exame_faixa_formatada }}</p>{% endif %}
-          {% if aluno.faixa_nome or aluno.graduacao_nome %}<p><strong>Faixa:</strong><br>{{ aluno.faixa_nome or '' }}{% if aluno.faixa_nome and aluno.graduacao_nome %} ({{ aluno.graduacao_nome }}){% elif aluno.graduacao_nome %}{{ aluno.graduacao_nome }}{% endif %}</p>{% endif %}
+          {# Mais de uma modalidade: uma faixa por modalidade, sem misturar. #}
+          {% if aluno.faixas_modalidade and aluno.faixas_modalidade|length > 1 %}<p><strong>Faixas:</strong>{% for f in aluno.faixas_modalidade %}<br>{{ f.modalidade }}: {{ f.rotulo or 'não informada' }}{% endfor %}</p>
+          {% elif aluno.faixa_nome or aluno.graduacao_nome %}<p><strong>Faixa:</strong><br>{{ aluno.faixa_nome or '' }}{% if aluno.faixa_nome and aluno.graduacao_nome and aluno.graduacao_nome|trim not in ['.', '-'] %} ({{ aluno.graduacao_nome }}){% elif aluno.graduacao_nome and aluno.graduacao_nome|trim not in ['.', '-'] %}{{ aluno.graduacao_nome }}{% endif %}</p>{% endif %}
         </div>
       </div>
     </section>

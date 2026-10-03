@@ -282,6 +282,12 @@
     border: 0 !important;
     padding: .35rem .25rem;
   }
+  /* O conteúdo da célula quebra linha: vários selos, e-mail longo ou botões
+     não podem empurrar o cartão para fora da tela. */
+  .u-tabela-cards, .u-tabela-cards tbody { display: block; width: 100%; }
+  .u-tabela-cards tbody td { flex-wrap: wrap; text-align: right; min-width: 0; }
+  .u-tabela-cards tbody td > * { max-width: 100%; }
+  .u-tabela-cards tbody td.text-truncate { white-space: normal; overflow-wrap: anywhere; }
   .u-tabela-cards tbody td::before {
     content: attr(data-label);
     font-size: var(--u-fs-xs);
@@ -290,4 +296,184 @@
     color: var(--u-text-muted);
   }
   .u-tabela-cards tbody td:empty { display: none; }
+}
+
+/* =======================================================================
+   Botão — o quarto padrão, que substitui os outros três
+   =======================================================================
+   Hoje convivem `btn btn-primary` (83 telas), `sh__btn` (79), `btn-success`
+   (30) e `lst-acao` (20). Este não é mais um: é para onde os quatro migram.
+   `sh__btn` continua valendo no shell e tem a mesma forma — a diferença é
+   que este consome os tokens e não depende do Bootstrap.
+   ===================================================================== */
+.u-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--u-space-2);
+  padding: .5rem .9rem;
+  border: 1px solid var(--u-border);
+  border-radius: var(--u-radius-sm);
+  background: var(--u-surface);
+  color: var(--u-text);
+  font-size: var(--u-fs-sm);
+  font-weight: var(--u-fw-semibold);
+  line-height: 1.2;
+  text-decoration: none;
+  cursor: pointer;
+  transition: border-color var(--u-transition), background var(--u-transition);
+}
+.u-btn:hover { border-color: var(--u-text-muted); color: var(--u-text); }
+.u-btn:focus-visible { outline: 2px solid var(--u-primary); outline-offset: 2px; }
+.u-btn[disabled], .u-btn.is-inativo { opacity: .55; pointer-events: none; }
+
+.u-btn--forte { background: var(--u-text); border-color: var(--u-text); color: var(--u-surface); }
+.u-btn--forte:hover { background: #000; border-color: #000; color: var(--u-surface); }
+.u-btn--primario { background: var(--u-primary); border-color: var(--u-primary); color: #fff; }
+.u-btn--primario:hover { background: var(--u-primary-hover); border-color: var(--u-primary-hover); color: #fff; }
+.u-btn--perigo { background: var(--u-danger); border-color: var(--u-danger); color: #fff; }
+.u-btn--perigo:hover { filter: brightness(.94); color: #fff; }
+/* Fantasma: ação secundária que não deve competir com a primária. */
+.u-btn--fantasma { background: transparent; border-color: transparent; color: var(--u-text-muted); }
+.u-btn--fantasma:hover { background: var(--u-surface-alt); color: var(--u-text); }
+/* Variantes que faltavam para a migração ser fiel: trocar 630 botões e de
+   quebra mudar o significado de cada um seria duas mudanças disfarçadas de
+   uma. O verde continua verde; decidir se ele devia ser outra coisa é
+   trabalho humano, tela a tela. */
+.u-btn--ok { background: var(--u-success); border-color: var(--u-success); color: #fff; }
+.u-btn--ok:hover { filter: brightness(.94); color: #fff; }
+.u-btn--alerta { background: var(--u-warning); border-color: var(--u-warning); color: #1c1c1c; }
+.u-btn--alerta:hover { filter: brightness(.94); color: #1c1c1c; }
+
+.u-btn--pequeno { padding: .3rem .6rem; font-size: var(--u-fs-xs); }
+.u-btn--grande { padding: .65rem 1.15rem; font-size: var(--u-fs-base); }
+/* Só ícone: o rótulo vai em aria-label, nunca omitido. */
+.u-btn--icone { padding: .38rem; width: 2rem; height: 2rem; }
+
+/* =======================================================================
+   Campo — rótulo, ajuda e erro num objeto só
+   =======================================================================
+   Existe para que rótulo deixe de ser opcional: a macro `campo` não monta
+   o controle sem um. Era a maior dívida do sistema — 433 campos sem nome
+   acessível.
+   ===================================================================== */
+.u-campo { display: flex; flex-direction: column; gap: .3rem; min-width: 0; }
+.u-campo__rotulo {
+  font-size: var(--u-fs-label);
+  letter-spacing: var(--u-ls-label);
+  text-transform: uppercase;
+  font-weight: var(--u-fw-semibold);
+  color: var(--u-text-muted);
+}
+.u-campo__rotulo .req { color: var(--u-danger); margin-left: 2px; }
+.u-campo input, .u-campo select, .u-campo textarea {
+  width: 100%;
+  padding: .45rem .6rem;
+  border: 1px solid var(--u-border);
+  border-radius: var(--u-radius-sm);
+  background: var(--u-surface);
+  color: var(--u-text);
+  font: inherit;
+  font-size: var(--u-fs-sm);
+}
+.u-campo input:focus, .u-campo select:focus, .u-campo textarea:focus {
+  outline: none;
+  border-color: var(--u-primary);
+  box-shadow: 0 0 0 3px var(--u-primary-ring);
+}
+/* Controle avulso: mesmo visual do campo, para quem já tem rótulo próprio
+   (dentro de modal, de tabela ou de grupo com botão colado). */
+.u-campo__controle {
+  width: 100%;
+  padding: .45rem .6rem;
+  border: 1px solid var(--u-border);
+  border-radius: var(--u-radius-sm);
+  background: var(--u-surface);
+  color: var(--u-text);
+  font: inherit;
+  font-size: var(--u-fs-sm);
+}
+.u-campo__controle:focus {
+  outline: none;
+  border-color: var(--u-primary);
+  box-shadow: 0 0 0 3px var(--u-primary-ring);
+}
+
+.u-campo__ajuda { font-size: var(--u-fs-xs); color: var(--u-text-faint); }
+/* Erro fica NO campo, não só num toast no topo: quem errou precisa saber onde. */
+.u-campo__erro { font-size: var(--u-fs-xs); color: var(--u-danger); font-weight: var(--u-fw-medium); }
+.u-campo.is-erro input, .u-campo.is-erro select, .u-campo.is-erro textarea { border-color: var(--u-danger); }
+
+/* =======================================================================
+   Skeleton — o estado que faltava
+   =======================================================================
+   O projeto não tinha nenhum: lista pesada aparecia em branco até chegar.
+   ===================================================================== */
+.u-skeleton {
+  background: linear-gradient(90deg, var(--u-surface-alt) 25%,
+              var(--u-border-soft) 37%, var(--u-surface-alt) 63%);
+  background-size: 400% 100%;
+  border-radius: var(--u-radius-sm);
+  animation: u-skeleton 1.4s ease infinite;
+}
+.u-skeleton--linha { height: 1rem; margin-bottom: .5rem; }
+.u-skeleton--titulo { height: 1.5rem; width: 40%; margin-bottom: .75rem; }
+@keyframes u-skeleton { 0% { background-position: 100% 50%; } 100% { background-position: 0 50%; } }
+@media (prefers-reduced-motion: reduce) { .u-skeleton { animation: none; } }
+
+/* Indicador que leva a algum lugar. O cartão inteiro é o alvo do clique —
+   alvo pequeno em número grande é o erro clássico deste tipo de tela. */
+.u-kpi--link { display: block; text-decoration: none; color: inherit; }
+.u-kpi--link:hover { border-color: var(--u-kpi-cor, var(--u-primary)); color: inherit; }
+.u-kpi--link:focus-visible { outline: 2px solid var(--u-primary); outline-offset: 2px; }
+.u-kpi__acao {
+  margin-top: var(--u-space-2);
+  font-size: var(--u-fs-xs);
+  font-weight: var(--u-fw-semibold);
+  color: var(--u-kpi-cor, var(--u-primary));
+}
+.u-kpi--link:hover .u-kpi__acao i { transform: translateX(2px); }
+.u-kpi__acao i { display: inline-block; transition: transform var(--u-transition); }
+
+/* =======================================================================
+   Cartão com cabeçalho colorido — neutralização
+   =======================================================================
+   40 telas abrem um `card-header` pintado: bg-primary numa, bg-info noutra,
+   bg-warning numa terceira, bg-success numa quarta. A cor não significa nada
+   — cada tela escolheu a sua — e é o que mais faz o sistema parecer remendado.
+
+   Resolver isso reescrevendo 40 templates seria mexer em estrutura aninhada
+   por um problema que é de aparência. Aqui a faixa vira o cabeçalho neutro do
+   design system, e as 40 telas acertam de uma vez.
+
+   O `!important` é necessário: as classes `bg-*` do Bootstrap já vêm com ele.
+   A especificidade extra de `body.sh` garante a última palavra.
+   ===================================================================== */
+body.sh .card-header[class*="bg-"] {
+  background: var(--u-surface-alt) !important;
+  color: var(--u-text) !important;
+  border-bottom: 1px solid var(--u-border);
+  border-radius: var(--u-radius) var(--u-radius) 0 0;
+}
+body.sh .card-header[class*="bg-"] h1,
+body.sh .card-header[class*="bg-"] h2,
+body.sh .card-header[class*="bg-"] h3,
+body.sh .card-header[class*="bg-"] h4,
+body.sh .card-header[class*="bg-"] h5,
+body.sh .card-header[class*="bg-"] h6,
+body.sh .card-header[class*="bg-"] strong {
+  color: var(--u-text) !important;
+  font-size: var(--u-fs-lg);
+  font-weight: var(--u-fw-semibold);
+}
+/* O ícone da faixa acompanha o texto em vez de ficar branco sobre claro. */
+body.sh .card-header[class*="bg-"] .bi { color: var(--u-text-muted) !important; }
+
+/* Moldura: borda fina em vez de sombra pesada — a mesma regra dos quadros
+   de lista, para o formulário não parecer de outro sistema. */
+body.sh .card.shadow-lg,
+body.sh .card.shadow-sm {
+  box-shadow: none !important;
+  border: 1px solid var(--u-border);
+  border-radius: var(--u-radius) !important;
 }

@@ -7,24 +7,70 @@
 
 {% block fin_css %}
 <style>
-  .rg-etapa { display: grid; grid-template-columns: 86px 1fr 120px 36px; gap: .6rem;
-              align-items: center; padding: .5rem 0; border-bottom: 1px solid var(--sh-line, #ededea); }
+  /* ----------------------------------------------------- configuração */
+  /* Dois dos quatro campos eram rótulo comprido em maiúsculas sobre um
+     número: "TRATATIVA ADMINISTRATIVA APÓS" quebrava em três linhas e
+     empurrava o campo para baixo, deixando a faixa desalinhada. Aqui os
+     dois viram frase: o número fica dentro do texto que o explica, e some
+     a dúvida sobre a unidade — os dois contam mensalidades vencidas. */
+  .rg-cfg { display: flex; flex-wrap: wrap; gap: var(--u-space-3) 1.5rem; padding: 1rem; }
+  .rg-regra {
+    display: flex; align-items: center; gap: .5rem; flex-wrap: wrap;
+    font-size: .92rem; color: var(--sh-ink);
+    flex: 1 1 340px;
+  }
+  .rg-regra__num {
+    width: 66px; flex: none; text-align: center;
+    padding: .4rem .5rem; border: 1px solid var(--u-border);
+    border-radius: var(--u-radius-sm); font: inherit;
+    font-variant-numeric: tabular-nums;
+  }
+  .rg-regra__nota { flex-basis: 100%; font-size: var(--u-fs-xs); color: var(--sh-ink-soft); }
+
+  /* ------------------------------------------------------------ etapas */
+  .rg-etapa {
+    display: grid;
+    grid-template-columns: 92px minmax(0, 1fr) auto 34px;
+    gap: .45rem .7rem; align-items: center;
+    padding: .55rem 0; border-bottom: 1px solid var(--sh-line, #ededea);
+  }
   .rg-etapa:last-child { border-bottom: 0; }
-  .rg-etapa input[type=number] { width: 100%; padding: .45rem .6rem; border: 1px solid #d8d7d3;
-                                 border-radius: 8px; font: inherit; }
-  .rg-etapa textarea { width: 100%; padding: .45rem .6rem; border: 1px solid #d8d7d3;
-                       border-radius: 8px; font: inherit; min-height: 38px; resize: vertical; }
   .rg-etapa.is-inativa { opacity: .55; }
-  .rg-rotulo { font-weight: 600; font-size: .9rem; }
-  .rg-cab { display: grid; grid-template-columns: 86px 1fr 120px 36px; gap: .6rem;
-            font-size: .7rem; text-transform: uppercase; letter-spacing: .06em;
-            color: var(--sh-ink-soft, #6f6b66); font-weight: 700; padding-bottom: .3rem; }
+  .rg-etapa input[type=number] {
+    width: 100%; padding: .42rem .5rem; text-align: center;
+    border: 1px solid var(--u-border); border-radius: var(--u-radius-sm);
+    font: inherit; font-variant-numeric: tabular-nums;
+  }
+  .rg-rotulo { font-weight: 600; font-size: .92rem; }
+  .rg-marca { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+
+  /* A mensagem própria ocupava uma coluna de 120px onde nem o texto de
+     ajuda cabia — aparecia "Usa o" e o resto sumia. Agora ela abre em
+     largura inteira, sob a etapa, e só para quem for de fato escrever uma.
+     O campo continua no DOM o tempo todo: o POST manda listas paralelas e
+     uma a menos desalinharia as etapas. */
+  .rg-msg { grid-column: 1 / -1; padding: .1rem 0 .35rem; }
+  .rg-msg[hidden] { display: none; }
+  .rg-msg textarea {
+    width: 100%; min-height: 62px; resize: vertical;
+    padding: .5rem .6rem; border: 1px solid var(--u-border);
+    border-radius: var(--u-radius-sm); font: inherit; font-size: .9rem;
+  }
+  .rg-msg__dica { font-size: var(--u-fs-xs); color: var(--sh-ink-soft); }
+
+  .rg-cab {
+    display: grid; grid-template-columns: 92px minmax(0, 1fr) auto 34px;
+    gap: .7rem; font-size: .7rem; text-transform: uppercase;
+    letter-spacing: .06em; color: var(--sh-ink-soft, #6f6b66);
+    font-weight: 700; padding-bottom: .35rem;
+  }
+
   .rg-sim { display: grid; grid-template-columns: 110px 1fr; gap: .4rem .8rem; font-size: .9rem; }
   .rg-sim__data { font-variant-numeric: tabular-nums; font-weight: 600; }
-  .rg-num { width: 74px; padding: .45rem .6rem; border: 1px solid #d8d7d3; border-radius: 8px; font: inherit; }
-  @media (max-width: 720px) {
-    .rg-etapa, .rg-cab { grid-template-columns: 74px 1fr 36px; }
-    .rg-etapa .rg-col-msg, .rg-cab .rg-col-msg { display: none; }
+
+  @media (max-width: 620px) {
+    .rg-etapa, .rg-cab { grid-template-columns: 78px minmax(0, 1fr) 34px; }
+    .rg-col-acao { display: none; }
   }
 </style>
 {% endblock %}
@@ -56,7 +102,7 @@
       <h2 class="lst-quadro__titulo">Cobrança automática</h2>
       <span class="lst-quadro__meta">O robô roda todo dia; a régua decide se fala</span>
     </header>
-    <div class="lst-filtros" style="border:0; margin:0">
+    <div class="lst-filtros" style="border:0; margin:0; padding-bottom:0">
       <label class="lst-campo lst-campo--curto">
         <span class="lst-campo__rotulo">Situação</span>
         <select name="automacao">
@@ -72,16 +118,28 @@
           {% endfor %}
         </select>
       </label>
-      <label class="lst-campo lst-campo--curto">
-        <span class="lst-campo__rotulo">Cobrança consolidada após</span>
-        <input type="number" name="consolidar_apos" min="2" max="12" value="{{ cfg.consolidar_apos }}">
-        <small class="lst-quadro__meta">mensalidades vencidas</small>
-      </label>
-      <label class="lst-campo lst-campo--curto">
-        <span class="lst-campo__rotulo">Tratativa administrativa após</span>
-        <input type="number" name="tratativa_apos" min="0" max="24" value="{{ cfg.tratativa_apos }}">
-        <small class="lst-quadro__meta">daí o robô para e a secretaria assume (0 = sem limite)</small>
-      </label>
+    </div>
+
+    <div class="rg-cfg">
+      <div class="rg-regra">
+        <label for="consolidarApos">Com</label>
+        <input type="number" id="consolidarApos" class="rg-regra__num"
+               name="consolidar_apos" min="2" max="12" value="{{ cfg.consolidar_apos }}">
+        <span>ou mais mensalidades vencidas, manda uma mensagem só.</span>
+        <span class="rg-regra__nota">
+          Abaixo disso, cada mensalidade é cobrada por si, pela régua da mensalidade.
+        </span>
+      </div>
+
+      <div class="rg-regra">
+        <label for="tratativaApos">Com</label>
+        <input type="number" id="tratativaApos" class="rg-regra__num"
+               name="tratativa_apos" min="0" max="24" value="{{ cfg.tratativa_apos }}">
+        <span>ou mais, o robô para e a secretaria assume.</span>
+        <span class="rg-regra__nota">
+          Também em mensalidades vencidas. Zero desliga o limite: o robô nunca para sozinho.
+        </span>
+      </div>
     </div>
   </section>
 
@@ -95,24 +153,32 @@
       <div class="rg-cab">
         <div>Dias</div>
         <div>Momento</div>
-        <div class="rg-col-msg">Mensagem própria</div>
+        <div class="rg-col-acao">Mensagem</div>
         <div></div>
       </div>
       <div id="listaInd">
         {% for e in cfg.individual %}
         <div class="rg-etapa {% if not e.ativo %}is-inativa{% endif %}">
-          <input type="number" name="ind_dias" value="{{ e.dias }}" min="-365" max="365" step="1">
+          <input type="number" name="ind_dias" value="{{ e.dias }}" min="-365" max="365" step="1"
+                 aria-label="Dias em relação ao vencimento">
           <div>
-            <label style="display:flex; align-items:center; gap:8px; cursor:pointer">
-              <input type="checkbox" class="form-check-input mt-0 js-rg-ativo" {% if e.ativo %}checked{% endif %}>
+            <label class="rg-marca">
+              <input type="checkbox" class="form-check-input mt-0 js-rg-ativo" {% if e.ativo %}checked{% endif %}
+                     aria-label="Enviar nesta etapa">
               <span class="rg-rotulo">{{ rotulo(e.dias) }}</span>
             </label>
             <input type="hidden" name="ind_ativo" value="{{ 1 if e.ativo else 0 }}">
           </div>
-          <textarea class="rg-col-msg" name="ind_msg" rows="1"
-                    placeholder="Usa o modelo padrão">{{ e.mensagem or '' }}</textarea>
+          <button type="button" class="sh__btn js-rg-msg rg-col-acao"
+                  aria-expanded="{{ 'true' if e.mensagem else 'false' }}">
+            {% if e.mensagem %}<i class="bi bi-pencil-square"></i> Própria{% else %}<i class="bi bi-chat-square-text"></i> Padrão{% endif %}
+          </button>
           <button type="button" class="lst-acao lst-acao--perigo js-rg-remover" title="Excluir etapa"
                   aria-label="Excluir etapa"><i class="bi bi-trash"></i></button>
+          <div class="rg-msg" {% if not e.mensagem %}hidden{% endif %}>
+            <textarea name="ind_msg" rows="3" placeholder="Escreva aqui para esta etapa falar diferente do modelo padrão." aria-label="Mensagem própria desta etapa">{{ e.mensagem or '' }}</textarea>
+            <span class="rg-msg__dica">Em branco, esta etapa usa o modelo padrão.</span>
+          </div>
         </div>
         {% endfor %}
       </div>
@@ -135,24 +201,32 @@
       <div class="rg-cab">
         <div>Dias</div>
         <div>Momento</div>
-        <div class="rg-col-msg">Mensagem própria</div>
+        <div class="rg-col-acao">Mensagem</div>
         <div></div>
       </div>
       <div id="listaCons">
         {% for e in cfg.consolidada %}
         <div class="rg-etapa {% if not e.ativo %}is-inativa{% endif %}">
-          <input type="number" name="cons_dias" value="{{ e.dias }}" min="0" max="365" step="1">
+          <input type="number" name="cons_dias" value="{{ e.dias }}" min="0" max="365" step="1"
+                 aria-label="Dias em relação ao vencimento">
           <div>
-            <label style="display:flex; align-items:center; gap:8px; cursor:pointer">
-              <input type="checkbox" class="form-check-input mt-0 js-rg-ativo" {% if e.ativo %}checked{% endif %}>
+            <label class="rg-marca">
+              <input type="checkbox" class="form-check-input mt-0 js-rg-ativo" {% if e.ativo %}checked{% endif %}
+                     aria-label="Enviar nesta etapa">
               <span class="rg-rotulo">{{ rotulo_consolidada(e.dias) }}</span>
             </label>
             <input type="hidden" name="cons_ativo" value="{{ 1 if e.ativo else 0 }}">
           </div>
-          <textarea class="rg-col-msg" name="cons_msg" rows="1"
-                    placeholder="Usa o modelo “Cobrança consolidada”">{{ e.mensagem or '' }}</textarea>
+          <button type="button" class="sh__btn js-rg-msg rg-col-acao"
+                  aria-expanded="{{ 'true' if e.mensagem else 'false' }}">
+            {% if e.mensagem %}<i class="bi bi-pencil-square"></i> Própria{% else %}<i class="bi bi-chat-square-text"></i> Padrão{% endif %}
+          </button>
           <button type="button" class="lst-acao lst-acao--perigo js-rg-remover" title="Excluir etapa"
                   aria-label="Excluir etapa"><i class="bi bi-trash"></i></button>
+          <div class="rg-msg" {% if not e.mensagem %}hidden{% endif %}>
+            <textarea name="cons_msg" rows="3" placeholder="Escreva aqui para esta etapa falar diferente do modelo “Cobrança consolidada”." aria-label="Mensagem própria desta etapa consolidada">{{ e.mensagem or '' }}</textarea>
+            <span class="rg-msg__dica">Em branco, esta etapa usa o modelo padrão.</span>
+          </div>
         </div>
         {% endfor %}
       </div>
@@ -297,7 +371,39 @@
     if (alvo) alvo.textContent = rotulo(ev.target.value, ev.target.name === 'cons_dias');
   });
 
+  // O botão só mostra/esconde o campo: o textarea nunca sai do DOM, senão a
+  // lista de mensagens chegaria ao servidor menor que a de dias e as etapas
+  // sairiam trocadas.
+  function alternarMensagem(botao) {
+    var linha = botao.closest('.rg-etapa');
+    var caixa = linha && linha.querySelector('.rg-msg');
+    if (!caixa) return;
+    var abrindo = caixa.hidden;
+    caixa.hidden = !abrindo;
+    botao.setAttribute('aria-expanded', abrindo ? 'true' : 'false');
+    if (abrindo) caixa.querySelector('textarea').focus();
+  }
+
+  function rotuloBotaoMsg(linha) {
+    var botao = linha.querySelector('.js-rg-msg');
+    var area = linha.querySelector('.rg-msg textarea');
+    if (!botao || !area) return;
+    var propria = area.value.trim().length > 0;
+    botao.innerHTML = propria
+      ? '<i class="bi bi-pencil-square"></i> Própria'
+      : '<i class="bi bi-chat-square-text"></i> Padrão';
+  }
+
+  document.addEventListener('input', function (ev) {
+    if (ev.target.tagName !== 'TEXTAREA') return;
+    var linha = ev.target.closest && ev.target.closest('.rg-etapa');
+    if (linha) rotuloBotaoMsg(linha);
+  });
+
   document.addEventListener('click', function (ev) {
+    var msg = ev.target.closest && ev.target.closest('.js-rg-msg');
+    if (msg) { alternarMensagem(msg); return; }
+
     var rm = ev.target.closest && ev.target.closest('.js-rg-remover');
     if (rm) { var l = rm.closest('.rg-etapa'); if (l) l.remove(); return; }
 
@@ -305,17 +411,25 @@
     if (!add) return;
     var lista = document.getElementById(add.dataset.alvo);
     var p = add.dataset.prefixo;
+    var cons = p === 'cons';
+    var modelo = cons ? 'o modelo “Cobrança consolidada”' : 'o modelo padrão';
     var div = document.createElement('div');
     div.className = 'rg-etapa';
     div.innerHTML =
-      '<input type="number" name="' + p + '_dias" value="" min="' + (p === 'cons' ? 0 : -365) + '" max="365" step="1">' +
-      '<div><label style="display:flex;align-items:center;gap:8px;cursor:pointer">' +
-      '<input type="checkbox" class="form-check-input mt-0 js-rg-ativo" checked>' +
+      '<input type="number" name="' + p + '_dias" value="" min="' + (cons ? 0 : -365) + '" max="365" step="1"' +
+      ' aria-label="Dias em relação ao vencimento">' +
+      '<div><label class="rg-marca">' +
+      '<input type="checkbox" class="form-check-input mt-0 js-rg-ativo" checked aria-label="Enviar nesta etapa">' +
       '<span class="rg-rotulo">—</span></label>' +
       '<input type="hidden" name="' + p + '_ativo" value="1"></div>' +
-      '<textarea class="rg-col-msg" name="' + p + '_msg" rows="1" placeholder="Usa o modelo padrão"></textarea>' +
-      '<button type="button" class="lst-acao lst-acao--perigo js-rg-remover" title="Excluir etapa">' +
-      '<i class="bi bi-trash"></i></button>';
+      '<button type="button" class="sh__btn js-rg-msg rg-col-acao" aria-expanded="false">' +
+      '<i class="bi bi-chat-square-text"></i> Padrão</button>' +
+      '<button type="button" class="lst-acao lst-acao--perigo js-rg-remover" title="Excluir etapa"' +
+      ' aria-label="Excluir etapa"><i class="bi bi-trash"></i></button>' +
+      '<div class="rg-msg" hidden><textarea name="' + p + '_msg" rows="3"' +
+      ' placeholder="Escreva aqui para esta etapa falar diferente de ' + modelo + '."' +
+      ' aria-label="Mensagem própria desta etapa"></textarea>' +
+      '<span class="rg-msg__dica">Em branco, esta etapa usa o modelo padrão.</span></div>';
     lista.appendChild(div);
     div.querySelector('input[type=number]').focus();
   });

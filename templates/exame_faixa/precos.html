@@ -1,0 +1,116 @@
+{% extends "base_app.html" %}
+{% block conteudo_classe %}exf-tela{% endblock %}
+{% from 'exame_faixa/_macros.html' import obi, promo with context %}
+{% set menu_ativo = 'exame_faixa' %}
+{% block title %}Exame de faixa — tabela de preços{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{{ asset('css/exame_faixa.css') }}">{% endblock %}
+
+{% block pagina_titulo %}Exame de faixa{% endblock %}
+{% block pagina_subtitulo %}Valor, idade e carência de cada promoção.{% endblock %}
+{% block pagina_acoes %}
+<button type="button" class="sh__btn" onclick="window.print()"><i class="bi bi-printer"></i> Imprimir</button>
+{% if prog and esc.pode_editar %}
+<button type="submit" form="exf-precos" class="sh__btn sh__btn--forte exf-nao-imprime"><i class="bi bi-check-lg"></i> Salvar tabela</button>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+{% include 'exame_faixa/_abas.html' %}
+
+{% if not prog %}
+<div class="lst-quadro"><div class="lst-vazio">A associação ainda não tem programa de exame cadastrado.</div></div>
+{% else %}
+{% set valores = prog|selectattr('valor')|map(attribute='valor')|list %}
+{% set ativas = prog|selectattr('ativo')|list|length %}
+<div class="sh__faixa mb-3">
+  <div class="sh__faixa-item"><span class="sh__faixa-rotulo">Promoções</span><span class="sh__faixa-valor">{{ prog|length }}</span></div>
+  <div class="sh__faixa-item"><span class="sh__faixa-rotulo">Ativas</span><span class="sh__faixa-valor">{{ ativas }}</span></div>
+  <div class="sh__faixa-item"><span class="sh__faixa-rotulo">Menor valor</span><span class="sh__faixa-valor">{{ 'R$ %.2f'|format(valores|min)|replace('.', ',') if valores else '—' }}</span></div>
+  <div class="sh__faixa-item"><span class="sh__faixa-rotulo">Maior valor</span><span class="sh__faixa-valor">{{ 'R$ %.2f'|format(valores|max)|replace('.', ',') if valores else '—' }}</span></div>
+  <div class="sh__faixa-item"><span class="sh__faixa-rotulo">Última alteração</span>
+    <span class="exf-faixa-texto">{% if atualizacao and atualizacao.por %}{{ atualizacao.por }}<small>{{ atualizacao.em|data_br }}</small>{% else %}Edição {{ prog[0].edicao or '—' }}{% endif %}</span></div>
+</div>
+
+<form method="POST" id="exf-precos">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <section class="lst-quadro exf-precos">
+    <div class="exf-preco exf-preco--cab">
+      <div>#</div>
+      <div>Promoção</div>
+      <div class="lst-num">Valor</div>
+      <div class="lst-num">Idade mínima</div>
+      <div class="lst-num">Idade máxima</div>
+      <div class="lst-num">Carência</div>
+      <div class="exf-preco__ativa">Ativa</div>
+    </div>
+    {% for p in prog %}
+    <div class="exf-preco{{ ' is-inativa' if not p.ativo }}" data-exf-linha>
+      <div class="exf-preco__n">{{ loop.index }}</div>
+      <div class="lst-corta">{{ promo(p) }}</div>
+      {% if esc.pode_editar %}
+      <input type="hidden" name="linha_{{ p.id }}" value="1">
+      <label class="exf-in"><span>R$</span><input type="number" name="valor_{{ p.id }}" min="0" step="0.01" inputmode="decimal"
+             value="{{ '%.2f'|format(p.valor) if p.valor is not none }}" aria-label="Valor {{ p.para }}"></label>
+      <label class="exf-in"><input type="number" name="idade_minima_{{ p.id }}" min="0" max="99" value="{{ p.idade_minima if p.idade_minima is not none }}" placeholder="—" aria-label="Idade mínima {{ p.para }}"><span>anos</span></label>
+      <label class="exf-in"><input type="number" name="idade_maxima_{{ p.id }}" min="0" max="99" value="{{ p.idade_maxima if p.idade_maxima is not none }}" placeholder="—" aria-label="Idade máxima {{ p.para }}"><span>anos</span></label>
+      <label class="exf-in"><input type="number" name="carencia_meses_{{ p.id }}" min="0" max="240" value="{{ p.carencia_meses if p.carencia_meses is not none }}" placeholder="—" aria-label="Carência {{ p.para }}"><span>meses</span></label>
+      <div class="exf-preco__ativa"><div class="form-check form-switch m-0">
+        <input type="checkbox" class="form-check-input" role="switch" name="ativo_{{ p.id }}" value="1" {% if p.ativo %}checked{% endif %} aria-label="Promoção {{ p.para }} ativa"></div></div>
+      {% else %}
+      <div class="lst-num">{{ p.valor_fmt }}</div>
+      <div class="lst-num">{{ (p.idade_minima ~ ' anos') if p.idade_minima is not none else '—' }}</div>
+      <div class="lst-num">{{ (p.idade_maxima ~ ' anos') if p.idade_maxima is not none else '—' }}</div>
+      <div class="lst-num">{{ (p.carencia_meses ~ ' meses') if p.carencia_meses is not none else '—' }}</div>
+      <div class="exf-preco__ativa">{{ 'Sim' if p.ativo else 'Não' }}</div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </section>
+
+  {% if esc.pode_editar %}
+  <div class="exf-rodape exf-nao-imprime" id="exf-precos-rodape">
+    <span class="exf-rodape__status" data-exf-status>Nenhuma alteração.</span>
+    <span class="u-muted u-fs-sm">Quem já se inscreveu mantém o valor do momento da inscrição.</span>
+    <button type="submit" class="sh__btn sh__btn--forte"><i class="bi bi-check-lg"></i> Salvar tabela</button>
+  </div>
+  {% else %}
+  <p class="u-muted u-fs-sm mt-3">A tabela é definida pela associação.</p>
+  {% endif %}
+</form>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+/* Marca a linha alterada e avisa antes de sair com a tabela sem salvar. */
+(function () {
+  var form = document.getElementById('exf-precos');
+  if (!form || !form.querySelector('.exf-in')) return;
+  var status = form.querySelector('[data-exf-status]');
+  var inicial = new Map();
+  form.querySelectorAll('input:not([type=hidden])').forEach(function (i) {
+    inicial.set(i, i.type === 'checkbox' ? i.checked : i.value);
+  });
+  var sujo = false;
+  function confere() {
+    var n = 0;
+    form.querySelectorAll('[data-exf-linha]').forEach(function (l) {
+      var mudou = false;
+      l.querySelectorAll('input:not([type=hidden])').forEach(function (i) {
+        if ((i.type === 'checkbox' ? i.checked : i.value) !== inicial.get(i)) mudou = true;
+        if (i.type === 'checkbox') l.classList.toggle('is-inativa', !i.checked);
+      });
+      l.classList.toggle('is-alterada', mudou);
+      if (mudou) n++;
+    });
+    sujo = n > 0;
+    status.textContent = n ? n + (n === 1 ? ' promoção alterada — não salva' : ' promoções alteradas — não salvas') : 'Nenhuma alteração.';
+    status.classList.toggle('is-alerta', sujo);
+  }
+  form.addEventListener('input', confere);
+  form.addEventListener('change', confere);
+  form.addEventListener('submit', function () { sujo = false; });
+  window.addEventListener('beforeunload', function (e) { if (sujo) { e.preventDefault(); e.returnValue = ''; } });
+})();
+</script>
+{% endblock %}

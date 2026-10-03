@@ -1,0 +1,311 @@
+/* =======================================================================
+   Legado — o Bootstrap das telas antigas no desenho do sistema
+   =======================================================================
+   Boa parte das telas ainda monta a página com `btn btn-primary`, `card`
+   com sombra e cabeçalho colorido, `table-striped`, `form-control` cru e
+   ícones `text-primary`. Cada uma escolheu seu azul, sua sombra e seu raio,
+   e é isso que faz o sistema parecer remendado.
+
+   Reescrever ~130 templates seria mexer em estrutura por um problema de
+   aparência. Esta camada redesenha essas classes DENTRO do conteúdo do
+   shell (body.sh .sh__conteudo): a barra lateral, o topo e as páginas
+   públicas ficam como estão.
+
+   Regras:
+   - Ação principal (`btn-primary`) fica preta, como `sh__btn--forte`.
+   - Verde, vermelho e amarelo continuam: comunicam estado (confirmar,
+     excluir, atenção). Só a forma muda.
+   - Azul "decorativo" (text-primary, bg-primary, border-primary, gradiente)
+     vira neutro.
+   - Usa os tokens --u-*: o modo noturno acompanha sem regra extra.
+   ======================================================================= */
+
+/* ------------------------------------------------------------- botões */
+body.sh .sh__conteudo .btn {
+  --bs-btn-border-radius: var(--u-radius-sm);
+  --bs-btn-font-weight: 500;
+  --bs-btn-padding-x: 1rem;
+  --bs-btn-padding-y: .55rem;
+  --bs-btn-font-size: .9rem;
+  --bs-btn-focus-box-shadow: 0 0 0 3px rgba(28, 28, 28, .12);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .4rem;
+}
+body.sh .sh__conteudo .btn-sm { --bs-btn-padding-x: .65rem; --bs-btn-padding-y: .35rem; --bs-btn-font-size: .8rem; }
+body.sh .sh__conteudo .btn-lg { --bs-btn-padding-x: 1.25rem; --bs-btn-padding-y: .75rem; --bs-btn-font-size: 1rem; }
+body.sh .sh__conteudo .btn > .bi + span, body.sh .sh__conteudo .btn .me-1, body.sh .sh__conteudo .btn .me-2 { margin-right: 0 !important; }
+
+body.sh .sh__conteudo .btn-primary,
+body.sh .sh__conteudo .btn-dark {
+  --bs-btn-color: var(--u-surface);
+  --bs-btn-bg: var(--u-text);
+  --bs-btn-border-color: var(--u-text);
+  --bs-btn-hover-color: var(--u-surface);
+  --bs-btn-hover-bg: #000;
+  --bs-btn-hover-border-color: #000;
+  --bs-btn-active-color: var(--u-surface);
+  --bs-btn-active-bg: #000;
+  --bs-btn-active-border-color: #000;
+  --bs-btn-disabled-color: var(--u-surface);
+  --bs-btn-disabled-bg: var(--u-text-muted);
+  --bs-btn-disabled-border-color: var(--u-text-muted);
+}
+.dark-mode body.sh .sh__conteudo .btn-primary,
+.dark-mode body.sh .sh__conteudo .btn-dark { --bs-btn-hover-bg: #fff; --bs-btn-hover-border-color: #fff; --bs-btn-active-bg: #fff; }
+
+/* Secundárias: o botão neutro do shell. */
+body.sh .sh__conteudo .btn-secondary,
+body.sh .sh__conteudo .btn-light,
+body.sh .sh__conteudo .btn-info,
+body.sh .sh__conteudo .btn-outline-primary,
+body.sh .sh__conteudo .btn-outline-secondary,
+body.sh .sh__conteudo .btn-outline-info,
+body.sh .sh__conteudo .btn-outline-dark,
+body.sh .sh__conteudo .btn-outline-light {
+  --bs-btn-color: var(--u-text);
+  --bs-btn-bg: var(--u-surface);
+  --bs-btn-border-color: var(--u-border);
+  --bs-btn-hover-color: var(--u-text);
+  --bs-btn-hover-bg: var(--u-surface-alt);
+  --bs-btn-hover-border-color: var(--u-text-faint);
+  --bs-btn-active-color: var(--u-text);
+  --bs-btn-active-bg: var(--u-surface-alt);
+  --bs-btn-active-border-color: var(--u-text);
+  --bs-btn-disabled-color: var(--u-text-faint);
+  --bs-btn-disabled-bg: var(--u-surface);
+  --bs-btn-disabled-border-color: var(--u-border);
+}
+/* Botão de grupo marcado (btn-check / .active) fica escuro, como aba ativa. */
+body.sh .sh__conteudo .btn-check:checked + .btn-outline-primary,
+body.sh .sh__conteudo .btn-check:checked + .btn-outline-secondary,
+body.sh .sh__conteudo .btn-outline-primary.active,
+body.sh .sh__conteudo .btn-outline-secondary.active {
+  background: var(--u-text); border-color: var(--u-text); color: var(--u-surface);
+}
+body.sh .sh__conteudo .btn-link { --bs-btn-color: var(--u-text); --bs-btn-hover-color: var(--u-text); text-decoration: underline; text-underline-offset: 2px; }
+
+/* --------------------------------------------------------------- cartões */
+body.sh .sh__conteudo .card {
+  --bs-card-border-color: var(--u-border);
+  --bs-card-border-radius: var(--u-radius);
+  --bs-card-inner-border-radius: calc(var(--u-radius) - 1px);
+  --bs-card-cap-bg: var(--u-surface);
+  --bs-card-bg: var(--u-surface);
+  --bs-card-cap-padding-y: .85rem;
+  --bs-card-cap-padding-x: 1.15rem;
+  box-shadow: none !important;
+  border: 1px solid var(--u-border);
+}
+body.sh .sh__conteudo .card.border-0 { border: 1px solid var(--u-border) !important; }
+body.sh .sh__conteudo .card-header {
+  background: var(--u-surface) !important;
+  color: var(--u-text) !important;
+  border-bottom: 1px solid var(--u-border);
+  font-weight: 600;
+}
+body.sh .sh__conteudo .card-header :is(h1, h2, h3, h4, h5, h6) {
+  margin: 0; color: var(--u-text) !important; font-size: 1rem; font-weight: 600;
+}
+body.sh .sh__conteudo .card-header .bi { color: var(--u-text-muted) !important; }
+body.sh .sh__conteudo .card-footer { background: var(--u-surface); border-top: 1px solid var(--u-border); }
+body.sh .sh__conteudo .card[class*="border-left"],
+body.sh .sh__conteudo .card[class*="border-start"] { border-left-width: 1px !important; }
+
+/* Sombras e gradientes decorativos. */
+body.sh .sh__conteudo .shadow,
+body.sh .sh__conteudo .shadow-sm,
+body.sh .sh__conteudo .shadow-lg { box-shadow: none !important; }
+body.sh .sh__conteudo .bg-gradient { background-image: none !important; }
+
+/* Faixa/caixa pintada de azul sem significar nada vira superfície neutra.
+   Badge com bg-primary também — o azul ali só repetia a decoração. */
+body.sh .sh__conteudo .bg-primary:not(.progress-bar) {
+  background-color: var(--u-surface-alt) !important;
+  color: var(--u-text) !important;
+}
+body.sh .sh__conteudo .bg-primary.text-white :is(h1, h2, h3, h4, h5, h6, p, span, i, small),
+body.sh .sh__conteudo .bg-primary .text-white { color: var(--u-text) !important; }
+body.sh .sh__conteudo .badge.bg-primary,
+body.sh .sh__conteudo .badge.text-bg-primary { background-color: var(--u-text) !important; color: var(--u-surface) !important; }
+body.sh .sh__conteudo .bg-light { background-color: var(--u-surface-alt) !important; }
+body.sh .sh__conteudo .border-primary { border-color: var(--u-border) !important; }
+body.sh .sh__conteudo .text-primary { color: var(--u-text) !important; }
+body.sh .sh__conteudo .bi.text-primary,
+body.sh .sh__conteudo i.text-primary { color: var(--u-text-muted) !important; }
+body.sh .sh__conteudo .progress-bar:not([class*="bg-"]) { background-color: var(--u-text); }
+body.sh .sh__conteudo .badge { font-weight: 600; border-radius: 999px; padding: .3em .65em; }
+
+/* ---------------------------------------------------------------- tabelas */
+body.sh .sh__conteudo .table {
+  --bs-table-bg: var(--u-surface);
+  --bs-table-color: var(--u-text);
+  --bs-table-border-color: var(--u-border-soft);
+  --bs-table-striped-bg: var(--u-surface-alt);
+  --bs-table-striped-color: var(--u-text);
+  --bs-table-hover-bg: var(--u-surface-alt);
+  --bs-table-hover-color: var(--u-text);
+  font-size: .9rem;
+  vertical-align: middle;
+}
+body.sh .sh__conteudo .table > thead > tr > th,
+body.sh .sh__conteudo .table > thead > tr > td {
+  background: var(--u-surface-alt) !important;
+  color: var(--u-text-muted) !important;
+  font-size: .68rem;
+  font-weight: 600;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--u-border);
+  white-space: nowrap;
+}
+/* Cabeçalhos pintados (table-dark, table-primary...) no mesmo neutro. */
+body.sh .sh__conteudo :is(.table-dark, .table-primary, .table-info, .table-secondary):is(thead, tr) {
+  --bs-table-bg: var(--u-surface-alt);
+  --bs-table-color: var(--u-text-muted);
+  --bs-table-border-color: var(--u-border);
+}
+body.sh .sh__conteudo .table > :not(caption) > * > * { padding: .65rem .75rem; }
+body.sh .sh__conteudo .table-sm > :not(caption) > * > * { padding: .4rem .55rem; }
+body.sh .sh__conteudo .table-bordered > :not(caption) > * { border-color: var(--u-border-soft); }
+
+/* ----------------------------------------------------------------- campos */
+body.sh .sh__conteudo .form-label { color: var(--u-text); font-weight: 600; font-size: .85rem; margin-bottom: .35rem; }
+body.sh .sh__conteudo .form-control,
+body.sh .sh__conteudo .form-select {
+  border-radius: var(--u-radius-sm);
+  border-color: var(--u-border);
+  color: var(--u-text);
+  background-color: var(--u-surface);
+}
+body.sh .sh__conteudo .form-control:focus,
+body.sh .sh__conteudo .form-select:focus {
+  border-color: var(--u-text);
+  box-shadow: 0 0 0 3px rgba(28, 28, 28, .08);
+}
+body.sh .sh__conteudo .form-check-input:checked { background-color: var(--u-text); border-color: var(--u-text); }
+body.sh .sh__conteudo .form-check-input:focus { border-color: var(--u-text); box-shadow: 0 0 0 3px rgba(28, 28, 28, .08); }
+body.sh .sh__conteudo .input-group-text { background: var(--u-surface-alt); border-color: var(--u-border); color: var(--u-text-muted); }
+body.sh .sh__conteudo .form-text { color: var(--u-text-muted); }
+
+/* ---------------------------------------------------------- abas e pills */
+body.sh .sh__conteudo .nav-tabs { border-bottom: 1px solid var(--u-border); gap: 1.2rem; }
+body.sh .sh__conteudo .nav-tabs .nav-link {
+  border: 0; border-bottom: 2px solid transparent; border-radius: 0;
+  padding: .55rem 0 .7rem; margin-bottom: -1px; color: var(--u-text-muted); background: none;
+}
+body.sh .sh__conteudo .nav-tabs .nav-link:hover { color: var(--u-text); }
+body.sh .sh__conteudo .nav-tabs .nav-link.active { color: var(--u-text); font-weight: 600; border-bottom-color: var(--u-text); background: none; }
+body.sh .sh__conteudo .nav-pills .nav-link { color: var(--u-text-muted); border-radius: 999px; }
+body.sh .sh__conteudo .nav-pills .nav-link.active { background: var(--u-text); color: var(--u-surface); }
+
+/* ------------------------------------------------- alertas, listas, páginas */
+body.sh .sh__conteudo .alert { border-radius: var(--u-radius-sm); border-width: 1px; }
+body.sh .sh__conteudo .alert-primary,
+body.sh .sh__conteudo .alert-info,
+body.sh .sh__conteudo .alert-secondary,
+body.sh .sh__conteudo .alert-light {
+  --bs-alert-bg: var(--u-surface-alt);
+  --bs-alert-color: var(--u-text);
+  --bs-alert-border-color: var(--u-border);
+}
+body.sh .sh__conteudo .list-group { --bs-list-group-border-color: var(--u-border); --bs-list-group-border-radius: var(--u-radius-sm); }
+body.sh .sh__conteudo .list-group-item.active { background: var(--u-text); border-color: var(--u-text); color: var(--u-surface); }
+body.sh .sh__conteudo .pagination {
+  --bs-pagination-color: var(--u-text);
+  --bs-pagination-border-color: var(--u-border);
+  --bs-pagination-hover-color: var(--u-text);
+  --bs-pagination-hover-bg: var(--u-surface-alt);
+  --bs-pagination-active-bg: var(--u-text);
+  --bs-pagination-active-border-color: var(--u-text);
+  --bs-pagination-active-color: var(--u-surface);
+  --bs-pagination-focus-box-shadow: 0 0 0 3px rgba(28, 28, 28, .1);
+}
+body.sh .sh__conteudo .accordion {
+  --bs-accordion-active-bg: var(--u-surface-alt);
+  --bs-accordion-active-color: var(--u-text);
+  --bs-accordion-btn-focus-box-shadow: 0 0 0 3px rgba(28, 28, 28, .08);
+  --bs-accordion-border-color: var(--u-border);
+}
+body.sh .sh__conteudo .dropdown-item.active,
+body.sh .sh__conteudo .dropdown-item:active { background: var(--u-text); color: var(--u-surface); }
+
+/* Título de página que a tela antiga escreve dentro do conteúdo (h2/h3 com
+   ícone azul): ícone neutro, como o cabeçalho do shell. */
+body.sh .sh__conteudo > :is(h1, h2, h3) .bi,
+body.sh .sh__conteudo > .container > :is(h1, h2, h3) .bi,
+body.sh .sh__conteudo > .container-fluid > :is(h1, h2, h3) .bi { color: var(--u-text-muted); }
+
+/* Modal: cabeçalho pintado vira neutro. */
+body.sh .modal-header[class*="bg-"] { background: var(--u-surface) !important; color: var(--u-text) !important; border-bottom: 1px solid var(--u-border); }
+body.sh .modal-header[class*="bg-"] :is(.modal-title, h5, .bi) { color: var(--u-text) !important; }
+body.sh .modal-header[class*="bg-"] .btn-close-white { filter: none; }
+
+/* ------------------------------------------- botão "primário" do u-btn */
+/* `u-btn--primario` nasceu azul (o --u-primary do Bootstrap). No shell a
+   ação principal é a preta; o azul aqui era o mesmo resíduo do btn-primary. */
+body.sh .sh__conteudo .u-btn--primario {
+  background: var(--u-text); border-color: var(--u-text); color: var(--u-surface);
+}
+body.sh .sh__conteudo .u-btn--primario:hover { background: #000; border-color: #000; color: var(--u-surface); }
+.dark-mode body.sh .sh__conteudo .u-btn--primario:hover { background: #fff; border-color: #fff; }
+body.sh .sh__conteudo .u-btn:focus-visible { outline-color: var(--u-text); }
+
+/* ---------------------------------------- título que a tela antiga escreve */
+/* Telas que ainda não usam o bloco `pagina_titulo` abrem com um h1/h2
+   "h4 fw-bold" (às vezes display-5/6) dentro do conteúdo. Aqui ele ganha o
+   tamanho e o peso do título do shell (.sh__titulo), para o topo de todas
+   as telas ter a mesma cara. */
+body.sh .sh__conteudo :is(h1, h2).h4.fw-bold,
+body.sh .sh__conteudo :is(h1, h2).h3.fw-bold,
+body.sh .sh__conteudo :is(h1, h2, h3).display-4,
+body.sh .sh__conteudo :is(h1, h2, h3).display-5,
+body.sh .sh__conteudo :is(h1, h2, h3).display-6 {
+  font-size: 1.85rem;
+  font-weight: 600 !important;
+  letter-spacing: -.02em;
+  line-height: 1.2;
+  color: var(--u-text) !important;
+}
+@media (max-width: 640px) {
+  body.sh .sh__conteudo :is(h1, h2).h4.fw-bold,
+  body.sh .sh__conteudo :is(h1, h2).h3.fw-bold,
+  body.sh .sh__conteudo :is(h1, h2, h3):is(.display-4, .display-5, .display-6) { font-size: 1.45rem; }
+}
+
+/* ================================================================ celular */
+/* Toque: alvo pequeno em tela pequena é o erro mais comum das telas antigas
+   (checkbox de 13px, botão de ícone de 24px). E campo com fonte < 16px faz o
+   iPhone dar zoom ao focar — a tela "pula" e a pessoa precisa voltar o zoom.
+   O .frm já fazia isso; aqui vale para todo campo do conteúdo. */
+@media (max-width: 767.98px) {
+  body.sh .sh__conteudo :is(.form-control, .form-select, .u-campo__controle,
+    input[type=text], input[type=email], input[type=tel], input[type=number],
+    input[type=search], input[type=password], input[type=date], input[type=time],
+    input[type=datetime-local], input[type=url], select, textarea) { font-size: 16px; }
+  body.sh .sh__conteudo .form-check:not(.form-switch) .form-check-input,
+  body.sh .sh__conteudo .form-check-input:not([role=switch]):not(.form-switch *) { width: 1.25em; height: 1.25em; }
+  body.sh .sh__conteudo .form-switch .form-check-input { width: 2.4em; height: 1.3em; }
+  body.sh .sh__conteudo .form-check { min-height: 1.75rem; }
+  body.sh .sh__conteudo :is(.btn-sm, .u-btn--pequeno) { min-height: 36px; }
+  body.sh .sh__conteudo :is(.lst-acao, .u-btn--icone) { min-width: 40px; min-height: 40px; }
+  /* Cabeçalho de cartão com título e botões: quebra em vez de espremer. */
+  body.sh .sh__conteudo .card-header.d-flex { flex-wrap: wrap; gap: .5rem; }
+  /* Grupo de botões largo rola em vez de estourar a tela. */
+  body.sh .sh__conteudo .btn-group:not(.btn-group-vertical) { flex-wrap: wrap; }
+  /* Abas numa linha só, rolando de lado — quebrar em duas linhas deixava a
+     aba ativa solta e a ordem confusa. */
+  body.sh .sh__conteudo :is(.lst-abas, .nav-tabs) {
+    flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden;
+    scrollbar-width: none; -webkit-overflow-scrolling: touch;
+  }
+  body.sh .sh__conteudo :is(.lst-abas, .nav-tabs)::-webkit-scrollbar { display: none; }
+  body.sh .sh__conteudo :is(.lst-aba, .nav-tabs .nav-item, .nav-tabs .nav-link) { flex: none; white-space: nowrap; }
+  /* Campo dentro de tabela rolável: largura mínima, para a tabela rolar de
+     lado em vez de espremer o campo até virar "BF". */
+  body.sh .sh__conteudo :is(.table-responsive, .lst-rolagem) td :is(input:not([type=checkbox]):not([type=radio]):not([type=hidden]):not([type=number]), select) { min-width: 8rem; }
+  body.sh .sh__conteudo :is(.table-responsive, .lst-rolagem) td input[type=number] { min-width: 4.5rem; }
+  /* Modal ocupa a tela com respiro e rola por dentro. */
+  body.sh .modal-dialog { margin: .75rem; }
+}

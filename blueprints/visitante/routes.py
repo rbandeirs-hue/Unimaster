@@ -711,7 +711,7 @@ def solicitar_mensalidade():
         cur.execute("""
             SELECT id, nome, descricao, valor 
             FROM mensalidades 
-            WHERE id_academia = %s AND ativo = 1
+            WHERE id_academia = %s AND ativo = 1 AND COALESCE(periodicidade,'mensal') <> 'diaria'
             ORDER BY valor ASC
         """, (visitante["id_academia"],))
         mensalidades = cur.fetchall()

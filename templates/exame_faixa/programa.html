@@ -1,0 +1,123 @@
+{% extends "base_app.html" %}
+{% block conteudo_classe %}exf-tela{% endblock %}
+{% from 'exame_faixa/_macros.html' import obi, promo with context %}
+{% set menu_ativo = 'exame_faixa' %}
+{% block title %}Exame de faixa — programa{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{{ asset('css/exame_faixa.css') }}">{% endblock %}
+
+{% block pagina_titulo %}Exame de faixa{% endblock %}
+{% block pagina_subtitulo %}Material de estudo de cada promoção — teoria, técnicas, katas, vídeos e documentos.{% endblock %}
+{% block pagina_acoes %}
+{% if alunos_apostila %}
+<button type="button" class="sh__btn" data-exf-apostila><i class="bi bi-printer"></i> Imprimir apostila</button>
+{% else %}
+<button type="button" class="sh__btn" onclick="window.print()"><i class="bi bi-printer"></i> Imprimir apostila</button>
+{% endif %}
+{% if esc.pode_editar %}
+<a href="{{ url_for('exame_faixa.materiais') }}" class="sh__btn"><i class="bi bi-camera-video"></i> Vídeos e documentos</a>
+{% endif %}
+{% if atual and esc.pode_editar %}
+<a href="{{ url_for('exame_faixa.editar_conteudo', programa_id=atual.id) }}" class="sh__btn sh__btn--forte"><i class="bi bi-pencil"></i> Editar conteúdo</a>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+{% include 'exame_faixa/_abas.html' %}
+
+{% if not prog %}
+<div class="lst-quadro"><div class="lst-vazio">
+  A associação ainda não tem programa de exame cadastrado.
+</div></div>
+{% else %}
+{% if marca.logo %}<img class="exf-so-papel exf-marca-dagua" src="{{ marca.logo }}" alt="">{% endif %}
+<style media="print">
+  {# cabeçalho de cada folha (substitui o do navegador) #}
+  @page { @top-left { content: "{{ (marca.nome or 'Unimaster')|replace('"', '')|replace('<', '')|replace('\\', '')|safe }}"; font: 7.5pt Inter, sans-serif; color: #666; }
+          @top-right { content: "Apostila · {{ atual.de|replace('"', '')|safe }} → {{ atual.para|replace('"', '')|safe }}"; font: 7.5pt Inter, sans-serif; color: #666; } }
+</style>
+<header class="exf-so-papel exf-apostila-cab">
+  {% if marca.logo %}<img class="exf-apostila-cab__logo" src="{{ marca.logo }}" alt="Logo {{ marca.nome or '' }}">{% endif %}
+  <div class="exf-apostila-cab__tit">
+    {% if marca.nome %}<span class="exf-apostila-cab__acad">{{ marca.nome }}</span>{% endif %}
+    <span class="exf-rotulo">Apostila de estudo · edição {{ atual.edicao or '—' }}</span>
+    <h1>{{ promo(atual) }}</h1>
+    <p>Idade {{ atual.idade_txt }} · carência {{ atual.carencia_txt }}</p>
+  </div>
+  <div class="exf-apostila-cab__meta">
+    <span>Aluno: ________________________________</span>
+    <span>Impresso em {{ hoje_txt }}</span>
+  </div>
+</header>
+<p class="exf-so-papel exf-apostila-leg">Aponte a câmera do celular para o QR code para ver o vídeo da técnica</p>
+<div class="exf-programa">
+  {# ------------------------------------------- promoções, na ordem do programa #}
+  <nav class="exf-promos exf-nao-imprime" aria-label="Promoções do programa">
+    <span class="exf-rotulo exf-promos__titulo">{{ prog|length }} promoções · edição {{ atual.edicao or '—' }}</span>
+    {% for p in prog %}
+    <a href="{{ url_for('exame_faixa.programa', p=loop.index0, **abas.kw) }}"
+       class="exf-promos__item{{ ' is-ativa' if loop.index0 == idx }}{{ ' is-inativa' if not p.ativo }}"
+       {% if loop.index0 == idx %}aria-current="page"{% endif %}>
+      <span class="exf-promos__n">{{ loop.index }}</span>
+      {{ obi(p.cores_para, true) }}
+      <span class="exf-promos__txt">
+        <strong>{{ p.para }}</strong>
+        <small>vindo da {{ p.de }}</small>
+      </span>
+      <span class="exf-promos__meta">{{ p.valor_fmt }}<small>{{ n_videos[p.id][0] }}/{{ n_videos[p.id][1] }} vídeos</small></span>
+    </a>
+    {% endfor %}
+    {% set ix = namespace(teo=0, tec=0) %}
+    {% for b in conhecimento if b.tipo not in ['texto', 'material', 'pedido'] %}{% set ix.teo = ix.teo + (b.itens|length) %}{% endfor %}
+    {% for g in tecnicas %}{% set ix.tec = ix.tec + (g.itens|length) %}{% endfor %}
+    {% set tem_fund = conhecimento|selectattr('tipo', 'equalto', 'material')|list %}
+    <div class="exf-indice">
+      <span class="exf-rotulo">Neste material</span>
+      <a href="#mat-teoria"><span><b>1</b>Conhecimento teórico</span><small>{{ ix.teo }}</small></a>
+      {% if tem_fund %}<a href="#mat-fund"><span><b>2</b>Fundamentos</span><small>{{ tem_fund|length }}</small></a>{% endif %}
+      <a href="#mat-tecnicas"><span><b>{{ 3 if tem_fund else 2 }}</b>Técnicas novas</span><small>{{ ix.tec }}</small></a>
+      {% set nk = (3 if tem_fund else 2) + (1 if mostra_katas else 0) %}
+      {% if mostra_katas %}<a href="#mat-katas"><span><b>{{ nk }}</b>Katas</span><small>{{ katas_cobrados|length + katas_extra|length }}</small></a>{% endif %}
+      <a href="#mat-docs"><span><b>{{ nk + 1 }}</b>Documentos</span><small>{{ documentos|length }}</small></a>
+      {% if anteriores %}<a href="#mat-revisao"><span><b></b>Revisão das faixas anteriores</span><small>{{ anteriores|sum(attribute='n') }}</small></a>{% endif %}
+    </div>
+  </nav>
+
+  {# ------------------------------------------------------ promoção escolhida #}
+  <div class="exf-programa__corpo exf-numerado">
+    {% include 'exame_faixa/_apostila_corpo.html' %}
+
+    <div class="exf-programa__nav exf-nao-imprime">
+      {% if idx > 0 %}
+      <a href="{{ url_for('exame_faixa.programa', p=idx - 1, **abas.kw) }}" class="sh__btn"><i class="bi bi-arrow-left"></i> {{ prog[idx - 1].para }}</a>
+      {% else %}<span></span>{% endif %}
+      {% if idx < prog|length - 1 %}
+      <a href="{{ url_for('exame_faixa.programa', p=idx + 1, **abas.kw) }}" class="sh__btn">{{ prog[idx + 1].para }} <i class="bi bi-arrow-right"></i></a>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+{% include 'exame_faixa/_video_dialogo.html' %}
+{% if alunos_apostila %}{% include 'exame_faixa/_apostila_dialogo.html' %}{% endif %}
+<script>
+/* No papel o material é o produto: o passo a passo de cada técnica sai aberto.
+   O CSS sozinho não dá conta — <details> fechado é escondido pelo navegador —
+   então abrimos antes de imprimir e devolvemos ao estado de antes depois. */
+(function () {
+  var abertos = [];
+  window.addEventListener('beforeprint', function () {
+    abertos = [];
+    document.querySelectorAll('details.exf-passos:not([open])').forEach(function (d) {
+      abertos.push(d); d.open = true;
+    });
+  });
+  window.addEventListener('afterprint', function () {
+    abertos.forEach(function (d) { d.open = false; });
+    abertos = [];
+  });
+})();
+</script>
+{% endblock %}

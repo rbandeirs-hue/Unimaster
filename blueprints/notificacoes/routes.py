@@ -73,6 +73,17 @@ def _next_path_aniversariante_live() -> str:
     return url_for("painel.home")
 
 
+def _filtro_academias_do_usuario(cur, uid: int):
+    """(trecho SQL, params) que limita os aniversariantes às academias do usuário.
+    Sem academia nenhuma, o trecho é falso: não avisa aniversário de ninguém."""
+    from utils.aniversariantes import academias_ids_do_usuario, sql_aluno_nas_academias
+
+    ids = academias_ids_do_usuario(cur, uid)
+    if not ids:
+        return "1 = 0", ()
+    return sql_aluno_nas_academias(ids, alias="a")
+
+
 def _build_aniv_live_link(aluno_id: int) -> str:
     next_path = _next_path_aniversariante_live()
     return f"/aniversariante-live/?next={quote(next_path, safe='/')}#/live/{int(aluno_id)}"
@@ -230,7 +241,7 @@ def push_test():
 def in_app_list():
     """
     Lista notificações in-app para o cabeçalho (dropdown).
-    Inclui: aniversariantes do dia (toda a base de alunos ativos) e parabéns recebidos (aluno do utilizador).
+    Inclui: aniversariantes do dia das academias do utilizador e parabéns recebidos (aluno do utilizador).
     """
     uid = int(current_user.id)
     conn = get_db_connection()
@@ -240,9 +251,11 @@ def in_app_list():
         ensure_in_app_notif_estado_table(cur)
         conn.commit()
         m_hoje, d_hoje, dia_ref = _hoje_mes_dia()
+        # Só os aniversariantes das academias do usuário.
+        trecho_ac, params_ac = _filtro_academias_do_usuario(cur, uid)
 
         cur.execute(
-            """
+            f"""
             SELECT a.id, a.nome, COALESCE(s.lida, 0) AS lida
             FROM alunos a
             LEFT JOIN in_app_notif_estado s
@@ -254,10 +267,11 @@ def in_app_list():
               AND MONTH(a.data_nascimento) = %s
               AND DAY(a.data_nascimento) = %s
               AND (s.oculta IS NULL OR s.oculta = 0)
+              AND {trecho_ac}
             ORDER BY a.nome ASC
             LIMIT 100
             """,
-            (uid, REF_TIPO_ANIVERSARIO_HOJE, m_hoje, d_hoje),
+            (uid, REF_TIPO_ANIVERSARIO_HOJE, m_hoje, d_hoje) + params_ac,
         )
         for r in cur.fetchall() or []:
             aid = int(r.get("id") or 0)
@@ -354,9 +368,10 @@ def in_app_unread_count():
         conn.commit()
         m_hoje, d_hoje, _dia = _hoje_mes_dia()
         total = 0
+        trecho_ac, params_ac = _filtro_academias_do_usuario(cur, uid)
 
         cur.execute(
-            """
+            f"""
             SELECT COUNT(*) AS c
             FROM alunos a
             LEFT JOIN in_app_notif_estado s
@@ -369,8 +384,9 @@ def in_app_unread_count():
               AND DAY(a.data_nascimento) = %s
               AND (s.oculta IS NULL OR s.oculta = 0)
               AND (s.lida IS NULL OR s.lida = 0)
+              AND {trecho_ac}
             """,
-            (uid, REF_TIPO_ANIVERSARIO_HOJE, m_hoje, d_hoje),
+            (uid, REF_TIPO_ANIVERSARIO_HOJE, m_hoje, d_hoje) + params_ac,
         )
         total += int((cur.fetchone() or {}).get("c") or 0)
 
@@ -484,9 +500,10 @@ def in_app_marcar_todas_lidas():
         conn.commit()
         m_hoje, d_hoje, _dia = _hoje_mes_dia()
         n = 0
+        trecho_ac, params_ac = _filtro_academias_do_usuario(cur, uid)
 
         cur.execute(
-            """
+            f"""
             INSERT INTO in_app_notif_estado (usuario_id, ref_tipo, ref_id, lida, oculta)
             SELECT %s, %s, a.id, 1, 0
             FROM alunos a
@@ -497,6 +514,7 @@ def in_app_marcar_todas_lidas():
               AND MONTH(a.data_nascimento) = %s
               AND DAY(a.data_nascimento) = %s
               AND (s.oculta IS NULL OR s.oculta = 0)
+              AND {trecho_ac}
             ON DUPLICATE KEY UPDATE lida = 1, oculta = 0
             """,
             (
@@ -506,7 +524,7 @@ def in_app_marcar_todas_lidas():
                 REF_TIPO_ANIVERSARIO_HOJE,
                 m_hoje,
                 d_hoje,
-            ),
+            ) + params_ac,
         )
         n += cur.rowcount
 

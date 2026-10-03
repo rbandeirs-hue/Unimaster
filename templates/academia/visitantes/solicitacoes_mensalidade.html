@@ -94,11 +94,11 @@
 <script>
   // A rota é montada com id 0 e o número real entra na hora do clique.
   var URL_APROVAR = "{{ url_for('academia.aprovar_solicitacao_mensalidade', solicitacao_id=0, academia_id=academia_id) }}";
-  document.addEventListener('click', function (ev) {
+  document.addEventListener('click', async function (ev) {
     var botao = ev.target.closest('.js-aprovar-matricula');
     if (!botao) return;
     var nome = botao.dataset.nome || 'este visitante';
-    if (!confirm('Aprovar a solicitação de ' + nome + '?\n\n' +
+    if (!await Dialogo.confirmar('Aprovar a solicitação de ' + nome + '?\n\n' +
                  'Ele será promovido a aluno e terá mensalidades geradas até o fim do ano.')) return;
     botao.disabled = true;
     fetch(URL_APROVAR.replace('/0/', '/' + botao.dataset.id + '/'), {

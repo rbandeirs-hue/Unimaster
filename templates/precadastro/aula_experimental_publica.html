@@ -33,9 +33,9 @@
 
     .form-label{ font-weight:600; font-size:.82rem; color:#2a2724; margin-bottom:.34rem; }
     .req{ color:var(--primary); }
-    .form-control, .form-select{ background:#fff; border:1px solid var(--input-border); color:var(--fg); border-radius:8px; padding:.62rem .82rem; font-size:.92rem; }
-    .form-control::placeholder{ color:#adaaa4; }
-    .form-control:focus, .form-select:focus{ border-color:var(--primary); box-shadow:0 0 0 3px rgba(193,18,31,.14); }
+    .form-control, .form-select, .u-campo__controle, .u-campo__controle { background:#fff; border:1px solid var(--input-border); color:var(--fg); border-radius:8px; padding:.62rem .82rem; font-size:.92rem; }
+    .form-control::placeholder, .u-campo__controle::placeholder { color:#adaaa4; }
+    .form-control:focus, .form-select:focus, .u-campo__controle:focus, .u-campo__controle:focus { border-color:var(--primary); box-shadow:0 0 0 3px rgba(193,18,31,.14); }
     .form-text{ color:var(--muted2) !important; font-size:.78rem; }
 
     .btn-go{ width:100%; border-radius:9px; font-weight:700; padding:.9rem 1rem; background:var(--primary); border:0; color:#fff; box-shadow:0 8px 20px -8px rgba(193,18,31,.5); display:inline-flex; align-items:center; justify-content:center; gap:8px; }
@@ -56,6 +56,7 @@
     /* flatpickr acento */
     .flatpickr-day.selected{ background:var(--primary); border-color:var(--primary); }
   </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/base/dialogo.css') }}">
 </head>
 <body>
 
@@ -115,27 +116,27 @@
                 <div>
                   <label class="form-label d-block">Foto <span class="req">*</span></label>
                   <label for="foto_arquivo" class="btn-foto"><i class="bi bi-camera-fill me-1"></i> Tirar foto ou escolher</label>
-                  <input type="file" id="foto_arquivo" name="foto_arquivo" class="d-none" accept="image/*" capture="user" required>
+                  <input type="file" id="foto_arquivo" name="foto_arquivo" class="d-none" accept="image/*" required>
                   <div class="form-text mt-1">JPG ou PNG, até 5 MB.</div>
                 </div>
               </div>
               <div>
                 <label for="nome" class="form-label">Nome completo <span class="req">*</span></label>
-                <input type="text" id="nome" name="nome" class="form-control" required value="{{ form.nome or '' }}" placeholder="Seu nome">
+                <input type="text" id="nome" name="nome" class="u-campo__controle" required value="{{ form.nome or '' }}" placeholder="Seu nome">
               </div>
               <div class="row g-3">
                 <div class="col-md-6">
                   <label for="telefone" class="form-label">Telefone / WhatsApp <span class="req">*</span></label>
-                  <input type="text" id="telefone" name="telefone" class="form-control" required value="{{ form.telefone or '' }}" placeholder="(81) 99999-9999" maxlength="15">
+                  <input type="text" id="telefone" name="telefone" class="u-campo__controle" required value="{{ form.telefone or '' }}" placeholder="(81) 99999-9999" maxlength="15">
                 </div>
                 <div class="col-md-6">
                   <label for="email" class="form-label">E-mail</label>
-                  <input type="email" id="email" name="email" class="form-control" value="{{ form.email or '' }}" placeholder="email@exemplo.com">
+                  <input type="email" id="email" name="email" class="u-campo__controle" value="{{ form.email or '' }}" placeholder="email@exemplo.com">
                 </div>
               </div>
               <div>
                 <label for="data_nascimento" class="form-label">Data de nascimento</label>
-                <input type="date" id="data_nascimento" name="data_nascimento" class="form-control" value="{{ form.data_nascimento or '' }}">
+                <input type="date" id="data_nascimento" name="data_nascimento" class="u-campo__controle" value="{{ form.data_nascimento or '' }}">
                 <div class="form-text mt-1">Opcional. Serve para indicar a turma pela faixa de idade.</div>
               </div>
             </div>
@@ -145,26 +146,27 @@
           <div class="sec">
             <div><div class="sec-num">02 · Turma e data</div><div class="sec-desc">Escolha onde e quando quer experimentar.</div></div>
             <div style="display:flex; flex-direction:column; gap:18px;">
+              {% with com_turma=false, turma_obrig=false, com_valor=false, mod_obrig=false %}{% include 'precadastro/_modalidade_turma.html' %}{% endwith %}
               <div class="row g-3">
                 <div class="col-md-6">
                   <label for="turma_id" class="form-label">Turma <span class="req">*</span></label>
-                  <select id="turma_id" name="turma_id" class="form-select" required>
+                  <select id="turma_id" name="turma_id" class="u-campo__controle" required data-filtra-modalidade>
                     <option value="" disabled {% if not form.turma_id %}selected{% endif %}>Selecione a turma</option>
                     {% for t in turmas %}
-                    <option value="{{ t.turma_id }}" data-dias="{{ t.dias_semana or '' }}"
+                    <option value="{{ t.turma_id }}" data-dias="{{ t.dias_semana or '' }}" data-mods="{{ (t.modalidades or [])|join(',') }}"
                             {% if form.turma_id and form.turma_id|string == t.turma_id|string %}selected{% endif %}>{{ t.turma_nome }}{% if t.DiasHorario %} — {{ t.DiasHorario }}{% endif %}</option>
                     {% endfor %}
                   </select>
                 </div>
                 <div class="col-md-6">
                   <label for="data_aula" class="form-label">Data desejada <span class="req">*</span></label>
-                  <input type="text" id="data_aula" name="data_aula" class="form-control" required value="{{ form.data_aula or '' }}"
+                  <input type="text" id="data_aula" name="data_aula" class="u-campo__controle" required value="{{ form.data_aula or '' }}"
                          placeholder="Escolha a turma primeiro" readonly>
                   <div class="form-text mt-1" id="diasHint">Escolha a turma primeiro.</div>
                 </div>
               </div>
               <div style="display:flex; align-items:center; gap:11px; background:#f7f7f5; border:1px solid var(--border); border-radius:10px; padding:12px 14px; color:var(--muted); font-size:.86rem;">
-                <i class="bi bi-info-circle" style="color:var(--muted2); flex:none;"></i> Venha com roupa leve e garrafa de água. O quimono é emprestado na primeira aula.
+                <i class="bi bi-info-circle" style="color:var(--muted2); flex:none;"></i> Venha com roupa leve e garrafa de água.
               </div>
               <button type="submit" class="btn-go">Solicitar aula experimental <i class="bi bi-arrow-right"></i></button>
               <p class="text-center text-muted" style="font-size:.8rem; margin:0;">A secretaria confirma a vaga por WhatsApp em até um dia útil.</p>
@@ -238,5 +240,6 @@
       }
     });
   </script>
+    <script src="{{ url_for('static', filename='js/base/dialogo.js') }}"></script>
 </body>
 </html>

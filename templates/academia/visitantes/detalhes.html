@@ -1,12 +1,12 @@
 {% extends "base_app.html" %}
+{% set back_url = url_for('academia.lista_visitantes', academia_id=academia_id) %}
 {% block title %}Detalhes do Visitante{% endblock %}
+{% block pagina_titulo %}Detalhes do visitante{% endblock %}
+{% block pagina_acoes %}
+<a href="{{ url_voltar(back_url) }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Voltar</a>
+{% endblock %}
 {% block content %}
 <div class="container mt-4">
-    <div class="mb-4">
-        {% set back_url = url_for('academia.lista_visitantes', academia_id=academia_id) %}
-        {% include 'components/botao_voltar.html' %}
-    </div>
-
     {% if visitante %}
     <div class="row">
         <div class="col-md-4">
@@ -93,6 +93,7 @@
                                     <th>Horário</th>
                                     <th>Status</th>
                                     <th>Registrado por</th>
+                                    <th>Pós-aula</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -117,6 +118,21 @@
                                         {% else %}
                                         <span class="text-muted">-</span>
                                         {% endif %}
+                                    </td>
+                                    <td>
+                                        {# Feedback + convite para matrícula. Sai sozinho no dia
+                                           seguinte à aula; o botão manda agora ou reenvia. #}
+                                        {% if st == 'presente' %}
+                                        <form method="POST" action="{{ url_for('precadastro.enviar_pos_aula', aula_id=aula.id) }}" class="d-inline"
+                                              {% if aula.pos_aula_enviado_em %}data-confirmar="A mensagem já foi enviada em {{ aula.pos_aula_enviado_em|data_br }}. Enviar de novo?" data-confirmar-tom="aviso"{% endif %}>
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                            {% if aula.pos_aula_enviado_em %}<input type="hidden" name="forcar" value="1">{% endif %}
+                                            <button type="submit" class="u-btn u-btn--pequeno" title="Perguntar como foi e enviar o link da matrícula">
+                                                <i class="bi bi-whatsapp"></i> {{ 'Reenviar' if aula.pos_aula_enviado_em else 'Pedir feedback' }}
+                                            </button>
+                                        </form>
+                                        {% if aula.pos_aula_enviado_em %}<small class="text-muted d-block">enviado {{ aula.pos_aula_enviado_em|data_br }}</small>{% endif %}
+                                        {% else %}<span class="text-muted">-</span>{% endif %}
                                     </td>
                                 </tr>
                                 {% endfor %}

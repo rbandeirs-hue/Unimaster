@@ -30,6 +30,37 @@ from utils import whatsapp
 bp_zempo = Blueprint("zempo", __name__, url_prefix="/zempo")
 
 
+@bp_zempo.before_request
+def _exige_judo():
+    """Zempo é o registro nacional do JUDÔ (CBJ).
+
+    Academia que não oferece judô não tem o que fazer aqui. Tirar o item do
+    menu não basta: a URL continua digitável, e a tela mostraria um fluxo de
+    federação de judô para quem dá jiu-jitsu. Mesma regra do módulo financeiro.
+
+    Na dúvida — sem academia no escopo ou consulta falhando — deixa passar:
+    barrar quem tem direito é pior do que mostrar a tela a mais.
+    """
+    try:
+        from flask_login import current_user
+        if not getattr(current_user, "is_authenticated", False):
+            return None
+        from utils.multimodalidade import modalidades_da_academia
+        academia_id = (request.args.get("academia_id", type=int)
+                       or session.get("academia_gerenciamento_id")
+                       or session.get("finance_academia_id"))
+        if not academia_id:
+            return None
+        mods = modalidades_da_academia(academia_id)
+        if mods and not any("jud" in (m.get("nome") or "").lower() for m in mods):
+            flash("O Zempo é o registro nacional do judô. Esta academia não "
+                  "oferece judô.", "warning")
+            return redirect(url_for("painel.home"))
+    except Exception:
+        return None
+    return None
+
+
 # --------------------------------------------------------------- permissões
 
 def _pode_solicitar():
@@ -95,7 +126,13 @@ _SELECT_ALUNO = """
 
 
 def _carregar_aluno(cur, aluno_id):
-    cur.execute(_SELECT_ALUNO + " WHERE a.id = %s", (aluno_id,))
+    # O Zempo é de judô: a faixa comparada/exibida é a de JUDÔ do aluno, mesmo
+    # que a faixa principal dele seja a de jiu-jitsu.
+    from utils import graduacao_modalidade as grad_mod
+    sql = _SELECT_ALUNO.replace(
+        "LEFT JOIN graduacao g ON g.id = a.graduacao_id",
+        grad_mod.sql_join_faixa(modalidade_id=grad_mod.id_modalidade_judo(cur)))
+    cur.execute(sql + " WHERE a.id = %s", (aluno_id,))
     return cur.fetchone()
 
 
@@ -272,7 +309,12 @@ def _alunos_visiveis(cur, academia_id, academias, busca=None):
     # Um academia_id fora do escopo é ignorado em vez de honrado.
     escopo = [academia_id] if academia_id in permitidas else permitidas
     marcadores = ", ".join(["%s"] * len(escopo))
-    sql = (_SELECT_ALUNO + f" WHERE a.id_academia IN ({marcadores}) AND a.ativo = 1")
+    # Faixa de JUDÔ (o Zempo é de judô), não a principal.
+    from utils import graduacao_modalidade as grad_mod
+    sql = (_SELECT_ALUNO.replace(
+               "LEFT JOIN graduacao g ON g.id = a.graduacao_id",
+               grad_mod.sql_join_faixa(modalidade_id=grad_mod.id_modalidade_judo(cur)))
+           + f" WHERE a.id_academia IN ({marcadores}) AND a.ativo = 1")
     parametros = list(escopo)
 
     termo = (busca or "").strip()
@@ -699,18 +741,19 @@ def _aplicar_sync(cur, aluno_id, zempo_id, diferencas, escolhidos):
         if valor is not None:
             atualizacoes[dif["coluna"]] = valor
 
-    # `faixa` vem de outra tabela: vira graduacao_id.
+    # `faixa` vem de outra tabela. O Zempo é de judô: a faixa é a de JUDÔ e vai
+    # para a modalidade judô do aluno, sem tocar na faixa de jiu-jitsu.
+    from utils import graduacao_modalidade as grad_mod
+    grad_id = None
     if "faixa" in atualizacoes:
-        cur.execute("SELECT id FROM graduacao WHERE UPPER(faixa) = UPPER(%s) LIMIT 1",
-                    (atualizacoes.pop("faixa"),))
-        grad = cur.fetchone()
-        if grad:
-            atualizacoes["graduacao_id"] = grad["id"]
+        grad_id = grad_mod.graduacao_judo_por_nome(cur, atualizacoes.pop("faixa"))
 
     if atualizacoes:
         colunas = ", ".join(f"{c} = %s" for c in atualizacoes)
         cur.execute(f"UPDATE alunos SET {colunas} WHERE id = %s",
                     tuple(atualizacoes.values()) + (aluno_id,))
+    if grad_id:
+        grad_mod.aplicar_faixa_importada(cur, aluno_id, grad_id)
     _gravar_vinculo(cur, aluno_id, zempo_id, f"JU{zempo_id}")
     return len(atualizacoes)
 

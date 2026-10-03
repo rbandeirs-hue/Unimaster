@@ -1,0 +1,98 @@
+{% extends "base_app.html" %}
+{% block conteudo_classe %}exf-tela{% endblock %}
+{% from 'exame_faixa/_macros.html' import obi, promo, trilha, pill with context %}
+{% set menu_ativo = 'exame_estudo' %}
+{% block title %}Modo estudo — exame de faixa{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{{ asset('css/exame_faixa.css') }}">{% endblock %}
+
+{% block pagina_titulo %}Modo estudo{% endblock %}
+{% block pagina_subtitulo %}{{ aluno.nome }} — o material do próximo exame e de todas as faixas anteriores.{% endblock %}
+{% block pagina_acoes %}
+<a href="{{ url_for('exame_faixa.meus_exames', aluno_id=aluno.id) }}" class="sh__btn"><i class="bi bi-clock-history"></i> Meus exames</a>
+{% endblock %}
+
+{% block content %}
+{% include 'exame_faixa/_seletor_aluno.html' %}
+
+{% if not prog %}
+<div class="lst-quadro"><div class="lst-vazio">A academia ainda não tem programa de exame de faixa cadastrado.</div></div>
+{% else %}
+
+{% if sit %}
+{% set st = status_rotulo[sit.status] %}
+<dl class="exf-situacao">
+  <div class="exf-situacao__item"><dt>Faixa atual</dt>
+    <dd>{% if faixa_atual %}{{ obi(faixa_atual.cores) }} {{ faixa_atual.nome }}{% else %}Não cadastrada{% endif %}</dd></div>
+  {% if sit.promocao %}
+  <div class="exf-situacao__item"><dt>Próxima faixa</dt><dd>{{ obi(sit.promocao.cores_para) }} {{ sit.promocao.para }}</dd></div>
+  <div class="exf-situacao__item"><dt>Idade permitida</dt><dd>{{ sit.promocao.idade_txt }}</dd></div>
+  <div class="exf-situacao__item"><dt>Carência</dt><dd>{{ sit.promocao.carencia_txt }}</dd></div>
+  <div class="exf-situacao__item"><dt>Valor do exame</dt><dd>{{ sit.promocao.valor_fmt }}</dd></div>
+  {% endif %}
+  <div class="exf-situacao__item"><dt>Situação hoje</dt><dd>{{ pill(st[0], st[1]) }}
+    {% if sit.status == 'aguardando' and sit.data_elegivel %}<span class="d-block u-fs-sm u-muted">a partir de {{ sit.data_elegivel|data_br }}</span>{% endif %}</dd></div>
+</dl>
+{% if sit.pendencias or sit.avisos %}
+<div class="alert alert-warning py-2">
+  <ul class="exf-lista-aviso mb-0">{% for m in sit.pendencias + sit.avisos %}<li>{{ m }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+{% endif %}
+
+{% if exames %}
+<section class="lst-quadro mb-3">
+  <header class="lst-quadro__topo"><h2 class="lst-quadro__titulo">Exames com inscrição aberta</h2></header>
+  {% for ev in exames %}
+  <div class="lst-linha lst-item" style="grid-template-columns:minmax(0,1fr) auto">
+    <div class="lst-corta"><span class="lst-nome">{{ ev.nome }}</span>
+      <span class="lst-sub">Prova {{ ev.data_exame|data_br if ev.data_exame else '—' }}{% if ev.hora_prova %} às {{ ev.hora_prova }}{% endif %} · inscrições {% if ev.nao_abriu %}abrem em {{ ev.data_inicio|data_br }}{% else %}até {{ ev.data_fim|data_br }}{% endif %}</span></div>
+    <div class="lst-fim">
+      {% if ev.inscricao %}
+      <a href="{{ url_for('exame_faixa.meu_exame', evento_id=ev.id, aluno_id=aluno.id) }}" class="sh__btn">Inscrito · ver exame</a>
+      {% elif ev.nao_abriu %}
+      <span class="lst-tag">Em breve</span>
+      {% else %}
+      <a href="{{ url_for('exame_faixa.inscrever', evento_id=ev.id, aluno_id=aluno.id) }}" class="sh__btn sh__btn--forte">Inscrever</a>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
+
+{{ trilha(liberadas, idx, 'exame_faixa.estudo', {'aluno_id': aluno.id}, alvo=(k if sit and sit.promocao else none)) }}
+
+<div class="exf-cab">
+  <div>
+    <p class="exf-cab__titulo">{{ promo(atual) }}</p>
+    <span class="u-muted u-fs-sm">{% if sit and sit.promocao and idx == k %}É o seu próximo exame.{% else %}Faixa anterior — também cai na prova.{% endif %}</span>
+  </div>
+  <label class="exf-alternar exf-nao-imprime"><input type="checkbox" class="form-check-input" id="exf-quiz"> Esconder respostas (me testar)</label>
+</div>
+
+<div id="exf-estudo">
+{% with quiz=false %}{% include 'exame_faixa/_conteudo.html' %}{% endwith %}
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+{% include 'exame_faixa/_video_dialogo.html' %}
+<script>
+(function () {
+  var box = document.getElementById('exf-quiz'), alvo = document.getElementById('exf-estudo');
+  if (!box || !alvo) return;
+  box.addEventListener('change', function () {
+    alvo.querySelectorAll('.exf-grade').forEach(function (g) { g.classList.toggle('exf-quiz', box.checked); });
+    alvo.querySelectorAll('.exf-resp').forEach(function (r) { r.classList.remove('is-visto'); r.tabIndex = box.checked ? 0 : -1; });
+  });
+  alvo.addEventListener('click', function (e) {
+    var r = e.target.closest('.exf-quiz .exf-resp'); if (r) r.classList.add('is-visto');
+  });
+  alvo.addEventListener('keydown', function (e) {
+    var r = e.target.closest('.exf-quiz .exf-resp');
+    if (r && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); r.classList.add('is-visto'); }
+  });
+})();
+</script>
+{% endblock %}

@@ -1,256 +1,199 @@
-{% extends "base_academia.html" %}
+{% extends "base_app.html" %}
+{% from 'components/ui.html' import vazio %}
 {% set menu_ativo = 'modalidades' %}
-{% block title %}Modalidades — Configurações{% endblock %}
+{% block title %}Modalidades{% endblock %}
 
 {% block pagina_titulo %}Modalidades{% endblock %}
-{% block pagina_subtitulo %}Cadastre modalidades e vincule às academias.{% endblock %}
+{% block pagina_subtitulo %}As modalidades do sistema e em quantas academias cada uma está.{% endblock %}
 
 {% block pagina_acoes %}
   {% set back_url = back_url or get_back_url_default() %}
   <a href="{{ url_voltar(back_url) }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Voltar</a>
+  {% if is_admin %}
+  <a href="{{ url_for('configuracoes.menu_modalidade') }}" class="sh__btn">
+    <i class="bi bi-toggles"></i> Menu por modalidade
+  </a>
+  {% endif %}
   <a href="{{ url_for('configuracoes.modalidades_cadastro', academia_id=academia_contexto_id) }}"
      class="sh__btn sh__btn--forte"><i class="bi bi-plus-lg"></i> Nova modalidade</a>
 {% endblock %}
 
 {% block extra_css %}
+<style>
+  .mod-grade {
+    display: grid; gap: var(--u-space-3);
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  }
+  .mod-card {
+    display: flex; flex-direction: column; gap: var(--u-space-2);
+    padding: var(--u-space-4);
+    background: var(--u-surface);
+    border: 1px solid var(--u-border);
+    border-radius: var(--u-radius);
+  }
+  .mod-card.is-inativa { opacity: .62; }
+
+  .mod-card__topo { display: flex; align-items: center; gap: .6rem; min-width: 0; }
+  /* A cor é a da própria modalidade (a mesma que pinta o shell), não uma cor
+     sorteada pelo id como antes — aqui ela identifica, não decora. */
+  .mod-card__cor {
+    width: 8px; height: 28px; flex: none; border-radius: 3px;
+    background: var(--mod-cor, var(--u-border));
+  }
+  .mod-card__nome {
+    margin: 0; font-size: var(--u-fs-base); font-weight: var(--u-fw-semibold);
+    line-height: 1.3; overflow-wrap: anywhere;
+  }
+  .mod-card__desc {
+    margin: 0; font-size: var(--u-fs-sm); color: var(--u-text-muted);
+    overflow-wrap: anywhere;
+  }
+  /* Só o que foge do normal vira etiqueta. "Ativa" e "Pública" em todos os
+     cartões não informavam nada e ocupavam uma linha inteira de cada um. */
+  .mod-card__tags { display: flex; flex-wrap: wrap; gap: .3rem; }
+
+  .mod-card__vinculos { font-size: var(--u-fs-sm); color: var(--u-text-muted); margin: 0; }
+  .mod-card__vinculos a { color: inherit; text-decoration: underline; }
+  .mod-card__vinculos a:hover { color: var(--u-text); }
+
+  .mod-card__acoes {
+    display: flex; align-items: center; gap: .35rem; flex-wrap: wrap;
+    margin-top: auto; padding-top: var(--u-space-3);
+    border-top: 1px solid var(--u-border);
+  }
+  /* Editar/Graduações/Vincular são o dia a dia; inativar e excluir ficam à
+     direita, em ícone, porque são raras e uma delas não tem volta. */
+  .mod-card__perigo { margin-left: auto; display: flex; gap: .35rem; }
+  .mod-card__perigo form { margin: 0; }
+</style>
 {% endblock %}
 
 {% block content %}
-<style>
-  /* A tela tinha paleta própria (azul Bootstrap, raio 16px). Os tokens agora
-     vêm do design system; abaixo fica só o que é específico desta tela. */
-  :root {
-    --c-surface: #fff;
-    --c-border: var(--sh-line);
-    --c-text: var(--sh-ink);
-    --c-muted: var(--sh-ink-soft);
-    --c-primary: var(--sh-ink);
-    --c-primary-soft: #f4f2ee;
-  }
 
-  .mod-page { width: 100%; }
-
-
-  /* Toolbar */
-  .toolbar {
-    background: var(--c-surface);
-    border: 1px solid var(--c-border);
-    border-radius: 14px;
-    padding: .85rem 1rem;
-    margin-bottom: 1.1rem;
-    display: flex; align-items: center; flex-wrap: wrap; gap: .75rem;
-    box-shadow: 0 1px 3px rgba(15,23,42,.03);
-  }
-  .toolbar .filter-label {
-    font-size: .78rem; color: var(--c-muted); font-weight: 600;
-    text-transform: uppercase; letter-spacing: .04em;
-  }
-  .toolbar .form-select-sm {
-    border-radius: 10px; border: 1px solid var(--c-border);
-    background: #f9fafb; min-width: 220px;
-  }
-
-  /* Grid de cards */
-  .mod-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
-    gap: .9rem;
-  }
-  .mod-card {
-    background: var(--c-surface);
-    border: 1px solid var(--c-border);
-    border-radius: 14px;
-    padding: 1.1rem 1.15rem;
-    display: flex; flex-direction: column;
-    transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease;
-    position: relative;
-    overflow: hidden;
-  }
-  .mod-card.is-inativa { opacity: .72; }
-  .mod-card::before {
-    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px;
-    background: var(--accent, var(--c-primary));
-  }
-  .mod-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 18px rgba(15,23,42,.08);
-    border-color: #cfd6e2;
-  }
-  .mod-card .nome {
-    margin: 0 0 .15rem 0; font-size: 1.05rem; font-weight: 700;
-    color: var(--c-text); line-height: 1.3;
-  }
-  .mod-card .desc {
-    font-size: .85rem; color: var(--c-muted);
-    margin: 0 0 .65rem 0;
-    word-break: break-word;
-  }
-  .mod-card .desc:empty { display: none; }
-  .mod-card .badges {
-    display: flex; flex-wrap: wrap; gap: .35rem;
-    margin-bottom: .7rem;
-  }
-  .mod-card .chip {
-    font-size: .7rem; font-weight: 600;
-    padding: .25rem .6rem; border-radius: 999px;
-    border: 1px solid transparent;
-  }
-  .mod-card .chip.ativa { background: #ecfdf5; color: #047857; border-color: #a7f3d0; }
-  .mod-card .chip.inativa { background: #f3f4f6; color: #6b7280; border-color: #e5e7eb; }
-  .mod-card .chip.publica { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
-  .mod-card .chip.privada { background: #fef3c7; color: #92400e; border-color: #fde68a; }
-  .mod-card .academias-line {
-    font-size: .8rem; color: var(--c-muted);
-    margin-bottom: .8rem;
-    word-break: break-word;
-  }
-  .mod-card .academias-line .ac-pill {
-    display: inline-block;
-    background: #f3f4f6; color: #4b5563;
-    padding: .15rem .5rem; border-radius: 999px;
-    font-size: .72rem; font-weight: 600;
-    margin: 2px 2px 2px 0;
-  }
-  .mod-card .academias-line .ac-pill.empty {
-    background: transparent; color: #9ca3af; font-style: italic; border: 1px dashed #e5e7eb;
-  }
-  .mod-card .actions {
-    display: flex; gap: .35rem;
-    margin-top: auto;
-    padding-top: .85rem;
-    border-top: 1px solid #f1f3f5;
-    flex-wrap: wrap;
-  }
-  .mod-card .btn-act {
-    flex: 1 1 auto;
-    border-radius: 10px;
-    padding: .45rem .65rem;
-    font-size: .8rem; font-weight: 600;
-    border: 1px solid var(--c-border); background: #fff; color: var(--c-text);
-    text-decoration: none;
-    display: inline-flex; align-items: center; justify-content: center; gap: .3rem;
-    cursor: pointer; transition: all .15s ease;
-  }
-  .mod-card .btn-act:hover { border-color: var(--c-primary); color: var(--c-primary); background: #f8fbff; }
-  .mod-card .btn-act.warn:hover { border-color: #f59e0b; color: #b45309; background: #fffbeb; }
-  .mod-card .btn-act.success:hover { border-color: #10b981; color: #047857; background: #ecfdf5; }
-  .mod-card .btn-act.danger:hover { border-color: #dc2626; color: #b91c1c; background: #fef2f2; }
-  .mod-card form { margin: 0; flex: 1 1 auto; display: flex; }
-  .mod-card form .btn-act { width: 100%; }
-
-  .empty-state {
-    background: var(--c-surface);
-    border: 1px dashed var(--c-border);
-    border-radius: 16px;
-    padding: 3rem 1rem;
-    text-align: center;
-    color: var(--c-muted);
-  }
-  .empty-state i.bi-collection { font-size: 3rem; color: #d1d5db; display: block; margin-bottom: .75rem; }
-
-  @media (max-width: 575.98px) {
-    .toolbar { padding: .75rem; }
-    .toolbar .form-select-sm { width: 100%; min-width: 0; }
-    .mod-grid { grid-template-columns: 1fr; gap: .75rem; }
-  }
-</style>
-
-{% set palette = ['#0d6efd','#10b981','#f59e0b','#8b5cf6','#ec4899','#06b6d4','#ef4444','#14b8a6'] %}
-
-<div class="mod-page">
-  {# Os números viram a faixa de indicadores das demais telas. #}
-  {% if modalidades %}
-  {% set _ativas = modalidades | selectattr('ativo') | list | length %}
-  {% set _privadas = modalidades | selectattr('visibilidade', 'equalto', 'privada') | list | length %}
-  <div class="sh__faixa">
-    <div class="sh__faixa-item">
-      <span class="sh__faixa-rotulo">Modalidades</span>
-      <span class="sh__faixa-valor">{{ modalidades|length }}</span>
-      <span class="lst-sub">Cadastradas neste contexto</span>
-    </div>
-    <div class="sh__faixa-item">
-      <span class="sh__faixa-rotulo">Ativas</span>
-      <span class="sh__faixa-valor">{{ _ativas }}</span>
-      <span class="lst-sub">Disponíveis para as turmas</span>
-    </div>
-    <div class="sh__faixa-item">
-      <span class="sh__faixa-rotulo">Inativas</span>
-      <span class="sh__faixa-valor">{{ modalidades|length - _ativas }}</span>
-      <span class="lst-sub">Fora de uso, sem excluir</span>
-    </div>
-    <div class="sh__faixa-item">
-      <span class="sh__faixa-rotulo">Privadas</span>
-      <span class="sh__faixa-valor">{{ _privadas }}</span>
-      <span class="lst-sub">Só das academias vinculadas</span>
-    </div>
+{% if modalidades %}
+{% set _ativas = modalidades | selectattr('ativo') | list | length %}
+{% set _privadas = modalidades | selectattr('visibilidade', 'equalto', 'privada') | list | length %}
+<div class="sh__faixa">
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Modalidades</span>
+    <span class="sh__faixa-valor">{{ modalidades|length }}</span>
+    <span class="lst-sub">Cadastradas neste contexto</span>
   </div>
-  {% endif %}
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Ativas</span>
+    <span class="sh__faixa-valor">{{ _ativas }}</span>
+    <span class="lst-sub">Disponíveis para as turmas</span>
+  </div>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Inativas</span>
+    <span class="sh__faixa-valor">{{ modalidades|length - _ativas }}</span>
+    <span class="lst-sub">Fora de uso, sem excluir</span>
+  </div>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Privadas</span>
+    <span class="sh__faixa-valor">{{ _privadas }}</span>
+    <span class="lst-sub">Só das academias vinculadas</span>
+  </div>
+</div>
+{% endif %}
 
-  {% if not is_admin and academias_contexto|length > 1 %}
-  <form method="GET" class="toolbar">
-    <span class="filter-label d-none d-md-inline">Academia</span>
-    <select name="academia_id" class="form-select form-select-sm" onchange="this.form.submit()">
+{% if not is_admin and academias_contexto|length > 1 %}
+<form method="GET" class="lst-filtros">
+  <label class="lst-campo lst-campo--largo">
+    <span class="lst-campo__rotulo">Academia</span>
+    <select name="academia_id" onchange="this.form.submit()">
       {% for ac in academias_contexto %}
       <option value="{{ ac.id }}" {% if ac.id == academia_contexto_id %}selected{% endif %}>{{ ac.nome }}</option>
       {% endfor %}
     </select>
-  </form>
-  {% endif %}
+  </label>
+</form>
+{% endif %}
 
-  {% if modalidades %}
-  <div class="mod-grid">
-    {% for m in modalidades %}
-    {% set cor = palette[(m.id or 0) % palette|length] %}
-    <article class="mod-card {% if not m.ativo %}is-inativa{% endif %}" style="--accent: {{ cor }};">
-      <h3 class="nome">{{ m.nome }}</h3>
-      {% if m.descricao %}<p class="desc">{{ (m.descricao or '')[:140] }}{% if (m.descricao or '')|length > 140 %}…{% endif %}</p>{% endif %}
-      <div class="badges">
-        {% if m.ativo %}<span class="chip ativa"><i class="bi bi-check-circle-fill me-1"></i>Ativa</span>{% else %}<span class="chip inativa"><i class="bi bi-pause-circle-fill me-1"></i>Inativa</span>{% endif %}
-        {% if m.visibilidade == 'privada' %}<span class="chip privada"><i class="bi bi-lock-fill me-1"></i>Privada</span>{% else %}<span class="chip publica"><i class="bi bi-globe me-1"></i>Pública</span>{% endif %}
-      </div>
-      <div class="academias-line">
-        {% if m.academias %}
-          {% for ac in m.academias %}<span class="ac-pill"><i class="bi bi-building me-1"></i>{{ ac.nome }}</span>{% endfor %}
-        {% else %}<span class="ac-pill empty">Nenhuma academia vinculada</span>{% endif %}
-      </div>
-      <div class="actions">
-        <a href="{{ url_for('configuracoes.modalidades_editar', modalidade_id=m.id, academia_id=academia_contexto_id) }}" class="btn-act" title="Editar">
-          <i class="bi bi-pencil-square"></i> Editar
-        </a>
-        <a href="{{ url_for('configuracoes.modalidades_graduacoes', modalidade_id=m.id, academia_id=academia_contexto_id) }}" class="btn-act" title="Graduações">
-          <i class="bi bi-stars"></i> Graduações
-        </a>
-        {% if is_admin %}
-        <a href="{{ url_for('configuracoes.modalidades_vincular', modalidade_id=m.id) }}" class="btn-act" title="Vincular academias">
-          <i class="bi bi-link-45deg"></i> Vincular
-        </a>
-        {% endif %}
-        <form method="post" action="{{ url_for('configuracoes.modalidades_toggle', modalidade_id=m.id) }}">
+{% if modalidades %}
+<div class="mod-grade mt-3">
+  {% for m in modalidades %}
+  <article class="mod-card {% if not m.ativo %}is-inativa{% endif %}">
+
+    <div class="mod-card__topo">
+      <span class="mod-card__cor" style="--mod-cor: {{ m.cor or 'var(--u-border)' }}"></span>
+      <h3 class="mod-card__nome">{{ m.nome }}</h3>
+    </div>
+
+    {% if not m.ativo or m.visibilidade == 'privada' %}
+    <div class="mod-card__tags">
+      {% if not m.ativo %}<span class="lst-tag">Inativa</span>{% endif %}
+      {% if m.visibilidade == 'privada' %}<span class="lst-tag">Privada</span>{% endif %}
+    </div>
+    {% endif %}
+
+    {% if m.descricao %}
+    <p class="mod-card__desc">
+      {{ (m.descricao or '')[:120] }}{% if (m.descricao or '')|length > 120 %}…{% endif %}
+    </p>
+    {% endif %}
+
+    {# Contagem no lugar da lista de academias: com 11 vínculos, os nomes
+       tomavam o cartão inteiro e deixavam os cartões de alturas diferentes.
+       Quem precisa saber quais são abre a tela de vínculos. #}
+    <p class="mod-card__vinculos">
+      {% set _n = m.academias|length %}
+      {% if _n and is_admin %}
+      <a href="{{ url_for('configuracoes.modalidades_vincular', modalidade_id=m.id) }}">
+        {{ _n }} academia{{ 's' if _n != 1 }} vinculada{{ 's' if _n != 1 }}
+      </a>
+      {% elif _n %}
+      {{ _n }} academia{{ 's' if _n != 1 }} vinculada{{ 's' if _n != 1 }}
+      {% else %}
+      Nenhuma academia vinculada
+      {% endif %}
+    </p>
+
+    <div class="mod-card__acoes">
+      <a class="u-btn u-btn--pequeno"
+         href="{{ url_for('configuracoes.modalidades_editar', modalidade_id=m.id, academia_id=academia_contexto_id) }}">
+        <i class="bi bi-pencil"></i> Editar
+      </a>
+      <a class="u-btn u-btn--pequeno"
+         href="{{ url_for('configuracoes.modalidades_graduacoes', modalidade_id=m.id, academia_id=academia_contexto_id) }}">
+        <i class="bi bi-award"></i> Graduações
+      </a>
+      {% if is_admin %}
+      <a class="u-btn u-btn--pequeno"
+         href="{{ url_for('configuracoes.modalidades_vincular', modalidade_id=m.id) }}">
+        <i class="bi bi-link-45deg"></i> Vincular
+      </a>
+      {% endif %}
+
+      <div class="mod-card__perigo">
+        <form method="post"
+              action="{{ url_for('configuracoes.modalidades_toggle', modalidade_id=m.id) }}">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          {% if m.ativo %}
-          <button type="submit" class="btn-act warn"><i class="bi bi-pause-circle"></i> Inativar</button>
-          {% else %}
-          <button type="submit" class="btn-act success"><i class="bi bi-play-circle"></i> Ativar</button>
-          {% endif %}
+          <button type="submit" class="lst-acao"
+                  title="{{ 'Inativar' if m.ativo else 'Ativar' }} {{ m.nome }}"
+                  aria-label="{{ 'Inativar' if m.ativo else 'Ativar' }} {{ m.nome }}">
+            <i class="bi {{ 'bi-pause-circle' if m.ativo else 'bi-play-circle' }}"></i>
+          </button>
         </form>
-        <form method="post" action="{{ url_for('configuracoes.modalidades_excluir', modalidade_id=m.id, academia_id=academia_contexto_id) }}"
-              onsubmit="return confirm('Excluir a modalidade «{{ m.nome }}» e seus vínculos?');">
+        <form method="post"
+              action="{{ url_for('configuracoes.modalidades_excluir', modalidade_id=m.id, academia_id=academia_contexto_id) }}"
+              data-confirmar="Excluir a modalidade «{{ m.nome|e }}» e seus vínculos?">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <button type="submit" class="btn-act danger" title="Excluir"><i class="bi bi-trash"></i> Excluir</button>
+          <button type="submit" class="lst-acao lst-acao--perigo"
+                  title="Excluir {{ m.nome }}" aria-label="Excluir {{ m.nome }}">
+            <i class="bi bi-trash"></i>
+          </button>
         </form>
       </div>
-    </article>
-    {% endfor %}
-  </div>
-  {% else %}
-  <div class="empty-state">
-    <i class="bi bi-collection"></i>
-    <p class="fw-semibold mb-1" style="color: var(--c-text);">Nenhuma modalidade cadastrada</p>
-    <p class="small mb-3">Cadastre a primeira modalidade para começar a vincular alunos e turmas.</p>
-    <a href="{{ url_for('configuracoes.modalidades_cadastro', academia_id=academia_contexto_id) }}" class="btn btn-primary">
-      <i class="bi bi-plus-lg me-1"></i> Cadastrar modalidade
-    </a>
-  </div>
-  {% endif %}
+    </div>
+
+  </article>
+  {% endfor %}
 </div>
+{% else %}
+{{ vazio('Nenhuma modalidade cadastrada. Cadastre a primeira para vincular turmas e alunos.',
+         href=url_for('configuracoes.modalidades_cadastro', academia_id=academia_contexto_id),
+         acao='Cadastrar modalidade', icone='bi-diagram-3') }}
+{% endif %}
+
 {% endblock %}

@@ -1,0 +1,67 @@
+{# Diálogo "Faixa do próximo exame": o professor escolhe o destino do aluno.
+   Espera `prog`. Abre por botões com data-exf-destino e:
+     data-url     rota exame_faixa.definir_destino do aluno
+     data-nome    nome do aluno
+     data-natural índice da promoção normal da faixa atual
+     data-regra   faixa que a regra de idade daria (opcional)
+     data-atual   programa_id escolhido hoje (vazio = segue a regra)
+     data-motivo  motivo salvo #}
+{% set pj = [] %}{% for p in prog %}{% if pj.append({'id': p.id, 'i': p.indice, 'de': p.de, 'para': p.para, 'valor': p.valor_fmt}) %}{% endif %}{% endfor %}
+<script type="application/json" id="exf-prog-json">{{ pj|tojson }}</script>
+<dialog class="exf-dialogo" id="exf-destino" aria-labelledby="exf-destino-titulo">
+  <form method="POST" action="" id="exf-destino-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="voltar" value="{{ request.full_path }}">
+    {% if esc and esc.academia_id %}<input type="hidden" name="academia_id" value="{{ esc.academia_id }}">{% endif %}
+    <header class="exf-dialogo__topo">
+      <h2 id="exf-destino-titulo">Faixa do próximo exame</h2>
+      <span class="u-muted u-fs-sm" data-d-nome></span>
+    </header>
+    <div class="exf-dialogo__corpo">
+      <p class="exf-dialogo__regra" data-d-regra-linha>Pela regra de idade: <strong data-d-regra></strong></p>
+      <fieldset class="exf-destinos" data-d-opcoes></fieldset>
+      <label class="u-campo mb-0"><span class="u-campo__rotulo">Motivo (opcional)</span>
+        <input type="text" name="motivo" class="u-campo__controle" maxlength="160" placeholder="Ex.: ainda precisa firmar o nage-waza"></label>
+      <p class="u-muted u-fs-sm mb-0">Vale para o próximo exame enquanto o aluno estiver nesta faixa. Se ele já estiver inscrito e ainda sem notas, a inscrição e a fatura em aberto mudam junto.</p>
+    </div>
+    <footer class="exf-dialogo__rodape">
+      <button type="button" class="sh__btn" data-d-fechar>Cancelar</button>
+      <button type="submit" class="sh__btn sh__btn--forte"><i class="bi bi-check-lg"></i> Salvar</button>
+    </footer>
+  </form>
+</dialog>
+<script>
+(function () {
+  var dlg = document.getElementById('exf-destino');
+  if (!dlg || !dlg.showModal) return;
+  var prog = JSON.parse(document.getElementById('exf-prog-json').textContent || '[]');
+  var form = document.getElementById('exf-destino-form');
+  function esc(t) { var d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-exf-destino]');
+    if (!b) return;
+    var nat = parseInt(b.getAttribute('data-natural'), 10);
+    var regra = b.getAttribute('data-regra') || '';
+    var atual = b.getAttribute('data-atual') || '';
+    form.action = b.getAttribute('data-url');
+    dlg.querySelector('[data-d-nome]').textContent = b.getAttribute('data-nome') || '';
+    dlg.querySelector('[data-d-regra]').textContent = regra;
+    dlg.querySelector('[data-d-regra-linha]').hidden = !regra;
+    form.motivo.value = b.getAttribute('data-motivo') || '';
+    var html = '<label class="exf-destinos__op"><input type="radio" name="programa_id" value=""' + (atual ? '' : ' checked') +
+               '> <span><strong>Seguir a regra</strong>' + (regra ? '<small>' + esc(regra) + '</small>' : '') + '</span></label>';
+    prog.forEach(function (p) {
+      if (p.i < nat) return;
+      var marcas = [];
+      if (p.i === nat) marcas.push('faixa seguinte');
+      if (regra && p.para === regra && p.i !== nat) marcas.push('regra de idade');
+      html += '<label class="exf-destinos__op"><input type="radio" name="programa_id" value="' + p.id + '"' +
+              (String(p.id) === atual ? ' checked' : '') + '> <span><strong>' + esc(p.para) + '</strong><small>' +
+              esc(p.valor) + (marcas.length ? ' · ' + marcas.join(' · ') : '') + '</small></span></label>';
+    });
+    dlg.querySelector('[data-d-opcoes]').innerHTML = html;
+    dlg.showModal();
+  });
+  dlg.querySelector('[data-d-fechar]').addEventListener('click', function () { dlg.close(); });
+})();
+</script>

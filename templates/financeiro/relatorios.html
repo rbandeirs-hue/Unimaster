@@ -1,5 +1,12 @@
 {% extends "base_app.html" %}
 {% block title %}Relatórios financeiros{% endblock %}
+{% set meses_nomes = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'] %}
+{% set back_url = url_for('financeiro.dashboard', academia_id=academia_id) %}
+{% block pagina_titulo %}Relatórios financeiros{% endblock %}
+{% block pagina_subtitulo %}{{ meses_nomes[mes-1] }}/{{ ano }}{% endblock %}
+{% block pagina_acoes %}
+<a href="{{ url_voltar(back_url) }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Voltar</a>
+{% endblock %}
 {% block extra_css %}
 <style>
   .so-imprime { display: none; }
@@ -7,7 +14,7 @@
   @media print {
     /* Some tudo que é navegação: sobra o relatório. */
     .sh__lateral, .sh__topo, .sh__rodape, .lst-rodape, nav, footer,
-    .nao-imprime, form, .btn { display: none !important; }
+    .nao-imprime, form, .btn, .u-btn { display: none !important; }
     .so-imprime { display: block !important; }
     body, .sh__conteudo, .container { background: #fff !important; margin: 0 !important; padding: 0 !important; width: auto !important; max-width: none !important; }
     /* Cartão vira caixa simples: sombra e cor de fundo gastam tinta e somem
@@ -24,37 +31,30 @@
 {% endblock %}
 
 {% block content %}
-{% set meses_nomes = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'] %}
 <div class="container mt-4">
 
   <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-4">
-    <div>
-      {% set back_url = url_for('financeiro.dashboard', academia_id=academia_id) %}
-      {% include 'components/botao_voltar.html' %}
-      <h2 class="h4 fw-bold text-primary mb-1 mt-2"><i class="bi bi-file-earmark-bar-graph me-2"></i>Relatórios financeiros</h2>
-      <p class="text-muted mb-0">{{ meses_nomes[mes-1] }}/{{ ano }}</p>
-    </div>
     <form method="GET" class="d-flex flex-wrap gap-2 align-items-end">
       {% if academias and academias|length > 1 %}
       <div>
         <label class="form-label small fw-semibold mb-1">Academia</label>
-        <select name="academia_id" class="form-select form-select-sm">
+        <select name="academia_id" class="u-campo__controle" aria-label="Academia">
           {% for ac in academias %}<option value="{{ ac.id }}" {% if ac.id == academia_id %}selected{% endif %}>{{ ac.nome }}</option>{% endfor %}
         </select>
       </div>
       {% endif %}
       <div>
         <label class="form-label small fw-semibold mb-1">Mês</label>
-        <select name="mes" class="form-select form-select-sm">
+        <select name="mes" class="u-campo__controle" aria-label="Mês">
           {% for i in range(1,13) %}<option value="{{ i }}" {% if i == mes %}selected{% endif %}>{{ meses_nomes[i-1] }}</option>{% endfor %}
         </select>
       </div>
       <div>
         <label class="form-label small fw-semibold mb-1">Ano</label>
-        <input type="number" name="ano" class="form-control form-control-sm" value="{{ ano }}" min="2000" max="2100" style="width:100px;">
+        <input type="number" name="ano" class="u-campo__controle" value="{{ ano }}" min="2000" max="2100" style="width:100px;" aria-label="Ano">
       </div>
-      <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-funnel me-1"></i>Aplicar</button>
-      <button type="button" class="btn btn-outline-secondary btn-sm nao-imprime" onclick="window.print()">
+      <button type="submit" class="u-btn u-btn--primario u-btn--pequeno"><i class="bi bi-funnel me-1"></i>Aplicar</button>
+      <button type="button" class="u-btn u-btn--pequeno nao-imprime" onclick="window.print()">
         <i class="bi bi-printer me-1"></i>Imprimir
       </button>
     </form>
@@ -108,7 +108,7 @@
       <div class="card shadow-sm border-0 h-100"><div class="card-body">
         <div class="d-flex justify-content-between align-items-center mb-3">
           <h6 class="fw-bold mb-0">Receitas por categoria</h6>
-          <a href="{{ url_for('financeiro.relatorios_export', tipo='receitas', mes=mes, ano=ano, academia_id=academia_id) }}" class="btn btn-outline-success btn-sm"><i class="bi bi-download me-1"></i>CSV</a>
+          <a href="{{ url_for('financeiro.relatorios_export', tipo='receitas', mes=mes, ano=ano, academia_id=academia_id) }}" class="u-btn u-btn--pequeno"><i class="bi bi-download me-1"></i>CSV</a>
         </div>
         {% if rel.receitas_cat %}
         <table class="table table-sm align-middle mb-0">
@@ -129,7 +129,7 @@
       <div class="card shadow-sm border-0 h-100"><div class="card-body">
         <div class="d-flex justify-content-between align-items-center mb-3">
           <h6 class="fw-bold mb-0">Despesas por categoria</h6>
-          <a href="{{ url_for('financeiro.relatorios_export', tipo='despesas', mes=mes, ano=ano, academia_id=academia_id) }}" class="btn btn-outline-danger btn-sm"><i class="bi bi-download me-1"></i>CSV</a>
+          <a href="{{ url_for('financeiro.relatorios_export', tipo='despesas', mes=mes, ano=ano, academia_id=academia_id) }}" class="u-btn u-btn--pequeno"><i class="bi bi-download me-1"></i>CSV</a>
         </div>
         {% if rel.despesas_cat %}
         <table class="table table-sm align-middle mb-0">
@@ -173,7 +173,7 @@
   <div class="card shadow-sm border-0 mt-3 mb-4"><div class="card-body">
     <div class="d-flex justify-content-between align-items-center mb-3">
       <h6 class="fw-bold mb-0"><i class="bi bi-exclamation-triangle text-warning me-1"></i>Inadimplentes</h6>
-      <a href="{{ url_for('financeiro.relatorios_export', tipo='inadimplentes', mes=mes, ano=ano, academia_id=academia_id) }}" class="btn btn-outline-warning btn-sm"><i class="bi bi-download me-1"></i>CSV</a>
+      <a href="{{ url_for('financeiro.relatorios_export', tipo='inadimplentes', mes=mes, ano=ano, academia_id=academia_id) }}" class="u-btn u-btn--pequeno"><i class="bi bi-download me-1"></i>CSV</a>
     </div>
     {% if rel.inadimplentes %}
     <div class="table-responsive">

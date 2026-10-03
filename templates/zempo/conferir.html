@@ -1,18 +1,12 @@
 {% extends "base_app.html" %}
 {% block title %}Conferir cadastros do Zempo{% endblock %}
+{% block pagina_titulo %}Conferir cadastros{% endblock %}
+{% block pagina_subtitulo %}Cadastros enviados pelos alunos pelo formulário. Confira, corrija se precisar e confirme — depois a associação faz o cadastro no Zempo.{% endblock %}
+{% block pagina_acoes %}
+<a href="{{ url_for('zempo.solicitar') }}" class="sh__btn">Todos os alunos</a>
+{% endblock %}
 {% block content %}
-<div class="container-fluid" style="max-width:1100px;">
-
-  <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
-    <div>
-      <h1 class="h4 mb-1"><i class="bi bi-clipboard-check text-primary me-2"></i>Conferir cadastros</h1>
-      <p class="text-muted small mb-0">
-        Cadastros enviados pelos alunos pelo formulário. Confira, corrija se precisar
-        e confirme — depois a associação faz o cadastro no Zempo.
-      </p>
-    </div>
-    <a href="{{ url_for('zempo.solicitar') }}" class="btn btn-sm btn-outline-secondary">Todos os alunos</a>
-  </div>
+<div class="container-fluid px-0">
 
   {% for sol in solicitacoes %}
   <div class="card shadow-sm mb-3">
@@ -27,7 +21,7 @@
           </div>
         </div>
         <a href="{{ url_for('alunos.editar_aluno', aluno_id=sol.aluno_id) }}"
-           class="btn btn-sm btn-outline-secondary">
+           class="u-btn u-btn--pequeno">
           <i class="bi bi-pencil me-1"></i>Editar dados
         </a>
       </div>
@@ -49,12 +43,12 @@
       <form method="post" action="{{ url_for('zempo.confirmar_conferencia', solicitacao_id=sol.id) }}"
             class="mt-3 d-flex flex-wrap gap-2 align-items-center">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button type="submit" class="btn btn-primary btn-sm" {% if sol.faltando %}disabled{% endif %}>
+        <button type="submit" class="u-btn u-btn--primario u-btn--pequeno" {% if sol.faltando %}disabled{% endif %}>
           <i class="bi bi-check-lg me-1"></i>Confirmar e enviar para a associação
         </button>
-        <input type="text" name="motivo" class="form-control form-control-sm" style="max-width:260px;"
-               placeholder="Motivo da devolução (opcional)">
-        <button type="submit" name="rejeitar" value="1" class="btn btn-outline-danger btn-sm">
+        <input type="text" name="motivo" class="u-campo__controle" style="max-width:260px;"
+               placeholder="Motivo da devolução (opcional)" aria-label="Motivo da devolução (opcional)">
+        <button type="submit" name="rejeitar" value="1" class="u-btn u-btn--pequeno">
           Devolver
         </button>
       </form>

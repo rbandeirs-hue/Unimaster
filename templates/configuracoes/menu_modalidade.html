@@ -1,0 +1,147 @@
+{% extends "base_app.html" %}
+{% set menu_ativo = 'menu_modalidade' %}
+{% block title %}Menu por modalidade{% endblock %}
+
+{% block pagina_titulo %}Menu por modalidade{% endblock %}
+{% block pagina_subtitulo %}
+  O que cada modalidade mostra na barra lateral. Item desligado some do menu de quem faz só essa modalidade.
+{% endblock %}
+
+{% block pagina_acoes %}
+  <a href="{{ url_for('configuracoes.modalidades_lista') }}" class="sh__btn">
+    <i class="bi bi-diagram-3"></i> Modalidades
+  </a>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+  .mmod-topo {
+    display: flex; align-items: center; gap: var(--u-space-3); flex-wrap: wrap;
+    background: var(--u-surface); border: 1px solid var(--u-border);
+    border-radius: var(--u-radius); padding: var(--u-space-3);
+  }
+  .mmod-cor { width: 10px; height: 34px; border-radius: 3px; background: var(--mmod-cor, #cfcbc4); }
+
+  .mmod-modo {
+    background: var(--u-surface); border: 1px solid var(--u-border);
+    border-radius: var(--u-radius); margin-top: var(--u-space-3);
+    overflow: hidden;
+  }
+  .mmod-modo__topo {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: var(--u-space-3); flex-wrap: wrap;
+    padding: var(--u-space-3); border-bottom: 1px solid var(--u-border);
+    background: var(--u-surface-alt);
+  }
+  .mmod-modo__nome { font-weight: var(--u-fw-semibold); }
+  .mmod-grupo { padding: var(--u-space-3); }
+  .mmod-grupo + .mmod-grupo { border-top: 1px solid var(--u-border); }
+  .mmod-grupo__rotulo {
+    font-size: var(--u-fs-xs); letter-spacing: var(--u-ls-label);
+    text-transform: uppercase; color: var(--u-text-muted);
+    margin-bottom: var(--u-space-2);
+  }
+  .mmod-itens {
+    display: grid; gap: var(--u-space-2);
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  }
+  .mmod-item {
+    display: flex; align-items: center; gap: .6rem;
+    padding: .5rem .7rem;
+    border: 1px solid var(--u-border); border-radius: var(--u-radius-sm);
+  }
+  .mmod-item i { color: var(--u-text-muted); }
+  .mmod-item__nome { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .mmod-item__marca {
+    font-size: var(--u-fs-xs); color: var(--u-text-muted);
+  }
+
+  /* Liga/desliga. Checkbox de verdade por baixo: funciona sem JavaScript,
+     é alcançável pelo teclado e o leitor de tela anuncia o estado. */
+  .mmod-chave { position: relative; flex: none; width: 42px; height: 24px; }
+  .mmod-chave input {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    margin: 0; opacity: 0; cursor: pointer; z-index: 2;
+  }
+  .mmod-chave__trilho {
+    position: absolute; inset: 0; border-radius: 999px;
+    background: var(--u-border); transition: background .15s;
+  }
+  .mmod-chave__trilho::after {
+    content: ""; position: absolute; top: 3px; left: 3px;
+    width: 18px; height: 18px; border-radius: 50%;
+    background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.25);
+    transition: transform .15s;
+  }
+  .mmod-chave input:checked + .mmod-chave__trilho { background: #16a34a; }
+  .mmod-chave input:checked + .mmod-chave__trilho::after { transform: translateX(18px); }
+  .mmod-chave input:focus-visible + .mmod-chave__trilho {
+    outline: 2px solid var(--sh-red); outline-offset: 2px;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="mmod-topo">
+  <span class="mmod-cor" style="--mmod-cor: {{ modalidade.cor or '#cfcbc4' }}"></span>
+  <form method="GET" class="d-flex align-items-center gap-2">
+    <label for="modalidade_id" class="lst-campo__rotulo mb-0">Modalidade</label>
+    <select name="modalidade_id" id="modalidade_id" class="u-campo__controle"
+            style="min-width:13rem" onchange="this.form.submit()">
+      {% for m in modalidades %}
+      <option value="{{ m.id }}" {% if m.id == modalidade_id %}selected{% endif %}>{{ m.nome }}</option>
+      {% endfor %}
+    </select>
+  </form>
+  <p class="u-muted mb-0" style="flex:1; min-width:16rem">
+    Numa academia com mais de uma modalidade, o item só some quando <strong>todas</strong>
+    a desligam — ou quando o gestor escolhe essa modalidade no contexto do topo.
+  </p>
+</div>
+
+{% for bloco in quadro %}
+<form method="POST" class="mmod-modo">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="modalidade_id" value="{{ modalidade_id }}">
+  <input type="hidden" name="modo" value="{{ bloco.modo }}">
+
+  <div class="mmod-modo__topo">
+    <span class="mmod-modo__nome">{{ bloco.rotulo }}</span>
+    <div class="d-flex gap-2">
+      <button type="submit" name="acao" value="padrao" class="u-btn u-btn--pequeno u-btn--fantasma"
+              title="Apaga as exceções deste modo e volta ao comportamento do sistema">
+        Voltar ao padrão
+      </button>
+      <button type="submit" class="u-btn u-btn--pequeno u-btn--forte">
+        <i class="bi bi-check-lg"></i> Salvar
+      </button>
+    </div>
+  </div>
+
+  {% for grupo in bloco.grupos %}
+  <div class="mmod-grupo">
+    <div class="mmod-grupo__rotulo">{{ grupo.rotulo }}</div>
+    <div class="mmod-itens">
+      {% for it in grupo.itens %}
+      <label class="mmod-item">
+        <span class="mmod-chave">
+          <input type="checkbox" name="itens" value="{{ it.chave }}"
+                 {% if it.ligado %}checked{% endif %}
+                 aria-label="{{ it.rotulo }} no menu de {{ bloco.rotulo }}">
+          <span class="mmod-chave__trilho"></span>
+        </span>
+        <i class="bi {{ it.icone }}"></i>
+        <span class="mmod-item__nome">
+          {{ it.rotulo }}
+          {% if it.explicito %}<br><span class="mmod-item__marca">definido aqui</span>{% endif %}
+        </span>
+      </label>
+      {% endfor %}
+    </div>
+  </div>
+  {% endfor %}
+</form>
+{% endfor %}
+
+{% endblock %}

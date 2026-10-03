@@ -1,6 +1,6 @@
 {% extends "base_academia.html" %}
 {% set menu_ativo = 'professores' %}
-{% block title %}Professores — Unimaster Judô{% endblock %}
+{% block title %}Professores — Unimaster {{ marca_modalidade }}{% endblock %}
 
 {% block pagina_titulo %}Professores{% endblock %}
 {% block pagina_subtitulo %}Vincule usuários como professores e gerencie suas modalidades.{% endblock %}
@@ -57,12 +57,12 @@
   {% if origin %}<input type="hidden" name="origin" value="{{ origin }}">{% endif %}
   <label class="dash-campo prof-campo--busca">
     <span class="dash-campo__label">Buscar</span>
-    <input type="search" name="busca" value="{{ busca }}" class="form-control"
+    <input type="search" name="busca" value="{{ busca }}" class="u-campo__controle"
            placeholder="Nome, e-mail ou telefone" autocomplete="off">
   </label>
   <label class="dash-campo">
     <span class="dash-campo__label">Modalidade</span>
-    <select name="modalidade_id" class="form-select" {% if not modalidades_opts %}disabled{% endif %}>
+    <select name="modalidade_id" class="u-campo__controle" {% if not modalidades_opts %}disabled{% endif %}>
       <option value="">Todas</option>
       {% for m in modalidades_opts %}
       <option value="{{ m.id }}" {% if modalidade_id == m.id %}selected{% endif %}>{{ m.nome }}</option>
@@ -71,7 +71,7 @@
   </label>
   <label class="dash-campo">
     <span class="dash-campo__label">Situação</span>
-    <select name="situacao" class="form-select">
+    <select name="situacao" class="u-campo__controle">
       <option value="">Todos</option>
       <option value="ativo" {% if situacao == 'ativo' %}selected{% endif %}>Ativos</option>
       <option value="inativo" {% if situacao == 'inativo' %}selected{% endif %}>Inativos</option>
@@ -190,7 +190,8 @@
 document.querySelectorAll('.js-prof-excluir').forEach(function (form) {
   form.addEventListener('submit', function (e) {
     var nome = form.dataset.nome || 'este professor';
-    if (!confirm('Remover ' + nome + ' da equipe desta academia?')) e.preventDefault();
+    Dialogo.confirmarEvento(e, 'Remover ' + nome + ' da equipe desta academia?',
+                            { confirmar: 'Remover' });
   });
 });
 </script>

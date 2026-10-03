@@ -1,111 +1,107 @@
 {% extends "base_app.html" %}
+{% from 'components/ui.html' import vazio %}
 {% block title %}Academias{% endblock %}
-{% block content %}
-<style>
-    .logo-circle {
-        width: 44px;
-        height: 44px;
-        border-radius: 50%;
-        overflow: hidden;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-weight: 700;
-        font-size: 1.1rem;
-        text-transform: uppercase;
-        flex-shrink: 0;
-    }
-    .logo-circle.logo-has-img {
-        background: #ffffff !important;
-    }
-    .card-link {
-        text-decoration: none;
-        color: inherit;
-        display: block;
-    }
-    .card-link:hover .card {
-        box-shadow: 0 0.75rem 1.5rem rgba(0, 0, 0, 0.08);
-        transform: translateY(-2px);
-        transition: all 0.2s ease;
-    }
-    .academia-card-link { text-decoration: none; color: inherit; display: block; }
-    .academia-card-link:hover .card {
-        transform: translateY(-4px);
-        box-shadow: 0 0.5rem 1rem rgba(0,0,0,0.1) !important;
-    }
-    .card-actions {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-    }
-    .logo-img {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-        border-radius: 50%;
-    }
-</style>
-<div class="container my-4">
-    <div class="d-flex flex-column flex-md-row justify-content-between align-items-center mb-4 gap-3">
-        <div class="text-center text-md-start">
-            <h2 class="display-6 fw-bold text-primary mb-1">
-                {% if escopo_associacao|default(False) and associacao_nome %}
-                    Academias — {{ associacao_nome }}
-                {% else %}
-                    Academias
-                {% endif %}
-            </h2>
-            <p class="lead text-muted mb-0">
-                {% if escopo_associacao|default(False) %}
-                    Lista de academias da sua associação.
-                {% else %}
-                    Lista completa das academias cadastradas.
-                {% endif %}
-            </p>
-        </div>
-        <div class="d-flex flex-column flex-md-row gap-2 w-100 w-md-auto align-items-md-center">
-            {% set back_url = back_url or get_back_url_default() %}
-{% include 'components/botao_voltar.html' %}
-            <a href="{{ url_for('associacao.cadastro_academia', next=request.full_path) }}" class="btn btn-success btn-lg w-100 w-md-auto">
-                <i class="bi bi-plus-circle-fill me-2"></i> Nova Academia
-            </a>
-        </div>
-    </div>
 
-    {% if academias %}
-    <div class="row g-4">
-        {% for acad in academias %}
-        <div class="col-12 col-sm-6 col-md-4 col-lg-3">
-            <a href="{{ url_for('associacao.editar_academia', academia_id=acad.id, next=request.full_path) }}" class="academia-card-link">
-                <div class="card h-100 shadow-sm border-success" style="transition: transform 0.2s, box-shadow 0.2s;">
-                    <div class="card-body text-center p-4">
-                        <div class="logo-circle mx-auto mb-3 bg-success text-white {% if acad.logo_url %}logo-has-img{% endif %}" style="width: 64px; height: 64px;">
-                            {% if acad.logo_url %}
-                                <img src="{{ acad.logo_url }}" alt="Logo {{ acad.nome }}" class="logo-img">
-                            {% else %}
-                                <i class="bi bi-building fs-3"></i>
-                            {% endif %}
-                        </div>
-                        <h5 class="card-title fw-bold mb-1">{{ acad.nome }}</h5>
-                        {% if not escopo_associacao|default(False) %}
-                        <p class="small text-muted mb-1">{{ acad.associacao_nome or '-' }}</p>
-                        {% endif %}
-                        <p class="small text-muted mb-2">{{ acad.cidade or '-' }}{% if acad.uf %} / {{ acad.uf }}{% endif %}</p>
-                        <span class="btn btn-outline-success btn-sm"><i class="bi bi-pencil-square me-1"></i> Editar</span>
-                    </div>
-                </div>
-            </a>
-        </div>
-        {% endfor %}
-    </div>
-    {% else %}
-    <div class="alert alert-info text-center mt-4">
-        {% if escopo_associacao|default(False) %}
-            Nenhuma academia cadastrada nesta associação.
-        {% else %}
-            Nenhuma academia cadastrada no sistema.
-        {% endif %}
-    </div>
-    {% endif %}
+{% block pagina_titulo %}
+  {%- if escopo_associacao|default(False) and associacao_nome -%}
+    Academias de {{ associacao_nome }}
+  {%- else -%}Academias{%- endif -%}
+{% endblock %}
+{% block pagina_subtitulo %}
+  {%- if escopo_associacao|default(False) -%}
+    {{ academias|length }} academia{{ 's' if academias|length != 1 }} nesta associação.
+  {%- else -%}
+    {{ academias|length }} academia{{ 's' if academias|length != 1 }} cadastrada{{ 's' if academias|length != 1 }} no sistema.
+  {%- endif -%}
+{% endblock %}
+
+{% block pagina_acoes %}
+  <a class="u-btn u-btn--forte"
+     href="{{ url_for('associacao.cadastro_academia', next=request.full_path) }}">
+    <i class="bi bi-plus-lg"></i> Nova academia
+  </a>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+  /* Grade pelo espaço disponível, não por doze frações fixas. */
+  .acad-grade {
+    display: grid;
+    gap: var(--u-space-3);
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  }
+  .acad-card {
+    display: flex;
+    align-items: center;
+    gap: var(--u-space-3);
+    padding: var(--u-space-3);
+    border: 1px solid var(--u-border);
+    border-radius: var(--u-radius);
+    background: var(--u-surface);
+    color: inherit;
+    text-decoration: none;
+    transition: border-color var(--u-transition);
+  }
+  .acad-card:hover { border-color: var(--u-text-muted); color: inherit; }
+  .acad-card:focus-visible { outline: 2px solid var(--u-primary); outline-offset: 2px; }
+  /* A marca da academia é a logo dela. Sem logo, a inicial — não um ícone
+     genérico de prédio repetido doze vezes, que era o que mais poluía. */
+  .acad-marca {
+    width: 44px; height: 44px; flex-shrink: 0;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--u-surface-alt);
+    color: var(--u-text-muted);
+    font-weight: var(--u-fw-bold);
+    font-size: var(--u-fs-lg);
+    overflow: hidden;
+  }
+  .acad-marca img { width: 100%; height: 100%; object-fit: cover; }
+  .acad-dados { min-width: 0; }
+  .acad-nome {
+    font-weight: var(--u-fw-semibold);
+    font-size: var(--u-fs-sm);
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+  }
+  .acad-meta {
+    font-size: var(--u-fs-xs);
+    color: var(--u-text-muted);
+    margin-top: 2px;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+
+{% if academias %}
+<div class="acad-grade">
+  {% for acad in academias %}
+  <a class="acad-card"
+     href="{{ url_for('associacao.editar_academia', academia_id=acad.id, next=request.full_path) }}">
+    <span class="acad-marca">
+      {% if acad.logo_url %}
+        <img src="{{ acad.logo_url }}" alt="">
+      {% else %}
+        {{ (acad.nome or '?')[0] }}
+      {% endif %}
+    </span>
+    <span class="acad-dados">
+      <span class="acad-nome">{{ acad.nome }}</span>
+      {% if not escopo_associacao|default(False) %}
+      <span class="acad-meta">{{ acad.associacao_nome or 'Independente' }}</span>
+      {% endif %}
+      {% if acad.cidade %}
+      <span class="acad-meta">{{ acad.cidade }}{% if acad.uf %} · {{ acad.uf }}{% endif %}</span>
+      {% endif %}
+    </span>
+  </a>
+  {% endfor %}
 </div>
+{% else %}
+  {{ vazio('Nenhuma academia cadastrada ' ~ ('nesta associação.' if escopo_associacao|default(False) else 'no sistema.'),
+           href=url_for('associacao.cadastro_academia'), acao='Cadastrar a primeira',
+           icone='bi-house-add') }}
+{% endif %}
+
 {% endblock %}

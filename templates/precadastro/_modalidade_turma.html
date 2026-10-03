@@ -1,0 +1,121 @@
+{# Escolha de modalidade (e turma) nos formulários públicos.
+   Espera:
+     op            utils.turma_plano.opcoes(...)  → modalidades, turmas, graduacoes
+     sel_mods      ids marcados (lista de int)
+     sel_turma     id da turma marcada (ou none)
+     travada       id da modalidade do link (?modalidade=), que trava a escolha
+     com_turma     mostra o select de turma
+     turma_obrig   turma obrigatória
+     com_valor     mostra a mensalidade de cada turma (matrícula)
+   O select de faixa do formulário (name="graduacao_id"), quando existe, tem as
+   opções filtradas pela modalidade escolhida — cada <option> precisa do
+   atributo data-modalidade. #}
+{% set _mods = op.modalidades %}
+{% set _unica = _mods|length == 1 %}
+{% set _obrig = mod_obrig is not defined or mod_obrig %}
+<div class="exf-mod-bloco" data-mod-bloco data-mod-obrig="{{ 1 if _obrig else 0 }}">
+  {% if travada %}
+    <input type="hidden" name="modalidade_ids" value="{{ travada }}">
+    {% for m in _mods if m.id == travada %}
+    <div><label class="form-label">Modalidade</label>
+      <div class="pc-mods"><span class="pc-mod is-on" style="--c:{{ m.cor or '#1b1b1b' }}">{{ m.nome }}</span></div></div>
+    {% endfor %}
+  {% elif _unica %}
+    <input type="hidden" name="modalidade_ids" value="{{ _mods[0].id }}">
+  {% elif _mods %}
+  <div>
+    <label class="form-label">Modalidade{% if _obrig %} <span class="req">*</span>{% endif %}</label>
+    <div class="pc-mods" role="group" aria-label="Modalidade">
+      {% for m in _mods %}
+      <label class="pc-mod" style="--c:{{ m.cor or '#1b1b1b' }}">
+        <input type="checkbox" name="modalidade_ids" value="{{ m.id }}" {% if m.id in (sel_mods or []) %}checked{% endif %}>
+        {{ m.nome }}
+      </label>
+      {% endfor %}
+    </div>
+    <div class="form-text mt-1">Pode marcar mais de uma.</div>
+  </div>
+  {% endif %}
+
+  {% if com_turma and op.turmas %}
+  <div class="mt-3">
+    <label class="form-label" for="pcTurma">Turma {% if turma_obrig %}<span class="req">*</span>{% endif %}</label>
+    <select id="pcTurma" name="turma_id" class="u-campo__controle" {% if turma_obrig %}required{% endif %}>
+      <option value="">{{ 'Selecione a turma' if turma_obrig else 'Ainda não sei — a academia indica' }}</option>
+      {% for t in op.turmas %}
+      <option value="{{ t.id }}" data-mods="{{ t.modalidades|join(',') }}"
+              data-valor="{{ '%.2f'|format(t.plano_valor|float) if t.plano_valor is not none else '' }}"
+              data-plano="{{ t.plano_nome or '' }}"
+              {% if sel_turma and sel_turma|string == t.id|string %}selected{% endif %}>
+        {{ t.nome }}{% if t.dias %} — {{ t.dias }}{% endif %}{% if t.IdadeMin or t.IdadeMax %} ({{ t.IdadeMin or 0 }}–{{ t.IdadeMax or '' }} anos){% endif %}{% if com_valor and t.plano_valor is not none %} · mensalidade R$ {{ '%.2f'|format(t.plano_valor|float)|replace('.', ',') }}{% endif %}
+      </option>
+      {% endfor %}
+    </select>
+    <div class="form-text mt-1" id="pcTurmaVazia" hidden>Nenhuma turma desta modalidade no momento — a academia entra em contato.</div>
+  </div>
+  {% endif %}
+</div>
+
+<style>
+  .pc-mods { display:flex; flex-wrap:wrap; gap:8px; }
+  .pc-mod { display:inline-flex; align-items:center; gap:7px; padding:8px 14px; border:1.5px solid #d9d8d4;
+            border-radius:999px; cursor:pointer; font-weight:600; font-size:.92rem; background:#fff; user-select:none; }
+  .pc-mod input { accent-color: var(--c); margin:0; }
+  .pc-mod:has(input:checked), .pc-mod.is-on { border-color: var(--c); box-shadow: inset 0 0 0 1px var(--c); }
+  .pc-mod:focus-within { outline:2px solid #9bb7ff; outline-offset:2px; }
+</style>
+<script>
+(function () {
+  var bloco = document.querySelector('[data-mod-bloco]');
+  if (!bloco) return;
+  var form = bloco.closest('form');
+  function escolhidas() {
+    return Array.prototype.map.call(
+      form.querySelectorAll('input[name="modalidade_ids"]'),
+      function (i) { return (i.type === 'hidden' || i.checked) ? i.value : null; }
+    ).filter(Boolean);
+  }
+  function filtrar() {
+    var mods = escolhidas();
+    // Turmas: só as da modalidade marcada. Turma sem modalidade cadastrada
+    // aparece sempre — não dá para saber de qual é.
+    var sel = document.getElementById('pcTurma') || form.querySelector('select[data-filtra-modalidade]');
+    if (sel) {
+      var visiveis = 0;
+      Array.prototype.forEach.call(sel.options, function (o) {
+        if (!o.value) return;
+        var tm = (o.getAttribute('data-mods') || '').split(',').filter(Boolean);
+        var ok = !mods.length || !tm.length || tm.some(function (m) { return mods.indexOf(m) >= 0; });
+        o.hidden = !ok; o.disabled = !ok;
+        if (ok) visiveis++;
+        if (!ok && o.selected) sel.value = '';
+      });
+      var aviso = document.getElementById('pcTurmaVazia');
+      if (aviso) aviso.hidden = !(mods.length && !visiveis);
+      sel.dispatchEvent(new Event('change'));
+    }
+    // Faixas: só as da modalidade marcada (e as genéricas, sem modalidade).
+    var grad = form.querySelector('select[name="graduacao_id"]');
+    if (grad) {
+      Array.prototype.forEach.call(grad.options, function (o) {
+        var m = o.getAttribute('data-modalidade');
+        if (!o.value || !m) return;
+        var ok = !mods.length || mods.indexOf(m) >= 0;
+        o.hidden = !ok; o.disabled = !ok;
+        if (!ok && o.selected) grad.value = '';
+      });
+    }
+  }
+  form.addEventListener('change', function (e) {
+    if (e.target && e.target.name === 'modalidade_ids') filtrar();
+  });
+  form.addEventListener('submit', function (e) {
+    if (bloco.getAttribute('data-mod-obrig') === '1'
+        && bloco.querySelector('input[type=checkbox][name="modalidade_ids"]') && !escolhidas().length) {
+      e.preventDefault();
+      alert('Escolha a modalidade.');
+    }
+  });
+  filtrar();
+})();
+</script>

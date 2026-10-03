@@ -108,6 +108,26 @@
           <div class="lst-fim">
             {% if a.parabenizado %}
             <span class="lst-tag lst-tag--ok">Parabenizado</span>
+            {% elif grupo.chave == 'proximos' %}
+            {# Aniversário que ainda vem: agenda para o dia (o job diário envia).
+               Antes o "Agendar" mandava a mensagem na hora do clique. #}
+            {% if a.automatico %}
+            <span class="lst-tag" title="A automação de aniversário da academia envia no dia">Sai automático em {{ a.data_curta }}</span>
+            {% elif a.agendado %}
+            <span class="lst-tag lst-tag--ok">Agendado · {{ a.data_curta }}</span>
+            <button type="button" class="sh__btn" data-aniv-agendar data-cancelar="1" data-aluno-id="{{ a.id }}"
+                    title="Cancelar o parabéns agendado de {{ a.nome }}">Cancelar</button>
+            {% else %}
+            <button type="button" class="sh__btn" data-aniv-agendar data-aluno-id="{{ a.id }}"
+                    title="Agendar o parabéns de {{ a.nome }} para {{ a.data_curta }}">
+              <i class="bi bi-calendar-check"></i> Agendar
+            </button>
+            {% endif %}
+            <button type="button" class="sh__btn" data-aniv-whatsapp data-forcar="1" data-confirmar-envio="1"
+                    data-aluno-id="{{ a.id }}" data-nome="{{ a.nome }}" data-data="{{ a.data_curta }}"
+                    title="Enviar agora, antes do aniversário">
+              <i class="bi bi-whatsapp"></i> Enviar agora
+            </button>
             {% else %}
             <button type="button" class="sh__btn {% if grupo.chave == 'hoje' %}sh__btn--forte{% endif %}"
                     data-aniv-whatsapp data-aluno-id="{{ a.id }}"
@@ -186,8 +206,9 @@
       <div class="aniv-ficha__acoes">
         <button type="button" class="sh__btn sh__btn--forte"
                 data-aniv-whatsapp data-aluno-id="{{ selecionado.id }}" data-forcar="1"
+                {% if selecionado.futuro %}data-confirmar-envio="1" data-nome="{{ selecionado.nome }}" data-data="{{ selecionado.data_curta }}"{% endif %}
                 {% if not selecionado.telefone %}disabled title="Sem telefone cadastrado"{% endif %}>
-          <i class="bi bi-whatsapp"></i> Enviar parabéns
+          <i class="bi bi-whatsapp"></i> {{ 'Enviar agora' if selecionado.futuro else 'Enviar parabéns' }}
         </button>
         <a class="sh__btn" href="{{ url_for('academia.whatsapp_config', academia_id=academia_id) }}#modelos">
           Editar mensagem
@@ -236,7 +257,7 @@
         <div class="aniv-recado">
           <textarea id="anivRecado" rows="3" maxlength="2000"
                     {% if selecionado.futuro %}disabled{% endif %}
-                    placeholder="{% if selecionado.futuro %}Aguarde o dia do aniversário{% else %}Escreva uma mensagem para {{ selecionado.nome.split()[0] }}...{% endif %}"></textarea>
+                    placeholder="{% if selecionado.futuro %}Aguarde o dia do aniversário{% else %}Escreva uma mensagem para {{ selecionado.nome.split()[0] }}...{% endif %}" aria-label="Aguarde o dia do aniversárioEscre"></textarea>
           <div class="aniv-recado__rodape">
             {% for r in selecionado.reacoes %}
             <button type="button" class="aniv-reagir" data-aniv-reacao="{{ r.chave }}"
@@ -346,8 +367,9 @@
 
   function toast(msg, erro) {
     // O shell já mostra flash como toast; aqui basta um aviso simples e curto.
-    alert(msg);
-    if (!erro) location.reload();
+    Dialogo.alerta(msg, { tom: erro ? 'perigo' : 'ok' }).then(function () {
+      if (!erro) location.reload();
+    });
   }
 
   async function postJSON(url, corpo) {
@@ -418,16 +440,38 @@
 
   document.querySelectorAll('[data-aniv-whatsapp]').forEach(function (botao) {
     botao.addEventListener('click', function () {
+      // Antes do dia, enviar é exceção: confirma para não sair por engano.
+      if (botao.dataset.confirmarEnvio === '1' &&
+          !confirm('Enviar AGORA o parabéns de ' + botao.dataset.nome + '? O aniversário é só em ' +
+                   botao.dataset.data + '. Para enviar no dia, use Agendar.')) return;
       enviarWhatsapp(botao, [parseInt(botao.dataset.alunoId, 10)], botao.dataset.forcar === '1');
+    });
+  });
+
+  /* ------------------------------------------- agendar para o dia */
+  document.querySelectorAll('[data-aniv-agendar]').forEach(function (botao) {
+    botao.addEventListener('click', async function () {
+      const cancelar = botao.dataset.cancelar === '1';
+      botao.disabled = true;
+      try {
+        const {dados} = await postJSON({{ url_for('aniversariante_live.api_whatsapp_agendar')|tojson }},
+                                       {aluno_id: parseInt(botao.dataset.alunoId, 10), cancelar: cancelar});
+        toast(dados.msg || (dados.ok ? 'Feito.' : 'Não foi possível.'), !dados.ok);
+        if (dados.ok) setTimeout(function () { location.reload(); }, 600);
+      } catch (e) {
+        toast('Falha de rede ao agendar.', true);
+      } finally {
+        botao.disabled = false;
+      }
     });
   });
 
   const btnHoje = document.getElementById('btnParabenizarHoje');
   if (btnHoje && !btnHoje.disabled) {
-    btnHoje.addEventListener('click', function () {
+    btnHoje.addEventListener('click', async function () {
       const ids = (btnHoje.dataset.alunos || '').split(',').filter(Boolean).map(Number);
       if (!ids.length) return;
-      if (!confirm('Enviar o parabéns por WhatsApp para ' + ids.length + ' aniversariante(s) de hoje?')) return;
+      if (!await Dialogo.confirmar('Enviar o parabéns por WhatsApp para ' + ids.length + ' aniversariante(s) de hoje?')) return;
       enviarWhatsapp(btnHoje, ids, false);
     });
   }

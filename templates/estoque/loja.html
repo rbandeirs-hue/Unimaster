@@ -1,0 +1,129 @@
+{% extends "base_app.html" %}
+{% from 'components/ui.html' import vazio %}
+{% set menu_ativo = 'loja' %}
+{% block title %}Loja da academia{% endblock %}
+
+{% block pagina_titulo %}Loja{% endblock %}
+{% block pagina_subtitulo %}
+  Escolha o que quer, monte o carrinho e envie o pedido. A retirada e o
+  pagamento são na academia.
+{% endblock %}
+
+{% block pagina_acoes %}
+  <a href="{{ url_for('estoque.meus_pedidos') }}" class="sh__btn">
+    <i class="bi bi-bag-check"></i> Meus pedidos
+  </a>
+  <a href="{{ url_for('estoque.carrinho_ver') }}" class="sh__btn sh__btn--forte">
+    <i class="bi bi-cart3"></i> Carrinho
+    {% if carrinho_qtd %}<span class="cat-selo">{{ carrinho_qtd }}</span>{% endif %}
+  </a>
+{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ asset('css/painel/estoque.css') }}">
+{% endblock %}
+
+{% block content %}
+
+<form method="GET" class="lst-filtros">
+  <label class="lst-campo lst-campo--largo">
+    <span class="lst-campo__rotulo">Buscar</span>
+    <input type="text" name="busca" value="{{ busca }}" placeholder="O que você procura?">
+  </label>
+  {% if categorias %}
+  <label class="lst-campo lst-campo--curto">
+    <span class="lst-campo__rotulo">Categoria</span>
+    <select name="categoria" onchange="this.form.submit()">
+      <option value="">Todas</option>
+      {% for c in categorias %}
+      <option value="{{ c }}" {% if categoria == c %}selected{% endif %}>{{ c }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  {% endif %}
+  <button type="submit" class="u-btn"><i class="bi bi-search"></i> Buscar</button>
+  {% if busca or categoria %}
+  <a class="u-btn u-btn--fantasma" href="{{ url_for('estoque.loja') }}">Limpar</a>
+  {% endif %}
+</form>
+
+{% if fichas %}
+<div class="cat-grade mt-3">
+  {% for f in fichas %}
+  <article class="cat-card">
+    <div class="cat-card__foto">
+      {% if f.imagem %}
+      <img src="{{ url_for('static', filename='uploads/estoque/' ~ f.imagem) }}"
+           alt="{{ f.produto }}" loading="lazy">
+      {% else %}
+      {# Sem foto, um ícone neutro em vez de um quadro vazio: o cartão mantém
+         a mesma altura e o catálogo não fica esburacado. #}
+      <span class="cat-card__sem-foto"><i class="bi bi-box-seam"></i></span>
+      {% endif %}
+    </div>
+
+    <div class="cat-card__corpo">
+      {% if f.categoria %}<span class="cat-card__cat">{{ f.categoria }}</span>{% endif %}
+      <h3 class="cat-card__nome">{{ f.produto }}</h3>
+      {% if f.descricao %}
+      <p class="cat-card__desc">{{ f.descricao[:110] }}{% if f.descricao|length > 110 %}…{% endif %}</p>
+      {% endif %}
+
+      {% set precos = f.variacoes | map(attribute='preco') | map('float') | list %}
+      <div class="cat-card__preco">
+        {% if precos|length > 1 and precos|min != precos|max %}
+        a partir de R$ {{ '%.2f'|format(precos|min)|replace('.', ',') }}
+        {% else %}
+        R$ {{ '%.2f'|format(precos|first)|replace('.', ',') }}
+        {% endif %}
+      </div>
+
+      {# Uma linha por variação: é ela que tem saldo e preço próprios, e é ela
+         que vai para o carrinho. Produto sem variação mostra uma linha só. #}
+      <div class="cat-card__vars">
+        {% for v in f.variacoes %}
+        <form method="POST"
+              action="{{ url_for('estoque.carrinho_por', variacao_id=v.id) }}"
+              class="cat-var">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="voltar" value="{{ request.full_path }}">
+          <span class="cat-var__nome">
+            {% if v.variacao != 'Único' %}{{ v.variacao }}{% else %}Unidade{% endif %}
+            {% if f.variacoes|length > 1 %}
+            <span class="cat-var__preco">R$ {{ '%.2f'|format(v.preco|float)|replace('.', ',') }}</span>
+            {% endif %}
+          </span>
+          <span class="cat-var__saldo">{{ v.saldo }} disp.</span>
+          <button type="submit" class="u-btn u-btn--pequeno u-btn--forte"
+                  aria-label="Adicionar {{ f.produto }} {{ v.variacao }} ao carrinho">
+            <i class="bi bi-cart-plus"></i>
+          </button>
+        </form>
+        {% endfor %}
+      </div>
+    </div>
+  </article>
+  {% endfor %}
+</div>
+
+{% if carrinho_qtd %}
+<div class="cat-barra">
+  <span>
+    <strong>{{ carrinho_qtd }}</strong> item(ns) no carrinho ·
+    R$ {{ '%.2f'|format(carrinho_total|float)|replace('.', ',') }}
+  </span>
+  <a href="{{ url_for('estoque.carrinho_ver') }}" class="u-btn u-btn--forte">
+    Ver carrinho
+  </a>
+</div>
+{% endif %}
+
+{% else %}
+{{ vazio('Nenhum produto disponível com esse filtro.' if (busca or categoria)
+         else 'A loja da sua academia ainda não tem produtos disponíveis.',
+         href=url_for('estoque.loja') if (busca or categoria) else None,
+         acao='Ver tudo' if (busca or categoria) else None,
+         icone='bi-shop') }}
+{% endif %}
+
+{% endblock %}

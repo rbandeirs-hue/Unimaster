@@ -9,6 +9,8 @@ from datetime import datetime, date
 from dateutil.relativedelta import relativedelta
 
 from blueprints.presencas.presencas import _garantir_tabela_presencas_observacao_aluno
+from utils.graduacao_modalidade import sql_join_faixa as _join_faixa
+from utils.acesso_academia import sql_papel_na_academia as _papel_acad
 
 
 bp_painel_aluno = Blueprint(
@@ -127,15 +129,14 @@ def _enriquecer_aluno_painel(aluno):
         modalidades_list = [r["nome"] for r in cur.fetchall()]
         aluno["modalidades"] = modalidades_list
         aluno["modalidades_nomes"] = ", ".join(modalidades_list) if modalidades_list else "-"
-        aluno["proxima_faixa"] = "—"
-        cur.execute("SELECT id, faixa, graduacao FROM graduacao ORDER BY id")
-        faixas = cur.fetchall()
-        gid = aluno.get("graduacao_id")
-        for i, f in enumerate(faixas):
-            if f["id"] == gid and i + 1 < len(faixas):
-                proxima = faixas[i + 1]
-                aluno["proxima_faixa"] = f"{proxima.get('faixa', '')} {proxima.get('graduacao', '')}".strip() or "—"
-                break
+        # Próxima faixa dentro da MESMA modalidade, e a faixa de cada modalidade
+        # do aluno (judô e jiu-jitsu separados).
+        from utils import graduacao_modalidade as grad_mod
+        aluno["proxima_faixa"] = grad_mod.proxima_faixa(cur, aluno.get("graduacao_id"))
+        aluno["faixas_modalidade"] = [
+            dict(f, proxima=grad_mod.proxima_faixa(cur, f["graduacao_id"]))
+            for f in grad_mod.faixas_por_modalidade(cur, [aluno["id"]]).get(aluno["id"], [])
+        ]
     except Exception:
         pass
     finally:
@@ -207,6 +208,12 @@ def _calcular_graduacao_prevista(aluno):
         previsao_proximo_exame = aluno.get("previsao_proximo_exame")
         ultimo_exame = aluno.get("ultimo_exame_faixa")
         graduacao_atual_id = aluno.get("graduacao_id")
+        # A previsão segue a tabela do judô (faixas_judo): parte da faixa de JUDÔ
+        # do aluno, não da principal (que pode ser a de jiu-jitsu).
+        from utils import graduacao_modalidade as grad_mod
+        _fj = grad_mod.faixa_na_modalidade(cur, aluno["id"], grad_mod.id_modalidade_judo(cur) or 0)
+        if _fj is not None:
+            graduacao_atual_id = _fj.get("graduacao_id")
         data_nascimento = aluno.get("data_nascimento")
         
         # Determinar a data base para o cálculo
@@ -1305,18 +1312,18 @@ def _buscar_alunos_turma(cur, turma_id, id_academia_turma):
     """Retorna lista de alunos da turma (mesma turma e mesma academia)."""
     try:
         if id_academia_turma is not None:
-            cur.execute("""
+            cur.execute(f"""
                 SELECT a.id, a.nome, a.foto, g.faixa AS faixa_nome, g.graduacao AS graduacao_nome
                 FROM alunos a
-                LEFT JOIN graduacao g ON g.id = a.graduacao_id
+                {_join_faixa()}
                 WHERE a.TurmaID = %s AND a.id_academia = %s
                 ORDER BY a.nome
             """, (turma_id, id_academia_turma))
         else:
-            cur.execute("""
+            cur.execute(f"""
                 SELECT a.id, a.nome, a.foto, g.faixa AS faixa_nome, g.graduacao AS graduacao_nome
                 FROM alunos a
-                LEFT JOIN graduacao g ON g.id = a.graduacao_id
+                {_join_faixa()}
                 WHERE a.TurmaID = %s
                 ORDER BY a.nome
             """, (turma_id,))
@@ -1655,11 +1662,11 @@ def associacao(aluno):
         for acad in academias:
             try:
                 # Primeiro tentar buscar por gestor_academia
-                cur.execute("""
+                cur.execute(f"""
                     SELECT u.nome, u.email
                     FROM usuarios u
                     INNER JOIN usuarios_academias ua ON ua.usuario_id = u.id
-                    INNER JOIN roles_usuario ru ON ru.usuario_id = u.id
+                    INNER JOIN roles_usuario ru ON ru.usuario_id = u.id {_papel_acad()}
                     INNER JOIN roles r ON r.id = ru.role_id
                     WHERE ua.academia_id = %s 
                       AND (
@@ -1674,11 +1681,11 @@ def associacao(aluno):
                 
                 # Se não encontrou gestor, buscar professor
                 if not gestor:
-                    cur.execute("""
+                    cur.execute(f"""
                         SELECT u.nome, u.email
                         FROM usuarios u
                         INNER JOIN usuarios_academias ua ON ua.usuario_id = u.id
-                        INNER JOIN roles_usuario ru ON ru.usuario_id = u.id
+                        INNER JOIN roles_usuario ru ON ru.usuario_id = u.id {_papel_acad()}
                         INNER JOIN roles r ON r.id = ru.role_id
                         WHERE ua.academia_id = %s 
                           AND (
@@ -1929,11 +1936,11 @@ def solicitacoes_academia(aluno, academia_destino_id):
         
         # Buscar gestor/professor responsável da academia destino
         try:
-            cur.execute("""
+            cur.execute(f"""
                 SELECT u.nome, u.email
                 FROM usuarios u
                 INNER JOIN usuarios_academias ua ON ua.usuario_id = u.id
-                INNER JOIN roles_usuario ru ON ru.usuario_id = u.id
+                INNER JOIN roles_usuario ru ON ru.usuario_id = u.id {_papel_acad()}
                 INNER JOIN roles r ON r.id = ru.role_id
                 WHERE ua.academia_id = %s 
                   AND (
@@ -1958,11 +1965,11 @@ def solicitacoes_academia(aluno, academia_destino_id):
         gestor_origem = None
         if id_academia_aluno:
             try:
-                cur.execute("""
+                cur.execute(f"""
                     SELECT u.nome, u.email
                     FROM usuarios u
                     INNER JOIN usuarios_academias ua ON ua.usuario_id = u.id
-                    INNER JOIN roles_usuario ru ON ru.usuario_id = u.id
+                    INNER JOIN roles_usuario ru ON ru.usuario_id = u.id {_papel_acad()}
                     INNER JOIN roles r ON r.id = ru.role_id
                     WHERE ua.academia_id = %s 
                       AND (
@@ -2326,6 +2333,11 @@ def curriculo():
             pass
         aluno.setdefault("faixa_nome", None)
         aluno.setdefault("graduacao_nome", None)
+        try:
+            from utils import graduacao_modalidade as grad_mod
+            aluno["faixas_modalidade"] = grad_mod.faixas_por_modalidade(cur, [aluno["id"]]).get(aluno["id"], [])
+        except Exception:
+            aluno["faixas_modalidade"] = []
         aluno["email_curriculo"] = aluno.get("email") or getattr(current_user, "email", None)
         aluno["telefone_curriculo"] = aluno.get("telefone_celular") or aluno.get("telefone") or ""
         exame = aluno.get("ultimo_exame_faixa")
@@ -2404,6 +2416,9 @@ def curriculo_impressao():
         if g:
             aluno["faixa_nome"] = g.get("faixa")
             aluno["graduacao_nome"] = g.get("graduacao")
+        # Uma faixa por modalidade no currículo impresso, como na tela.
+        from utils import graduacao_modalidade as grad_mod
+        aluno["faixas_modalidade"] = grad_mod.faixas_por_modalidade(cur, [aluno["id"]]).get(aluno["id"], [])
     except Exception:
         pass
     aluno.setdefault("faixa_nome", None)

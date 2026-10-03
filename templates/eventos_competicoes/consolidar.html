@@ -1,22 +1,28 @@
 {% extends "base_app.html" %}
+{% set back_url = back_url or get_back_url_default() %}
 {% block title %}Consolidar Inscrições{% if evento %} — {{ evento.nome }}{% endif %}{% endblock %}
+{% block pagina_titulo %}{% if not (evento and evento.tipo is defined and evento.tipo == 'competicao') %}Consolidar inscrições{% endif %}{% endblock %}
+{% block pagina_subtitulo %}{% if not (evento and evento.tipo is defined and evento.tipo == 'competicao') %}{{ evento.nome if evento else '' }}{% endif %}{% endblock %}
+{% block pagina_acoes %}
+{% if not layout_embed %}
+<a href="{{ url_voltar(back_url) }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Voltar</a>
+{% endif %}
+{% endblock %}
 {% block content %}
 {% macro link_editar_inscricao(aluno) -%}
-<a href="{{ url_for('eventos_competicoes.editar_inscricao', evento_id=evento.id, inscricao_id=aluno.id, academia_id=aluno.academia_id, origem='consolidar') }}" class="btn btn-sm btn-outline-secondary" title="Editar dados da inscrição"><i class="bi bi-pencil"></i></a>
+<a href="{{ url_for('eventos_competicoes.editar_inscricao', evento_id=evento.id, inscricao_id=aluno.id, academia_id=aluno.academia_id, origem='consolidar') }}" class="u-btn u-btn--pequeno" title="Editar dados da inscrição"><i class="bi bi-pencil"></i></a>
 {%- endmacro %}
 {% macro form_excluir_inscricao(aluno) -%}
 <form method="POST" action="{{ url_for('eventos_competicoes.excluir_inscricao_consolidar', evento_id=evento.id, inscricao_id=aluno.id) }}" class="d-inline"
-      onsubmit="return confirm('Excluir esta inscrição permanentemente? Esta ação não pode ser desfeita.');">
+      data-confirmar="Excluir esta inscrição permanentemente? Esta ação não pode ser desfeita.">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="agrupamento" value="{{ agrupamento|default('academia') }}">
-    <button type="submit" class="btn btn-sm btn-outline-danger" title="Excluir inscrição"><i class="bi bi-trash"></i></button>
+    <button type="submit" class="u-btn u-btn--pequeno" title="Excluir inscrição"><i class="bi bi-trash"></i></button>
 </form>
 {%- endmacro %}
 <div class="container consolidar-root {% if layout_embed %}mt-2{% else %}mt-3 mt-md-5{% endif %} px-2 px-md-3{% if evento and evento.tipo is defined and evento.tipo == 'competicao' %} consolidar-comp-page{% endif %}">
     <div class="mb-3 mb-md-4">
         {% if not layout_embed %}
-        {% set back_url = back_url or get_back_url_default() %}
-{% include 'components/botao_voltar.html' %}
         {% if evento and evento.tipo is defined and evento.tipo == 'competicao' %}
         <nav aria-label="Navegação" class="mb-3">
             <ol class="breadcrumb small mb-0 py-2 px-3 rounded-3 bg-light border">
@@ -34,11 +40,7 @@
 
         {# Cabeçalho da consolidação de EVENTO (competição já tem o próprio menu). #}
         {% if not (evento and evento.tipo is defined and evento.tipo == 'competicao') %}
-        <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mt-2">
-            <div>
-                <h1 class="h4 fw-bold mb-1"><i class="bi bi-collection text-primary me-2"></i>Consolidar inscrições</h1>
-                <p class="text-muted small mb-0">{{ evento.nome if evento else '' }}</p>
-            </div>
+        <div class="d-flex flex-wrap justify-content-end align-items-start gap-2 mt-2">
             <div class="d-flex gap-3">
                 <div class="text-center">
                     <div class="h4 fw-bold mb-0 text-primary">{{ academias_com_inscricoes | length }}</div>
@@ -61,11 +63,11 @@
                     <span class="small text-muted fw-semibold">Filtros</span>
                     <div class="btn-group flex-grow-1 flex-md-grow-0" role="group" style="min-width: min(100%, 280px);">
                         <input type="radio" class="btn-check" name="agrupamento" id="agrupamento_academia" value="academia" {% if agrupamento != 'categoria' %}checked{% endif %} onchange="atualizarAgrupamento()">
-                        <label class="btn btn-outline-primary" for="agrupamento_academia">
+                        <label class="u-btn" for="agrupamento_academia">
                             <i class="bi bi-building me-1"></i><span class="d-none d-sm-inline">Por </span>Academia
                         </label>
                         <input type="radio" class="btn-check" name="agrupamento" id="agrupamento_categoria" value="categoria" {% if agrupamento == 'categoria' %}checked{% endif %} onchange="atualizarAgrupamento()">
-                        <label class="btn btn-outline-primary" for="agrupamento_categoria">
+                        <label class="u-btn" for="agrupamento_categoria">
                             <i class="bi bi-tag me-1"></i><span class="d-none d-sm-inline">Por </span>Categoria
                         </label>
                     </div>
@@ -74,18 +76,18 @@
                 <div class="d-flex flex-column gap-1">
                     <span class="small text-muted fw-semibold">Inscrições</span>
                     <div class="d-flex flex-wrap gap-2">
-                        <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#modalNovaInscricao">
+                        <button type="button" class="u-btn u-btn--ok" data-bs-toggle="modal" data-bs-target="#modalNovaInscricao">
                             <i class="bi bi-person-plus me-1"></i>Nova inscrição
                         </button>
-                        <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalImportarInscricoes">
+                        <button type="button" class="u-btn" data-bs-toggle="modal" data-bs-target="#modalImportarInscricoes">
                             <i class="bi bi-file-earmark-spreadsheet me-1"></i>Importar Excel
                         </button>
                         {% if layout_embed %}
-                        <a href="{{ url_for('eventos_competicoes.modelo_planilha_inscricoes', evento_id=evento.id, embed=1) }}" class="btn btn-outline-secondary">
+                        <a href="{{ url_for('eventos_competicoes.modelo_planilha_inscricoes', evento_id=evento.id, embed=1) }}" class="u-btn">
                             <i class="bi bi-download me-1"></i>Modelo .xlsx
                         </a>
                         {% else %}
-                        <a href="{{ url_for('eventos_competicoes.modelo_planilha_inscricoes', evento_id=evento.id) }}" class="btn btn-outline-secondary">
+                        <a href="{{ url_for('eventos_competicoes.modelo_planilha_inscricoes', evento_id=evento.id) }}" class="u-btn">
                             <i class="bi bi-download me-1"></i>Modelo .xlsx
                         </a>
                         {% endif %}
@@ -95,16 +97,16 @@
                 <div class="d-flex flex-column gap-1">
                     <span class="small text-muted fw-semibold">Exportação</span>
                     <div class="d-flex flex-wrap gap-2">
-                        <a href="{{ url_for('eventos_competicoes.configurar_impressao', evento_id=evento.id) if evento else '#' }}" class="btn btn-primary">
+                        <a href="{{ url_for('eventos_competicoes.configurar_impressao', evento_id=evento.id) if evento else '#' }}" class="u-btn u-btn--primario">
                             <i class="bi bi-printer me-1"></i> Imprimir / exportar
                         </a>
                         {% if evento and evento.tipo is defined and evento.tipo == 'competicao' and evento.categorias_modo is defined and evento.categorias_modo == 'aproximacao' %}
                         <form method="POST" action="{{ url_for('eventos_competicoes.recalcular_categorias_aproximacao', evento_id=evento.id) }}" class="d-inline"
-                              onsubmit="return confirm('Atualizar categorias por aproximação em todas as inscrições desta competição? Quem estiver sem data, sexo ou peso válidos pode continuar sem categoria.');">
+                              data-confirmar="Atualizar categorias por aproximação em todas as inscrições desta competição? Quem estiver sem data, sexo ou peso válidos pode continuar sem categoria.">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <input type="hidden" name="retorno" value="consolidar">
                             <input type="hidden" name="agrupamento_retorno" value="{{ agrupamento|default('academia') }}">
-                            <button type="submit" class="btn btn-outline-secondary">
+                            <button type="submit" class="u-btn">
                                 <i class="bi bi-arrow-repeat me-1"></i> Recalcular categorias
                             </button>
                         </form>
@@ -242,12 +244,12 @@
                             </label>
                             <div class="btn-group w-100" role="group">
                                 <input type="radio" class="btn-check" name="orientacao_pdf" id="orientacao_paisagem" value="paisagem" checked>
-                                <label class="btn btn-outline-primary" for="orientacao_paisagem">
+                                <label class="u-btn" for="orientacao_paisagem">
                                     <i class="bi bi-arrows-expand me-1"></i> Paisagem
                                 </label>
                                 
                                 <input type="radio" class="btn-check" name="orientacao_pdf" id="orientacao_retrato" value="retrato">
-                                <label class="btn btn-outline-primary" for="orientacao_retrato">
+                                <label class="u-btn" for="orientacao_retrato">
                                     <i class="bi bi-arrows-collapse me-1"></i> Retrato
                                 </label>
                             </div>
@@ -259,11 +261,11 @@
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-outline-secondary" onclick="resetarConfiguracao()">
+                    <button type="button" class="u-btn" onclick="resetarConfiguracao()">
                         <i class="bi bi-arrow-counterclockwise me-1"></i> Resetar
                     </button>
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="button" class="btn btn-primary" onclick="salvarConfiguracaoExportacao()">
+                    <button type="button" class="u-btn" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="u-btn u-btn--primario" onclick="salvarConfiguracaoExportacao()">
                         <i class="bi bi-save me-1"></i> Salvar Configuração
                     </button>
                 </div>
@@ -343,7 +345,7 @@
                             <div class="btn-group btn-group-sm ms-2">
                                 {{ link_editar_inscricao(aluno) }}
                                 {{ form_excluir_inscricao(aluno) }}
-                                <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalDetalhesAlunoCat{{ aluno.id }}_{{ loop.index }}" title="Ver detalhes">
+                                <button type="button" class="u-btn u-btn--pequeno" data-bs-toggle="modal" data-bs-target="#modalDetalhesAlunoCat{{ aluno.id }}_{{ loop.index }}" title="Ver detalhes">
                                     <i class="bi bi-eye"></i>
                                 </button>
                             </div>
@@ -407,7 +409,7 @@
                                             {{ link_editar_inscricao(aluno) }}
                                             {{ form_excluir_inscricao(aluno) }}
                                         </div>
-                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+                                        <button type="button" class="u-btn" data-bs-dismiss="modal">Fechar</button>
                                     </div>
                                 </div>
                             </div>
@@ -495,7 +497,7 @@
                         <div class="btn-group btn-group-sm ms-2">
                             {{ link_editar_inscricao(aluno) }}
                             {{ form_excluir_inscricao(aluno) }}
-                            <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalDetalhesAluno{{ aluno.id }}_{{ loop.index }}" title="Ver detalhes">
+                            <button type="button" class="u-btn u-btn--pequeno" data-bs-toggle="modal" data-bs-target="#modalDetalhesAluno{{ aluno.id }}_{{ loop.index }}" title="Ver detalhes">
                                 <i class="bi bi-eye"></i>
                             </button>
                         </div>
@@ -559,7 +561,7 @@
                                         {{ link_editar_inscricao(aluno) }}
                                         {{ form_excluir_inscricao(aluno) }}
                                     </div>
-                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+                                    <button type="button" class="u-btn" data-bs-dismiss="modal">Fechar</button>
                                 </div>
                             </div>
                         </div>
@@ -626,32 +628,32 @@
     background: #ffffff;
 }
 .campo-disponivel:hover {
-    background: #f0f7ff;
-    border-color: #0d6efd;
-    box-shadow: 0 2px 8px rgba(13, 110, 253, 0.15);
+    background: #f4f2ee;
+    border-color: #1c1c1c;
+    box-shadow: 0 2px 8px rgba(28, 28, 28, 0.15);
     transform: translateY(-2px);
 }
 .campo-disponivel:has(input:checked) {
-    background: #e7f3ff;
-    border-color: #0d6efd;
+    background: #f4f2ee;
+    border-color: #1c1c1c;
     border-width: 2px;
 }
 .campo-item.dragging {
     opacity: 0.6;
     transform: scale(0.98);
     box-shadow: 0 4px 16px rgba(0,0,0,0.2);
-    border-color: #0d6efd;
+    border-color: #1c1c1c;
 }
 #campos-selecionados .campo-item {
     cursor: move;
-    background: linear-gradient(135deg, #e7f3ff 0%, #d0e7ff 100%);
-    border-color: #0d6efd;
+    background: linear-gradient(135deg, #f4f2ee 0%, #f4f2ee 100%);
+    border-color: #1c1c1c;
     border-width: 2px;
     padding-right: 50px;
 }
 #campos-selecionados .campo-item:hover {
-    background: linear-gradient(135deg, #d0e7ff 0%, #b8dbff 100%);
-    box-shadow: 0 3px 10px rgba(13, 110, 253, 0.25);
+    background: linear-gradient(135deg, #f4f2ee 0%, #f4f2ee 100%);
+    box-shadow: 0 3px 10px rgba(28, 28, 28, 0.25);
     transform: translateY(-2px);
 }
 .campo-item .form-check-label {
@@ -679,7 +681,7 @@
 }
 #campos-selecionados .campo-item:hover .bi-grip-vertical {
     opacity: 1;
-    color: #0d6efd;
+    color: #1c1c1c;
 }
 .modal-body {
     padding: 1.5rem;
@@ -773,7 +775,7 @@
         padding-bottom: 0.75rem !important;
     }
     
-    .d-md-none .btn-sm {
+    .d-md-none .btn-sm, .d-md-none .u-btn--pequeno {
         min-width: 44px;
         min-height: 44px;
         padding: 0.5rem;
@@ -804,7 +806,7 @@
     }
     
     /* Botões de agrupamento */
-    .btn-group .btn {
+    .btn-group .btn{
         min-height: 44px;
     }
     
@@ -841,17 +843,17 @@
         padding: 0.25em 0.5em;
     }
     
-    .btn {
+    .btn, .u-btn {
         min-height: 44px;
         font-size: 0.875rem;
         padding: 0.5rem 1rem;
     }
     
-    .btn-group {
+    .btn-group{
         width: 100%;
     }
     
-    .btn-group .btn {
+    .btn-group .btn{
         flex: 1;
         font-size: 0.8rem;
         padding: 0.5rem 0.75rem;
@@ -920,18 +922,18 @@
         flex-direction: row !important;
     }
     
-    .btn-group.w-100 {
+    .btn-group.w-100{
         width: auto !important;
     }
     
-    .btn.w-100 {
+    .btn.w-100, .u-btn.w-100 {
         width: auto !important;
     }
 }
 
 /* Melhorias de toque para mobile */
 @media (hover: none) and (pointer: coarse) {
-    .btn {
+    .btn, .u-btn {
         min-height: 44px;
     }
     
@@ -1341,7 +1343,7 @@ function exportarComConfiguracao(formato) {
 }
 </script>
 <style>
-.consolidar-comp-page { max-width: 1040px; }
+.consolidar-comp-page { max-width: none; }
 .consolidar-root .table thead th { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.03em; color: var(--bs-secondary-color); font-weight: 600; }
 </style>
 {% endblock %}

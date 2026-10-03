@@ -1,5 +1,10 @@
 {% extends "base_app.html" %}
 {% block title %}Editar Desconto{% endblock %}
+{% set back_url = url_for('financeiro.lista_descontos', academia_id=academia_id) if academia_id else url_for('financeiro.lista_descontos') %}
+{% block pagina_titulo %}Editar desconto{% endblock %}
+{% block pagina_acoes %}
+<a href="{{ url_voltar(back_url) }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Voltar</a>
+{% endblock %}
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/financeiro/responsive.css') }}?v=1">
 <style>
@@ -9,51 +14,45 @@
   .desconto-form-page .card-body { padding: 1rem !important; }
   .desconto-form-page .card-header { padding: 0.75rem 1rem !important; }
   .desconto-form-page .card-header h5 { font-size: 1rem !important; }
-  .desconto-form-page .form-control, .desconto-form-page .form-select { font-size: 16px !important; min-height: 44px; }
+  .desconto-form-page .form-control, .desconto-form-page .form-select,
+  .desconto-form-page .u-campo__controle { font-size: 16px !important; min-height: 44px; }
   .desconto-form-page .form-check-label { font-size: 0.95rem; }
   .desconto-form-page .d-flex.gap-2 { flex-direction: column !important; }
-  .desconto-form-page .d-flex.gap-2 .btn { width: 100%; margin-bottom: 0.5rem; }
-  .desconto-form-page .d-flex.gap-2 .btn:last-child { margin-bottom: 0; }
+  .desconto-form-page .d-flex.gap-2 .btn, .desconto-form-page .d-flex.gap-2 .u-btn { width: 100%; margin-bottom: 0.5rem; }
+  .desconto-form-page .d-flex.gap-2 .btn:last-child, .desconto-form-page .d-flex.gap-2 .u-btn:last-child { margin-bottom: 0; }
 }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="container mt-4 desconto-form-page">
-    <div class="mb-3">
-        {% set back_url = url_for('financeiro.lista_descontos', academia_id=academia_id) if academia_id else url_for('financeiro.lista_descontos') %}
-        {% include 'components/botao_voltar.html' %}
-    </div>
-    <div class="card shadow-lg border-0 mx-auto financeiro-form" style="max-width: 600px;">
-        <div class="card-header bg-warning text-dark">
-            <h5 class="mb-0"><i class="bi bi-pencil me-2"></i> Editar Desconto</h5>
-        </div>
+    <div class="card shadow-lg border-0 financeiro-form">
         <div class="card-body p-4">
             <form method="POST">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="mb-3">
                     <label for="nome" class="form-label fw-semibold">Nome <span class="text-danger">*</span></label>
-                    <input type="text" class="form-control" id="nome" name="nome" required value="{{ desconto.nome }}">
+                    <input type="text" class="u-campo__controle" id="nome" name="nome" required value="{{ desconto.nome }}">
                 </div>
                 <div class="mb-3">
                     <label for="descricao" class="form-label fw-semibold">Descrição</label>
-                    <textarea class="form-control" id="descricao" name="descricao" rows="2">{{ desconto.descricao or '' }}</textarea>
+                    <textarea class="u-campo__controle" id="descricao" name="descricao" rows="2">{{ desconto.descricao or '' }}</textarea>
                 </div>
                 <div class="mb-3">
                     <label for="tipo" class="form-label fw-semibold">Tipo</label>
-                    <select class="form-select" id="tipo" name="tipo">
+                    <select class="u-campo__controle" id="tipo" name="tipo">
                         <option value="percentual" {% if desconto.tipo == 'percentual' %}selected{% endif %}>Percentual (%)</option>
                         <option value="valor_fixo" {% if desconto.tipo == 'valor_fixo' %}selected{% endif %}>Valor fixo (R$)</option>
                     </select>
                 </div>
                 <div class="mb-3">
                     <label for="valor" class="form-label fw-semibold">Valor <span class="text-danger">*</span></label>
-                    <input type="text" class="form-control" id="valor" name="valor" required value="{{ "%.2f"|format(desconto.valor|float) if desconto.tipo == 'valor_fixo' else "%.0f"|format(desconto.valor|float) }}" pattern="[0-9]+([,\.][0-9]{2})?">
+                    <input type="text" class="u-campo__controle" id="valor" name="valor" required value="{{ "%.2f"|format(desconto.valor|float) if desconto.tipo == 'valor_fixo' else "%.0f"|format(desconto.valor|float) }}" pattern="[0-9]+([,\.][0-9]{2})?">
                 </div>
                 {% if academias|length > 1 %}
                 <div class="mb-3">
                     <label for="id_academia" class="form-label fw-semibold">Academia <span class="text-danger">*</span></label>
-                    <select class="form-select" id="id_academia" name="id_academia" required>
+                    <select class="u-campo__controle" id="id_academia" name="id_academia" required>
                         {% for ac in academias %}
                         <option value="{{ ac.id }}" {% if desconto.id_academia == ac.id %}selected{% endif %}>{{ ac.nome }}</option>
                         {% endfor %}
@@ -79,7 +78,7 @@
                 <div class="d-flex gap-2 mt-4 justify-content-between">
                     {% set back_url = url_for('financeiro.lista_descontos', academia_id=academia_id) if academia_id else url_for('financeiro.lista_descontos') %}
                     {% include 'components/botao_voltar.html' %}
-                    <button type="submit" class="btn btn-warning text-dark">Salvar</button>
+                    <button type="submit" class="u-btn u-btn--alerta text-dark">Salvar</button>
                 </div>
             </form>
         </div>

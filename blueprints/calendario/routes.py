@@ -47,6 +47,61 @@ def _hora_para_sort(hora):
     return s[:5] if len(s) >= 5 else '00:00'
 
 
+def _modalidades_ativas():
+    """Todas as modalidades do sistema, para federação e associação.
+
+    Fora da academia não existe "modalidades desta academia": a federação vê a
+    agenda de todas. A tabela tem poucas linhas e a consulta é barata.
+    """
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute("SELECT id, nome, cor FROM modalidade WHERE ativo = 1 ORDER BY nome")
+        return cur.fetchall() or []
+    except Exception:
+        return []
+    finally:
+        cur.close()
+        conn.close()
+
+
+def _filtro_modalidades_do_aluno(aluno_id):
+    """(trecho SQL, params) com as modalidades do aluno, para o alias `e`."""
+    try:
+        from utils.multimodalidade import (modalidades_ids_do_aluno,
+                                           filtro_eventos_por_modalidades)
+        return filtro_eventos_por_modalidades("e", modalidades_ids_do_aluno(aluno_id))
+    except Exception:
+        return "", ()
+
+
+def _modalidades_do_nivel(nivel, nivel_id):
+    """O que a tela pode oferecer como modalidade de um lançamento."""
+    if nivel == 'academia':
+        try:
+            from utils.multimodalidade import modalidades_da_academia
+            return modalidades_da_academia(nivel_id)
+        except Exception:
+            return []
+    return _modalidades_ativas()
+
+
+def _modalidade_sugerida(nivel, nivel_id):
+    """Pré-seleção do formulário: a modalidade em foco, quando há uma.
+
+    Quem está olhando o jiu-jitsu quase sempre está criando algo de jiu-jitsu.
+    Continua sendo só sugestão — dá para trocar para "todas" no próprio campo.
+    """
+    try:
+        from utils.multimodalidade import contexto_id
+        if nivel != 'academia':
+            return None
+        atual = contexto_id(nivel_id)
+        return atual if atual in [m['id'] for m in _modalidades_do_nivel(nivel, nivel_id)] else None
+    except Exception:
+        return None
+
+
 def _get_nivel_e_id_usuario():
     """Retorna o nível e ID do contexto atual do usuário baseado no modo_painel."""
     modo = session.get('modo_painel', 'academia')
@@ -55,12 +110,14 @@ def _get_nivel_e_id_usuario():
         return 'federacao', current_user.id_federacao
     elif modo == 'associacao' and current_user.id_associacao:
         return 'associacao', current_user.id_associacao
-    elif modo == 'academia' and current_user.id_academia:
-        return 'academia', current_user.id_academia
-    elif modo == 'professor':
-        # Professor vê calendário da academia
-        if current_user.id_academia:
-            return 'academia', current_user.id_academia
+    elif modo in ('academia', 'professor'):
+        # A academia em foco é a escolhida no topo do sistema (a sessão guarda,
+        # depois de validar o acesso em academia.escolher). `id_academia` do
+        # cadastro é só a reserva: com ele, o admin que trocou para outra
+        # academia continuava vendo a agenda da academia fixa dele.
+        aid = session.get('academia_gerenciamento_id') or current_user.id_academia
+        if aid:
+            return 'academia', aid
     elif modo == 'aluno':
         # Aluno vê calendário da sua academia
         conn = get_db_connection()
@@ -329,11 +386,20 @@ def _sincronizar_turmas_como_eventos(academia_id):
                     """, (hora_inicio, hora_fim, titulo_aula, evento_existente['id']))
                     eventos_criados += 1
             else:
+                # A aula nasce com a modalidade da turma — é o dado mais
+                # confiável que existe. Turma de duas modalidades fica geral:
+                # escolher uma seria inventar.
+                cur.execute("""SELECT modalidade_id FROM turma_modalidades
+                               WHERE turma_id = %s""", (turma['TurmaID'],))
+                _mods_turma = cur.fetchall() or []
+                _mod_aula = (_mods_turma[0]['modalidade_id']
+                             if len(_mods_turma) == 1 else None)
                 cur.execute("""
                     INSERT INTO eventos
                     (titulo, descricao, data_inicio, tipo, recorrente, dias_semana,
-                     hora_inicio, hora_fim, nivel, nivel_id, turma_id, criado_por_usuario_id, cor)
-                    VALUES (%s, %s, CURDATE(), 'aula', 1, %s, %s, %s, 'academia', %s, %s, %s, '#0d6efd')
+                     hora_inicio, hora_fim, nivel, nivel_id, turma_id, criado_por_usuario_id,
+                     cor, modalidade_id)
+                    VALUES (%s, %s, CURDATE(), 'aula', 1, %s, %s, %s, 'academia', %s, %s, %s, '#0d6efd', %s)
                 """, (
                     titulo_aula,
                     descricao,
@@ -342,7 +408,8 @@ def _sincronizar_turmas_como_eventos(academia_id):
                     hora_fim,
                     academia_id,
                     turma['TurmaID'],
-                    current_user.id
+                    current_user.id,
+                    _mod_aula
                 ))
                 eventos_criados += 1
         
@@ -506,11 +573,27 @@ def visualizar():
     else:
         data_fim_mes = date(ano, mes + 1, 1) - timedelta(days=1)
     
-    # Contexto de modalidade: aula de outra modalidade sai do calendário; feriado
-    # e evento sem turma continuam para todo mundo.
+    # ------------------------------------------------- separação por modalidade
+    # O calendário tem um filtro próprio, e não só o contexto global do shell:
+    # o gestor costuma querer olhar a agenda de uma modalidade sem trocar o
+    # contexto do sistema inteiro. Sem `?modalidade=` na URL, vale o contexto.
+    # Com `?modalidade=` vazio, é uma escolha explícita por "todas".
+    modalidades_cal, modalidade_filtro = [], None
     try:
-        from utils.multimodalidade import filtro_eventos_sql
-        _trecho_ev, _params_ev = filtro_eventos_sql("e")
+        from utils import multimodalidade as mm
+        if nivel == 'academia':
+            modalidades_cal = mm.modalidades_da_academia(nivel_id)
+        else:
+            modalidades_cal = _modalidades_ativas()
+        if 'modalidade' in request.args:
+            modalidade_filtro = request.args.get('modalidade', type=int) or None
+        else:
+            modalidade_filtro = mm.contexto_id()
+        if modalidade_filtro not in [m['id'] for m in modalidades_cal]:
+            modalidade_filtro = None
+        _trecho_ev, _params_ev = (
+            mm.filtro_eventos_sql("e", modalidade_id=modalidade_filtro)
+            if modalidade_filtro else ("", ()))
     except Exception:
         _trecho_ev, _params_ev = "", ()
 
@@ -519,10 +602,13 @@ def visualizar():
         cur.execute("""
             SELECT e.*, 
                    t.Nome as turma_nome,
-                   u.nome as criador_nome
+                   u.nome as criador_nome,
+                   md.nome as modalidade_nome,
+                   md.cor  as modalidade_cor
             FROM eventos e
             LEFT JOIN turmas t ON t.TurmaID = e.turma_id
             LEFT JOIN usuarios u ON u.id = e.criado_por_usuario_id
+            LEFT JOIN modalidade md ON md.id = e.modalidade_id
             WHERE e.nivel = %s AND e.nivel_id = %s
               AND e.recorrente = 0
               AND e.status = 'ativo'
@@ -538,10 +624,13 @@ def visualizar():
         cur.execute("""
             SELECT e.*, 
                    t.Nome as turma_nome,
-                   u.nome as criador_nome
+                   u.nome as criador_nome,
+                   md.nome as modalidade_nome,
+                   md.cor  as modalidade_cor
             FROM eventos e
             LEFT JOIN turmas t ON t.TurmaID = e.turma_id
             LEFT JOIN usuarios u ON u.id = e.criado_por_usuario_id
+            LEFT JOIN modalidade md ON md.id = e.modalidade_id
             WHERE e.nivel = %s AND e.nivel_id = %s
               AND e.recorrente = 1
               AND e.status = 'ativo'
@@ -678,6 +767,10 @@ def visualizar():
             'tipo': (ev.get('tipo') or 'evento'),
             'horario': _horario(ev),
             'cor': ev.get('cor'),
+            # Sem modalidade o lançamento é geral — a tela mostra isso como
+            # ausência de marca, não como uma marca "geral".
+            'modalidade': ev.get('modalidade_nome'),
+            'modalidade_cor': ev.get('modalidade_cor'),
         }
 
     primeiro = date(ano, mes, 1)
@@ -740,6 +833,8 @@ def visualizar():
                           visao=visao,
                           tipo_filtro=tipo_filtro,
                           dia_filtro=dia_filtro,
+                          modalidades_cal=modalidades_cal,
+                          modalidade_filtro=modalidade_filtro,
                           celulas=celulas,
                           lancamentos=lancamentos,
                           mes_label='%s de %s' % (MESES_PT[mes - 1], ano),
@@ -781,6 +876,10 @@ def aluno():
     else:
         data_fim_mes = date(ano, mes + 1, 1) - timedelta(days=1)
     
+    # O aluno não escolhe recorte: ele vê o que é geral e o que é das
+    # modalidades em que está matriculado. Sem matrícula conhecida, vê tudo.
+    _trecho_al, _params_al = _filtro_modalidades_do_aluno(aluno['id'])
+
     try:
         # Busca eventos da academia
         cur.execute("""
@@ -793,8 +892,10 @@ def aluno():
               AND e.status = 'ativo'
               AND ((e.data_inicio BETWEEN %s AND %s) 
                    OR (e.data_fim IS NOT NULL AND e.data_fim >= %s AND e.data_inicio <= %s))
+              """ + _trecho_al + """
             ORDER BY e.data_inicio, e.hora_inicio
-        """, (academia_id, data_inicio_mes, data_fim_mes, data_inicio_mes, data_fim_mes))
+        """, (academia_id, data_inicio_mes, data_fim_mes,
+              data_inicio_mes, data_fim_mes) + tuple(_params_al))
         eventos_normais = cur.fetchall()
         
         # Busca eventos recorrentes (aulas das turmas do aluno)
@@ -967,6 +1068,9 @@ def aluno_responsavel():
     else:
         data_fim_mes = date(ano, mes + 1, 1) - timedelta(days=1)
     
+    # Mesmo critério do calendário do aluno: geral + modalidades dele.
+    _trecho_al, _params_al = _filtro_modalidades_do_aluno(aluno['id'])
+
     try:
         cur.execute("""
             SELECT e.*, t.Nome as turma_nome
@@ -976,8 +1080,10 @@ def aluno_responsavel():
               AND e.recorrente = 0 AND e.status = 'ativo'
               AND ((e.data_inicio BETWEEN %s AND %s) 
                    OR (e.data_fim IS NOT NULL AND e.data_fim >= %s AND e.data_inicio <= %s))
+              """ + _trecho_al + """
             ORDER BY e.data_inicio, e.hora_inicio
-        """, (academia_id, data_inicio_mes, data_fim_mes, data_inicio_mes, data_fim_mes))
+        """, (academia_id, data_inicio_mes, data_fim_mes,
+              data_inicio_mes, data_fim_mes) + tuple(_params_al))
         eventos_normais = cur.fetchall()
         
         cur.execute("""
@@ -1100,7 +1206,12 @@ def sincronizar():
         historico = []
 
     conflitos_pendentes = 0
+    # Academia independente (sem associação) não tem sede de onde trazer
+    # eventos nem eventos da associação para aprovar: os cartões somem.
+    tem_associacao = False
     if nivel == 'academia':
+        cur.execute("SELECT id_associacao FROM academias WHERE id = %s", (nivel_id,))
+        tem_associacao = bool((cur.fetchone() or {}).get('id_associacao'))
         try:
             cur.execute(
                 "SELECT COUNT(*) as c FROM conflitos_aula_feriado WHERE academia_id = %s AND status = 'pendente'",
@@ -1121,6 +1232,7 @@ def sincronizar():
                           historico=historico,
                           ano_atual=ano_atual,
                           conflitos_pendentes=conflitos_pendentes if nivel == 'academia' else 0,
+                          tem_associacao=tem_associacao,
                           **_ctx_shell(nivel, nivel_id))
 
 
@@ -1223,7 +1335,8 @@ def _sincronizar_eventos_da_sede(academia_id):
 
         cur.execute("""
             SELECT id, titulo, descricao, data_inicio, data_fim, hora_inicio, hora_fim,
-                   tipo, recorrente, dias_semana, feriado_nacional, origem_sincronizacao, cor
+                   tipo, recorrente, dias_semana, feriado_nacional, origem_sincronizacao,
+                   cor, modalidade_id
             FROM eventos
             WHERE nivel = 'associacao' AND nivel_id = %s AND status = 'ativo'
             ORDER BY data_inicio
@@ -1252,8 +1365,9 @@ def _sincronizar_eventos_da_sede(academia_id):
                 INSERT INTO eventos
                 (titulo, descricao, data_inicio, data_fim, hora_inicio, hora_fim,
                  tipo, recorrente, dias_semana, nivel, nivel_id, feriado_nacional,
-                 origem_sincronizacao, evento_origem_id, criado_por_usuario_id, cor, status)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'academia', %s, %s, %s, %s, %s, %s, 'ativo')
+                 origem_sincronizacao, evento_origem_id, criado_por_usuario_id, cor,
+                 modalidade_id, status)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'academia', %s, %s, %s, %s, %s, %s, %s, 'ativo')
             """, (
                 titulo,
                 ev.get("descricao"),
@@ -1270,6 +1384,7 @@ def _sincronizar_eventos_da_sede(academia_id):
                 ev.get("id"),
                 current_user.id,
                 ev.get("cor") or "#0d6efd",
+                ev.get("modalidade_id"),
             ))
             eventos_criados += 1
 
@@ -1815,6 +1930,14 @@ def novo_evento():
         hora_fim = request.form.get('hora_fim') or None
         tipo = request.form.get('tipo', 'evento')
         cor = request.form.get('cor', '#0d6efd')
+        # Modalidade: vazio = lançamento geral, aparece em todos os recortes.
+        # Validado contra a lista que a tela ofereceu — o campo é um <select>,
+        # mas o POST é editável e quem valida é o servidor.
+        modalidade_id = request.form.get('modalidade_id', type=int) or None
+        if modalidade_id and modalidade_id not in [
+                m['id'] for m in _modalidades_do_nivel(nivel, nivel_id)]:
+            flash('Modalidade inválida para este nível.', 'warning')
+            return redirect(url_for('calendario.novo_evento'))
         
         if not titulo or not data_inicio:
             flash('Título e data de início são obrigatórios.', 'warning')
@@ -1827,10 +1950,10 @@ def novo_evento():
             cur.execute("""
                 INSERT INTO eventos
                 (titulo, descricao, data_inicio, data_fim, hora_inicio, hora_fim,
-                 tipo, nivel, nivel_id, criado_por_usuario_id, cor)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                 tipo, nivel, nivel_id, criado_por_usuario_id, cor, modalidade_id)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """, (titulo, descricao, data_inicio, data_fim, hora_inicio, hora_fim,
-                  tipo, nivel, nivel_id, current_user.id, cor))
+                  tipo, nivel, nivel_id, current_user.id, cor, modalidade_id))
             
             evento_id = cur.lastrowid
             
@@ -1868,6 +1991,8 @@ def novo_evento():
             conn.close()
     
     return render_template('calendario/novo_evento.html', nivel=nivel, nivel_id=nivel_id,
+                           modalidades=_modalidades_do_nivel(nivel, nivel_id),
+                           modalidade_sugerida=_modalidade_sugerida(nivel, nivel_id),
                            **_ctx_shell(nivel, nivel_id))
 
 
@@ -1950,8 +2075,9 @@ def aprovar_evento(aprovacao_id):
         cur.execute("""
             INSERT INTO eventos
             (titulo, descricao, data_inicio, data_fim, hora_inicio, hora_fim,
-             tipo, nivel, nivel_id, criado_por_usuario_id, cor, origem_sincronizacao, evento_origem_id)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'aprovacao', %s)
+             tipo, nivel, nivel_id, criado_por_usuario_id, cor, modalidade_id,
+             origem_sincronizacao, evento_origem_id)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'aprovacao', %s)
         """, (
             aprovacao['titulo'],
             aprovacao['descricao'],
@@ -1964,6 +2090,7 @@ def aprovar_evento(aprovacao_id):
             nivel_id,
             current_user.id,
             aprovacao.get('cor', '#0d6efd'),
+            aprovacao.get('modalidade_id'),
             evento_pai_id
         ))
         novo_evento_id = cur.lastrowid
@@ -2044,6 +2171,18 @@ def lista_eventos():
     mes = request.args.get('mes', type=int)
     ano = request.args.get('ano', type=int, default=datetime.now().year)
     filtro = request.args.get('filtro', 'ativos')  # ativos | cancelados | todos
+    # Mesma regra do calendário: sem `?modalidade=` vale o contexto do shell.
+    modalidades_cal, modalidade_filtro = _modalidades_do_nivel(nivel, nivel_id), None
+    try:
+        from utils import multimodalidade as mm
+        if 'modalidade' in request.args:
+            modalidade_filtro = request.args.get('modalidade', type=int) or None
+        else:
+            modalidade_filtro = mm.contexto_id()
+        if modalidade_filtro not in [m['id'] for m in modalidades_cal]:
+            modalidade_filtro = None
+    except Exception:
+        modalidade_filtro = None
     
     conn = get_db_connection()
     cur = conn.cursor(dictionary=True)
@@ -2055,6 +2194,16 @@ def lista_eventos():
             where_status = " AND e.status = 'ativo'"
         elif filtro == 'cancelados':
             where_status = " AND e.status = 'cancelado'"
+        
+        where_modalidade = ""
+        if modalidade_filtro:
+            try:
+                from utils.multimodalidade import filtro_eventos_sql
+                where_modalidade, _p_mod = filtro_eventos_sql(
+                    "e", modalidade_id=modalidade_filtro)
+                params.extend(_p_mod)
+            except Exception:
+                where_modalidade = ""
         
         where_extra = ""
         if mes and ano:
@@ -2068,10 +2217,12 @@ def lista_eventos():
             SELECT e.id, e.titulo, e.descricao, e.data_inicio, e.data_fim,
                    e.hora_inicio, e.hora_fim, e.tipo, e.status, e.recorrente,
                    e.feriado_nacional, e.origem_sincronizacao, e.evento_origem_id,
-                   t.Nome as turma_nome
+                   t.Nome as turma_nome,
+                   md.nome as modalidade_nome, md.cor as modalidade_cor
             FROM eventos e
             LEFT JOIN turmas t ON t.TurmaID = e.turma_id
-            WHERE e.nivel = %s AND e.nivel_id = %s {where_status} {where_extra}
+            LEFT JOIN modalidade md ON md.id = e.modalidade_id
+            WHERE e.nivel = %s AND e.nivel_id = %s {where_status} {where_modalidade} {where_extra}
             ORDER BY e.data_inicio DESC, e.hora_inicio
             LIMIT 200
         """, params)
@@ -2101,6 +2252,8 @@ def lista_eventos():
     return render_template('calendario/lista_eventos.html',
                           eventos=eventos, nivel=nivel, nivel_id=nivel_id,
                           contexto=contexto, mes=mes, ano=ano, filtro=filtro,
+                          modalidades_cal=modalidades_cal,
+                          modalidade_filtro=modalidade_filtro,
                           **_ctx_shell(nivel, nivel_id))
 
 

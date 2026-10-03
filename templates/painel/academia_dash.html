@@ -1,6 +1,6 @@
 {% extends "base_academia.html" %}
 {% set menu_ativo = 'indicadores' %}
-{% block title %}Painel da academia — Unimaster Judô{% endblock %}
+{% block title %}Painel da academia — Unimaster {{ marca_modalidade }}{% endblock %}
 
 {% set meses_nomes = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'] %}
 
@@ -32,47 +32,62 @@
   {% else %}<span class="dash-delta">Igual a {{ dash.mes_anterior_nome }}</span>{% endif %}
 {% endmacro %}
 
-{# Indicador de um bloco: rótulo pequeno, número grande, legenda embaixo. #}
-{% macro indicador(valor, rotulo, legenda=None, tom='') %}
+{# Indicador de um bloco: rótulo pequeno, número grande, legenda embaixo.
+
+   `alcance` aparece só quando há filtro ativo, e existe porque a dúvida é
+   legítima: com a modalidade escolhida, Receitas e Despesas continuam da
+   academia inteira, e sem dizer isso no próprio número o filtro parece não
+   funcionar. #}
+{% macro indicador(valor, rotulo, legenda=None, tom='', alcance=None) %}
 <div class="dash-ind">
-  <div class="dash-ind__rotulo">{{ rotulo }}</div>
+  <div class="dash-ind__rotulo">
+    {{ rotulo }}
+    {% if alcance %}<span class="dash-ind__alcance">{{ alcance }}</span>{% endif %}
+  </div>
   <div class="dash-ind__valor {% if tom %}is-{{ tom }}{% endif %}">{{ valor }}</div>
   {% if legenda %}<div class="dash-ind__legenda">{{ legenda|safe }}</div>{% endif %}
 </div>
 {% endmacro %}
 
+{# Rótulo curto do recorte, para as etiquetas dos indicadores. #}
+{% set _no_recorte = 'no recorte' if dash.filtrado else None %}
+{% set _toda_academia = 'toda a academia' if dash.filtrado else None %}
+
 {# ----------------------------------------------------------------- filtros #}
-<form method="GET" class="dash-card dash-filtros">
+{# Aplica ao trocar. O botão continua, para quem mexe em dois campos antes de
+   olhar — mas exigir o clique fazia o filtro parecer quebrado: a pessoa
+   escolhia a modalidade, os números não mudavam, e nada explicava por quê. #}
+<form method="GET" class="dash-card dash-filtros" id="formFiltros">
   {% if academias|length > 1 %}
   <label class="dash-campo">
     <span class="dash-campo__label">Academia</span>
-    <select name="academia_id" class="form-select">
+    <select name="academia_id" class="u-campo__controle">
       {% for ac in academias %}<option value="{{ ac.id }}" {% if ac.id == academia_id %}selected{% endif %}>{{ ac.nome }}</option>{% endfor %}
     </select>
   </label>
   {% endif %}
   <label class="dash-campo">
     <span class="dash-campo__label">Mês</span>
-    <select name="mes" class="form-select">
+    <select name="mes" class="u-campo__controle">
       {% for i in range(1,13) %}<option value="{{ i }}" {% if i == mes %}selected{% endif %}>{{ meses_nomes[i-1] }}</option>{% endfor %}
     </select>
   </label>
   <label class="dash-campo">
     <span class="dash-campo__label">Ano</span>
-    <select name="ano" class="form-select">
+    <select name="ano" class="u-campo__controle">
       {% for a in range(ano-4, ano+2) %}<option value="{{ a }}" {% if a == ano %}selected{% endif %}>{{ a }}</option>{% endfor %}
     </select>
   </label>
   <label class="dash-campo">
     <span class="dash-campo__label">Turma</span>
-    <select name="turma_id" class="form-select" {% if not turmas_opts %}disabled{% endif %}>
+    <select name="turma_id" class="u-campo__controle" {% if not turmas_opts %}disabled{% endif %}>
       <option value="">Todas as turmas</option>
       {% for t in turmas_opts %}<option value="{{ t.id }}" {% if t.id == turma_id %}selected{% endif %}>{{ t.nome }}</option>{% endfor %}
     </select>
   </label>
   <label class="dash-campo">
     <span class="dash-campo__label">Modalidade</span>
-    <select name="modalidade_id" class="form-select" {% if not modalidades_opts %}disabled{% endif %}>
+    <select name="modalidade_id" class="u-campo__controle" {% if not modalidades_opts %}disabled{% endif %}>
       <option value="">Todas as modalidades</option>
       {% for m in modalidades_opts %}<option value="{{ m.id }}" {% if m.id == modalidade_id %}selected{% endif %}>{{ m.nome }}</option>{% endfor %}
     </select>
@@ -104,15 +119,19 @@
     </div>
   </header>
   <div class="dash-grid dash-grid--4">
-    {{ indicador(dash.ativos, 'Alunos ativos', 'Matrículas em vigor') }}
+    {{ indicador(dash.ativos, 'Alunos ativos', 'Matrículas em vigor',
+                 alcance=_no_recorte) }}
     {% set leg_novos %}{{ delta_num(dash.atual.novos, dash.anterior.novos) }}{% endset %}
-    {{ indicador(dash.atual.novos, 'Novos no mês', leg_novos) }}
+    {{ indicador(dash.atual.novos, 'Novos no mês', leg_novos,
+                 alcance=_no_recorte) }}
     {% set leg_baixas %}{{ delta_num(dash.atual.baixas, dash.anterior.baixas) }}{% endset %}
-    {{ indicador(dash.atual.baixas, 'Baixas no mês', leg_baixas) }}
+    {{ indicador(dash.atual.baixas, 'Baixas no mês', leg_baixas,
+                 alcance=_no_recorte) }}
     {% set sa = dash.saldo_alunos %}
     {{ indicador(('+' if sa > 0 else '') ~ sa, 'Saldo do mês',
                  'Churn ' ~ ('%.1f'|format(dash.churn_pct))|replace('.', ',') ~ '%',
-                 'positivo' if sa > 0 else ('negativo' if sa < 0 else '')) }}
+                 'positivo' if sa > 0 else ('negativo' if sa < 0 else ''),
+                 alcance=_no_recorte) }}
   </div>
   {% if dash.posicao_historica %}
   <p class="dash-nota"><i class="bi bi-clock-history"></i>
@@ -128,14 +147,18 @@
   </header>
   <div class="dash-grid dash-grid--4">
     {% set leg_rec %}{{ delta_money(dash.atual.receitas, dash.anterior.receitas) }}{% endset %}
-    {{ indicador('R$ ' ~ dash.atual.receitas|moeda_br, 'Receitas', leg_rec, 'positivo') }}
+    {{ indicador('R$ ' ~ dash.atual.receitas|moeda_br, 'Receitas', leg_rec, 'positivo',
+                 alcance=_toda_academia) }}
     {% set leg_desp %}{{ delta_money(dash.atual.despesas, dash.anterior.despesas) }}{% endset %}
-    {{ indicador('R$ ' ~ dash.atual.despesas|moeda_br, 'Despesas', leg_desp) }}
+    {{ indicador('R$ ' ~ dash.atual.despesas|moeda_br, 'Despesas', leg_desp,
+                 alcance=_toda_academia) }}
     {% set sl = dash.atual.saldo %}
     {% set leg_saldo %}{{ delta_money(dash.atual.saldo, dash.anterior.saldo) }}{% endset %}
-    {{ indicador('R$ ' ~ sl|moeda_br, 'Saldo', leg_saldo, 'positivo' if sl >= 0 else 'negativo') }}
+    {{ indicador('R$ ' ~ sl|moeda_br, 'Saldo', leg_saldo,
+                 'positivo' if sl >= 0 else 'negativo', alcance=_toda_academia) }}
     {{ indicador('R$ ' ~ dash.ticket_medio|moeda_br, 'Ticket médio',
-                 'Mensalidades recebidas ÷ ' ~ dash.ativos ~ ' aluno' ~ ('s' if dash.ativos != 1 else '') ~ ' ativo' ~ ('s' if dash.ativos != 1 else '')) }}
+                 'Mensalidades recebidas ÷ ' ~ dash.ativos ~ ' aluno' ~ ('s' if dash.ativos != 1 else '') ~ ' ativo' ~ ('s' if dash.ativos != 1 else ''),
+                 alcance=_no_recorte) }}
   </div>
 
   <div class="dash-barras">
@@ -149,7 +172,8 @@
         <div class="dash-barra__preenchimento is-verde" style="width: {{ dash.mens_pct if dash.mens_pct <= 100 else 100 }}%"></div>
       </div>
       <p class="dash-barra__nota">
-        {{ ('%.0f'|format(dash.mens_pct)) }}% do previsto. Previsto = mensalidades que vencem no mês.
+        {{ ('%.0f'|format(dash.mens_pct)) }}% do previsto. Previsto = mensalidades que vencem no mês;
+        recebido = quanto dessas já foi pago, mesmo em outro mês.
       </p>
     </div>
 
@@ -178,7 +202,7 @@
     <i class="bi bi-info-circle"></i>
     <span>
       <b>Receitas</b> soma tudo que entrou no caixa no mês (R$ {{ dash.atual.receitas|moeda_br }});
-      <b>Mensalidades recebidas</b> soma as baixas de mensalidade (R$ {{ dash.atual.mens_recebido|moeda_br }}).
+      as baixas de mensalidade <i>pagas</i> dentro do mês somam R$ {{ dash.atual.mens_caixa|moeda_br }}.
       {% if dash.conciliacao_dif > 0 %}
         Há R$ {{ dash.conciliacao_dif|moeda_br }} em mensalidades baixadas sem lançamento correspondente em receitas.
       {% else %}
@@ -264,9 +288,32 @@
       <i class="bi bi-exclamation-triangle-fill"></i> Alunos inadimplentes
     </h2>
     <div class="dash-card__acoes">
-      {% if dash.inadimplentes %}
-      <a href="{{ url_for('financeiro.painel_mensalidades', academia_id=academia_id, filtro='atrasadas') }}" class="dash-btn dash-btn--whats">
-        <i class="bi bi-whatsapp"></i> Cobrar por WhatsApp
+      {% set _n = dash.cobranca_alvo or 0 %}
+      {% if dash.inadimplentes and _n %}
+      {# Cobra daqui mesmo. Antes este botão só levava para a tela de
+         mensalidades: quem clicava esperava cobrar e via outra página, sem
+         nada ter sido enviado.
+
+         `cobranca_alvo` vem da MESMA consulta que o envio usa. A lista abaixo
+         mostra só os 10 maiores e segue o filtro da tela — anunciar aquele
+         número prometeria uma coisa e faria outra. #}
+      <form method="POST"
+            action="{{ url_for('financeiro_painel.mensalidades_notificar_atrasados') }}"
+            data-confirmar="Enviar cobrança por WhatsApp para {{ _n }} aluno{{ 's' if _n != 1 }} em atraso?{% if dash.filtrado %}
+
+ATENÇÃO: a cobrança é da academia inteira, não do recorte selecionado na tela.{% endif %}
+
+Sai a mensagem configurada em Academia › WhatsApp › Mensagens. Quem ainda não tem link de pagamento vai ter um gerado agora.">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="academia_id" value="{{ academia_id }}">
+        <input type="hidden" name="voltar" value="{{ request.full_path }}">
+        <button type="submit" class="dash-btn dash-btn--whats">
+          <i class="bi bi-whatsapp"></i> Cobrar {{ _n }} por WhatsApp
+        </button>
+      </form>
+      <a href="{{ url_for('academia.whatsapp_mensagens', academia_id=academia_id) }}"
+         class="dash-btn" title="Personalizar o texto que sai na cobrança">
+        <i class="bi bi-pencil"></i> Editar mensagem
       </a>
       {% endif %}
       <a href="{{ url_for('financeiro.painel_mensalidades', academia_id=academia_id) }}" class="dash-btn">Ver mensalidades</a>
@@ -317,6 +364,18 @@
 {% endblock %}
 
 {% block extra_js %}
+<script>
+// Aplica ao trocar qualquer campo do filtro. Sem isto, a pessoa escolhia a
+// modalidade, nada acontecia até clicar em "Aplicar", e a conclusão natural
+// era que o filtro não funcionava.
+(function () {
+  var f = document.getElementById('formFiltros');
+  if (!f) return;
+  f.querySelectorAll('select').forEach(function (campo) {
+    campo.addEventListener('change', function () { f.submit(); });
+  });
+})();
+</script>
 <script id="dashSerie" type="application/json">{{ dash.serie|tojson }}</script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script>

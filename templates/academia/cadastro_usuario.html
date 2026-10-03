@@ -1,18 +1,11 @@
 {% extends "base_app.html" %}
 {% block title %}Cadastrar Usuário — Academia{% endblock %}
+{% block pagina_titulo %}Cadastrar usuário na academia{% endblock %}
+{% block pagina_subtitulo %}Preencha os dados para criar uma nova conta vinculada à academia.{% endblock %}
 {% block content %}
 <div class="container my-4 my-md-5">
-    <div class="card shadow-lg border-0 rounded-3 mx-auto" style="max-width: 650px;">
-        <div class="card-header bg-primary text-white text-center py-3 rounded-top-3">
-            <h5 class="mb-0 fw-bold">
-                <i class="bi bi-person-plus-fill me-2"></i> Cadastrar Usuário na Academia
-            </h5>
-        </div>
+    <div class="card shadow-lg border-0 rounded-3 mx-auto">
         <div class="card-body p-4 p-md-5">
-            <p class="text-muted text-center mb-4">
-                Preencha os dados para criar uma nova conta vinculada à academia.
-            </p>
-
             <form method="POST" action="{{ url_for('academia.cadastro_usuario') }}" class="needs-validation" novalidate>
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="next" value="{{ back_url }}">
@@ -20,7 +13,7 @@
                 {% if academia_fixa %}
                 <div class="mb-3">
                     <label class="form-label fw-semibold">Academia</label>
-                    <div class="form-control bg-light" readonly>{{ academia_nome_cadastro or (academias[0].nome if academias else '') }}</div>
+                    <div class="u-campo__controle bg-light" readonly>{{ academia_nome_cadastro or (academias[0].nome if academias else '') }}</div>
                     <input type="hidden" name="id_academia" id="id_academia" value="{{ academia_id }}">
                     <input type="hidden" name="academias" value="{{ academia_id }}">
                 </div>
@@ -45,24 +38,24 @@
 
                 <div class="mb-3">
                     <label for="nome" class="form-label fw-semibold">Nome Completo</label>
-                    <input type="text" class="form-control" id="nome" name="nome" placeholder="Ex: João da Silva" required>
+                    <input type="text" class="u-campo__controle" id="nome" name="nome" placeholder="Ex: João da Silva" required>
                 </div>
 
                 <div class="mb-3">
                     <label for="cpf" class="form-label fw-semibold">CPF <span class="text-danger">*</span></label>
-                    <input type="text" inputmode="numeric" class="form-control" id="cpf" name="cpf" placeholder="000.000.000-00" maxlength="14" required autocomplete="off">
+                    <input type="text" inputmode="numeric" class="u-campo__controle" id="cpf" name="cpf" placeholder="000.000.000-00" maxlength="14" required autocomplete="off">
                     <div class="form-text">Login do sistema. Se a role <strong>Aluno</strong> for marcada e existir um aluno desta academia com o mesmo CPF, o vínculo é feito automaticamente.</div>
                 </div>
 
                 <div class="mb-3">
                     <label for="email" class="form-label fw-semibold">E-mail</label>
-                    <input type="email" class="form-control" id="email" name="email" placeholder="exemplo@academia.com" value="" required autocomplete="off">
+                    <input type="email" class="u-campo__controle" id="email" name="email" placeholder="exemplo@academia.com" value="" required autocomplete="off">
                     <div class="form-text">Usado para recuperação de senha e comunicação.</div>
                 </div>
 
                 <div class="mb-3">
                     <label for="senha" class="form-label fw-semibold">Senha</label>
-                    <input type="password" class="form-control" id="senha" name="senha" value="" required autocomplete="new-password">
+                    <input type="password" class="u-campo__controle" id="senha" name="senha" value="" required autocomplete="new-password">
                 </div>
 
                 <div class="mb-3">
@@ -82,7 +75,7 @@
 
                 <div id="blocoAluno" class="mb-3" style="display:none;">
                     <label for="aluno_id" class="form-label fw-semibold">Qual aluno é este usuário? <span class="text-danger">*</span></label>
-                    <select class="form-select" id="aluno_id" name="aluno_id">
+                    <select class="u-campo__controle" id="aluno_id" name="aluno_id">
                         <option value="">— Selecione o aluno —</option>
                         {% for a in alunos_para_aluno %}
                         <option value="{{ a.id }}">{{ a.nome }}</option>
@@ -108,7 +101,7 @@
                 </div>
 
                 <div class="d-flex flex-column flex-md-row justify-content-center gap-3 mt-4">
-                    <button type="submit" class="btn btn-primary btn-lg">
+                    <button type="submit" class="u-btn u-btn--primario u-btn--grande">
                         <i class="bi bi-save me-2"></i> Cadastrar
                     </button>
                     {% set back_url = back_url or get_back_url_default() %}

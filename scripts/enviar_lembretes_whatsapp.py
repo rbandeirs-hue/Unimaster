@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Envio de cobranças de mensalidade via WhatsApp (régua) e aniversários.
+"""Envio de cobranças de mensalidade via WhatsApp (régua), aniversários e pós-aula.
+
+Pós-aula experimental: quem fez aula experimental (de ontem até 7 dias atrás)
+recebe uma mensagem perguntando como foi e com o link da matrícula na turma.
+Sai uma vez por aula; a academia desliga desativando o modelo "Pós-aula
+experimental" nas Mensagens do WhatsApp.
 
 Roda de hora em hora (systemd timer) e não envia nada fora da hora configurada
 por academia (`cobranca_regua_config.hora_envio`, padrão 9h). Rodar mais vezes
@@ -45,10 +50,24 @@ def main():
         cur.execute(
             """SELECT id, nome,
                       COALESCE(whatsapp_lembrete_mensalidade, 0) AS lembretes,
-                      COALESCE(whatsapp_aniversario, 0) AS aniversario
+                      COALESCE(whatsapp_aniversario, 0) AS aniversario,
+                      EXISTS (SELECT 1 FROM whatsapp_envios we
+                              WHERE we.id_academia = academias.id
+                                AND we.tipo = 'aniversario_agendado'
+                                AND we.data_ref = CURDATE()) AS aniversario_agendado
                FROM academias
                WHERE COALESCE(whatsapp_lembrete_mensalidade, 0) = 1
-                  OR COALESCE(whatsapp_aniversario, 0) = 1"""
+                  OR COALESCE(whatsapp_aniversario, 0) = 1
+                  OR EXISTS (SELECT 1 FROM whatsapp_envios we
+                             WHERE we.id_academia = academias.id
+                               AND we.tipo = 'aniversario_agendado'
+                               AND we.data_ref = CURDATE())
+                  OR EXISTS (SELECT 1 FROM visitantes v
+                             JOIN aulas_experimentais ae ON ae.visitante_id = v.id
+                             WHERE v.id_academia = academias.id AND ae.presente = 1
+                               AND ae.pos_aula_enviado_em IS NULL
+                               AND ae.data_aula < CURDATE()
+                               AND ae.data_aula >= DATE_SUB(CURDATE(), INTERVAL 7 DAY))"""
         )
         academias = cur.fetchall()
         cur.close()
@@ -60,6 +79,7 @@ def main():
 
         total_geral = 0
         total_aniv = 0
+        total_pos = 0
         for ac in academias:
             aid = ac["id"]
             if not wpp.conectado(aid):
@@ -86,7 +106,9 @@ def main():
                       f"{resumo.get('suspensos',0)} suspensos "
                       f"(de {resumo.get('total',0)} em aberto).")
 
-            if ac.get("aniversario"):
+            # Automação ligada manda para todos do dia; desligada, só os que a
+            # secretaria agendou na tela de aniversariantes.
+            if ac.get("aniversario") or ac.get("aniversario_agendado"):
                 ra = lem.enviar_aniversariantes(aid, somente_ativadas=True)
                 total_aniv += ra.get("enviados", 0)
                 if ra.get("total"):
@@ -95,7 +117,17 @@ def main():
                           f"{ra.get('sem_telefone',0)} sem telefone, "
                           f"{ra.get('repetidos',0)} já enviados hoje (de {ra.get('total',0)}).")
 
-        print(f"[lembretes] concluído. Cobranças: {total_geral} · Aniversários: {total_aniv}.")
+            # Pós-aula experimental: independe das automações de cobrança e de
+            # aniversário — quem manda é o modelo da mensagem estar ativo.
+            rp = lem.processar_pos_aula(aid)
+            total_pos += rp.get("enviados", 0)
+            if rp.get("total"):
+                print(f"[pós-aula] academia {aid} ({ac['nome']}): "
+                      f"{rp.get('enviados',0)} enviados, {rp.get('falhas',0)} não enviados "
+                      f"(de {rp.get('total',0)}).")
+
+        print(f"[lembretes] concluído. Cobranças: {total_geral} · Aniversários: {total_aniv} "
+              f"· Pós-aula: {total_pos}.")
 
 
 if __name__ == "__main__":

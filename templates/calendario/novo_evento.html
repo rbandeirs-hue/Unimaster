@@ -12,7 +12,7 @@
 {% block content %}
 <div>
     <div class="row">
-        <div class="col-lg-8 mx-auto">
+        <div class="col-12">
             <div class="card shadow-sm">
                 <div class="card-body">
                     <form method="POST">
@@ -20,19 +20,19 @@
                         <!-- Título -->
                         <div class="mb-3">
                             <label for="titulo" class="form-label">Título <span class="text-danger">*</span></label>
-                            <input type="text" name="titulo" id="titulo" class="form-control" required>
+                            <input type="text" name="titulo" id="titulo" class="u-campo__controle" required>
                         </div>
 
                         <!-- Descrição -->
                         <div class="mb-3">
                             <label for="descricao" class="form-label">Descrição</label>
-                            <textarea name="descricao" id="descricao" class="form-control" rows="3"></textarea>
+                            <textarea name="descricao" id="descricao" class="u-campo__controle" rows="3"></textarea>
                         </div>
 
                         <!-- Tipo -->
                         <div class="mb-3">
                             <label for="tipo" class="form-label">Tipo de Evento</label>
-                            <select name="tipo" id="tipo" class="form-select">
+                            <select name="tipo" id="tipo" class="u-campo__controle">
                                 <option value="evento">Evento</option>
                                 <option value="competicao">Competição</option>
                                 <option value="exame">Exame de Graduação</option>
@@ -40,15 +40,33 @@
                             </select>
                         </div>
 
+                        <!-- Modalidade -->
+                        {% if modalidades and modalidades|length > 1 %}
+                        <div class="mb-3">
+                            <label for="modalidade_id" class="form-label">Modalidade</label>
+                            <select name="modalidade_id" id="modalidade_id" class="u-campo__controle">
+                                <option value="">Todas as modalidades</option>
+                                {% for m in modalidades %}
+                                <option value="{{ m.id }}"
+                                        {% if modalidade_sugerida == m.id %}selected{% endif %}>{{ m.nome }}</option>
+                                {% endfor %}
+                            </select>
+                            <small class="text-muted">
+                                Deixe em <strong>todas</strong> para feriados, reuniões e avisos gerais.
+                                Escolhendo uma modalidade, o lançamento só aparece no calendário dela.
+                            </small>
+                        </div>
+                        {% endif %}
+
                         <!-- Datas -->
                         <div class="row">
                             <div class="col-md-6 mb-3">
                                 <label for="data_inicio" class="form-label">Data Início <span class="text-danger">*</span></label>
-                                <input type="date" name="data_inicio" id="data_inicio" class="form-control" required>
+                                <input type="date" name="data_inicio" id="data_inicio" class="u-campo__controle" required>
                             </div>
                             <div class="col-md-6 mb-3">
                                 <label for="data_fim" class="form-label">Data Fim <small class="text-muted">(opcional)</small></label>
-                                <input type="date" name="data_fim" id="data_fim" class="form-control">
+                                <input type="date" name="data_fim" id="data_fim" class="u-campo__controle">
                             </div>
                         </div>
 
@@ -56,11 +74,11 @@
                         <div class="row">
                             <div class="col-md-6 mb-3">
                                 <label for="hora_inicio" class="form-label">Hora Início <small class="text-muted">(opcional)</small></label>
-                                <input type="time" name="hora_inicio" id="hora_inicio" class="form-control">
+                                <input type="time" name="hora_inicio" id="hora_inicio" class="u-campo__controle">
                             </div>
                             <div class="col-md-6 mb-3">
                                 <label for="hora_fim" class="form-label">Hora Fim <small class="text-muted">(opcional)</small></label>
-                                <input type="time" name="hora_fim" id="hora_fim" class="form-control">
+                                <input type="time" name="hora_fim" id="hora_fim" class="u-campo__controle">
                             </div>
                         </div>
 
@@ -68,7 +86,7 @@
                         <div class="mb-3">
                             <label for="cor" class="form-label">Cor do Evento</label>
                             <div class="d-flex gap-2 align-items-center">
-                                <input type="color" name="cor" id="cor" class="form-control form-control-color" value="#0d6efd">
+                                <input type="color" name="cor" id="cor" class="u-campo__controle form-control-color" value="#0d6efd">
                                 <span class="text-muted small">Escolha uma cor para identificar o evento no calendário</span>
                             </div>
                         </div>
@@ -77,7 +95,7 @@
                         <div class="d-flex gap-2 justify-content-between">
                             {% set back_url = url_for('calendario.visualizar', nivel=nivel, nivel_id=nivel_id) %}
                             {% include 'components/botao_voltar.html' %}
-                            <button type="submit" class="btn btn-primary">
+                            <button type="submit" class="u-btn u-btn--primario">
                                 <i class="bi bi-check-lg"></i> Criar Evento
                             </button>
                         </div>

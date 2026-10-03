@@ -57,13 +57,20 @@
           {%- endif -%}
         {%- else -%}—{%- endif -%}
       </span></div>
-      <div class="perfil-item"><span class="perfil-label">Faixa</span><span class="perfil-valor">
+{# Mais de uma modalidade: faixa e próxima faixa de cada uma, sem misturar. #}
+      {% if aluno.faixas_modalidade and aluno.faixas_modalidade | length > 1 %}
+      {% for f in aluno.faixas_modalidade %}
+      <div class="perfil-item"><span class="perfil-label">Faixa · {{ f.modalidade }}</span><span class="perfil-valor">{{ f.rotulo or 'não informada' }}{% if f.rotulo and f.proxima != '—' %}<br><small class="text-muted">próxima: {{ f.proxima }}</small>{% endif %}</span></div>
+      {% endfor %}
+      {% else %}
+            <div class="perfil-item"><span class="perfil-label">Faixa</span><span class="perfil-valor">
         {%- if aluno.faixa_nome or aluno.graduacao_nome -%}
           {{ aluno.faixa_nome or '' }}
           {%- if aluno.faixa_nome and aluno.graduacao_nome %} ({{ aluno.graduacao_nome }}){% elif aluno.graduacao_nome %}{{ aluno.graduacao_nome }}{% endif -%}
         {%- else -%}—{%- endif -%}
       </span></div>
       <div class="perfil-item"><span class="perfil-label">Próxima faixa</span><span class="perfil-valor">{{ aluno.proxima_faixa | default('—') }}</span></div>
+      {% endif %}
     </div>
 
     <div class="perfil-acoes">

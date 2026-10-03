@@ -21,6 +21,7 @@ Toda alteração fica em `fin_auditoria`, a mesma trilha do resto do financeiro.
 from decimal import Decimal, InvalidOperation
 
 from config import get_db_connection
+from utils.planos_modalidade import filtrar_contexto as filtrar_planos
 
 ENTIDADE = "contrato"
 STATUS_VALIDOS = ("ativo", "suspenso", "encerrado", "cancelado")
@@ -182,9 +183,9 @@ def planos_da_academia(academia_id):
                          JOIN modalidade md ON md.id = mm.modalidade_id
                         WHERE mm.mensalidade_id = m.id) AS modalidades
                FROM mensalidades m
-               WHERE m.id_academia = %s AND COALESCE(m.ativo, 1) = 1
+               WHERE m.id_academia = %s AND COALESCE(m.ativo, 1) = 1 AND COALESCE(m.periodicidade,'mensal') <> 'diaria'
                ORDER BY m.nome""", (academia_id,))
-        return cur.fetchall() or []
+        return filtrar_planos(cur, cur.fetchall() or [], academia_id)
     finally:
         cur.close()
         conn.close()

@@ -1,8 +1,14 @@
 {% extends "base_app.html" %}
+{% set back_url = back_url or get_back_url_default() %}
 {% block title %}Cadastro de Turma{% endblock %}
+{% block pagina_titulo %}Cadastrar nova turma{% endblock %}
+{% block pagina_subtitulo %}Preencha os dados para criar um novo grupo de aula.{% endblock %}
+{% block pagina_acoes %}
+<a href="{{ url_voltar(back_url) }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Voltar</a>
+{% endblock %}
 {% block content %}
 <style>
-.turma-form-wrap { max-width: 720px; margin-left: auto; margin-right: auto; }
+.turma-form-wrap { max-width: none; }
 @media (min-width: 576px) { .turma-form-wrap { padding-left: 0.5rem; padding-right: 0.5rem; } }
 .turma-form .form-section {
     padding: 1.25rem 0;
@@ -39,12 +45,6 @@
 }
 </style>
 <div class="container py-4">
-    <div class="turma-form-wrap mb-4">
-        {% set back_url = back_url or get_back_url_default() %}
-{% include 'components/botao_voltar.html' %}
-        <h2 class="h4 fw-bold text-primary mb-1">Cadastrar Nova Turma</h2>
-        <p class="text-muted small mb-0">Preencha os dados para criar um novo grupo de aula.</p>
-    </div>
 
     <div class="card shadow-sm turma-form turma-form-wrap" style="overflow: hidden;">
         <div class="card-header py-3">
@@ -60,7 +60,7 @@
                     <div class="row g-3">
                         <div class="col-md-6">
                             <label for="modalidade_id" class="form-label fw-semibold">Modalidade</label>
-                            <select id="modalidade_id" name="modalidade_id" class="form-select">
+                            <select id="modalidade_id" name="modalidade_id" class="u-campo__controle">
                                 <option value="">— Selecione (opcional) —</option>
                                 {% for m in modalidades %}
                                 <option value="{{ m.id }}">{{ m.nome }}</option>
@@ -69,8 +69,19 @@
                             <small class="text-muted">Apenas modalidades liberadas pela academia. Professores serão filtrados pela modalidade.</small>
                         </div>
                         <div class="col-md-6">
+                            <label for="mensalidade_id" class="form-label fw-semibold">Plano de mensalidade da turma</label>
+                            {% set _planos = planos_da_academia_turma(academia_selecionada) %}
+                            <select id="mensalidade_id" name="mensalidade_id" class="u-campo__controle">
+                                <option value="">— Sem plano (matrícula usa o valor da academia) —</option>
+                                {% for p in _planos %}
+                                <option value="{{ p.id }}" data-mods="{{ p.mod_ids or '' }}" {% if none == p.id %}selected{% endif %}>{{ p.nome }} — R$ {{ '%.2f'|format(p.valor|float)|replace('.', ',') }}</option>
+                                {% endfor %}
+                            </select>
+                            <small class="text-muted">Define o valor da matrícula pelo link público e o plano sugerido ao matricular.</small>
+                        </div>
+                        <div class="col-md-6">
                             <label for="nome" class="form-label fw-semibold">Nome da Turma <span class="text-danger">*</span></label>
-                            <input type="text" id="nome" name="nome" class="form-control" required placeholder="Ex: Judô Iniciante">
+                            <input type="text" id="nome" name="nome" class="u-campo__controle" required placeholder="Ex: Judô Iniciante">
                         </div>
                         <div class="col-12">
                             <label class="form-label fw-semibold">Dias da semana com aula <span class="text-danger">*</span></label>
@@ -85,11 +96,11 @@
                         </div>
                         <div class="col-md-6">
                             <label for="hora_inicio" class="form-label fw-semibold">Hora início do treino <span class="text-danger">*</span></label>
-                            <input type="time" id="hora_inicio" name="hora_inicio" class="form-control" required>
+                            <input type="time" id="hora_inicio" name="hora_inicio" class="u-campo__controle" required>
                         </div>
                         <div class="col-md-6">
                             <label for="hora_fim" class="form-label fw-semibold">Hora fim do treino <span class="text-danger">*</span></label>
-                            <input type="time" id="hora_fim" name="hora_fim" class="form-control" required>
+                            <input type="time" id="hora_fim" name="hora_fim" class="u-campo__controle" required>
                         </div>
                     </div>
                 </div>
@@ -99,15 +110,15 @@
                     <div class="row g-3">
                         <div class="col-md-4">
                             <label for="idade_min" class="form-label fw-semibold">Idade Mín. <span class="text-danger">*</span></label>
-                            <input type="number" id="idade_min" name="idade_min" class="form-control" required min="1">
+                            <input type="number" id="idade_min" name="idade_min" class="u-campo__controle" required min="1">
                         </div>
                         <div class="col-md-4">
                             <label for="idade_max" class="form-label fw-semibold">Idade Máx. <span class="text-danger">*</span></label>
-                            <input type="number" id="idade_max" name="idade_max" class="form-control" required min="1">
+                            <input type="number" id="idade_max" name="idade_max" class="u-campo__controle" required min="1">
                         </div>
                         <div class="col-md-4">
                             <label for="classificacao" class="form-label fw-semibold">Classificação <span class="text-danger">*</span></label>
-                            <input type="text" id="classificacao" name="classificacao" class="form-control" required placeholder="Ex: Infantil, Adulto">
+                            <input type="text" id="classificacao" name="classificacao" class="u-campo__controle" required placeholder="Ex: Infantil, Adulto">
                         </div>
                     </div>
                 </div>
@@ -116,7 +127,7 @@
                     <h6><i class="bi bi-person-badge me-1"></i> Professores</h6>
                     <div class="mb-3">
                         <label for="professor_responsavel_id" class="form-label fw-semibold">Professor responsável <span class="text-danger">*</span></label>
-                        <select id="professor_responsavel_id" name="professor_responsavel_id" class="form-select" required>
+                        <select id="professor_responsavel_id" name="professor_responsavel_id" class="u-campo__controle" required>
                             <option value="">— Selecione —</option>
                             {% for prof in professores %}
                             <option value="{{ prof.id }}" data-modalidades="{{ (prof_modalidades.get(prof.id, []) | map('string') | list | join(',')) or '' }}">{{ prof.nome }}</option>
@@ -146,12 +157,12 @@
                     <div class="row g-3">
                         <div class="col-md-6">
                             <label for="capacidade" class="form-label fw-semibold">Capacidade máxima</label>
-                            <input type="number" id="capacidade" name="capacidade" class="form-control" required min="1">
+                            <input type="number" id="capacidade" name="capacidade" class="u-campo__controle" required min="1">
                         </div>
                         <div class="col-md-6">
                             <label for="id_academia" class="form-label fw-semibold">Academia <span class="text-danger">*</span></label>
                             {% if academias %}
-                            <select id="id_academia" name="id_academia" class="form-select" required>
+                            <select id="id_academia" name="id_academia" class="u-campo__controle" required>
                                 <option value="" disabled {% if not academia_selecionada %}selected{% endif %}>Selecione</option>
                                 {% for academia in academias %}
                                 <option value="{{ academia.id }}" {% if academia.id == academia_selecionada %}selected{% endif %}>{{ academia.nome }}</option>
@@ -173,17 +184,26 @@
 
                 <div class="form-section">
                     <h6><i class="bi bi-chat-text me-1"></i> Observações</h6>
-                    <textarea id="observacoes" name="observacoes" class="form-control" rows="2" placeholder="Informações adicionais sobre a turma..."></textarea>
+                    <textarea id="observacoes" name="observacoes" class="u-campo__controle" rows="2" placeholder="Informações adicionais sobre a turma..." aria-label="Informações adicionais sobre a turma..."></textarea>
                 </div>
 
                 <div class="d-flex justify-content-end gap-2 pt-4 mt-4 border-top">
-                    <a href="{{ back_url }}" class="btn btn-outline-secondary">Cancelar</a>
-                    <button type="submit" class="btn btn-primary px-4"><i class="bi bi-check-lg me-1"></i> Salvar Turma</button>
+                    <a href="{{ back_url }}" class="u-btn">Cancelar</a>
+                    <button type="submit" class="u-btn u-btn--primario px-4"><i class="bi bi-check-lg me-1"></i> Salvar Turma</button>
                 </div>
             </form>
         </div>
     </div>
 </div>
+<script src="{{ asset('js/planos_por_modalidade.js') }}"></script>
+<script>
+  // Plano da turma: só os planos da modalidade escolhida para a turma.
+  (function () {
+    var mod = document.getElementById('modalidade_id');
+    PlanosPorModalidade(document.getElementById('mensalidade_id'),
+      function () { return mod && mod.value ? [mod.value] : []; }, [mod]);
+  })();
+</script>
 <script>
 (function() {
     var selProf = document.getElementById('professor_responsavel_id');

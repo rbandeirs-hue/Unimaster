@@ -1,0 +1,191 @@
+{# Conteúdo cobrado numa promoção: conhecimento teórico, fundamentos e técnicas.
+   Espera `conhecimento` e `tecnicas` (utils.exame_faixa.blocos_estudo).
+   `quiz` = true esconde as respostas até o clique (modo estudo do aluno).
+   Opcional: `anteriores` (técnicas acumuladas das faixas de antes).
+
+   Ukemi e kumi-kata vêm como blocos `material`: o programa só diz quantos
+   tipos se cobra, então a tela mostra o catálogo inteiro como estudo e deixa
+   o recorte cobrado à parte, no rodapé do bloco. #}
+{% set curtos = conhecimento|selectattr('tipo', 'equalto', 'texto')|list %}
+{% set materiais = conhecimento|selectattr('tipo', 'equalto', 'material')|list %}
+{% set blocos = conhecimento|rejectattr('tipo', 'in', ['texto', 'material', 'pedido'])|list %}
+{% set pedido_t = conhecimento|selectattr('tipo', 'equalto', 'pedido')|first %}
+{% set n_teoria = namespace(n=0) %}{% for b in blocos %}{% set n_teoria.n = n_teoria.n + (b.itens|length) %}{% endfor %}
+{% set n_tec = namespace(n=0) %}{% for g in tecnicas %}{% set n_tec.n = n_tec.n + (g.itens|length) %}{% endfor %}
+
+{% if blocos or curtos %}
+<section class="exf-bloco" id="mat-teoria">
+  <header class="exf-bloco__topo">
+    <h2><i class="bi bi-book" aria-hidden="true"></i> Conhecimento teórico</h2>
+    <span>{{ n_teoria.n }} ite{{ 'ns' if n_teoria.n != 1 else 'm' }} novo{{ 's' if n_teoria.n != 1 }} nesta faixa{% if quiz %} · toque na resposta para ver{% endif %}</span>
+  </header>
+  {% if curtos %}
+  <dl class="exf-curtos">
+    {% for b in curtos %}<div><dt>{{ b.titulo }}</dt><dd>{{ b.texto }}</dd></div>{% endfor %}
+  </dl>
+  {% endif %}
+  {% if blocos %}
+  <div class="exf-teoria{% if quiz %} exf-quiz{% endif %}">
+    {% for b in blocos %}
+    <section class="exf-teoria__grupo">
+      <h3>{{ b.titulo }}<span>{{ b.itens|length }}</span></h3>
+      {% if b.tipo == 'lista' %}
+      <ul class="exf-termos exf-termos--simples">{% for t in b.itens %}<li>{{ t }}</li>{% endfor %}</ul>
+      {% else %}
+      <dl class="exf-termos{{ ' exf-termos--qa' if b.tipo == 'qa' }}">
+        {% for it in b.itens %}
+        <div>
+          <dt>{{ it.q }}</dt>
+          {% if it.a %}<dd class="exf-resp" {% if quiz %}tabindex="0" title="Toque para ver"{% endif %}>{{ it.a }}</dd>{% endif %}
+        </div>
+        {% endfor %}
+      </dl>
+      {% endif %}
+    </section>
+    {% endfor %}
+  </div>
+  {% endif %}
+</section>
+{% endif %}
+
+{% if materiais %}
+<section class="exf-bloco" id="mat-fund">
+  <header class="exf-bloco__topo">
+    <h2><i class="bi bi-mortarboard" aria-hidden="true"></i> Fundamentos</h2>
+    <span>ukemi e kumi-kata · o recorte cobrado está no quadro do fim</span>
+  </header>
+  {% for m in materiais %}
+  <section class="exf-fund">
+    <div class="exf-fund__topo">
+      <h3>{{ m.titulo }} <small>{{ m.subtitulo }}</small><span>{{ m.itens|length }}</span></h3>
+      {% if m.nota %}<p class="exf-fund__nota">{{ m.nota }}</p>{% endif %}
+    </div>
+    <div class="exf-fund__grade">
+      {% for it in m.itens %}
+      <article class="exf-fund__item{% if it.exigido %} is-exigido{% endif %}">
+        <h4>{{ it.nome }}{% if it.traducao %} <span>{{ it.traducao }}</span>{% endif %}</h4>
+        {% if it.resumo %}<p>{{ it.resumo }}</p>{% endif %}
+        {% if it.passos %}
+        <details class="exf-passos">
+          <summary>Como se faz</summary>
+          <ol>{% for s in it.passos %}<li>{{ s }}</li>{% endfor %}</ol>
+        </details>
+        {% endif %}
+      </article>
+      {% endfor %}
+    </div>
+  </section>
+  {% endfor %}
+</section>
+{% endif %}
+
+<section class="exf-bloco" id="mat-tecnicas">
+  {% set n_vid = namespace(n=0) %}{% for g in tecnicas %}{% for t in g.itens if t.video %}{% set n_vid.n = n_vid.n + 1 %}{% endfor %}{% endfor %}
+  <header class="exf-bloco__topo">
+    <h2><i class="bi bi-person-arms-up" aria-hidden="true"></i> Técnicas novas desta faixa</h2>
+    <span>{{ n_tec.n }} técnica{{ 's' if n_tec.n != 1 }} · {{ n_vid.n }} com vídeo · o exame também cobra as das faixas anteriores</span>
+  </header>
+  {% if tecnicas %}
+  <div class="exf-tecnicas exf-tecnicas--vitrine">
+    {% for g in tecnicas %}
+    {% set de_pares = g.itens|selectattr('sep')|list|length > 0 %}
+    {% set nv = namespace(n=0) %}{% for t in g.itens if t.video %}{% set nv.n = nv.n + 1 %}{% endfor %}
+    <section class="exf-tecnicas__grupo exf-tecnicas__grupo--{{ g.chave }}{{ ' is-pares' if de_pares else ' is-cards' }}">
+      <h3><span class="exf-grupo__tit">{{ g.nome }}{% if g.significado %}<small>{{ g.significado }}</small>{% endif %}</span><span title="{{ nv.n }} com vídeo">{{ g.itens|length }}</span></h3>
+      <ol>
+        {% for t in g.itens %}
+        {% set p0 = t.partes[0] %}
+        {% if de_pares %}
+        <li class="exf-parl">
+          <span class="exf-tecnicas__n">{{ loop.index }}</span>
+          <div class="exf-tecnicas__corpo">
+            <button type="button" class="exf-parl__txt" data-exf-ficha data-titulo="{{ t.partes|map(attribute='nome')|join(' ' ~ t.sep ~ ' ') }}">
+              <span class="exf-par"><span>{{ p0.nome }}</span><b title="{{ 'contra-ataque' if t.sep == '×' else 'combinação' }}">{{ t.sep }}</b><span>{{ t.partes[1].nome if t.partes|length > 1 }}</span></span>
+            </button>
+            {% include 'exame_faixa/_ficha_dados.html' %}
+          </div>
+          {% set rot_par = t.partes|map(attribute='nome')|join(' ' ~ t.sep ~ ' ') %}
+          <span class="exf-parl__vids exf-nao-imprime">
+            {% if t.video %}<button type="button" class="exf-play" data-exf-video data-embed="{{ t.video.embed or '' }}" data-url="{{ t.video.url }}" data-titulo="{{ rot_par }}" title="Vídeo: {{ rot_par }}" aria-label="Vídeo: {{ rot_par }}"><i class="bi bi-play-fill" aria-hidden="true"></i></button>
+            {% else %}<span class="exf-play is-vazio" title="Sem vídeo ainda"><i class="bi bi-play-fill" aria-hidden="true"></i></span>{% endif %}
+          </span>
+          {% if t.qr %}<img class="exf-so-papel exf-qr" src="{{ t.qr }}" alt="QR do vídeo de {{ rot_par }}">{% endif %}
+        </li>
+        {% else %}
+        <li class="exf-card{{ ' tem-video' if p0.video }}">
+          <span class="exf-tecnicas__n exf-so-papel">{{ loop.index }}</span>
+          {% if p0.video %}
+          <button type="button" class="exf-card__capa exf-nao-imprime" data-exf-video data-embed="{{ p0.video.embed or '' }}" data-url="{{ p0.video.url }}" data-titulo="{{ p0.nome }}" aria-label="Assistir: {{ p0.nome }}">
+          {% else %}
+          <button type="button" class="exf-card__capa exf-nao-imprime" data-exf-ficha data-titulo="{{ p0.nome }}" aria-label="Ficha: {{ p0.nome }}">
+          {% endif %}
+            <span class="exf-card__n">{{ loop.index }}</span>
+            <span class="exf-card__play"><i class="bi bi-play-fill" aria-hidden="true"></i></span>
+          </button>
+          <div class="exf-tecnicas__corpo exf-card__corpo">
+            <strong class="exf-tecnicas__nome">{{ p0.nome }}</strong>
+            {% if p0.ficha and p0.ficha.traducao %}<span class="exf-card__trad exf-nao-imprime">{{ p0.ficha.traducao }}</span>{% endif %}
+            <span class="exf-card__rodape exf-nao-imprime">
+              <span>{{ 'Vídeo · demonstração' if p0.video else 'Sem vídeo ainda' }}</span>
+              {% if p0.ficha %}<button type="button" class="exf-card__ficha" data-exf-ficha data-titulo="{{ p0.nome }}">Ficha</button>{% endif %}
+            </span>
+            {% include 'exame_faixa/_ficha_dados.html' %}
+          </div>
+          {% if p0.qr %}<img class="exf-so-papel exf-qr" src="{{ p0.qr }}" alt="QR do vídeo de {{ p0.nome }}">{% endif %}
+        </li>
+        {% endif %}
+        {% endfor %}
+      </ol>
+    </section>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="u-muted exf-bloco__vazio">Sem técnicas novas nesta promoção — o exame cobra as das faixas anteriores.</p>
+  {% endif %}
+</section>
+
+{% if not sem_pede and (pedido_t or materiais or tecnicas) %}
+<section class="exf-bloco exf-pede" id="mat-pede">
+  <header class="exf-bloco__topo">
+    <h2><i class="bi bi-clipboard-check" aria-hidden="true"></i> O que a banca pede nesta promoção</h2>
+    <span>a lista limpa, sem o material de estudo</span>
+  </header>
+  <dl class="exf-pede__grade">
+    {% if pedido_t %}
+    <div>
+      <dt>Conhecimento teórico</dt>
+      <dd>
+        <span class="exf-pede__itens">{% for it in pedido_t.itens %}<span>{{ it }}</span>{% endfor %}</span>
+        {% if pedido_t.sorteio %}<small>{{ pedido_t.sorteio }} sorteados na prova, entre estes e os das faixas anteriores.</small>{% endif %}
+      </dd>
+    </div>
+    {% endif %}
+    {% for m in materiais if m.pedido %}
+    <div><dt>{{ m.titulo }}</dt><dd><span class="exf-pede__itens"><span>{{ m.pedido }}</span></span></dd></div>
+    {% endfor %}
+    {% for g in tecnicas %}
+    <div>
+      <dt>{{ g.nome }}</dt>
+      <dd><span class="exf-pede__itens">{% for t in g.itens %}<span>{{ t.rotulo }}</span>{% endfor %}</span></dd>
+    </div>
+    {% endfor %}
+  </dl>
+</section>
+{% endif %}
+
+{% if anteriores %}
+<details class="exf-bloco exf-anteriores" id="mat-revisao">
+  <summary class="exf-bloco__topo">
+    <h2><i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i> Revisão: técnicas das faixas anteriores</h2>
+    <span>{{ anteriores|sum(attribute='n') }} técnicas que também entram no sorteio</span>
+  </summary>
+  <div class="exf-tecnicas">
+    {% for g in anteriores if g.itens %}
+    <section class="exf-tecnicas__grupo">
+      <h3><span class="exf-grupo__tit">{{ g.nome }}{% if g.significado %}<small>{{ g.significado }}</small>{% endif %}</span><span>{{ g.itens|length }}</span></h3>
+      <ul class="exf-termos exf-termos--simples">{% for t in g.itens %}<li>{{ t }}</li>{% endfor %}</ul>
+    </section>
+    {% endfor %}
+  </div>
+</details>
+{% endif %}

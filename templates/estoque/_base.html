@@ -1,0 +1,83 @@
+{# =========================================================================
+   Estoque — base das telas do módulo
+   =========================================================================
+   Estende o shell padrão: o estoque não tem ambiente próprio, é mais uma
+   seção do sistema. As abas seguem o mesmo componente do financeiro, com o
+   passador lateral, porque o problema é o mesmo — mais abas do que cabe.
+   ========================================================================= #}
+{% extends "base_app.html" %}
+{% set menu_ativo = 'estoque' %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ asset('css/painel/estoque.css') }}">
+{% block est_css %}{% endblock %}
+{% endblock %}
+
+{% block content %}
+<div class="fin-abas-caixa" data-fin-abas>
+  <button type="button" class="fin-passador fin-passador--esq" data-fin-passar="-1"
+          aria-label="Ver abas anteriores" hidden><i class="bi bi-chevron-left"></i></button>
+  <nav class="lst-abas fin-abas" data-fin-tira>
+    {% for chave, rotulo, endpoint in [
+        ('painel',      'Painel',        'estoque.painel'),
+        ('produtos',    'Produtos',      'estoque.produtos'),
+        ('venda',       'Venda',         'estoque.venda_balcao'),
+        ('pedidos',     'Pedidos',       'estoque.pedidos'),
+        ('movimentar',  'Movimentar',    'estoque.movimentar'),
+        ('historico',   'Histórico',     'estoque.historico'),
+        ('inventario',  'Inventário',    'estoque.inventario'),
+        ('repasses',    'Repasses',      'estoque.repasses'),
+        ('config',      'Configurações', 'estoque.config')
+      ] %}
+    {# Repasse só existe onde há associação envolvida. #}
+    {% if chave != 'repasses' or ctx.tipo == 'associacao' or ctx.id_associacao %}
+    <a href="{{ url_for(endpoint) }}"
+       class="lst-aba {% if est_aba == chave %}is-ativa{% endif %}">{{ rotulo }}</a>
+    {% endif %}
+    {% endfor %}
+  </nav>
+  <button type="button" class="fin-passador fin-passador--dir" data-fin-passar="1"
+          aria-label="Ver mais abas" hidden><i class="bi bi-chevron-right"></i></button>
+</div>
+
+{% if ctx.tipo == 'organizacao' %}
+<div class="est-aviso">
+  <span><i class="bi bi-shop"></i> Estoque independente — <strong>{{ ctx.nome }}</strong>,
+    com caixa próprio, sem vínculo com academia ou associação.</span>
+  <a href="{{ url_for('estoque.sair_organizacao') }}" class="u-btn u-btn--pequeno">Sair</a>
+</div>
+{% endif %}
+
+{% block est_conteudo %}{% endblock %}
+
+<script>
+(function () {
+  var caixa = document.querySelector('[data-fin-abas]');
+  if (!caixa) return;
+  var tira = caixa.querySelector('[data-fin-tira]');
+  var botoes = caixa.querySelectorAll('[data-fin-passar]');
+  function atualizar() {
+    var passa = tira.scrollWidth - tira.clientWidth > 1;
+    var fim = tira.scrollLeft + tira.clientWidth >= tira.scrollWidth - 1;
+    botoes.forEach(function (b) {
+      b.hidden = !passa;
+      b.disabled = b.dataset.finPassar === '1' ? fim : tira.scrollLeft <= 0;
+    });
+    caixa.classList.toggle('tem-passador', passa);
+  }
+  botoes.forEach(function (b) {
+    b.addEventListener('click', function () {
+      var salto = Math.max(160, Math.round(tira.clientWidth * 0.7));
+      var suave = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      tira.scrollBy({ left: salto * Number(b.dataset.finPassar),
+                      behavior: suave ? 'smooth' : 'auto' });
+    });
+  });
+  tira.addEventListener('scroll', atualizar, { passive: true });
+  window.addEventListener('resize', atualizar);
+  var ativa = tira.querySelector('.lst-aba.is-ativa');
+  if (ativa) ativa.scrollIntoView({ inline: 'center', block: 'nearest' });
+  atualizar();
+})();
+</script>
+{% endblock %}

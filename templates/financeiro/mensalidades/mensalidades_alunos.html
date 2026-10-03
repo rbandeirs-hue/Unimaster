@@ -43,14 +43,14 @@
           <img src="data:image/png;base64,{{ qrcode }}" alt="QR Code PIX" class="img-fluid mb-3" style="max-width:260px">
           {% endif %}
           {% if copia_cola %}
-          <label class="form-label small text-muted d-block text-start">PIX copia e cola</label>
+          <span class="u-campo__rotulo" style="display:block;text-align:left">PIX copia e cola</span>
           <div class="input-group mb-2">
-            <input type="text" class="form-control" id="pixCopia{{ uid }}" value="{{ copia_cola }}" readonly>
-            <button class="btn btn-outline-primary js-copiar-link" type="button" data-link="{{ copia_cola }}"><i class="bi bi-clipboard"></i></button>
+            <input type="text" class="u-campo__controle" id="pixCopia{{ uid }}" value="{{ copia_cola }}" readonly aria-label="PIX copia e cola">
+            <button class="u-btn u-btn--icone js-copiar-link" type="button" data-link="{{ copia_cola }}" aria-label="Copiar código PIX"><i class="bi bi-clipboard"></i></button>
           </div>
           {% endif %}
           {% if boleto_url %}
-          <a href="{{ boleto_url }}" target="_blank" rel="noopener" class="btn btn-outline-secondary btn-sm w-100">
+          <a href="{{ boleto_url }}" target="_blank" rel="noopener" class="u-btn u-btn--pequeno" style="width:100%">
             <i class="bi bi-{{ 'download' if url_imagem else 'box-arrow-up-right' }} me-1"></i>
             {{ 'Baixar imagem do QR Code' if url_imagem else 'Abrir página da cobrança' }}</a>
           {% endif %}
@@ -143,10 +143,15 @@
   <a href="{{ url_for('financeiro.aplicar_desconto', **_a) }}" class="sh__btn">
     <i class="bi bi-percent"></i> Desconto
   </a>
+  {# O rótulo diz o alcance. Com a tela filtrada num aluno, este botão falava
+     com a academia inteira — o nome "Lembretes" não deixava isso aparecer. #}
   <button type="button" class="sh__btn" id="btnLembretesWpp"
           data-url="{{ url_for('financeiro.lembretes_whatsapp_lote') }}"
-          title="Enviar lembrete de mensalidade no WhatsApp para os pendentes e atrasados">
-    <i class="bi bi-whatsapp"></i> Lembretes
+          {% if aluno_filtro %}data-aluno="{{ aluno_filtro }}"
+          data-nome="{{ aluno_filtro_nome or 'este aluno' }}"{% endif %}
+          title="{% if aluno_filtro %}Enviar lembrete das mensalidades e cobranças avulsas só deste aluno{% else %}Enviar lembrete para TODOS os alunos com mensalidade ou cobrança avulsa pendente ou atrasada{% endif %}">
+    <i class="bi bi-whatsapp"></i>
+    {% if aluno_filtro %}Lembrete deste aluno{% else %}Lembretes de todos{% endif %}
   </button>
   {% if aluno_filtro %}
   {# Filtrada por um aluno: gera para ele aqui mesmo, sem abrir a tela geral. #}
@@ -278,7 +283,7 @@
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <input type="hidden" name="academia_id" value="{{ academia_id }}">
         <button type="submit" class="sh__btn" id="btn-excluir-lote" disabled
-                onclick="return confirm('Excluir as mensalidades selecionadas?');">
+                data-confirmar="Excluir as mensalidades selecionadas?">
           <i class="bi bi-trash"></i> Excluir selecionadas
         </button>
       </form>
@@ -377,7 +382,7 @@
             <button type="submit" class="lst-acao"
                     title="{% if m.remover_juros %}Voltar a cobrar juros e multa{% else %}Não cobrar juros e multa desta mensalidade{% endif %}"
                     aria-label="{{ 'Cobrar juros de' if m.remover_juros else 'Isentar de juros' }} {{ m.aluno_nome }}"
-                    onclick="return confirm({% if m.remover_juros %}'Voltar a cobrar juros e multa desta mensalidade?'{% else %}'Remover juros e multa desta mensalidade? (ex: pagou em dia mas informou fora do vencimento)'{% endif %});">
+                    data-confirmar="{% if m.remover_juros %}Voltar a cobrar juros e multa desta mensalidade?{% else %}Remover juros e multa desta mensalidade? (ex: pagou em dia mas informou fora do vencimento){% endif %}">
               <i class="bi bi-{{ 'percent' if m.remover_juros else 'dash-circle' }}"></i>
             </button>
           </form>
@@ -443,7 +448,9 @@
               <input type="hidden" name="next" value="{{ request.full_path }}">
               <button type="submit" class="lst-acao lst-acao--perigo" title="Cancelar mensalidade"
                       aria-label="Cancelar mensalidade de {{ m.aluno_nome }}"
-                      onclick="return confirm('Cancelar a mensalidade de {{ m.aluno_nome|e }} — {% if m.data_vencimento %}venc. {{ m.data_vencimento.strftime('%d/%m/%Y') }}{% endif %} (R$ {{ '%.2f'|format(m.valor or 0)|replace('.', ',') }})?\n\nA cobrança sai da lista. Só faça isso se for realmente esta.');">
+                      data-confirmar="Cancelar a mensalidade de {{ m.aluno_nome|e }} — {% if m.data_vencimento %}venc. {{ m.data_vencimento.strftime('%d/%m/%Y') }}{% endif %} (R$ {{ '%.2f'|format(m.valor or 0)|replace('.', ',') }})?
+
+A cobrança sai da lista. Só faça isso se for realmente esta.">
                 <i class="bi bi-x-circle"></i>
               </button>
             </form>
@@ -471,7 +478,7 @@
               <input type="hidden" name="registro_id" value="{{ m.id }}">
               <button type="submit" class="lst-acao" title="Desfazer a baixa deste pagamento"
                       aria-label="Cancelar pagamento de {{ m.aluno_nome }}"
-                      onclick="return confirm({% if m.pago_auto %}'Cancelar pagamento desta mensalidade? Como foi confirmado automaticamente pelo gateway, o valor vira crédito na carteira do aluno.'{% else %}'Cancelar pagamento desta mensalidade? O status será revertido para pendente e a receita será cancelada.'{% endif %});">
+                      data-confirmar="{% if m.pago_auto %}Cancelar pagamento desta mensalidade? Como foi confirmado automaticamente pelo gateway, o valor vira crédito na carteira do aluno.{% else %}Cancelar pagamento desta mensalidade? O status será revertido para pendente e a receita será cancelada.{% endif %}">
                 <i class="bi bi-arrow-counterclockwise"></i>
               </button>
             </form>
@@ -535,7 +542,7 @@
             <input type="hidden" name="tipo" value="cobranca_avulsa">
             <input type="hidden" name="registro_id" value="{{ a.id }}">
             <button type="submit" class="sh__btn" style="padding:.35rem .7rem"
-                    onclick="return confirm('Registrar pagamento manual desta cobrança? Uma receita será gerada automaticamente.');">Registrar</button>
+                    data-confirmar="Registrar pagamento manual desta cobrança? Uma receita será gerada automaticamente.">Registrar</button>
           </form>
           <form method="POST" action="{{ url_for('financeiro.cancelar_cobranca') }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -543,7 +550,7 @@
             <input type="hidden" name="registro_id" value="{{ a.id }}">
             <button type="submit" class="lst-acao lst-acao--perigo" title="Cancelar cobrança"
                     aria-label="Cancelar cobrança de {{ a.aluno_nome }}"
-                    onclick="return confirm('Cancelar esta cobrança?');">
+                    data-confirmar="Cancelar esta cobrança?">
               <i class="bi bi-x-circle"></i>
             </button>
           </form>
@@ -568,6 +575,11 @@
             {% endif %}
             {{ cobranca_online_box('Avd' ~ a.id, a.asaas_boleto_url, a.asaas_pix_qrcode, a.asaas_pix_copia_cola, a.valor, 'avulsa', a.id) }}
           {% endif %}
+          <button type="button" class="lst-acao js-lembrete-wpp" title="Enviar lembrete no WhatsApp"
+                  aria-label="Enviar lembrete no WhatsApp para {{ a.aluno_nome }}"
+                  data-url="{{ url_for('financeiro.lembrete_whatsapp_avulsa', av_id=a.id) }}">
+            <i class="bi bi-whatsapp"></i>
+          </button>
           {% else %}
             {% if a.status == 'pago' %}
             <form method="POST" action="{{ url_for('financeiro.cancelar_pagamento') }}">
@@ -578,7 +590,7 @@
               <input type="hidden" name="registro_id" value="{{ a.id }}">
               <button type="submit" class="lst-acao" title="Desfazer a baixa deste pagamento"
                       aria-label="Cancelar pagamento de {{ a.aluno_nome }}"
-                      onclick="return confirm('Cancelar pagamento desta cobrança? O status será revertido para pendente e a receita será cancelada.');">
+                      data-confirmar="Cancelar pagamento desta cobrança? O status será revertido para pendente e a receita será cancelada.">
                 <i class="bi bi-arrow-counterclockwise"></i>
               </button>
             </form>
@@ -677,9 +689,9 @@
         <div class="mb-3" id="gcBlocoAvulsa">
           <div class="text-uppercase fw-bold text-muted small mb-2"><i class="bi bi-lightning-charge"></i> Cobrança avulsa <span class="fw-normal text-lowercase">(paga uma vez)</span></div>
           <div class="d-flex gap-2 flex-wrap">
-            <button type="button" class="btn btn-outline-success btn-sm gc-avulsa" data-tipo="PIX" data-gw="asaas mercadopago efi"><i class="bi bi-qr-code"></i> PIX</button>
-            <button type="button" class="btn btn-outline-secondary btn-sm gc-avulsa" data-tipo="BOLETO" data-gw="asaas mercadopago"><i class="bi bi-upc-scan"></i> Boleto</button>
-            <button type="button" class="btn btn-outline-primary btn-sm gc-avulsa" data-tipo="PIX" data-gw="infinitepay"><i class="bi bi-box-arrow-up-right"></i> Link de pagamento</button>
+            <button type="button" class="u-btn u-btn--pequeno gc-avulsa" data-tipo="PIX" data-gw="asaas mercadopago efi"><i class="bi bi-qr-code"></i> PIX</button>
+            <button type="button" class="u-btn u-btn--pequeno gc-avulsa" data-tipo="BOLETO" data-gw="asaas mercadopago"><i class="bi bi-upc-scan"></i> Boleto</button>
+            <button type="button" class="u-btn u-btn--pequeno u-btn--primario gc-avulsa" data-tipo="PIX" data-gw="infinitepay"><i class="bi bi-box-arrow-up-right"></i> Link de pagamento</button>
           </div>
         </div>
 
@@ -691,7 +703,7 @@
           <div class="text-uppercase fw-bold text-muted small mb-2"><i class="bi bi-arrow-repeat"></i> Mensalidade recorrente <span class="fw-normal text-lowercase">(todo mês)</span></div>
           <div class="d-flex gap-2 flex-wrap">
             {% for op in recorrencia_opcoes %}
-            <button type="button" class="btn btn-sm gc-recorrente {% if op.metodo == 'pix' %}btn-outline-info{% else %}btn-outline-primary{% endif %}" data-opcao="{{ op.val }}">
+            <button type="button" class="u-btn u-btn--pequeno gc-recorrente{% if op.metodo != 'pix' %} u-btn--primario{% endif %}" data-opcao="{{ op.val }}">
               {% if op.metodo == 'pix' %}<i class="bi bi-qr-code"></i>{% else %}<i class="bi bi-credit-card"></i>{% endif %} {{ op.label }}
             </button>
             {% endfor %}
@@ -852,10 +864,10 @@ document.addEventListener('click', function (ev) {
         });
     });
     document.querySelectorAll('.gc-recorrente').forEach(function (b) {
-        b.addEventListener('click', function () {
+        b.addEventListener('click', async function () {
             var opcao = b.getAttribute('data-opcao') || '';
             var label = opcao.indexOf('pix') >= 0 ? 'PIX recorrente' : 'cartão (débito automático)';
-            if (!confirm('Gerar mensalidade recorrente por ' + label + ' para ' + estado.nome +
+            if (!await Dialogo.confirmar('Gerar mensalidade recorrente por ' + label + ' para ' + estado.nome +
                          ' (R$ ' + estado.valor + '/mês)? O aluno cadastra uma vez e passa a ser cobrado automaticamente todo mês.')) return;
             fRec.querySelector('[name=opcao_recorrencia]').value = opcao;
             fRec.submit();
@@ -884,10 +896,21 @@ document.addEventListener('click', function (ev) {
 
   // Botão em lote
   var btnLote = document.getElementById('btnLembretesWpp');
-  if(btnLote) btnLote.addEventListener('click', function(){
-    if(!confirm('Enviar lembrete de mensalidade no WhatsApp para todos os alunos com mensalidade pendente ou atrasada (vencendo nos próximos 3 dias ou já vencida)?')) return;
+  if(btnLote) btnLote.addEventListener('click', async function (){
+    var aluno = btnLote.getAttribute('data-aluno');
+    var nome = btnLote.getAttribute('data-nome') || 'este aluno';
+    // A pergunta diz para QUEM vai. A versão anterior dizia sempre "todos os
+    // alunos", mesmo numa tela filtrada — e quem confirmava não estava mesmo
+    // mandando para todos por engano: estava, e o texto não ajudava a notar.
+    var pergunta = aluno
+      ? 'Enviar lembrete das mensalidades e cobranças avulsas no WhatsApp para ' + nome + '?'
+      : 'Enviar lembrete no WhatsApp para TODOS os alunos com mensalidade ou '
+        + 'cobrança avulsa pendente ou atrasada (vencendo nos próximos 3 dias ou já vencida)?';
+    if(!await Dialogo.confirmar(pergunta)) return;
+    var corpo = null;
+    if(aluno){ corpo = new FormData(); corpo.append('aluno_id', aluno); }
     var orig = btnLote.innerHTML; btnLote.disabled = true; btnLote.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Enviando…';
-    post(btnLote.getAttribute('data-url')).then(function(r){return r.json();}).then(function(d){
+    post(btnLote.getAttribute('data-url'), corpo).then(function(r){return r.json();}).then(function(d){
       btnLote.disabled=false; btnLote.innerHTML=orig;
       var r = d.resumo || {};
       if(r.motivo === 'automacao_desligada'){ alert('A automação está desligada, mas o envio manual continua. (Se não enviou, verifique a conexão do WhatsApp.)'); }
@@ -914,12 +937,12 @@ document.addEventListener('click', function (ev) {
         <p class="lst-sub mb-3" id="edcAluno"></p>
         <div class="mb-3">
           <label class="form-label fw-semibold" for="edcValor">Valor da mensalidade</label>
-          <input type="number" step="0.01" min="0.01" class="form-control" id="edcValor" name="valor_original" required>
+          <input type="number" step="0.01" min="0.01" class="u-campo__controle" id="edcValor" name="valor_original" required>
           <div class="form-text">Valor cheio, antes do desconto.</div>
         </div>
         <div class="mb-3">
           <label class="form-label fw-semibold" for="edcDescSel">Desconto</label>
-          <select class="form-select" id="edcDescSel" name="desconto_id">
+          <select class="u-campo__controle" id="edcDescSel" name="desconto_id">
             <option value="">Sem desconto</option>
             {% for d in descontos or [] %}
             <option value="{{ d.id }}" data-tipo="{{ d.tipo }}" data-valor="{{ '%.2f'|format(d.valor|float) }}">
@@ -932,20 +955,20 @@ document.addEventListener('click', function (ev) {
             Os descontos vêm de
             <a href="{{ url_for('financeiro_painel.descontos', academia_id=academia_id) }}">Financeiro → Descontos</a>.
           </div>
-          <input type="number" step="0.01" min="0" class="form-control mt-2" id="edcDesconto"
-                 name="desconto_aplicado" value="0" style="display:none" placeholder="Valor do desconto em R$">
+          <input type="number" step="0.01" min="0" class="u-campo__controle mt-2" id="edcDesconto"
+                 name="desconto_aplicado" value="0" style="display:none" placeholder="Valor do desconto em R$" aria-label="Valor do desconto em R$">
         </div>
         <div class="mb-3">
           <label class="form-label fw-semibold" for="edcVencimento">Data de vencimento</label>
-          <input type="date" class="form-control" id="edcVencimento" name="data_vencimento" required>
+          <input type="date" class="u-campo__controle" id="edcVencimento" name="data_vencimento" required>
         </div>
         <div class="alert alert-light border mb-0 py-2">
           Valor a cobrar: <strong id="edcLiquido">—</strong>
         </div>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Fechar</button>
-        <button type="submit" class="btn btn-dark">Salvar alterações</button>
+        <button type="button" class="u-btn u-btn--fantasma" data-bs-dismiss="modal">Fechar</button>
+        <button type="submit" class="u-btn u-btn--forte">Salvar alterações</button>
       </div>
     </form>
   </div>

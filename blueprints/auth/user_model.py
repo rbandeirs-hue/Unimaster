@@ -167,12 +167,30 @@ class Usuario(UserMixin):
         conn = get_db_connection()
         cur = conn.cursor(dictionary=True)
 
-        cur.execute("""
-            SELECT r.nome
-            FROM roles r
-            JOIN roles_usuario ru ON ru.role_id = r.id
-            WHERE ru.usuario_id = %s
-        """, (usuario_id,))
+        # Papel por academia (MM-14): nos modos de equipe, com academia
+        # escolhida, só valem os papéis dela e os globais — gestor numa
+        # academia e aluno em outra não vira gestor nas duas.
+        aid = None
+        try:
+            from utils.acesso_academia import academia_dos_papeis, tem_papel_por_academia
+            if tem_papel_por_academia(cur):
+                aid = academia_dos_papeis()
+        except Exception:
+            aid = None
+        if aid:
+            cur.execute("""
+                SELECT DISTINCT r.nome
+                FROM roles r
+                JOIN roles_usuario ru ON ru.role_id = r.id
+                WHERE ru.usuario_id = %s AND ru.academia_id IN (0, %s)
+            """, (usuario_id, aid))
+        else:
+            cur.execute("""
+                SELECT DISTINCT r.nome
+                FROM roles r
+                JOIN roles_usuario ru ON ru.role_id = r.id
+                WHERE ru.usuario_id = %s
+            """, (usuario_id,))
 
         roles = [row["nome"] for row in cur.fetchall()]
 

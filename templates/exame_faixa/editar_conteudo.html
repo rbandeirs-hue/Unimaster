@@ -1,0 +1,75 @@
+{% extends "base_app.html" %}
+{% block conteudo_classe %}exf-tela{% endblock %}
+{% from 'exame_faixa/_macros.html' import obi, promo with context %}
+{% set menu_ativo = 'exame_faixa' %}
+{% block title %}Editar conteúdo — {{ atual.de }} → {{ atual.para }}{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{{ asset('css/exame_faixa.css') }}">{% endblock %}
+
+{% block pagina_titulo %}Editar conteúdo do exame{% endblock %}
+{% block pagina_subtitulo %}O que se cobra nesta promoção. Vale para o modo estudo e para os próximos sorteios da banca.{% endblock %}
+{% block pagina_acoes %}
+<a href="{{ voltar }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Programa</a>
+{% endblock %}
+
+{% block content %}
+{% include 'exame_faixa/_abas.html' %}
+
+<form method="GET" class="lst-filtros">
+  <label class="lst-campo">
+    <span class="lst-campo__rotulo">Promoção</span>
+    <select onchange="if(this.value) location.href=this.value">
+      {% for p in prog %}
+      <option value="{{ url_for('exame_faixa.editar_conteudo', programa_id=p.id) }}" {% if p.id == atual.id %}selected{% endif %}>
+        {{ p.de }} → {{ p.para }}{% if not p.ativo %} (inativa){% endif %}</option>
+      {% endfor %}
+    </select>
+  </label>
+</form>
+
+<div class="exf-cab">
+  <div><p class="exf-cab__titulo">{{ promo(atual) }}</p>
+    <span class="u-muted u-fs-sm">Idade {{ atual.idade_txt }} · carência {{ atual.carencia_txt }} · {{ atual.valor_fmt }} — altere na aba Tabela de preços.</span></div>
+</div>
+
+<form method="POST">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="row g-3">
+    <div class="col-md-4">
+      <label class="u-campo d-block"><span class="u-campo__rotulo">Edição do material</span>
+        <input type="text" name="edicao" class="u-campo__controle" maxlength="20" value="{{ edicao }}" placeholder="Ex.: 2026.1"></label>
+    </div>
+  </div>
+
+  <h2 class="exf-secao-titulo">Parte teórica</h2>
+  <div class="row g-3">
+    {% for c in campos if c.chave in ('historico', 'terminologia', 'reiho', 'gestos', 'arbitragem', 'ukemi', 'kumikata') %}
+    <div class="{{ 'col-12' if c.tipo == 'qa' else 'col-md-6' }}">
+      <label class="u-campo d-block"><span class="u-campo__rotulo">{{ c.rotulo }}</span>
+        {% if c.tipo == 'texto' %}
+        <input type="text" name="{{ c.chave }}" class="u-campo__controle" value="{{ valores[c.chave] }}">
+        {% else %}
+        <textarea name="{{ c.chave }}" class="u-campo__controle" rows="{{ 5 if c.tipo == 'qa' else 4 }}" spellcheck="false">{{ valores[c.chave] }}</textarea>
+        {% endif %}
+        <span class="u-campo__ajuda">{{ c.ajuda }}</span></label>
+    </div>
+    {% endfor %}
+  </div>
+
+  <h2 class="exf-secao-titulo">Parte prática</h2>
+  <div class="row g-3">
+    {% for c in campos if c.chave in ('nage', 'katame', 'kaeshi', 'renraku') %}
+    <div class="col-md-6">
+      <label class="u-campo d-block"><span class="u-campo__rotulo">{{ c.rotulo }}</span>
+        <textarea name="{{ c.chave }}" class="u-campo__controle" rows="8" spellcheck="false">{{ valores[c.chave] }}</textarea>
+        <span class="u-campo__ajuda">{{ c.ajuda }}</span></label>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="d-flex flex-wrap gap-2 align-items-center mt-3">
+    <button type="submit" class="sh__btn sh__btn--forte"><i class="bi bi-check-lg"></i> Salvar conteúdo</button>
+    <a href="{{ voltar }}" class="sh__btn">Cancelar</a>
+    <span class="u-muted u-fs-sm">Fichas já sorteadas não mudam.</span>
+  </div>
+</form>
+{% endblock %}
