@@ -866,6 +866,7 @@ def _montar_contexto_lista(so_aluno_id=None):
     modalidades_por_aluno = {}
     modalidades_filtro = []
     tem_sem_modalidade = False
+    filtro_modalidade_restrito = False
     mensalidade_status_por_aluno = {}
     mensalidade_detalhes_por_aluno = {}
     pacotes_ativos_por_aluno = {}
@@ -897,6 +898,17 @@ def _montar_contexto_lista(so_aluno_id=None):
             key=lambda x: (x["nome"] or "").lower(),
         )
         tem_sem_modalidade = any(not modalidades_por_aluno.get(aid) for aid in aluno_ids)
+        # Usuário restrito a algumas modalidades (MM-13): o filtro só oferece as
+        # dele, sem "Todas" nem "Sem modalidade" (a guarda de app.py também barra).
+        try:
+            from utils import acesso_academia as _acs
+            _perm = _acs.modalidades_permitidas()
+            if _perm is not None and not _acs.escopo_amplo():
+                modalidades_filtro = [m for m in modalidades_filtro if m["id"] in _perm]
+                tem_sem_modalidade = False
+                filtro_modalidade_restrito = True
+        except Exception:
+            pass
 
         # Status financeiro por aluno (lista de alunos no modo academia)
         # Regra:
@@ -2293,6 +2305,7 @@ def _montar_contexto_lista(so_aluno_id=None):
         modalidades_filtro=modalidades_filtro,
         modalidade_id=modalidade_filtro,
         tem_sem_modalidade=tem_sem_modalidade,
+        filtro_modalidade_restrito=filtro_modalidade_restrito,
         filtro_ativo=filtro_ativo,
         stats=stats,
         mostrar_filtros_avancados=mostrar_filtros_avancados,

@@ -75,12 +75,19 @@ GROUP BY a.id_academia, am.modalidade_id, md.nome
 
 
 def _inserir(cur, linha, modalidade_id, origem):
+    # Só cria se o aluno ainda não tem matrícula nesta modalidade. O INSERT
+    # IGNORE sozinho não protegia: a chave única inclui contrato_id, e com
+    # contrato NULL o MySQL aceita repetir — rodar de novo duplicava tudo
+    # (aconteceu em 03/10/2026: 315 duplicatas, apagadas na hora).
     cur.execute(
-        """INSERT IGNORE INTO matricula_modalidade
+        """INSERT INTO matricula_modalidade
              (aluno_id, modalidade_id, contrato_id, data_inicio, status, origem)
-           VALUES (%s, %s, NULL, %s, %s, %s)""",
+           SELECT %s, %s, NULL, %s, %s, %s FROM DUAL
+           WHERE NOT EXISTS (SELECT 1 FROM matricula_modalidade
+                             WHERE aluno_id = %s AND modalidade_id = %s)""",
         (linha["aluno_id"], modalidade_id, linha["data_matricula"],
-         STATUS_ALUNO.get(linha["status"], "ativa"), origem))
+         STATUS_ALUNO.get(linha["status"], "ativa"), origem,
+         linha["aluno_id"], modalidade_id))
     return cur.rowcount
 
 

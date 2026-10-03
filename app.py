@@ -324,6 +324,18 @@ def _exigir_acesso_na_academia():
         ac = acs.acesso(acs.academia_atual())
         if ac["total"]:
             return None
+        # Modalidade pedida na URL (filtro próprio das telas: lista de alunos,
+        # painel, professores, calendário…) que não é do usuário — inclusive
+        # "Todas" (vazio) e "Sem modalidade" (-1): troca pela permitida. Sem
+        # isso o filtro da página passava por cima da restrição.
+        permitidas = ac.get("modalidades")
+        if permitidas and request.method == "GET" and "modalidade_id" in request.args:
+            pedida = request.args.get("modalidade_id", type=int)
+            if pedida not in permitidas:
+                from utils import multimodalidade as mm
+                args = request.args.to_dict(flat=True)
+                args["modalidade_id"] = mm.contexto_id(acs.academia_atual()) or min(permitidas)
+                return redirect(url_for(endpoint, **{**(request.view_args or {}), **args}))
         area = acs.area_do_blueprint(request.blueprint)
         bloqueio = None
         if area and not ac.get(area, True):
