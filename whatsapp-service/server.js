@@ -21,6 +21,7 @@ const {
   useMultiFileAuthState,
   DisconnectReason,
   fetchLatestBaileysVersion,
+  makeCacheableSignalKeyStore,
 } = require('@whiskeysockets/baileys');
 
 const PORT = parseInt(process.env.WPP_PORT || '3333', 10);
@@ -148,7 +149,12 @@ async function startSession(id) {
 
     const sock = makeWASocket({
       version,
-      auth: state,
+      // Chaves de criptografia com cache em memória na frente dos arquivos,
+      // como a biblioteca recomenda. Gravando direto no disco, envios em
+      // sequência (a régua das 09:00) disputavam os mesmos arquivos de sessão
+      // e corrompiam a sessão com o aparelho do destinatário — "Bad MAC" no
+      // log e "Aguardando mensagem" do outro lado.
+      auth: { creds: state.creds, keys: makeCacheableSignalKeyStore(state.keys, logger) },
       printQRInTerminal: false,
       logger,
       browser: ['Unimaster', 'Chrome', '1.0'],
@@ -176,6 +182,19 @@ async function startSession(id) {
     sock.ev.on('messages.upsert', (ev) => {
       for (const m of (ev && ev.messages) || []) {
         if (m && m.key && m.key.fromMe && m.key.id && m.message) lembrarMensagem(id, m.key.id, m.message);
+      }
+    });
+    // Confirmação do WhatsApp para o que saiu daqui: 3 = entregue no aparelho,
+    // 4 = lida. Sem isso o sistema só sabia que a mensagem foi ACEITA pelo
+    // serviço — não se chegou ao destinatário ("Aguardando mensagem" do outro
+    // lado não aparece em lugar nenhum). Fica no journal para conferir.
+    sock.ev.on('messages.update', (ups) => {
+      for (const u of ups || []) {
+        const st2 = u && u.update && u.update.status;
+        if (u && u.key && u.key.fromMe && (st2 === 3 || st2 === 4)) {
+          logger.warn({ id, msgId: u.key.id, para: (u.key.remoteJid || '').split('@')[0].slice(-4),
+                        status: st2 === 4 ? 'lida' : 'entregue' }, 'confirmacao do whatsapp');
+        }
       }
     });
     sock.ev.on('connection.update', async (u) => {
