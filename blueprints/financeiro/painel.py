@@ -447,10 +447,20 @@ def dashboard():
     receita_mes = 0.0
     pagos = 0
     pendencias = []
+    # Adimplência olha só o que JÁ VENCEU: quem tem mensalidade para o dia 10 e
+    # hoje é dia 5 não está devendo nada. Antes o painel contava todo pendente
+    # como inadimplente e a "adimplência" era só a taxa de arrecadação do mês.
+    hoje_ref = date.today()
+    vencidas = pagas_vencidas = 0
     for r in do_mes:
         efetivo = (_status_efetivo(r.get("status"), r.get("data_vencimento"),
                                    r.get("status_pagamento")) or "").lower()
         valor = float(r.get("valor") or 0)
+        venc = r.get("data_vencimento")
+        if venc is not None and hasattr(venc, "year") and venc <= hoje_ref:
+            vencidas += 1
+            if efetivo == "pago":
+                pagas_vencidas += 1
         if efetivo == "pago":
             receita_mes += valor
             pagos += 1
@@ -469,6 +479,7 @@ def dashboard():
 
     total_cobrado = len(do_mes)
     taxa = round((pagos / total_cobrado) * 100) if total_cobrado else 0
+    adimplencia = round((pagas_vencidas / vencidas) * 100) if vencidas else 100
 
     # Receita que não vem de mensalidade — matrícula, cobrança avulsa, lançamento
     # manual. O painel somava só mensalidades e chamava o resultado de "receita
@@ -520,6 +531,8 @@ def dashboard():
     # Filtros aplicados só à lista de pendências: os números do topo continuam
     # retratando o mês inteiro.
     pendencias_total = len(pendencias)
+    inadimplentes = sum(1 for p in pendencias if p["status"] == "Atrasado")
+    a_vencer = pendencias_total - inadimplentes
     if situacao:
         pendencias = [p for p in pendencias if p["status"].lower() == situacao]
     if busca:
@@ -532,7 +545,10 @@ def dashboard():
         busca=busca,
         situacao=situacao,
         pendencias_total=pendencias_total,
-        adimplencia=taxa,
+        inadimplentes=inadimplentes,
+        a_vencer=a_vencer,
+        adimplencia=adimplencia,
+        arrecadacao=taxa,
         ano=ano, mes=mes,
         mes_label=fmt_mes(ano, mes),
         mes_chave=f"{ano:04d}-{mes:02d}",
@@ -546,7 +562,6 @@ def dashboard():
         receita_total=receita_mes + receita_outras,
         receita_anterior=receita_anterior,
         receita_potencial=receita_potencial,
-        inadimplentes=len(pendencias),
         taxa=taxa,
         pagos=pagos,
         total_cobrado=total_cobrado,
