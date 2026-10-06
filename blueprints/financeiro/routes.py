@@ -4405,6 +4405,49 @@ def lembrete_whatsapp_individual(ma_id):
     return jsonify({"ok": ok, "msg": msg})
 
 
+def _confirmacao_whatsapp(tipo, registro_id):
+    """Reenvia a confirmação de pagamento pelo WhatsApp (botão da lista).
+
+    Só para registro desta academia e já pago — a confirmação diz "recebemos
+    o seu pagamento". Usa o mesmo modelo e o mesmo envio da baixa automática.
+    """
+    academia_id = _get_academia_id()
+    if not academia_id:
+        return jsonify({"ok": False, "erro": "academia não definida"}), 400
+    tabela = "cobranca_avulsa" if tipo == "cobranca_avulsa" else "mensalidade_aluno"
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute(
+            f"""SELECT r.status, a.id_academia FROM {tabela} r
+                JOIN alunos a ON a.id = r.aluno_id WHERE r.id = %s""", (registro_id,))
+        r = cur.fetchone()
+    finally:
+        cur.close()
+        conn.close()
+    if not r or int(r["id_academia"] or 0) != int(academia_id):
+        return jsonify({"ok": False, "msg": "Cobrança não encontrada nesta academia."}), 404
+    if r["status"] != "pago":
+        return jsonify({"ok": False, "msg": "Só dá para enviar a confirmação de uma cobrança paga."}), 400
+    from utils import whatsapp_lembretes as lem
+    ok = lem.enviar_confirmacao_pagamento(registro_id, tipo=tabela)
+    return jsonify({"ok": ok, "msg": "Confirmação enviada." if ok else
+                    "Não foi possível enviar. Confira se o WhatsApp da academia está conectado, "
+                    "se o modelo de confirmação de pagamento está ativo e se o aluno tem telefone."})
+
+
+@bp_financeiro.route("/mensalidades/<int:ma_id>/confirmacao-whatsapp", methods=["POST"])
+@login_required
+def confirmacao_whatsapp_mensalidade(ma_id):
+    return _confirmacao_whatsapp("mensalidade_aluno", ma_id)
+
+
+@bp_financeiro.route("/cobranca-avulsa/<int:av_id>/confirmacao-whatsapp", methods=["POST"])
+@login_required
+def confirmacao_whatsapp_avulsa(av_id):
+    return _confirmacao_whatsapp("cobranca_avulsa", av_id)
+
+
 @bp_financeiro.route("/cobranca-avulsa/<int:av_id>/lembrete-whatsapp", methods=["POST"])
 @login_required
 def lembrete_whatsapp_avulsa(av_id):
