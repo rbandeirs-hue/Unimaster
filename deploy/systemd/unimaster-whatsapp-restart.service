@@ -1,0 +1,13 @@
+[Unit]
+Description=Reinicio diario do Unimaster WhatsApp com checagem das sessoes de criptografia
+
+[Service]
+Type=oneshot
+# 1) para o servico (a limpeza so e segura com ele parado)
+ExecStart=/bin/systemctl stop unimaster-whatsapp.service
+# 2) checa e, se preciso, descarta as sessoes corrompidas com os aparelhos da
+#    academia (com copia). O "-" garante que uma falha aqui nao impede o passo 3.
+ExecStart=-/usr/bin/python3 /var/www/Unimaster/scripts/whatsapp_saude_sessoes.py --limpar
+# 3) liga de novo
+ExecStart=/bin/systemctl start unimaster-whatsapp.service
+TimeoutStartSec=300
