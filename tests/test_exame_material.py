@@ -99,6 +99,17 @@ def main():
     checar("5. nome que não existe não quebra: devolve nada",
            mat.ficha("Tecnica-inventada-xyz") is None)
 
+    print("\nToda técnica ensina como se faz, não só o nome")
+    sem_passos = sorted(n for n in nomes
+                        if not (mat.ficha(n) or {}).get("passos")
+                        and (mat.ficha(n) or {}).get("familia") != "grupo")
+    checar("5b. todas as técnicas do programa têm passo a passo",
+           not sem_passos, ", ".join(sem_passos[:8]))
+    curtos = sorted(n for n in nomes
+                    if 0 < len((mat.ficha(n) or {}).get("passos") or []) < 3)
+    checar("5c. nenhum passo a passo é um passo solto",
+           not curtos, ", ".join(curtos[:8]))
+
     # ------------------------------------------------- ukemi e kumi-kata
     print("\nUkemi e kumi-kata: catálogo em cima, o que se pede embaixo")
     primeira = prog[0]
@@ -182,8 +193,11 @@ def main():
     checar("25. o catálogo de quedas aparece com os nomes",
            "Ushiro-ukemi" in html and "Zempo-kaiten-ukemi" in html)
     checar("26. as formas de pegada aparecem", "Ushiro-obi" in html and "Naka-sode" in html)
-    checar("27. o que a banca pede continua visível",
-           "O que a banca pede nesta promoção" in html)
+    # A tela do programa virou "apostila" e passa sem_pede=true de propósito:
+    # ali o quadro do que cai sai de cena. O bloco em si é checado logo abaixo,
+    # direto no trecho que o monta, para o teste não depender de qual tela o usa.
+    checar("27. a apostila esconde o quadro do que cai, como foi desenhada",
+           "O que a banca pede nesta promoção" not in html)
     checar("28. a ficha da técnica aparece junto do nome",
            "grande ceifada externa" in html)
     checar("29. o passo a passo está na página, recolhido",
@@ -216,22 +230,36 @@ def main():
            'class="exf-grupo__tit">Nage-waza' in html)
 
     # ------------------------- material e cobrança deixaram de se misturar
-    print("\nA ordem da página: material primeiro, lista do que cai por último")
-    pos = {t: html.find(t) for t in ("Conhecimento teórico", "Fundamentos",
-                                     "Técnicas desta promoção",
-                                     "O que a banca pede nesta promoção")}
+    # O bloco é montado em exame_faixa/_conteudo.html, que hoje serve três
+    # telas. Renderizamos o trecho direto: assim o teste cobre a regra (material
+    # em cima, lista do que cai embaixo) sem travar em qual tela o mostra.
+    print("\nO quadro do que cai: material primeiro, lista limpa por último")
+    from flask import render_template
+    with app.app_context():
+        parcial = render_template("exame_faixa/_conteudo.html",
+                                  conhecimento=conhecimento, tecnicas=tecnicas, quiz=False)
+        escondido = render_template("exame_faixa/_conteudo.html",
+                                    conhecimento=conhecimento, tecnicas=tecnicas,
+                                    quiz=False, sem_pede=True)
+    pos = {t: parcial.find(t) for t in ("Conhecimento teórico", "Fundamentos",
+                                        "Técnicas novas desta faixa",
+                                        "O que a banca pede nesta promoção")}
     checar("33. existe o quadro único do que a banca pede",
-           pos["O que a banca pede nesta promoção"] > 0)
+           pos["O que a banca pede nesta promoção"] > 0, str(pos))
     checar("34. a ordem é conhecimento teórico, fundamentos e depois o que cai",
            pos["Conhecimento teórico"] < pos["Fundamentos"]
-           < pos["Técnicas desta promoção"] < pos["O que a banca pede nesta promoção"],
+           < pos["Técnicas novas desta faixa"] < pos["O que a banca pede nesta promoção"],
            str(pos))
-    quadro = html[pos["O que a banca pede nesta promoção"]:]
+    quadro = parcial[pos["O que a banca pede nesta promoção"]:]
     quadro = quadro[:quadro.find("</section>")]
     checar("35. o quadro é só lista: não repete resumo nem passo a passo",
            "Como se faz" not in quadro and "<details" not in quadro)
     checar("36. o recorte saiu de dentro do bloco de fundamentos",
-           'class="exf-pedido"' not in html)
+           'class="exf-pedido"' not in parcial)
+    checar("36b. quem pede sem_pede não recebe o quadro",
+           "O que a banca pede nesta promoção" not in escondido)
+    checar("36c. esconder o quadro não esconde o material de estudo",
+           "Ushiro-ukemi" in escondido and "Fundamentos" in escondido)
 
     print("\nA lista do que cai é a mesma que alimenta o sorteio")
     bloco_pedido = next((b for b in conhecimento if b.get("tipo") == "pedido"), None)
@@ -245,7 +273,7 @@ def main():
         n_estudo = sum(len(b["itens"]) for b in conhecimento
                        if b.get("tipo") not in ("texto", "material", "pedido"))
         checar("39. a lista do fim não é somada na contagem de itens novos",
-               re.search(r">%d iten?s? novo" % n_estudo, html) is not None,
+               re.search(r">%d iten?s? novo" % n_estudo, parcial) is not None,
                f"esperado {n_estudo}")
     checar("40. o quadro cobre também ukemi, kumi-kata e os grupos de técnica",
            all(t in quadro for t in ("Ukemi-waza", "Kumi-kata", "Nage-waza", "Katame-waza")))

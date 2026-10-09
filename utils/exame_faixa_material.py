@@ -19,8 +19,14 @@ Fontes
     (Prof. Jonas Nascimento, 6º Dan).
   * Classificação por família e série do Go-kyo: lista oficial do Kodokan.
 
-Os passos de execução são resumos das apostilas, não a transcrição delas —
-a tela é um lembrete de estudo, e quem vai ao exame estuda pelo original.
+Os passos de execução das técnicas de solo são resumos da apostila de
+Katame-Waza, não a transcrição dela. Os das projeções não vêm de apostila
+nenhuma: a de Nage-Waza da FPJU é só imagem (um cartaz com as listas) e a de
+Nage-no-Kata descreve a coreografia do kata, não a execução da técnica — então
+seguem a execução padrão do Kodokan, na ordem kuzushi → tsukuri → kake.
+
+De toda forma a tela é um lembrete de estudo: quem vai ao exame estuda pelo
+material da federação e com o professor no tatame.
 """
 
 import unicodedata
@@ -875,3 +881,354 @@ def ficha_ukemi(nome):
 
 def familia(chave):
     return FAMILIAS.get(chave or "")
+
+
+# ---------------------------------------------- execução das projeções
+# As técnicas de solo trazem os passos da apostila de Katame-Waza da FPJU.
+# Para as projeções não existe material equivalente: a apostila de Nage-Waza
+# da FPJU é só imagem (um cartaz com as listas, sem texto), e a de Nage-no-Kata
+# descreve a coreografia do kata — passos, distâncias, tsugi-ashi — e não a
+# execução da técnica em si. Os passos abaixo seguem a execução padrão do
+# Kodokan, na ordem em que a aula ensina: kuzushi (quebra do equilíbrio),
+# tsukuri (encaixe), kake (aplicação) e o ponto onde a técnica costuma falhar.
+PASSOS_NAGE = {
+    # ------------------------------------------------------------ te-waza
+    "Seoi-nage": [
+        "Kuzushi para a frente e para cima, levantando o oponente na ponta dos pés.",
+        "Gire de costas em dois tempos, joelhos flexionados, quadril abaixo do dele.",
+        "Os dois braços carregam: o da gola passa por baixo da axila, o da manga puxa.",
+        "Estenda as pernas e gire o tronco — a projeção vem das pernas, não dos braços.",
+    ],
+    "Ippon-seoi-nage": [
+        "Kuzushi para a frente, puxando a manga para cima.",
+        "Solte a gola e passe o próprio braço por dentro da axila do oponente, "
+        "encaixando o braço dele no ombro.",
+        "Gire de costas com o quadril abaixo do dele e o cotovelo bem alto.",
+        "Estenda as pernas projetando à frente; a mão da manga nunca larga.",
+    ],
+    "Tai-otoshi": [
+        "Kuzushi para a frente, na diagonal do ombro do oponente.",
+        "Gire o corpo e estenda a perna à frente do tornozelo dele — a perna é "
+        "barreira, não varre.",
+        "As duas mãos giram como um volante, levando o tronco dele por cima da perna.",
+        "O quadril não encosta: quem derruba são as mãos.",
+    ],
+    "Kata-guruma": [
+        "Kuzushi para a frente, puxando a manga para baixo e para o lado.",
+        "Abaixe entrando com a cabeça por baixo do braço, o ombro na altura da "
+        "virilha dele.",
+        "Carregue atravessado sobre os ombros, segurando a perna com a mão livre.",
+        "Levante com as pernas e gire para a frente, soltando-o à sua frente.",
+    ],
+    "Uki-otoshi": [
+        "Kuzushi para a frente, no canto da ponta do pé dele.",
+        "Recue um pé e leve um joelho ao tatame, mantendo os braços estendidos.",
+        "As mãos descrevem um arco para baixo, na diagonal, acompanhando a queda.",
+        "Nenhuma perna toca o oponente — só as mãos e o deslocamento.",
+    ],
+    "Sumi-otoshi": [
+        "Kuzushi para o canto de trás, empurrando a gola e puxando a manga.",
+        "Desloque-se para fora da base dele, abrindo o ângulo.",
+        "As mãos levam o tronco para o canto onde ele não tem apoio.",
+        "Também é só de mãos: nenhum contato de perna ou quadril.",
+    ],
+    "Sukui-nage": [
+        "Entre por baixo, pelo lado ou por trás, com o centro de gravidade baixo.",
+        "Passe os braços por baixo do quadril ou das pernas dele.",
+        "Levante com as pernas, recolhendo como quem usa uma pá.",
+        "Gire-o para trás e acompanhe a queda sem soltar.",
+    ],
+    "Morote-gari": [
+        "Abaixe entrando com um passo profundo, a cabeça ao lado do tronco dele.",
+        "Os dois braços envolvem as pernas na altura dos joelhos.",
+        "Puxe as pernas para você e empurre o tronco dele para trás com o ombro.",
+        "A cabeça nunca entra por baixo do braço do oponente.",
+    ],
+    "Kuchiki-taoshi": [
+        "Kuzushi para trás ou para o lado, quebrando a postura.",
+        "Abaixe e agarre a perna por fora, na altura do joelho ou do tornozelo.",
+        "Puxe a perna na sua direção e empurre o tronco no sentido contrário.",
+        "O nome é 'derrubar a árvore podre': a perna sai, o tronco cai sozinho.",
+    ],
+    "Kibisu-gaeshi": [
+        "Kuzushi puxando o oponente para a frente, para ele carregar o peso.",
+        "Abaixe e pegue o calcanhar por trás, com a palma para cima.",
+        "Levante o calcanhar enquanto empurra o peito dele para trás.",
+        "É uma ação só: se levantar sem empurrar, ele apenas recua o pé.",
+    ],
+    "Uchi-mata-sukashi": [
+        "Reconheça a entrada: o oponente gira para aplicar uchi-mata.",
+        "Recolha a perna atacada, deixando a dele passar no vazio.",
+        "Gire as mãos no sentido do giro dele, somando-se ao impulso.",
+        "Não há força: ele cai no próprio movimento.",
+    ],
+    "O-soto-sukashi": [
+        "Reconheça a entrada do o-soto-gari.",
+        "Gire o quadril e recolha a perna que seria ceifada.",
+        "Mantenha as mãos firmes, conduzindo o tronco dele no sentido do ataque.",
+        "O tempo é tudo: cedo demais ele reequilibra, tarde demais a ceifa pega.",
+    ],
+
+    # --------------------------------------------------------- koshi-waza
+    "O-goshi": [
+        "Kuzushi para a frente e para cima.",
+        "Gire de costas e solte a gola, envolvendo a cintura dele pelas costas.",
+        "Encaixe o quadril abaixo do dele, pernas flexionadas e pés dentro da base.",
+        "Estenda as pernas levantando e gire o tronco — ele passa por cima do quadril.",
+    ],
+    "Uki-goshi": [
+        "Kuzushi para a frente, em rotação.",
+        "Entre de lado, com o quadril pela lateral e sem abaixar as pernas.",
+        "O braço envolve a cintura e o outro puxa a manga no sentido do giro.",
+        "Não levanta: a projeção é de rotação, e por isso é a mais sutil do grupo.",
+    ],
+    "Koshi-guruma": [
+        "Kuzushi para a frente e para cima.",
+        "Gire de costas com o quadril passando além do dele.",
+        "O braço envolve o pescoço, trazendo a cabeça dele junto ao seu ombro.",
+        "Gire: ele roda sobre o quadril como sobre um eixo.",
+    ],
+    "Tsuri-komi-goshi": [
+        "Kuzushi para cima pela gola, levantando a postura dele.",
+        "Gire de costas abaixando bem o quadril, mais baixo do que no o-goshi.",
+        "O cotovelo da gola fica alto, mantendo o oponente suspenso.",
+        "Estenda as pernas: ele passa por cima do quadril baixo.",
+    ],
+    "Tsuri-goshi": [
+        "Kuzushi para cima, puxando a gola.",
+        "Passe a mão na faixa dele — por cima do braço (o-tsuri) ou por baixo (ko-tsuri).",
+        "Gire de costas e encaixe o quadril, usando a faixa para suspender.",
+        "Levante com as pernas e gire; a faixa dá o controle que a cintura não daria.",
+    ],
+    "Harai-goshi": [
+        "Kuzushi para a frente e na diagonal, desequilibrando sobre a ponta dos pés.",
+        "Gire de costas com o quadril encostando no dele, apoiado numa perna só.",
+        "A perna livre estende e varre a coxa e o lado do corpo dele.",
+        "Quadril e perna agem juntos: só o quadril é o-goshi, só a perna é ashi-waza.",
+    ],
+    "Hane-goshi": [
+        "Kuzushi para a frente e para cima.",
+        "Gire de costas e encaixe o quadril, apoiado numa perna.",
+        "A outra perna fica semiflexionada, com a coxa e a panturrilha sob a coxa dele.",
+        "O impulso é de mola, para cima — não é varrida.",
+    ],
+    "Ushiro-goshi": [
+        "Reconheça a entrada de quadril do oponente e abaixe o centro de gravidade.",
+        "Envolva a cintura dele pela frente, colando o peito nas costas dele.",
+        "Levante com as pernas, tirando-o do chão enquanto o ataque dele passa no vazio.",
+        "Recue o quadril e deixe-o cair de costas, acompanhando com os braços.",
+    ],
+    "Utsuri-goshi": [
+        "Mesma defesa do ushiro-goshi: abaixe e levante o oponente pela cintura.",
+        "Com ele no ar, troque o quadril de lado, girando por baixo.",
+        "Encaixe o quadril do outro lado, agora como quem ataca.",
+        "Projete no sentido contrário ao do ataque dele.",
+    ],
+
+    # ---------------------------------------------------------- ashi-waza
+    "De-ashi-harai": [
+        "Acompanhe o deslocamento do oponente, sem forçar o passo.",
+        "No instante em que o pé sai do tatame e ainda não apoiou, varra a planta "
+        "com a sola do seu pé.",
+        "As mãos giram no sentido da varrida, levando o tronco dele junto.",
+        "É tempo, não força: com o peso apoiado, a varrida não sai.",
+    ],
+    "Hiza-guruma": [
+        "Kuzushi para a frente, na diagonal.",
+        "Apoie a sola do pé na lateral do joelho dele, perna estendida.",
+        "Gire as mãos como um volante em torno desse ponto de apoio.",
+        "O pé bloqueia, não empurra: quem gira o corpo são as mãos.",
+    ],
+    "Sasae-tsuri-komi-ashi": [
+        "Kuzushi para cima e para a frente, puxando a gola.",
+        "Apoie a sola do pé no tornozelo ou na canela dele, perna estendida.",
+        "Gire as mãos em arco, levando-o por cima do bloqueio.",
+        "A perna de apoio fica flexionada: é dela que sai o equilíbrio.",
+    ],
+    "O-soto-gari": [
+        "Kuzushi para trás, na diagonal do calcanhar dele.",
+        "Dê um passo ao lado do pé dele, com a sua perna de apoio alinhada.",
+        "A perna de ataque balança à frente e volta ceifando por fora, com a parte "
+        "de trás da coxa.",
+        "Peito colado e cabeça baixa: afastar o tronco é o erro clássico.",
+    ],
+    "O-uchi-gari": [
+        "Kuzushi para trás, abrindo a base dele.",
+        "Entre com a perna por dentro das pernas dele.",
+        "Ceife a perna de dentro para fora, acompanhando com o peito e com as mãos.",
+        "Não pare na ceifa: avance junto, senão ele recupera o apoio.",
+    ],
+    "Ko-soto-gari": [
+        "Kuzushi na diagonal de trás, para o lado do calcanhar atacado.",
+        "Saia da linha dele com um passo lateral.",
+        "Varra o calcanhar por fora, no sentido do passo que ele já estava dando.",
+        "As mãos puxam para baixo, no mesmo sentido da varrida.",
+    ],
+    "Ko-uchi-gari": [
+        "Kuzushi para trás, no pé avançado.",
+        "Avance o próprio pé em direção ao calcanhar dele, por dentro.",
+        "Varre no sentido em que o pé dele já ia — não contra.",
+        "Empurre o tronco na diagonal de trás enquanto varre.",
+    ],
+    "Uchi-mata": [
+        "Kuzushi para a frente, trazendo o oponente para as suas costas.",
+        "Gire em dois ou três tempos, apoiado numa perna, quadril encaixado.",
+        "A perna de ataque entra entre as coxas dele e sobe pela face interna.",
+        "A cabeça baixa e o braço da manga puxam para baixo; o corpo todo gira.",
+    ],
+    "Ko-soto-gake": [
+        "Kuzushi para trás, na diagonal.",
+        "Engate o próprio pé por fora, no calcanhar ou na panturrilha dele.",
+        "Empurre o tronco para trás enquanto o pé segura a perna no lugar.",
+        "Diferente do gari, o pé não varre: prende.",
+    ],
+    "Ko-uchi-gake": [
+        "Kuzushi para trás, no pé que recebeu o peso.",
+        "Engate o pé por dentro, na panturrilha dele.",
+        "Empurre o tronco na diagonal, mantendo o engate.",
+        "Serve quando o peso já está apoiado e a varrida do ko-uchi-gari não sairia.",
+    ],
+    "Ashi-guruma": [
+        "Kuzushi para a frente e na diagonal.",
+        "Gire o corpo e ponha a perna estendida à frente das pernas dele, na altura "
+        "do joelho.",
+        "As mãos giram levando o tronco por cima da perna, como sobre um eixo.",
+        "A perna não varre nem o quadril encosta: é só o eixo do giro.",
+    ],
+    "Harai-tsuri-komi-ashi": [
+        "Kuzushi para cima e para a frente, puxando a gola alto.",
+        "Espere o momento em que ele está mais leve, no alto do movimento.",
+        "Varra o pé avançado com a sola, perna estendida.",
+        "Mãos e perna agem juntas: sem a suspensão, a varrida não sai.",
+    ],
+    "O-guruma": [
+        "Kuzushi para a frente e para cima.",
+        "Gire o corpo e passe a perna estendida à frente, na altura do ventre dele.",
+        "As mãos giram levando-o por cima da perna.",
+        "O quadril não encosta — é o que separa o o-guruma do harai-goshi.",
+    ],
+    "O-soto-guruma": [
+        "Kuzushi para trás, como no o-soto-gari.",
+        "Entre com a perna estendida por fora, mas mais funda: passando as duas "
+        "pernas dele.",
+        "Ceife as duas de uma vez, girando o tronco dele para trás.",
+        "Peito colado; a perna vai alta, na altura das coxas.",
+    ],
+    "O-soto-otoshi": [
+        "Kuzushi para trás, na diagonal do calcanhar.",
+        "Plante a perna atrás da dele, firme no tatame — não balança nem ceifa.",
+        "Empurre o tronco para trás por cima da perna plantada.",
+        "A perna é apoio: quem derruba é o deslocamento do peso.",
+    ],
+    "Nidan-ko-soto-gari": [
+        "Comece o deslocamento lateral junto com o oponente.",
+        "Dê um primeiro salto no sentido do movimento, sem varrer.",
+        "No segundo tempo, varra o calcanhar dele, já em desequilíbrio.",
+        "O ritmo é o ataque: um tempo só não tira o apoio.",
+    ],
+    "Hane-goshi-gaeshi": [
+        "Reconheça a entrada de hane-goshi do oponente.",
+        "Abaixe o centro de gravidade e bloqueie a perna de impulso dele.",
+        "Levante a perna dele pelo lado de fora, somando-se ao giro.",
+        "Projete no mesmo sentido em que ele girava.",
+    ],
+    "Harai-goshi-gaeshi": [
+        "Reconheça a entrada de harai-goshi.",
+        "Abaixe e segure a perna que varre, por fora.",
+        "Gire o tronco no sentido do ataque dele, levantando essa perna.",
+        "Ele cai para o mesmo lado para onde girava.",
+    ],
+
+    # ------------------------------------------------------ ma-sutemi-waza
+    "Tomoe-nage": [
+        "Kuzushi para a frente, puxando o oponente sobre você.",
+        "Apoie o pé no ventre, logo abaixo do nó da faixa.",
+        "Sente e deite-se, mantendo as mãos puxando a gola.",
+        "Estenda a perna lançando-o por cima da sua cabeça.",
+    ],
+    "Sumi-gaeshi": [
+        "Pegada alta, por cima do ombro ou nas costas, com o oponente curvado.",
+        "Apoie o peito do pé na face interna da coxa dele.",
+        "Sente e role para trás, na diagonal.",
+        "Levante a perna no momento do rolamento, lançando-o para o canto.",
+    ],
+    "Ura-nage": [
+        "Reconheça o ataque e entre por baixo, com o quadril à frente do dele.",
+        "Envolva a cintura ou o tronco com os dois braços.",
+        "Levante com as pernas e jogue-se para trás, em arco.",
+        "Gire na queda para não cair embaixo dele.",
+    ],
+    "Tawara-gaeshi": [
+        "O gatilho é o oponente abaixar para atacar as pernas.",
+        "Envolva o tronco dele por cima, com os dois braços travados.",
+        "Jogue-se para trás levantando-o, como quem vira um fardo.",
+        "Gire o corpo na queda para terminar por cima.",
+    ],
+
+    # ---------------------------------------------------- yoko-sutemi-waza
+    "Yoko-otoshi": [
+        "Kuzushi para o lado, puxando a manga.",
+        "Estenda a perna junto ao pé dele, no sentido da queda.",
+        "Deixe-se cair de lado, nunca de costas.",
+        "As mãos puxam para baixo, acompanhando o corpo dele por cima da perna.",
+    ],
+    "Tani-otoshi": [
+        "Entre pelo lado ou por trás, colando o quadril ao dele.",
+        "Estenda a perna por trás das duas pernas dele.",
+        "Jogue-se de lado, levando o peso dele para trás por cima da perna.",
+        "Cuidado com a perna dele presa: o movimento é para trás, não torcendo.",
+    ],
+    "Hane-makikomi": [
+        "Entre como no hane-goshi, com a perna de impulso encaixada.",
+        "Solte a gola e enrole o braço dele, prendendo-o contra o seu peito.",
+        "Continue o giro jogando-se de lado.",
+        "Caia por cima, sem largar o braço enrolado.",
+    ],
+    "Soto-makikomi": [
+        "Kuzushi para a frente, na diagonal.",
+        "Gire de costas e enrole o braço do oponente por fora, por baixo da axila.",
+        "Siga o giro e jogue-se de lado, levando-o junto.",
+        "O braço preso é o que garante que ele vá junto.",
+    ],
+    "Harai-makikomi": [
+        "Entre como no harai-goshi, varrendo a coxa dele.",
+        "Em vez de completar a varrida de pé, enrole o braço dele.",
+        "Gire e caia de lado, levando-o por cima.",
+        "É a saída de quando o harai-goshi não termina em pé.",
+    ],
+    "Uchi-makikomi": [
+        "Entre por dentro, entre os braços do oponente.",
+        "Enrole o braço dele por dentro, prendendo-o no seu tronco.",
+        "Gire e jogue-se de lado.",
+        "A diferença para o soto-makikomi é só por onde o braço é enrolado.",
+    ],
+    "Uki-waza": [
+        "Kuzushi para a frente, no sentido do avanço dele.",
+        "Estenda a perna à frente do pé dele, como barreira baixa.",
+        "Deixe-se cair de lado, puxando as mãos para baixo e para trás.",
+        "Quem derruba é o próprio avanço dele somado à sua queda.",
+    ],
+    "Yoko-wakare": [
+        "Kuzushi para a frente, puxando com as duas mãos.",
+        "Jogue-se à frente dos pés dele, deslizando de lado sob o corpo dele.",
+        "As mãos não soltam: puxam para baixo enquanto você desliza.",
+        "Ele passa por cima, separado da própria base.",
+    ],
+    "Yoko-guruma": [
+        "O gatilho é o oponente se abaixar, defendendo um ura-nage.",
+        "Passe por baixo do braço dele, entrando de lado.",
+        "Jogue-se de lado estendendo a perna, com o braço envolvendo o tronco.",
+        "Ele gira por cima de você, em roda.",
+    ],
+    "Yoko-gake": [
+        "Kuzushi para o lado, no momento do passo dele.",
+        "Engate ou varra o pé dele por fora com a sola.",
+        "Jogue-se de lado ao mesmo tempo, sem soltar as mãos.",
+        "A queda sua e a varrida são um movimento só.",
+    ],
+}
+
+for _nome, _passos in PASSOS_NAGE.items():
+    if _nome in TECNICAS:
+        TECNICAS[_nome]["passos"] = _passos
+    _INDICE[_norm(_nome)]["passos"] = _passos
