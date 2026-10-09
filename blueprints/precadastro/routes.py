@@ -1078,6 +1078,7 @@ def matricula_publica(academia_slug):
     telefone = (form.get("telefone") or "").strip() or None
     cep = (form.get("cep") or "").strip() or None
     numero = (form.get("numero") or "").strip() or None
+    complemento = (form.get("complemento") or "").strip() or None
     rua = (form.get("rua") or "").strip() or None
     bairro = (form.get("bairro") or "").strip() or None
     cidade = (form.get("cidade") or "").strip() or None
@@ -1141,15 +1142,15 @@ def matricula_publica(academia_slug):
                 responsavel_financeiro_nome, responsavel_financeiro_cpf,
                 matricula_valor, matricula_valor_original, matricula_desconto, matricula_cupom,
                 matricula_vencimento,
-                cep, numero, rua, bairro, cidade, modalidades_ids, TurmaID, origem)
-               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'matricula')""",
+                cep, numero, complemento, rua, bairro, cidade, modalidades_ids, TurmaID, origem)
+               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'matricula')""",
             (academia_id, nome, email, telefone, data_nascimento, sexo, cpf_aluno,
              resp_nome, resp_cpf_raw,
              valor_final, valor_base, desconto, (cupom_codigo if cupom_obj else None),
              # Prazo para pagar a matrícula. É esta data que coloca a matrícula na
              # régua de cobrança: sem ela não há "faltam 3 dias" nem "venceu há 10".
              date.today() + timedelta(days=PRAZO_MATRICULA_DIAS),
-             cep, numero, rua, bairro, cidade,
+             cep, numero, complemento, rua, bairro, cidade,
              ",".join(str(m) for m in mods_escolhidas) or None,
              turma_escolhida["id"] if turma_escolhida else None),
         )
@@ -2152,6 +2153,46 @@ def _enviar_credenciais(cur, pc, academia_id, login, senha):
     return email, enviou_email, enviou_whats
 
 
+# Nome da coluna -> como o campo se chama na tela, para o erro falar a língua
+# de quem está na secretaria e não a do banco.
+_CAMPO_NA_TELA = {
+    "nome": "Nome", "nome_pai": "Nome do pai", "nome_mae": "Nome da mãe",
+    "nome_social": "Nome social", "cpf": "CPF", "rg": "RG", "email": "E-mail",
+    "telefone": "Telefone", "cep": "CEP", "rua": "Rua", "numero": "Número",
+    "complemento": "Complemento", "bairro": "Bairro", "cidade": "Cidade",
+    "estado": "Estado", "responsavel_financeiro_nome": "Nome do responsável financeiro",
+    "responsavel_financeiro_cpf": "CPF do responsável financeiro",
+    "responsavel_parentesco": "Parentesco do responsável",
+}
+
+
+def _erro_legivel(e):
+    """Mensagem de erro da promoção em português, não em MySQL.
+
+    O caso que motivou isto foi "Data too long for column 'numero'": quem
+    escreveu "138 Apto 301" no número da casa recebia o erro cru do banco e não
+    tinha como saber qual campo encurtar. A largura das colunas foi corrigida
+    na migração PC-01, mas texto colado de fora continua podendo estourar
+    qualquer limite — então o erro precisa dizer onde mexer.
+    """
+    texto = str(e)
+    achado = re.search(r"Data too long for column '([^']+)'", texto)
+    if achado:
+        coluna = achado.group(1)
+        rotulo = _CAMPO_NA_TELA.get(coluna, coluna)
+        return (f"O campo “{rotulo}” está longo demais para o cadastro de aluno. "
+                f"Edite o pré-cadastro e encurte esse campo antes de promover.")
+    achado = re.search(r"Duplicate entry '([^']*)' for key '([^']+)'", texto)
+    if achado:
+        valor, chave = achado.group(1), achado.group(2)
+        if "cpf" in chave.lower():
+            return (f"O CPF {valor} já está cadastrado em outro registro. "
+                    "Confira se esta pessoa já foi promovida antes.")
+        return (f"Já existe um cadastro com este valor ({valor}). "
+                "Confira se esta pessoa já foi promovida antes.")
+    return f"Erro ao promover: {e}"
+
+
 @bp_precadastro.route("/<int:precadastro_id>/promover", methods=["GET", "POST"])
 @login_required
 def promover(precadastro_id):
@@ -2859,5 +2900,5 @@ def promover(precadastro_id):
         cur.close()
         conn.close()
         current_app.logger.error(f"Erro ao promover pré-cadastro: {e}")
-        flash(f"Erro ao promover: {e}", "danger")
+        flash(_erro_legivel(e), "danger")
         return redirect(url_for("precadastro.promover", precadastro_id=precadastro_id))
