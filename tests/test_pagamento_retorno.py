@@ -105,9 +105,16 @@ def main():
     checar("6. a emissão fora de request não quebra", bool(r and r.get("boleto_url")))
     checar("7. o link vai com webhook_url — era isto que faltava",
            bool(env.get("webhook_url")), repr(env.get("webhook_url")))
+    from urllib.parse import urlsplit, parse_qs
+    from blueprints.financeiro.routes import _assinatura_confere
+    _wh = urlsplit(str(env.get("webhook_url") or ""))
     checar("8. o webhook aponta para a nossa rota de webhook",
-           str(env.get("webhook_url") or "").endswith("/financeiro/webhook/infinitepay"),
-           repr(env.get("webhook_url")))
+           _wh.path == "/financeiro/webhook/infinitepay", repr(env.get("webhook_url")))
+    # O corpo que o gateway envia não é assinado; quem assina somos nós, na URL.
+    with app.app_context():
+        _tok = (parse_qs(_wh.query).get("k") or [""])[0]
+        checar("8b. a URL leva o token que prova a origem do aviso",
+               _assinatura_confere(env.get("order_nsu"), _tok), repr(_tok))
     checar("9. o link também vai com redirect_url (a segunda via de baixa)",
            str(env.get("redirect_url") or "").endswith("/financeiro/pagamento/infinitepay/retorno"),
            repr(env.get("redirect_url")))

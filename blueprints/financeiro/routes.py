@@ -1,6 +1,8 @@
 # ======================================================
 # Blueprint: Financeiro (mensalidades, receitas, despesas, descontos)
 # ======================================================
+import hashlib
+import hmac
 import os
 import uuid
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session, jsonify, current_app
@@ -2442,6 +2444,27 @@ def _cobranca_gateway_ainda_vale(cfg, gateway, payment_id):
     return status in ("DRAFT", "OPEN", "IN_PAYMENT", "LATE")
 
 
+def _assinatura_retorno(ref):
+    """Token que prova que o aviso de pagamento veio da cobrança que emitimos.
+
+    Quem monta a URL de callback somos nós: o gateway só a chama de volta. Então
+    não é preciso conhecer o formato do corpo que ele envia para saber se o
+    aviso é legítimo — basta pendurar na própria URL um token derivado da
+    referência da cobrança. Sem o SECRET_KEY ninguém forja o par (ref, token).
+
+    É o que falta hoje: o webhook aceita qualquer POST, e um `order_nsu`
+    adivinhado (os ids são sequenciais) daria baixa numa mensalidade alheia.
+    """
+    segredo = (current_app.secret_key or "").encode() or b"unimaster"
+    return hmac.new(segredo, f"retorno:{ref}".encode(), hashlib.sha256).hexdigest()[:24]
+
+
+def _assinatura_confere(ref, token):
+    if not ref or not token:
+        return False
+    return hmac.compare_digest(_assinatura_retorno(ref), str(token))
+
+
 def _url_publica(endpoint, **kwargs):
     """URL absoluta de uma rota nossa, inclusive fora de request (cron).
 
@@ -2483,7 +2506,8 @@ def _emitir_cobranca_online_bruto(cfg, tipo, *, nome, cpf, email, telefone, valo
         )
     elif gw == "infinitepay":
         from utils.infinitepay import InfinitePayClient
-        webhook_url = _url_publica("financeiro.webhook_infinitepay")
+        webhook_url = _url_publica("financeiro.webhook_infinitepay",
+                                   k=_assinatura_retorno(ext))
         # O webhook é ponto único de falha, e falha calado. O redirect_url põe
         # o próprio pagador trazendo a confirmação de volta: ao terminar, ele
         # cai na nossa página com slug e transaction_nsu, que é o que a API
@@ -3777,33 +3801,103 @@ def _mp_tentar_baixa_recorrente(payment_id):
 @bp_financeiro.route("/webhook/infinitepay", methods=["POST"])
 @csrf.exempt
 def webhook_infinitepay():
-    """Recebe o webhook da InfinitePay (link pago) e dá baixa pela referência order_nsu."""
+    """Aviso de pagamento da InfinitePay. Só dá baixa no que conseguir provar.
+
+    O corpo deste POST não é assinado e o endpoint é público, então aceitar o
+    que chega significaria que qualquer um, com um `order_nsu` adivinhado (os
+    ids são sequenciais), quitaria a mensalidade de outro aluno. Duas provas
+    independentes são aceitas, e basta uma:
+
+      * o token `k` na URL — nós é que montamos o endereço de callback na
+        emissão, derivado da referência da cobrança com o SECRET_KEY;
+      * a resposta da própria API da InfinitePay, quando o corpo trouxer slug e
+        transaction_nsu (é o que o `payment_check` exige).
+
+    Sem nenhuma das duas, nada de baixa: fica o registro no log com o corpo
+    inteiro, que é o que permite acertar a leitura depois. Não perder pagamento
+    é importante, mas creditar um que não aconteceu é pior.
+    """
     data = request.get_json(silent=True) or request.form.to_dict() or {}
-    # Nenhuma entrega real deste webhook foi observada até hoje (os links saíam
-    # sem webhook_url). Registrar o corpo da primeira é o que vai permitir
-    # endurecer a confirmação depois — hoje o corpo é aceito como verdade.
-    current_app.logger.info("Webhook InfinitePay recebido: %s", data)
-    order_nsu = data.get("order_nsu") or data.get("orderNsu") or (data.get("invoice") or {}).get("order_nsu")
-    if not order_nsu or "-" not in str(order_nsu):
+    if isinstance(data, list):
+        data = next((x for x in data if isinstance(x, dict)), {})
+    invoice = data.get("invoice") if isinstance(data.get("invoice"), dict) else {}
+
+    def _campo(*nomes):
+        for n in nomes:
+            v = data.get(n) or invoice.get(n)
+            if v:
+                return str(v)
+        return ""
+
+    order_nsu = _campo("order_nsu", "orderNsu", "external_order_nsu")
+    current_app.logger.info("Webhook InfinitePay recebido (order_nsu=%r): %s", order_nsu, data)
+    if not order_nsu or "-" not in order_nsu:
         return jsonify({"ok": True})
-    origem, _, rid = str(order_nsu).rpartition("-")
+    origem, _, rid = order_nsu.rpartition("-")
     if origem not in ("mensalidade", "avulsa", "precadastro", "grupo") or not rid.isdigit():
         return jsonify({"ok": True})
-    valor_pago = None
-    try:
-        cents = data.get("paid_amount") or data.get("amount")
-        if cents:
-            valor_pago = float(cents) / 100.0
-    except Exception:
+    rid = int(rid)
+
+    # Prova 1: o token que nós mesmos penduramos na URL de callback.
+    assinado = _assinatura_confere(order_nsu, request.args.get("k"))
+    if assinado:
         valor_pago = None
-    try:
-        if origem == "precadastro":
-            _baixar_matricula_paga(precad_id=int(rid))
-        else:
-            _baixar_cobranca_paga(origem, int(rid), valor_pago, "InfinitePay")
-    except Exception as e:
-        current_app.logger.error(f"Webhook InfinitePay erro: {e}", exc_info=True)
+        try:
+            cents = data.get("paid_amount") or data.get("amount")
+            if cents:
+                valor_pago = float(cents) / 100.0
+        except (TypeError, ValueError):
+            valor_pago = None
+        try:
+            if origem == "precadastro":
+                _baixar_matricula_paga(precad_id=rid)
+            else:
+                _baixar_cobranca_paga(origem, rid, _valor_plausivel(origem, rid, valor_pago),
+                                      "InfinitePay")
+        except Exception as e:                                       # noqa: BLE001
+            current_app.logger.error(f"Webhook InfinitePay erro: {e}", exc_info=True)
+        return jsonify({"ok": True})
+
+    # Prova 2: perguntar à InfinitePay, se o corpo trouxer o que ela exige.
+    slug = _campo("slug", "invoice_slug", "code")
+    transacao = _campo("transaction_nsu", "transactionNsu", "nsu")
+    pago, _, _ = _infinitepay_confirmar(order_nsu, transacao, slug)
+    if pago:
+        return jsonify({"ok": True})
+
+    current_app.logger.error(
+        "Webhook InfinitePay RECUSADO (sem token na URL e sem confirmação na API): "
+        "order_nsu=%r slug=%r transaction_nsu=%r corpo=%s — nenhuma baixa foi dada.",
+        order_nsu, slug or None, transacao or None, data)
     return jsonify({"ok": True})
+
+
+def _valor_plausivel(origem, registro_id, valor_pago):
+    """Não deixa o valor anunciado no aviso passar do valor cobrado.
+
+    Mesmo vindo por caminho confiável, o número do corpo é dado de fora: se ele
+    vier maior que a dívida, a receita lançada ficaria errada. Acima do valor
+    da cobrança, vale o da cobrança.
+    """
+    if valor_pago is None or valor_pago <= 0:
+        return None
+    tabela = {"mensalidade": "mensalidade_aluno", "avulsa": "cobranca_avulsa",
+              "grupo": "cobranca_grupo"}.get(origem)
+    if not tabela:
+        return valor_pago
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute(f"SELECT valor FROM {tabela} WHERE id = %s", (registro_id,))
+        devido = (cur.fetchone() or {}).get("valor")
+        if devido is not None and valor_pago > float(devido):
+            return float(devido)
+        return valor_pago
+    except Exception:
+        return valor_pago
+    finally:
+        cur.close()
+        conn.close()
 
 
 def _infinitepay_confirmar(order_nsu, transaction_nsu, slug):
