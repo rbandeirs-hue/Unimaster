@@ -1,0 +1,30 @@
+{# Página para onde a InfinitePay manda o pagador depois do checkout.
+   Quem vê isto é o responsável financeiro, não o gestor — então aqui não
+   aparece nada do sistema, só o resultado do pagamento dele. #}
+{% extends "base_app.html" %}
+{% block title %}Pagamento{% endblock %}
+{% block content %}
+<div class="container my-4" style="max-width: 520px;">
+  <div class="card border-0 shadow-sm" style="border-radius:16px;">
+    <div class="card-body p-4 text-center">
+      {% if pago %}
+      <div style="width:54px;height:54px;border-radius:14px;background:#e6f6ec;color:#198754;display:inline-flex;align-items:center;justify-content:center;font-size:1.6rem;margin-bottom:.5rem;">
+        <i class="bi bi-check-lg"></i></div>
+      <h5 class="fw-bold mb-2">Pagamento confirmado!</h5>
+      <p class="text-muted small mb-3">Já registramos a baixa. Não precisa enviar comprovante.</p>
+      {% else %}
+      <div style="width:54px;height:54px;border-radius:14px;background:#fff4e5;color:#b26a00;display:inline-flex;align-items:center;justify-content:center;font-size:1.6rem;margin-bottom:.5rem;">
+        <i class="bi bi-hourglass-split"></i></div>
+      <h5 class="fw-bold mb-2">Pagamento em processamento</h5>
+      <p class="text-muted small mb-3">
+        A confirmação ainda não chegou. Se o valor já saiu da sua conta, pode ficar
+        tranquilo: a baixa entra assim que o banco confirmar.</p>
+      {% endif %}
+      {% if recibo %}
+      <a href="{{ recibo }}" class="btn btn-outline-secondary btn-sm" rel="noopener" target="_blank">
+        <i class="bi bi-receipt"></i> Ver comprovante</a>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

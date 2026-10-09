@@ -8,8 +8,14 @@ Não há QR Code embutido — o aluno é direcionado ao link.
 Configuração POR ACADEMIA (tabela academias):
   - infinitepay_handle : a "InfiniteTag" (handle) da conta
 
-Confirmação de pagamento: via webhook (campo order_nsu) que a InfinitePay
-envia para a URL informada na criação do link.
+Confirmação de pagamento, por dois caminhos independentes:
+  * webhook: a InfinitePay chama a URL informada na criação do link (campo
+    order_nsu no corpo);
+  * retorno do pagador: ele volta para o nosso `redirect_url` com slug e
+    transaction_nsu, e aí perguntamos à API se foi pago (`payment_check`).
+
+O webhook sozinho é ponto único de falha — e silencioso, porque ninguém
+percebe uma chamada que não chega. Por isso os dois.
 
 Docs: https://www.infinitepay.io/desenvolvedores
 """
@@ -17,6 +23,11 @@ import requests
 
 TIMEOUT = 25
 LINKS_URL = "https://api.checkout.infinitepay.io/links"
+# Confirmação "puxada": alternativa ao webhook, usada no retorno do pagador.
+# Precisa dos identificadores que a InfinitePay devolve na volta do checkout
+# (slug da fatura e transaction_nsu) — com o order_nsu sozinho ela responde
+# {"success": false}.
+PAYMENT_CHECK_URL = "https://api.checkout.infinitepay.io/payment_check"
 
 
 class InfinitePayClient:
@@ -39,6 +50,39 @@ class InfinitePayClient:
         if 10 <= len(tel) <= 11:
             return "+55" + tel
         return None
+
+    def consultar_pagamento(self, order_nsu, transaction_nsu, slug):
+        """Pergunta à InfinitePay se o pedido foi pago. Devolve dict:
+        {pago: bool, valor: float|None, parcelas: int|None, bruto: dict}.
+
+        Só responde com os três identificadores juntos: o order_nsu é nosso, mas
+        slug e transaction_nsu vêm da InfinitePay no retorno do checkout. Sem
+        eles a API devolve {"success": false} — ou seja, não dá para varrer
+        cobranças antigas por aqui, só confirmar quem acabou de pagar.
+        """
+        if not (self.handle and order_nsu and transaction_nsu and slug):
+            return {"pago": False, "valor": None, "parcelas": None, "bruto": {}}
+        corpo = {
+            "handle": self.handle,
+            "order_nsu": str(order_nsu),
+            "transaction_nsu": str(transaction_nsu),
+            "slug": str(slug),
+        }
+        r = requests.post(PAYMENT_CHECK_URL, json=corpo, timeout=TIMEOUT)
+        try:
+            j = r.json() or {}
+        except Exception:
+            j = {}
+        pago = bool(j.get("paid") if "paid" in j else j.get("success"))
+        valor = None
+        try:
+            cents = j.get("amount") or j.get("paid_amount")
+            if cents is not None:
+                valor = float(cents) / 100.0
+        except (TypeError, ValueError):
+            valor = None
+        return {"pago": pago, "valor": valor,
+                "parcelas": j.get("installments"), "bruto": j}
 
     def criar_link(self, valor, descricao, order_nsu, webhook_url=None, redirect_url=None,
                    nome=None, email=None, telefone=None, endereco=None):

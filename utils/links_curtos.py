@@ -47,6 +47,39 @@ def base_url():
     return ""
 
 
+def url_publica(endpoint, **kwargs):
+    """URL absoluta de uma rota nossa, que também funciona fora de request.
+
+    `url_for(..., _external=True)` só sabe montar URL absoluta quando há uma
+    request em curso ou SERVER_NAME configurado — e não há nenhum dos dois no
+    cron dos lembretes. Quem chamava url_for lá pegava RuntimeError, engolia a
+    exceção e seguia com None; no caso do webhook de gateway isso significava
+    criar a cobrança sem endereço de retorno, e o pagamento nunca dava baixa.
+
+    Aqui o caminho relativo (que o app monta em qualquer contexto) é colado na
+    base pública — a mesma que o encurtador já usa.
+    """
+    from flask import url_for
+    try:
+        return url_for(endpoint, _external=True, **kwargs)
+    except Exception:
+        pass
+    # Fora de request, nem a forma relativa do url_for funciona: ele precisa de
+    # um adaptador de URL. Montamos um na mão, a partir da base pública.
+    base = base_url()
+    if not base:
+        return None
+    try:
+        from urllib.parse import urlsplit
+        from flask import current_app
+        partes = urlsplit(base)
+        adaptador = current_app.url_map.bind(
+            partes.netloc, script_name=(partes.path or "/"), url_scheme=partes.scheme or "https")
+        return adaptador.build(endpoint, kwargs, force_external=True)
+    except Exception:
+        return None
+
+
 def obter_token(origem, registro_id, academia_id=None):
     """Token do registro, criando na primeira vez. None se a tabela não existir."""
     if origem not in ORIGENS or not registro_id:

@@ -2442,6 +2442,24 @@ def _cobranca_gateway_ainda_vale(cfg, gateway, payment_id):
     return status in ("DRAFT", "OPEN", "IN_PAYMENT", "LATE")
 
 
+def _url_publica(endpoint, **kwargs):
+    """URL absoluta de uma rota nossa, inclusive fora de request (cron).
+
+    O endereço de retorno do gateway não pode depender de haver uma request:
+    os links de cobrança nascem na régua de cobrança, que roda pelo systemd.
+    Quando isso falhava, a cobrança era criada sem webhook e o pagamento nunca
+    dava baixa sozinho — em silêncio, porque o erro era engolido. Agora, se a
+    URL não puder ser montada, pelo menos fica registrado.
+    """
+    from utils.links_curtos import url_publica
+    url = url_publica(endpoint, **kwargs)
+    if not url:
+        current_app.logger.error(
+            "Sem URL pública para %s — a cobrança vai nascer sem retorno do gateway. "
+            "Confira PUBLIC_BASE_URL.", endpoint)
+    return url
+
+
 def _emitir_cobranca_online_bruto(cfg, tipo, *, nome, cpf, email, telefone, valor, vencimento,
                                   descricao, origem, registro_id, endereco=None):
     """Cria a cobrança no gateway ATIVO da academia. Retorna dict normalizado:
@@ -2465,12 +2483,15 @@ def _emitir_cobranca_online_bruto(cfg, tipo, *, nome, cpf, email, telefone, valo
         )
     elif gw == "infinitepay":
         from utils.infinitepay import InfinitePayClient
-        try:
-            webhook_url = url_for("financeiro.webhook_infinitepay", _external=True)
-        except Exception:
-            webhook_url = None
+        webhook_url = _url_publica("financeiro.webhook_infinitepay")
+        # O webhook é ponto único de falha, e falha calado. O redirect_url põe
+        # o próprio pagador trazendo a confirmação de volta: ao terminar, ele
+        # cai na nossa página com slug e transaction_nsu, que é o que a API
+        # pede para confirmar o pagamento.
+        redirect_url = _url_publica("financeiro.infinitepay_retorno")
         r = InfinitePayClient(cfg.get("infinitepay_handle")).criar_link(
             valor, descricao, order_nsu=ext, webhook_url=webhook_url,
+            redirect_url=redirect_url,
             nome=nome, email=email, telefone=telefone, endereco=endereco,
         )
         # QR Code do link de checkout (InfinitePay não devolve QR PIX próprio)
@@ -2501,14 +2522,8 @@ def _emitir_cobranca_online_bruto(cfg, tipo, *, nome, cpf, email, telefone, valo
         # onde ele paga com cartão (e PIX/boleto se habilitados na conta SumUp).
         import uuid as _uuid
         cli = _sumup_client(cfg)
-        try:
-            return_url = url_for("financeiro.webhook_sumup", _external=True)
-        except Exception:
-            return_url = None
-        try:
-            redirect_url = url_for("financeiro.sumup_retorno", ref=ext, _external=True)
-        except Exception:
-            redirect_url = None
+        return_url = _url_publica("financeiro.webhook_sumup")
+        redirect_url = _url_publica("financeiro.sumup_retorno", ref=ext)
         # A SumUp exige checkout_reference único; sufixo evita colisão na regeração.
         # A resolução (status/webhook) é por checkout_id, não pela referência.
         ref_sumup = f"{ext}-{_uuid.uuid4().hex[:8]}"
@@ -2517,10 +2532,7 @@ def _emitir_cobranca_online_bruto(cfg, tipo, *, nome, cpf, email, telefone, valo
             return_url=return_url, redirect_url=redirect_url, email=email,
         )
         checkout_id = chk.get("id")
-        try:
-            pagina = url_for("financeiro.sumup_pagamento", checkout_id=checkout_id, _external=True)
-        except Exception:
-            pagina = None
+        pagina = _url_publica("financeiro.sumup_pagamento", checkout_id=checkout_id)
         r = {
             "payment_id": str(checkout_id),
             "tipo": "LINK",
@@ -2846,14 +2858,8 @@ def _emitir_assinatura_recorrente(cfg, gw, *, nome, cpf, email, telefone, valor,
         cli = _sumup_client(cfg)
         customer_id = str(external_reference)  # ex.: 'assinatura-<aluno_id>' — id estável do pagador
         cli.criar_ou_obter_cliente(customer_id, nome=nome, email=email, telefone=telefone)
-        try:
-            return_url = url_for("financeiro.webhook_sumup", _external=True)
-        except Exception:
-            return_url = None
-        try:
-            redirect_url = url_for("financeiro.sumup_retorno", _external=True)
-        except Exception:
-            redirect_url = None
+        return_url = _url_publica("financeiro.webhook_sumup")
+        redirect_url = _url_publica("financeiro.sumup_retorno")
         # checkout_reference único (a SumUp recusa repetido); o customer_id é que fica estável.
         chk = cli.criar_checkout(
             valor, descricao, f"{external_reference}-{_uuid.uuid4().hex[:8]}",
@@ -2861,10 +2867,7 @@ def _emitir_assinatura_recorrente(cfg, gw, *, nome, cpf, email, telefone, valor,
             customer_id=customer_id, purpose="SETUP_RECURRING_PAYMENT",
         )
         checkout_id = chk.get("id")
-        try:
-            pagina = url_for("financeiro.sumup_pagamento", checkout_id=checkout_id, _external=True)
-        except Exception:
-            pagina = None
+        pagina = _url_publica("financeiro.sumup_pagamento", checkout_id=checkout_id)
         return {"subscription_id": customer_id, "url": pagina, "checkout_id": checkout_id}
     raise RuntimeError("A assinatura recorrente está disponível apenas com Asaas, Mercado Pago ou SumUp.")
 
@@ -3776,6 +3779,10 @@ def _mp_tentar_baixa_recorrente(payment_id):
 def webhook_infinitepay():
     """Recebe o webhook da InfinitePay (link pago) e dá baixa pela referência order_nsu."""
     data = request.get_json(silent=True) or request.form.to_dict() or {}
+    # Nenhuma entrega real deste webhook foi observada até hoje (os links saíam
+    # sem webhook_url). Registrar o corpo da primeira é o que vai permitir
+    # endurecer a confirmação depois — hoje o corpo é aceito como verdade.
+    current_app.logger.info("Webhook InfinitePay recebido: %s", data)
     order_nsu = data.get("order_nsu") or data.get("orderNsu") or (data.get("invoice") or {}).get("order_nsu")
     if not order_nsu or "-" not in str(order_nsu):
         return jsonify({"ok": True})
@@ -3797,6 +3804,91 @@ def webhook_infinitepay():
     except Exception as e:
         current_app.logger.error(f"Webhook InfinitePay erro: {e}", exc_info=True)
     return jsonify({"ok": True})
+
+
+def _infinitepay_confirmar(order_nsu, transaction_nsu, slug):
+    """Confirma na API da InfinitePay e dá baixa. Devolve (pago, origem, rid).
+
+    Nada do que chega na URL de retorno é tomado como verdade: quem diz se foi
+    pago é a API, consultada com as credenciais da academia dona da cobrança.
+    """
+    from utils.infinitepay import InfinitePayClient
+    if not order_nsu or "-" not in str(order_nsu):
+        return False, None, None
+    origem, _, rid = str(order_nsu).rpartition("-")
+    if origem not in ("mensalidade", "avulsa", "precadastro", "grupo") or not rid.isdigit():
+        return False, None, None
+    rid = int(rid)
+
+    id_academia = _academia_da_cobranca(origem, rid)
+    if not id_academia:
+        return False, origem, rid
+    cfg = _gateway_config_academia(id_academia) or {}
+    handle = (cfg.get("infinitepay_handle") or "").strip()
+    if not handle:
+        return False, origem, rid
+    try:
+        res = InfinitePayClient(handle).consultar_pagamento(order_nsu, transaction_nsu, slug)
+    except Exception as e:                                           # noqa: BLE001
+        current_app.logger.warning("InfinitePay payment_check falhou (%s): %s", order_nsu, e)
+        return False, origem, rid
+    if not res.get("pago"):
+        return False, origem, rid
+    try:
+        if origem == "precadastro":
+            _baixar_matricula_paga(precad_id=rid)
+        else:
+            _baixar_cobranca_paga(origem, rid, res.get("valor"), "InfinitePay")
+    except Exception as e:                                           # noqa: BLE001
+        current_app.logger.error("Baixa InfinitePay (%s %s) falhou: %s", origem, rid, e,
+                                 exc_info=True)
+        return False, origem, rid
+    return True, origem, rid
+
+
+def _academia_da_cobranca(origem, rid):
+    """Academia dona da cobrança — é dela o handle que confirma o pagamento."""
+    consultas = {
+        "mensalidade": """SELECT a.id_academia FROM mensalidade_aluno ma
+                          JOIN alunos a ON a.id = ma.aluno_id WHERE ma.id = %s""",
+        "avulsa": "SELECT id_academia FROM cobranca_avulsa WHERE id = %s",
+        "precadastro": "SELECT academia_id AS id_academia FROM pre_cadastro WHERE id = %s",
+        "grupo": "SELECT id_academia FROM cobranca_grupo WHERE id = %s",
+    }
+    sql = consultas.get(origem)
+    if not sql:
+        return None
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute(sql, (rid,))
+        return (cur.fetchone() or {}).get("id_academia")
+    except Exception:
+        return None
+    finally:
+        cur.close()
+        conn.close()
+
+
+@bp_financeiro.route("/pagamento/infinitepay/retorno", methods=["GET"])
+def infinitepay_retorno():
+    """Para onde a InfinitePay manda o pagador depois do checkout.
+
+    Ela devolve order_nsu, slug, transaction_nsu, capture_method e receipt_url
+    na query. É a segunda via de baixa: se o webhook não chegar, o pagamento
+    ainda é confirmado aqui, na volta do próprio pagador.
+    """
+    order_nsu = request.args.get("order_nsu") or request.args.get("order_id") or ""
+    slug = request.args.get("slug") or ""
+    transaction_nsu = request.args.get("transaction_nsu") or ""
+    recibo = request.args.get("receipt_url") or ""
+    pago, origem, rid = _infinitepay_confirmar(order_nsu, transaction_nsu, slug)
+    if not pago and order_nsu:
+        current_app.logger.info(
+            "Retorno InfinitePay sem confirmação: order_nsu=%r slug=%r transaction_nsu=%r",
+            order_nsu, slug, transaction_nsu)
+    return render_template("financeiro/infinitepay_retorno.html",
+                           pago=pago, recibo=recibo, origem=origem, registro_id=rid)
 
 
 @bp_financeiro.route("/webhook/cora", methods=["POST"])
@@ -9461,6 +9553,28 @@ def _categorias_lancadas(academia_id, tabela):
 
 
 # ---------- DESPESAS: cadastrar, editar, excluir ----------
+# Despesa recorrente: em vez de um agendador, o cadastro já grava todas as
+# ocorrências de uma vez — cada uma é um lançamento comum, que pode ser
+# editado ou excluído sozinho, e os totais do mês continuam batendo.
+RECORRENCIA_FREQUENCIAS = {"semanal": "Semanal", "mensal": "Mensal", "anual": "Anual"}
+RECORRENCIA_MAX_VEZES = 60
+
+
+def _datas_recorrencia(inicio, frequencia, vezes):
+    """Datas das `vezes` ocorrências a partir de `inicio`.
+
+    Mensal e anual mantêm o dia de `inicio`; em meses mais curtos caem no
+    último dia (31/01 -> 28/02 -> 31/03), sem "escorregar" para o dia 28.
+    """
+    from dateutil.relativedelta import relativedelta
+    passo = {
+        "semanal": lambda i: timedelta(weeks=i),
+        "mensal": lambda i: relativedelta(months=i),
+        "anual": lambda i: relativedelta(years=i),
+    }[frequencia]
+    return [inicio + passo(i) for i in range(vezes)]
+
+
 @bp_financeiro.route("/despesas/cadastrar", methods=["GET", "POST"])
 @login_required
 def cadastrar_despesa():
@@ -9471,6 +9585,9 @@ def cadastrar_despesa():
 
     academias = _get_academias_for_select()
 
+    def _form():
+        return render_template("financeiro/despesas/form_despesa.html", despesa=None, academias=academias, academia_id=academia_id, categorias_sugeridas=_categorias_lancadas(academia_id, "despesas"), hoje_iso=date.today().isoformat(), frequencias=RECORRENCIA_FREQUENCIAS, max_vezes=RECORRENCIA_MAX_VEZES)
+
     if request.method == "POST":
         descricao = (request.form.get("descricao") or "").strip()
         valor = _parse_valor(request.form.get("valor"))
@@ -9480,33 +9597,58 @@ def cadastrar_despesa():
         id_acad = request.form.get("id_academia", type=int) or academia_id
         if id_acad not in _get_academias_ids():
             id_acad = academia_id
+        recorrente = request.form.get("recorrente") == "1"
+        frequencia = request.form.get("frequencia") or "mensal"
+        vezes = request.form.get("vezes", type=int) if recorrente else 1
 
         if not descricao:
             flash("Informe a descrição.", "danger")
-            return render_template("financeiro/despesas/form_despesa.html", despesa=None, academias=academias, academia_id=academia_id, categorias_sugeridas=_categorias_lancadas(academia_id, "despesas"), hoje_iso=date.today().isoformat())
+            return _form()
         if valor is None or valor <= 0:
             flash("Informe um valor válido.", "danger")
-            return render_template("financeiro/despesas/form_despesa.html", despesa=None, academias=academias, academia_id=academia_id, categorias_sugeridas=_categorias_lancadas(academia_id, "despesas"), hoje_iso=date.today().isoformat())
+            return _form()
         if not data_str:
             flash("Informe a data.", "danger")
-            return render_template("financeiro/despesas/form_despesa.html", despesa=None, academias=academias, academia_id=academia_id, categorias_sugeridas=_categorias_lancadas(academia_id, "despesas"), hoje_iso=date.today().isoformat())
+            return _form()
+        try:
+            data_inicio = date.fromisoformat(data_str)
+        except ValueError:
+            flash("Data inválida.", "danger")
+            return _form()
+        if recorrente:
+            if frequencia not in RECORRENCIA_FREQUENCIAS:
+                flash("Escolha a frequência da repetição.", "danger")
+                return _form()
+            if not vezes or not 2 <= vezes <= RECORRENCIA_MAX_VEZES:
+                flash(f"Informe quantas vezes repetir (de 2 a {RECORRENCIA_MAX_VEZES}).", "danger")
+                return _form()
+
+        datas = _datas_recorrencia(data_inicio, frequencia, vezes)
+        # "(3/12)" na descrição identifica a série na lista e nos relatórios.
+        linhas = [
+            (f"{descricao} ({i}/{vezes})" if vezes > 1 else descricao, valor, d.isoformat(), categoria, id_acad, observacoes, current_user.id)
+            for i, d in enumerate(datas, start=1)
+        ]
 
         try:
             conn = get_db_connection()
             cur = conn.cursor()
-            cur.execute(
+            cur.executemany(
                 "INSERT INTO despesas (descricao, valor, data, categoria, id_academia, observacoes, criado_por) VALUES (%s, %s, %s, %s, %s, %s, %s)",
-                (descricao, valor, data_str, categoria, id_acad, observacoes, current_user.id),
+                linhas,
             )
             conn.commit()
             conn.close()
-            flash("Despesa cadastrada com sucesso.", "success")
+            if vezes > 1:
+                flash(f"Despesa recorrente cadastrada: {vezes} lançamentos, de {datas[0].strftime('%d/%m/%Y')} a {datas[-1].strftime('%d/%m/%Y')}.", "success")
+            else:
+                flash("Despesa cadastrada com sucesso.", "success")
             return redirect(url_for("financeiro.lista_despesas", academia_id=academia_id))
         except Exception:
             flash("Erro ao salvar despesa.", "danger")
-            return render_template("financeiro/despesas/form_despesa.html", despesa=None, academias=academias, academia_id=academia_id, categorias_sugeridas=_categorias_lancadas(academia_id, "despesas"), hoje_iso=date.today().isoformat())
+            return _form()
 
-    return render_template("financeiro/despesas/form_despesa.html", despesa=None, academias=academias, academia_id=academia_id, categorias_sugeridas=_categorias_lancadas(academia_id, "despesas"), hoje_iso=date.today().isoformat())
+    return _form()
 
 
 @bp_financeiro.route("/despesas/editar/<int:despesa_id>", methods=["GET", "POST"])
