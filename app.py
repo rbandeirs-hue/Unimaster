@@ -166,6 +166,42 @@ def aplicar_headers_seguranca(response):
 
 
 # ============================================================
+# 🔹 Domínio próprio da academia (MM-15)
+# ============================================================
+# Pedido que chega pelo domínio de uma academia carrega a marca dela e só
+# serve a quem é dela (utils/dominio_academia.py). Vem antes das outras travas:
+# quem não pode estar ali sai antes de ser mandado completar cadastro ou
+# escolher academia. O cookie de sessão é por host, então a sessão do endereço
+# principal nunca chega aqui — a checagem cobre o login feito neste domínio.
+@app.before_request
+def _dominio_da_academia():
+    from flask import flash, g, session
+    from flask_login import logout_user
+    from utils import dominio_academia as dom
+
+    endpoint = request.endpoint or ""
+    if endpoint.endswith("static"):
+        return None
+    g.academia_dominio = dom.academia_do_host(request.host)
+    if not g.academia_dominio or not current_user.is_authenticated:
+        return None
+    aid = g.academia_dominio["id"]
+    if session.get("_dominio_ok") == aid or endpoint == "auth.logout":
+        return None
+    try:
+        permitido = dom.pode_entrar(current_user, aid)
+    except Exception:
+        return None
+    if permitido:
+        session["_dominio_ok"] = aid
+        return None
+    logout_user()
+    session.clear()
+    flash("Este endereço é só para quem é da academia. Entre pelo endereço principal do sistema.", "warning")
+    return redirect(url_for("auth.login"))
+
+
+# ============================================================
 # 🔹 Bloqueio: força cadastro de CPF antes de qualquer navegação
 # ============================================================
 _CPF_BLOQUEIO_PERMITIDOS = {
@@ -440,6 +476,20 @@ def asset(filename):
             versao = "0"
         _ASSET_VERSAO[filename] = versao
     return url_for("static", filename=filename) + "?v=" + versao
+
+
+@app.context_processor
+def injetar_marca_dominio():
+    """`marca_academia`: {id, titulo, texto, cor, logo_url} quando o pedido veio
+    pelo domínio de uma academia; None no endereço principal."""
+    from flask import g, has_request_context
+    if not has_request_context():
+        return {"marca_academia": None}
+    acad = getattr(g, "academia_dominio", None)
+    if not acad:
+        return {"marca_academia": None}
+    from utils.contexto_logo import buscar_logo_url
+    return {"marca_academia": dict(acad, logo_url=buscar_logo_url("academia", acad["id"]))}
 
 
 # ============================================================

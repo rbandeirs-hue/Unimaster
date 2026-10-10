@@ -362,6 +362,96 @@
       </div>
     </div>
     {% endif %}
+
+    {# Domínio próprio e marca (MM-15). O domínio passa por
+       scripts/dominios_academias.py, que confere o DNS, emite o certificado e
+       cria o site no nginx; aqui só se grava e se acompanha o estado. #}
+    {% if pode_dominio_marca and academia.dominio is defined %}
+    {% set _st = academia.dominio_status or '' %}
+    <div class="cfg-panel mt-3" id="dominio-marca">
+      <div class="cfg-panel__head">
+        <div class="cfg-item__icon cfg-item__icon--blue"><i class="bi bi-globe2"></i></div>
+        <div class="cfg-item__body">
+          <p class="cfg-item__name">Domínio e marca</p>
+          <p class="cfg-item__desc">Endereço próprio da academia, com o nome, a logo e a cor dela no lugar de Unimaster.</p>
+        </div>
+        {% if academia.dominio and _st == 'ativo' %}
+        <span class="cfg-badge cfg-badge--on"><span class="dot"></span> No ar</span>
+        {% elif academia.dominio and _st == 'erro' %}
+        <span class="cfg-badge cfg-badge--off"><span class="dot"></span> Aguardando DNS</span>
+        {% elif academia.dominio %}
+        <span class="cfg-badge cfg-badge--off"><span class="dot"></span> Em ativação</span>
+        {% endif %}
+      </div>
+      <div class="cfg-panel__body">
+        <form method="POST" enctype="multipart/form-data"
+              action="{{ url_for('academia.configuracoes_academia', academia_id=academia.id) }}#dominio-marca">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="secao" value="dominio_marca">
+
+          <p class="cfg-form-label mb-2">Domínio</p>
+          <div class="row g-3 mb-2">
+            <div class="col-md-7">
+              <input type="text" class="u-campo__controle" name="dominio" id="dominio"
+                     value="{{ academia.dominio or '' }}" placeholder="minhaacademia.com.br"
+                     autocomplete="off" spellcheck="false">
+              <div class="form-text">Só o domínio, sem https:// e sem www. Em branco = sem domínio próprio.</div>
+            </div>
+          </div>
+          {% if academia.dominio and _st == 'ativo' %}
+          <div class="alert alert-success py-2 small">
+            Funcionando: <a href="https://{{ academia.dominio }}" target="_blank" rel="noopener">https://{{ academia.dominio }}</a>
+            {% if academia.dominio_ativado_em %} — ativo desde {{ academia.dominio_ativado_em.strftime('%d/%m/%Y %H:%M') }}{% endif %}.
+            Só entram por ele alunos, responsáveis, professores e equipe desta academia.
+          </div>
+          {% elif academia.dominio %}
+          <div class="alert alert-{{ 'warning' if _st == 'erro' else 'info' }} py-2 small">
+            {% if _st == 'erro' and academia.dominio_erro %}<strong>{{ academia.dominio_erro }}</strong><br>{% endif %}
+            No painel onde o domínio foi registrado (Registro.br, GoDaddy, Hostinger…), crie dois registros
+            <strong>tipo A</strong> apontando para <code>{{ ip_servidor }}</code>:
+            <code>{{ academia.dominio }}</code> e <code>www.{{ academia.dominio }}</code>.
+            O sistema confere a cada 5 minutos e ativa sozinho, com certificado (cadeado). A propagação do DNS
+            pode levar algumas horas.
+          </div>
+          {% endif %}
+
+          <hr class="my-3">
+          <p class="cfg-form-label mb-2">Marca</p>
+          <div class="row g-3 mb-3">
+            <div class="col-md-5">
+              <label class="cfg-form-label" for="marca_titulo">Nome exibido</label>
+              <input type="text" class="u-campo__controle" name="marca_titulo" id="marca_titulo" maxlength="80"
+                     value="{{ academia.marca_titulo or '' }}" placeholder="{{ academia.nome }}">
+            </div>
+            <div class="col-md-2 col-5">
+              <label class="cfg-form-label" for="marca_cor">Cor</label>
+              <input type="color" class="form-control form-control-color w-100" name="marca_cor" id="marca_cor"
+                     value="{{ academia.marca_cor or '#e4001b' }}">
+            </div>
+            <div class="col-md-5">
+              <label class="cfg-form-label" for="logo">Logo</label>
+              <div class="d-flex align-items-center gap-2">
+                {% if logo_academia_url %}
+                <img src="{{ logo_academia_url }}" alt="" style="width:38px;height:38px;object-fit:contain;border-radius:6px;background:#fff;border:1px solid var(--u-border, #ddd)">
+                {% endif %}
+                <input type="file" class="form-control" name="logo" id="logo" accept="image/png,image/jpeg,image/gif">
+              </div>
+            </div>
+            <div class="col-12">
+              <label class="cfg-form-label" for="marca_texto">Frase da tela de entrada</label>
+              <input type="text" class="u-campo__controle" name="marca_texto" id="marca_texto" maxlength="160"
+                     value="{{ academia.marca_texto or '' }}" placeholder="Área do aluno, da família e da equipe.">
+            </div>
+          </div>
+          <div class="form-text mb-3">
+            A marca aparece na tela de entrada e no menu do sistema quando ele é aberto pelo domínio da academia.
+            No endereço principal continua Unimaster.
+          </div>
+          <button type="submit" class="cfg-btn-save"><i class="bi bi-check-lg"></i> Salvar</button>
+        </form>
+      </div>
+    </div>
+    {% endif %}
   </div>
   <!-- /Aba Geral -->
 

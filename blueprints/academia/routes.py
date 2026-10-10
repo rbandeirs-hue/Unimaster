@@ -9,6 +9,7 @@ from blueprints.auth.user_model import Usuario
 
 from utils.permissoes import somente_gestao
 from utils.contexto_logo import buscar_logo_url
+from utils import dominio_academia as _dom
 from utils.graduacao_modalidade import sql_join_faixa as _join_faixa
 academia_bp = Blueprint("academia", __name__, url_prefix="/academia")
 
@@ -2200,6 +2201,63 @@ def _chave_pix_normalizada(academia):
         return None
 
 
+def _pode_dominio_marca(academia_id):
+    if current_user.has_role("admin"):
+        return True
+    from utils import acesso_academia as acs
+    return current_user.has_role("gestor_academia") and acs.acesso(academia_id)["principal"]
+
+
+def _salvar_dominio_marca(cur, conn, academia_id):
+    """Grava domínio e marca. Domínio novo fica 'pendente' até o
+    scripts/dominios_academias.py emitir o certificado e criar o site."""
+    from utils import dominio_academia as dom
+    from blueprints.associacao.routes import salvar_logo
+
+    cur.execute("SHOW COLUMNS FROM academias LIKE 'dominio'")
+    if not cur.fetchall():
+        flash("Domínio e marca ainda não estão disponíveis: falta rodar a migração MM-15.", "warning")
+        return
+    cur.execute("SELECT dominio FROM academias WHERE id = %s", (academia_id,))
+    atual = (cur.fetchone() or {}).get("dominio")
+
+    try:
+        dominio = dom.normalizar(request.form.get("dominio"))
+    except dom.DominioInvalido as e:
+        flash(f"Domínio: {e}", "danger")
+        dominio = atual
+    if dominio and dominio != atual:
+        cur.execute("SELECT nome FROM academias WHERE dominio = %s AND id <> %s", (dominio, academia_id))
+        if cur.fetchone() or dominio in dom.dominios_do_servidor():
+            flash("Domínio: esse endereço já está em uso no servidor.", "danger")
+            dominio = atual
+
+    cor = dom.cor_valida(request.form.get("marca_cor"))
+    titulo = (request.form.get("marca_titulo") or "").strip()[:80] or None
+    texto = (request.form.get("marca_texto") or "").strip()[:160] or None
+    cur.execute("UPDATE academias SET marca_cor = %s, marca_titulo = %s, marca_texto = %s WHERE id = %s",
+                (cor, titulo, texto, academia_id))
+    if dominio != atual:
+        cur.execute("""UPDATE academias SET dominio = %s, dominio_status = %s,
+                              dominio_erro = NULL, dominio_ativado_em = NULL
+                       WHERE id = %s""",
+                    (dominio, "pendente" if dominio else None, academia_id))
+    conn.commit()
+
+    logo = request.files.get("logo")
+    if logo and logo.filename and not salvar_logo(logo, "academia", academia_id):
+        flash("Logo: envie uma imagem PNG, JPG ou GIF.", "danger")
+    dom.esquecer_cache()
+
+    if dominio != atual and dominio:
+        flash(f"Domínio {dominio} salvo. Assim que o DNS apontar para o servidor, o sistema ativa "
+              "o endereço com certificado (confere a cada 5 minutos).", "success")
+    elif dominio != atual:
+        flash("Domínio removido. O endereço deixa de abrir o sistema em alguns minutos.", "success")
+    else:
+        flash("Marca da academia salva.", "success")
+
+
 @academia_bp.route("/configuracoes", methods=["GET", "POST"])
 @login_required
 def configuracoes_academia():
@@ -2427,6 +2485,13 @@ def configuracoes_academia():
 
                 if not cora_incompleto:
                     flash("Configuração de cobrança online salva com sucesso!", "success")
+            elif secao == "dominio_marca":
+                # Domínio próprio e marca (MM-15). Só o gestor principal: o
+                # domínio decide por onde a academia inteira entra no sistema.
+                if not _pode_dominio_marca(academia_id):
+                    flash("Só o gestor principal da academia pode alterar o domínio e a marca.", "danger")
+                else:
+                    _salvar_dominio_marca(cur, conn, academia_id)
             elif secao == "campos_obrigatorios":
                 # Quais campos o cadastro interno do aluno exige nesta academia.
                 # Só quem administra a academia decide: professor e gestores de
@@ -2521,6 +2586,10 @@ def configuracoes_academia():
         campos_obrig_ativos=_co.obrigatorios(academia_id),
         campos_obrig_sempre=_co.SEMPRE_OBRIGATORIOS,
         pode_campos_obrig=current_user.has_role("admin") or current_user.has_role("gestor_academia"),
+        # Seção "Domínio e marca" (MM-15).
+        pode_dominio_marca=_pode_dominio_marca(academia_id),
+        ip_servidor=_dom.IP_DO_SERVIDOR,
+        logo_academia_url=buscar_logo_url("academia", academia_id),
         # Mostra na tela exatamente a chave que vai dentro do código PIX: é a
         # única forma de o gestor conferir sem precisar tentar pagar.
         chave_pix_normalizada=_chave_pix_normalizada(academia),

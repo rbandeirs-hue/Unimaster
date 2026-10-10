@@ -1,11 +1,12 @@
 # blueprints/auth/routes.py
 
-from flask import Blueprint, render_template, request, redirect, url_for, flash, current_app, session
+from flask import Blueprint, render_template, request, redirect, url_for, flash, current_app, session, g
 from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import check_password_hash, generate_password_hash
 from config import get_db_connection
 from .user_model import Usuario
 from utils.contexto_logo import buscar_logo_url
+from utils import dominio_academia
 from utils.email_utils import enviar_email_redefinicao_senha
 from datetime import datetime, timedelta
 import secrets
@@ -214,6 +215,13 @@ def login():
             cpf=usuario.get("cpf")
         )
 
+        # Domínio próprio de academia (MM-15): só entra quem é dela. A senha
+        # estava certa, então não conta como tentativa errada.
+        acad_dominio = getattr(g, "academia_dominio", None)
+        if acad_dominio and not dominio_academia.pode_entrar(user_obj, acad_dominio["id"]):
+            flash("Seu cadastro não é desta academia. Entre pelo endereço principal do sistema.", "warning")
+            return render_template("login.html")
+
         # --------------------------------------------
         # 4️⃣ Logar usuário
         # --------------------------------------------
@@ -222,6 +230,11 @@ def login():
         # navegador herda a academia e o modo de painel da sessão anterior.
         _limpar_contexto_sessao()
         login_user(user_obj)
+        if acad_dominio:
+            # Pelo domínio da academia, é ela que abre — quem administra mais
+            # de uma não passa pela tela de escolha.
+            session["_dominio_ok"] = acad_dominio["id"]
+            session["academia_gerenciamento_id"] = acad_dominio["id"]
 
         # Se entrou pelo fallback de e-mail (sem CPF), forçar cadastro de CPF
         if not usuario.get("cpf"):

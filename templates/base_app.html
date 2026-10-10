@@ -24,7 +24,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}Academia — Unimaster {{ marca_modalidade or '' }}{% endblock %}</title>
+  <title>{% block title %}Academia — {{ marca_academia.titulo if marca_academia else 'Unimaster' }} {{ marca_modalidade or '' }}{% endblock %}</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%23C8102E'/%3E%3Cpath d='M50 20 L60 40 L50 50 L40 40 Z' fill='white'/%3E%3Cpath d='M30 60 L50 50 L70 60 L50 80 Z' fill='white'/%3E%3C/svg%3E">
 
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -34,6 +34,15 @@
   <link rel="stylesheet" href="{{ asset('css/base/tokens.css') }}">
   <link rel="stylesheet" href="{{ asset('css/base/ui.css') }}">
   <link rel="stylesheet" href="{{ asset('css/base/shell.css') }}">
+  {# Domínio próprio da academia (MM-15): a cor dela no lugar do vermelho. #}
+  {% if marca_academia %}
+  <style>
+    :root { --sh-red: {{ marca_academia.cor }}; }
+    .sh__marca-logo { width: 34px; height: 34px; flex: 0 0 34px; object-fit: contain;
+                      background: #fff; border-radius: 8px; padding: 2px; }
+    .sh__marca-texto--academia { text-transform: none; letter-spacing: .02em; }
+  </style>
+  {% endif %}
   <link rel="stylesheet" href="{{ asset('css/base/listas.css') }}">
   <link rel="stylesheet" href="{{ asset('css/base/formularios.css') }}">
   <link rel="stylesheet" href="{{ asset('css/base/theme.css') }}">
@@ -66,11 +75,16 @@
        if modo_shell in ('academia','admin','federacao','associacao','professor')
        else url_for('painel.home') %}
     <a class="sh__marca" href="{{ _marca_href }}">
+      {% if marca_academia and marca_academia.logo_url %}
+      <img class="sh__marca-logo" src="{{ marca_academia.logo_url }}" alt="">
+      {% else %}
       <span class="sh__marca-icone"><i class="bi bi-shield-fill-check"></i></span>
+      {% endif %}
       {# A marca acompanha a modalidade em foco: trocar o recorte tem de ser
          visível antes de ler qualquer número. Academia de modalidade única
          mostra a dela; só quem tem várias e não escolheu fica sem o sufixo. #}
-      <span class="sh__marca-texto">Unimaster
+      <span class="sh__marca-texto{% if marca_academia %} sh__marca-texto--academia{% endif %}">
+        {{- marca_academia.titulo if marca_academia else 'Unimaster' }}
         {%- if marca_modalidade %} <em>{{ marca_modalidade }}</em>{% endif %}</span>
     </a>
 
