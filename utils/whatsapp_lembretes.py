@@ -1452,6 +1452,20 @@ def processar_regua(academia_id, hoje=None, somente_ativadas=True):
         nome_acad = acad.get("nome") or ""
         cfg = regua.carregar(academia_id, cur)
 
+        # Cobrança familiar: o grupo do mês (irmãos numa cobrança só) era montado
+        # só à mão, na tela de famílias. Sem ele a régua cobrava cada irmão
+        # separado — a família do Thiago recebeu em out/2026 o lembrete de R$ 30
+        # de um filho em vez dos R$ 60 dos dois. Monta aqui, para o mês atual e o
+        # seguinte (o lembrete sai dias antes do vencimento). Idempotente: grupo
+        # pago fica como está, e com um irmão só o grupo nem nasce.
+        try:
+            from utils.cobranca_familia import montar_grupos_do_mes
+            _prox = date(hoje.year + (hoje.month == 12), hoje.month % 12 + 1, 1)
+            for _a, _m in {(hoje.year, hoje.month), (_prox.year, _prox.month)}:
+                montar_grupos_do_mes(academia_id, _a, _m)
+        except Exception:
+            logging.getLogger(__name__).exception("Régua: falha ao montar grupos familiares")
+
         linhas = buscar_em_aberto(cur, academia_id)
         resumo["total"] = len(linhas)
 

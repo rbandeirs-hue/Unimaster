@@ -608,12 +608,20 @@ def baixar_grupo(grupo_id, valor_pago=None, gateway_nome="gateway", data_pagamen
             cur2.execute("SELECT nome FROM academias WHERE id=%s", (g["id_academia"],))
             row = cur2.fetchone()
             cur2.close(); conn2.close()
-            enviar_evento(g["id_academia"], "confirmacao_pagamento", tel, {
+            ok_wpp = enviar_evento(g["id_academia"], "confirmacao_pagamento", tel, {
                 "nome": (g.get("responsavel_nome") or "").split(" ")[0],
                 "aluno": ", ".join(i["aluno_nome"] for i in itens),
                 "valor": f"R$ {recebido:.2f}".replace(".", ","),
                 "academia": row[0] if row else "",
             })
+            # Registro no histórico de envios, como a confirmação individual faz.
+            try:
+                from utils import whatsapp_log as wlog
+                wlog.registrar(g["id_academia"], "confirmacao_pagamento",
+                               "entregue" if ok_wpp else "falha",
+                               aluno_id=itens[0]["aluno_id"] if itens else None, telefone=tel)
+            except Exception:
+                pass
     except Exception:
         log.exception("Grupo %s: confirmação no WhatsApp falhou", grupo_id)
     return True
