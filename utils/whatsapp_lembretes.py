@@ -568,7 +568,7 @@ def _link_matricula_turma(cur, academia_id, turma_id):
     from utils.links_curtos import base_url
     cur.execute("SELECT slug FROM academias WHERE id = %s", (academia_id,))
     slug = (cur.fetchone() or {}).get("slug") or academia_id
-    base = base_url()
+    base = base_url(academia_id)
     if not base:
         return ""
     url = f"{base}/precadastro/matricula/{slug}?turma={turma_id}"

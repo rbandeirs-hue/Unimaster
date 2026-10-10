@@ -33,8 +33,19 @@ def _novo_token():
     return "".join(secrets.choice(_ALFABETO) for _ in range(TOKEN_TAMANHO))
 
 
-def base_url():
-    """Base pública do sistema, sem barra no fim."""
+def base_url(academia_id=None):
+    """Base pública do sistema, sem barra no fim.
+
+    Com `academia_id`, e a academia com domínio próprio no ar (MM-15), a base
+    é o domínio dela: o link que a família recebe leva a marca da academia."""
+    if academia_id:
+        try:
+            from utils.dominio_academia import dominio_ativo
+            dominio = dominio_ativo(academia_id)
+            if dominio:
+                return f"https://{dominio}"
+        except Exception:
+            pass
     env = (os.environ.get("PUBLIC_BASE_URL") or "").strip().rstrip("/")
     if env:
         return env
@@ -132,7 +143,7 @@ def encurtar(origem, registro_id, academia_id=None):
     token = obter_token(origem, registro_id, academia_id)
     if not token:
         return None
-    base = base_url()
+    base = base_url(academia_id)
     return f"{base}/p/{token}" if base else None
 
 

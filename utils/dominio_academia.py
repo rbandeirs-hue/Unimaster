@@ -136,7 +136,39 @@ def dominios_do_servidor():
     return hosts | HOSTS_DO_SISTEMA
 
 
+_CACHE_ATIVO = {}
+
+
+def dominio_ativo(academia_id):
+    """Domínio da academia já no ar (certificado e nginx prontos), ou None.
+    Pendente ou com erro não conta: o link mandado ao aluno não abriria."""
+    if not academia_id:
+        return None
+    agora = time.time()
+    em_cache = _CACHE_ATIVO.get(int(academia_id))
+    if em_cache and em_cache[0] > agora:
+        return em_cache[1]
+    dominio = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        try:
+            cur.execute("""SELECT dominio FROM academias
+                           WHERE id = %s AND dominio_status = 'ativo' AND dominio <> ''""",
+                        (int(academia_id),))
+            r = cur.fetchone()
+            dominio = r[0] if r else None
+        finally:
+            cur.close()
+            conn.close()
+    except Exception:
+        dominio = None  # sem a MM-15
+    _CACHE_ATIVO[int(academia_id)] = (agora + _TTL, dominio)
+    return dominio
+
+
 def esquecer_cache():
+    _CACHE_ATIVO.clear()
     _CACHE.clear()
 
 

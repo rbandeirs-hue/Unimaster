@@ -115,3 +115,18 @@ def test_quem_e_da_academia_ve_a_marca_no_shell(app, monkeypatch):
     html = r.get_data(as_text=True)
     assert "--sh-red: #123abc" in html
     assert "Judô Teste Clube" in html
+
+
+def test_link_curto_usa_dominio_da_academia_no_ar(monkeypatch):
+    from utils import links_curtos as lc
+    monkeypatch.setattr(dom, "dominio_ativo", lambda aid: HOST if aid == 1 else None)
+    monkeypatch.setenv("PUBLIC_BASE_URL", "https://rmservicosnet.com.br")
+    assert lc.base_url(1) == f"https://{HOST}"
+    assert lc.base_url(2) == "https://rmservicosnet.com.br"
+    assert lc.base_url() == "https://rmservicosnet.com.br"
+
+
+def test_dominio_ativo_sem_dominio_cadastrado():
+    dom.esquecer_cache()
+    assert dom.dominio_ativo(None) is None
+    assert dom.dominio_ativo(999999) is None
