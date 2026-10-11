@@ -104,7 +104,7 @@
             var wd = d.getDay();
             var diaNum = (wd === 0) ? '0' : String(wd);
             if (diasList.indexOf(diaNum) >= 0 && d.getTime() >= hoje.getTime()) {
-                result.push(d.toISOString().split('T')[0]);
+                result.push(new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().split('T')[0]);
             }
             d.setDate(d.getDate() + 1);
         }
@@ -150,7 +150,7 @@
             clickOpens: true,
             onChange: function(selectedDates, dateStr, instance) {
                 var datasArray = selectedDates.map(function(d) {
-                    return d.toISOString().split('T')[0];
+                    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().split('T')[0];
                 });
                 dataSubmit.value = datasArray.join(',');
                 atualizarDatasSelecionadas(selectedDates);
