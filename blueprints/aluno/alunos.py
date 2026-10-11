@@ -4367,6 +4367,21 @@ def editar_aluno(aluno_id):
         pass
     marcar_brancas(graduacoes)
 
+    # Academia em que o aluno está sendo editado: a aberta na sessão, quando o
+    # aluno é dela. Quem treina em duas academias tem turma e modalidade em
+    # cada uma, e cada academia edita só as suas — o salvamento só mexe no
+    # que a tela ofereceu, então o vínculo com a outra fica intacto.
+    acad_form = aluno.get("id_academia")
+    try:
+        from utils.acesso_academia import academia_atual as _acad_atual
+        _aberta = _acad_atual()
+        cursor.execute("SELECT academia_id FROM alunos_academias WHERE aluno_id = %s", (aluno_id,))
+        _do_aluno = {r["academia_id"] for r in cursor.fetchall()} | {aluno.get("id_academia")}
+        if _aberta and _aberta in _do_aluno:
+            acad_form = _aberta
+    except Exception:
+        pass
+
     try:
         # Filtrar turmas apenas das academias acessíveis ao usuário
         ids_acad = _get_academias_ids()
@@ -4381,6 +4396,8 @@ def editar_aluno(aluno_id):
             if aluno_academia_id and aluno_academia_id not in ids_aluno:
                 ids_aluno.append(aluno_academia_id)
             ids_turmas = [i for i in ids_aluno if i in ids_acad]
+            if acad_form in ids_turmas:
+                ids_turmas = [acad_form]
 
             if ids_turmas:
                 marcadores = ",".join(["%s"] * len(ids_turmas))
@@ -4405,7 +4422,7 @@ def editar_aluno(aluno_id):
         turmas = []
 
     try:
-        id_acad = aluno.get("id_academia")
+        id_acad = acad_form
         if id_acad:
             cursor.execute("SELECT id_associacao FROM academias WHERE id = %s", (id_acad,))
             r = cursor.fetchone()
@@ -4521,7 +4538,7 @@ def editar_aluno(aluno_id):
 
         if pode_alterar_turma_mod:
             modalidades_ids_raw = request.form.getlist("aluno_modalidade_ids")
-            id_acad = aluno.get("id_academia")
+            id_acad = acad_form
             if id_acad:
                 cursor.execute(
                     "SELECT modalidade_id FROM academia_modalidades WHERE academia_id = %s",

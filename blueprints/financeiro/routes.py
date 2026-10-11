@@ -4799,7 +4799,9 @@ def mensalidades_alunos():
             FROM mensalidade_aluno ma
             JOIN mensalidades m ON m.id = ma.mensalidade_id
             JOIN alunos a ON a.id = ma.aluno_id
-            LEFT JOIN turmas t ON t.TurmaID = ma.turma_id
+            -- Só vale a turma gravada se for da academia da cobrança: aluno de
+            -- duas academias chegou a ter cobrança com a turma da outra.
+            LEFT JOIN turmas t ON t.TurmaID = ma.turma_id AND t.id_academia = m.id_academia
             WHERE {' AND '.join(where_ma)}
             ORDER BY ma.data_vencimento DESC
             LIMIT 200
@@ -5819,8 +5821,14 @@ def gerar_cobranca():
                 turma_por_aluno = {}
                 if not turma_id and aluno_ids:
                     try:
+                        # A turma tem de ser DESTA academia: alunos.TurmaID guarda
+                        # uma só, e para quem treina em duas era a da outra.
                         ph = ",".join(["%s"] * len(aluno_ids))
-                        cur.execute(f"SELECT id, TurmaID FROM alunos WHERE id IN ({ph})", tuple(aluno_ids))
+                        cur.execute(f"""SELECT at.aluno_id, MIN(at.TurmaID)
+                                        FROM aluno_turmas at
+                                        JOIN turmas t ON t.TurmaID = at.TurmaID AND t.id_academia = %s
+                                        WHERE at.aluno_id IN ({ph}) GROUP BY at.aluno_id""",
+                                    (id_acad,) + tuple(aluno_ids))
                         for sid, tid in cur.fetchall():
                             if tid is not None:
                                 turma_por_aluno[int(sid)] = int(tid)
