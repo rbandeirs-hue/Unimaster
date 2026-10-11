@@ -4789,7 +4789,13 @@ def mensalidades_alunos():
                    COALESCE(m.aplicar_juros_multas, 0) AS aplicar_juros_multas,
                    COALESCE(m.percentual_multa_mes, 2) AS percentual_multa_mes,
                    COALESCE(m.percentual_juros_dia, 0.033) AS percentual_juros_dia,
-                   t.Nome as turma_nome
+                   -- Cobrança sem turma gravada (gerada pelo contrato, por
+                   -- exemplo) mostra a turma em que o aluno está na academia.
+                   COALESCE(t.Nome, (
+                       SELECT GROUP_CONCAT(tt.Nome ORDER BY tt.Nome SEPARATOR ', ')
+                       FROM aluno_turmas at2 JOIN turmas tt ON tt.TurmaID = at2.TurmaID
+                       WHERE at2.aluno_id = ma.aluno_id AND tt.id_academia = m.id_academia
+                   )) as turma_nome
             FROM mensalidade_aluno ma
             JOIN mensalidades m ON m.id = ma.mensalidade_id
             JOIN alunos a ON a.id = ma.aluno_id
