@@ -9319,28 +9319,106 @@ def lista_receitas():
 @bp_financeiro.route("/despesas")
 @login_required
 def lista_despesas():
+    from utils import despesas_pagamento as dp
     academia_id = _get_academia_id()
     if not academia_id:
         return redirect(url_for("painel.home"))
 
     mes = request.args.get("mes", date.today().month, type=int)
     ano = request.args.get("ano", date.today().year, type=int)
+    if not 1 <= mes <= 12:
+        mes = date.today().month
+    situacao = request.args.get("situacao") or ""
+    if situacao not in ("", "pagas", "a_pagar"):
+        situacao = ""
+    inicio = date(ano, mes, 1)
+    fim = date(ano + (mes == 12), mes % 12 + 1, 1) - timedelta(days=1)
 
-    despesas = []
-    total_mes = 0.0
+    despesas, contas, formas = [], [], []
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
     try:
-        conn = get_db_connection()
-        cur = conn.cursor(dictionary=True)
-        cur.execute(
-            "SELECT id, descricao, valor, data, categoria FROM despesas WHERE id_academia = %s AND MONTH(data) = %s AND YEAR(data) = %s ORDER BY data DESC",
-            (academia_id, mes, ano),
-        )
-        despesas = cur.fetchall()
-        total_mes = sum(float(d.get("valor") or 0) for d in despesas)
-        conn.close()
+        despesas = dp.listar(cur, academia_id, inicio, fim, situacao or None)
+        contas, formas = dp.contas_e_formas(cur, academia_id)
     except Exception:
-        pass
-    return render_template("financeiro/despesas/lista_despesas.html", despesas=despesas, mes=mes, ano=ano, total_mes=total_mes, ano_atual=date.today().year, academia_id=academia_id)
+        current_app.logger.exception("lista de despesas")
+    finally:
+        conn.close()
+    total_mes = sum(float(d.get("valor") or 0) for d in despesas)
+    total_pago = sum(float(d.get("valor_pago") or 0) for d in despesas if d["paga"])
+    total_a_pagar = sum(float(d.get("valor") or 0) for d in despesas if not d["paga"])
+    return render_template(
+        "financeiro/despesas/lista_despesas.html", despesas=despesas, mes=mes, ano=ano,
+        situacao=situacao, total_mes=total_mes, total_pago=total_pago, total_a_pagar=total_a_pagar,
+        n_vencidas=sum(1 for d in despesas if d["vencida"]),
+        contas=contas, formas=formas, hoje_iso=date.today().isoformat(),
+        ano_atual=date.today().year, academia_id=academia_id)
+
+
+def _volta_despesas():
+    args = {k: request.form.get(k) for k in ("mes", "ano", "situacao") if request.form.get(k)}
+    if request.form.get("voltar") == "fluxo":
+        return redirect(url_for("financeiro_painel.fluxo", academia_id=_get_academia_id(),
+                                mes=request.form.get("mes_chave") or None))
+    return redirect(url_for("financeiro.lista_despesas", academia_id=_get_academia_id(), **args))
+
+
+@bp_financeiro.route("/despesas/<int:despesa_id>/pagar", methods=["POST"])
+@login_required
+def pagar_despesa(despesa_id):
+    """Registra o pagamento: de qual conta saiu, por qual forma, quando e quanto."""
+    from utils import despesas_pagamento as dp
+    from utils import financeiro_core as fin
+    ids = _get_academias_ids()
+    try:
+        data_pag = date.fromisoformat((request.form.get("data_pagamento") or "")[:10])
+    except ValueError:
+        data_pag = None
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        dp.pagar(conn, cur, despesa_id, ids, data_pagamento=data_pag,
+                 id_conta=request.form.get("id_conta", type=int),
+                 id_forma_pagamento=request.form.get("id_forma_pagamento", type=int),
+                 valor=_parse_valor(request.form.get("valor_pago")),
+                 observacoes=(request.form.get("observacoes") or "").strip() or None,
+                 usuario_id=current_user.id)
+        conn.commit()
+        flash("Pagamento da despesa registrado.", "success")
+    except fin.ErroFinanceiro as e:
+        conn.rollback()
+        flash(str(e), "danger")
+    except Exception:
+        conn.rollback()
+        current_app.logger.exception("pagar despesa %s", despesa_id)
+        flash("Erro ao registrar o pagamento.", "danger")
+    finally:
+        conn.close()
+    return _volta_despesas()
+
+
+@bp_financeiro.route("/despesas/<int:despesa_id>/desfazer-pagamento", methods=["POST"])
+@login_required
+def desfazer_pagamento_despesa(despesa_id):
+    """Estorna o pagamento (fica no extrato) e a despesa volta a ficar a pagar."""
+    from utils import despesas_pagamento as dp
+    from utils import financeiro_core as fin
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        dp.desfazer(conn, cur, despesa_id, _get_academias_ids(), usuario_id=current_user.id)
+        conn.commit()
+        flash("Pagamento desfeito: a despesa voltou para a pagar e o estorno ficou no extrato.", "success")
+    except fin.ErroFinanceiro as e:
+        conn.rollback()
+        flash(str(e), "danger")
+    except Exception:
+        conn.rollback()
+        current_app.logger.exception("desfazer pagamento despesa %s", despesa_id)
+        flash("Erro ao desfazer o pagamento.", "danger")
+    finally:
+        conn.close()
+    return _volta_despesas()
 
 
 @bp_financeiro.route("/mensalidades/editar/<int:mensalidade_id>", methods=["GET", "POST"])
@@ -9680,7 +9758,14 @@ def cadastrar_despesa():
     academias = _get_academias_for_select()
 
     def _form():
-        return render_template("financeiro/despesas/form_despesa.html", despesa=None, academias=academias, academia_id=academia_id, categorias_sugeridas=_categorias_lancadas(academia_id, "despesas"), hoje_iso=date.today().isoformat(), frequencias=RECORRENCIA_FREQUENCIAS, max_vezes=RECORRENCIA_MAX_VEZES)
+        from utils.despesas_pagamento import contas_e_formas
+        _c = get_db_connection()
+        try:
+            contas, formas = contas_e_formas(_c.cursor(dictionary=True), academia_id)
+        finally:
+            _c.close()
+        return render_template("financeiro/despesas/form_despesa.html", despesa=None, academias=academias, academia_id=academia_id, categorias_sugeridas=_categorias_lancadas(academia_id, "despesas"), hoje_iso=date.today().isoformat(), frequencias=RECORRENCIA_FREQUENCIAS, max_vezes=RECORRENCIA_MAX_VEZES,
+                               pagamento={"contas": contas, "formas": formas})
 
     if request.method == "POST":
         descricao = (request.form.get("descricao") or "").strip()
@@ -9724,23 +9809,48 @@ def cadastrar_despesa():
             for i, d in enumerate(datas, start=1)
         ]
 
+        from utils import despesas_pagamento as dp
+        from utils import financeiro_core as fin
+        ja_paga = request.form.get("ja_paga") == "1"
+        conn = get_db_connection()
+        cur = conn.cursor(dictionary=True)
         try:
-            conn = get_db_connection()
-            cur = conn.cursor()
-            cur.executemany(
-                "INSERT INTO despesas (descricao, valor, data, categoria, id_academia, observacoes, criado_por) VALUES (%s, %s, %s, %s, %s, %s, %s)",
-                linhas,
-            )
+            ids_novas = []
+            for linha in linhas:
+                cur.execute(
+                    "INSERT INTO despesas (descricao, valor, data, categoria, id_academia, observacoes, criado_por) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                    linha,
+                )
+                ids_novas.append(cur.lastrowid)
+            if ja_paga:
+                # Na recorrente, só a primeira ocorrência já está paga.
+                try:
+                    data_pag = date.fromisoformat((request.form.get("data_pagamento") or "")[:10])
+                except ValueError:
+                    data_pag = None
+                dp.pagar(conn, cur, ids_novas[0], [id_acad], data_pagamento=data_pag,
+                         id_conta=request.form.get("id_conta", type=int),
+                         id_forma_pagamento=request.form.get("id_forma_pagamento", type=int),
+                         valor=valor, usuario_id=current_user.id)
             conn.commit()
-            conn.close()
             if vezes > 1:
-                flash(f"Despesa recorrente cadastrada: {vezes} lançamentos, de {datas[0].strftime('%d/%m/%Y')} a {datas[-1].strftime('%d/%m/%Y')}.", "success")
+                flash(f"Despesa recorrente cadastrada: {vezes} lançamentos, de {datas[0].strftime('%d/%m/%Y')} a {datas[-1].strftime('%d/%m/%Y')}."
+                      + (" A primeira já entrou como paga." if ja_paga else ""), "success")
             else:
-                flash("Despesa cadastrada com sucesso.", "success")
-            return redirect(url_for("financeiro.lista_despesas", academia_id=academia_id))
+                flash("Despesa cadastrada e paga." if ja_paga else "Despesa cadastrada com sucesso.", "success")
+            return redirect(url_for("financeiro.lista_despesas", academia_id=academia_id,
+                                    mes=datas[0].month, ano=datas[0].year))
+        except fin.ErroFinanceiro as e:
+            conn.rollback()
+            flash(f"Nada foi salvo: {e}", "danger")
+            return _form()
         except Exception:
+            conn.rollback()
+            current_app.logger.exception("cadastrar despesa")
             flash("Erro ao salvar despesa.", "danger")
             return _form()
+        finally:
+            conn.close()
 
     return _form()
 
@@ -9825,6 +9935,13 @@ def excluir_despesa(despesa_id):
         conn = get_db_connection()
         cur = conn.cursor()
         ph = ",".join(["%s"] * len(ids))
+        # Paga, a despesa tem uma saída no caixa: apagá-la deixaria o dinheiro
+        # saindo sem motivo. Desfazer o pagamento primeiro registra o estorno.
+        from utils.despesas_pagamento import esta_paga
+        if esta_paga(cur, despesa_id):
+            conn.close()
+            flash("Esta despesa já foi paga. Desfaça o pagamento antes de excluir.", "warning")
+            return _volta_despesas()
         cur.execute("DELETE FROM despesas WHERE id = %s AND id_academia IN (" + ph + ")", (despesa_id,) + tuple(ids))
         conn.commit()
         conn.close()

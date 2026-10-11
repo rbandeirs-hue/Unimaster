@@ -1,0 +1,76 @@
+{# Diálogo "Pagar despesa": o botão .js-pagar-despesa traz data-acao (URL do
+   POST), data-descricao e data-valor. Precisa de `contas`, `formas`,
+   `hoje_iso`; `voltar`/`mes_chave` opcionais (para voltar ao Entradas x Saídas). #}
+<style>
+  .desp-dialogo { border: 0; border-radius: 10px; padding: 0; width: min(480px, calc(100vw - 32px));
+                  box-shadow: 0 24px 60px rgba(0, 0, 0, .3); background: var(--sh-surface, #fff); color: inherit; }
+  .desp-dialogo::backdrop { background: rgba(0, 0, 0, .45); }
+  .desp-dialogo form { padding: 1.25rem 1.35rem; display: grid; gap: .85rem; }
+  .desp-dialogo h2 { font-size: 1.05rem; margin: 0; }
+  .desp-dialogo label { display: grid; gap: .3rem; font-size: .85rem; font-weight: 600; }
+  .desp-dialogo input, .desp-dialogo select { height: 38px; padding: 0 .6rem; border: 1px solid var(--sh-line, #ddd);
+                                              border-radius: 6px; background: transparent; color: inherit; font-weight: 400; }
+  .desp-dialogo .desp-linha { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
+  .desp-dialogo .desp-rodape { display: flex; justify-content: flex-end; gap: .5rem; margin-top: .25rem; }
+</style>
+<dialog class="desp-dialogo" id="dlgPagarDespesa" aria-labelledby="dlgPagarTitulo">
+  <form method="POST" action="">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% if mes is defined and ano is defined %}<input type="hidden" name="mes" value="{{ mes }}"><input type="hidden" name="ano" value="{{ ano }}">{% endif %}
+    {% if situacao is defined %}<input type="hidden" name="situacao" value="{{ situacao }}">{% endif %}
+    {% if voltar is defined %}<input type="hidden" name="voltar" value="{{ voltar }}">{% endif %}
+    {% if mes_chave is defined %}<input type="hidden" name="mes_chave" value="{{ mes_chave }}">{% endif %}
+    <h2 id="dlgPagarTitulo">Pagar despesa</h2>
+    <p class="lst-sub m-0" data-pag-descricao></p>
+    <div class="desp-linha">
+      <label>Pago em
+        <input type="date" name="data_pagamento" value="{{ hoje_iso }}" max="{{ hoje_iso }}" required>
+      </label>
+      <label>Valor pago (R$)
+        <input type="text" name="valor_pago" inputmode="decimal" required pattern="[0-9]+([,\.][0-9]{1,2})?">
+      </label>
+    </div>
+    <label>Forma de pagamento
+      <select name="id_forma_pagamento" data-pag-forma>
+        <option value="">Não informada</option>
+        {% for f in formas %}<option value="{{ f.id }}" data-conta="{{ f.id_conta_padrao or '' }}">{{ f.nome }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Saiu da conta
+      <select name="id_conta" data-pag-conta required>
+        {% for c in contas %}<option value="{{ c.id }}">{{ c.nome }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Observações
+      <input type="text" name="observacoes" maxlength="255" placeholder="Opcional — nº do comprovante, quem pagou…">
+    </label>
+    <div class="desp-rodape">
+      <button type="button" class="sh__btn" data-pag-fechar>Cancelar</button>
+      <button type="submit" class="sh__btn sh__btn--forte"><i class="bi bi-check-lg"></i> Confirmar pagamento</button>
+    </div>
+  </form>
+</dialog>
+<script>
+(function () {
+  var dlg = document.getElementById('dlgPagarDespesa');
+  if (!dlg) return;
+  var form = dlg.querySelector('form');
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest('.js-pagar-despesa');
+    if (b) {
+      form.action = b.getAttribute('data-acao');
+      form.querySelector('[name=valor_pago]').value = b.getAttribute('data-valor') || '';
+      dlg.querySelector('[data-pag-descricao]').textContent = b.getAttribute('data-descricao') || '';
+      dlg.showModal();
+    }
+    if (e.target.closest('[data-pag-fechar]')) dlg.close();
+  });
+  // A forma sugere a conta amarrada a ela (Contas › forma → conta).
+  form.addEventListener('change', function (e) {
+    if (!e.target.matches('[data-pag-forma]')) return;
+    var alvo = e.target.selectedOptions[0] && e.target.selectedOptions[0].getAttribute('data-conta');
+    var conta = form.querySelector('[data-pag-conta]');
+    if (alvo && conta.querySelector('option[value="' + alvo + '"]')) conta.value = alvo;
+  });
+})();
+</script>

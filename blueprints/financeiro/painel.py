@@ -2150,6 +2150,30 @@ def contas_transferir():
     return _volta("financeiro_painel.contas", academia_id)
 
 
+@bp_financeiro_painel.route("/fluxo")
+@login_required
+def fluxo():
+    """Entradas x saídas do mês: o que entrou (receitas), o que saiu (despesas
+    pagas) e o que ainda está previsto — a receber e a pagar."""
+    from utils import despesas_pagamento as dp
+    academia_id = _get_academia_id()
+    if not academia_id:
+        return _sem_academia()
+    ano, mes = _mes_ref()
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        dados = dp.entradas_saidas(cur, academia_id, ano, mes)
+        contas, formas = dp.contas_e_formas(cur, academia_id)
+    finally:
+        conn.close()
+    ctx = _ctx_base(academia_id)
+    ctx.update(fin_aba="fluxo", mes=mes, ano=ano, mes_chave=f"{ano:04d}-{mes:02d}",
+               mes_label=fmt_mes(ano, mes), contas=contas, formas=formas,
+               hoje_iso=date.today().isoformat(), voltar="fluxo", **dados)
+    return render_template("financeiro/painel/fluxo.html", **ctx)
+
+
 @bp_financeiro_painel.route("/extrato")
 @login_required
 def extrato():

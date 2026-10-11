@@ -1,12 +1,12 @@
 {% extends "financeiro/painel/_base.html" %}
-{% from "financeiro/_form_lancamento.html" import form_lancamento, css_lancamento %}
+{% from "financeiro/_form_lancamento.html" import form_lancamento, css_lancamento, js_pagamento_conta %}
 {% set fin_aba = 'despesas' %}
 {% block title %}{{ 'Editar' if despesa else 'Nova' }} despesa{% endblock %}
 
 {% block pagina_titulo %}{{ 'Editar despesa' if despesa else 'Nova despesa' }}{% endblock %}
 {% block pagina_subtitulo %}
   {% if despesa %}Corrigir um lançamento de saída já registrado.
-  {% else %}Registrar uma saída de caixa — aluguel, contas, material, serviços.{% endif %}
+  {% else %}Registrar uma conta a pagar — aluguel, contas, material, serviços. Se já foi paga, informe de onde saiu o dinheiro.{% endif %}
 {% endblock %}
 
 {% block pagina_acoes %}
@@ -18,5 +18,8 @@
 {% block fin_css %}{{ css_lancamento() }}{% endblock %}
 
 {% block fin_conteudo %}
-{{ form_lancamento(despesa, 'despesa', academias, academia_id, categorias_sugeridas, hoje_iso) }}
+{{ form_lancamento(despesa, 'despesa', academias, academia_id, categorias_sugeridas, hoje_iso,
+                   frequencias=frequencias|default(none), max_vezes=max_vezes|default(60),
+                   pagamento=pagamento|default(none)) }}
+{{ js_pagamento_conta() }}
 {% endblock %}

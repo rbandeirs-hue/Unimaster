@@ -7,9 +7,11 @@
 
    Parâmetros: `registro` (None ao cadastrar), `tipo` ('receita'|'despesa'),
    `sugestoes` (categorias comuns) e `hoje_iso` (data padrão ao cadastrar).
+   `frequencias` liga o bloco "Repetir" (só no cadastro de despesa): a rota
+   grava uma despesa por ocorrência, até `max_vezes`.
    A macro não enxerga o contexto do template: tudo entra por parâmetro.
    ===================================================================== #}
-{% macro form_lancamento(registro, tipo, academias, academia_id, sugestoes, hoje_iso='') %}
+{% macro form_lancamento(registro, tipo, academias, academia_id, sugestoes, hoje_iso='', frequencias=none, max_vezes=60, pagamento=none) %}
 {% set eh_receita = tipo == 'receita' %}
 {% set voltar = url_for('financeiro.lista_receitas' if eh_receita else 'financeiro.lista_despesas',
                         academia_id=academia_id) %}
@@ -33,7 +35,7 @@
                placeholder="0,00" pattern="[0-9]+([,\.][0-9]{1,2})?">
       </div>
       <div class="lan-campo">
-        <label for="data">Data <span class="lan-req">*</span></label>
+        <label for="data">{{ 'Data' if eh_receita else 'Vencimento' }} <span class="lan-req">*</span></label>
         <input type="date" id="data" name="data" required
                value="{{ (registro.data.strftime('%Y-%m-%d')
                           if registro.data and not (registro.data is string)
@@ -70,6 +72,67 @@
     <input type="hidden" name="id_academia" value="{{ academias[0].id if academias else academia_id }}">
     {% endif %}
 
+    {% if frequencias and not registro %}
+    <div class="lan-campo lan-rec">
+      <label class="lan-rec__liga">
+        <input type="checkbox" id="recorrente" name="recorrente" value="1">
+        Despesa recorrente
+      </label>
+      <span class="lan-ajuda">Para contas que se repetem, como aluguel ou internet. Cada repetição vira um lançamento próprio, a partir da data acima.</span>
+      <div class="lan-linha lan-rec__campos">
+        <div class="lan-campo">
+          <label for="frequencia">Repetir</label>
+          <select id="frequencia" name="frequencia">
+            {% for valor, rotulo in frequencias.items() %}
+            <option value="{{ valor }}" {% if valor == 'mensal' %}selected{% endif %}>{{ rotulo }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="lan-campo">
+          <label for="vezes">Quantas vezes</label>
+          <input type="number" id="vezes" name="vezes" min="2" max="{{ max_vezes }}" value="12">
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    {# Despesa nova que já saiu do caixa: registra o pagamento junto
+       (utils/despesas_pagamento.py). Na recorrente, só a primeira. #}
+    {% if pagamento and not registro and not eh_receita %}
+    <div class="lan-campo lan-rec lan-pag">
+      <label class="lan-rec__liga">
+        <input type="checkbox" id="ja_paga" name="ja_paga" value="1">
+        Já foi paga
+      </label>
+      <span class="lan-ajuda">Marque se o dinheiro já saiu. Senão, a despesa fica a pagar e o pagamento é registrado depois, na lista.</span>
+      <div class="lan-linha lan-rec__campos lan-pag__campos">
+        <div class="lan-campo">
+          <label for="data_pagamento">Pago em</label>
+          <input type="date" id="data_pagamento" name="data_pagamento" value="{{ hoje_iso }}" max="{{ hoje_iso }}">
+        </div>
+        <div class="lan-campo">
+          <label for="id_forma_pagamento">Forma de pagamento</label>
+          <select id="id_forma_pagamento" name="id_forma_pagamento" data-pag-forma>
+            <option value="">Não informada</option>
+            {% for f in pagamento.formas %}
+            <option value="{{ f.id }}" data-conta="{{ f.id_conta_padrao or '' }}">{{ f.nome }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="lan-campo">
+          <label for="id_conta">Saiu da conta</label>
+          <select id="id_conta" name="id_conta" data-pag-conta>
+            {% for c in pagamento.contas %}
+            <option value="{{ c.id }}">{{ c.nome }}</option>
+            {% else %}
+            <option value="">Nenhuma conta cadastrada</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
     <div class="lan-campo">
       <label for="observacoes">Observações</label>
       <textarea id="observacoes" name="observacoes" rows="3"
@@ -84,6 +147,19 @@
     <a href="{{ voltar }}" class="sh__btn">Cancelar</a>
   </div>
 </form>
+{% endmacro %}
+
+{# Escolher a forma sugere a conta amarrada a ela (Contas › forma → conta). #}
+{% macro js_pagamento_conta() %}
+<script>
+document.addEventListener('change', function (e) {
+  var forma = e.target.closest('[data-pag-forma]');
+  if (!forma) return;
+  var conta = forma.form && forma.form.querySelector('[data-pag-conta]');
+  var alvo = forma.selectedOptions[0] && forma.selectedOptions[0].getAttribute('data-conta');
+  if (conta && alvo && conta.querySelector('option[value="' + alvo + '"]')) conta.value = alvo;
+});
+</script>
 {% endmacro %}
 
 {% macro css_lancamento() %}
@@ -114,6 +190,12 @@
     border-color: var(--sh-ink);
     box-shadow: 0 0 0 3px rgba(28, 28, 28, .07);
   }
+  .lan-rec__liga { display: flex !important; align-items: center; gap: .5rem; cursor: pointer; }
+  .lan-rec__liga input { width: auto !important; margin: 0; }
+  .lan-rec__campos { display: none; margin-top: .8rem; }
+  .lan-rec:has(#recorrente:checked) .lan-rec__campos { display: grid; }
+  .lan-pag:has(#ja_paga:checked) .lan-pag__campos { display: grid; }
+  .lan-rec__campos .lan-campo { margin-bottom: 0; }
   .lan-ajuda { display: block; margin-top: .3rem; color: var(--sh-ink-soft); font-size: .82rem; }
 
   .lan-rodape {

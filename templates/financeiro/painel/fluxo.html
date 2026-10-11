@@ -1,0 +1,173 @@
+{% extends "financeiro/painel/_base.html" %}
+{% set fin_aba = 'fluxo' %}
+{% block title %}Entradas x Saídas — Financeiro{% endblock %}
+
+{% block pagina_titulo %}Entradas x Saídas{% endblock %}
+{% block pagina_subtitulo %}{{ mes_label }} · o que entrou, o que saiu e o que ainda está previsto{% endblock %}
+
+{% block pagina_acoes %}
+  <a class="sh__btn" href="{{ url_for('financeiro.lista_despesas', academia_id=academia_id, mes=mes, ano=ano) }}">
+    <i class="bi bi-receipt"></i> Despesas
+  </a>
+  <a class="sh__btn sh__btn--forte" href="{{ url_for('financeiro.cadastrar_despesa', academia_id=academia_id) }}">
+    <i class="bi bi-plus-lg"></i> Nova despesa
+  </a>
+{% endblock %}
+
+{% block fin_css %}
+<style>
+  .flx-entrada { color: #16713c; }
+  .flx-saida { color: #a4131f; }
+  .flx-grade { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; margin-top: 1rem; }
+  .flx-quadro { padding: 1rem 1.15rem; }
+  .flx-quadro h2 { font-size: .95rem; margin: 0 0 .75rem; }
+  .flx-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: .45rem; }
+  .flx-lista li { display: flex; justify-content: space-between; gap: 1rem; font-size: .88rem; }
+  .flx-lista li span:last-child { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .flx-vazio { color: var(--sh-ink-soft); font-size: .85rem; margin: 0; }
+
+  /* Barras dos últimos meses: entradas e saídas lado a lado, mesma escala. */
+  .flx-serie { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: .75rem;
+               align-items: end; height: 190px; padding-top: .5rem; }
+  .flx-mes { display: grid; grid-template-rows: 1fr auto auto; height: 100%; gap: .3rem; text-align: center; }
+  .flx-barras { display: flex; align-items: flex-end; justify-content: center; gap: 4px; height: 100%; }
+  .flx-barra { width: min(22px, 40%); border-radius: 3px 3px 0 0; min-height: 2px; }
+  .flx-barra--e { background: #16a34a; }
+  .flx-barra--s { background: #dc2626; }
+  .flx-mes small { font-size: .72rem; color: var(--sh-ink-soft); }
+  .flx-mes.is-atual small:first-of-type { font-weight: 700; color: inherit; }
+  .flx-legenda { display: flex; gap: 1rem; font-size: .78rem; color: var(--sh-ink-soft); margin-top: .6rem; }
+  .flx-legenda i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: .3rem; }
+
+  .lin-pagar { grid-template-columns: 100px minmax(0, 2fr) 120px 110px; }
+  @media (max-width: 620px) { .lin-pagar { grid-template-columns: minmax(0, 1fr) 110px 90px; } .col-data { display: none; } }
+  .desp-pagar { height: 30px; padding: 0 .7rem; font-size: .8rem; }
+  .flx-vencida { color: #a4131f; font-weight: 600; }
+</style>
+{% endblock %}
+
+{% block fin_conteudo %}
+<form method="GET" class="lst-filtros">
+  {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
+  <label class="lst-campo lst-campo--curto">
+    <span class="lst-campo__rotulo">Mês</span>
+    <input type="month" name="mes" value="{{ mes_chave }}" onchange="this.form.submit()">
+  </label>
+</form>
+
+<div class="sh__faixa">
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Entradas</span>
+    <span class="sh__faixa-valor fin-valor flx-entrada">{{ fmt_moeda(entradas) }}</span>
+    <span class="lst-sub">Recebido no mês</span>
+  </div>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Saídas</span>
+    <span class="sh__faixa-valor fin-valor flx-saida">{{ fmt_moeda(saidas) }}</span>
+    <span class="lst-sub">Despesas pagas no mês</span>
+  </div>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Resultado</span>
+    <span class="sh__faixa-valor fin-valor {{ 'flx-saida' if resultado < 0 else 'flx-entrada' }}">{{ fmt_moeda(resultado) }}</span>
+    <span class="lst-sub">Entradas − saídas</span>
+  </div>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">Previsto até o fim do mês</span>
+    <span class="sh__faixa-valor fin-valor {{ 'flx-saida' if previsto < 0 else '' }}">{{ fmt_moeda(previsto) }}</span>
+    <span class="lst-sub">+ {{ fmt_moeda(a_receber) }} a receber · − {{ fmt_moeda(a_pagar) }} a pagar</span>
+  </div>
+</div>
+
+{% if n_atrasadas_antes %}
+<p class="lst-sub flx-vencida">
+  <i class="bi bi-exclamation-triangle-fill"></i>
+  {{ n_atrasadas_antes }} despesa{{ 's' if n_atrasadas_antes != 1 }} de meses anteriores ainda sem pagamento
+  ({{ fmt_moeda(atrasadas_antes) }}) —
+  <a href="{{ url_for('financeiro.lista_despesas', academia_id=academia_id, situacao='a_pagar', mes=inicio.month, ano=inicio.year) }}">ver despesas a pagar</a>.
+</p>
+{% endif %}
+
+<section class="lst-quadro flx-quadro">
+  <h2>Últimos {{ serie|length }} meses</h2>
+  <div class="flx-serie" style="--n: {{ serie|length }}">
+    {% for s in serie %}
+    <a class="flx-mes {% if s.ano == ano and s.mes == mes %}is-atual{% endif %}"
+       href="{{ url_for('financeiro_painel.fluxo', academia_id=academia_id, mes='%04d-%02d'|format(s.ano, s.mes)) }}"
+       title="Entradas {{ fmt_moeda(s.entradas) }} · Saídas {{ fmt_moeda(s.saidas) }} · Resultado {{ fmt_moeda(s.resultado) }}"
+       style="text-decoration:none;color:inherit">
+      <div class="flx-barras">
+        <div class="flx-barra flx-barra--e" style="height: {{ '%.1f'|format(s.pct_entradas) }}%"></div>
+        <div class="flx-barra flx-barra--s" style="height: {{ '%.1f'|format(s.pct_saidas) }}%"></div>
+      </div>
+      <small>{{ fmt_mes(s.ano, s.mes) }}</small>
+      <small class="{{ 'flx-saida' if s.resultado < 0 else 'flx-entrada' }}">{{ fmt_moeda(s.resultado) }}</small>
+    </a>
+    {% endfor %}
+  </div>
+  <div class="flx-legenda"><span><i style="background:#16a34a"></i>Entradas</span><span><i style="background:#dc2626"></i>Saídas</span></div>
+</section>
+
+<div class="flx-grade">
+  <section class="lst-quadro flx-quadro">
+    <h2 class="flx-entrada">Entradas por categoria</h2>
+    {% if entradas_cat %}
+    <ul class="flx-lista">
+      {% for r in entradas_cat %}<li><span>{{ r.nome }} <span class="lst-sub">({{ r.n }})</span></span><span>{{ fmt_moeda(r.total) }}</span></li>{% endfor %}
+    </ul>
+    {% else %}<p class="flx-vazio">Nada recebido neste mês.</p>{% endif %}
+  </section>
+  <section class="lst-quadro flx-quadro">
+    <h2 class="flx-entrada">Entradas por forma de pagamento</h2>
+    {% if entradas_forma %}
+    <ul class="flx-lista">
+      {% for r in entradas_forma %}<li><span>{{ r.nome }}</span><span>{{ fmt_moeda(r.total) }}</span></li>{% endfor %}
+    </ul>
+    {% else %}<p class="flx-vazio">Nada recebido neste mês.</p>{% endif %}
+  </section>
+  <section class="lst-quadro flx-quadro">
+    <h2 class="flx-saida">Saídas por categoria</h2>
+    {% if saidas_cat %}
+    <ul class="flx-lista">
+      {% for r in saidas_cat %}<li><span>{{ r.nome }} <span class="lst-sub">({{ r.n }})</span></span><span>{{ fmt_moeda(r.total) }}</span></li>{% endfor %}
+    </ul>
+    {% else %}<p class="flx-vazio">Nenhuma despesa paga neste mês.</p>{% endif %}
+  </section>
+</div>
+
+<section class="lst-quadro mt-3">
+  <header class="lst-quadro__topo">
+    <h2 class="lst-quadro__titulo">A pagar em {{ mes_label }}</h2>
+    <span class="lst-quadro__meta">{{ a_pagar_lista|length }} · {{ fmt_moeda(a_pagar) }}</span>
+  </header>
+  <div class="lst-rolagem">
+    <div class="lst-largura" style="--lst-min:420px">
+      {% for d in a_pagar_lista %}
+      <div class="lst-linha lin-pagar lst-item">
+        <div class="col-data {{ 'flx-vencida' if d.vencida }}">{{ d.data|data_br }}</div>
+        <div class="lst-corta">
+          <span class="lst-nome">{{ d.descricao }}</span>
+          <span class="lst-sub">{{ d.categoria or 'Sem categoria' }}{% if d.vencida %} · <span class="flx-vencida">vencida</span>{% endif %}</span>
+        </div>
+        <div class="lst-num fin-valor">{{ fmt_moeda(d.valor) }}</div>
+        <div class="lst-fim">
+          {% if contas %}
+          <button type="button" class="sh__btn sh__btn--forte desp-pagar js-pagar-despesa"
+                  data-acao="{{ url_for('financeiro.pagar_despesa', despesa_id=d.id) }}"
+                  data-descricao="{{ d.descricao }}" data-valor="{{ '%.2f'|format(d.valor or 0)|replace('.', ',') }}">Pagar</button>
+          {% endif %}
+        </div>
+      </div>
+      {% else %}
+      <p class="lst-vazio">Nenhuma despesa a pagar neste mês.</p>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<p class="lst-sub mt-2">
+  Entradas: receitas não canceladas, pela data do recebimento (mensalidades, cobranças e receitas avulsas).
+  Saídas: despesas pagas, pela data do pagamento. A receber: mensalidades e cobranças em aberto com vencimento no mês, sem juros.
+</p>
+
+{% include "financeiro/despesas/_dialogo_pagar.html" %}
+{% endblock %}

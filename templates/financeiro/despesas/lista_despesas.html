@@ -4,10 +4,13 @@
 
 {% block pagina_titulo %}Despesas{% endblock %}
 {% block pagina_subtitulo %}
-  Contas, compras e demais saídas de caixa lançadas no período.
+  Contas a pagar do período. Ao pagar, informe de qual conta saiu o dinheiro: a saída entra no caixa e no extrato.
 {% endblock %}
 
 {% block pagina_acoes %}
+  <a class="sh__btn" href="{{ url_for('financeiro_painel.fluxo', academia_id=academia_id, mes='%04d-%02d'|format(ano, mes)) }}">
+    <i class="bi bi-arrow-left-right"></i> Entradas x Saídas
+  </a>
   <a class="sh__btn sh__btn--forte"
      href="{{ url_for('financeiro.cadastrar_despesa', academia_id=academia_id) if academia_id else url_for('financeiro.cadastrar_despesa') }}">
     <i class="bi bi-plus-lg"></i> Nova despesa
@@ -16,15 +19,21 @@
 
 {% block fin_css %}
 <style>
-  .lin-desp { grid-template-columns: 110px minmax(0, 2fr) minmax(0, 1fr) 130px 130px; }
+  .lin-desp { grid-template-columns: 110px minmax(0, 2fr) minmax(0, 1.4fr) 120px 150px; }
   @media (max-width: 900px) {
-    .lin-desp { grid-template-columns: 110px minmax(0, 2fr) 130px 130px; }
-    .col-cat { display: none; }
+    .lin-desp { grid-template-columns: 100px minmax(0, 2fr) 120px 150px; }
+    .col-sit { display: none; }
   }
   @media (max-width: 620px) {
-    .lin-desp { grid-template-columns: minmax(0, 1fr) 130px; }
+    .lin-desp { grid-template-columns: minmax(0, 1fr) 110px; }
     .col-data, .col-acoes { display: none; }
   }
+  .desp-sit { display: inline-flex; align-items: center; gap: .35rem; font-size: .8rem; font-weight: 600;
+              padding: .15rem .55rem; border-radius: 999px; white-space: nowrap; }
+  .desp-sit--paga { background: rgba(22, 113, 60, .12); color: #16713c; }
+  .desp-sit--aberta { background: rgba(217, 119, 6, .14); color: #a35a00; }
+  .desp-sit--vencida { background: rgba(164, 19, 31, .12); color: #a4131f; }
+  .desp-pagar { height: 30px; padding: 0 .7rem; font-size: .8rem; }
 </style>
 {% endblock %}
 
@@ -32,15 +41,18 @@
 <div class="sh__faixa">
   <div class="sh__faixa-item">
     <span class="sh__faixa-rotulo">Total do mês</span>
-    <span class="sh__faixa-valor fin-valor fin-valor--saida">
-      R$ {{ '%.2f'|format(total_mes or 0)|replace('.', ',') }}
-    </span>
-    <span class="lst-sub">{{ '%02d'|format(mes) }}/{{ ano }}</span>
+    <span class="sh__faixa-valor fin-valor">R$ {{ '%.2f'|format(total_mes or 0)|replace('.', ',') }}</span>
+    <span class="lst-sub">{{ despesas|length }} despesa{{ 's' if despesas|length != 1 }} em {{ '%02d'|format(mes) }}/{{ ano }}</span>
   </div>
   <div class="sh__faixa-item">
-    <span class="sh__faixa-rotulo">Lançamentos</span>
-    <span class="sh__faixa-valor">{{ despesas|length }}</span>
-    <span class="lst-sub">No período escolhido</span>
+    <span class="sh__faixa-rotulo">Pago</span>
+    <span class="sh__faixa-valor fin-valor fin-valor--saida">R$ {{ '%.2f'|format(total_pago or 0)|replace('.', ',') }}</span>
+    <span class="lst-sub">Já saiu do caixa</span>
+  </div>
+  <div class="sh__faixa-item">
+    <span class="sh__faixa-rotulo">A pagar</span>
+    <span class="sh__faixa-valor fin-valor">R$ {{ '%.2f'|format(total_a_pagar or 0)|replace('.', ',') }}</span>
+    <span class="lst-sub">{% if n_vencidas %}{{ n_vencidas }} vencida{{ 's' if n_vencidas != 1 }}{% else %}Nenhuma vencida{% endif %}</span>
   </div>
 </div>
 
@@ -60,15 +72,30 @@
   <label class="lst-campo lst-campo--curto">
     <span class="lst-campo__rotulo">Ano</span>
     <select name="ano">
-      {% for a in range(ano_atual, ano_atual - 5, -1) %}
+      {% for a in range(ano_atual + 1, ano_atual - 5, -1) %}
       <option value="{{ a }}" {% if ano == a %}selected{% endif %}>{{ a }}</option>
       {% endfor %}
+    </select>
+  </label>
+  <label class="lst-campo lst-campo--curto">
+    <span class="lst-campo__rotulo">Situação</span>
+    <select name="situacao">
+      <option value="" {% if not situacao %}selected{% endif %}>Todas</option>
+      <option value="a_pagar" {% if situacao == 'a_pagar' %}selected{% endif %}>A pagar</option>
+      <option value="pagas" {% if situacao == 'pagas' %}selected{% endif %}>Pagas</option>
     </select>
   </label>
   <div class="lst-filtros__acoes">
     <button type="submit" class="sh__btn sh__btn--forte">Filtrar</button>
   </div>
 </form>
+
+{% if not contas %}
+<p class="lst-sub mb-2">
+  Para registrar pagamentos, a academia precisa de ao menos uma conta (caixa, banco, Pix):
+  <a href="{{ url_for('financeiro_painel.contas', academia_id=academia_id) }}">cadastrar contas</a>.
+</p>
+{% endif %}
 
 <section class="lst-quadro">
   <header class="lst-quadro__topo">
@@ -77,11 +104,11 @@
   </header>
 
   <div class="lst-rolagem">
-    <div class="lst-largura" style="--lst-min:540px">
+    <div class="lst-largura" style="--lst-min:640px">
       <div class="lst-linha lin-desp lst-cab">
-        <div class="col-data">Data</div>
+        <div class="col-data">Vencimento</div>
         <div>Descrição</div>
-        <div class="col-cat">Categoria</div>
+        <div class="col-sit">Situação</div>
         <div class="lst-num">Valor</div>
         <div class="lst-fim col-acoes">Ações</div>
       </div>
@@ -93,16 +120,44 @@
           <span class="lst-nome">{{ d.descricao }}</span>
           <span class="lst-sub">{{ d.categoria or 'Sem categoria' }}</span>
         </div>
-        <div class="col-cat lst-corta">{{ d.categoria or '—' }}</div>
+        <div class="col-sit lst-corta">
+          {% if d.paga %}
+          <span class="desp-sit desp-sit--paga"><i class="bi bi-check-circle-fill"></i> Paga</span>
+          <span class="lst-sub">{{ d.data_pagamento|data_br }} · {{ d.forma_nome or 'forma não informada' }} · {{ d.conta_nome }}</span>
+          {% elif d.vencida %}
+          <span class="desp-sit desp-sit--vencida"><i class="bi bi-exclamation-circle-fill"></i> Vencida</span>
+          {% else %}
+          <span class="desp-sit desp-sit--aberta"><i class="bi bi-clock"></i> A pagar</span>
+          {% endif %}
+        </div>
         <div class="lst-num fin-valor fin-valor--saida">
-          R$ {{ '%.2f'|format(d.valor or 0)|replace('.', ',') }}
+          R$ {{ '%.2f'|format((d.valor_pago if d.paga else d.valor) or 0)|replace('.', ',') }}
+          {% if d.paga and d.valor_pago != d.valor %}<span class="lst-sub">de R$ {{ '%.2f'|format(d.valor or 0)|replace('.', ',') }}</span>{% endif %}
         </div>
         <div class="lst-fim col-acoes">
           <div class="lst-acoes">
+            {% if d.paga %}
+            <form method="POST" action="{{ url_for('financeiro.desfazer_pagamento_despesa', despesa_id=d.id) }}"
+                  data-confirmar="Desfazer o pagamento? A saída é estornada no extrato e a despesa volta para a pagar.">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="mes" value="{{ mes }}"><input type="hidden" name="ano" value="{{ ano }}">
+              <input type="hidden" name="situacao" value="{{ situacao }}">
+              <button type="submit" class="lst-acao" title="Desfazer pagamento" aria-label="Desfazer pagamento">
+                <i class="bi bi-arrow-counterclockwise"></i>
+              </button>
+            </form>
+            {% elif contas %}
+            <button type="button" class="sh__btn sh__btn--forte desp-pagar js-pagar-despesa"
+                    data-acao="{{ url_for('financeiro.pagar_despesa', despesa_id=d.id) }}"
+                    data-descricao="{{ d.descricao }}" data-valor="{{ '%.2f'|format(d.valor or 0)|replace('.', ',') }}">
+              Pagar
+            </button>
+            {% endif %}
             <a class="lst-acao" title="Editar" aria-label="Editar despesa"
                href="{{ url_for('financeiro.editar_despesa', despesa_id=d.id) }}{% if academia_id %}?academia_id={{ academia_id }}{% endif %}">
               <i class="bi bi-pencil"></i>
             </a>
+            {% if not d.paga %}
             <form method="POST" action="{{ url_for('financeiro.excluir_despesa', despesa_id=d.id) }}"
                   data-confirmar="Excluir esta despesa?">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -113,6 +168,7 @@
                 <i class="bi bi-trash"></i>
               </button>
             </form>
+            {% endif %}
           </div>
         </div>
       </div>
@@ -125,4 +181,6 @@
     </div>
   </div>
 </section>
+
+{% include "financeiro/despesas/_dialogo_pagar.html" %}
 {% endblock %}
