@@ -43,6 +43,14 @@
   @media (max-width: 620px) { .lin-pagar { grid-template-columns: minmax(0, 1fr) 110px 90px; } .col-data { display: none; } }
   .desp-pagar { height: 30px; padding: 0 .7rem; font-size: .8rem; }
   .flx-vencida { color: #a4131f; font-weight: 600; }
+  .flx-lista a { color: inherit; text-decoration: none; border-bottom: 1px dashed currentColor; }
+  .flx-lista a.flx-saida { color: #a4131f; }
+  .flx-lista li.is-ativo { font-weight: 700; }
+  .lin-entrada { grid-template-columns: 100px minmax(0, 2fr) 110px 190px; }
+  @media (max-width: 620px) { .lin-entrada { grid-template-columns: minmax(0, 1fr) 90px 150px; } }
+  .flx-forma { height: 32px; width: 100%; padding: 0 .5rem; border: 1px solid var(--sh-line, #ddd);
+               border-radius: 6px; background: transparent; color: inherit; font-size: .85rem; }
+  .flx-forma.is-vazia { border-color: #dc2626; color: #a4131f; }
 </style>
 {% endblock %}
 
@@ -77,6 +85,14 @@
     <span class="lst-sub">+ {{ fmt_moeda(a_receber) }} a receber · − {{ fmt_moeda(a_pagar) }} a pagar</span>
   </div>
 </div>
+
+{% if sem_forma and filtro_entradas != 'sem' %}
+<p class="lst-sub flx-vencida">
+  <i class="bi bi-question-circle-fill"></i>
+  {{ sem_forma.n }} entrada{{ 's' if sem_forma.n != 1 }} sem forma de pagamento ({{ fmt_moeda(sem_forma.total) }}) —
+  <a href="{{ url_for('financeiro_painel.fluxo', academia_id=academia_id, mes=mes_chave, entradas='sem') }}#entradas">informar a forma</a>.
+</p>
+{% endif %}
 
 {% if n_atrasadas_antes %}
 <p class="lst-sub flx-vencida">
@@ -120,8 +136,19 @@
     <h2 class="flx-entrada">Entradas por forma de pagamento</h2>
     {% if entradas_forma %}
     <ul class="flx-lista">
-      {% for r in entradas_forma %}<li><span>{{ r.nome }}</span><span>{{ fmt_moeda(r.total) }}</span></li>{% endfor %}
+      {% for r in entradas_forma %}
+      {% set _chave = (r.forma_id|string) if r.forma_id else 'sem' %}
+      <li class="{{ 'is-ativo' if filtro_entradas == _chave }}">
+        <a href="{{ url_for('financeiro_painel.fluxo', academia_id=academia_id, mes=mes_chave, entradas=_chave) }}#entradas"
+           class="{{ 'flx-saida' if not r.forma_id }}">{{ r.nome }} <span class="lst-sub">({{ r.n }})</span></a>
+        <span>{{ fmt_moeda(r.total) }}</span>
+      </li>
+      {% endfor %}
     </ul>
+    <p class="lst-sub mt-2 mb-0">
+      Clique numa forma para ver as entradas e ajustar.
+      <a href="{{ url_for('financeiro_painel.fluxo', academia_id=academia_id, mes=mes_chave, entradas='todas') }}#entradas">Ver todas</a>.
+    </p>
     {% else %}<p class="flx-vazio">Nada recebido neste mês.</p>{% endif %}
   </section>
   <section class="lst-quadro flx-quadro">
@@ -133,6 +160,50 @@
     {% else %}<p class="flx-vazio">Nenhuma despesa paga neste mês.</p>{% endif %}
   </section>
 </div>
+
+{% if lista_entradas is not none %}
+<section class="lst-quadro mt-3" id="entradas">
+  <header class="lst-quadro__topo">
+    <h2 class="lst-quadro__titulo">
+      Entradas de {{ mes_label }}{% if filtro_entradas == 'sem' %} sem forma de pagamento
+      {% elif filtro_entradas != 'todas' %} · {{ (entradas_forma|selectattr('forma_id', 'equalto', filtro_entradas|int)|map(attribute='nome')|first) or 'forma' }}{% endif %}
+    </h2>
+    <span class="lst-quadro__meta">
+      {{ lista_entradas|length }} ·
+      <a href="{{ url_for('financeiro_painel.fluxo', academia_id=academia_id, mes=mes_chave) }}">fechar</a>
+    </span>
+  </header>
+  <div class="lst-rolagem">
+    <div class="lst-largura" style="--lst-min:560px">
+      {% for e in lista_entradas %}
+      <div class="lst-linha lin-entrada lst-item">
+        <div class="col-data">{{ e.data|data_br }}</div>
+        <div class="lst-corta">
+          <span class="lst-nome">{{ e.aluno_nome or e.descricao }}</span>
+          <span class="lst-sub">{{ e.descricao if e.aluno_nome else (e.categoria or 'Sem categoria') }}</span>
+        </div>
+        <div class="lst-num fin-valor">{{ fmt_moeda(e.valor) }}</div>
+        <form method="POST" action="{{ url_for('financeiro_painel.receita_forma', receita_id=e.id) }}" class="lst-fim">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="academia_id" value="{{ academia_id }}">
+          <input type="hidden" name="mes_chave" value="{{ mes_chave }}">
+          <input type="hidden" name="entradas" value="{{ filtro_entradas }}">
+          <select name="id_forma_pagamento" class="flx-forma {{ 'is-vazia' if not e.id_forma_pagamento }}"
+                  aria-label="Forma de pagamento" onchange="this.form.submit()">
+            <option value="" {% if not e.id_forma_pagamento %}selected{% endif %}>Não informada</option>
+            {% for f in formas %}
+            <option value="{{ f.id }}" {% if f.id == e.id_forma_pagamento %}selected{% endif %}>{{ f.nome }}</option>
+            {% endfor %}
+          </select>
+        </form>
+      </div>
+      {% else %}
+      <p class="lst-vazio">Nenhuma entrada aqui.</p>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endif %}
 
 <section class="lst-quadro mt-3">
   <header class="lst-quadro__topo">

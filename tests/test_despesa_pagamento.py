@@ -206,3 +206,43 @@ def test_rotas_ponta_a_ponta(ficticia):
 
     h = cli.get("/financeiro/painel/fluxo").get_data(as_text=True)
     assert "R$ 90,50" in h and "Aluguel" in h   # paga nas saídas; aluguel volta a "a pagar"
+
+
+def test_trocar_forma_da_entrada(transacao):
+    conn, cur = transacao
+    cur.execute("""SELECT id FROM formas_pagamento WHERE id_academia = %s AND id_conta_padrao IS NOT NULL
+                   AND COALESCE(ativo, 1) = 1 LIMIT 1""", (ACADEMIA,))
+    forma = cur.fetchone()["id"]
+    cur.execute("""INSERT INTO receitas (descricao, valor, data, categoria, id_academia)
+                   VALUES ('Teste forma', 10, %s, 'Teste', %s)""", (date.today(), ACADEMIA))
+    rid = cur.lastrowid
+    sem = dp.entradas_do_mes(cur, ACADEMIA, date.today(), date.today(), "sem")
+    assert rid in [e["id"] for e in sem]
+    dp.trocar_forma_receita(conn, cur, rid, ACADEMIA, forma, usuario_id=USUARIO)
+    assert rid in [e["id"] for e in dp.entradas_do_mes(cur, ACADEMIA, date.today(), date.today(), forma)]
+    with pytest.raises(dp.ErroPagamento):   # entrada de outra academia
+        dp.trocar_forma_receita(conn, cur, rid, 1, forma)
+
+
+def test_trocar_forma_move_o_lancamento_para_a_conta_da_forma(transacao):
+    conn, cur = transacao
+    cur.execute("""SELECT id, id_conta_padrao FROM formas_pagamento WHERE id_academia = %s
+                   AND id_conta_padrao IS NOT NULL ORDER BY id""", (ACADEMIA,))
+    formas = cur.fetchall()
+    destino = formas[0]
+    outra = next(c for c in [_conta(cur)] + [f["id_conta_padrao"] for f in formas]
+                 if c != destino["id_conta_padrao"])
+    lanc = fin.lancar(conn, cur, id_academia=ACADEMIA, id_conta=outra, sentido="entrada",
+                      valor=Decimal("12"), descricao="Teste", data_competencia=date.today(),
+                      origem="receita", usuario_id=USUARIO)
+    cur.execute("""INSERT INTO receitas (descricao, valor, data, id_academia, id_lancamento)
+                   VALUES ('Teste conta', 12, %s, %s, %s)""", (date.today(), ACADEMIA, lanc))
+    dp.trocar_forma_receita(conn, cur, cur.lastrowid, ACADEMIA, destino["id"], usuario_id=USUARIO)
+    cur.execute("SELECT id_conta, id_forma_pagamento FROM fin_lancamentos WHERE id = %s", (lanc,))
+    l = cur.fetchone()
+    assert (l["id_conta"], l["id_forma_pagamento"]) == (destino["id_conta_padrao"], destino["id"])
+
+
+def test_tela_lista_entradas_sem_forma(cliente):
+    h = cliente.get("/financeiro/painel/fluxo?mes=2026-10&entradas=sem").get_data(as_text=True)
+    assert 'id="entradas"' in h and "receitas/" in h and "/forma" in h

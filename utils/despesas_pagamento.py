@@ -178,11 +178,13 @@ def entradas_saidas(cur, id_academia, ano, mes, meses_serie=6):
                      AND r.data BETWEEN %s AND %s
                    GROUP BY 1 ORDER BY total DESC""", (id_academia, inicio, fim))
     entradas_cat = cur.fetchall()
-    cur.execute("""SELECT COALESCE(fp.nome, 'Não informada') AS nome, SUM(r.valor) AS total
+    cur.execute("""SELECT r.id_forma_pagamento AS forma_id,
+                          COALESCE(MAX(fp.nome), 'Não informada') AS nome,
+                          SUM(r.valor) AS total, COUNT(*) AS n
                    FROM receitas r LEFT JOIN formas_pagamento fp ON fp.id = r.id_forma_pagamento
                    WHERE r.id_academia = %s AND COALESCE(r.cancelada, 0) = 0
                      AND r.data BETWEEN %s AND %s
-                   GROUP BY 1 ORDER BY total DESC""", (id_academia, inicio, fim))
+                   GROUP BY r.id_forma_pagamento ORDER BY total DESC""", (id_academia, inicio, fim))
     entradas_forma = cur.fetchall()
     cur.execute(f"""SELECT COALESCE(NULLIF(TRIM(d.categoria), ''), 'Sem categoria') AS nome,
                            SUM(l.valor) AS total, COUNT(*) AS n
@@ -248,3 +250,63 @@ def entradas_saidas(cur, id_academia, ano, mes, meses_serie=6):
         "previsto": entradas - saidas + a_receber - a_pagar,
         "serie": serie,
     }
+
+
+# ---------------------------------------------------------------------
+# Forma de pagamento das entradas
+# ---------------------------------------------------------------------
+def entradas_do_mes(cur, id_academia, inicio, fim, forma=None):
+    """Receitas do período, para conferir e ajustar a forma. `forma`: id da
+    forma, 'sem' (não informada) ou None (todas)."""
+    onde = ["r.id_academia = %s", "COALESCE(r.cancelada, 0) = 0", "r.data BETWEEN %s AND %s"]
+    args = [id_academia, inicio, fim]
+    if forma == "sem":
+        onde.append("r.id_forma_pagamento IS NULL")
+    elif forma:
+        onde.append("r.id_forma_pagamento = %s")
+        args.append(int(forma))
+    cur.execute(
+        f"""SELECT r.id, r.descricao, r.valor, r.data, r.categoria, r.id_forma_pagamento,
+                   COALESCE(a.nome, a2.nome) AS aluno_nome
+            FROM receitas r
+            LEFT JOIN alunos a ON a.id = r.id_aluno
+            LEFT JOIN mensalidade_aluno ma ON ma.id = r.id_mensalidade_aluno
+            LEFT JOIN alunos a2 ON a2.id = ma.aluno_id
+            WHERE {' AND '.join(onde)}
+            ORDER BY r.data, r.id""", tuple(args))
+    return cur.fetchall()
+
+
+def trocar_forma_receita(conn, cur, receita_id, id_academia, id_forma, usuario_id=None):
+    """Grava a forma da entrada. Se a entrada está no caixa (razão), o
+    lançamento acompanha: ganha a forma e vai para a conta dela. Não faz commit."""
+    cur.execute("""SELECT id, id_lancamento, id_mensalidade_aluno, id_cobranca_avulsa
+                   FROM receitas WHERE id = %s AND id_academia = %s FOR UPDATE""",
+                (receita_id, id_academia))
+    r = cur.fetchone()
+    if not r:
+        raise ErroPagamento("Entrada não encontrada.")
+    id_conta_forma = None
+    if id_forma:
+        cur.execute("SELECT id, id_conta_padrao FROM formas_pagamento WHERE id = %s AND id_academia = %s",
+                    (id_forma, id_academia))
+        f = cur.fetchone()
+        if not f:
+            raise ErroPagamento("Forma de pagamento inválida.")
+        id_conta_forma = f["id_conta_padrao"]
+    cur.execute("UPDATE receitas SET id_forma_pagamento = %s WHERE id = %s", (id_forma or None, receita_id))
+    if r["id_mensalidade_aluno"]:
+        cur.execute("UPDATE mensalidade_aluno SET id_forma_pagamento = %s WHERE id = %s",
+                    (id_forma or None, r["id_mensalidade_aluno"]))
+    if r["id_lancamento"]:
+        cur.execute("SELECT id_conta, status, id_estorno FROM fin_lancamentos WHERE id = %s",
+                    (r["id_lancamento"],))
+        l = cur.fetchone()
+        if l:
+            cur.execute("UPDATE fin_lancamentos SET id_forma_pagamento = %s WHERE id = %s",
+                        (id_forma or None, r["id_lancamento"]))
+            if (id_conta_forma and l["status"] == "efetivado" and not l["id_estorno"]
+                    and int(l["id_conta"]) != int(id_conta_forma)):
+                fin.reatribuir_conta(conn, cur, r["id_lancamento"], id_conta_forma,
+                                     motivo="Forma de pagamento da entrada ajustada.",
+                                     usuario_id=usuario_id)

@@ -2162,16 +2162,55 @@ def fluxo():
     ano, mes = _mes_ref()
     conn = get_db_connection()
     cur = conn.cursor(dictionary=True)
+    # ?entradas=sem|<id forma>|todas abre a lista das entradas para ajustar a forma.
+    filtro = (request.args.get("entradas") or "").strip()
+    if filtro not in ("", "sem", "todas") and not filtro.isdigit():
+        filtro = ""
     try:
         dados = dp.entradas_saidas(cur, academia_id, ano, mes)
         contas, formas = dp.contas_e_formas(cur, academia_id)
+        lista_entradas = (dp.entradas_do_mes(cur, academia_id, dados["inicio"], dados["fim"],
+                                             None if filtro == "todas" else filtro)
+                          if filtro else None)
     finally:
         conn.close()
+    sem_forma = next((f for f in dados["entradas_forma"] if not f["forma_id"]), None)
     ctx = _ctx_base(academia_id)
     ctx.update(fin_aba="fluxo", mes=mes, ano=ano, mes_chave=f"{ano:04d}-{mes:02d}",
                mes_label=fmt_mes(ano, mes), contas=contas, formas=formas,
-               hoje_iso=date.today().isoformat(), voltar="fluxo", **dados)
+               hoje_iso=date.today().isoformat(), voltar="fluxo",
+               filtro_entradas=filtro, lista_entradas=lista_entradas, sem_forma=sem_forma, **dados)
     return render_template("financeiro/painel/fluxo.html", **ctx)
+
+
+@bp_financeiro_painel.route("/receitas/<int:receita_id>/forma", methods=["POST"])
+@login_required
+def receita_forma(receita_id):
+    """Ajusta a forma de pagamento de uma entrada (e, se ela está no caixa,
+    move o lançamento para a conta da forma)."""
+    from utils import despesas_pagamento as dp
+    academia_id = _get_academia_id()
+    if not academia_id:
+        return _sem_academia()
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        dp.trocar_forma_receita(conn, cur, receita_id, academia_id,
+                                request.form.get("id_forma_pagamento", type=int),
+                                usuario_id=current_user.id)
+        conn.commit()
+        flash("Forma de pagamento da entrada atualizada.", "success")
+    except fin.ErroFinanceiro as e:
+        conn.rollback()
+        flash(str(e), "danger")
+    except Exception:
+        conn.rollback()
+        current_app.logger.exception("forma da receita %s", receita_id)
+        flash("Erro ao atualizar a forma de pagamento.", "danger")
+    finally:
+        conn.close()
+    return _volta("financeiro_painel.fluxo", academia_id, mes=request.form.get("mes_chave") or None,
+                  entradas=request.form.get("entradas") or None)
 
 
 @bp_financeiro_painel.route("/extrato")
