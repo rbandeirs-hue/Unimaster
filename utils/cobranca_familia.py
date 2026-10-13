@@ -472,7 +472,8 @@ def gerar_link(grupo_id, forcar=False):
 # ---------------------------------------------------------------------------
 # Baixa
 # ---------------------------------------------------------------------------
-def baixar_grupo(grupo_id, valor_pago=None, gateway_nome="gateway", data_pagamento=None):
+def baixar_grupo(grupo_id, valor_pago=None, gateway_nome="gateway", data_pagamento=None,
+                 id_forma_pagamento=None):
     """Dá baixa em TODAS as mensalidades do grupo e lança as receitas.
 
     O valor pago é rateado na proporção do valor de cada item, com a sobra do
@@ -480,6 +481,8 @@ def baixar_grupo(grupo_id, valor_pago=None, gateway_nome="gateway", data_pagamen
     com o que entrou, e o relatório por aluno continua correto.
 
     Idempotente: grupo já pago não faz nada (os gateways reenviam o webhook).
+    `id_forma_pagamento` (baixa manual) vai para a mensalidade, a receita e o
+    lançamento no caixa — sem ela a entrada ficava "não informada".
     """
     import logging
     log = logging.getLogger(__name__)
@@ -554,9 +557,10 @@ def baixar_grupo(grupo_id, valor_pago=None, gateway_nome="gateway", data_pagamen
             else:
                 cur.execute(
                     """UPDATE mensalidade_aluno
-                       SET status='pago', status_pagamento='pago', data_pagamento=%s, valor_pago=%s
+                       SET status='pago', status_pagamento='pago', data_pagamento=%s, valor_pago=%s,
+                           id_forma_pagamento=COALESCE(%s, id_forma_pagamento)
                        WHERE id=%s AND status <> 'pago'""",
-                    (dia, v, i["registro_id"]),
+                    (dia, v, id_forma_pagamento, i["registro_id"]),
                 )
         cur.execute(
             "UPDATE cobranca_grupo SET status='pago', valor_pago=%s, data_pagamento=%s WHERE id=%s",
@@ -578,19 +582,35 @@ def baixar_grupo(grupo_id, valor_pago=None, gateway_nome="gateway", data_pagamen
             if (i.get("origem") or "mensalidade") == "avulsa":
                 cur.execute(
                     """INSERT INTO receitas (descricao, valor, data, categoria,
-                                             id_academia, id_cobranca_avulsa)
-                       VALUES (%s, %s, %s, 'Cobrança avulsa', %s, %s)""",
+                                             id_academia, id_cobranca_avulsa, id_forma_pagamento, id_aluno)
+                       VALUES (%s, %s, %s, 'Cobrança avulsa', %s, %s, %s, %s)""",
                     (f"Cobrança avulsa - {i['aluno_nome']} (cobrança familiar {gateway_nome})",
-                     v, dia, g["id_academia"], i["registro_id"]),
+                     v, dia, g["id_academia"], i["registro_id"], id_forma_pagamento, i.get("aluno_id")),
                 )
             else:
                 cur.execute(
                     """INSERT INTO receitas (descricao, valor, data, categoria,
-                                             id_academia, id_mensalidade_aluno)
-                       VALUES (%s, %s, %s, 'Mensalidades', %s, %s)""",
+                                             id_academia, id_mensalidade_aluno, id_forma_pagamento, id_aluno)
+                       VALUES (%s, %s, %s, 'Mensalidades', %s, %s, %s, %s)""",
                     (f"Mensalidade - {i['aluno_nome']} (cobrança familiar {gateway_nome})",
-                     v, dia, g["id_academia"], i["registro_id"]),
+                     v, dia, g["id_academia"], i["registro_id"], id_forma_pagamento, i.get("aluno_id")),
                 )
+            id_receita = cur.lastrowid
+            # Espelha no caixa, como a baixa individual (respeita o modo do
+            # controle financeiro; desativado não grava nada).
+            if v and v > 0:
+                from utils import financeiro_core as fin
+                _origem = "cobranca_avulsa" if (i.get("origem") or "mensalidade") == "avulsa" else "mensalidade"
+                try:
+                    # O núcleo financeiro lê as linhas como dicionário.
+                    fin.registrar_entrada_de_pagamento(
+                        conn, conn.cursor(dictionary=True), id_academia=g["id_academia"], valor=v,
+                        descricao=f"{'Cobrança avulsa' if _origem == 'cobranca_avulsa' else 'Mensalidade'} - {i['aluno_nome']} (cobrança familiar)",
+                        data=dia, id_forma_pagamento=id_forma_pagamento, id_aluno=i.get("aluno_id"),
+                        origem=_origem, origem_id=i["registro_id"], id_receita=id_receita)
+                except fin.ErroFinanceiro:
+                    # Mês fechado no caixa: a receita fica, o caixa não recebe.
+                    log.warning("Grupo %s: entrada no caixa recusada", grupo_id, exc_info=True)
         conn.commit()
     except Exception:
         conn.rollback()

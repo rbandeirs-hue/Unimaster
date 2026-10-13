@@ -19,6 +19,15 @@
   .fam-acoes { display:flex; flex-wrap:wrap; gap:.4rem; margin-top:.75rem; }
   .fam-link { display:flex; gap:.4rem; margin-top:.6rem; }
   .fam-link input { flex:1; min-width:0; }
+
+  .fam-baixa > summary { list-style: none; cursor: pointer; }
+  .fam-baixa > summary::-webkit-details-marker { display: none; }
+  .fam-baixa__campos { display: flex; flex-wrap: wrap; gap: .5rem; align-items: end; margin-top: .5rem; }
+  .fam-baixa__campos label { display: grid; gap: .2rem; font-size: .78rem; font-weight: 600; }
+  .fam-baixa__campos input, .fam-baixa__campos select { height: 34px; padding: 0 .5rem; border: 1px solid var(--sh-line, #ddd);
+                                                        border-radius: 6px; background: transparent; color: inherit; }
+  .fam-baixa__campos input[name=valor] { width: 90px; }
+
 </style>
 {% endblock %}
 
@@ -141,7 +150,22 @@
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
             <input type="hidden" name="mes" value="{{ mes_chave }}">
-            <button type="submit" class="sh__btn">Registrar pagamento recebido</button>
+            {# Pagamento por fora: quando, quanto e como — sem isso a entrada
+               ficava "forma não informada" e fora do caixa. #}
+            <details class="fam-baixa">
+              <summary class="sh__btn">Registrar pagamento recebido</summary>
+              <div class="fam-baixa__campos">
+                <label>Pago em <input type="date" name="data_pagamento" value="{{ hoje_iso }}" max="{{ hoje_iso }}" required></label>
+                <label>Valor (R$) <input type="text" name="valor" inputmode="decimal" value="{{ '%.2f'|format(g.valor_total or 0) }}" required></label>
+                <label>Forma
+                  <select name="id_forma_pagamento" required>
+                    <option value="">Escolha…</option>
+                    {% for fp in formas %}<option value="{{ fp.id }}">{{ fp.nome }}</option>{% endfor %}
+                  </select>
+                </label>
+                <button type="submit" class="sh__btn sh__btn--forte">Confirmar baixa</button>
+              </div>
+            </details>
           </form>
           {% endif %}
 

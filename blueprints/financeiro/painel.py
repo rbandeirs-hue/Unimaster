@@ -2443,8 +2443,21 @@ def familias():
         meses=_meses_disponiveis(date.today().year, date.today().month, 6),
         n_ativas=sum(1 for f in lista if f.get("ativo")),
         gateway_ok=_gateway_ativo(_gateway_config_academia(academia_id)),
+        formas=_formas_ativas(academia_id), hoje_iso=date.today().isoformat(),
     )
     return render_template("financeiro/painel/familias.html", **ctx)
+
+
+def _formas_ativas(academia_id):
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute("""SELECT id, nome FROM formas_pagamento
+                       WHERE id_academia = %s AND COALESCE(ativo, 1) = 1 ORDER BY ordem, nome""",
+                    (academia_id,))
+        return cur.fetchall()
+    finally:
+        conn.close()
 
 
 @bp_financeiro_painel.route("/familias/ativar", methods=["POST"])
@@ -2545,7 +2558,23 @@ def familias_baixar(grupo_id):
     ano, mes = _mes_ref()
     valor = request.form.get("valor")
     valor = float(_dec(valor)) if valor else None
-    if cf.baixar_grupo(grupo_id, valor, "manual"):
+    try:
+        data_pag = date.fromisoformat((request.form.get("data_pagamento") or "")[:10])
+    except ValueError:
+        data_pag = None
+    if data_pag and data_pag > date.today():
+        flash("A data do pagamento não pode ser no futuro.", "danger")
+        return _volta("financeiro_painel.familias", academia_id, mes=f"{ano:04d}-{mes:02d}")
+    forma = request.form.get("id_forma_pagamento", type=int)
+    if forma:
+        conn = get_db_connection(); cur = conn.cursor()
+        try:
+            cur.execute("SELECT 1 FROM formas_pagamento WHERE id = %s AND id_academia = %s", (forma, academia_id))
+            if not cur.fetchone():
+                forma = None
+        finally:
+            conn.close()
+    if cf.baixar_grupo(grupo_id, valor, "manual", data_pagamento=data_pag, id_forma_pagamento=forma):
         flash("Cobrança familiar baixada. Todas as mensalidades do grupo foram "
               "marcadas como pagas e as receitas lançadas por aluno.", "success")
     else:
