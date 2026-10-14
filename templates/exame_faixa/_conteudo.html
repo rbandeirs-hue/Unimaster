@@ -89,17 +89,6 @@
     <h2><i class="bi bi-person-arms-up" aria-hidden="true"></i> Técnicas novas desta faixa</h2>
     <span>{{ n_tec.n }} técnica{{ 's' if n_tec.n != 1 }} · {{ n_vid.n }} com vídeo · o exame também cobra as das faixas anteriores</span>
   </header>
-  {# As descrições das técnicas falam em tori e uke o tempo todo (80 das 83),
-     mas esses dois termos só são cobrados na promoção para a amarela. Quem
-     está na branca lia "Tori desequilibra o uke" sem ter onde descobrir quem
-     é quem. #}
-  {% set tem_ficha = namespace(v=false) %}
-  {% for g in tecnicas %}{% for t in g.itens %}{% for pt in t.partes if pt.ficha %}{% set tem_ficha.v = true %}{% endfor %}{% endfor %}{% endfor %}
-  {% if tem_ficha.v and termos_do_material %}
-  <p class="exf-legenda">Nas descrições:
-    {% for t in termos_do_material %}<b>{{ t.termo }}</b>, {{ t.significado }}{{ '; ' if not loop.last else '.' }}{% endfor %}
-  </p>
-  {% endif %}
   {% if tecnicas %}
   <div class="exf-tecnicas exf-tecnicas--vitrine">
     {% for g in tecnicas %}
@@ -213,3 +202,9 @@
   </div>
 </details>
 {% endif %}
+
+{# O glossário fecha o material. A apostila o inclui por conta própria, depois
+   dos katas e dos documentos, para ficar mesmo na última página. #}
+{% set tem_ficha = namespace(v=false) %}
+{% for g in tecnicas %}{% for t in g.itens %}{% for pt in t.partes if pt.ficha %}{% set tem_ficha.v = true %}{% endfor %}{% endfor %}{% endfor %}
+{% if tem_ficha.v and not sem_termos %}{% include 'exame_faixa/_termos.html' %}{% endif %}

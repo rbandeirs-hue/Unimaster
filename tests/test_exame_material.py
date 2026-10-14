@@ -265,10 +265,15 @@ def main():
     checar("54. tori e uke estão na legenda",
            {"tori", "uke"} <= {t["termo"] for t in legenda},
            str([t["termo"] for t in legenda]))
-    checar("55. a legenda sai na tela, junto das técnicas",
-           'class="exf-legenda"' in html and "quem aplica a técnica" in html)
-    checar("56. a legenda não é escondida da impressão",
-           "exf-nao-imprime" not in html.split('class="exf-legenda"')[1][:200])
+    checar("55. o glossário sai no material", 'id="mat-termos"' in html
+           and "quem aplica a técnica" in html)
+    checar("56. o glossário não é escondido da impressão",
+           "exf-nao-imprime" not in html.split('id="mat-termos"')[1][:300])
+    # Ele fecha o material: quem estuda a técnica quer a técnica primeiro.
+    import re as _re2
+    secoes = [m.group(1) for m in _re2.finditer(r'id="(mat-[a-z]+)"', html)]
+    checar("57. o glossário é a última seção do material",
+           secoes and secoes[-1] == "mat-termos", str(secoes))
 
     print("\nO nome do grupo vem com o que ele quer dizer")
     sem_sig = [g["chave"] for g in exf.GRUPOS if not g.get("significado")]
