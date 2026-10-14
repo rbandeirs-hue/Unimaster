@@ -106,6 +106,15 @@
             <button type="button" class="exf-parl__txt" data-exf-ficha data-titulo="{{ t.partes|map(attribute='nome')|join(' ' ~ t.sep ~ ' ') }}">
               <span class="exf-par"><span>{{ p0.nome }}</span><b title="{{ 'contra-ataque' if t.sep == '×' else 'combinação' }}">{{ t.sep }}</b><span>{{ t.partes[1].nome if t.partes|length > 1 }}</span></span>
             </button>
+            {# O par é a única linha que mostrava só nome japonês: a ficha
+               inteira não cabe aqui, mas a tradução cabe, e é o que se precisa
+               para saber o que a técnica é. Vale na tela e no papel. #}
+            {% set com_trad = t.partes|selectattr('ficha')|selectattr('ficha.traducao')|list %}
+            {% if com_trad %}
+            <span class="exf-parl__trad">
+              {% for pt in com_trad %}<span><b>{{ pt.nome }}</b> {{ pt.ficha.traducao }}</span>{% endfor %}
+            </span>
+            {% endif %}
             {% include 'exame_faixa/_ficha_dados.html' %}
           </div>
           {% set rot_par = t.partes|map(attribute='nome')|join(' ' ~ t.sep ~ ' ') %}

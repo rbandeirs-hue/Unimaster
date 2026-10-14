@@ -213,6 +213,40 @@ def main():
     else:
         checar(f"31. todas as {len(prog)} promoções abrem sem erro", True)
 
+    print("\nToda técnica mostra o que o nome quer dizer")
+    # Golpe e contragolpe (kaeshi/renraku) eram a única linha que saía só com o
+    # nome japonês: a ficha inteira não cabe no par, e no papel ela é escondida.
+    # A tradução passa a sair ali, na tela e no papel.
+    from flask import render_template
+    com_par = next((p for p in prog if (p.get("conteudo") or {}).get("kaeshi")), None)
+    if com_par:
+        con_p, tec_p = exf.blocos_estudo(com_par)
+        with app.app_context():
+            html_p = render_template("exame_faixa/_conteudo.html", conhecimento=con_p,
+                                     tecnicas=tec_p, quiz=False, atual=com_par)
+        pares = [t for g in tec_p for t in g["itens"] if t.get("sep")]
+        checar("47. os pares ganham a linha de tradução",
+               html_p.count("exf-parl__trad") == len(pares),
+               f'{html_p.count("exf-parl__trad")} x {len(pares)}')
+        metades = {pt["nome"] for t in pares for pt in t["partes"]}
+        faltam = sorted(n for n in metades
+                        if (mat.ficha(n) or {}).get("traducao")
+                        and (mat.ficha(n) or {})["traducao"] not in html_p)
+        checar("48. cada metade do par traz o próprio significado",
+               not faltam, ", ".join(faltam[:5]))
+        checar("49. a tradução do par não é escondida da impressão",
+               "exf-parl__trad" in html_p
+               and "exf-nao-imprime" not in html_p.split('exf-parl__trad')[1][:120])
+
+    # E as técnicas soltas (nage/katame) seguem com a ficha completa no papel.
+    nomes_cartao = {t["partes"][0]["nome"] for g in tecnicas for t in g["itens"]
+                    if not t.get("sep")}
+    faltam_c = sorted(n for n in nomes_cartao
+                      if (mat.ficha(n) or {}).get("traducao")
+                      and (mat.ficha(n) or {})["traducao"] not in html)
+    checar("50. técnica solta mostra a tradução no material",
+           not faltam_c, ", ".join(faltam_c[:5]))
+
     print("\nO nome do grupo vem com o que ele quer dizer")
     sem_sig = [g["chave"] for g in exf.GRUPOS if not g.get("significado")]
     checar("42. todo grupo do programa tem significado cadastrado",
