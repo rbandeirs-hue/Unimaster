@@ -15,6 +15,9 @@
 <a href="{{ url_for('exame_faixa.exames', **base) }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Exames</a>
 {% if pode_editar %}<a href="{{ url_for('exame_faixa.editar_exame', evento_id=ev.id) }}" class="sh__btn"><i class="bi bi-pencil"></i> Editar exame</a>{% endif %}
 <button type="button" class="sh__btn" onclick="window.print()"><i class="bi bi-printer"></i> Imprimir lista</button>
+{% if ap_lista %}
+<button type="button" class="sh__btn sh__btn--forte" data-exf-apostila><i class="bi bi-journal-text"></i> Imprimir material</button>
+{% endif %}
 {% if fila %}
 <a href="{{ url_for('exame_faixa.avaliar', evento_id=ev.id, inscricao_id=fila[0].inscricao_id, **base) }}" class="sh__btn sh__btn--forte">
   Chamar próximo: <span class="sh__btn__nome">{{ fila[0].nome }}</span> <i class="bi bi-chevron-right"></i></a>
@@ -265,6 +268,7 @@
     {% endif %}
   </aside>
 </div>
+{% if ap_lista %}{% include 'exame_faixa/_apostila_dialogo.html' %}{% endif %}
 {% endblock %}
 
 {% block extra_js %}

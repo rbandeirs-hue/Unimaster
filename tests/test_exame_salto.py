@@ -148,6 +148,53 @@ def main():
            all(t in html_s for t in _tecnicas(prog[0]["conteudo"], "nage")),
            str(_tecnicas(prog[0]["conteudo"], "nage")))
 
+    print("\nA banca imprime o material dos alunos do exame")
+    from tests.test_shell_smoke import USUARIO_POR_MODO
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute("""SELECT id, exame_academia_id FROM eventos_competicoes
+                       WHERE exame_faixa = 1 AND exame_academia_id IS NOT NULL
+                       ORDER BY id DESC LIMIT 1""")
+        ev = cur.fetchone()
+    finally:
+        cur.close()
+        conn.close()
+    checar("20. existe exame de academia para testar", ev is not None)
+    if ev:
+        cli = app.test_client()
+        with cli.session_transaction() as sess:
+            sess["_user_id"] = str(USUARIO_POR_MODO["admin"])
+            sess["_fresh"] = True
+            sess["modo_painel"] = "admin"
+            sess["academia_gerenciamento_id"] = ev["exame_academia_id"]
+        base = f"?academia_id={ev['exame_academia_id']}"
+        r_b = cli.get(f"/exame-faixa/evento/{ev['id']}/banca{base}", follow_redirects=True)
+        hb = r_b.get_data(as_text=True)
+        checar("21. a banca abre", r_b.status_code == 200, str(r_b.status_code))
+        checar("22. a banca tem o botão de imprimir material", "Imprimir material" in hb)
+        checar("23. o diálogo lista os alunos do exame",
+               'id="exf-apostila"' in hb and hb.count('name="aluno_id"') > 0)
+        r_a = cli.get(f"/exame-faixa/evento/{ev['id']}/apostilas{base}")
+        ha = r_a.get_data(as_text=True)
+        checar("24. a rota de apostilas do exame responde 200",
+               r_a.status_code == 200, str(r_a.status_code))
+        # Antes, a impressão só considerava inscritos: com a inscrição ainda não
+        # feita (ou cancelada), saía uma página em branco.
+        n_folhas = ha.count('class="exf-so-papel exf-apostila-folha"')
+        checar("25. sai material mesmo sem inscrição confirmada", n_folhas > 0,
+               f"{n_folhas} folhas")
+        checar("26. quem salta leva o aviso na própria apostila",
+               ("Salto de faixa" in ha) == (hb.count('lst-tag">salto<') > 0),
+               f'avisos={ha.count("Salto de faixa")} na lista={hb.count(chr(62) + "salto" + chr(60))}')
+        # Filtrar por aluno reduz a impressão.
+        import re as _re
+        ids = _re.findall(r'name="aluno_id" value="(\d+)"', hb)
+        if ids:
+            r_f = cli.get(f"/exame-faixa/evento/{ev['id']}/apostilas{base}&aluno_id={ids[0]}")
+            n_um = r_f.get_data(as_text=True).count('class="exf-so-papel exf-apostila-folha"')
+            checar("27. filtrar por aluno imprime só aquele aluno", n_um == 1, f"{n_um} folhas")
+
     print("\n" + ("TUDO PASSOU" if not _falhas else f"FALHARAM {len(_falhas)}: " + "; ".join(_falhas)))
     return 1 if _falhas else 0
 

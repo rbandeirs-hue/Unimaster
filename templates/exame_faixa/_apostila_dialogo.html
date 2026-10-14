@@ -1,15 +1,23 @@
-{# Diálogo "Imprimir apostila": escolhe os alunos da academia. Marcados, sai
-   uma apostila por aluno, com o nome dele e o material da faixa do próximo
-   exame dele (rota exame_faixa.programa_apostilas). Ninguém marcado, imprime
-   a apostila desta tela, sem nome.
-   Espera: alunos_apostila (com sit.promocao), esc, idx. #}
+{# Diálogo "Imprimir apostila": escolhe os alunos e sai uma apostila por aluno,
+   com o nome dele e o material da faixa do próximo exame dele — já somado
+   quando ele vai saltar faixa.
+
+   Serve duas telas, que diferem só no destino e nos campos escondidos:
+     ap_acao     url do formulário
+     ap_ocultos  {campo: valor} que vai junto (academia_id, p, evento_id…)
+     ap_lista    [{id, nome, de, para, salto}]
+     ap_sem_nome true quando "ninguém marcado" imprime a página atual (programa);
+                 na banca não há o que imprimir sem aluno, então o botão exige
+                 pelo menos um. #}
 <dialog class="exf-dialogo" id="exf-apostila" aria-labelledby="exf-apostila-titulo">
-  <form method="GET" action="{{ url_for('exame_faixa.programa_apostilas') }}" id="exf-apostila-form">
-    <input type="hidden" name="academia_id" value="{{ esc.academia_id }}">
-    <input type="hidden" name="p" value="{{ idx }}">
+  <form method="GET" action="{{ ap_acao }}" id="exf-apostila-form"
+        data-sem-nome="{{ '1' if ap_sem_nome else '' }}">
+    {% for campo, valor in (ap_ocultos or {}).items() %}
+    <input type="hidden" name="{{ campo }}" value="{{ valor }}">
+    {% endfor %}
     <header class="exf-dialogo__topo">
       <h2 id="exf-apostila-titulo">Imprimir apostila</h2>
-      <span class="u-muted u-fs-sm">Marque os alunos para sair uma apostila com o nome de cada um, no material da faixa do próximo exame dele. Sem ninguém marcado, imprime esta, sem nome.</span>
+      <span class="u-muted u-fs-sm">Marque os alunos para sair uma apostila com o nome de cada um, no material da faixa do próximo exame dele. Quem vai saltar faixa recebe o material das faixas puladas junto.{% if ap_sem_nome %} Sem ninguém marcado, imprime esta, sem nome.{% endif %}</span>
     </header>
     <div class="exf-dialogo__corpo">
       <div class="exf-ap-topo">
@@ -17,13 +25,12 @@
         <input type="search" class="u-campo__controle exf-ap-busca" id="exf-ap-busca" placeholder="Buscar aluno" aria-label="Buscar aluno">
       </div>
       <ul class="exf-ap-lista">
-        {% for a in alunos_apostila %}
-        {% set p = a.sit.promocao %}
+        {% for a in ap_lista %}
         <li data-nome="{{ (a.nome or '')|lower }}">
           <label>
             <input type="checkbox" class="form-check-input" name="aluno_id" value="{{ a.id }}">
             <span class="exf-ap-nome">{{ a.nome }}</span>
-            <span class="exf-ap-faixa">{{ p.de }} → <strong>{{ p.para }}</strong></span>
+            <span class="exf-ap-faixa">{{ a.de }} → <strong>{{ a.para }}</strong>{% if a.salto %} <span class="lst-tag">salto</span>{% endif %}{% if a.inscrito is defined and not a.inscrito %} <span class="lst-tag">não inscrito</span>{% endif %}</span>
           </label>
         </li>
         {% endfor %}
@@ -31,7 +38,7 @@
     </div>
     <footer class="exf-dialogo__rodape">
       <button type="button" class="sh__btn" data-ap-fechar>Cancelar</button>
-      <button type="submit" class="sh__btn sh__btn--forte" data-ap-imprimir><i class="bi bi-printer"></i> <span>Imprimir sem nome</span></button>
+      <button type="submit" class="sh__btn sh__btn--forte" data-ap-imprimir><i class="bi bi-printer"></i> <span>{{ 'Imprimir sem nome' if ap_sem_nome else 'Marque ao menos um aluno' }}</span></button>
     </footer>
   </form>
 </dialog>
@@ -57,10 +64,13 @@
   var btn = dlg.querySelector('[data-ap-imprimir] span');
   function caixas() { return Array.prototype.slice.call(form.querySelectorAll('input[name="aluno_id"]')); }
   function visiveis() { return caixas().filter(function (c) { return !c.closest('li').hidden; }); }
+  var semNome = form.getAttribute('data-sem-nome') === '1';
   function atualizar() {
     var n = caixas().filter(function (c) { return c.checked; }).length;
     var vis = visiveis();
-    btn.textContent = n ? 'Imprimir ' + n + ' apostila' + (n > 1 ? 's' : '') : 'Imprimir sem nome';
+    btn.textContent = n ? 'Imprimir ' + n + ' apostila' + (n > 1 ? 's' : '')
+                        : (semNome ? 'Imprimir sem nome' : 'Marque ao menos um aluno');
+    btn.closest('button').disabled = !n && !semNome;
     todos.checked = vis.length > 0 && vis.every(function (c) { return c.checked; });
     todos.indeterminate = !todos.checked && vis.some(function (c) { return c.checked; });
   }
@@ -79,10 +89,12 @@
     });
     atualizar();
   });
-  // Ninguém marcado: imprime a apostila desta tela, sem nome.
+  // Ninguém marcado: na tela do programa imprime a apostila da própria tela,
+  // sem nome; na banca não há apostila sem aluno, então não envia.
   form.addEventListener('submit', function (e) {
     if (caixas().some(function (c) { return c.checked; })) return;
     e.preventDefault();
+    if (!semNome) return;
     dlg.close();
     setTimeout(function () { window.print(); }, 50);
   });

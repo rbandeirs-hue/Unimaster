@@ -424,6 +424,13 @@ def _marca_da_apostila(cur, esc):
     return marca
 
 
+def _item_apostila(aluno_id, nome, promocao):
+    """Uma linha do diálogo de impressão: quem é e para que faixa vai."""
+    p = promocao or {}
+    return {"id": aluno_id, "nome": nome, "de": p.get("de"), "para": p.get("para"),
+            "salto": bool(p.get("salto"))}
+
+
 def _alunos_para_apostila(cur, esc, prog):
     """Alunos da academia em foco com a promoção do próximo exame de cada um.
 
@@ -460,6 +467,11 @@ def programa():
             "exame_faixa/programa.html", esc=esc, abas=_abas(esc, "programa"),
             prog=prog, idx=idx, marca=marca, n_videos=n_videos,
             alunos_apostila=_alunos_para_apostila(cur, esc, prog),
+            ap_acao=url_for("exame_faixa.programa_apostilas"),
+            ap_ocultos={"academia_id": esc.get("academia_id") or "", "p": idx},
+            ap_lista=[_item_apostila(a["id"], a["nome"], a["sit"].get("promocao"))
+                      for a in _alunos_para_apostila(cur, esc, prog)],
+            ap_sem_nome=True,
             hoje_txt=datetime.now().strftime("%d/%m/%Y"), **material)
     finally:
         cur.close()
@@ -488,23 +500,101 @@ def programa_apostilas():
         if not escolhidos:
             flash("Marque ao menos um aluno da academia para imprimir com nome.", "warning")
             return redirect(voltar)
-        videos = exf.videos_da_associacao(cur, esc["id_assoc"])
-        indice = {p["id"]: i for i, p in enumerate(prog)}
-        materiais, apostilas = {}, []
-        for a in escolhidos:
-            promo = a["sit"]["promocao"]
-            i = indice.get(promo["id"])
-            if i is None:
+        apostilas = _montar_apostilas(cur, esc, prog,
+                                      [(a, a["sit"]["promocao"]) for a in escolhidos])
+        return render_template(
+            "exame_faixa/apostilas.html", esc=esc, apostilas=apostilas, voltar=voltar,
+            marca=_marca_da_apostila(cur, esc), hoje_txt=datetime.now().strftime("%d/%m/%Y"))
+    finally:
+        cur.close()
+        conn.close()
+
+
+def _alunos_do_exame(cur, esc, ev, prog):
+    """(aluno, promoção) de todo mundo que vai prestar este exame, na ordem.
+
+    Inscritos primeiro — a promoção vem da inscrição, que é a que vale na prova
+    e pode ter sido mudada pelo professor. Depois os candidatos da academia em
+    foco, ainda não inscritos: na véspera do exame o professor quer o material
+    de quem VAI prestar, e esperar a inscrição ficar pronta para poder imprimir
+    é o que fazia a impressão sair vazia.
+    """
+    saida, vistos = [], set()
+    for r in _inscritos_da_banca(cur, esc, ev, prog):
+        if r["promocao"] and r["aluno_id"] not in vistos:
+            vistos.add(r["aluno_id"])
+            saida.append(({"id": r["aluno_id"], "nome": r["nome"], "inscrito": True},
+                          r["promocao"]))
+    if esc.get("academia_id") and prog:
+        for a in _alunos_com_situacao(cur, [esc["academia_id"]], prog,
+                                      data_ref=_data_exame(ev)):
+            if a["id"] in vistos or not a["sit"].get("promocao"):
                 continue
-            # O material de quem salta não serve para quem não salta: a chave
-            # do cache leva também a faixa de origem.
-            chave = (i, promo.get("indice_de"))
-            if chave not in materiais:
-                materiais[chave] = _material_da_promocao(
-                    cur, esc, prog, i, videos,
-                    promocao=promo if promo.get("salto") else None)
-            # O cabeçalho sai da faixa do aluno: num salto, "Branca → Amarela/Laranja".
-            apostilas.append(dict(materiais[chave], aluno=a, atual=promo))
+            vistos.add(a["id"])
+            saida.append(({"id": a["id"], "nome": a["nome"], "inscrito": False},
+                          a["sit"]["promocao"]))
+    return saida
+
+
+def _montar_apostilas(cur, esc, prog, pares):
+    """Uma apostila por aluno, a partir de (aluno, promoção).
+
+    A promoção vem de fora porque cada tela sabe a sua: na do programa é a do
+    próximo exame do aluno; na banca é a da inscrição, que pode ter sido
+    mudada pelo professor. Nos dois casos, se houver salto, ela já traz o
+    conteúdo somado das faixas puladas.
+    """
+    videos = exf.videos_da_associacao(cur, esc["id_assoc"])
+    indice = {p["id"]: i for i, p in enumerate(prog)}
+    materiais, apostilas = {}, []
+    for aluno, promo in pares:
+        if not promo:
+            continue
+        i = indice.get(promo.get("id"))
+        if i is None:
+            continue
+        # O material de quem salta não serve para quem não salta: a chave do
+        # cache leva também a faixa de origem.
+        chave = (i, promo.get("indice_de"))
+        if chave not in materiais:
+            materiais[chave] = _material_da_promocao(
+                cur, esc, prog, i, videos,
+                promocao=promo if promo.get("salto") else None)
+        # O cabeçalho sai da faixa do aluno: num salto, "Branca → Amarela/Laranja".
+        apostilas.append(dict(materiais[chave], aluno=aluno, atual=promo))
+    return apostilas
+
+
+@bp_exame_faixa.route("/evento/<int:evento_id>/apostilas")
+@login_required
+def evento_apostilas(evento_id):
+    """Apostilas dos inscritos num exame, para a banca imprimir no dia.
+
+    A promoção sai da inscrição — é ela que vale na prova, inclusive quando o
+    professor mudou a faixa de destino — e, havendo salto, o material já vem
+    com as faixas puladas junto, porque é tudo isso que o aluno apresenta.
+    """
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        esc, erro = _exige_escopo(cur)
+        if erro:
+            return erro
+        ev = _evento(cur, evento_id)
+        if not _pode_banca(esc, ev):
+            flash("Exame não encontrado.", "danger")
+            return redirect(url_for("exame_faixa.exames"))
+        prog = exf.programa(cur, ev["id_associacao"])
+        voltar = url_for("exame_faixa.banca", evento_id=evento_id,
+                         academia_id=esc.get("academia_id"))
+        pedidos = set(request.args.getlist("aluno_id", type=int))
+        todos = _alunos_do_exame(cur, esc, ev, prog)
+        escolhidos = [(a, p) for a, p in todos if not pedidos or a["id"] in pedidos]
+        if not escolhidos:
+            flash("Ninguém com faixa definida para imprimir — nem inscrito, nem "
+                  "candidato na academia escolhida.", "warning")
+            return redirect(voltar)
+        apostilas = _montar_apostilas(cur, esc, prog, escolhidos)
         return render_template(
             "exame_faixa/apostilas.html", esc=esc, apostilas=apostilas, voltar=voltar,
             marca=_marca_da_apostila(cur, esc), hoje_txt=datetime.now().strftime("%d/%m/%Y"))
@@ -1193,6 +1283,11 @@ def banca(evento_id):
             dono = (cur.fetchone() or {}).get("nome")
         return render_template(
             "exame_faixa/banca.html", esc=esc, abas=_abas(esc, "exames"), ev=ev,
+            ap_acao=url_for("exame_faixa.evento_apostilas", evento_id=ev["id"]),
+            ap_ocultos={"academia_id": esc.get("academia_id") or ""},
+            ap_lista=[dict(_item_apostila(a["id"], a["nome"], p), inscrito=a["inscrito"])
+                      for a, p in _alunos_do_exame(cur, esc, ev, prog)],
+            ap_sem_nome=False,
             fila=_fila(inscritos), chamada=chamada, dono=dono, prog=prog,
             pode_editar=_pode_editar_exame(esc, ev),
             data_exame=_data_exame(ev), hora_prova=_hora_prova(ev), prazo=_prazo_pagamento(ev),
