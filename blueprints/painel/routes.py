@@ -62,21 +62,45 @@ def _usuario_e_professor_ou_auxiliar():
 
 
 def _modos_disponiveis():
-    """Retorna lista de (modo_id, nome) disponíveis para o usuário."""
+    """Retorna lista de (modo_id, nome) disponíveis para o usuário.
+
+    O administrador entra em todos os modos de gestão. Boa parte das telas é
+    fechada por MODO e não por papel — "Disponível apenas em modo associação ou
+    academia" aparece 23 vezes nos blueprints, sempre olhando
+    `session['modo_painel']`. Enquanto o admin acumulava também os papéis de
+    gestor isso não aparecia; separada a conta de administração (ADM-01), ele
+    ficou barrado no sistema que administra.
+
+    Abrir exceção para admin em cada uma das 23 checagens seria 23 chances de
+    esquecer uma. Aqui ele ganha os modos, e as checagens continuam como estão.
+
+    Professor, aluno, responsável e visitante são exceção de propósito:
+    dependem de um cadastro ligado à pessoa. Sem ele o modo não leva a lugar
+    nenhum — no caso do professor, leva a um laço de redirecionamento. Esses
+    só aparecem para quem tem mesmo o vínculo.
+    """
+    eh_admin = current_user.has_role("admin")
+
+    def pode(papel):
+        return eh_admin or current_user.has_role(papel)
+
     modos = []
-    if current_user.has_role("admin"):
+    if eh_admin:
         modos.append(("admin", "Administrador"))
-    if current_user.has_role("gestor_federacao"):
+    if pode("gestor_federacao"):
         modos.append(("federacao", "Federação"))
-    if current_user.has_role("gestor_associacao"):
+    if pode("gestor_associacao"):
         modos.append(("associacao", "Associação"))
-    if current_user.has_role("gestor_academia"):
+    if pode("gestor_academia"):
         modos.append(("academia", "Academia"))
+    # Professor fica com aluno e responsável: o painel do professor exige ficha
+    # de professor e, sem ela, devolve para /painel/, que devolve para ele —
+    # um laço de redirecionamento. O admin só ganha o modo se tiver a ficha.
     if current_user.has_role("professor") or _usuario_e_professor_ou_auxiliar():
         modos.append(("professor", "Professor"))
-    if current_user.has_role("aluno"):
+    if current_user.has_role("aluno") or (eh_admin and _aluno_tem_registro()):
         modos.append(("aluno", "Aluno"))
-    if current_user.has_role("responsavel"):
+    if current_user.has_role("responsavel") or (eh_admin and _responsavel_tem_alunos()):
         modos.append(("responsavel", "Responsável"))
     if current_user.has_role("visitante"):
         modos.append(("visitante", "Visitante"))

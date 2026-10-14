@@ -108,14 +108,63 @@ def main():
                    vinc == [ACADEMIA_DO_RODRIGO], str(vinc))
 
         print()
+        # "Administrador pode ter acesso a qualquer parte do sistema."
+        # Boa parte das telas é fechada por MODO, não por papel — e o admin,
+        # depois da ADM-01, só tinha o modo "admin". A correção foi dar a ele
+        # os modos de gestão; este teste varre as rotas para garantir que não
+        # sobrou tela de gestão fora do alcance dele.
+        MODOS = ("admin", "federacao", "associacao", "academia")
+        # Telas pessoais: dependem de um cadastro da própria pessoa (ficha de
+        # professor, de visitante). Não são parte a administrar — sem cadastro
+        # não há o que mostrar.
+        PESSOAIS = ("/professor/", "/visitante/", "/eventos-competicoes/disponiveis")
+        rotas = [str(r) for r in app.url_map.iter_rules()
+                 if "GET" in r.methods and "<" not in str(r)
+                 and not str(r).startswith(("/static", "/auth/logout", "/painel/sair"))]
+        cli2 = app.test_client()
+        with cli2.session_transaction() as sess:
+            sess["_user_id"] = str(adm["id"])
+            sess["_fresh"] = True
+        sem_saida = []
+        for url in rotas:
+            if url.startswith(PESSOAIS):
+                continue
+            for modo in MODOS:
+                with cli2.session_transaction() as sess:
+                    sess["modo_painel"] = modo
+                    sess["academia_gerenciamento_id"] = ACADEMIA_DO_RODRIGO
+                try:
+                    txt = cli2.get(url, follow_redirects=True).get_data(as_text=True)
+                except Exception:
+                    break
+                if "Disponível apenas em modo" not in txt and "Acesso negado" not in txt:
+                    break
+            else:
+                sem_saida.append(url)
+        checar(f"15. o admin alcança as {len(rotas)} telas de gestão em algum modo",
+               not sem_saida, ", ".join(sem_saida[:6]))
+
+        from blueprints.painel.routes import _modos_disponiveis
+        from app import load_user as _load
+        with app.test_request_context("/"):
+            from flask_login import login_user as _login
+            _login(_load(str(adm["id"])))
+            modos_adm = [m[0] for m in _modos_disponiveis()]
+        checar("16. o admin pode entrar nos modos de gestão",
+               {"admin", "federacao", "associacao", "academia"} <= set(modos_adm),
+               str(modos_adm))
+        checar("17. não recebe o modo professor sem ficha de professor",
+               "professor" not in modos_adm, str(modos_adm))
+
+        print()
         cur.execute("""SELECT u.id, u.nome FROM usuarios u
                        JOIN roles_usuario ru ON ru.usuario_id = u.id
                        JOIN roles r ON r.id = ru.role_id AND r.chave = 'admin'
                        WHERE COALESCE(u.ativo, 1) = 1""")
         admins = cur.fetchall()
-        checar("15. existe exatamente um administrador de sistema ativo",
+        checar("18. existe exatamente um administrador de sistema ativo",
                len(admins) == 1, str([(a["id"], a["nome"]) for a in admins]))
-        checar("16. e é a conta de CPF 99999999999",
+        checar("19. e é a conta de CPF 99999999999",
                admins and admins[0]["id"] == adm["id"],
                str([(a["id"], a["nome"]) for a in admins]))
     finally:
