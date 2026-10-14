@@ -275,6 +275,35 @@ def main():
     checar("57. o glossário é a última seção do material",
            secoes and secoes[-1] == "mat-termos", str(secoes))
 
+    # O glossário é da promoção, não do sistema: cada faixa usa um vocabulário.
+    por_promocao = {}
+    for p_i, p_ in enumerate(prog):
+        c_, t_ = exf.blocos_estudo(p_)
+        por_promocao[p_i] = [x["termo"] for x in exf.termos_do_material(c_, t_)]
+    checar("58. o glossário muda de uma promoção para outra",
+           len({tuple(v) for v in por_promocao.values()}) > 1,
+           str(por_promocao))
+    sobrando = {i: [t for t in v if t not in
+                    " ".join([(pt.get("ficha") or {}).get("resumo") or ""
+                              for g in exf.blocos_estudo(prog[i])[1]
+                              for it in g["itens"] for pt in it["partes"]]
+                             + [s2 for g in exf.blocos_estudo(prog[i])[1]
+                                for it in g["itens"] for pt in it["partes"]
+                                for s2 in ((pt.get("ficha") or {}).get("passos") or [])]
+                             + [(b.get("nota") or "") for b in exf.blocos_estudo(prog[i])[0]]
+                             + [s3 for b in exf.blocos_estudo(prog[i])[0]
+                                for it in (b.get("itens") or []) if isinstance(it, dict)
+                                for s3 in ([it.get("resumo") or ""] + (it.get("passos") or []))]
+                             ).lower()]
+                for i, v in por_promocao.items()}
+    checar("59. nenhum termo listado está ausente do material daquela faixa",
+           not any(sobrando.values()),
+           str({i: v for i, v in sobrando.items() if v}))
+    checar("60. tori e uke entram em toda promoção que tem técnica",
+           all({"tori", "uke"} <= set(v) for i, v in por_promocao.items()
+               if exf.blocos_estudo(prog[i])[1]),
+           str(por_promocao))
+
     print("\nO nome do grupo vem com o que ele quer dizer")
     sem_sig = [g["chave"] for g in exf.GRUPOS if not g.get("significado")]
     checar("42. todo grupo do programa tem significado cadastrado",

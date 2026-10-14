@@ -242,6 +242,31 @@ def blocos_estudo(p):
     return conhecimento, tecnicas
 
 
+def termos_do_material(conhecimento, tecnicas):
+    """Glossário desta promoção: só os termos que o material dela usa.
+
+    O vocabulário de tatame ("tori", "kuzushi", "taka-kyoshi") entra nas
+    descrições das técnicas e dos fundamentos. Como cada promoção mostra
+    técnicas diferentes, a lista muda — a da branca tem sete termos, a da roxa
+    tem quatro. Fixá-la faria o material explicar palavra que não está lá.
+    """
+    textos = []
+    for g in tecnicas or []:
+        for item in g.get("itens") or []:
+            for parte in item.get("partes") or []:
+                f = parte.get("ficha") or {}
+                textos.append(f.get("resumo") or "")
+                textos += f.get("passos") or []
+    for bloco in conhecimento or []:
+        if bloco.get("tipo") != "material":
+            continue
+        textos.append(bloco.get("nota") or "")
+        for item in bloco.get("itens") or []:
+            textos.append(item.get("resumo") or "")
+            textos += item.get("passos") or []
+    return mat.termos_citados(textos)
+
+
 def _bloco_pedido_teoria(p):
     """A lista do que a banca cobra de teoria, separada do material.
 

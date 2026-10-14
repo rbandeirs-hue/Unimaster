@@ -402,6 +402,7 @@ def _material_da_promocao(cur, esc, prog, idx, videos, promocao=None):
     mostra_katas = bool(katas_cobrados) or (i_verde is not None and idx >= i_verde)
     return {
         "atual": atual, "conhecimento": conhecimento, "tecnicas": tecnicas,
+        "termos_do_material": exf.termos_do_material(conhecimento, tecnicas),
         "acumulado": acumulado, "anteriores": anteriores,
         "katas_cobrados": katas_cobrados, "katas_extra": katas_extra, "mostra_katas": mostra_katas,
         "documentos": exf.documentos_da_associacao(cur, esc["id_assoc"], atual["id"]),
@@ -2043,6 +2044,7 @@ def estudo():
             "exame_faixa/estudo.html", aluno=aluno, alunos=alunos_lista, modo=modo,
             prog=prog, liberadas=liberadas, k=k, idx=idx, atual=atual, sit=sit,
             faixa_atual=faixa_atual, conhecimento=conhecimento, tecnicas=tecnicas,
+            termos_do_material=exf.termos_do_material(conhecimento, tecnicas),
             exames=_exames_abertos(cur, aluno) if prog else [],
             status_rotulo=exf.STATUS_ROTULO)
     finally:
@@ -2175,7 +2177,9 @@ def meu_exame(evento_id):
             data_exame=_data_exame(ev), hora_prova=_hora_prova(ev), pagamento=pag["pagamento"],
             insc=insc, dados=dados, promocao=promo, av=av, linhas=linhas,
             liberadas=prog[: idx + 1] if idx is not None else [], idx=sel, k=idx, atual=atual,
-            conhecimento=conhecimento, tecnicas=tecnicas, valor_fmt=exf.moeda(dados.get("valor")))
+            conhecimento=conhecimento, tecnicas=tecnicas,
+            termos_do_material=exf.termos_do_material(conhecimento, tecnicas),
+            valor_fmt=exf.moeda(dados.get("valor")))
     finally:
         cur.close()
         conn.close()

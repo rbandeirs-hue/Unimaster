@@ -1268,14 +1268,17 @@ def _textos_das_fichas():
     yield KUMI_KATA_NOTA
 
 
-def termos_citados():
-    """Os termos da legenda que de fato aparecem nas descrições.
+def termos_citados(textos=None):
+    """Os termos que de fato aparecem nos textos dados.
 
     Explicar um termo que o texto não usa é ruído; deixar sem explicar um que
-    ele usa é o problema que a legenda veio resolver. Por isso a lista é
-    filtrada pelo próprio texto, e não fixa na tela.
+    ele usa é o problema que o glossário veio resolver. Por isso a lista é
+    filtrada pelo próprio texto.
+
+    `textos` é o material que vai à tela — assim o glossário de uma promoção
+    fala só do vocabulário que ELA usa. Sem argumento, varre o módulo inteiro.
     """
     import re
-    junto = " ".join(_textos_das_fichas()).lower()
+    junto = " ".join(textos if textos is not None else _textos_das_fichas()).lower()
     return [t for t in TERMOS_DO_TEXTO
             if re.search(r"\b" + re.escape(t["termo"]) + r"\b", junto)]
