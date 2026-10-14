@@ -203,6 +203,14 @@ def main():
         n_folhas = ha.count('class="exf-so-papel exf-apostila-folha"')
         checar("25. sai material mesmo sem inscrição confirmada", n_folhas > 0,
                f"{n_folhas} folhas")
+        # A apostila impressa monta o corpo com um {% with %} de variáveis
+        # nomeadas: o que não for passado ali some sem erro nenhum. Foi o que
+        # aconteceu com o glossário — some na impressão e aparece na tela.
+        n_termos = ha.count('id="mat-termos"')
+        checar("25b. cada folha impressa leva o glossário de termos",
+               n_termos == n_folhas, f"{n_termos} glossários para {n_folhas} folhas")
+        checar("25c. o glossário impresso tem conteúdo, não só o cabeçalho",
+               ha.count("<dt>") >= n_folhas, f'{ha.count("<dt>")} termos')
         checar("26. a apostila impressa também sai sem jargão de salto",
                "Salto de faixa" not in ha and "faixas do salto" not in ha)
         # Filtrar por aluno reduz a impressão.
