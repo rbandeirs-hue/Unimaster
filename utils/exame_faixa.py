@@ -597,6 +597,60 @@ def regra_de_salto(prog, nat, nasc, ref, laranja=None):
     return melhor
 
 
+# Como cada grupo do conteúdo se junta quando um aluno pula faixas.
+_CHAVE_DO_ITEM = {
+    "historico": lambda it: _norm(it.get("q") if isinstance(it, dict) else it),
+    "kaeshi": lambda it: (_norm(it.get("a")), _norm(it.get("b"))) if isinstance(it, dict) else _norm(it),
+    "renraku": lambda it: (_norm(it.get("a")), _norm(it.get("b"))) if isinstance(it, dict) else _norm(it),
+}
+# Texto de quantidade ("Um tipo", "Dois tipos"): vale o da faixa mais alta,
+# que é a mais exigente. Se alguma promoção nomeia os tipos, a lista vence.
+_CHAVES_DE_QUANTIDADE = ("ukemi", "kumikata")
+
+
+def conteudo_composto(prog, i_de, i_ate):
+    """Conteúdo somado das promoções de `i_de` até `i_ate`, inclusive.
+
+    Quem pula da branca direto para a azul faz um exame só, mas a prova é de
+    tudo que ficou pelo caminho — as três promoções que ele não prestou. O
+    conteúdo de uma linha do programa traz só o que é NOVO naquela faixa, então
+    mostrar a linha de destino sozinha esconderia justamente o que ele precisa
+    estudar.
+
+    A ordem é a do programa: o que se aprende primeiro aparece primeiro.
+    """
+    if not prog:
+        return {}
+    i_de = max(0, i_de)
+    i_ate = min(len(prog) - 1, i_ate)
+    if i_ate < i_de:
+        return dict((prog[i_ate].get("conteudo") or {}))
+    fora = {}
+    vistos = {}
+    for p in prog[i_de:i_ate + 1]:
+        for chave, valor in (p.get("conteudo") or {}).items():
+            if chave in _CHAVES_DE_QUANTIDADE:
+                # Lista de nomes vence texto; entre textos, vale o mais recente.
+                atual = fora.get(chave)
+                if isinstance(valor, list) or not isinstance(atual, list):
+                    fora[chave] = valor
+                continue
+            if not isinstance(valor, list):
+                fora[chave] = valor
+                continue
+            chave_de = _CHAVE_DO_ITEM.get(chave, lambda it: _norm(
+                it if not isinstance(it, dict) else it.get("q") or it.get("a")))
+            destino = fora.setdefault(chave, [])
+            marcados = vistos.setdefault(chave, set())
+            for item in valor:
+                k = chave_de(item)
+                if k in marcados:
+                    continue
+                marcados.add(k)
+                destino.append(item)
+    return fora
+
+
 def promocao_com_salto(prog, nat, salto):
     """Promoção de destino vista a partir da faixa atual do aluno.
 
@@ -604,10 +658,15 @@ def promocao_com_salto(prog, nat, salto):
     a faixa de origem e a carência são as da faixa atual.
     """
     p = dict(prog[salto[0]])
+    # O conteúdo é o das faixas puladas somado ao da faixa de destino: ele vai
+    # prestar um exame só, mas sobre tudo que ficou pelo caminho.
+    p["conteudo"] = conteudo_composto(prog, nat["indice"], salto[0])
     p.update(de=nat["de"], de_faixa=nat["de_faixa"], cores_de=nat["cores_de"],
              graduacao_de_id=nat["graduacao_de_id"], carencia_meses=nat.get("carencia_meses"),
              carencia_txt=nat["carencia_txt"], idade_txt=salto[1],
-             salto=True, salto_motivo=salto[1], promocao_normal=nat["para"])
+             salto=True, salto_motivo=salto[1], promocao_normal=nat["para"],
+             indice_de=nat["indice"],
+             faixas_no_salto=[x["para"] for x in prog[nat["indice"]:salto[0] + 1]])
     return p
 
 

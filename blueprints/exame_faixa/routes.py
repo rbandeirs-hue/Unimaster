@@ -361,20 +361,29 @@ def index():
 
 
 # ---------------------------------------------------------------- programa
-def _material_da_promocao(cur, esc, prog, idx, videos):
+def _material_da_promocao(cur, esc, prog, idx, videos, promocao=None):
     """Tudo o que a apostila de uma promoção mostra: teoria, técnicas (com QR
-    dos vídeos), revisão das faixas anteriores, katas e documentos."""
-    atual = prog[idx]
+    dos vídeos), revisão das faixas anteriores, katas e documentos.
+
+    `promocao` entra quando o aluno vai saltar faixa: ali o conteúdo já vem
+    somado (branca → azul traz também cinza e cinza/azul), e a revisão precisa
+    começar antes da faixa dele, não antes da faixa de destino.
+    """
+    atual = promocao or prog[idx]
     conhecimento, tecnicas = exf.blocos_estudo(atual)
     acumulado = [{"nome": g["nome"], "n": len(exf.itens_acumulados(prog, idx, g["chave"]))}
                  for g in exf.GRUPOS]
     # Revisão: o que veio das faixas anteriores e também entra no sorteio.
     anteriores = []
-    if idx > 0:
+    # Num salto, o material já cobre da faixa do aluno até o destino: a revisão
+    # começa antes da faixa dele, senão repetiria o que está logo acima.
+    i_inicio = atual.get("indice_de", idx)
+    if i_inicio > 0:
         for g in exf.GRUPOS:
             if g["chave"] == "teoria":
                 continue
-            its = [exf.rotulo_item(g, it) for it in exf.itens_acumulados(prog, idx - 1, g["chave"])]
+            its = [exf.rotulo_item(g, it)
+                   for it in exf.itens_acumulados(prog, i_inicio - 1, g["chave"])]
             anteriores.append({"nome": g["nome"], "significado": g.get("significado"),
                                "itens": its, "n": len(its)})
     # Material: vídeo de cada técnica (com QR para a apostila), katas e
@@ -487,10 +496,15 @@ def programa_apostilas():
             i = indice.get(promo["id"])
             if i is None:
                 continue
-            if i not in materiais:
-                materiais[i] = _material_da_promocao(cur, esc, prog, i, videos)
+            # O material de quem salta não serve para quem não salta: a chave
+            # do cache leva também a faixa de origem.
+            chave = (i, promo.get("indice_de"))
+            if chave not in materiais:
+                materiais[chave] = _material_da_promocao(
+                    cur, esc, prog, i, videos,
+                    promocao=promo if promo.get("salto") else None)
             # O cabeçalho sai da faixa do aluno: num salto, "Branca → Amarela/Laranja".
-            apostilas.append(dict(materiais[i], aluno=a, atual=promo))
+            apostilas.append(dict(materiais[chave], aluno=a, atual=promo))
         return render_template(
             "exame_faixa/apostilas.html", esc=esc, apostilas=apostilas, voltar=voltar,
             marca=_marca_da_apostila(cur, esc), hoje_txt=datetime.now().strftime("%d/%m/%Y"))
@@ -1922,7 +1936,12 @@ def estudo():
         idx = request.args.get("p", type=int)
         if idx is None or not (0 <= idx <= k):
             idx = k
-        atual = prog[idx] if prog else None
+        # Na faixa do próximo exame mostramos a promoção DO ALUNO: num salto ela
+        # traz o conteúdo somado das faixas puladas. Nas abas anteriores vale a
+        # linha do programa, que é o que aquela faixa cobra por si.
+        promo_aluno = (sit or {}).get("promocao") or {}
+        atual = (promo_aluno if (prog and idx == k and promo_aluno.get("salto"))
+                 else (prog[idx] if prog else None))
         conhecimento, tecnicas = exf.blocos_estudo(atual) if atual else ([], [])
         exf.anotar_videos(tecnicas, exf.videos_da_associacao(cur, id_assoc), com_qr=True)
         return render_template(
@@ -2051,7 +2070,9 @@ def meu_exame(evento_id):
             sel = None
         elif sel is None or not (0 <= sel <= idx):
             sel = idx
-        atual = prog[sel] if sel is not None else None
+        # Mesma regra da tela de estudo: na faixa do exame, a promoção do aluno.
+        atual = (promo if (sel is not None and sel == idx and (promo or {}).get("salto"))
+                 else (prog[sel] if sel is not None else None))
         conhecimento, tecnicas = exf.blocos_estudo(atual) if atual else ([], [])
         exf.anotar_videos(tecnicas, exf.videos_da_associacao(cur, ev.get("id_associacao")), com_qr=True)
         return render_template(
