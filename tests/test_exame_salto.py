@@ -127,7 +127,7 @@ def main():
     checar("13. tudo que o material mostra está no banco de sorteio",
            do_material <= banco, str(sorted(do_material - banco)[:5]))
 
-    print("\nA tela avisa que é salto")
+    print("\nO material é um só: sem jargão de salto, na ordem das faixas")
     from flask import render_template
     con_s, tec_s = exf.blocos_estudo(salto)
     con_n, tec_n = exf.blocos_estudo(prog[destino])
@@ -136,17 +136,36 @@ def main():
                                  tecnicas=tec_s, quiz=False, atual=salto)
         html_n = render_template("exame_faixa/_conteudo.html", conhecimento=con_n,
                                  tecnicas=tec_n, quiz=False, atual=prog[destino])
-    checar("14. com salto, o aviso aparece", "Salto de faixa" in html_s)
-    checar("15. o aviso nomeia as faixas cobertas",
-           all(f in html_s for f in salto["faixas_no_salto"]))
-    checar("16. sem salto, nenhum aviso", "exf-salto" not in html_n)
-    checar("17. sem salto o rótulo continua 'nesta faixa'",
-           "novos nesta faixa" in html_n or "novo nesta faixa" in html_n)
-    checar("18. com salto o rótulo não diz 'nesta faixa'",
-           "nesta faixa" not in html_s)
+    checar("14. o material não anuncia salto nenhum",
+           "Salto de faixa" not in html_s and "faixas do salto" not in html_s)
+    checar("15. o cabeçalho é o mesmo com e sem salto",
+           "Técnicas novas desta faixa" in html_s and "Técnicas novas desta faixa" in html_n)
+    checar("16. o rótulo de itens é o mesmo com e sem salto",
+           "nesta faixa" in html_s and "nesta faixa" in html_n)
+
+    # O que substitui o aviso é a própria ordem: dentro do grupo, as técnicas
+    # saem na sequência das faixas, da mais antiga à de destino.
+    nage = next(g for g in tec_s if g["chave"] == "nage")
+    ordem = [t["partes"][0]["nome"] for t in nage["itens"]]
+    esperado = []
+    for pr in prog[0:destino + 1]:
+        for t in (pr.get("conteudo") or {}).get("nage") or []:
+            if t not in esperado:
+                esperado.append(t)
+    checar("17. dentro do grupo, as técnicas seguem a ordem das faixas",
+           ordem == esperado, f"{ordem} != {esperado}")
+    checar("18. a primeira é da faixa mais antiga e a última é da de destino",
+           ordem[0] in ((prog[0].get("conteudo") or {}).get("nage") or [])
+           and ordem[-1] in ((prog[destino].get("conteudo") or {}).get("nage") or []),
+           f"{ordem[0]} … {ordem[-1]}")
     checar("19. as técnicas das faixas puladas aparecem na tela",
            all(t in html_s for t in _tecnicas(prog[0]["conteudo"], "nage")),
            str(_tecnicas(prog[0]["conteudo"], "nage")))
+    # A numeração é um loop.index por grupo — contínua por construção. O que
+    # vale travar é que o grupo não foi partido em um bloco por faixa.
+    checar("19b. cada grupo aparece uma vez só, não um bloco por faixa",
+           html_s.count('exf-tecnicas__grupo--nage') == 1
+           and html_s.count('exf-tecnicas__grupo--katame') == 1)
 
     print("\nA banca imprime o material dos alunos do exame")
     from tests.test_shell_smoke import USUARIO_POR_MODO
@@ -184,9 +203,8 @@ def main():
         n_folhas = ha.count('class="exf-so-papel exf-apostila-folha"')
         checar("25. sai material mesmo sem inscrição confirmada", n_folhas > 0,
                f"{n_folhas} folhas")
-        checar("26. quem salta leva o aviso na própria apostila",
-               ("Salto de faixa" in ha) == (hb.count('lst-tag">salto<') > 0),
-               f'avisos={ha.count("Salto de faixa")} na lista={hb.count(chr(62) + "salto" + chr(60))}')
+        checar("26. a apostila impressa também sai sem jargão de salto",
+               "Salto de faixa" not in ha and "faixas do salto" not in ha)
         # Filtrar por aluno reduz a impressão.
         import re as _re
         ids = _re.findall(r'name="aluno_id" value="(\d+)"', hb)

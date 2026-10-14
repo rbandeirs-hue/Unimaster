@@ -3,6 +3,10 @@
    `quiz` = true esconde as respostas até o clique (modo estudo do aluno).
    Opcional: `anteriores` (técnicas acumuladas das faixas de antes).
 
+   Num salto de faixa o conteúdo chega já somado (utils.exame_faixa
+   .conteudo_composto), na ordem das faixas: o material é um só, sem rótulo
+   dizendo que houve salto.
+
    Ukemi e kumi-kata vêm como blocos `material`: o programa só diz quantos
    tipos se cobra, então a tela mostra o catálogo inteiro como estudo e deixa
    o recorte cobrado à parte, no rodapé do bloco. #}
@@ -13,23 +17,11 @@
 {% set n_teoria = namespace(n=0) %}{% for b in blocos %}{% set n_teoria.n = n_teoria.n + (b.itens|length) %}{% endfor %}
 {% set n_tec = namespace(n=0) %}{% for g in tecnicas %}{% set n_tec.n = n_tec.n + (g.itens|length) %}{% endfor %}
 
-{# Salto de faixa: o aluno presta um exame só, mas sobre tudo que ficou pelo
-   caminho. Sem dizer isso, o material parece longo demais para a promoção. #}
-{% if atual is defined and atual and atual.salto %}
-<p class="exf-salto">
-  <strong>Salto de faixa.</strong>
-  O material abaixo reúne as {{ atual.faixas_no_salto|length }} promoções entre a
-  {{ atual.de }} e a {{ atual.para }}{% if atual.faixas_no_salto %} ({{ atual.faixas_no_salto|join(' · ') }}){% endif %} —
-  o exame cobra tudo o que ficou pelo caminho.
-  {% if atual.promocao_normal %}Sem o salto, a próxima faixa seria {{ atual.promocao_normal }}.{% endif %}
-</p>
-{% endif %}
-
 {% if blocos or curtos %}
 <section class="exf-bloco" id="mat-teoria">
   <header class="exf-bloco__topo">
     <h2><i class="bi bi-book" aria-hidden="true"></i> Conhecimento teórico</h2>
-    <span>{{ n_teoria.n }} ite{{ 'ns' if n_teoria.n != 1 else 'm' }}{% if atual is defined and atual and atual.salto %} somando as faixas do salto{% else %} novo{{ 's' if n_teoria.n != 1 }} nesta faixa{% endif %}{% if quiz %} · toque na resposta para ver{% endif %}</span>
+    <span>{{ n_teoria.n }} ite{{ 'ns' if n_teoria.n != 1 else 'm' }} novo{{ 's' if n_teoria.n != 1 }} nesta faixa{% if quiz %} · toque na resposta para ver{% endif %}</span>
   </header>
   {% if curtos %}
   <dl class="exf-curtos">
@@ -94,7 +86,7 @@
 <section class="exf-bloco" id="mat-tecnicas">
   {% set n_vid = namespace(n=0) %}{% for g in tecnicas %}{% for t in g.itens if t.video %}{% set n_vid.n = n_vid.n + 1 %}{% endfor %}{% endfor %}
   <header class="exf-bloco__topo">
-    <h2><i class="bi bi-person-arms-up" aria-hidden="true"></i> {% if atual is defined and atual and atual.salto %}Técnicas das faixas do salto{% else %}Técnicas novas desta faixa{% endif %}</h2>
+    <h2><i class="bi bi-person-arms-up" aria-hidden="true"></i> Técnicas novas desta faixa</h2>
     <span>{{ n_tec.n }} técnica{{ 's' if n_tec.n != 1 }} · {{ n_vid.n }} com vídeo · o exame também cobra as das faixas anteriores</span>
   </header>
   {% if tecnicas %}
