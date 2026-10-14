@@ -134,7 +134,7 @@ KUMI_KATA = [
                   "na gola (tsurite) e a outra na manga (hikite) do lado oposto.",
         "passos": [
             "A mão da gola pega na altura do peitoral, com o cotovelo baixo.",
-            "A mão da manga pega por fora, na altura do cotovelo do oponente.",
+            "A mão da manga pega por fora, na altura do cotovelo do uke.",
             "Os braços ficam soltos: a pegada é firme nos dedos, não nos ombros.",
         ],
     },
@@ -145,7 +145,7 @@ KUMI_KATA = [
                "mais comum no hikite."},
     {"nome": "Oku-sode", "traducao": "manga, na parte alta",
      "resumo": "Pegada alta na manga, junto ao cotovelo ou acima dele. Controla o "
-               "braço inteiro e prende o ombro do oponente."},
+               "braço inteiro e prende o ombro do uke."},
     {"nome": "Mae-eri", "traducao": "gola, na parte inferior",
      "resumo": "Pegada baixa na gola, na altura do peito. Pegada de ataque: aproxima "
                "e puxa para a frente."},
@@ -153,14 +153,14 @@ KUMI_KATA = [
      "resumo": "Pegada no meio da gola, na altura da clavícula. É a do kumi-kata "
                "fundamental."},
     {"nome": "Uwa-eri", "traducao": "gola, na parte alta",
-     "resumo": "Pegada alta na gola, junto ao pescoço. Levanta a postura do oponente "
+     "resumo": "Pegada alta na gola, junto ao pescoço. Levanta a postura do uke "
                "e prepara as técnicas de quadril."},
     {"nome": "Ushiro-eri", "traducao": "gola, por trás",
      "resumo": "Pegada na parte de trás da gola, na nuca. Puxa a cabeça para baixo e "
                "quebra a postura."},
     {"nome": "Ushiro-obi", "traducao": "faixa, nas costas",
      "resumo": "Pegada na faixa, por trás do corpo. É a pegada do tsuri-goshi e das "
-               "técnicas que levantam o oponente."},
+               "técnicas que levantam o uke."},
 ]
 
 
@@ -177,272 +177,272 @@ TECNICAS = {
     "Seoi-nage": {
         "traducao": "arremesso carregando nas costas",
         "familia": "te", "serie": "1ª série do Go-kyo",
-        "resumo": "Tori gira de costas, encaixa o oponente sobre os dois ombros usando "
+        "resumo": "Tori gira de costas, encaixa o uke sobre os dois ombros usando "
                   "as costas como alavanca e o projeta à frente."},
     "Ippon-seoi-nage": {
         "traducao": "arremesso sobre o ombro com um braço",
         "familia": "te", "serie": "Shinmeisho-no-waza",
         "resumo": "O seoi-nage feito com um braço só: tori passa o próprio braço por "
-                  "dentro da axila do oponente e carrega o braço dele no ombro."},
+                  "dentro da axila do uke e carrega o braço dele no ombro."},
     "Tai-otoshi": {
         "traducao": "queda brusca do corpo",
         "familia": "te", "serie": "2ª série do Go-kyo",
-        "resumo": "Tori gira, estende a perna à frente do tornozelo do oponente e o "
+        "resumo": "Tori gira, estende a perna à frente do tornozelo do uke e o "
                   "derruba pela ação das mãos — a perna é barreira, não varre."},
     "Kata-guruma": {
         "traducao": "giro pelos ombros",
         "familia": "te", "serie": "3ª série do Go-kyo",
-        "resumo": "Tori abaixa o corpo, carrega o oponente atravessado sobre os ombros "
+        "resumo": "Tori abaixa o corpo, carrega o uke atravessado sobre os ombros "
                   "e o faz girar para a frente."},
     "Uki-otoshi": {
         "traducao": "queda brusca flutuante",
         "familia": "te", "serie": "4ª série do Go-kyo",
         "resumo": "Só com as mãos: tori recua levando um joelho ao tatame e derruba o "
-                  "oponente na diagonal da frente. É a primeira técnica do Nage-no-Kata."},
+                  "uke na diagonal da frente. É a primeira técnica do Nage-no-Kata."},
     "Sumi-otoshi": {
         "traducao": "queda brusca em ângulo",
         "familia": "te", "serie": "5ª série do Go-kyo",
-        "resumo": "Também só de mãos, mas para o canto de trás: tori leva o oponente "
+        "resumo": "Também só de mãos, mas para o canto de trás: tori leva o uke "
                   "para fora da base e o derruba sem encostar perna nenhuma."},
     "Sukui-nage": {
         "traducao": "arremesso em forma de colher",
         "familia": "te", "serie": "4ª série do Go-kyo",
-        "resumo": "Tori passa os braços por baixo do quadril ou das pernas do oponente "
+        "resumo": "Tori passa os braços por baixo do quadril ou das pernas do uke "
                   "e o levanta como quem recolhe com uma pá, girando-o para trás."},
     "Morote-gari": {
         "traducao": "ceifa com as duas mãos",
         "familia": "te", "serie": "Shinmeisho-no-waza",
-        "resumo": "Tori abaixa, agarra as duas pernas do oponente ao mesmo tempo e "
+        "resumo": "Tori abaixa, agarra as duas pernas do uke ao mesmo tempo e "
                   "empurra o tronco dele para trás."},
     "Kuchiki-taoshi": {
         "traducao": "derrubar a árvore podre",
         "familia": "te", "serie": "Shinmeisho-no-waza",
-        "resumo": "Tori agarra uma perna do oponente com a mão e puxa, enquanto empurra "
+        "resumo": "Tori agarra uma perna do uke com a mão e puxa, enquanto empurra "
                   "o tronco no sentido contrário."},
     "Kibisu-gaeshi": {
         "traducao": "virada pelo calcanhar",
         "familia": "te", "serie": "Shinmeisho-no-waza",
-        "resumo": "Tori pega o calcanhar do oponente e puxa para cima, empurrando o "
+        "resumo": "Tori pega o calcanhar do uke e puxa para cima, empurrando o "
                   "peito dele para trás."},
     "Uchi-mata-sukashi": {
         "traducao": "desvio na defesa do uchi-mata",
         "familia": "te", "serie": "Shinmeisho-no-waza · contragolpe",
-        "resumo": "Quando o oponente entra de uchi-mata, tori tira a perna atacada e "
-                  "gira as mãos: o oponente cai no vazio, pelo próprio impulso."},
+        "resumo": "Quando o uke entra de uchi-mata, tori tira a perna atacada e "
+                  "gira as mãos: o uke cai no vazio, pelo próprio impulso."},
     "O-soto-sukashi": {
         "traducao": "desvio na defesa do o-soto-gari",
         "familia": "te", "serie": "Contragolpe",
         "resumo": "Mesma ideia do uchi-mata-sukashi: tori recolhe a perna que seria "
-                  "ceifada e deixa o oponente cair no próprio movimento."},
+                  "ceifada e deixa o uke cair no próprio movimento."},
 
     # ---------------------------------------------------------- koshi-waza
     "O-goshi": {
         "traducao": "grande golpe de quadril",
         "familia": "koshi", "serie": "1ª série do Go-kyo",
-        "resumo": "Tori encaixa o quadril abaixo do quadril do oponente, envolve a "
+        "resumo": "Tori encaixa o quadril abaixo do quadril do uke, envolve a "
                   "cintura dele e o projeta por cima, girando."},
     "Uki-goshi": {
         "traducao": "arremesso de quadril em rotação flutuante",
         "familia": "koshi", "serie": "1ª série do Go-kyo",
-        "resumo": "O quadril entra de lado e não levanta o oponente: a projeção vem do "
+        "resumo": "O quadril entra de lado e não levanta o uke: a projeção vem do "
                   "giro, não da elevação. Era a técnica preferida de Jigoro Kano."},
     "Koshi-guruma": {
         "traducao": "giro de quadril",
         "familia": "koshi", "serie": "2ª série do Go-kyo",
-        "resumo": "Como o o-goshi, mas o braço de tori envolve o pescoço do oponente, "
+        "resumo": "Como o o-goshi, mas o braço de tori envolve o pescoço do uke, "
                   "que roda sobre o quadril como sobre um eixo."},
     "Tsuri-komi-goshi": {
         "traducao": "arremesso de quadril em suspensão",
         "familia": "koshi", "serie": "2ª série do Go-kyo",
         "resumo": "Tori puxa a gola para cima, abaixa o próprio quadril por baixo do "
-                  "oponente e o projeta à frente."},
+                  "uke e o projeta à frente."},
     "Tsuri-goshi": {
         "traducao": "quadril com suspensão pela faixa",
         "familia": "koshi", "serie": "3ª série do Go-kyo",
-        "resumo": "Tori segura a faixa do oponente — por cima ou por baixo do braço — e "
+        "resumo": "Tori segura a faixa do uke — por cima ou por baixo do braço — e "
                   "o levanta sobre o quadril."},
     "Harai-goshi": {
         "traducao": "varrida de perna com apoio de quadril",
         "familia": "koshi", "serie": "2ª série do Go-kyo",
-        "resumo": "Tori encaixa o quadril, desequilibra o oponente à frente e varre a "
+        "resumo": "Tori encaixa o quadril, desequilibra o uke à frente e varre a "
                   "coxa e o lado do corpo dele com a perna estendida."},
     "Hane-goshi": {
         "traducao": "impulso do quadril",
         "familia": "koshi", "serie": "3ª série do Go-kyo",
-        "resumo": "Com a perna semiflexionada, tori levanta o lado do corpo do oponente "
+        "resumo": "Com a perna semiflexionada, tori levanta o lado do corpo do uke "
                   "num impulso de mola, e não com uma varrida."},
     "Ushiro-goshi": {
-        "traducao": "arremesso do oponente de costas",
+        "traducao": "arremesso do uke de costas",
         "familia": "koshi", "serie": "5ª série do Go-kyo",
-        "resumo": "Contragolpe de quadril: quando o oponente entra, tori o levanta pela "
+        "resumo": "Contragolpe de quadril: quando o uke entra, tori o levanta pela "
                   "cintura e o derruba de costas no tatame."},
     "Utsuri-goshi": {
         "traducao": "arremesso com troca de quadril",
         "familia": "koshi", "serie": "4ª série do Go-kyo",
-        "resumo": "Tori levanta o oponente que atacava e, com ele no ar, troca o quadril "
+        "resumo": "Tori levanta o uke que atacava e, com ele no ar, troca o quadril "
                   "de lado para projetá-lo no sentido contrário."},
 
     # ----------------------------------------------------------- ashi-waza
     "De-ashi-harai": {
         "traducao": "varrer o pé que avança",
         "familia": "ashi", "serie": "1ª série do Go-kyo",
-        "resumo": "No instante em que o oponente desloca o pé, tori varre a planta dele "
+        "resumo": "No instante em que o uke desloca o pé, tori varre a planta dele "
                   "com a sola, no sentido do passo. É tempo, não força."},
     "Hiza-guruma": {
         "traducao": "rodada com apoio no joelho",
         "familia": "ashi", "serie": "1ª série do Go-kyo",
-        "resumo": "Tori apoia a sola do pé no joelho do oponente e gira o corpo dele "
+        "resumo": "Tori apoia a sola do pé no joelho do uke e gira o corpo dele "
                   "sobre esse ponto fixo."},
     "Sasae-tsuri-komi-ashi": {
         "traducao": "bloqueio no pé com puxada",
         "familia": "ashi", "serie": "1ª série do Go-kyo",
-        "resumo": "Tori bloqueia o tornozelo do oponente com a sola e o puxa para cima "
+        "resumo": "Tori bloqueia o tornozelo do uke com a sola e o puxa para cima "
                   "e para a frente, fazendo-o girar por cima do bloqueio."},
     "O-soto-gari": {
         "traducao": "grande ceifada externa",
         "familia": "ashi", "serie": "1ª série do Go-kyo",
-        "resumo": "Tori desequilibra o oponente para trás e ceifa por fora a perna de "
+        "resumo": "Tori desequilibra o uke para trás e ceifa por fora a perna de "
                   "apoio dele, com a parte de trás da própria coxa."},
     "O-uchi-gari": {
         "traducao": "grande ceifada interna",
         "familia": "ashi", "serie": "1ª série do Go-kyo",
-        "resumo": "Tori ceifa por dentro a perna do oponente, no sentido de trás, "
+        "resumo": "Tori ceifa por dentro a perna do uke, no sentido de trás, "
                   "derrubando-o de costas."},
     "Ko-soto-gari": {
         "traducao": "pequena varrida externa",
         "familia": "ashi", "serie": "2ª série do Go-kyo",
-        "resumo": "Tori varre por fora o calcanhar do oponente no sentido do passo dele, "
+        "resumo": "Tori varre por fora o calcanhar do uke no sentido do passo dele, "
                   "derrubando-o para trás, na diagonal."},
     "Ko-uchi-gari": {
         "traducao": "pequena varredura interna",
         "familia": "ashi", "serie": "2ª série do Go-kyo",
-        "resumo": "Tori varre por dentro o calcanhar do pé avançado do oponente, no "
+        "resumo": "Tori varre por dentro o calcanhar do pé avançado do uke, no "
                   "mesmo sentido em que ele estava indo."},
     "Uchi-mata": {
         "traducao": "arremesso com a perna entre as coxas",
         "familia": "ashi", "serie": "2ª série do Go-kyo",
-        "resumo": "Tori gira e levanta por dentro a coxa do oponente com a parte de "
+        "resumo": "Tori gira e levanta por dentro a coxa do uke com a parte de "
                   "trás da própria coxa."},
     "Ko-soto-gake": {
         "traducao": "pequena enganchada externa",
         "familia": "ashi", "serie": "3ª série do Go-kyo",
         "resumo": "Em vez de varrer, tori engancha o próprio pé por fora do calcanhar "
-                  "do oponente e empurra o tronco dele para trás."},
+                  "do uke e empurra o tronco dele para trás."},
     "Ko-uchi-gake": {
         "traducao": "pequena enganchada interna",
         "familia": "ashi", "serie": "Variação do ko-uchi-gari",
         "resumo": "Como o ko-uchi-gari, mas o pé engancha a perna por dentro em vez de "
-                  "varrê-la — serve quando o oponente já apoiou o peso."},
+                  "varrê-la — serve quando o uke já apoiou o peso."},
     "Ashi-guruma": {
         "traducao": "rodada sobre a perna",
         "familia": "ashi", "serie": "3ª série do Go-kyo",
-        "resumo": "Tori põe a perna estendida à frente das do oponente, na altura do "
+        "resumo": "Tori põe a perna estendida à frente das do uke, na altura do "
                   "joelho, e o faz girar por cima dela como sobre um eixo."},
     "Harai-tsuri-komi-ashi": {
         "traducao": "varrida com levantamento de perna",
         "familia": "ashi", "serie": "3ª série do Go-kyo",
-        "resumo": "Tori puxa o oponente para cima e para a frente e varre o pé avançado "
+        "resumo": "Tori puxa o uke para cima e para a frente e varre o pé avançado "
                   "no alto do movimento, quando ele está mais leve."},
     "O-guruma": {
         "traducao": "grande roda",
         "familia": "ashi", "serie": "4ª série do Go-kyo",
-        "resumo": "A perna estendida de tori passa na altura do ventre do oponente, que "
+        "resumo": "A perna estendida de tori passa na altura do ventre do uke, que "
                   "gira por cima dela. Diferente do harai-goshi, o quadril não encosta."},
     "O-soto-guruma": {
         "traducao": "grande giro externo",
         "familia": "ashi", "serie": "5ª série do Go-kyo",
         "resumo": "Como o o-soto-gari, mas a perna de tori ceifa as duas pernas do "
-                  "oponente de uma vez."},
+                  "uke de uma vez."},
     "O-soto-otoshi": {
         "traducao": "grande queda brusca externa",
         "familia": "ashi", "serie": "Habukareta-waza",
-        "resumo": "Tori planta a perna atrás da do oponente e o derruba para trás sem "
+        "resumo": "Tori planta a perna atrás da do uke e o derruba para trás sem "
                   "ceifar — a perna é apoio, não varrida."},
     "Nidan-ko-soto-gari": {
         "traducao": "pequena varredura externa em dois tempos",
         "familia": "ashi", "serie": "Variação do ko-soto-gari",
         "resumo": "Tori salta duas vezes no mesmo sentido e varre o calcanhar do "
-                  "oponente na segunda batida, quando ele já está em desequilíbrio."},
+                  "uke na segunda batida, quando ele já está em desequilíbrio."},
     "Hane-goshi-gaeshi": {
         "traducao": "contragolpe do hane-goshi",
         "familia": "ashi", "serie": "Shinmeisho-no-waza · contragolpe",
-        "resumo": "Quando o oponente entra de hane-goshi, tori bloqueia a perna de "
+        "resumo": "Quando o uke entra de hane-goshi, tori bloqueia a perna de "
                   "impulso dele e devolve a projeção no sentido do giro."},
     "Harai-goshi-gaeshi": {
         "traducao": "contragolpe do harai-goshi",
         "familia": "ashi", "serie": "Shinmeisho-no-waza · contragolpe",
-        "resumo": "Tori segura a perna que varre e derruba o oponente para o mesmo lado "
+        "resumo": "Tori segura a perna que varre e derruba o uke para o mesmo lado "
                   "em que ele estava girando."},
 
     # -------------------------------------------------------- sutemi-waza
     "Tomoe-nage": {
         "traducao": "arremesso circular",
         "familia": "ma", "serie": "3ª série do Go-kyo",
-        "resumo": "Tori senta sob o oponente, apoia o pé no ventre dele e o lança por "
+        "resumo": "Tori senta sob o uke, apoia o pé no ventre dele e o lança por "
                   "cima da própria cabeça."},
     "Sumi-gaeshi": {
         "traducao": "arremesso encaixado em ângulo para trás",
         "familia": "ma", "serie": "4ª série do Go-kyo",
-        "resumo": "Tori senta, apoia o pé na parte interna da coxa do oponente e o "
+        "resumo": "Tori senta, apoia o pé na parte interna da coxa do uke e o "
                   "lança na diagonal por cima da própria cabeça."},
     "Ura-nage": {
         "traducao": "arremesso invertido para trás",
         "familia": "ma", "serie": "5ª série do Go-kyo",
-        "resumo": "Tori envolve o oponente pela cintura e se joga para trás, lançando-o "
+        "resumo": "Tori envolve o uke pela cintura e se joga para trás, lançando-o "
                   "por cima do próprio ombro."},
     "Tawara-gaeshi": {
         "traducao": "arremesso do saco de arroz",
         "familia": "ma", "serie": "Habukareta-waza",
-        "resumo": "Quando o oponente se abaixa para atacar, tori o abraça pelo tronco e "
+        "resumo": "Quando o uke se abaixa para atacar, tori o abraça pelo tronco e "
                   "o joga por cima da cabeça, como quem vira um fardo."},
     "Yoko-otoshi": {
         "traducao": "queda brusca lateral",
         "familia": "yoko", "serie": "3ª série do Go-kyo",
-        "resumo": "Tori se joga de lado estendendo a perna junto ao pé do oponente, que "
+        "resumo": "Tori se joga de lado estendendo a perna junto ao pé do uke, que "
                   "cai para o lado."},
     "Tani-otoshi": {
         "traducao": "queda no vale",
         "familia": "yoko", "serie": "4ª série do Go-kyo",
         "resumo": "Tori se joga de lado e estende a perna por trás das duas pernas do "
-                  "oponente, derrubando-o para trás."},
+                  "uke, derrubando-o para trás."},
     "Hane-makikomi": {
         "traducao": "projeção com enrolamento e elevação do quadril",
         "familia": "yoko", "serie": "4ª série do Go-kyo",
-        "resumo": "É o hane-goshi em que tori enrola o braço do oponente e cai junto, "
+        "resumo": "É o hane-goshi em que tori enrola o braço do uke e cai junto, "
                   "de lado, por cima dele."},
     "Soto-makikomi": {
         "traducao": "projeção de enrolamento externo",
         "familia": "yoko", "serie": "4ª série do Go-kyo",
-        "resumo": "Tori enrola o braço do oponente por fora, gira e se joga de lado, "
+        "resumo": "Tori enrola o braço do uke por fora, gira e se joga de lado, "
                   "levando-o junto."},
     "Harai-makikomi": {
         "traducao": "enrolamento com varrida de quadril",
         "familia": "yoko", "serie": "Shinmeisho-no-waza",
         "resumo": "O harai-goshi terminado em enrolamento: tori prende o braço do "
-                  "oponente e cai junto com ele."},
+                  "uke e cai junto com ele."},
     "Uchi-makikomi": {
         "traducao": "projeção de enrolamento interior",
         "familia": "yoko", "serie": "Habukareta-waza",
-        "resumo": "Tori entra por dentro, enrola o braço do oponente e se joga de lado."},
+        "resumo": "Tori entra por dentro, enrola o braço do uke e se joga de lado."},
     "Uki-waza": {
         "traducao": "arremesso flutuante",
         "familia": "yoko", "serie": "5ª série do Go-kyo",
-        "resumo": "Tori se joga de lado estendendo a perna à frente do pé do oponente, "
+        "resumo": "Tori se joga de lado estendendo a perna à frente do pé do uke, "
                   "que cai no próprio avanço."},
     "Yoko-wakare": {
         "traducao": "separação lateral",
         "familia": "yoko", "serie": "5ª série do Go-kyo",
-        "resumo": "Tori se joga à frente dos pés do oponente, deslizando de lado e "
+        "resumo": "Tori se joga à frente dos pés do uke, deslizando de lado e "
                   "puxando-o por cima de si."},
     "Yoko-guruma": {
         "traducao": "roda lateral",
         "familia": "yoko", "serie": "5ª série do Go-kyo",
-        "resumo": "Quando o oponente se abaixa, tori passa por baixo, joga-se de lado e "
+        "resumo": "Quando o uke se abaixa, tori passa por baixo, joga-se de lado e "
                   "o faz girar por cima. É o contragolpe clássico do ura-nage defendido."},
     "Yoko-gake": {
         "traducao": "enganchada lateral",
         "familia": "yoko", "serie": "5ª série do Go-kyo",
-        "resumo": "Tori engancha o pé do oponente por fora e se joga de lado no mesmo "
+        "resumo": "Tori engancha o pé do uke por fora e se joga de lado no mesmo "
                   "tempo, levando-o junto."},
 
     # --------------------------------------------------------------- grupo
@@ -464,26 +464,26 @@ TECNICAS.update({
     "Hon-kesa-gatame": {
         "traducao": "imobilização em echarpe, forma básica",
         "familia": "osaekomi", "serie": "Forma oficial do Kodokan",
-        "resumo": "A imobilização lateral clássica: tori controla o oponente de lado, "
+        "resumo": "A imobilização lateral clássica: tori controla o uke de lado, "
                   "usando o peso do próprio corpo sobre o peito dele.",
         "passos": [
-            "Tori fica de lado ao oponente, em taka-kyoshi, bem próximo.",
-            "Um braço segura o braço do oponente junto ao corpo, prendendo o pulso dele "
+            "Tori fica de lado ao uke, em taka-kyoshi, bem próximo.",
+            "Um braço segura o braço do uke junto ao corpo, prendendo o pulso dele "
             "sob a própria axila.",
             "O outro braço envolve o pescoço por baixo da cabeça e segura a lapela.",
             "A perna do lado da cabeça fica estendida e a outra dobrada, com o pé firme "
             "no solo.",
-            "O peso do corpo fica distribuído sobre o peito do oponente.",
+            "O peso do corpo fica distribuído sobre o peito do uke.",
         ]},
     "Kuzure-kesa-gatame": {
         "traducao": "variação do kesa-gatame",
         "familia": "osaekomi", "serie": "Forma oficial do Kodokan",
         "resumo": "Em vez de envolver a cabeça, tori passa o braço por baixo da axila do "
-                  "oponente — dá mais estabilidade e menos risco de ser girado.",
+                  "uke — dá mais estabilidade e menos risco de ser girado.",
         "passos": [
             "Tori fica de lado, em taka-kyoshi, com o tronco voltado para o tórax do "
-            "oponente.",
-            "Um braço envolve e prende o braço do oponente contra o próprio corpo.",
+            "uke.",
+            "Um braço envolve e prende o braço do uke contra o próprio corpo.",
             "O outro braço passa por baixo da axila dele, com o antebraço e a mão "
             "espalmados no tatame.",
             "A perna do lado da cabeça estendida, a outra dobrada com o pé no solo.",
@@ -492,26 +492,26 @@ TECNICAS.update({
     "Kata-gatame": {
         "traducao": "imobilização pelo ombro",
         "familia": "osaekomi", "serie": "Forma oficial do Kodokan",
-        "resumo": "Tori prende o próprio braço do oponente contra o rosto dele e fecha "
+        "resumo": "Tori prende o próprio braço do uke contra o rosto dele e fecha "
                   "as mãos do outro lado da cabeça.",
         "passos": [
-            "Tori fica de lado ao oponente, em taka-kyoshi.",
-            "Com as duas mãos, posiciona o braço do oponente à frente do rosto dele.",
+            "Tori fica de lado ao uke, em taka-kyoshi.",
+            "Com as duas mãos, posiciona o braço do uke à frente do rosto dele.",
             "A cabeça de tori desce para perto do tatame, com o ombro pressionando o "
-            "lado do rosto do oponente.",
+            "lado do rosto do uke.",
             "Os braços abraçam o pescoço até as mãos se encontrarem, formando um cadeado.",
-            "Um joelho fica na altura da faixa do oponente e a outra perna estendida.",
+            "Um joelho fica na altura da faixa do uke e a outra perna estendida.",
         ]},
     "Makura-kesa-gatame": {
         "traducao": "imobilização em echarpe com travesseiro",
         "familia": "osaekomi", "serie": "Variação do kesa-gatame",
-        "resumo": "Makura é travesseiro: o braço do oponente — ou a coxa de tori — vira "
+        "resumo": "Makura é travesseiro: o braço do uke — ou a coxa de tori — vira "
                   "apoio da cabeça dele, o que trava o pescoço e impede o giro.",
         "passos": [
-            "Tori fica de lado, com o peito voltado para o tronco do oponente.",
+            "Tori fica de lado, com o peito voltado para o tronco do uke.",
             "Segura o interior da manga dele, prendendo o cotovelo sob o próprio braço e "
             "o pulso na axila.",
-            "Abraça a cabeça do oponente e segura a parte interna da própria perna — é "
+            "Abraça a cabeça do uke e segura a parte interna da própria perna — é "
             "isso que dá o efeito makura.",
             "As pernas seguem a base do kesa: uma estendida, a outra dobrada com o pé "
             "firme no solo.",
@@ -520,9 +520,9 @@ TECNICAS.update({
         "traducao": "imobilização em diagonal de costas",
         "familia": "osaekomi", "serie": "Forma oficial do Kodokan",
         "resumo": "O kesa-gatame invertido: tori imobiliza de costas para a cabeça do "
-                  "oponente, o que muda a direção inteira do controle.",
+                  "uke, o que muda a direção inteira do controle.",
         "passos": [
-            "Tori fica ao lado e um pouco atrás, de costas para a cabeça do oponente.",
+            "Tori fica ao lado e um pouco atrás, de costas para a cabeça do uke.",
             "Um braço envolve o braço dele, prendendo-o contra o próprio corpo.",
             "O outro passa por baixo do tronco, segurando o judogui ou a faixa.",
             "Uma perna estendida e a outra dobrada, com o pé firme, na base do kesa.",
@@ -532,11 +532,11 @@ TECNICAS.update({
         "traducao": "imobilização pelos quatro apoios, pela cabeça",
         "familia": "osaekomi", "serie": "Forma oficial do Kodokan",
         "resumo": "Tori controla por cima da cabeça, segurando a faixa dos dois lados, "
-                  "com o peito sobre o tórax do oponente.",
+                  "com o peito sobre o tórax do uke.",
         "passos": [
-            "Tori se posiciona à frente da cabeça do oponente, ajoelhado e centralizado "
+            "Tori se posiciona à frente da cabeça do uke, ajoelhado e centralizado "
             "sobre o tórax dele.",
-            "Os dois braços passam por baixo dos braços do oponente e seguram a faixa.",
+            "Os dois braços passam por baixo dos braços do uke e seguram a faixa.",
             "O peito fica colado ao abdômen ou ao peito dele, com o centro de gravidade "
             "baixo.",
             "Os cotovelos tocam o solo e as pernas abrem para a lateral, joelhos "
@@ -549,7 +549,7 @@ TECNICAS.update({
         "resumo": "Quando a pegada por baixo dos dois ombros não dá, um braço passa por "
                   "cima ou ao redor do ombro e o outro segura a gola de lado.",
         "passos": [
-            "Tori à frente da cabeça do oponente, ajoelhado e centralizado sobre o tórax.",
+            "Tori à frente da cabeça do uke, ajoelhado e centralizado sobre o tórax.",
             "Um braço passa por cima ou ao redor do ombro; o outro segura a gola "
             "lateralmente.",
             "O peito permanece apoiado sobre o tórax ou abdômen, centro de gravidade "
@@ -560,9 +560,9 @@ TECNICAS.update({
         "traducao": "imobilização pelos quatro apoios, de lado",
         "familia": "osaekomi", "serie": "Forma oficial do Kodokan",
         "resumo": "Uma das imobilizações mais seguras do judô: tori atravessa o corpo do "
-                  "oponente, dominando tronco e quadril ao mesmo tempo.",
+                  "uke, dominando tronco e quadril ao mesmo tempo.",
         "passos": [
-            "Tori fica ao lado, deitado transversalmente em relação ao corpo do oponente.",
+            "Tori fica ao lado, deitado transversalmente em relação ao corpo do uke.",
             "Um braço passa por baixo do pescoço e alcança o lado oposto do tronco, a "
             "faixa ou o judogui.",
             "O outro braço passa por baixo das pernas dele, buscando pegada firme.",
@@ -573,9 +573,9 @@ TECNICAS.update({
         "traducao": "variação do yoko-shiho-gatame",
         "familia": "osaekomi", "serie": "Forma oficial do Kodokan",
         "resumo": "Em vez de passar o braço sob as pernas, tori passa por cima do braço "
-                  "ou do tronco do oponente — útil quando ele tenta escapar.",
+                  "ou do tronco do uke — útil quando ele tenta escapar.",
         "passos": [
-            "Tori lateral ao oponente, deitado transversalmente, como no yoko-shiho.",
+            "Tori lateral ao uke, deitado transversalmente, como no yoko-shiho.",
             "Um braço passa por cima do braço ou do tronco; o outro controla a parte "
             "superior pela faixa, pela gola ou apoiado no ombro.",
             "Peito e abdômen pressionando a lateral do tórax, centro de gravidade baixo.",
@@ -584,13 +584,13 @@ TECNICAS.update({
     "Tate-shiho-gatame": {
         "traducao": "imobilização pelos quatro apoios, montado",
         "familia": "osaekomi", "serie": "Forma oficial do Kodokan",
-        "resumo": "Tori monta sobre o tronco do oponente de frente, o que dá o controle "
+        "resumo": "Tori monta sobre o tronco do uke de frente, o que dá o controle "
                   "mais amplo de todas as imobilizações.",
         "passos": [
             "Tori se aproxima de frente, em taka-kyoshi.",
             "Segura o interior de uma das mangas, prendendo o cotovelo do lado contrário "
             "sob o próprio braço.",
-            "Desliza o outro braço do oponente até a altura do ombro dele e, ao mesmo "
+            "Desliza o outro braço do uke até a altura do ombro dele e, ao mesmo "
             "tempo, passa a perna por cima, montando.",
             "Abraça o pescoço segurando fundo a parte de trás da lapela, baixando o "
             "tronco ao mesmo tempo.",
@@ -599,11 +599,11 @@ TECNICAS.update({
     "Kuzure-tate-shiho-gatame": {
         "traducao": "variação do tate-shiho-gatame",
         "familia": "osaekomi", "serie": "Forma oficial do Kodokan",
-        "resumo": "A montada com pegada adaptada: tori eleva os dois braços do oponente "
+        "resumo": "A montada com pegada adaptada: tori eleva os dois braços do uke "
                   "acima da cabeça dele e os prende por baixo, nas próprias mangas.",
         "passos": [
             "Tori se aproxima de frente, em taka-kyoshi.",
-            "Com as duas mãos, eleva um braço do oponente acima da cabeça dele e em "
+            "Com as duas mãos, eleva um braço do uke acima da cabeça dele e em "
             "seguida o outro.",
             "Passa a perna por cima, montando, mantendo o joelho ainda elevado.",
             "Abaixa o tórax e o joelho ao mesmo tempo, passando os dois braços por baixo "
@@ -619,7 +619,7 @@ TECNICAS.update({
         "resumo": "As duas mãos entram na gola com as palmas voltadas para baixo e os "
                   "punhos se cruzam num X à frente da garganta.",
         "passos": [
-            "Tori fica de frente para o oponente, em geral com ele de costas no tatame.",
+            "Tori fica de frente para o uke, em geral com ele de costas no tatame.",
             "Uma das mãos entra na gola com a palma para baixo, deslizando até a nuca.",
             "A outra entra cruzada, também com a palma para baixo, do lado oposto, "
             "formando um X com os punhos.",
@@ -633,7 +633,7 @@ TECNICAS.update({
         "resumo": "A mesma cruz, mas com as palmas voltadas para cima: a alavanca muda e "
                   "o estrangulamento fica mais profundo.",
         "passos": [
-            "Tori de frente, com o oponente de costas no tatame.",
+            "Tori de frente, com o uke de costas no tatame.",
             "A primeira mão entra na gola oposta com a palma para cima; a segunda faz o "
             "mesmo do outro lado, cruzando.",
             "Os polegares ficam por fora da gola e os quatro dedos por dentro.",
@@ -645,7 +645,7 @@ TECNICAS.update({
         "resumo": "O meio-termo entre os dois anteriores: uma mão com a palma para cima "
                   "e a outra com a palma para baixo.",
         "passos": [
-            "Tori de frente para o oponente, de costas no tatame ou na guarda.",
+            "Tori de frente para o uke, de costas no tatame ou na guarda.",
             "A primeira mão entra na gola oposta com a palma para cima, quatro dedos por "
             "dentro e polegar por fora.",
             "A segunda entra na gola contrária com a palma para baixo.",
@@ -658,7 +658,7 @@ TECNICAS.update({
         "resumo": "Tori segura as duas lapelas e fecha a gola em volta do pescoço, como "
                   "uma guilhotina. É rápido, por isso exige controle.",
         "passos": [
-            "Tori de frente, com o oponente sentado ou de costas no tatame.",
+            "Tori de frente, com o uke sentado ou de costas no tatame.",
             "Segura as duas lapelas, uma com cada mão, polegares por dentro e dedos por "
             "fora.",
             "As mãos deslizam fundo, até a base do pescoço, criando a alavanca.",
@@ -671,7 +671,7 @@ TECNICAS.update({
         "resumo": "Sem cruzar os braços: as duas mãos trabalham lado a lado e abrem a "
                   "gola, que pressiona os lados do pescoço.",
         "passos": [
-            "Tori de frente, com o oponente sentado ou de costas.",
+            "Tori de frente, com o uke sentado ou de costas.",
             "As duas mãos entram ao mesmo tempo nas golas, polegares por fora e dedos "
             "por dentro, paralelas e na mesma altura.",
             "As mãos deslizam fundo até os antebraços quase tocarem o pescoço.",
@@ -683,7 +683,7 @@ TECNICAS.update({
         "resumo": "O estrangulamento 'nu': não usa o judogui, só os braços. É o de "
                   "quando não há gola à mão.",
         "passos": [
-            "Tori fica atrás, com o joelho na linha da coluna do oponente para "
+            "Tori fica atrás, com o joelho na linha da coluna do uke para "
             "estabilizar.",
             "Encosta o dorso de uma das mãos no ombro dele.",
             "Com a outra mão, desliza pela frente do pescoço, palma para baixo, e segura "
@@ -693,10 +693,10 @@ TECNICAS.update({
     "Kata-ha-jime": {
         "traducao": "estrangulamento de uma asa",
         "familia": "shime", "serie": "Forma oficial do Kodokan",
-        "resumo": "Uma mão na gola e a outra travando o braço do oponente como uma asa: "
+        "resumo": "Uma mão na gola e a outra travando o braço do uke como uma asa: "
                   "ele perde o lado que usaria para se defender.",
         "passos": [
-            "Tori por trás, com o oponente sentado.",
+            "Tori por trás, com o uke sentado.",
             "Uma das mãos passa por trás da cabeça e pega a gola oposta com firmeza, "
             "quatro dedos por fora e polegar por dentro.",
             "A outra passa por baixo do braço do mesmo lado da gola segurada e o "
@@ -709,7 +709,7 @@ TECNICAS.update({
         "resumo": "Clássico das transições pelas costas: uma mão entra fundo na gola e a "
                   "outra puxa do lado oposto, em sentidos contrários.",
         "passos": [
-            "Tori se posiciona atrás do oponente.",
+            "Tori se posiciona atrás do uke.",
             "A mão dominante entra fundo na gola oposta, quatro dedos por fora e polegar "
             "por dentro, bem perto da nuca.",
             "A outra mão passa por trás e por baixo do braço dele, ajudando a puxar a "
@@ -724,7 +724,7 @@ TECNICAS.update({
                   "mangas: a pressão vem de um movimento de roda.",
         "passos": [
             "Tori se aproxima pelas costas, podendo estar sentado.",
-            "Um braço passa por cima do ombro do oponente e o outro por baixo do queixo, "
+            "Um braço passa por cima do ombro do uke e o outro por baixo do queixo, "
             "cruzados, envolvendo o pescoço.",
             "Cada mão segura a própria manga, com os punhos cruzados à frente do pescoço.",
             "Tori fecha os cotovelos num giro interno dos braços, trazendo os antebraços "
@@ -736,12 +736,12 @@ TECNICAS.update({
         "resumo": "As pernas formam um triângulo em volta do pescoço e de um braço: um "
                   "lado do pescoço é comprimido pela perna, o outro pelo próprio braço.",
         "passos": [
-            "Com o oponente em três apoios, tori se aproxima pela frente e faz a "
+            "Com o uke em três apoios, tori se aproxima pela frente e faz a "
             "kumi-kata, segurando a gola com quatro dedos por dentro.",
             "Desequilibra-o para a frente passando a perna por cima da nuca dele e "
             "lateralizando o quadril.",
             "Cruza a outra perna, prendendo o pé na articulação do joelho — o braço do "
-            "oponente fica preso entre as pernas.",
+            "uke fica preso entre as pernas.",
             "Empurra a manga dele na diagonal e eleva o quadril, apertando as pernas.",
         ]},
     "Koshi-jime": {
@@ -754,7 +754,7 @@ TECNICAS.update({
             "na gola oposta.",
             "Com a outra mão, faz um giro interno e segura a manga pela parte interna do "
             "antebraço.",
-            "Puxa o oponente para trás e em seguida o desliza para a frente.",
+            "Puxa o uke para trás e em seguida o desliza para a frente.",
             "Senta na altura da omoplata dele, em postura de kesa, e gira levemente o "
             "tronco para efetuar o estrangulamento.",
         ]},
@@ -764,13 +764,13 @@ TECNICAS.update({
         "resumo": "Combina o estrangulamento das mãos com o controle das pernas — as "
                   "pernas viram um laço que tira qualquer defesa.",
         "passos": [
-            "Com o oponente em seis apoios, tori se aproxima pela esquerda e segura a "
+            "Com o uke em seis apoios, tori se aproxima pela esquerda e segura a "
             "gola direita dele com a mão esquerda.",
-            "Usa a perna esquerda para travar o braço esquerdo do oponente.",
+            "Usa a perna esquerda para travar o braço esquerdo do uke.",
             "Com a mão direita, giro interno para segurar a manga pela parte interna do "
             "antebraço.",
             "Rola por cima das costas dele, terminando de costas no tatame com o "
-            "oponente por cima.",
+            "uke por cima.",
             "Prende a perna e o braço dele, passa a mão direita por trás da nuca e eleva "
             "o quadril para aplicar a pressão.",
         ]},
@@ -779,24 +779,24 @@ TECNICAS.update({
     "Ude-garami": {
         "traducao": "chave de braço enrolado",
         "familia": "kansetsu", "serie": "Forma oficial do Kodokan",
-        "resumo": "O braço do oponente fica dobrado em 90° e tori o torce enrolando os "
+        "resumo": "O braço do uke fica dobrado em 90° e tori o torce enrolando os "
                   "próprios braços nele, pressionando cotovelo e ombro.",
         "passos": [
-            "Tori está ao lado do oponente, em posição de domínio, como no "
+            "Tori está ao lado do uke, em posição de domínio, como no "
             "yoko-shiho-gatame.",
             "Segura o punho dele com uma das mãos e passa o outro braço por baixo do "
             "braço dele, mantendo-o dobrado a 90°.",
-            "Passa o próprio braço por sobre o antebraço do oponente e segura o próprio "
+            "Passa o próprio braço por sobre o antebraço do uke e segura o próprio "
             "punho.",
             "Mantém o cotovelo dele fixo e eleva lentamente o punho, gerando a torção.",
         ]},
     "Ude-gatame": {
         "traducao": "chave de braço no cotovelo estendido",
         "familia": "kansetsu", "serie": "Forma oficial do Kodokan",
-        "resumo": "Tori estende o braço do oponente e pressiona o cotovelo com as duas "
+        "resumo": "Tori estende o braço do uke e pressiona o cotovelo com as duas "
                   "mãos, usando o próprio tronco ou ombro como apoio.",
         "passos": [
-            "Com a kumi-kata feita, tori prende com a cabeça a mão que o oponente tem na "
+            "Com a kumi-kata feita, tori prende com a cabeça a mão que o uke tem na "
             "sua gola.",
             "Posiciona uma das mãos sobre a articulação do cotovelo dele.",
             "Coloca a outra mão sobre a primeira.",
@@ -808,22 +808,22 @@ TECNICAS.update({
         "resumo": "A chave mais conhecida do judô: tori prende o braço entre as coxas e "
                   "usa o quadril para estender o cotovelo.",
         "passos": [
-            "O gatilho é o oponente esticar o braço para empurrar tori.",
+            "O gatilho é o uke esticar o braço para empurrar tori.",
             "Tori segura o punho dele firme com as duas mãos, trazendo o braço para o "
             "centro do próprio peito.",
-            "Lança uma perna por cima da cabeça do oponente, com a parte de trás da coxa "
+            "Lança uma perna por cima da cabeça do uke, com a parte de trás da coxa "
             "sobre o rosto dele, e a outra sob o tronco; os joelhos ficam unidos.",
-            "Deita-se de costas com o braço preso entre as coxas, o polegar do oponente "
+            "Deita-se de costas com o braço preso entre as coxas, o polegar do uke "
             "virado para cima e o cotovelo dele no centro da linha do quadril.",
         ]},
     "Hiza-gatame": {
         "traducao": "chave com auxílio do joelho",
         "familia": "kansetsu", "serie": "Forma oficial do Kodokan",
         "resumo": "O joelho de tori é o ponto de apoio sobre o qual o cotovelo do "
-                  "oponente é estendido.",
+                  "uke é estendido.",
         "passos": [
             "Tori ajoelhado ou com um joelho no solo, em controle superior.",
-            "Envolve o braço do oponente, encaixando a mão dele na própria axila.",
+            "Envolve o braço do uke, encaixando a mão dele na própria axila.",
             "Apoia o pé no joelho dele e puxa para a frente; o outro pé vai sobre a "
             "faixa, de modo que o joelho fique sobre o cotovelo dele.",
             "Pressiona o joelho para baixo enquanto puxa o punho, estendendo a "
@@ -835,22 +835,22 @@ TECNICAS.update({
         "resumo": "A axila de tori é o apoio. Funciona em pé e no solo, e é das mais "
                   "perigosas: só se aplica com controle total.",
         "passos": [
-            "Com o braço do oponente estendido, tori segura firme o punho dele, polegar "
+            "Com o braço do uke estendido, tori segura firme o punho dele, polegar "
             "voltado para baixo.",
             "Encaixa o cotovelo dele na própria axila e fecha o braço sobre a "
             "articulação.",
             "Empurra o punho para baixo e para trás, pressionando com o tronco à frente "
             "ou girando o corpo.",
-            "Mantém pés ou joelhos firmes no solo para o oponente não girar.",
+            "Mantém pés ou joelhos firmes no solo para o uke não girar.",
         ]},
     "Hara-gatame": {
         "traducao": "chave de braço com o abdômen",
         "familia": "kansetsu", "serie": "Forma oficial do Kodokan",
-        "resumo": "O abdômen de tori é a base fixa sobre a qual o cotovelo do oponente "
+        "resumo": "O abdômen de tori é a base fixa sobre a qual o cotovelo do uke "
                   "é hiperestendido.",
         "passos": [
             "Tori em posição superior, os dois em pé.",
-            "Segura o braço do oponente estendido, com o cotovelo centralizado em "
+            "Segura o braço do uke estendido, com o cotovelo centralizado em "
             "relação ao próprio abdômen e o polegar dele para cima.",
             "Posiciona o abdômen logo abaixo da articulação do cotovelo, sem folga.",
             "Puxa o punho para trás e projeta o tronco à frente.",
@@ -894,20 +894,20 @@ def familia(chave):
 PASSOS_NAGE = {
     # ------------------------------------------------------------ te-waza
     "Seoi-nage": [
-        "Kuzushi para a frente e para cima, levantando o oponente na ponta dos pés.",
+        "Kuzushi para a frente e para cima, levantando o uke na ponta dos pés.",
         "Gire de costas em dois tempos, joelhos flexionados, quadril abaixo do dele.",
         "Os dois braços carregam: o da gola passa por baixo da axila, o da manga puxa.",
         "Estenda as pernas e gire o tronco — a projeção vem das pernas, não dos braços.",
     ],
     "Ippon-seoi-nage": [
         "Kuzushi para a frente, puxando a manga para cima.",
-        "Solte a gola e passe o próprio braço por dentro da axila do oponente, "
+        "Solte a gola e passe o próprio braço por dentro da axila do uke, "
         "encaixando o braço dele no ombro.",
         "Gire de costas com o quadril abaixo do dele e o cotovelo bem alto.",
         "Estenda as pernas projetando à frente; a mão da manga nunca larga.",
     ],
     "Tai-otoshi": [
-        "Kuzushi para a frente, na diagonal do ombro do oponente.",
+        "Kuzushi para a frente, na diagonal do ombro do uke.",
         "Gire o corpo e estenda a perna à frente do tornozelo dele — a perna é "
         "barreira, não varre.",
         "As duas mãos giram como um volante, levando o tronco dele por cima da perna.",
@@ -924,7 +924,7 @@ PASSOS_NAGE = {
         "Kuzushi para a frente, no canto da ponta do pé dele.",
         "Recue um pé e leve um joelho ao tatame, mantendo os braços estendidos.",
         "As mãos descrevem um arco para baixo, na diagonal, acompanhando a queda.",
-        "Nenhuma perna toca o oponente — só as mãos e o deslocamento.",
+        "Nenhuma perna toca o uke — só as mãos e o deslocamento.",
     ],
     "Sumi-otoshi": [
         "Kuzushi para o canto de trás, empurrando a gola e puxando a manga.",
@@ -942,7 +942,7 @@ PASSOS_NAGE = {
         "Abaixe entrando com um passo profundo, a cabeça ao lado do tronco dele.",
         "Os dois braços envolvem as pernas na altura dos joelhos.",
         "Puxe as pernas para você e empurre o tronco dele para trás com o ombro.",
-        "A cabeça nunca entra por baixo do braço do oponente.",
+        "A cabeça nunca entra por baixo do braço do uke.",
     ],
     "Kuchiki-taoshi": [
         "Kuzushi para trás ou para o lado, quebrando a postura.",
@@ -951,13 +951,13 @@ PASSOS_NAGE = {
         "O nome é 'derrubar a árvore podre': a perna sai, o tronco cai sozinho.",
     ],
     "Kibisu-gaeshi": [
-        "Kuzushi puxando o oponente para a frente, para ele carregar o peso.",
+        "Kuzushi puxando o uke para a frente, para ele carregar o peso.",
         "Abaixe e pegue o calcanhar por trás, com a palma para cima.",
         "Levante o calcanhar enquanto empurra o peito dele para trás.",
         "É uma ação só: se levantar sem empurrar, ele apenas recua o pé.",
     ],
     "Uchi-mata-sukashi": [
-        "Reconheça a entrada: o oponente gira para aplicar uchi-mata.",
+        "Reconheça a entrada: o uke gira para aplicar uchi-mata.",
         "Recolha a perna atacada, deixando a dele passar no vazio.",
         "Gire as mãos no sentido do giro dele, somando-se ao impulso.",
         "Não há força: ele cai no próprio movimento.",
@@ -991,7 +991,7 @@ PASSOS_NAGE = {
     "Tsuri-komi-goshi": [
         "Kuzushi para cima pela gola, levantando a postura dele.",
         "Gire de costas abaixando bem o quadril, mais baixo do que no o-goshi.",
-        "O cotovelo da gola fica alto, mantendo o oponente suspenso.",
+        "O cotovelo da gola fica alto, mantendo o uke suspenso.",
         "Estenda as pernas: ele passa por cima do quadril baixo.",
     ],
     "Tsuri-goshi": [
@@ -1013,13 +1013,13 @@ PASSOS_NAGE = {
         "O impulso é de mola, para cima — não é varrida.",
     ],
     "Ushiro-goshi": [
-        "Reconheça a entrada de quadril do oponente e abaixe o centro de gravidade.",
+        "Reconheça a entrada de quadril do uke e abaixe o centro de gravidade.",
         "Envolva a cintura dele pela frente, colando o peito nas costas dele.",
         "Levante com as pernas, tirando-o do chão enquanto o ataque dele passa no vazio.",
         "Recue o quadril e deixe-o cair de costas, acompanhando com os braços.",
     ],
     "Utsuri-goshi": [
-        "Mesma defesa do ushiro-goshi: abaixe e levante o oponente pela cintura.",
+        "Mesma defesa do ushiro-goshi: abaixe e levante o uke pela cintura.",
         "Com ele no ar, troque o quadril de lado, girando por baixo.",
         "Encaixe o quadril do outro lado, agora como quem ataca.",
         "Projete no sentido contrário ao do ataque dele.",
@@ -1027,7 +1027,7 @@ PASSOS_NAGE = {
 
     # ---------------------------------------------------------- ashi-waza
     "De-ashi-harai": [
-        "Acompanhe o deslocamento do oponente, sem forçar o passo.",
+        "Acompanhe o deslocamento do uke, sem forçar o passo.",
         "No instante em que o pé sai do tatame e ainda não apoiou, varra a planta "
         "com a sola do seu pé.",
         "As mãos giram no sentido da varrida, levando o tronco dele junto.",
@@ -1071,7 +1071,7 @@ PASSOS_NAGE = {
         "Empurre o tronco na diagonal de trás enquanto varre.",
     ],
     "Uchi-mata": [
-        "Kuzushi para a frente, trazendo o oponente para as suas costas.",
+        "Kuzushi para a frente, trazendo o uke para as suas costas.",
         "Gire em dois ou três tempos, apoiado numa perna, quadril encaixado.",
         "A perna de ataque entra entre as coxas dele e sobe pela face interna.",
         "A cabeça baixa e o braço da manga puxam para baixo; o corpo todo gira.",
@@ -1121,13 +1121,13 @@ PASSOS_NAGE = {
         "A perna é apoio: quem derruba é o deslocamento do peso.",
     ],
     "Nidan-ko-soto-gari": [
-        "Comece o deslocamento lateral junto com o oponente.",
+        "Comece o deslocamento lateral junto com o uke.",
         "Dê um primeiro salto no sentido do movimento, sem varrer.",
         "No segundo tempo, varra o calcanhar dele, já em desequilíbrio.",
         "O ritmo é o ataque: um tempo só não tira o apoio.",
     ],
     "Hane-goshi-gaeshi": [
-        "Reconheça a entrada de hane-goshi do oponente.",
+        "Reconheça a entrada de hane-goshi do uke.",
         "Abaixe o centro de gravidade e bloqueie a perna de impulso dele.",
         "Levante a perna dele pelo lado de fora, somando-se ao giro.",
         "Projete no mesmo sentido em que ele girava.",
@@ -1141,13 +1141,13 @@ PASSOS_NAGE = {
 
     # ------------------------------------------------------ ma-sutemi-waza
     "Tomoe-nage": [
-        "Kuzushi para a frente, puxando o oponente sobre você.",
+        "Kuzushi para a frente, puxando o uke sobre você.",
         "Apoie o pé no ventre, logo abaixo do nó da faixa.",
         "Sente e deite-se, mantendo as mãos puxando a gola.",
         "Estenda a perna lançando-o por cima da sua cabeça.",
     ],
     "Sumi-gaeshi": [
-        "Pegada alta, por cima do ombro ou nas costas, com o oponente curvado.",
+        "Pegada alta, por cima do ombro ou nas costas, com o uke curvado.",
         "Apoie o peito do pé na face interna da coxa dele.",
         "Sente e role para trás, na diagonal.",
         "Levante a perna no momento do rolamento, lançando-o para o canto.",
@@ -1159,7 +1159,7 @@ PASSOS_NAGE = {
         "Gire na queda para não cair embaixo dele.",
     ],
     "Tawara-gaeshi": [
-        "O gatilho é o oponente abaixar para atacar as pernas.",
+        "O gatilho é o uke abaixar para atacar as pernas.",
         "Envolva o tronco dele por cima, com os dois braços travados.",
         "Jogue-se para trás levantando-o, como quem vira um fardo.",
         "Gire o corpo na queda para terminar por cima.",
@@ -1186,7 +1186,7 @@ PASSOS_NAGE = {
     ],
     "Soto-makikomi": [
         "Kuzushi para a frente, na diagonal.",
-        "Gire de costas e enrole o braço do oponente por fora, por baixo da axila.",
+        "Gire de costas e enrole o braço do uke por fora, por baixo da axila.",
         "Siga o giro e jogue-se de lado, levando-o junto.",
         "O braço preso é o que garante que ele vá junto.",
     ],
@@ -1197,7 +1197,7 @@ PASSOS_NAGE = {
         "É a saída de quando o harai-goshi não termina em pé.",
     ],
     "Uchi-makikomi": [
-        "Entre por dentro, entre os braços do oponente.",
+        "Entre por dentro, entre os braços do uke.",
         "Enrole o braço dele por dentro, prendendo-o no seu tronco.",
         "Gire e jogue-se de lado.",
         "A diferença para o soto-makikomi é só por onde o braço é enrolado.",
@@ -1215,7 +1215,7 @@ PASSOS_NAGE = {
         "Ele passa por cima, separado da própria base.",
     ],
     "Yoko-guruma": [
-        "O gatilho é o oponente se abaixar, defendendo um ura-nage.",
+        "O gatilho é o uke se abaixar, defendendo um ura-nage.",
         "Passe por baixo do braço dele, entrando de lado.",
         "Jogue-se de lado estendendo a perna, com o braço envolvendo o tronco.",
         "Ele gira por cima de você, em roda.",
@@ -1232,3 +1232,50 @@ for _nome, _passos in PASSOS_NAGE.items():
     if _nome in TECNICAS:
         TECNICAS[_nome]["passos"] = _passos
     _INDICE[_norm(_nome)]["passos"] = _passos
+
+
+# ------------------------------------------- termos usados nas descrições
+# As fichas acima explicam o nome da técnica, mas as descrições em si usam
+# vocabulário de tatame: "tori", "uke", "kuzushi". Esses termos só são cobrados
+# em promoções adiantadas — quem está na branca lia "Tori desequilibra o uke"
+# sem ter onde descobrir quem é quem. A legenda do material sai desta lista.
+#
+# Só entra termo que aparece mesmo nos textos; `termos_citados()` confere.
+TERMOS_DO_TEXTO = [
+    {"termo": "tori", "significado": "quem aplica a técnica"},
+    {"termo": "uke", "significado": "quem recebe a técnica"},
+    {"termo": "kuzushi", "significado": "a quebra do equilíbrio, que abre a técnica"},
+    {"termo": "tsukuri", "significado": "o encaixe, a preparação do corpo"},
+    {"termo": "kake", "significado": "a execução, o momento da projeção"},
+    {"termo": "hikite", "significado": "a mão que puxa, na manga"},
+    {"termo": "tsurite", "significado": "a mão que suspende, na gola"},
+    {"termo": "taka-kyoshi", "significado": "postura de joelho alto, de aproximação no solo"},
+    {"termo": "tatame", "significado": "o piso do dojô"},
+]
+
+
+def _textos_das_fichas():
+    for v in TECNICAS.values():
+        yield v.get("resumo") or ""
+        for s in v.get("passos") or []:
+            yield s
+    for grupo in (UKEMI, KUMI_KATA):
+        for it in grupo:
+            yield it.get("resumo") or ""
+            for s in it.get("passos") or []:
+                yield s
+    yield UKEMI_NOTA
+    yield KUMI_KATA_NOTA
+
+
+def termos_citados():
+    """Os termos da legenda que de fato aparecem nas descrições.
+
+    Explicar um termo que o texto não usa é ruído; deixar sem explicar um que
+    ele usa é o problema que a legenda veio resolver. Por isso a lista é
+    filtrada pelo próprio texto, e não fixa na tela.
+    """
+    import re
+    junto = " ".join(_textos_das_fichas()).lower()
+    return [t for t in TERMOS_DO_TEXTO
+            if re.search(r"\b" + re.escape(t["termo"]) + r"\b", junto)]

@@ -247,6 +247,29 @@ def main():
     checar("50. técnica solta mostra a tradução no material",
            not faltam_c, ", ".join(faltam_c[:5]))
 
+    print("\nO vocabulário das descrições também é explicado")
+    import re as _re
+    # Entram também os rótulos dos grupos: eles aparecem no mesmo material.
+    texto = " ".join(list(mat._textos_das_fichas())
+                     + [g.get("significado") or "" for g in exf.GRUPOS])
+    checar("51. o material inteiro fala a língua do exame: tori e uke, não 'oponente'",
+           not _re.search(r"\boponente\b", texto, _re.I),
+           str(_re.findall(r".{30}\boponente\b.{20}", texto, _re.I)[:2]))
+    checar("52. tori e uke aparecem mesmo nos textos",
+           _re.search(r"\btori\b", texto, _re.I) and _re.search(r"\buke\b", texto, _re.I))
+    legenda = mat.termos_citados()
+    checar("53. a legenda não explica termo que o texto não usa",
+           all(_re.search(r"\b" + _re.escape(t["termo"]) + r"\b", texto, _re.I) for t in legenda),
+           str([t["termo"] for t in legenda
+                if not _re.search(r"\b" + _re.escape(t["termo"]) + r"\b", texto, _re.I)]))
+    checar("54. tori e uke estão na legenda",
+           {"tori", "uke"} <= {t["termo"] for t in legenda},
+           str([t["termo"] for t in legenda]))
+    checar("55. a legenda sai na tela, junto das técnicas",
+           'class="exf-legenda"' in html and "quem aplica a técnica" in html)
+    checar("56. a legenda não é escondida da impressão",
+           "exf-nao-imprime" not in html.split('class="exf-legenda"')[1][:200])
+
     print("\nO nome do grupo vem com o que ele quer dizer")
     sem_sig = [g["chave"] for g in exf.GRUPOS if not g.get("significado")]
     checar("42. todo grupo do programa tem significado cadastrado",

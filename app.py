@@ -478,6 +478,16 @@ def asset(filename):
     return url_for("static", filename=filename) + "?v=" + versao
 
 
+# A legenda do material do exame de faixa (tori, uke, kuzushi…) é lista fixa do
+# módulo e vale para todas as telas que mostram material — vai como global do
+# Jinja para não ter de ser passada em cada rota.
+try:
+    from utils.exame_faixa_material import termos_citados as _termos_exame
+    app.jinja_env.globals["termos_do_material"] = _termos_exame()
+except Exception:  # pragma: no cover - material ausente não derruba o app
+    app.jinja_env.globals["termos_do_material"] = []
+
+
 @app.context_processor
 def injetar_marca_dominio():
     """`marca_academia`: {id, titulo, texto, cor, logo_url} quando o pedido veio

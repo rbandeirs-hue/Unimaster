@@ -35,11 +35,11 @@ NOTA_CORTE = 6.0
 # As traduções são as do glossário da FPJU (Tadao Nagai, 9º Dan).
 GRUPOS = [
     {"chave": "nage",    "nome": "Nage-waza",          "tipo": "lista", "simbolo": "",
-     "significado": "técnicas de arremesso — projetar o oponente de pé"},
+     "significado": "técnicas de arremesso — projetar o uke de pé"},
     {"chave": "katame",  "nome": "Katame-waza",        "tipo": "lista", "simbolo": "",
      "significado": "técnicas de controle no solo — imobilizar, estrangular, chavear"},
     {"chave": "kaeshi",  "nome": "Kaeshi-waza",        "tipo": "par",   "simbolo": "×",
-     "significado": "contragolpes — devolver o ataque do oponente"},
+     "significado": "contragolpes — devolver o ataque do uke"},
     {"chave": "renraku", "nome": "Renraku-henka-waza", "tipo": "par",   "simbolo": "+",
      "significado": "técnicas combinadas — uma puxa a seguinte, em sequência"},
     {"chave": "teoria",  "nome": "Conhecimento teórico", "tipo": "lista", "simbolo": "",
