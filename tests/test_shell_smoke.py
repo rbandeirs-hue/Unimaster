@@ -22,16 +22,21 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Um usuário por modo. O 3 acumula quase todos os papéis; federação e
-# visitante têm titulares próprios.
+# Um usuário por modo, cada um com o papel daquele modo de verdade.
+#
+# Até a ADM-01 o usuário 3 acumulava quase tudo e servia para todos os modos.
+# Separar administração de gestão tirou dele admin, gestor de associação,
+# aluno e responsável — e um teste que continuasse usando o 3 para esses modos
+# passaria sem exercitar tela nenhuma, porque o sistema desvia quem não tem o
+# papel. Por isso cada modo agora aponta para um titular real.
 USUARIO_POR_MODO = {
-    "admin": 3,
-    "academia": 3,
-    "associacao": 3,
+    "admin": 9,          # Administrador de Sistema (ADM-01)
+    "academia": 3,       # Rodrigo, gestor da academia dele
+    "associacao": 6,     # Edrremulos, gestor da associação
     "federacao": 9,
     "professor": 3,
-    "aluno": 3,
-    "responsavel": 3,
+    "aluno": 5,          # Renato
+    "responsavel": 5,
     "visitante": 271,
 }
 
@@ -65,7 +70,8 @@ def _rotas_visitaveis(app):
 
 # Sem uma academia escolhida, o modo academia redireciona tudo para a tela de
 # escolha e o teste passaria sem visitar nada.
-ACADEMIA_TESTE = 1
+# A academia do usuário 3: desde a ADM-01 ele só enxerga esta.
+ACADEMIA_TESTE = 14
 
 
 def _cliente(app, modo):
