@@ -8,6 +8,17 @@ class DatabaseUnavailableError(Exception):
     pass
 
 
+# Tempo máximo para ABRIR a conexão. Sem isto, um banco que aceita o TCP mas
+# não completa o handshake deixa o pedido pendurado até o timeout do sistema —
+# foi o que aconteceu em 16/10/2026, quando uma atualização automática do
+# MariaDB travou o serviço por horas. São três workers: bastam três pedidos
+# presos para o site inteiro parar de responder, e a tela de login fica
+# "rodando e nada" em vez de dar erro.
+#
+# Vale só para a abertura: consulta demorada continua podendo demorar.
+DB_CONNECT_TIMEOUT = int(os.environ.get("DB_CONNECT_TIMEOUT", "5"))
+
+
 def get_db_connection():
     """Conexão MySQL — usa variáveis de ambiente ou fallback."""
     return mysql.connector.connect(
@@ -15,6 +26,7 @@ def get_db_connection():
         user=os.environ.get("DB_USER", "unimaster"),
         password=os.environ.get("DB_PASSWORD", "Un1m@ster_2024"),
         database=os.environ.get("DB_NAME", "unimaster"),
+        connection_timeout=DB_CONNECT_TIMEOUT,
     )
 
 
