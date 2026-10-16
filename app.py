@@ -289,6 +289,12 @@ _ESCOLHA_ACADEMIA_PERMITIDOS = {
     "auth.esqueci_senha",
     "auth.redefinir_senha",
     "academia.escolher_academia",
+    # A escolha do MODO vem antes da escolha da academia: quem administra o
+    # sistema vê todas as academias e, sem esta linha, era empurrado para o
+    # seletor de academia antes de poder dizer que ia entrar como associação —
+    # e ficava presa no modo academia. Deixar `painel.home` passar não afrouxa
+    # a trava: ela continua valendo em todas as telas de operação.
+    "painel.home",
     "painel.escolher_modo",
     "static",
 }

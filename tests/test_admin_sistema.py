@@ -144,16 +144,37 @@ def main():
         checar(f"15. o admin alcança as {len(rotas)} telas de gestão em algum modo",
                not sem_saida, ", ".join(sem_saida[:6]))
 
+        # Entrar no sistema é escolher o MODO primeiro. A trava que exige
+        # escolher a academia na entrada empurrava o admin — que vê todas —
+        # para o seletor de academia antes disso, e ele ficava preso no modo
+        # academia, sem conseguir chegar a associação.
+        import re as _re3
+        cli3 = app.test_client()
+        pag = cli3.get("/auth/login").get_data(as_text=True)
+        _tok = _re3.search(r'name="csrf_token"[^>]*value="([^"]+)"', pag)
+        with cli3.session_transaction() as sess:
+            sess["_user_id"] = str(adm["id"])
+            sess["_fresh"] = True
+            sess.pop("modo_painel", None)
+            sess.pop("academia_gerenciamento_id", None)
+        r_painel = cli3.get("/painel/", follow_redirects=True)
+        destino = r_painel.request.path
+        checar("16. a entrada do admin é a escolha de modo, não a de academia",
+               destino == "/painel/", destino)
+        texto = r_painel.get_data(as_text=True)
+        checar("17. os quatro modos de gestão aparecem na escolha",
+               all(m in texto for m in ("Administrador", "Federação", "Associação", "Academia")))
+
         from blueprints.painel.routes import _modos_disponiveis
         from app import load_user as _load
         with app.test_request_context("/"):
             from flask_login import login_user as _login
             _login(_load(str(adm["id"])))
             modos_adm = [m[0] for m in _modos_disponiveis()]
-        checar("16. o admin pode entrar nos modos de gestão",
+        checar("18. o admin pode entrar nos modos de gestão",
                {"admin", "federacao", "associacao", "academia"} <= set(modos_adm),
                str(modos_adm))
-        checar("17. não recebe o modo professor sem ficha de professor",
+        checar("19. não recebe o modo professor sem ficha de professor",
                "professor" not in modos_adm, str(modos_adm))
 
         print()
@@ -162,9 +183,9 @@ def main():
                        JOIN roles r ON r.id = ru.role_id AND r.chave = 'admin'
                        WHERE COALESCE(u.ativo, 1) = 1""")
         admins = cur.fetchall()
-        checar("18. existe exatamente um administrador de sistema ativo",
+        checar("20. existe exatamente um administrador de sistema ativo",
                len(admins) == 1, str([(a["id"], a["nome"]) for a in admins]))
-        checar("19. e é a conta de CPF 99999999999",
+        checar("21. e é a conta de CPF 99999999999",
                admins and admins[0]["id"] == adm["id"],
                str([(a["id"], a["nome"]) for a in admins]))
     finally:
