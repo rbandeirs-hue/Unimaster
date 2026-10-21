@@ -17,13 +17,14 @@
     {% endfor %}
     <header class="exf-dialogo__topo">
       <h2 id="exf-apostila-titulo">Imprimir apostila</h2>
-      <span class="u-muted u-fs-sm">Marque os alunos para sair uma apostila com o nome de cada um, no material da faixa do próximo exame dele. Quem vai saltar faixa recebe o material das faixas puladas junto.{% if ap_sem_nome %} Sem ninguém marcado, imprime esta, sem nome.{% endif %}</span>
+      <span class="u-muted u-fs-sm">Marque alunos para sair uma apostila com o nome de cada um, no material da faixa do próximo exame dele — quem vai saltar recebe as faixas puladas junto. Marque faixas para imprimir o material delas, sem nome.{% if ap_sem_nome %} Sem nada marcado, imprime esta tela.{% endif %}</span>
     </header>
     <div class="exf-dialogo__corpo">
       <div class="exf-ap-topo">
         <label class="exf-ap-todos"><input type="checkbox" class="form-check-input" id="exf-ap-todos"> Selecionar todos</label>
         <input type="search" class="u-campo__controle exf-ap-busca" id="exf-ap-busca" placeholder="Buscar aluno" aria-label="Buscar aluno">
       </div>
+      {% if ap_lista and ap_faixas %}<p class="exf-ap-secao">Alunos</p>{% endif %}
       <ul class="exf-ap-lista">
         {% for a in ap_lista %}
         <li data-nome="{{ (a.nome or '')|lower }}">
@@ -35,6 +36,26 @@
         </li>
         {% endfor %}
       </ul>
+      {% if ap_faixas %}
+      {# Material de qualquer faixa, sem depender de haver aluno indo prestar
+         exame: é o que o professor usa para montar o caderno da turma. #}
+      <p class="exf-ap-secao">Faixas</p>
+      <ul class="exf-ap-lista">
+        {% for f in ap_faixas %}
+        <li data-nome="{{ ((f.de ~ ' ' ~ f.para) or '')|lower }}">
+          <label>
+            <input type="checkbox" class="form-check-input" name="faixa" value="{{ f.indice }}">
+            <span class="exf-ap-nome">{{ f.de }} → <strong>{{ f.para }}</strong></span>
+            <span class="exf-ap-faixa">{{ f.n }} técnica{{ 's' if f.n != 1 }}</span>
+          </label>
+        </li>
+        {% endfor %}
+      </ul>
+      <label class="exf-ap-acumulado">
+        <input type="checkbox" class="form-check-input" name="acumulado" value="1">
+        <span>Material acumulado<small>soma o conteúdo de todas as faixas até a escolhida</small></span>
+      </label>
+      {% endif %}
     </div>
     <footer class="exf-dialogo__rodape">
       <button type="button" class="sh__btn" data-ap-fechar>Cancelar</button>
@@ -53,6 +74,14 @@
   .exf-ap-lista label:hover { background: #fdfcfa; }
   .exf-ap-nome { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .exf-ap-faixa { flex: none; font-size: .82rem; color: var(--sh-ink-soft); }
+  .exf-ap-secao { margin: .9rem 0 .25rem; font-size: .7rem; font-weight: 600; letter-spacing: .1em;
+                  text-transform: uppercase; color: var(--sh-ink-soft); }
+  .exf-ap-secao:first-child { margin-top: 0; }
+  .exf-ap-acumulado { display: flex; align-items: flex-start; gap: .6rem; margin: .6rem 0 0;
+                      padding: .6rem .8rem; border: 1px solid var(--sh-line);
+                      border-radius: var(--u-radius-sm); background: #fcfbfa; cursor: pointer; }
+  .exf-ap-acumulado span { display: flex; flex-direction: column; line-height: 1.3; }
+  .exf-ap-acumulado small { color: var(--sh-ink-soft); font-size: .78rem; }
 </style>
 <script>
 (function () {
@@ -62,14 +91,14 @@
   var todos = document.getElementById('exf-ap-todos');
   var busca = document.getElementById('exf-ap-busca');
   var btn = dlg.querySelector('[data-ap-imprimir] span');
-  function caixas() { return Array.prototype.slice.call(form.querySelectorAll('input[name="aluno_id"]')); }
+  function caixas() { return Array.prototype.slice.call(form.querySelectorAll('input[name="aluno_id"], input[name="faixa"]')); }
   function visiveis() { return caixas().filter(function (c) { return !c.closest('li').hidden; }); }
   var semNome = form.getAttribute('data-sem-nome') === '1';
   function atualizar() {
     var n = caixas().filter(function (c) { return c.checked; }).length;
     var vis = visiveis();
     btn.textContent = n ? 'Imprimir ' + n + ' apostila' + (n > 1 ? 's' : '')
-                        : (semNome ? 'Imprimir sem nome' : 'Marque ao menos um aluno');
+                        : (semNome ? 'Imprimir sem nome' : 'Marque ao menos um item');
     btn.closest('button').disabled = !n && !semNome;
     todos.checked = vis.length > 0 && vis.every(function (c) { return c.checked; });
     todos.indeterminate = !todos.checked && vis.some(function (c) { return c.checked; });
@@ -81,7 +110,9 @@
     visiveis().forEach(function (c) { c.checked = todos.checked; });
     atualizar();
   });
-  form.addEventListener('change', function (e) { if (e.target.name === 'aluno_id') atualizar(); });
+  form.addEventListener('change', function (e) {
+    if (e.target.name === 'aluno_id' || e.target.name === 'faixa') atualizar();
+  });
   busca.addEventListener('input', function () {
     var q = busca.value.trim().toLowerCase();
     form.querySelectorAll('.exf-ap-lista li').forEach(function (li) {

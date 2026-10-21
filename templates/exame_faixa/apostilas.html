@@ -17,7 +17,7 @@
 {% endblock %}
 
 {% block pagina_titulo %}Apostilas para impressão{% endblock %}
-{% block pagina_subtitulo %}{{ apostilas|length }} apostila{{ 's' if apostilas|length != 1 }}, cada uma com o nome do aluno e o material da faixa do próximo exame dele.{% endblock %}
+{% block pagina_subtitulo %}{{ apostilas|length }} apostila{{ 's' if apostilas|length != 1 }} — por aluno, com o nome e a faixa do próximo exame dele; por faixa, só o material.{% endblock %}
 {% block pagina_acoes %}
 <a href="{{ voltar }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Voltar</a>
 <button type="button" class="sh__btn sh__btn--forte" onclick="window.print()"><i class="bi bi-printer"></i> Imprimir</button>
@@ -31,7 +31,7 @@
   </div>
   {% for ap in apostilas %}
   <div class="lst-linha lst-item" style="grid-template-columns: minmax(0, 1fr) auto">
-    <span class="lst-nome lst-corta">{{ ap.aluno.nome }}</span>
+    <span class="lst-nome lst-corta">{{ ap.aluno.nome if ap.aluno and ap.aluno.nome else ('Acumulado até ' ~ ap.atual.para if ap.atual.acumulado else ap.atual.para) }}</span>
     <span class="lst-sub">{{ promo(ap.atual) }}</span>
   </div>
   {% endfor %}
@@ -49,7 +49,9 @@
       <p>Idade {{ ap.atual.idade_txt }} · carência {{ ap.atual.carencia_txt }}</p>
     </div>
     <div class="exf-apostila-cab__meta">
-      <span>Aluno: <strong>{{ ap.aluno.nome }}</strong></span>
+      {% if ap.aluno and ap.aluno.nome %}<span>Aluno: <strong>{{ ap.aluno.nome }}</strong></span>
+      {% elif ap.atual.acumulado %}<span>Material acumulado · {{ ap.atual.faixas_no_acumulado|length }} promoções</span>
+      {% endif %}
       <span>Impresso em {{ hoje_txt }}</span>
     </div>
   </header>

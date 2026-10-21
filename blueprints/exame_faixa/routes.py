@@ -472,6 +472,11 @@ def programa():
             ap_ocultos={"academia_id": esc.get("academia_id") or "", "p": idx},
             ap_lista=[_item_apostila(a["id"], a["nome"], a["sit"].get("promocao"))
                       for a in _alunos_para_apostila(cur, esc, prog)],
+            # Material de qualquer faixa, sem depender de aluno inscrito.
+            ap_faixas=[{"indice": i, "de": p["de"], "para": p["para"],
+                        "n": sum(len(exf.itens(p, g["chave"]))
+                                 for g in exf.GRUPOS if g["chave"] != "teoria")}
+                       for i, p in enumerate(prog)],
             ap_sem_nome=True,
             hoje_txt=datetime.now().strftime("%d/%m/%Y"), **material)
     finally:
@@ -482,10 +487,19 @@ def programa():
 @bp_exame_faixa.route("/programa/apostilas")
 @login_required
 def programa_apostilas():
-    """Apostilas em lote: uma por aluno marcado, com o nome dele e o material
-    da faixa do próximo exame dele (salto e escolha do professor inclusos).
+    """Apostilas em lote, por aluno ou por faixa.
 
-    Sem aluno marcado a tela do programa imprime ela mesma, sem nome.
+    `aluno_id` — uma apostila por aluno marcado, com o nome dele e o material
+                 da faixa do próximo exame dele (salto e escolha do professor
+                 inclusos).
+    `faixa`    — uma apostila por promoção escolhida, sem nome de aluno. Serve
+                 para imprimir o material de qualquer faixa, não só o da turma
+                 que vai prestar exame.
+    `acumulado=1` — cada faixa escolhida sai com o conteúdo somado desde a
+                 primeira: é o material inteiro até ali, não só o que aquela
+                 promoção acrescenta.
+
+    Sem nada marcado a tela do programa imprime ela mesma, sem nome.
     """
     conn = get_db_connection()
     cur = conn.cursor(dictionary=True)
@@ -498,11 +512,18 @@ def programa_apostilas():
                          academia_id=esc.get("academia_id"))
         pedidos = set(request.args.getlist("aluno_id", type=int))
         escolhidos = [a for a in _alunos_para_apostila(cur, esc, prog) if a["id"] in pedidos]
-        if not escolhidos:
-            flash("Marque ao menos um aluno da academia para imprimir com nome.", "warning")
+        faixas = sorted({i for i in request.args.getlist("faixa", type=int)
+                         if 0 <= i < len(prog)})
+        acumulado = request.args.get("acumulado") == "1"
+        if not escolhidos and not faixas:
+            flash("Marque ao menos um aluno ou uma faixa para imprimir.", "warning")
             return redirect(voltar)
-        apostilas = _montar_apostilas(cur, esc, prog,
-                                      [(a, a["sit"]["promocao"]) for a in escolhidos])
+        pares = [(a, a["sit"]["promocao"]) for a in escolhidos]
+        # Faixa sem aluno: a apostila sai sem nome, com o material daquela
+        # promoção ou, no acumulado, de todas até ela.
+        pares += [(None, exf.promocao_acumulada(prog, i) if acumulado else prog[i])
+                  for i in faixas]
+        apostilas = _montar_apostilas(cur, esc, prog, pares)
         return render_template(
             "exame_faixa/apostilas.html", esc=esc, apostilas=apostilas, voltar=voltar,
             marca=_marca_da_apostila(cur, esc), hoje_txt=datetime.now().strftime("%d/%m/%Y"))
@@ -554,13 +575,14 @@ def _montar_apostilas(cur, esc, prog, pares):
         i = indice.get(promo.get("id"))
         if i is None:
             continue
-        # O material de quem salta não serve para quem não salta: a chave do
-        # cache leva também a faixa de origem.
-        chave = (i, promo.get("indice_de"))
+        # O material de quem salta não serve para quem não salta, e o acumulado
+        # não serve para quem quer só a faixa: a chave do cache leva as três
+        # coisas — a promoção, de onde o conteúdo começa e se é acumulado.
+        composta = promo.get("indice_de") is not None
+        chave = (i, promo.get("indice_de"), bool(promo.get("acumulado")))
         if chave not in materiais:
             materiais[chave] = _material_da_promocao(
-                cur, esc, prog, i, videos,
-                promocao=promo if promo.get("salto") else None)
+                cur, esc, prog, i, videos, promocao=promo if composta else None)
         # O cabeçalho sai da faixa do aluno: num salto, "Branca → Amarela/Laranja".
         apostilas.append(dict(materiais[chave], aluno=aluno, atual=promo))
     return apostilas

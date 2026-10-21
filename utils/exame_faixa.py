@@ -695,6 +695,26 @@ def promocao_com_salto(prog, nat, salto):
     return p
 
 
+def promocao_acumulada(prog, indice):
+    """Promoção com o conteúdo de TODAS as faixas até `indice`, somado.
+
+    É o material acumulado: tudo o que se cobra da primeira faixa até aquela,
+    para imprimir sem depender de haver um aluno que vá saltar. A diferença
+    para `promocao_com_salto` é só a origem — aqui não há aluno, então não há
+    salto a anunciar, e a apostila não leva a marca de salto de faixa.
+    """
+    if not prog:
+        return None
+    indice = max(0, min(indice, len(prog) - 1))
+    p = dict(prog[indice])
+    p["conteudo"] = conteudo_composto(prog, 0, indice)
+    p.update(de=prog[0]["de"], de_faixa=prog[0]["de_faixa"],
+             cores_de=prog[0]["cores_de"], graduacao_de_id=prog[0]["graduacao_de_id"],
+             indice_de=0, acumulado=True,
+             faixas_no_acumulado=[x["para"] for x in prog[: indice + 1]])
+    return p
+
+
 def promocao_da_inscricao(prog, dados, graduacao_id=None):
     """(promoção, índice) de uma inscrição, respeitando salto de faixa.
 
