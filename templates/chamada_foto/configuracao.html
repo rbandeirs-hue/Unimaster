@@ -1,0 +1,148 @@
+{% extends "base_app.html" %}
+{% set menu_ativo = 'chamada_foto' %}
+{% block title %}Chamada por foto{% endblock %}
+{% block pagina_titulo %}Chamada por foto{% endblock %}
+{% block pagina_subtitulo %}{{ academia.nome if academia }} · reconhecimento na chamada e o consentimento de cada aluno.{% endblock %}
+{% block pagina_acoes %}
+<form method="POST" action="{{ url_for('chamada_foto.definir_ativa', academia_id=academia_id) }}" style="display:inline">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="f" value="{{ filtro }}">
+  <input type="hidden" name="ativa" value="{{ '0' if ativa else '1' }}">
+  <button type="submit" class="sh__btn {{ '' if ativa else 'sh__btn--forte' }}">
+    <i class="bi {{ 'bi-toggle-on' if ativa else 'bi-toggle-off' }}"></i>
+    {{ 'Ligada — desligar' if ativa else 'Ligar nesta academia' }}
+  </button>
+</form>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+  .cfg-grade { display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-start; }
+  .cfg-lado { flex: 1 1 280px; max-width: 360px; display: flex; flex-direction: column; gap: 1rem; }
+  .cfg-lista { flex: 999 1 560px; min-width: 0; }
+  .cfg-caixa { background: var(--u-surface); border: 1px solid var(--u-border); border-radius: var(--u-radius-sm, 10px); padding: 1rem 1.1rem; }
+  .cfg-caixa h2 { font-size: 1rem; font-weight: 600; margin: 0 0 .5rem; }
+  .cfg-caixa p { font-size: var(--u-fs-sm, .875rem); color: var(--u-text-muted); line-height: 1.55; margin: 0 0 .6rem; }
+  .lin-cf { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1.3fr) 120px minmax(150px, auto); }
+  .cf-acoes { display: flex; gap: .35rem; justify-content: flex-end; flex-wrap: wrap; }
+  .cf-acoes form { display: inline; }
+  @media (max-width: 900px) {
+    .lin-cf { grid-template-columns: minmax(0, 1fr) 110px; }
+    .lin-cf .col-quem { display: none !important; }
+    .lin-cf .cf-acoes { grid-column: 1 / -1; justify-content: flex-start; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+{% if not ativa %}
+<div class="cfg-caixa mb-3" role="status">
+  <p style="margin:0; color: var(--u-text);"><b>Desligada nesta academia.</b> Você já pode colher os consentimentos;
+  o botão "Chamada por foto" só aparece na chamada depois de ligar.</p>
+</div>
+{% endif %}
+
+<div class="sh__faixa mb-3">
+  <div class="sh__faixa-item"><span class="sh__faixa-rotulo">Alunos ativos</span><span class="sh__faixa-valor">{{ contagem.todos }}</span></div>
+  <div class="sh__faixa-item"><span class="sh__faixa-rotulo">Reconhecíveis</span><span class="sh__faixa-valor">{{ reconheciveis }}</span><span class="lst-sub">foto + consentimento</span></div>
+  <div class="sh__faixa-item"><span class="sh__faixa-rotulo">Sem resposta</span><span class="sh__faixa-valor">{{ contagem.sem_resposta + contagem.aguardando }}</span><span class="lst-sub">{{ contagem.aguardando }} já receberam o pedido</span></div>
+  <div class="sh__faixa-item"><span class="sh__faixa-rotulo">Recusaram</span><span class="sh__faixa-valor">{{ contagem.recusou }}</span></div>
+  <div class="sh__faixa-item"><span class="sh__faixa-rotulo">Sem foto no cadastro</span><span class="sh__faixa-valor {% if contagem.sem_foto %}sh__faixa-valor--alerta{% endif %}">{{ contagem.sem_foto }}</span></div>
+</div>
+
+<div class="cfg-grade">
+  <aside class="cfg-lado">
+    <div class="cfg-caixa">
+      <h2>O termo que a família assina</h2>
+      <p>Autoriza usar a foto do cadastro só para conferir presença nas aulas. A foto da turma é analisada no
+        celular do professor e não é guardada. Dá para retirar a autorização quando quiser, e então os dados
+        do rosto são apagados.</p>
+      <p>Menor de 18 anos: autoriza o responsável. Adulto: o próprio aluno.</p>
+      <a class="sh__btn" href="{{ url_for('chamada_foto.termo', academia_id=academia_id) }}" target="_blank" rel="noopener">
+        <i class="bi bi-printer"></i> Imprimir termo em branco</a>
+    </div>
+    <div class="cfg-caixa">
+      <h2>Como pedir</h2>
+      <p><b>Pelo sistema:</b> o responsável (ou o aluno adulto) entra com o próprio acesso e responde em
+        "Chamada por foto", no menu. O botão <i class="bi bi-whatsapp" aria-hidden="true"></i> manda o link, uma pessoa por vez.</p>
+      <p style="margin:0"><b>Em papel:</b> imprima o termo com o nome, e depois lance a resposta aqui com
+        <i class="bi bi-check2-circle" aria-hidden="true"></i> ou <i class="bi bi-x-circle" aria-hidden="true"></i>.</p>
+    </div>
+  </aside>
+
+  <div class="cfg-lista">
+    <nav class="lst-abas">
+      {% for chave, rotulo in FILTROS.items() %}
+      <a href="{{ url_for('chamada_foto.configuracao', academia_id=academia_id, f=chave if chave != 'todos' else None) }}"
+         class="lst-aba {% if filtro == chave %}is-ativa{% endif %}">{{ rotulo }}<span class="lst-aba__n">{{ contagem[chave] }}</span></a>
+      {% endfor %}
+    </nav>
+
+    <section class="lst-quadro">
+      <header class="lst-quadro__topo">
+        <h2 class="lst-quadro__titulo">Alunos</h2>
+        <span class="lst-quadro__meta">{{ lista|length }} aluno{{ 's' if lista|length != 1 }}</span>
+      </header>
+      <div class="lst-rolagem"><div class="lst-largura" style="--lst-min:420px">
+        <div class="lst-linha lin-cf lst-cab">
+          <div>Aluno</div><div class="col-quem">Quem autoriza</div><div>Situação</div><div class="lst-fim">Ações</div>
+        </div>
+        {% for a in lista %}
+        <div class="lst-linha lin-cf lst-item">
+          <div style="min-width:0">
+            <span class="lst-nome">{{ a.nome }}</span>
+            <span class="lst-sub">{{ a.turma_nome or 'Sem turma' }}{% if a.sem_foto %} · <b style="color:#a15c00">sem foto</b>{% endif %}</span>
+          </div>
+          <div class="col-quem lst-corta">
+            {% if a.menor %}{{ a.responsavel_financeiro_nome or 'Responsável' }} <span class="lst-sub">responsável</span>
+            {% else %}O próprio aluno{% endif %}
+          </div>
+          <div>
+            {% if a.status %}
+              <span class="u-pill {% if STATUS[a.status][1] != 'neutral' %}u-pill--{{ STATUS[a.status][1] }}{% endif %}">{{ STATUS[a.status][0] }}</span>
+              <span class="lst-sub">{% if a.via %}{{ a.via }}{% elif a.pedido_em %}pedido em {{ a.pedido_em.strftime('%d/%m') }}{% endif %}</span>
+            {% else %}<span class="lst-sub">Sem resposta</span>{% endif %}
+          </div>
+          <div class="cf-acoes">
+            {% if a.status != 'autorizou' %}
+            <form method="POST" action="{{ url_for('chamada_foto.pedir_whatsapp', aluno_id=a.id, academia_id=academia_id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="f" value="{{ filtro }}">
+              <button type="submit" class="lst-acao" title="{{ 'Reenviar' if a.pedido_em else 'Enviar' }} pedido pelo WhatsApp"
+                      aria-label="Pedir pelo WhatsApp o consentimento de {{ a.nome }}"><i class="bi bi-whatsapp"></i></button>
+            </form>
+            {% endif %}
+            <a class="lst-acao" href="{{ url_for('chamada_foto.termo', academia_id=academia_id, aluno_id=a.id) }}" target="_blank" rel="noopener"
+               title="Imprimir termo com o nome" aria-label="Imprimir termo de {{ a.nome }}"><i class="bi bi-printer"></i></a>
+            {% if a.status != 'autorizou' %}
+            <form method="POST" action="{{ url_for('chamada_foto.registrar_termo_papel', aluno_id=a.id, academia_id=academia_id) }}"
+                  data-confirmar="Lançar que o termo de {{ a.nome }} voltou assinado AUTORIZANDO?">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="f" value="{{ filtro }}">
+              <button type="submit" name="status" value="autorizou" class="lst-acao" title="Termo em papel: autorizou"
+                      aria-label="Termo em papel: {{ a.nome }} autorizou"><i class="bi bi-check2-circle"></i></button>
+            </form>
+            {% endif %}
+            {% if a.status != 'recusou' %}
+            <form method="POST" action="{{ url_for('chamada_foto.registrar_termo_papel', aluno_id=a.id, academia_id=academia_id) }}"
+                  data-confirmar="Lançar que {{ a.nome }} NÃO autorizou? Os dados do rosto, se houver, são apagados.">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="f" value="{{ filtro }}">
+              <button type="submit" name="status" value="recusou" class="lst-acao lst-acao--perigo" title="Termo em papel: não autorizou"
+                      aria-label="Termo em papel: {{ a.nome }} não autorizou"><i class="bi bi-x-circle"></i></button>
+            </form>
+            {% endif %}
+            {% if a.sem_foto %}
+            <a class="lst-acao" href="{{ url_for('alunos.editar_aluno', aluno_id=a.id) }}" title="Pôr foto no cadastro"
+               aria-label="Pôr foto no cadastro de {{ a.nome }}"><i class="bi bi-camera"></i></a>
+            {% endif %}
+          </div>
+        </div>
+        {% else %}
+        <div class="lst-vazio">Nenhum aluno neste filtro.</div>
+        {% endfor %}
+      </div></div>
+    </section>
+  </div>
+</div>
+{% endblock %}

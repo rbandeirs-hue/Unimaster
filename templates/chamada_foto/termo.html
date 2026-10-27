@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Termo — chamada por foto</title>
+  <style>
+    body { font-family: Georgia, 'Times New Roman', serif; color: #111; margin: 0; background: #f4f2ee; }
+    .folha { background: #fff; max-width: 720px; margin: 24px auto; padding: 48px 56px; box-sizing: border-box; font-size: 12.5pt; line-height: 1.6; }
+    h1 { font-size: 16pt; margin: 0 0 4px; }
+    .acad { color: #444; margin: 0 0 28px; font-size: 11pt; }
+    .linha { border-bottom: 1px solid #111; min-height: 28px; margin: 6px 0 2px; }
+    .rot { font-size: 9.5pt; color: #444; }
+    .grade { display: grid; grid-template-columns: 2fr 1fr; gap: 28px; margin-top: 28px; }
+    .opcoes { margin: 24px 0; display: flex; flex-direction: column; gap: 10px; }
+    .caixa { display: inline-block; width: 14px; height: 14px; border: 1.5px solid #111; vertical-align: -2px; margin-right: 8px; }
+    .imprimir { position: fixed; right: 16px; top: 16px; font: 600 14px system-ui, sans-serif; padding: 10px 16px; border: 0;
+                border-radius: 8px; background: #1c1c1c; color: #fff; cursor: pointer; }
+    @media print {
+      body { background: #fff; }
+      .folha { margin: 0; max-width: none; padding: 18mm 20mm; page-break-after: always; }
+      .folha:last-child { page-break-after: auto; }
+      .imprimir { display: none; }
+    }
+  </style>
+</head>
+<body>
+<button type="button" class="imprimir" onclick="window.print()">Imprimir</button>
+{% for a in alunos %}
+<div class="folha">
+  <h1>Autorização para a chamada por foto</h1>
+  <p class="acad">{{ academia.nome or '' }}</p>
+
+  <p>Aluno(a): <b>{{ a.nome or '' }}</b>{% if not a.nome %}<span class="linha" style="display:inline-block; width:70%"></span>{% endif %}</p>
+  <p>{{ a.texto }}</p>
+
+  <div class="opcoes">
+    <div><span class="caixa"></span>Autorizo</div>
+    <div><span class="caixa"></span>Não autorizo</div>
+  </div>
+
+  <p class="rot">Se o aluno for menor de 18 anos, assina o responsável legal.</p>
+  <div class="grade">
+    <div><div class="linha">{% if a.menor and a.responsavel_financeiro_nome %}{{ a.responsavel_financeiro_nome }}{% endif %}</div><span class="rot">Nome de quem assina</span></div>
+    <div><div class="linha"></div><span class="rot">Data</span></div>
+  </div>
+  <div style="margin-top:36px; max-width: 60%;"><div class="linha"></div><span class="rot">Assinatura</span></div>
+</div>
+{% endfor %}
+</body>
+</html>

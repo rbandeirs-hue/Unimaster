@@ -54,6 +54,7 @@ from blueprints.aniversariante_live import bp_aniversariante_live
 from blueprints.zempo import bp_zempo, bp_zempo_publico
 from blueprints.exame_faixa import bp_exame_faixa
 from blueprints.aula_particular import bp_aula_particular
+from blueprints.chamada_foto import bp_chamada_foto
 
 # 🔹 Modelo de Usuário (flask-login)
 from blueprints.auth.user_model import Usuario
@@ -251,6 +252,10 @@ _CADASTRO_ALUNO_PERMITIDOS = {
     # Check-in por QR: o aluno está no tatame, com a aula começando — mandar
     # completar o cadastro ali perderia o check-in. O cadastro é cobrado depois.
     "checkin.ler",
+    # Autorização da chamada por foto: a família chega pelo link do WhatsApp
+    # para responder uma pergunta só. O cadastro é cobrado na navegação normal.
+    "chamada_foto.autorizar",
+    "chamada_foto.autorizar_salvar",
     "static",
 }
 
@@ -1083,6 +1088,7 @@ app.register_blueprint(bp_zempo)        # Zempo/CBJ — solicitar, migrar e sinc
 app.register_blueprint(bp_zempo_publico)  # Zempo/CBJ — formulário público do aluno (sem login)
 app.register_blueprint(bp_exame_faixa)   # Exame de faixa — programa, preços, banca e modo estudo
 app.register_blueprint(bp_aula_particular)  # Aula particular — combinado por aluno e registro de cada aula
+app.register_blueprint(bp_chamada_foto)     # Chamada por foto — consentimento, liga/desliga e descritores
 
 try:
     import pywebpush  # noqa: F401 — dependência opcional em runtime antigo; requirements.txt inclui.

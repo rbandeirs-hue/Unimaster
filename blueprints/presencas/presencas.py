@@ -2258,8 +2258,26 @@ def registro_presenca():
             kw["excluir_aluno_tela"] = excluir_aluno_tela_param
         return url_for("presencas.registro_presenca", **kw)
 
+    # Chamada por foto: mesma lista, outra tela; grava pelo mesmo POST acima.
+    from blueprints.chamada_foto.routes import pagina_chamada, ativa_na_academia
+    if request.args.get("modo") == "foto" and turma_selecionada:
+        pagina = pagina_chamada(
+            alunos=alunos or [], turmas=turmas, turma_id=turma_selecionada,
+            data_presenca=data_presenca, horario_aula=horario_aula_form,
+            academia_id=academia_id,
+            observacao_aula=registro_aula_atual.get("observacao") or "",
+            plano_aula_texto=registro_aula_atual.get("plano_aula_texto") or "",
+            back_url=url_for("presencas.registro_presenca", turma_id=turma_selecionada,
+                             data_presenca=data_presenca, horario_aula=horario_aula_form,
+                             academia_id=academia_id),
+        )
+        if pagina is not None:
+            return pagina
+        flash("A chamada por foto está desligada nesta academia.", "info")
+
     return render_template(
         'registro_presenca.html',
+        chamada_foto_ativa=ativa_na_academia(academia_id) if turma_selecionada else False,
         turmas=turmas,
         alunos=alunos,
         turma_selecionada=turma_selecionada,

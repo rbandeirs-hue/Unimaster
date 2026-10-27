@@ -1,0 +1,77 @@
+{% extends "base_app.html" %}
+{% set menu_ativo = 'chamada_foto' %}
+{% block title %}Chamada por foto — autorização{% endblock %}
+{% block pagina_titulo %}Chamada por foto{% endblock %}
+{% block pagina_subtitulo %}Autorize, recuse ou retire o uso da foto do cadastro na chamada.{% endblock %}
+
+{% block extra_css %}
+<style>
+  .cfa { max-width: 720px; display: flex; flex-direction: column; gap: 1rem; }
+  .cfa-cartao { background: var(--u-surface); border: 1px solid var(--u-border); border-radius: 14px; padding: 1.1rem 1.2rem;
+                display: flex; flex-direction: column; gap: .8rem; }
+  .cfa-topo { display: flex; align-items: center; gap: .9rem; }
+  .cfa-topo img, .cfa-topo .ini { width: 52px; height: 52px; border-radius: 999px; object-fit: cover; background: #e6e4e0; flex-shrink: 0;
+                                  display: flex; align-items: center; justify-content: center; font-weight: 600; color: #6b6862; }
+  .cfa-termo { font-size: .9rem; line-height: 1.6; color: var(--u-text); background: #f7f6f3; border-radius: 10px; padding: .8rem 1rem; margin: 0; }
+  .cfa-acoes { display: flex; gap: .5rem; flex-wrap: wrap; }
+  .cfa-acoes form { display: inline; }
+  .cfa-nota { font-size: .85rem; color: var(--u-text-muted); margin: 0; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="cfa">
+  <div class="cfa-cartao">
+    <p style="margin:0; line-height:1.6;">Na <b>chamada por foto</b> o professor tira uma foto da turma e o sistema marca
+      a presença comparando cada rosto com a foto do cadastro. A foto da turma é analisada no celular do
+      professor e <b>não é guardada</b>. Sem autorização, a presença continua sendo marcada à mão, como sempre.</p>
+  </div>
+
+  {% for a in alunos %}
+  <section class="cfa-cartao" aria-labelledby="cfa-{{ a.id }}">
+    <div class="cfa-topo">
+      {% if a.foto %}<img src="{{ url_for('static', filename='uploads/' + a.foto) }}" alt="">
+      {% else %}<span class="ini" aria-hidden="true">{{ (a.nome or '?')[0] }}</span>{% endif %}
+      <div style="flex:1; min-width:0;">
+        <h2 id="cfa-{{ a.id }}" style="margin:0; font-size:1.1rem;">{{ a.nome }}</h2>
+        <span class="cfa-nota">{{ a.academia_nome or '' }}</span>
+      </div>
+      {% if a.status %}
+      <span class="u-pill {% if STATUS[a.status][1] != 'neutral' %}u-pill--{{ STATUS[a.status][1] }}{% endif %}">{{ STATUS[a.status][0] if a.status != 'aguardando' else 'Aguardando você' }}</span>
+      {% endif %}
+    </div>
+
+    <p class="cfa-termo">{{ a.texto }}</p>
+
+    {% if not a.pode_decidir %}
+      <p class="cfa-nota"><i class="bi bi-info-circle"></i> Para menores de 18 anos, quem autoriza é o responsável, pelo acesso dele.</p>
+    {% else %}
+      <div class="cfa-acoes">
+        {% if a.status != 'autorizou' %}
+        <form method="POST" action="{{ url_for('chamada_foto.autorizar_salvar', aluno_id=a.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" name="status" value="autorizou" class="u-btn u-btn--primario"><i class="bi bi-check-lg"></i> Autorizo</button>
+        </form>
+        {% endif %}
+        {% if a.status != 'recusou' %}
+        <form method="POST" action="{{ url_for('chamada_foto.autorizar_salvar', aluno_id=a.id) }}"
+              {% if a.status == 'autorizou' %}data-confirmar="Retirar a autorização de {{ a.nome }}? Os dados do rosto são apagados e a presença volta a ser marcada à mão."{% endif %}>
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" name="status" value="recusou" class="u-btn">{{ 'Retirar a autorização' if a.status == 'autorizou' else 'Não autorizo' }}</button>
+        </form>
+        {% endif %}
+      </div>
+      {% if a.status == 'autorizou' and a.sem_foto %}
+      <p class="cfa-nota"><i class="bi bi-camera"></i> Ainda falta a foto no cadastro para o reconhecimento funcionar. Fale com a secretaria.</p>
+      {% endif %}
+      {% if a.respondido_em %}<p class="cfa-nota">Respondido em {{ a.respondido_em.strftime('%d/%m/%Y') }}.</p>{% endif %}
+    {% endif %}
+    {% if not a.academia_usa %}
+      <p class="cfa-nota">A academia ainda não ligou a chamada por foto. A resposta fica guardada para quando ligar.</p>
+    {% endif %}
+  </section>
+  {% else %}
+  <div class="cfa-cartao"><p style="margin:0">Não há aluno vinculado ao seu acesso.</p></div>
+  {% endfor %}
+</div>
+{% endblock %}

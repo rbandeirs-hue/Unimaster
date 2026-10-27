@@ -1,0 +1,253 @@
+{% extends "base_app.html" %}
+{% set menu_ativo = 'presencas' %}
+{% block title %}Chamada por foto — {{ turma_nome }}{% endblock %}
+{% block pagina_titulo %}Chamada por foto{% endblock %}
+{% block pagina_subtitulo %}{{ turma_nome }} · {{ data_presenca[8:10] }}/{{ data_presenca[5:7] }} · {{ horario_aula }}{% endblock %}
+{% block pagina_acoes %}
+  <a href="{{ back_url }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Chamada manual</a>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+  .cf { max-width: 640px; margin: 0 auto; display: flex; flex-direction: column; gap: 1rem; }
+  .cf [hidden] { display: none !important; }
+  .cf-cartao { background: var(--u-surface, #fff); border: 1px solid var(--u-border, #e6e4e0); border-radius: 14px; padding: 1rem 1.1rem; }
+  .cf-rotulo { font-size: .72rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--u-text-muted, #6b6862); margin: 0 0 .5rem; }
+  .cf-rotulo--ok { color: #1c6b35; } .cf-rotulo--atencao { color: #a15c00; }
+  .cf-barra { display: flex; height: 8px; border-radius: 999px; overflow: hidden; gap: 2px; margin: .75rem 0; }
+  .cf-barra span { display: block; }
+  .cf-legenda { display: flex; flex-direction: column; gap: .4rem; font-size: .875rem; }
+  .cf-legenda div { display: flex; align-items: center; gap: .6rem; }
+  .cf-legenda i.cor { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+  .cf-legenda b { margin-left: auto; }
+  .cf-principal { display: flex; flex-direction: column; gap: .6rem; }
+  .cf-btn { display: flex; align-items: center; justify-content: center; gap: .5rem; min-height: 48px; padding: .75rem 1rem;
+            border-radius: 10px; border: 1px solid var(--u-border, #e6e4e0); background: #fff; color: #1c1c1c;
+            font: inherit; font-weight: 600; cursor: pointer; text-decoration: none; }
+  .cf-btn--forte { background: #1c1c1c; color: #fff; border-color: #1c1c1c; }
+  .cf-btn:disabled { opacity: .55; cursor: wait; }
+  .cf-dica { font-size: .8125rem; color: var(--u-text-muted, #6b6862); line-height: 1.5; text-align: center; margin: 0; }
+  .cf-passos { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .75rem; }
+  .cf-passos li { display: flex; align-items: center; gap: .75rem; color: var(--u-text-muted, #6b6862); }
+  .cf-passos li.feito { color: #1c1c1c; } .cf-passos li.agora { color: #1c1c1c; font-weight: 600; }
+  .cf-passos .bola { width: 24px; height: 24px; border-radius: 999px; border: 2px solid #e6e4e0; flex-shrink: 0; box-sizing: border-box;
+                     display: flex; align-items: center; justify-content: center; color: #fff; font-size: .8rem; }
+  .cf-passos li.feito .bola { background: #1c6b35; border-color: #1c6b35; }
+  .cf-passos li.agora .bola { border-color: #e6e4e0; border-top-color: #1c1c1c; animation: cfgira 0.9s linear infinite; }
+  @keyframes cfgira { to { transform: rotate(360deg); } }
+  .cf-progresso { height: 6px; border-radius: 999px; background: #e6e4e0; overflow: hidden; }
+  .cf-progresso div { height: 6px; background: #1c1c1c; width: 0; transition: width .2s; }
+  .cf-fotos { display: flex; flex-direction: column; gap: .5rem; }
+  .cf-fotos canvas { width: 100%; height: auto; border-radius: 12px; background: #3a3631; display: block; }
+  .cf-numeros { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .5rem; }
+  .cf-numeros b { display: block; font-size: 1.5rem; font-weight: 600; line-height: 1.1; }
+  .cf-numeros span { font-size: .75rem; color: var(--u-text-muted, #6b6862); }
+  .cf-rostos { display: flex; flex-wrap: wrap; gap: .5rem; }
+  .cf-rosto { display: flex; align-items: center; gap: .6rem; padding: .45rem .7rem .45rem .45rem; border: 1.5px dashed #a15c00;
+              border-radius: 12px; background: #fff; font: inherit; font-weight: 600; cursor: pointer; min-height: 52px; }
+  .cf-rosto canvas { width: 40px; height: 40px; border-radius: 8px; background: #3a3631; }
+  .cf-rosto.resolvido { border-style: solid; border-color: #e6e4e0; font-weight: 500; }
+  .cf-lista { border: 1px solid var(--u-border, #e6e4e0); border-radius: 12px; overflow: hidden; background: #fff; }
+  .cf-pessoa { width: 100%; display: flex; align-items: center; gap: .75rem; min-height: 54px; padding: .45rem .9rem; background: #fff;
+               border: 0; border-bottom: 1px solid #efede9; text-align: left; font: inherit; color: #1c1c1c; cursor: pointer; }
+  .cf-pessoa:last-child { border-bottom: 0; }
+  .cf-pessoa img, .cf-pessoa .ini { width: 38px; height: 38px; border-radius: 999px; object-fit: cover; flex-shrink: 0; background: #e6e4e0;
+                                   display: flex; align-items: center; justify-content: center; font-size: .75rem; font-weight: 600; color: #6b6862; }
+  .cf-pessoa .txt { flex: 1; min-width: 0; }
+  .cf-pessoa .txt span { display: block; font-size: .75rem; color: var(--u-text-muted, #6b6862); }
+  .cf-pessoa .txt span.confira { color: #a15c00; font-weight: 600; }
+  .cf-marca { width: 26px; height: 26px; border-radius: 7px; border: 1.5px solid #c9c6c0; flex-shrink: 0; display: flex; align-items: center;
+              justify-content: center; color: #fff; }
+  .cf-pessoa[aria-pressed="true"] .cf-marca { background: #1c6b35; border-color: #1c6b35; }
+  .cf-rodape { position: sticky; bottom: 0; background: var(--u-surface, #fff); border-top: 1px solid var(--u-border, #e6e4e0);
+               padding: .75rem 0 1rem; display: flex; flex-direction: column; gap: .4rem; z-index: 5; }
+  .cf-folha { border: 0; border-radius: 18px 18px 0 0; padding: 1rem 1.1rem 1.4rem; width: 100%; max-width: 640px;
+              margin: auto auto 0; max-height: 92vh; overflow: auto; }
+  .cf-folha::backdrop { background: rgba(0,0,0,.45); }
+  .cf-folha-topo { display: flex; align-items: center; gap: .9rem; margin-bottom: 1rem; }
+  .cf-folha-topo canvas { width: 84px; height: 84px; border-radius: 12px; border: 2.5px dashed #a15c00; background: #3a3631; flex-shrink: 0; }
+  .cf-opcao { width: 100%; display: flex; align-items: center; gap: .75rem; min-height: 54px; padding: .45rem .9rem; margin-bottom: .4rem;
+              border: 1px solid #e6e4e0; border-radius: 12px; background: #fff; font: inherit; text-align: left; cursor: pointer; color: #1c1c1c; }
+  .cf-opcao[aria-pressed="true"] { border: 1.5px solid #1c1c1c; background: #f4f2ee; }
+  .cf-opcoes { max-height: 260px; overflow: auto; margin-bottom: .75rem; }
+  .cf-campo { width: 100%; box-sizing: border-box; padding: .75rem .85rem; font: inherit; font-size: 16px; border: 1px solid #e6e4e0;
+              border-radius: 8px; background: #fdfcfa; }
+  .cf-linha2 { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; margin-top: .6rem; }
+  .cf-ok { width: 64px; height: 64px; border-radius: 999px; background: #1c6b35; color: #fff; display: flex; align-items: center;
+           justify-content: center; font-size: 1.9rem; }
+  .cf-tabela-mini { display: flex; flex-direction: column; gap: .5rem; font-size: .875rem; }
+  .cf-tabela-mini div { display: flex; justify-content: space-between; }
+  .cf-tabela-mini div span:first-child { color: var(--u-text-muted, #6b6862); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="cf" id="cf">
+
+  {# ------------------------------------------------------------ entrada #}
+  <section id="passoEntrada" class="cf-principal">
+    <div class="cf-cartao">
+      <p class="cf-rotulo">Quem a foto reconhece nesta turma</p>
+      <div><strong>{{ resumo.reconheciveis }} de {{ resumo.total }} alunos.</strong>
+        {% if resumo.total - resumo.reconheciveis %}Os outros {{ resumo.total - resumo.reconheciveis }} aparecem na revisão para você marcar à mão.{% endif %}</div>
+      {% if resumo.total %}
+      <div class="cf-barra" aria-hidden="true">
+        <span style="flex-grow: {{ resumo.reconheciveis }}; background: #1c6b35;"></span>
+        <span style="flex-grow: {{ resumo.sem_foto }}; background: #a15c00;"></span>
+        <span style="flex-grow: {{ resumo.sem_consentimento }}; background: #9b9893;"></span>
+      </div>
+      {% endif %}
+      <div class="cf-legenda">
+        <div><i class="cor" style="background:#1c6b35"></i>Com foto e consentimento<b>{{ resumo.reconheciveis }}</b></div>
+        <div><i class="cor" style="background:#a15c00"></i>Sem foto no cadastro<b>{{ resumo.sem_foto }}</b></div>
+        <div><i class="cor" style="background:#9b9893"></i><a href="{{ url_for('chamada_foto.configuracao', academia_id=academia_id, f='sem_resposta') }}">Sem consentimento</a><b>{{ resumo.sem_consentimento }}</b></div>
+      </div>
+    </div>
+
+    <div id="fotosEscolhidas" class="cf-fotos" hidden></div>
+    <button type="button" class="cf-btn cf-btn--forte" id="btnAnalisar" hidden>Analisar</button>
+    <label class="cf-btn cf-btn--forte" for="fotoCamera" id="rotuloCamera"><i class="bi bi-camera-fill"></i> <span>Tirar foto da turma</span></label>
+    <input type="file" id="fotoCamera" accept="image/*" capture="environment" hidden>
+    <label class="cf-btn" for="fotoGaleria" id="rotuloGaleria"><i class="bi bi-images"></i> Escolher da galeria (até 3)</label>
+    <input type="file" id="fotoGaleria" accept="image/*" multiple hidden>
+    <p class="cf-dica">Todos de frente, rosto à mostra, boa luz e sem contraluz. Turma grande: 2 ou 3 fotos.<br>
+      A foto é analisada aqui no aparelho e não é enviada para o servidor.</p>
+    <p class="cf-dica" id="modelosStatus" role="status" aria-live="polite">Preparando o reconhecimento…</p>
+  </section>
+
+  {# ---------------------------------------------------------- analisando #}
+  <section id="passoAnalise" class="cf-principal" hidden>
+    <div class="cf-cartao" style="display:flex; flex-direction:column; gap:1rem;">
+      <p class="cf-rotulo" id="analiseTitulo">Analisando</p>
+      <div class="cf-progresso" role="progressbar" aria-label="Progresso da análise" aria-valuemin="0" aria-valuemax="100"><div id="analiseBarra"></div></div>
+      <ol class="cf-passos" id="analisePassos">
+        <li data-p="modelos"><span class="bola"></span>Carregando o reconhecimento</li>
+        <li data-p="cadastro"><span class="bola"></span><span>Lendo as fotos do cadastro</span></li>
+        <li data-p="rostos"><span class="bola"></span>Encontrando os rostos nas fotos</li>
+        <li data-p="comparar"><span class="bola"></span>Comparando com os alunos da turma</li>
+      </ol>
+    </div>
+    <p class="cf-dica">Quem aparece em mais de uma foto conta uma vez só.</p>
+  </section>
+
+  {# ------------------------------------------------------------ problema #}
+  <section id="passoProblema" class="cf-principal" hidden>
+    <div class="cf-cartao">
+      <h2 style="margin:0 0 .4rem; font-size:1.2rem;" id="problemaTitulo">Nenhum rosto encontrado</h2>
+      <p style="margin:0 0 .9rem; color:#6b6862;" id="problemaTexto">A foto pode ter saído escura, de longe ou com luz forte atrás da turma.</p>
+      <ol style="margin:0; padding-left:1.2rem; display:flex; flex-direction:column; gap:.4rem;">
+        <li>Fique de costas para a janela ou a luz</li>
+        <li>Chegue mais perto: cada rosto do tamanho de uma unha na tela</li>
+        <li>Duas fileiras, a de trás em pé</li>
+      </ol>
+    </div>
+    <button type="button" class="cf-btn cf-btn--forte" data-acao="recomecar">Tirar outra foto</button>
+    <a class="cf-btn" href="{{ back_url }}">Fazer a chamada manual</a>
+  </section>
+
+  {# ------------------------------------------------------------- revisão #}
+  <section id="passoRevisao" class="cf-principal" hidden>
+    <div class="cf-fotos" id="revisaoFotos" role="img" aria-label="Fotos da turma com os rostos encontrados marcados"></div>
+    <div class="cf-cartao cf-numeros" role="status" aria-live="polite">
+      <div><b style="color:#1c6b35" id="nPresentes">0</b><span>presentes</span></div>
+      <div><b style="color:#a15c00" id="nIdentificar">0</b><span>rostos a identificar</span></div>
+      <div><b id="nAusentes">0</b><span>ausentes</span></div>
+    </div>
+
+    <div id="blocoIdentificar">
+      <p class="cf-rotulo cf-rotulo--atencao">Rostos a identificar</p>
+      <div class="cf-rostos" id="listaRostos"></div>
+    </div>
+
+    <div id="blocoReconhecidos">
+      <p class="cf-rotulo cf-rotulo--ok">Reconhecidos · <span id="nReconhecidos">0</span></p>
+      <div class="cf-lista" id="listaReconhecidos"></div>
+    </div>
+
+    <div>
+      <p class="cf-rotulo">Não apareceram na foto · <span id="nNaoApareceram">0</span></p>
+      <p class="cf-dica" style="text-align:left; margin-bottom:.5rem;">Ficam ausentes. Toque em quem veio e ficou fora da foto.</p>
+      <div class="cf-lista" id="listaAusentes"></div>
+    </div>
+
+    <div class="cf-rodape">
+      <button type="button" class="cf-btn cf-btn--forte" id="btnSalvar">Salvar chamada</button>
+      <span class="cf-dica" id="avisoSalvar"></span>
+    </div>
+  </section>
+
+  {# --------------------------------------------------------------- salva #}
+  <section id="passoSalva" class="cf-principal" hidden>
+    <div class="cf-ok" aria-hidden="true"><i class="bi bi-check-lg"></i></div>
+    <div>
+      <h2 style="margin:0; font-size:1.5rem;">Chamada salva</h2>
+      <p style="margin:.3rem 0 0; color:#6b6862;">{{ turma_nome }} · {{ data_presenca[8:10] }}/{{ data_presenca[5:7] }} · {{ horario_aula }}</p>
+    </div>
+    <div class="cf-cartao cf-numeros">
+      <div><b style="color:#1c6b35" id="fimPresentes">0</b><span>presentes</span></div>
+      <div><b id="fimAusentes">0</b><span>ausentes</span></div>
+      <div><b id="fimVisitantes">0</b><span>visitantes</span></div>
+    </div>
+    <div class="cf-cartao cf-tabela-mini">
+      <div><span>Pela foto</span><b id="fimFoto">0</b></div>
+      <div><span>Rosto identificado por você</span><b id="fimIdentificados">0</b></div>
+      <div><span>Marcados à mão</span><b id="fimMao">0</b></div>
+    </div>
+    <p class="cf-dica" style="text-align:left;"><i class="bi bi-trash3"></i> As fotos da turma não saíram deste aparelho e foram descartadas. Ficou só a lista de presença.</p>
+    <a class="cf-btn cf-btn--forte" href="{{ back_url }}">Abrir a chamada (plano da aula, observações)</a>
+  </section>
+</div>
+
+{# ------------------------------------------------------ folha: quem é? #}
+<dialog class="cf-folha" id="folhaRosto" aria-labelledby="folhaTitulo">
+  <div class="cf-folha-topo">
+    <canvas id="folhaRecorte" width="168" height="168" role="img" aria-label="Rosto recortado da foto da turma"></canvas>
+    <div style="flex:1; min-width:0;">
+      <h2 id="folhaTitulo" style="margin:0; font-size:1.2rem;">Quem é?</h2>
+      <p style="margin:.25rem 0 0; font-size:.85rem; color:#6b6862;" id="folhaSub"></p>
+    </div>
+    <button type="button" class="cf-btn" style="min-height:44px; padding:.5rem .7rem;" data-acao="fecharFolha" aria-label="Fechar"><i class="bi bi-x-lg"></i></button>
+  </div>
+  <label for="folhaBusca" style="font-size:.85rem; font-weight:600; display:block; margin-bottom:.35rem;">Buscar na chamada</label>
+  <input type="search" id="folhaBusca" class="cf-campo" placeholder="Nome do aluno" autocomplete="off">
+  <div class="cf-opcoes" id="folhaOpcoes" style="margin-top:.6rem;"></div>
+  <label style="display:flex; gap:.6rem; align-items:flex-start; font-size:.85rem; margin-bottom:.9rem;" id="folhaGuardarRotulo">
+    <input type="checkbox" id="folhaGuardar" checked style="width:20px; height:20px; margin:0; flex-shrink:0;">
+    <span>Guardar este rosto para reconhecer da próxima vez <span style="color:#6b6862">(só para quem deu consentimento)</span></span>
+  </label>
+  <button type="button" class="cf-btn cf-btn--forte" style="width:100%;" id="folhaConfirmar">Marcar presente</button>
+  <div class="cf-linha2">
+    <button type="button" class="cf-btn" data-acao="visitante">É visitante</button>
+    <button type="button" class="cf-btn" data-acao="ignorar">Ignorar este rosto</button>
+  </div>
+  <div id="folhaVisitante" hidden style="margin-top:.8rem;">
+    <label for="folhaVisitanteNome" style="font-size:.85rem; font-weight:600; display:block; margin-bottom:.35rem;">Nome do visitante</label>
+    <input type="text" id="folhaVisitanteNome" class="cf-campo" maxlength="200" autocomplete="off">
+    <button type="button" class="cf-btn cf-btn--forte" style="width:100%; margin-top:.5rem;" data-acao="confirmarVisitante">Incluir como presença avulsa</button>
+    <p class="cf-dica" style="margin-top:.4rem;">Entra como registro avulso, com este recorte como foto.</p>
+  </div>
+</dialog>
+
+<form id="formGravar" hidden>
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  {% if academia_id %}<input type="hidden" name="academia_id" value="{{ academia_id }}">{% endif %}
+  <input type="hidden" name="turma_id" value="{{ turma_id }}">
+  <input type="hidden" name="data_presenca" value="{{ data_presenca }}">
+  <input type="hidden" name="horario_aula" value="{{ horario_aula }}">
+  {# A gravação reescreve observação e plano: mandamos o que já está lá. #}
+  <input type="hidden" name="observacao_aula" value="{{ observacao_aula }}">
+  <input type="hidden" name="plano_aula_texto" value="{{ plano_aula_texto }}">
+</form>
+
+<script type="application/json" id="cfDados">{{ {
+  "pessoas": pessoas,
+  "urlGravar": url_for('presencas.registro_presenca'),
+  "urlDescritores": url_for('chamada_foto.salvar_descritores', academia_id=academia_id),
+  "modelos": "https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/model/"
+} | tojson }}</script>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/dist/face-api.js"></script>
+<script src="{{ url_for('static', filename='js/chamada_foto.js') }}"></script>
+{% endblock %}
