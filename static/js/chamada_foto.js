@@ -19,7 +19,7 @@
   var CONFIRA = 0.5;     // acima disto, reconhece mas pede para conferir
   var REPETIDO = 0.62;   // mesmo aluno em outra foto: conta uma vez
   var APRENDER = 0.3;    // reconhecido com folga menor que isto vira mais uma referência
-  var MAX_LADO = 3000;   // a foto da turma fica grande: rosto pequeno precisa de pixel
+  var MAX_LADO = 2400;   // a foto da turma fica grande: rosto pequeno precisa de pixel
   var MAX_FOTOS = 3;
 
   var pessoas = D.pessoas.map(function (p) {
@@ -120,6 +120,7 @@
       throw new Error('O reconhecimento não rodou neste aparelho.');
     })();
     modelos.then(function () {
+      enviarDescritores([]);   // só o diagnóstico: motor e autoteste, antes de qualquer conta pesada
       $('modelosStatus').textContent = 'Reconhecimento pronto' +
         (diag.motor === 'webgl' ? '.' : diag.motor === 'wasm' ? ' (modo compatível).' : ' (modo lento: pode demorar).');
     }, function (e) {
@@ -169,7 +170,7 @@
 
   // -------------------------------------------------------- servidor
   async function enviarDescritores(itens) {
-    for (var i = 0; i < itens.length; i += 50) {
+    for (var i = 0; i === 0 || i < itens.length; i += 50) {   // lista vazia: manda só o diagnóstico
       try {
         await fetch(D.urlDescritores, {
           method: 'POST', credentials: 'same-origin',
@@ -266,7 +267,7 @@
     ctx.fillStyle = '#808080';
     ctx.fillRect(0, 0, c.width, c.height);
     ctx.drawImage(base, m, m);
-    var tentativas = [[c, 0.3], [c, 0.15], [base, 0.15]];
+    var tentativas = [[c, 0.3], [c, 0.15]];
     for (var i = 0; i < tentativas.length; i++) {
       var r = await faceapi.detectSingleFace(tentativas[i][0], SSD(tentativas[i][1]))
         .withFaceLandmarks().withFaceDescriptor();
@@ -306,40 +307,76 @@
     return out;
   }
 
-  async function detectarTodos(foto, aoAvancar) {
-    var W = foto.width, H = foto.height;
-    var pedacos = [{ x: 0, y: 0, w: W, h: H, inteira: true }]
-      .concat(grade(W, H, Math.round(Math.max(W, H) / 2.2)))
-      .concat(Math.max(W, H) > PEDACO_FINO * 1.5 ? grade(W, H, PEDACO_FINO) : []);
-    var achados = [];
+  // Só DETECTA nos pedaços (o barato); os números de cada rosto (o caro)
+  // são calculados uma vez por rosto, depois de juntar as passadas. A grade
+  // fina só roda quando a foto pede: rosto pequeno ou muita gente.
+  async function detectarCaixas(foto, pedacos, conf, aoAvancar, base, total) {
+    var W = foto.width, H = foto.height, caixas = [];
     var t = document.createElement('canvas');
     for (var k = 0; k < pedacos.length; k++) {
-      var pc = pedacos[k];
-      var fonte = foto;
+      var pc = pedacos[k], fonte = foto;
       if (!pc.inteira) {
         t.width = pc.w; t.height = pc.h;
         t.getContext('2d').drawImage(foto, pc.x, pc.y, pc.w, pc.h, 0, 0, pc.w, pc.h);
         fonte = t;
       }
-      var dets = await faceapi.detectAllFaces(fonte, SSD(pc.inteira ? 0.45 : 0.4)).withFaceLandmarks().withFaceDescriptors();
+      var dets = await faceapi.detectAllFaces(fonte, SSD(conf));
       dets.forEach(function (d) {
-        var b = d.detection.box;
+        var b = d.box;
         // Rosto cortado na borda do pedaço é meio rosto: o vizinho, que se
         // sobrepõe em 30%, o pega inteiro.
         if (!pc.inteira && ((b.x < 3 && pc.x > 0) || (b.y < 3 && pc.y > 0) ||
             (b.x + b.width > pc.w - 3 && pc.x + pc.w < W) || (b.y + b.height > pc.h - 3 && pc.y + pc.h < H))) return;
-        achados.push({ box: { x: pc.x + b.x, y: pc.y + b.y, width: b.width, height: b.height },
-                       score: d.detection.score, descritor: d.descriptor });
+        caixas.push({ box: { x: pc.x + b.x, y: pc.y + b.y, width: b.width, height: b.height }, score: d.score });
       });
-      if (aoAvancar) aoAvancar((k + 1) / pedacos.length);
+      if (aoAvancar) aoAvancar((base + k + 1) / total);
     }
-    achados.sort(function (a, b) { return b.score - a.score; });
+    return caixas;
+  }
+
+  function juntar(caixas) {
+    caixas.sort(function (a, b) { return b.score - a.score; });
     var ficam = [];
-    achados.forEach(function (a) {
+    caixas.forEach(function (a) {
       var repetido = ficam.some(function (f) { var q = iou(a.box, f.box); return q.iou > 0.3 || q.cobre > 0.6; });
       if (!repetido) ficam.push(a);
     });
     return ficam;
+  }
+
+  async function detectarTodos(foto, aoAvancar) {
+    var W = foto.width, H = foto.height, lado = Math.max(W, H);
+    var medios = [{ x: 0, y: 0, w: W, h: H, inteira: true }].concat(grade(W, H, Math.round(lado / 2.2)));
+    var finos = lado > PEDACO_FINO * 1.5 ? grade(W, H, PEDACO_FINO) : [];
+    var total = medios.length + finos.length;
+    var caixas = await detectarCaixas(foto, medios, 0.4, aoAvancar, 0, total);
+    var achados = juntar(caixas);
+    // Rosto pequeno (mediana abaixo de 6% do lado) ou turma grande: é quando o
+    // rosto do fundo escapa das passadas de longe.
+    var larguras = achados.map(function (a) { return a.box.width; }).sort(function (a, b) { return a - b; });
+    var mediana = larguras.length ? larguras[Math.floor(larguras.length / 2)] : 0;
+    var precisaFina = finos.length && (!achados.length || mediana < lado * 0.06 || achados.length >= 15);
+    diag.ultimaFoto = { lado: lado, pedacos: medios.length + (precisaFina ? finos.length : 0), finos: !!precisaFina };
+    if (precisaFina) {
+      caixas = caixas.concat(await detectarCaixas(foto, finos, 0.4, aoAvancar, medios.length, total));
+      achados = juntar(caixas);
+    }
+    if (aoAvancar) aoAvancar(1);
+    // Os números de cada rosto, uma vez: recorta, acha os 68 pontos, alinha e
+    // calcula — o mesmo que a biblioteca faz em withFaceLandmarks/Descriptor.
+    var out = [];
+    for (var i = 0; i < achados.length; i++) {
+      var b = achados[i].box;
+      try {
+        var caixa = new faceapi.Rect(b.x, b.y, b.width, b.height);
+        var rosto = (await faceapi.extractFaces(foto, [caixa]))[0];
+        var pontos = (await faceapi.nets.faceLandmark68Net.detectLandmarks(rosto)).shiftBy(b.x, b.y);
+        var alinhado = (await faceapi.extractFaces(foto, [pontos.align()]))[0];
+        var descritor = await faceapi.nets.faceRecognitionNet.computeFaceDescriptor(alinhado);
+        out.push({ box: b, score: achados[i].score, descritor: descritor });
+      } catch (e) { /* rosto que não alinha fica de fora */ }
+    }
+    return out;
   }
 
   function distancia(desc, p) {
@@ -396,9 +433,12 @@
     mostrar('passoAnalise');
     $('analiseTitulo').textContent = estado.fotos.length === 1 ? 'Analisando 1 foto' : 'Analisando ' + estado.fotos.length + ' fotos';
     try {
+      var t0 = performance.now();
       passo('modelos');
       await carregarModelos();
+      var t1 = performance.now();
       await calcularCadastro();
+      var t2 = performance.now();
       passo('rostos');
       estado.rostos = [];
       for (var i = 0; i < estado.fotos.length; i++) {
@@ -409,6 +449,10 @@
           estado.rostos.push({ foto: i, box: d.box, descritor: d.descritor, aluno: null, dist: null, estado: 'novo' });
         });
       }
+      diag.tempos = { modelos_s: Math.round((t1 - t0) / 100) / 10, cadastro_s: Math.round((t2 - t1) / 100) / 10,
+                      rostos_s: Math.round((performance.now() - t2) / 100) / 10, fotos: estado.fotos.length,
+                      rostos: estado.rostos.length };
+      enviarDescritores([]);
       passo('comparar');
       if (!estado.rostos.length) {
         $('problemaTitulo').textContent = 'Nenhum rosto encontrado';
