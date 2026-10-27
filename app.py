@@ -397,6 +397,13 @@ def _exigir_acesso_na_academia():
             # Nem o próprio cadastro: a tela de usuário mexe em papéis. O
             # próprio perfil fica em usuarios.meu_perfil.
             bloqueio = "a gestão de usuários"
+        elif acs.nivel_financeiro_exigido(endpoint, request.method) and \
+                not ac.get(acs.nivel_financeiro_exigido(endpoint, request.method), True):
+            # Níveis do financeiro (MM-16): ver não basta para dar baixa, e dar
+            # baixa não basta para cancelar, estornar ou corrigir.
+            bloqueio = {"fin_baixar": "dar baixa em pagamentos",
+                        "fin_estornar": "cancelar, estornar ou corrigir lançamentos"}[
+                acs.nivel_financeiro_exigido(endpoint, request.method)]
         if not bloqueio:
             return None
         msg = f"Seu acesso nesta academia não inclui {bloqueio}. Fale com o gestor principal."

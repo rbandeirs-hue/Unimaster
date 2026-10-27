@@ -1,0 +1,75 @@
+{% extends "financeiro/painel/_base.html" %}
+{% set fin_aba = 'permissoes' %}
+{% block title %}Permissões — Financeiro{% endblock %}
+{% block pagina_titulo %}Permissões do financeiro{% endblock %}
+{% block pagina_subtitulo %}Quem da equipe vê o financeiro, quem dá baixa em pagamentos e quem pode cancelar, estornar ou corrigir.{% endblock %}
+
+{% block fin_css %}
+<style>
+  .pm-lin { grid-template-columns: minmax(0, 2fr) repeat(3, 120px); }
+  @media (max-width: 620px) { .pm-lin { grid-template-columns: minmax(0, 1fr) repeat(3, 64px); } .pm-rot { display: none; } }
+  .pm-lin .pm-c { display: flex; justify-content: center; }
+  .pm-lin input[type=checkbox] { width: 1.15rem; height: 1.15rem; }
+  .pm-todo { font-size: .8rem; color: var(--sh-ink-soft); grid-column: 2 / -1; text-align: center; }
+  .pm-legenda { display: grid; gap: .35rem; margin: 0 0 1rem; font-size: .88rem; }
+  .pm-legenda b { display: inline-block; min-width: 9.5rem; }
+</style>
+{% endblock %}
+
+{% block fin_conteudo %}
+{% if not niveis %}
+<div class="alert alert-warning">
+  Os níveis "dar baixa" e "estornar" dependem da migração MM-16
+  (<code>migrations/executar_mm_16_permissoes_financeiro.py --aplicar</code>). Até lá, só dá para ligar ou
+  desligar o financeiro inteiro.
+</div>
+{% endif %}
+
+<div class="pm-legenda">
+  <div><b>Ver</b> abre as telas do financeiro (sem ver, o financeiro some do menu).</div>
+  <div><b>Dar baixa</b> registra pagamentos e lança entradas e saídas.</div>
+  <div><b>Estornar / corrigir</b> cancela pagamento, isenta juros, edita ou exclui lançamento, cancela cobrança.</div>
+</div>
+
+<form method="POST" class="lst-quadro">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="academia_id" value="{{ academia_id }}">
+  <div class="lst-rolagem"><div class="lst-largura" style="--lst-min:420px">
+    <div class="lst-linha pm-lin lst-cab">
+      <div>Pessoa</div><div class="pm-c">Ver</div><div class="pm-c">Dar baixa</div><div class="pm-c">Estornar</div>
+    </div>
+    {% for p in equipe %}
+    <div class="lst-linha pm-lin lst-item">
+      <div class="lst-corta">
+        <span class="lst-nome">{{ p.nome }}</span>
+        <span class="lst-sub">{{ (p.papeis or '')|replace('gestor_academia', 'gestor')|replace(',', ' · ') }}{% if p.gestor_principal %} · gestor principal{% endif %}</span>
+      </div>
+      {% if p.gestor_principal %}
+      <div class="pm-todo">Tudo, sempre</div>
+      {% else %}
+      <div class="pm-c"><input type="checkbox" name="ver_{{ p.id }}" value="1" {% if p.acesso_financeiro %}checked{% endif %} aria-label="{{ p.nome }}: ver o financeiro" data-pm-ver="{{ p.id }}"></div>
+      <div class="pm-c"><input type="checkbox" name="baixar_{{ p.id }}" value="1" {% if p.acesso_financeiro and p.fin_baixar %}checked{% endif %} {% if not niveis %}disabled{% endif %} aria-label="{{ p.nome }}: dar baixa" data-pm-dep="{{ p.id }}"></div>
+      <div class="pm-c"><input type="checkbox" name="estornar_{{ p.id }}" value="1" {% if p.acesso_financeiro and p.fin_estornar %}checked{% endif %} {% if not niveis %}disabled{% endif %} aria-label="{{ p.nome }}: estornar e corrigir" data-pm-dep="{{ p.id }}"></div>
+      {% endif %}
+    </div>
+    {% else %}
+    <p class="lst-vazio">Nenhum gestor ou professor vinculado a esta academia.</p>
+    {% endfor %}
+  </div></div>
+  <div style="padding:1rem 1.25rem"><button type="submit" class="sh__btn sh__btn--forte"><i class="bi bi-check-lg"></i> Salvar permissões</button></div>
+</form>
+<script>
+// Sem "ver", os outros dois não fazem sentido: desliga e trava junto.
+document.addEventListener('change', function (e) {
+  var id = e.target.getAttribute('data-pm-ver');
+  if (!id) return;
+  document.querySelectorAll('[data-pm-dep="' + id + '"]').forEach(function (c) {
+    if (!e.target.checked) c.checked = false;
+    {% if niveis %}c.disabled = !e.target.checked;{% endif %}
+  });
+});
+document.querySelectorAll('[data-pm-ver]').forEach(function (v) {
+  if (!v.checked) document.querySelectorAll('[data-pm-dep="' + v.getAttribute('data-pm-ver') + '"]').forEach(function (c) { c.disabled = true; });
+});
+</script>
+{% endblock %}

@@ -2225,6 +2225,66 @@ def receita_forma(receita_id):
                   entradas=request.form.get("entradas") or None)
 
 
+@bp_financeiro_painel.route("/permissoes", methods=["GET", "POST"])
+@login_required
+def permissoes():
+    """Quem da equipe vê o financeiro, dá baixa e estorna (MM-16).
+    Só o gestor principal (ou admin) altera; ele mesmo tem tudo, sempre."""
+    from utils import acesso_academia as acs
+    academia_id = _get_academia_id()
+    if not academia_id:
+        return _sem_academia()
+    if not (current_user.has_role("admin") or acs.eh_principal(academia_id)):
+        flash("Só o gestor principal define as permissões do financeiro.", "warning")
+        return _volta("financeiro_painel.dashboard", academia_id)
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        niveis = acs.tem_niveis_financeiro(cur)
+        cols = ", ua.fin_baixar, ua.fin_estornar" if niveis else ", 1 AS fin_baixar, 1 AS fin_estornar"
+        cur.execute(
+            f"""SELECT u.id, u.nome, ua.gestor_principal, ua.acesso_financeiro {cols},
+                       GROUP_CONCAT(DISTINCT r.chave) AS papeis
+                FROM usuarios_academias ua
+                JOIN usuarios u ON u.id = ua.usuario_id
+                JOIN roles_usuario ru ON ru.usuario_id = ua.usuario_id
+                     AND ru.academia_id IN (ua.academia_id, 0)
+                JOIN roles r ON r.id = ru.role_id AND r.chave IN ('gestor_academia', 'professor')
+                WHERE ua.academia_id = %s AND COALESCE(u.ativo, 1) = 1
+                GROUP BY u.id, u.nome, ua.gestor_principal, ua.acesso_financeiro, fin_baixar, fin_estornar
+                ORDER BY ua.gestor_principal DESC, u.nome""", (academia_id,))
+        equipe = cur.fetchall()
+        if request.method == "POST":
+            mudou = 0
+            for p in equipe:
+                if p["gestor_principal"]:
+                    continue
+                ver = request.form.get(f"ver_{p['id']}") == "1"
+                baixar = ver and request.form.get(f"baixar_{p['id']}") == "1"
+                estornar = ver and request.form.get(f"estornar_{p['id']}") == "1"
+                sets, params = ["acesso_financeiro = %s"], [int(ver)]
+                if niveis:
+                    sets += ["fin_baixar = %s", "fin_estornar = %s"]
+                    params += [int(baixar), int(estornar)]
+                cur.execute(f"UPDATE usuarios_academias SET {', '.join(sets)} WHERE usuario_id = %s AND academia_id = %s",
+                            (*params, p["id"], academia_id))
+                antes = (bool(p["acesso_financeiro"]), bool(p["fin_baixar"]), bool(p["fin_estornar"]))
+                if antes != (ver, baixar if niveis else antes[1], estornar if niveis else antes[2]):
+                    mudou += 1
+                    fin.auditar(cur, academia_id, "usuarios_academias", p["id"], "permissoes_financeiro",
+                                status_anterior=str(antes), status_novo=str((ver, baixar, estornar)),
+                                usuario_id=current_user.id, detalhes=p["nome"])
+            conn.commit()
+            flash(f"Permissões salvas ({mudou} pessoa{'s' if mudou != 1 else ''} com mudança). "
+                  "Valem a partir da próxima tela que cada um abrir.", "success")
+            return _volta("financeiro_painel.permissoes", academia_id)
+    finally:
+        conn.close()
+    ctx = _ctx_base(academia_id)
+    ctx.update(fin_aba="permissoes", equipe=equipe, niveis=niveis)
+    return render_template("financeiro/painel/permissoes.html", **ctx)
+
+
 @bp_financeiro_painel.route("/conferencia")
 @login_required
 def conferencia():

@@ -61,7 +61,36 @@ def escopo_amplo(usuario=None):
         return False
 
 
-TOTAL = {"total": True, "principal": True, "financeiro": True, "academico": True, "modalidades": None}
+TOTAL = {"total": True, "principal": True, "financeiro": True, "academico": True, "modalidades": None,
+         "fin_baixar": True, "fin_estornar": True}
+
+# Ações do financeiro por nível (MM-16). Só valem com o financeiro liberado;
+# gestor principal e escopo amplo fazem tudo.
+FIN_BAIXAR = {
+    "financeiro.registrar_pagamento", "financeiro.confirmar_pagamento_mensalidade",
+    "financeiro.pagar_despesa", "financeiro.cadastrar_receita", "financeiro.cadastrar_despesa",
+    "financeiro_painel.mensalidades_pagar", "financeiro_painel.familias_baixar",
+    "financeiro_painel.receita_forma",
+}
+FIN_ESTORNAR = {
+    "financeiro.cancelar_pagamento", "financeiro.remover_juros_mensalidade",
+    "financeiro.desfazer_pagamento_despesa", "financeiro.editar_receita", "financeiro.excluir_receita",
+    "financeiro.editar_despesa", "financeiro.excluir_despesa", "financeiro.cancelar_cobranca",
+    "financeiro.cancelar_cobrancas_lote", "financeiro.editar_cobranca_aluno", "financeiro.aplicar_desconto",
+    "financeiro_painel.mensalidades_juros", "financeiro_painel.cobrancas_cancelar",
+    "financeiro_painel.extrato_reatribuir",
+}
+
+
+def nivel_financeiro_exigido(endpoint, metodo):
+    """'fin_baixar', 'fin_estornar' ou None. Só ações (POST): ver é o acesso normal."""
+    if metodo != "POST":
+        return None
+    if endpoint in FIN_BAIXAR:
+        return "fin_baixar"
+    if endpoint in FIN_ESTORNAR:
+        return "fin_estornar"
+    return None
 
 
 def acesso(academia_id, usuario=None):
@@ -86,8 +115,9 @@ def acesso(academia_id, usuario=None):
     cur = conn.cursor(dictionary=True)
     try:
         if tem_estrutura(cur):
+            _cols_fin = ", fin_baixar, fin_estornar" if tem_niveis_financeiro(cur) else ""
             cur.execute(
-                """SELECT gestor_principal, acesso_financeiro, acesso_academico
+                f"""SELECT gestor_principal, acesso_financeiro, acesso_academico{_cols_fin}
                    FROM usuarios_academias WHERE usuario_id = %s AND academia_id = %s""", chave)
             _linhas = cur.fetchall()
             v = _linhas[0] if _linhas else None
@@ -95,6 +125,9 @@ def acesso(academia_id, usuario=None):
                 resultado["principal"] = bool(eh_gestor and v["gestor_principal"])
                 resultado["financeiro"] = bool(v["acesso_financeiro"])
                 resultado["academico"] = bool(v["acesso_academico"])
+                # Sem a MM-16 as colunas não existem: segue liberado, como antes.
+                resultado["fin_baixar"] = bool(v.get("fin_baixar", 1))
+                resultado["fin_estornar"] = bool(v.get("fin_estornar", 1))
             cur.execute(
                 """SELECT modalidade_id FROM usuario_academia_modalidade
                    WHERE usuario_id = %s AND academia_id = %s""", chave)
@@ -102,12 +135,30 @@ def acesso(academia_id, usuario=None):
             resultado["modalidades"] = mods or None
         if resultado["principal"]:
             # Principal vê tudo, mesmo que alguém tenha marcado algo antes.
-            resultado.update(financeiro=True, academico=True, modalidades=None)
+            resultado.update(financeiro=True, academico=True, modalidades=None,
+                             fin_baixar=True, fin_estornar=True)
+        if not resultado["financeiro"]:
+            resultado.update(fin_baixar=False, fin_estornar=False)
     finally:
         cur.close()
         conn.close()
     cache[chave] = resultado
     return resultado
+
+
+_tem_niveis = None
+
+
+def tem_niveis_financeiro(cur):
+    """MM-16 aplicada?"""
+    global _tem_niveis
+    if _tem_niveis is None:
+        try:
+            cur.execute("SHOW COLUMNS FROM usuarios_academias LIKE 'fin_estornar'")
+            _tem_niveis = bool(cur.fetchall())
+        except Exception:
+            return False
+    return _tem_niveis
 
 
 def academia_atual():
