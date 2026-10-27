@@ -75,10 +75,40 @@
   var WASM = 'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@4.16.0/dist/';
   var diag = { motor: null, testes: [], cadastro: { tentados: 0, lidos: 0 } };
 
+  // Média RGB da referência reduzida a 32x32, medida num Chrome. Navegador com
+  // proteção contra rastreamento (Brave, DuckDuckGo, extensões) embaralha os
+  // pixels lidos pela página: aí nenhum motor acha rosto nenhum.
+  var REF_MEDIA = [38.9, 31.8, 25.6];
+  function pixelsDe(img) {
+    var c = document.createElement('canvas');
+    c.width = 32; c.height = 32;
+    var x = c.getContext('2d', { willReadFrequently: true });
+    x.drawImage(img, 0, 0, 32, 32);
+    var d = x.getImageData(0, 0, 32, 32).data, m = [0, 0, 0];
+    for (var i = 0; i < d.length; i += 4) { m[0] += d[i]; m[1] += d[i + 1]; m[2] += d[i + 2]; }
+    return m.map(function (v) { return Math.round(v / 1024 * 10) / 10; });
+  }
+  async function conferirPixels() {
+    try {
+      var img = await carregarImagem(D.referencia);
+      var a = pixelsDe(img), b = pixelsDe(img);
+      var desvio = Math.max.apply(null, a.map(function (v, i) { return Math.abs(v - REF_MEDIA[i]); }));
+      diag.pixels = { media: a, estavel: a.join() === b.join(), desvio: Math.round(desvio * 10) / 10,
+                      largura: img.naturalWidth, ok: a.join() === b.join() && desvio < 4 };
+    } catch (e) {
+      diag.pixels = { ok: false, erro: String(e && e.message || e).slice(0, 80) };
+    }
+    var nav = navigator.userAgentData && navigator.userAgentData.brands || [];
+    diag.navegador = { marcas: nav.map(function (b) { return b.brand; }).filter(function (b) { return !/Not/.test(b); }).join(', '),
+                       ua: navigator.userAgent.slice(0, 140), nucleos: navigator.hardwareConcurrency || null,
+                       memoria_gb: navigator.deviceMemory || null };
+  }
+
   async function autoteste() {
     try {
       var img = await carregarImagem(D.referencia);
-      var r = await faceapi.detectSingleFace(img, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.3 }))
+      // Confiança baixa de propósito: o que interessa é a nota que sai.
+      var r = await faceapi.detectSingleFace(img, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.05 }))
         .withFaceLandmarks().withFaceDescriptor();
       if (!r) return { ok: false, nota: 0, dist: 9 };
       var dist = faceapi.euclideanDistance(r.descriptor, REF_DESC);
@@ -95,6 +125,7 @@
     modelos = (async function () {
       if (!window.faceapi) throw new Error('O reconhecimento não carregou. Confira a internet e recarregue a página.');
       var tf = faceapi.tf;
+      await conferirPixels();
       var motores = ['webgl', 'wasm', 'cpu'];
       // ?motor=wasm na URL força um motor: saída para um aparelho que se dê mal com o automático.
       var forcado = new URLSearchParams(location.search).get('motor');
@@ -115,9 +146,16 @@
         var t = await autoteste();
         t.motor = m;
         diag.testes.push(t);
-        if (t.ok || m === 'cpu') { diag.motor = m; return; }
+        if (t.ok) { diag.motor = m; return; }
       }
-      throw new Error('O reconhecimento não rodou neste aparelho.');
+      // Nenhum motor acertou a referência: rodar mesmo assim só gasta minutos
+      // para não achar ninguém. Para aqui e diz o que fazer.
+      diag.motor = 'nenhum';
+      enviarDescritores([]);
+      throw new Error(diag.pixels && !diag.pixels.ok
+        ? 'Este navegador está alterando a imagem que a página lê (proteção contra rastreamento), e assim o reconhecimento não funciona. ' +
+          'Abra o sistema no Google Chrome, ou desligue a proteção de impressão digital/rastreamento para este site.'
+        : 'O reconhecimento não funcionou neste aparelho. Faça a chamada manual e avise o suporte.');
     })();
     modelos.then(function () {
       enviarDescritores([]);   // só o diagnóstico: motor e autoteste, antes de qualquer conta pesada
