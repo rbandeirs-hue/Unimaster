@@ -46,10 +46,17 @@ def _conn():
     return c, c.cursor(dictionary=True)
 
 
+UPLOADS = ROOT / "static" / "uploads"
+FOTOS_TESTE = ["zz_adulto.jpg", "zz_recusou.jpg", "zz_viz.jpg"]
+
+
 def limpar():
+    for f in FOTOS_TESTE:
+        (UPLOADS / f).unlink(missing_ok=True)
     c, cur = _conn()
     cf.garantir_tabelas(cur)
     for aid in (ACADEMIA, OUTRA):
+        cur.execute("DELETE FROM chamada_foto_rosto WHERE academia_id = %s", (aid,))
         cur.execute("""DELETE d FROM chamada_foto_descritor d JOIN alunos a ON a.id = d.aluno_id
                        WHERE a.id_academia = %s""", (aid,))
         cur.execute("""DELETE k FROM chamada_foto_consentimento k JOIN alunos a ON a.id = k.aluno_id
@@ -68,6 +75,9 @@ def limpar():
 
 
 def montar():
+    from PIL import Image
+    for f in FOTOS_TESTE:
+        Image.new("RGB", (60, 60), (120, 100, 90)).save(UPLOADS / f)
     c, cur = _conn()
     cur.execute("INSERT INTO academias (id, nome) VALUES (%s,'ZZ Foto Academia')", (ACADEMIA,))
     cur.execute("INSERT INTO academias (id, nome) VALUES (%s,'ZZ Foto Vizinha')", (OUTRA,))
@@ -125,9 +135,41 @@ def _contar(sql, params):
     return n
 
 
+class AwsFalso:
+    """Rekognition de mentira: registra o que foi pedido e responde fixo."""
+    def __init__(self):
+        self.indexados, self.apagados, self.sem_rosto = [], [], set()
+        self.n = 0
+
+    def instalar(self):
+        from utils import rekognition as rk
+        self.rk, self.orig = rk, {k: getattr(rk, k) for k in ("configurado", "indexar", "apagar", "detectar", "buscar")}
+        rk.configurado = lambda: True
+        rk.indexar = self.indexar
+        rk.apagar = lambda academia_id, faces: self.apagados.extend(f for f in faces if f)
+        rk.detectar = lambda img: [{"x": 10, "y": 10, "w": 30, "h": 30, "conf": 99},
+                                   {"x": 60, "y": 10, "w": 30, "h": 30, "conf": 98}]
+        rk.buscar = lambda academia_id, img, rostos: [
+            [{"id": str(ids["adulto"]), "sim": 99.1}, {"id": str(ids["vizinho"]), "sim": 97.0}],
+            [{"id": str(ids["recusou"]), "sim": 96.0}]]
+
+    def desinstalar(self):
+        for k, v in self.orig.items():
+            setattr(self.rk, k, v)
+
+    def indexar(self, academia_id, aluno_id, img):
+        if aluno_id in self.sem_rosto:
+            return None
+        self.n += 1
+        self.indexados.append(aluno_id)
+        return f"face-{aluno_id}-{self.n}"
+
+
 def main():
     limpar()
     montar()
+    aws = AwsFalso()
+    aws.instalar()
     try:
         cli = _cliente()
         q = f"academia_id={ACADEMIA}&turma_id={ids['turma']}&data_presenca={HOJE}&horario_aula=18:30"
@@ -161,36 +203,35 @@ def main():
         checar("8. sem resposta conta como sem consentimento",
                motivo.get("ZZ Menor Sem Foto") == "sem_consentimento", str(motivo))
         adulto = next((p for p in dados["pessoas"] if p["nome"] == "ZZ Adulto Autorizou"), {})
-        checar("9. sem descritor ainda, a página pede para calcular", adulto.get("calcular") == "zz_adulto.jpg",
+        checar("9. foto do cadastro ainda não levada ao reconhecimento: a página pede", adulto.get("indexar") is True,
                str(adulto))
-        checar("10. a foto da turma não tem para onde subir (sem input de arquivo no form de gravação)",
+        checar("10. a foto da turma não vai no formulário de gravação",
                'id="formGravar"' in h and "multipart" not in h.split('id="formGravar"')[1].split("</form>")[0])
         tok = _token(h)
 
-        print("\nDescritores\n")
-
-        def enviar(itens):
-            return cli.post(f"/chamada-foto/descritores?academia_id={ACADEMIA}", json={"itens": itens},
-                            headers={"X-CSRFToken": tok}).get_json() or {}
-        r = enviar([{"aluno_id": ids["adulto"], "origem": "cadastro", "foto": "zz_adulto.jpg", "descritor": DESC}])
-        checar("11. grava o descritor do aluno autorizado", r.get("gravados") == 1, str(r))
-        r = enviar([{"aluno_id": ids["recusou"], "origem": "cadastro", "foto": "zz_recusou.jpg", "descritor": DESC},
-                    {"aluno_id": ids["vizinho"], "origem": "cadastro", "foto": "zz_viz.jpg", "descritor": DESC},
-                    {"aluno_id": ids["adulto"], "origem": "cadastro", "foto": "foto_velha.jpg", "descritor": DESC},
-                    {"aluno_id": ids["adulto"], "origem": "chamada", "descritor": DESC[:10]}])
-        checar("12. recusa: sem consentimento, outra academia, foto velha, descritor torto",
-               r.get("gravados") == 0, str(r))
-        for _ in range(7):
-            enviar([{"aluno_id": ids["adulto"], "origem": "chamada", "descritor": DESC}])
-        n = _contar("SELECT COUNT(*) FROM chamada_foto_descritor WHERE aluno_id=%s AND origem='chamada'",
-                    (ids["adulto"],))
-        checar("13. rostos guardados na chamada ficam limitados", n == cf.MAX_DESCRITORES_CHAMADA, str(n))
+        print("\nRekognition (simulado)\n")
+        todos = [ids["adulto"], ids["recusou"], ids["vizinho"], ids["menor"]]
+        r = cli.post(f"/chamada-foto/preparar?academia_id={ACADEMIA}", json={"ids": todos},
+                     headers={"X-CSRFToken": tok}).get_json() or {}
+        checar("11. só a foto de quem autorizou, desta academia, vai ao reconhecimento",
+               r.get("prontos") == [str(ids["adulto"])] and aws.indexados == [ids["adulto"]], str(r))
+        cli.post(f"/chamada-foto/preparar?academia_id={ACADEMIA}", json={"ids": todos}, headers={"X-CSRFToken": tok})
+        checar("12. e não manda de novo a mesma foto", aws.indexados == [ids["adulto"]], str(aws.indexados))
         h = cli.get(f"/registro_presenca?modo=foto&{q}").get_data(as_text=True)
         dados = json.loads(re.search(r'id="cfDados">(.*?)</script>', h, re.S).group(1))
         adulto = next(p for p in dados["pessoas"] if p["nome"] == "ZZ Adulto Autorizou")
-        checar("14. na próxima aula vem pronto, sem recalcular",
-               adulto.get("calcular") is None and len(adulto["descritores"]) == 1 + cf.MAX_DESCRITORES_CHAMADA,
-               str(len(adulto.get("descritores") or [])))
+        checar("13. na próxima aula vem pronto", adulto.get("indexar") is False and adulto.get("referencias") == 1,
+               str(adulto))
+        import io
+        from PIL import Image
+        buf = io.BytesIO(); Image.new("RGB", (120, 60), (90, 90, 90)).save(buf, format="JPEG"); buf.seek(0)
+        r = cli.post(f"/chamada-foto/analisar?academia_id={ACADEMIA}", headers={"X-CSRFToken": tok},
+                     data={"foto": (buf, "turma.jpg"), "ids": ",".join(str(i) for i in todos)},
+                     content_type="multipart/form-data").get_json() or {}
+        rostos = r.get("rostos") or []
+        checar("14. analisar devolve os rostos com os parecidos, só os desta chamada que autorizaram",
+               len(rostos) == 2 and [m["id"] for m in rostos[0]["matches"]] == [str(ids["adulto"])]
+               and rostos[1]["matches"] == [] and r.get("largura") == 120, str(r)[:300])
 
         print("\nGravação pelo POST da chamada\n")
         c, cur = _conn()
@@ -252,15 +293,26 @@ def main():
         checar("21c. quem não consentiu não pode aprender",
                pes.get("ZZ Recusou", {}).get("pode_aprender") is False)
         tok = _token(h)
-        r = enviar([{"aluno_id": ids["menor"], "origem": "chamada", "descritor": DESC}])
-        checar("21d. o rosto identificado na chamada é guardado mesmo sem foto", r.get("gravados") == 1, str(r))
-        r = enviar([{"aluno_id": ids["menor"], "origem": "cadastro", "foto": None, "descritor": DESC}])
-        checar("21e. mas descritor de cadastro sem foto, não", r.get("gravados") == 0, str(r))
+
+        def aprender(aid):
+            b = io.BytesIO(); Image.new("RGB", (80, 80), (100, 90, 80)).save(b, format="JPEG"); b.seek(0)
+            return cli.post(f"/chamada-foto/aprender?academia_id={ACADEMIA}", headers={"X-CSRFToken": tok},
+                            data={"aluno_id": str(aid), "rosto": (b, "rosto.jpg")}, content_type="multipart/form-data")
+        r = aprender(ids["menor"])
+        checar("21d. o rosto identificado na chamada é guardado mesmo sem foto",
+               r.status_code == 200 and (r.get_json() or {}).get("guardado") is True, r.get_data(as_text=True)[:120])
+        checar("21e. quem não autorizou, não", aprender(ids["recusou"]).status_code == 403)
+        for _ in range(7):
+            aprender(ids["menor"])
+        n = _contar("SELECT COUNT(*) FROM chamada_foto_rosto WHERE aluno_id=%s AND origem='chamada'", (ids["menor"],))
+        from utils.rekognition import MAX_CHAMADA
+        checar("21e2. guarda no máximo os mais recentes, e apaga os velhos na AWS",
+               n == MAX_CHAMADA and len(aws.apagados) == 8 - MAX_CHAMADA, f"{n} {aws.apagados}")
         h = cli.get(f"/registro_presenca?modo=foto&{q}").get_data(as_text=True)
         pes = {p["nome"]: p for p in json.loads(re.search(r'id="cfDados">(.*?)</script>', h, re.S).group(1))["pessoas"]}
         menor = pes.get("ZZ Menor Sem Foto", {})
         checar("21f. na próxima chamada ele já entra no reconhecimento",
-               menor.get("motivo") is None and len(menor.get("descritores") or []) == 1 and not menor.get("calcular"),
+               menor.get("motivo") is None and menor.get("referencias") == MAX_CHAMADA and not menor.get("indexar"),
                str(menor)[:200])
         h = cli.get(f"/chamada-foto/configuracao?academia_id={ACADEMIA}").get_data(as_text=True)
         checar("21g. e a configuração mostra que foi reconhecido pela chamada", "reconhecido pelos rostos da chamada" in h)
@@ -269,8 +321,9 @@ def main():
         h = cli.get(f"/chamada-foto/configuracao?academia_id={ACADEMIA}").get_data(as_text=True)
         cli.post(f"/chamada-foto/aluno/{ids['adulto']}/termo-papel?academia_id={ACADEMIA}",
                  data={"csrf_token": _token(h), "status": "recusou"})
-        n = _contar("SELECT COUNT(*) FROM chamada_foto_descritor WHERE aluno_id=%s", (ids["adulto"],))
-        checar("22. descritores apagados ao recusar", n == 0, str(n))
+        n = _contar("SELECT COUNT(*) FROM chamada_foto_rosto WHERE aluno_id=%s", (ids["adulto"],))
+        checar("22. ao recusar, o rosto some daqui e da AWS",
+               n == 0 and any(f.startswith(f"face-{ids['adulto']}-") for f in aws.apagados), f"{n} {aws.apagados}")
         r = cli.post(f"/chamada-foto/aluno/{ids['vizinho']}/termo-papel?academia_id={ACADEMIA}",
                      data={"csrf_token": _token(h), "status": "recusou"}, follow_redirects=True).get_data(as_text=True)
         checar("23. gestão não lança termo de aluno de outra academia", "não encontrado nesta academia" in r)
@@ -298,6 +351,7 @@ def main():
         h = cli.get(f"/chamada-foto/termo?academia_id={ACADEMIA}&aluno_id={ids['menor']}").get_data(as_text=True)
         checar("26. o termo sai com o nome do aluno", "ZZ Menor Sem Foto" in h and "Autorizo" in h)
     finally:
+        aws.desinstalar()
         limpar()
 
     print()

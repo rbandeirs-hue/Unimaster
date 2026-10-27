@@ -37,10 +37,12 @@ TAMANHO_DESCRITOR = 128
 
 TERMO = (
     "Autorizo a academia a usar a foto do cadastro de {aluno} para conferir a "
-    "presença nas aulas pela chamada por foto. O sistema compara o rosto da foto "
-    "da turma com a foto do cadastro; a foto da turma não é guardada, fica só a "
-    "lista de presença. A autorização pode ser retirada a qualquer momento, e "
-    "então os dados do rosto são apagados e a presença volta a ser marcada à mão."
+    "presença nas aulas pela chamada por foto. O professor fotografa a turma e o "
+    "sistema compara cada rosto com a foto do cadastro, usando o serviço de "
+    "reconhecimento da Amazon Web Services, com servidores nos Estados Unidos. A foto "
+    "da turma é usada só para essa comparação e não é guardada: fica só a lista de "
+    "presença. A autorização pode ser retirada a qualquer momento, e então os dados "
+    "do rosto são apagados e a presença volta a ser marcada à mão."
 )
 
 _DDL = [
@@ -58,6 +60,17 @@ _DDL = [
         respondido_em   DATETIME NULL,
         pedido_em       DATETIME NULL,
         atualizado_em   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4""",
+    """CREATE TABLE IF NOT EXISTS chamada_foto_rosto (
+        id          INT AUTO_INCREMENT PRIMARY KEY,
+        academia_id INT NOT NULL,
+        aluno_id    INT NOT NULL,
+        face_id     VARCHAR(64) NULL,
+        origem      VARCHAR(10) NOT NULL,
+        foto        VARCHAR(255) NULL,
+        criado_em   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        KEY ix_cfr_aluno (aluno_id, origem),
+        KEY ix_cfr_academia (academia_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4""",
     """CREATE TABLE IF NOT EXISTS chamada_foto_descritor (
         id         INT AUTO_INCREMENT PRIMARY KEY,
@@ -126,6 +139,7 @@ def definir_consentimento(cur, aluno_id, status, via, usuario_id):
     )
     if status != "autorizou":
         cur.execute("DELETE FROM chamada_foto_descritor WHERE aluno_id = %s", (aluno_id,))
+        apagar_rostos(cur, aluno_id)
 
 
 def marcar_pedido(cur, aluno_id):
@@ -213,3 +227,76 @@ def descritores_validos(cur, alunos_foto):
         if r["origem"] == "cadastro":
             item["cadastro"] = True
     return out
+
+
+# ------------------------------------------------- rostos no Rekognition
+def rostos_dos_alunos(cur, aluno_ids):
+    """{aluno_id: [linhas de chamada_foto_rosto]} — inclui a marca de "foto sem rosto"."""
+    ids = [int(i) for i in aluno_ids if str(i).lstrip("-").isdigit()]
+    if not ids:
+        return {}
+    ph = ",".join(["%s"] * len(ids))
+    try:
+        cur.execute(f"SELECT * FROM chamada_foto_rosto WHERE aluno_id IN ({ph}) ORDER BY id", tuple(ids))
+        linhas = cur.fetchall()
+    except Exception:
+        return {}
+    out = {}
+    for r in linhas:
+        out.setdefault(r["aluno_id"], []).append(r)
+    return out
+
+
+def registrar_rosto(cur, academia_id, aluno_id, face_id, origem, foto=None):
+    """Guarda o FaceId (ou None = a foto do cadastro não tem rosto, não tentar de novo)."""
+    if origem == "cadastro":
+        antigos = _faces(cur, "SELECT academia_id, face_id FROM chamada_foto_rosto WHERE aluno_id = %s AND origem = 'cadastro'",
+                         (aluno_id,))
+        _apagar_na_aws(antigos)
+        cur.execute("DELETE FROM chamada_foto_rosto WHERE aluno_id = %s AND origem = 'cadastro'", (aluno_id,))
+    cur.execute("""INSERT INTO chamada_foto_rosto (academia_id, aluno_id, face_id, origem, foto)
+                   VALUES (%s, %s, %s, %s, %s)""", (academia_id, aluno_id, face_id, origem, foto))
+    if origem == "chamada":
+        from utils.rekognition import MAX_CHAMADA
+        cur.execute("""SELECT id, academia_id, face_id FROM chamada_foto_rosto
+                       WHERE aluno_id = %s AND origem = 'chamada' ORDER BY id DESC""", (aluno_id,))
+        velhos = cur.fetchall()[MAX_CHAMADA:]
+        if velhos:
+            _apagar_na_aws([(v["academia_id"], v["face_id"]) for v in velhos])
+            ph = ",".join(["%s"] * len(velhos))
+            cur.execute(f"DELETE FROM chamada_foto_rosto WHERE id IN ({ph})", tuple(v["id"] for v in velhos))
+
+
+def _faces(cur, sql, params):
+    cur.execute(sql, params)
+    return [(r["academia_id"], r["face_id"]) if isinstance(r, dict) else (r[0], r[1]) for r in cur.fetchall()]
+
+
+def _apagar_na_aws(pares):
+    from collections import defaultdict
+    por_acad = defaultdict(list)
+    for acad, face in pares:
+        if face:
+            por_acad[acad].append(face)
+    if not por_acad:
+        return
+    from utils import rekognition
+    for acad, faces in por_acad.items():
+        rekognition.apagar(acad, faces)
+
+
+def apagar_rostos(cur, aluno_id):
+    """Retirou o consentimento: some da AWS e daqui. Se a AWS falhar, as linhas
+    ficam para a próxima tentativa — e o aluno já não entra na busca, porque a
+    busca só considera quem autorizou."""
+    try:
+        pares = _faces(cur, "SELECT academia_id, face_id FROM chamada_foto_rosto WHERE aluno_id = %s", (aluno_id,))
+    except Exception:
+        return
+    try:
+        _apagar_na_aws(pares)
+    except Exception:
+        import logging
+        logging.getLogger(__name__).warning("chamada_foto: rostos do aluno %s não apagados na AWS", aluno_id)
+        return
+    cur.execute("DELETE FROM chamada_foto_rosto WHERE aluno_id = %s", (aluno_id,))

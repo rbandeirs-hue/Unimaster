@@ -15,7 +15,9 @@ pelo mesmo formulário. Aqui ficam:
 
 Regras de LGPD em utils/chamada_foto.py.
 """
-from flask import Blueprint, flash, jsonify, redirect, render_template, request, url_for
+import os
+
+from flask import Blueprint, current_app, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
 from config import get_db_connection
@@ -81,9 +83,9 @@ def configuracao():
                         ORDER BY a.nome""", tuple(p))
         alunos = cur.fetchall()
         status = cf.status_dos_alunos(cur, [a["id"] for a in alunos])
-        cur.execute(f"""SELECT DISTINCT d.aluno_id FROM chamada_foto_descritor d
+        cur.execute(f"""SELECT DISTINCT d.aluno_id FROM chamada_foto_rosto d
                         JOIN alunos a ON a.id = d.aluno_id
-                        WHERE d.origem = 'chamada' AND {t}""", tuple(p))
+                        WHERE d.origem = 'chamada' AND d.face_id IS NOT NULL AND {t}""", tuple(p))
         aprendidos = {r["aluno_id"] for r in cur.fetchall()}
     finally:
         cur.close()
@@ -300,6 +302,140 @@ def salvar_descritores():
     return jsonify(ok=True, gravados=gravados)
 
 
+# ------------------------------------------------ reconhecimento (AWS)
+def _consentidos_da_academia(cur, academia_id, ids):
+    """Dos ids pedidos, os alunos da academia que autorizaram: {id: aluno}."""
+    ids = [int(i) for i in ids if str(i).isdigit()][:300]
+    if not ids:
+        return {}
+    status = cf.status_dos_alunos(cur, ids)
+    t, p = filtro_alunos_da_academia(academia_id)
+    ph = ",".join(["%s"] * len(ids))
+    cur.execute(f"SELECT a.id, a.nome, a.foto FROM alunos a WHERE a.id IN ({ph}) AND {t}", (*ids, *p))
+    return {a["id"]: a for a in cur.fetchall() if (status.get(a["id"]) or {}).get("status") == "autorizou"}
+
+
+def _json_erro(e):
+    from utils.rekognition import ErroReconhecimento
+    msg = str(e) if isinstance(e, ErroReconhecimento) else "Não foi possível falar com o reconhecimento agora."
+    current_app.logger.warning("chamada_foto: %s", repr(e)[:300])
+    return jsonify(ok=False, erro=msg), 502
+
+
+@bp_chamada_foto.route("/preparar", methods=["POST"])
+@login_required
+def preparar():
+    """Leva ao Rekognition a foto do cadastro de quem ainda não foi.
+
+    Corpo: {"ids": [aluno_id, ...]}. Devolve quem ficou com referência e quem
+    tem foto sem rosto (fica marcado para não tentar de novo até trocar a foto).
+    """
+    from utils import rekognition
+    academia_id = _academia()
+    ids = (request.get_json(silent=True) or {}).get("ids") or []
+    if not academia_id or not rekognition.configurado():
+        return jsonify(ok=False, erro="Reconhecimento não configurado."), 400
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    prontos, sem_rosto = [], []
+    try:
+        cf.garantir_tabelas(cur)
+        alunos = _consentidos_da_academia(cur, academia_id, ids)
+        ja = cf.rostos_dos_alunos(cur, list(alunos))
+        pasta = os.path.join(current_app.root_path, "static", "uploads")
+        for aid, a in alunos.items():
+            foto = a.get("foto")
+            cad = next((r for r in ja.get(aid, []) if r["origem"] == "cadastro"), None)
+            if not foto or (cad and cad["foto"] == foto):
+                continue
+            caminho = os.path.realpath(os.path.join(pasta, foto))
+            if not caminho.startswith(os.path.realpath(pasta) + os.sep) or not os.path.isfile(caminho):
+                continue
+            face = rekognition.indexar(academia_id, aid, rekognition.abrir(caminho))
+            cf.registrar_rosto(cur, academia_id, aid, face, "cadastro", foto)
+            conn.commit()
+            (prontos if face else sem_rosto).append(str(aid))
+    except Exception as e:
+        conn.rollback()
+        return _json_erro(e)
+    finally:
+        cur.close()
+        conn.close()
+    return jsonify(ok=True, prontos=prontos, sem_rosto=sem_rosto)
+
+
+@bp_chamada_foto.route("/analisar", methods=["POST"])
+@login_required
+def analisar():
+    """Uma foto da turma → os rostos e, para cada um, os alunos parecidos.
+
+    Multipart: `foto` (JPEG) e `ids` (alunos da chamada que autorizaram, separados
+    por vírgula). A foto só passa pela memória: não é gravada aqui nem na AWS.
+    As caixas voltam em pixels da imagem recebida.
+    """
+    from utils import rekognition
+    academia_id = _academia()
+    arquivo = request.files.get("foto")
+    if not academia_id or not arquivo or not rekognition.configurado():
+        return jsonify(ok=False, erro="Requisição inválida."), 400
+    try:
+        img = rekognition.abrir(arquivo.read())
+    except Exception:
+        return jsonify(ok=False, erro="A foto não abriu. Tente outra."), 400
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        validos = {str(i) for i in _consentidos_da_academia(
+            cur, academia_id, (request.form.get("ids") or "").split(","))}
+    finally:
+        cur.close()
+        conn.close()
+    try:
+        rostos = rekognition.detectar(img)
+        achados = rekognition.buscar(academia_id, img, rostos) if rostos else []
+    except Exception as e:
+        return _json_erro(e)
+    out = []
+    for r, m in zip(rostos, achados):
+        out.append({"box": {"x": round(r["x"], 1), "y": round(r["y"], 1), "width": round(r["w"], 1), "height": round(r["h"], 1)},
+                    # Só quem está nesta chamada e autorizou: a coleção é da academia inteira.
+                    "matches": [x for x in m if x["id"] in validos][:5]})
+    current_app.logger.info("chamada_foto analisar academia=%s %sx%s rostos=%s", academia_id, img.width, img.height, len(out))
+    return jsonify(ok=True, largura=img.width, altura=img.height, rostos=out)
+
+
+@bp_chamada_foto.route("/aprender", methods=["POST"])
+@login_required
+def aprender():
+    """Rosto identificado na chamada vira referência do aluno (se autorizou).
+
+    Multipart: `aluno_id` e `rosto` (JPEG recortado no celular). Guarda até
+    MAX_CHAMADA por aluno: o mais antigo sai quando entra um novo.
+    """
+    from utils import rekognition
+    academia_id = _academia()
+    arquivo = request.files.get("rosto")
+    aid = request.form.get("aluno_id", type=int)
+    if not academia_id or not arquivo or not aid or not rekognition.configurado():
+        return jsonify(ok=False, erro="Requisição inválida."), 400
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        if aid not in _consentidos_da_academia(cur, academia_id, [aid]):
+            return jsonify(ok=False, erro="Sem consentimento."), 403
+        face = rekognition.indexar(academia_id, aid, rekognition.abrir(arquivo.read()))
+        if face:
+            cf.registrar_rosto(cur, academia_id, aid, face, "chamada")
+            conn.commit()
+    except Exception as e:
+        conn.rollback()
+        return _json_erro(e)
+    finally:
+        cur.close()
+        conn.close()
+    return jsonify(ok=True, guardado=bool(face))
+
+
 # ------------------------------------------------------------------ família
 def _alunos_que_posso_autorizar(cur):
     """Filhos (responsavel_alunos) e o próprio cadastro de aluno do usuário."""
@@ -398,14 +534,16 @@ def pagina_chamada(*, alunos, turmas, turma_id, data_presenca, horario_aula, aca
         conn.commit()
         if not cf.academia_ativa(cur, academia_id):
             return None
+        from utils import rekognition
+        if not rekognition.configurado():
+            return None
         ids_alunos = [a["id"] for a in alunos if isinstance(a.get("id"), int)]
         status = cf.status_dos_alunos(cur, ids_alunos)
         # Todo aluno com consentimento, com foto ou sem: quem não tem foto no
         # cadastro também aprende pelos rostos identificados na chamada.
-        fotos = {a["id"]: a.get("foto") or None for a in alunos
-                 if isinstance(a.get("id"), int)
-                 and (status.get(a["id"]) or {}).get("status") == "autorizou"}
-        descritores = cf.descritores_validos(cur, fotos)
+        consentidos = [a["id"] for a in alunos if isinstance(a.get("id"), int)
+                       and (status.get(a["id"]) or {}).get("status") == "autorizou"]
+        rostos = cf.rostos_dos_alunos(cur, consentidos)
     finally:
         cur.close()
         conn.close()
@@ -426,18 +564,21 @@ def pagina_chamada(*, alunos, turmas, turma_id, data_presenca, horario_aula, aca
         consentiu = isinstance(aid, int) and (status.get(aid) or {}).get("status") == "autorizou"
         # Só quem consentiu pode ter o rosto guardado ao ser identificado.
         item["pode_aprender"] = consentiu
-        d = (descritores.get(aid) or {}) if consentiu else {}
-        item["descritores"] = d.get("lista") or []
+        linhas = (rostos.get(aid) or []) if consentiu else []
+        item["referencias"] = sum(1 for r in linhas if r["face_id"])
+        cadastro = next((r for r in linhas if r["origem"] == "cadastro"), None)
+        # Foto do cadastro já tentada e sem rosto: não tenta de novo até trocar a foto.
+        item["sem_rosto"] = bool(cadastro and cadastro["foto"] == foto and not cadastro["face_id"])
         if not isinstance(aid, int):
             item["motivo"] = "visitante"
         elif not consentiu:
             item["motivo"] = "sem_consentimento"
-        elif not foto and not item["descritores"]:
+        elif not foto and not item["referencias"]:
             item["motivo"] = "sem_foto"
         else:
             item["motivo"] = None
-            # Sem descritor da foto atual: o navegador calcula e devolve.
-            item["calcular"] = foto if foto and not d.get("cadastro") else None
+            # Foto do cadastro ainda não levada ao reconhecimento (ou trocada).
+            item["indexar"] = bool(foto) and not (cadastro and cadastro["foto"] == foto)
         pessoas.append(item)
 
     turma = next((t for t in turmas if t.get("TurmaID") == turma_id), {}) or {}

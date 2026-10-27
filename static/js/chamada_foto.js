@@ -1,13 +1,13 @@
-/* Chamada por foto — reconhecimento no navegador (face-api) e revisão.
+/* Chamada por foto — envio ao servidor (Amazon Rekognition) e revisão.
  *
- * As fotos da turma ficam só neste aparelho: o que vai para o servidor é a
- * lista de presentes (mesmo POST da chamada manual) e, para quem deu
- * consentimento, o descritor do rosto (128 números).
+ * O celular só tira a foto, reduz e envia: quem acha e compara os rostos é o
+ * servidor, pelo Rekognition (utils/rekognition.py). Assim não depende da
+ * força do aparelho nem do navegador. A foto da turma não é guardada.
  *
  * Dados da página em #cfDados: pessoas da chamada, cada uma com `motivo`
  * (null = entra no reconhecimento; 'sem_foto' | 'sem_consentimento' |
- * 'visitante' = só à mão), `descritores` já guardados e `calcular` (nome da
- * foto do cadastro cujo descritor ainda não existe).
+ * 'visitante' = só à mão), `indexar` (a foto do cadastro ainda não foi ao
+ * reconhecimento) e `pode_aprender` (autorizou: o rosto indicado é guardado).
  */
 (function () {
   'use strict';
@@ -15,17 +15,16 @@
   var D = JSON.parse(document.getElementById('cfDados').textContent);
   var $ = function (id) { return document.getElementById(id); };
 
-  var LIMIAR = 0.58;     // distância máxima para dizer "é esta pessoa" (a biblioteca sugere 0,6)
-  var CONFIRA = 0.5;     // acima disto, reconhece mas pede para conferir
-  var REPETIDO = 0.62;   // mesmo aluno em outra foto: conta uma vez
-  var APRENDER = 0.3;    // reconhecido com folga menor que isto vira mais uma referência
+  // Similaridade do Rekognition (0–100). Mesma pessoa costuma passar de 95.
+  var LIMIAR = 85;       // a partir daqui, "é esta pessoa"
+  var CONFIRA = 93;      // abaixo disto, reconhece mas pede para conferir
+  var REPETIDO = 80;     // mesmo aluno em outra foto: conta uma vez
+  var APRENDER = 97;     // reconhecido abaixo disto vira mais uma referência
+  var MAX_APRENDER = 25; // por chamada, para não sair caro
   var MAX_LADO = 2400;   // a foto da turma fica grande: rosto pequeno precisa de pixel
   var MAX_FOTOS = 3;
 
-  var pessoas = D.pessoas.map(function (p) {
-    p.descritores = p.descritores || [];
-    return p;
-  });
+  var pessoas = D.pessoas;
   var porId = {};
   pessoas.forEach(function (p) { porId[p.id] = p; });
 
@@ -54,118 +53,11 @@
     var p = (nome || '').trim().split(/\s+/);
     return ((p[0] || '')[0] || '') + (p.length > 1 ? p[p.length - 1][0] : '');
   }
-  function pct(d) {
-    return Math.max(0, Math.min(100, Math.round((0.8 - d) / 0.5 * 100)));
-  }
   function mostrar(passo) {
     ['passoEntrada', 'passoAnalise', 'passoProblema', 'passoRevisao', 'passoSalva'].forEach(function (p) {
       $(p).hidden = p !== passo;
     });
     window.scrollTo(0, 0);
-  }
-
-  // --------------------------------------------------------- modelos
-  // Celular com WebGL de precisão reduzida (comum em Android) faz o detector
-  // errar e os números do rosto saírem tortos: o cadastro não é lido e o rosto
-  // já indicado não bate de novo. Por isso o motor se autotesta num rosto de
-  // referência, calculado no servidor; se não bater, troca: WebGL (rápido) →
-  // WebAssembly (mesma conta da CPU, ~10x mais rápido que ela) → CPU.
-  var REF_SCORE = 0.9604;
-  var REF_DESC = [-0.0539, 0.09736, 0.09807, -0.08141, -0.11523, 0.01202, -0.13585, -0.04563, 0.18254, -0.0214, 0.12021, -0.04676, -0.18774, 0.09389, -0.11829, 0.12444, -0.18656, -0.13548, -0.01522, -0.06051, 0.01539, 0.05844, 0.02688, 0.11383, -0.11737, -0.28481, -0.0739, -0.03285, 0.04013, -0.13192, -0.01953, 0.09916, -0.21656, -0.00669, 0.02448, 0.1089, -0.03726, -0.10601, 0.16955, 0.06742, -0.1943, -0.0465, 0.11431, 0.34274, 0.23706, 0.09262, -0.00934, -0.04891, 0.10216, -0.29759, 0.04063, 0.2632, 0.04266, 0.06647, 0.04732, -0.1626, 0.06037, 0.07149, -0.12653, 0.08446, 0.1036, -0.04115, 0.06761, -0.09784, 0.27887, 0.09127, -0.1004, -0.09731, 0.19175, -0.13935, -0.07801, 0.05084, -0.13608, -0.17709, -0.27009, -0.01002, 0.39981, 0.14558, -0.08603, 0.12824, -0.05483, -0.03595, -0.0248, 0.14389, -0.12267, 0.06207, -0.06877, 0.07276, 0.2533, 0.00041, 0.03883, 0.20274, -0.00097, -0.05235, 0.0334, 0.07091, -0.12162, 0.01973, -0.20611, -0.00167, -0.02498, -0.04619, 0.0322, 0.16191, -0.22611, 0.12521, 0.00972, -0.08977, -0.03822, 0.02256, -0.10301, -0.0638, 0.19287, -0.24287, 0.14564, 0.14774, 0.10323, 0.1266, 0.06594, 0.15444, 0.02146, -0.03129, -0.075, -0.06656, -0.00191, -0.06358, 0.01002, 0.08772];
-  var WASM = 'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@4.16.0/dist/';
-  var diag = { motor: null, testes: [], cadastro: { tentados: 0, lidos: 0 } };
-
-  // Média RGB da referência reduzida a 32x32, medida num Chrome. Navegador com
-  // proteção contra rastreamento (Brave, DuckDuckGo, extensões) embaralha os
-  // pixels lidos pela página: aí nenhum motor acha rosto nenhum.
-  var REF_MEDIA = [38.9, 31.8, 25.6];
-  function pixelsDe(img) {
-    var c = document.createElement('canvas');
-    c.width = 32; c.height = 32;
-    var x = c.getContext('2d', { willReadFrequently: true });
-    x.drawImage(img, 0, 0, 32, 32);
-    var d = x.getImageData(0, 0, 32, 32).data, m = [0, 0, 0];
-    for (var i = 0; i < d.length; i += 4) { m[0] += d[i]; m[1] += d[i + 1]; m[2] += d[i + 2]; }
-    return m.map(function (v) { return Math.round(v / 1024 * 10) / 10; });
-  }
-  async function conferirPixels() {
-    try {
-      var img = await carregarImagem(D.referencia);
-      var a = pixelsDe(img), b = pixelsDe(img);
-      var desvio = Math.max.apply(null, a.map(function (v, i) { return Math.abs(v - REF_MEDIA[i]); }));
-      diag.pixels = { media: a, estavel: a.join() === b.join(), desvio: Math.round(desvio * 10) / 10,
-                      largura: img.naturalWidth, ok: a.join() === b.join() && desvio < 4 };
-    } catch (e) {
-      diag.pixels = { ok: false, erro: String(e && e.message || e).slice(0, 80) };
-    }
-    var nav = navigator.userAgentData && navigator.userAgentData.brands || [];
-    diag.navegador = { marcas: nav.map(function (b) { return b.brand; }).filter(function (b) { return !/Not/.test(b); }).join(', '),
-                       ua: navigator.userAgent.slice(0, 140), nucleos: navigator.hardwareConcurrency || null,
-                       memoria_gb: navigator.deviceMemory || null };
-  }
-
-  async function autoteste() {
-    try {
-      var img = await carregarImagem(D.referencia);
-      // Confiança baixa de propósito: o que interessa é a nota que sai.
-      var r = await faceapi.detectSingleFace(img, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.05 }))
-        .withFaceLandmarks().withFaceDescriptor();
-      if (!r) return { ok: false, nota: 0, dist: 9 };
-      var dist = faceapi.euclideanDistance(r.descriptor, REF_DESC);
-      return { ok: Math.abs(r.detection.score - REF_SCORE) < 0.06 && dist < 0.12,
-               nota: Math.round(r.detection.score * 100) / 100, dist: Math.round(dist * 1000) / 1000 };
-    } catch (e) {
-      return { ok: false, nota: 0, dist: 9, erro: String(e && e.message || e).slice(0, 80) };
-    }
-  }
-
-  var modelos = null;
-  function carregarModelos() {
-    if (modelos) return modelos;
-    modelos = (async function () {
-      if (!window.faceapi) throw new Error('O reconhecimento não carregou. Confira a internet e recarregue a página.');
-      var tf = faceapi.tf;
-      await conferirPixels();
-      var motores = ['webgl', 'wasm', 'cpu'];
-      // ?motor=wasm na URL força um motor: saída para um aparelho que se dê mal com o automático.
-      var forcado = new URLSearchParams(location.search).get('motor');
-      if (motores.indexOf(forcado) >= 0) motores = [forcado];
-      for (var k = 0; k < motores.length; k++) {
-        var m = motores[k], ok = false;
-        try {
-          if (m === 'wasm') tf.setWasmPaths(WASM);
-          ok = await tf.setBackend(m);
-          if (ok) await tf.ready();
-        } catch (e) { ok = false; }
-        if (!ok) { diag.testes.push({ motor: m, indisponivel: true }); continue; }
-        if (!faceapi.nets.ssdMobilenetv1.isLoaded) {
-          await faceapi.nets.ssdMobilenetv1.loadFromUri(D.modelos);
-          await faceapi.nets.faceLandmark68Net.loadFromUri(D.modelos);
-          await faceapi.nets.faceRecognitionNet.loadFromUri(D.modelos);
-        }
-        var t = await autoteste();
-        t.motor = m;
-        diag.testes.push(t);
-        if (t.ok) { diag.motor = m; return; }
-      }
-      // Nenhum motor acertou a referência: rodar mesmo assim só gasta minutos
-      // para não achar ninguém. Para aqui e diz o que fazer.
-      diag.motor = 'nenhum';
-      enviarDescritores([]);
-      throw new Error(diag.pixels && !diag.pixels.ok
-        ? 'Este navegador está alterando a imagem que a página lê (proteção contra rastreamento), e assim o reconhecimento não funciona. ' +
-          'Abra o sistema no Google Chrome, ou desligue a proteção de impressão digital/rastreamento para este site.'
-        : 'O reconhecimento não funcionou neste aparelho. Faça a chamada manual e avise o suporte.');
-    })();
-    modelos.then(function () {
-      enviarDescritores([]);   // só o diagnóstico: motor e autoteste, antes de qualquer conta pesada
-      $('modelosStatus').textContent = 'Reconhecimento pronto' +
-        (diag.motor === 'webgl' ? '.' : diag.motor === 'wasm' ? ' (modo compatível).' : ' (modo lento: pode demorar).');
-    }, function (e) {
-      $('modelosStatus').textContent = e.message || 'Não foi possível carregar o reconhecimento.';
-      modelos = null;
-    });
-    return modelos;
   }
 
   // ---------------------------------------------------------- imagens
@@ -207,16 +99,20 @@
   }
 
   // -------------------------------------------------------- servidor
-  async function enviarDescritores(itens) {
-    for (var i = 0; i === 0 || i < itens.length; i += 50) {   // lista vazia: manda só o diagnóstico
-      try {
-        await fetch(D.urlDescritores, {
-          method: 'POST', credentials: 'same-origin',
-          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
-          body: JSON.stringify({ itens: itens.slice(i, i + 50), diag: diag })
-        });
-      } catch (e) { /* não impede a chamada: recalcula na próxima */ }
-    }
+  async function postar(url, corpo) {
+    var json = !(corpo instanceof FormData);
+    var r = await fetch(url, {
+      method: 'POST', credentials: 'same-origin',
+      headers: json ? { 'Content-Type': 'application/json', 'X-CSRFToken': csrf } : { 'X-CSRFToken': csrf },
+      body: json ? JSON.stringify(corpo) : corpo
+    });
+    var d = null;
+    try { d = await r.json(); } catch (e) { d = null; }
+    if (!r.ok || !d || !d.ok) throw new Error((d && d.erro) || 'O servidor não respondeu (erro ' + r.status + '). Tente de novo.');
+    return d;
+  }
+  function canvasBlob(c, q) {
+    return new Promise(function (ok) { c.toBlob(ok, 'image/jpeg', q || 0.88); });
   }
 
   // --------------------------------------------------------- entrada
@@ -259,200 +155,56 @@
     $('analiseBarra').parentNode.setAttribute('aria-valuenow', Math.round(total));
   }
 
-  async function calcularCadastro() {
-    var faltam = pessoas.filter(function (p) { return p.motivo === null && p.calcular; });
-    var novos = [];
-    var rotulo = document.querySelector('#analisePassos li[data-p=cadastro] span:last-child');
-    for (var i = 0; i < faltam.length; i++) {
-      var p = faltam[i];
-      passo('cadastro', i / Math.max(1, faltam.length));
-      rotulo.textContent = 'Lendo as fotos do cadastro (' + (i + 1) + ' de ' + faltam.length + ')';
-      var lido = false;
-      try {
-        var r = await detectarUm(await carregarImagem(p.foto_url));
-        lido = !!r;
-        if (r) {
-          var d = Array.from(r.descriptor);
-          p.descritores.push(d);
-          novos.push({ aluno_id: Number(p.id), origem: 'cadastro', foto: p.calcular, descritor: d });
-        } else if (!p.descritores.length) {
-          p.semRosto = true;
-        }
-      } catch (e) {
-        if (!p.descritores.length) p.semRosto = true;
-      }
-      diag.cadastro.tentados++;
-      if (lido) diag.cadastro.lidos++;
-      p.calcular = null;
-    }
-    rotulo.textContent = 'Lendo as fotos do cadastro';
-    // Vai mesmo sem nenhum lido: leva o diagnóstico do aparelho.
-    if (faltam.length) enviarDescritores(novos);
+  // Foto do cadastro de quem ainda não tem referência no reconhecimento.
+  async function prepararCadastro() {
+    var ids = pessoas.filter(function (p) { return p.motivo === null && p.indexar; }).map(function (p) { return p.id; });
+    if (!ids.length) return;
+    var d = await postar(D.urlPreparar, { ids: ids });
+    d.prontos.forEach(function (id) { var p = porId[id]; if (p) { p.indexar = false; p.referencias = (p.referencias || 0) + 1; } });
+    d.sem_rosto.forEach(function (id) { var p = porId[id]; if (p) { p.indexar = false; p.sem_rosto = true; } });
   }
 
-  // ------------------------------------------------------- detecção
-  var SSD = function (conf) { return new faceapi.SsdMobilenetv1Options({ minConfidence: conf, maxResults: 100 }); };
-
-  // Foto do cadastro: o recorte do sistema deixa o rosto ocupando o quadro
-  // inteiro, e o detector se perde sem margem. Põe uma moldura neutra em volta;
-  // se ainda assim não achar, tenta de novo menos exigente.
-  async function detectarUm(img) {
-    var base = reduzir(img, 640);
-    var m = Math.round(Math.max(base.width, base.height) * 0.35);
-    var c = document.createElement('canvas');
-    c.width = base.width + 2 * m; c.height = base.height + 2 * m;
-    var ctx = c.getContext('2d');
-    ctx.fillStyle = '#808080';
-    ctx.fillRect(0, 0, c.width, c.height);
-    ctx.drawImage(base, m, m);
-    var tentativas = [[c, 0.3], [c, 0.15]];
-    for (var i = 0; i < tentativas.length; i++) {
-      var r = await faceapi.detectSingleFace(tentativas[i][0], SSD(tentativas[i][1]))
-        .withFaceLandmarks().withFaceDescriptor();
-      if (r) return r;
-    }
-    return null;
-  }
-
-  function iou(a, b) {
-    var x1 = Math.max(a.x, b.x), y1 = Math.max(a.y, b.y);
-    var x2 = Math.min(a.x + a.width, b.x + b.width), y2 = Math.min(a.y + a.height, b.y + b.height);
-    var inter = Math.max(0, x2 - x1) * Math.max(0, y2 - y1);
-    var menor = Math.min(a.width * a.height, b.width * b.height);
-    return { iou: inter / (a.width * a.height + b.width * b.height - inter), cobre: inter / menor };
-  }
-
-  // Foto da turma: o detector encolhe tudo para 512 px por dentro, e numa foto
-  // de grupo o rosto do fundo some. Por isso passa três vezes, de longe para
-  // perto: a foto inteira (rostos grandes, na frente), uma grade média e uma
-  // grade fina de pedaços de ~640 px, que numa foto de celular dá uns 35
-  // pedaços — cada um ampliado por dentro, o que acha até o rosto da última
-  // fileira de uma turma de 50+. Junta tudo sem repetir rosto.
-  var PEDACO_FINO = 640, SOBRA = 0.3;
-
-  function grade(W, H, lado) {
-    lado = Math.min(lado, W, H);
-    var passo = lado * (1 - SOBRA);
-    var cols = Math.max(1, Math.ceil((W - lado) / passo) + 1), lins = Math.max(1, Math.ceil((H - lado) / passo) + 1);
-    var out = [];
-    for (var li = 0; li < lins; li++) {
-      for (var co = 0; co < cols; co++) {
-        var x = cols === 1 ? 0 : Math.round(co * (W - lado) / (cols - 1));
-        var y = lins === 1 ? 0 : Math.round(li * (H - lado) / (lins - 1));
-        out.push({ x: x, y: y, w: lado, h: lado });
-      }
-    }
-    return out;
-  }
-
-  // Só DETECTA nos pedaços (o barato); os números de cada rosto (o caro)
-  // são calculados uma vez por rosto, depois de juntar as passadas. A grade
-  // fina só roda quando a foto pede: rosto pequeno ou muita gente.
-  async function detectarCaixas(foto, pedacos, conf, aoAvancar, base, total) {
-    var W = foto.width, H = foto.height, caixas = [];
-    var t = document.createElement('canvas');
-    for (var k = 0; k < pedacos.length; k++) {
-      var pc = pedacos[k], fonte = foto;
-      if (!pc.inteira) {
-        t.width = pc.w; t.height = pc.h;
-        t.getContext('2d').drawImage(foto, pc.x, pc.y, pc.w, pc.h, 0, 0, pc.w, pc.h);
-        fonte = t;
-      }
-      var dets = await faceapi.detectAllFaces(fonte, SSD(conf));
-      dets.forEach(function (d) {
-        var b = d.box;
-        // Rosto cortado na borda do pedaço é meio rosto: o vizinho, que se
-        // sobrepõe em 30%, o pega inteiro.
-        if (!pc.inteira && ((b.x < 3 && pc.x > 0) || (b.y < 3 && pc.y > 0) ||
-            (b.x + b.width > pc.w - 3 && pc.x + pc.w < W) || (b.y + b.height > pc.h - 3 && pc.y + pc.h < H))) return;
-        caixas.push({ box: { x: pc.x + b.x, y: pc.y + b.y, width: b.width, height: b.height }, score: d.score });
-      });
-      if (aoAvancar) aoAvancar((base + k + 1) / total);
-    }
-    return caixas;
-  }
-
-  function juntar(caixas) {
-    caixas.sort(function (a, b) { return b.score - a.score; });
-    var ficam = [];
-    caixas.forEach(function (a) {
-      var repetido = ficam.some(function (f) { var q = iou(a.box, f.box); return q.iou > 0.3 || q.cobre > 0.6; });
-      if (!repetido) ficam.push(a);
+  async function analisarFoto(foto, i) {
+    var fd = new FormData();
+    fd.append('foto', await canvasBlob(foto, 0.9), 'turma.jpg');
+    fd.append('ids', pessoas.filter(function (p) { return p.motivo === null; }).map(function (p) { return p.id; }).join(','));
+    var d = await postar(D.urlAnalisar, fd);
+    // O servidor responde em pixels da imagem que recebeu; o canvas é o mesmo tamanho.
+    var ex = foto.width / (d.largura || foto.width), ey = foto.height / (d.altura || foto.height);
+    return d.rostos.map(function (r) {
+      return { foto: i, aluno: null, sim: null, estado: 'novo', matches: r.matches || [],
+               box: { x: r.box.x * ex, y: r.box.y * ey, width: r.box.width * ex, height: r.box.height * ey } };
     });
-    return ficam;
   }
 
-  async function detectarTodos(foto, aoAvancar) {
-    var W = foto.width, H = foto.height, lado = Math.max(W, H);
-    var medios = [{ x: 0, y: 0, w: W, h: H, inteira: true }].concat(grade(W, H, Math.round(lado / 2.2)));
-    var finos = lado > PEDACO_FINO * 1.5 ? grade(W, H, PEDACO_FINO) : [];
-    var total = medios.length + finos.length;
-    var caixas = await detectarCaixas(foto, medios, 0.4, aoAvancar, 0, total);
-    var achados = juntar(caixas);
-    // Rosto pequeno (mediana abaixo de 6% do lado) ou turma grande: é quando o
-    // rosto do fundo escapa das passadas de longe.
-    var larguras = achados.map(function (a) { return a.box.width; }).sort(function (a, b) { return a - b; });
-    var mediana = larguras.length ? larguras[Math.floor(larguras.length / 2)] : 0;
-    var precisaFina = finos.length && (!achados.length || mediana < lado * 0.06 || achados.length >= 15);
-    diag.ultimaFoto = { lado: lado, pedacos: medios.length + (precisaFina ? finos.length : 0), finos: !!precisaFina };
-    if (precisaFina) {
-      caixas = caixas.concat(await detectarCaixas(foto, finos, 0.4, aoAvancar, medios.length, total));
-      achados = juntar(caixas);
-    }
-    if (aoAvancar) aoAvancar(1);
-    // Os números de cada rosto, uma vez: recorta, acha os 68 pontos, alinha e
-    // calcula — o mesmo que a biblioteca faz em withFaceLandmarks/Descriptor.
-    var out = [];
-    for (var i = 0; i < achados.length; i++) {
-      var b = achados[i].box;
-      try {
-        var caixa = new faceapi.Rect(b.x, b.y, b.width, b.height);
-        var rosto = (await faceapi.extractFaces(foto, [caixa]))[0];
-        var pontos = (await faceapi.nets.faceLandmark68Net.detectLandmarks(rosto)).shiftBy(b.x, b.y);
-        var alinhado = (await faceapi.extractFaces(foto, [pontos.align()]))[0];
-        var descritor = await faceapi.nets.faceRecognitionNet.computeFaceDescriptor(alinhado);
-        out.push({ box: b, score: achados[i].score, descritor: descritor });
-      } catch (e) { /* rosto que não alinha fica de fora */ }
-    }
-    return out;
-  }
-
-  function distancia(desc, p) {
-    var m = Infinity;
-    p.descritores.forEach(function (d) { m = Math.min(m, faceapi.euclideanDistance(desc, d)); });
-    return m;
+  function simDe(r, id) {
+    var m = (r.matches || []).filter(function (x) { return x.id === id; })[0];
+    return m ? m.sim : null;
   }
 
   function comparar() {
     var rostos = estado.rostos;
-    var candidatos = pessoas.filter(function (p) { return p.motivo === null && p.descritores.length; });
     var pares = [];
     rostos.forEach(function (r, ri) {
-      candidatos.forEach(function (p) {
-        var d = distancia(r.descritor, p);
-        if (d < LIMIAR) pares.push({ ri: ri, p: p, d: d });
+      r.matches.forEach(function (m) {
+        var p = porId[m.id];
+        if (p && p.motivo === null && m.sim >= LIMIAR) pares.push({ ri: ri, p: p, sim: m.sim });
       });
     });
-    pares.sort(function (a, b) { return a.d - b.d; });
+    pares.sort(function (a, b) { return b.sim - a.sim; });
     var usados = {};
     pares.forEach(function (x) {
       var r = rostos[x.ri];
       if (r.aluno || usados[x.p.id]) return;
-      r.aluno = x.p.id; r.dist = x.d; r.estado = 'reconhecido';
+      r.aluno = x.p.id; r.sim = x.sim; r.estado = 'reconhecido';
       usados[x.p.id] = r;
     });
     // Rosto que sobrou e se parece com alguém já reconhecido em OUTRA foto é a
     // mesma criança fotografada de novo: não vai para "Quem é?".
     rostos.forEach(function (r) {
       if (r.aluno) return;
-      var melhor = null;
-      Object.keys(usados).forEach(function (id) {
-        var dono = usados[id];
-        if (dono.foto === r.foto) return;
-        var d = distancia(r.descritor, porId[id]);
-        if (d < REPETIDO && (!melhor || d < melhor.d)) melhor = { d: d };
-      });
-      r.estado = melhor ? 'repetido' : 'desconhecido';
+      var dup = r.matches.some(function (m) { var dono = usados[m.id]; return dono && dono.foto !== r.foto && m.sim >= REPETIDO; });
+      r.estado = dup ? 'repetido' : 'desconhecido';
     });
 
     // Quem a foto achou entra; quem já estava marcado continua marcado.
@@ -471,26 +223,14 @@
     mostrar('passoAnalise');
     $('analiseTitulo').textContent = estado.fotos.length === 1 ? 'Analisando 1 foto' : 'Analisando ' + estado.fotos.length + ' fotos';
     try {
-      var t0 = performance.now();
       passo('modelos');
-      await carregarModelos();
-      var t1 = performance.now();
-      await calcularCadastro();
-      var t2 = performance.now();
-      passo('rostos');
+      await prepararCadastro();
+      passo('cadastro');
       estado.rostos = [];
       for (var i = 0; i < estado.fotos.length; i++) {
-        var nf = estado.fotos.length, fi = i;
-        passo('rostos', i / nf);
-        var dets = await detectarTodos(estado.fotos[i], function (f) { passo('rostos', (fi + f) / nf); });
-        dets.forEach(function (d) {
-          estado.rostos.push({ foto: i, box: d.box, descritor: d.descritor, aluno: null, dist: null, estado: 'novo' });
-        });
+        passo('rostos', i / estado.fotos.length);
+        estado.rostos = estado.rostos.concat(await analisarFoto(estado.fotos[i], i));
       }
-      diag.tempos = { modelos_s: Math.round((t1 - t0) / 100) / 10, cadastro_s: Math.round((t2 - t1) / 100) / 10,
-                      rostos_s: Math.round((performance.now() - t2) / 100) / 10, fotos: estado.fotos.length,
-                      rostos: estado.rostos.length };
-      enviarDescritores([]);
       passo('comparar');
       if (!estado.rostos.length) {
         $('problemaTitulo').textContent = 'Nenhum rosto encontrado';
@@ -503,8 +243,7 @@
       mostrar('passoRevisao');
     } catch (e) {
       $('problemaTitulo').textContent = 'Não deu para analisar';
-      $('problemaTexto').textContent = (e && e.message && e.message !== 'imagem') ? e.message
-        : 'O reconhecimento não rodou neste aparelho. Tente de novo ou faça a chamada manual.';
+      $('problemaTexto').textContent = (e && e.message) || 'Tente de novo ou faça a chamada manual.';
       mostrar('passoProblema');
     }
   }
@@ -559,7 +298,7 @@
     if (p.motivo === 'sem_foto') return 'Sem foto — identifique uma vez para passar a ser reconhecido';
     if (p.motivo === 'sem_consentimento') return 'Sem consentimento — marcar à mão';
     if (p.motivo === 'visitante') return 'Visitante ou registro avulso';
-    if (p.semRosto) return 'A foto do cadastro não mostra o rosto';
+    if (p.sem_rosto) return 'A foto do cadastro não mostra o rosto — vale trocar';
     return 'Não encontrado nas fotos';
   }
 
@@ -596,9 +335,9 @@
       .sort(function (a, b) { return porId[a.aluno].nome.localeCompare(porId[b.aluno].nome); });
     rec.forEach(function (r) {
       var p = porId[r.aluno];
-      var confira = r.dist > CONFIRA;
+      var confira = r.sim < CONFIRA;
       var nota = !estado.presentes.has(p.id) ? 'Desmarcado por você'
-        : (confira ? 'Confira · ' : '') + pct(r.dist) + '% parecido';
+        : (confira ? 'Confira · ' : '') + Math.round(r.sim) + '% parecido';
       lrec.appendChild(linhaPessoa(p, nota, confira));
     });
     $('nReconhecidos').textContent = rec.length;
@@ -670,8 +409,9 @@
       return !termo || sem_acento(p.nome).indexOf(termo) >= 0;
     }).map(function (p) {
       var ja = !!ocupados[p.id] || (estado.presentes.has(p.id) && !(atual && atual.aluno === p.id));
-      return { p: p, ja: ja, d: p.descritores.length ? distancia(atual.descritor, p) : Infinity };
-    }).sort(function (a, b) { return (a.ja - b.ja) || (a.d - b.d) || a.p.nome.localeCompare(b.p.nome); });
+      var sim = simDe(atual, p.id);
+      return { p: p, ja: ja, sim: sim === null ? -1 : sim };
+    }).sort(function (a, b) { return (a.ja - b.ja) || (b.sim - a.sim) || a.p.nome.localeCompare(b.p.nome); });
     if (!escolhido || !lista.some(function (x) { return x.p === escolhido; })) {
       escolhido = atual.aluno ? porId[atual.aluno] : atual.mesmo ? porId[atual.mesmo] : (lista[0] ? lista[0].p : null);
     }
@@ -681,7 +421,7 @@
     lista.slice(0, 40).forEach(function (x) {
       var p = x.p;
       var nota = (x.ja ? 'Já presente · ' : '') +
-        (isFinite(x.d) ? pct(x.d) + '% parecido' : (x.ja ? 'mesma criança de novo?' : notaAusente(p)));
+        (x.sim >= 0 ? Math.round(x.sim) + '% parecido' : (x.ja ? 'mesma criança de novo?' : notaAusente(p)));
       var avatar = p.foto_url ? el('img', { src: p.foto_url, alt: '', style: 'width:38px;height:38px;border-radius:999px;object-fit:cover' })
         : el('span', { text: iniciais(p.nome), style: 'width:38px;height:38px;border-radius:999px;background:#e6e4e0;display:flex;align-items:center;justify-content:center;font-size:.75rem;font-weight:600;color:#6b6862;flex-shrink:0' });
       var b = el('button', { type: 'button', class: 'cf-opcao', 'aria-pressed': p === escolhido ? 'true' : 'false' }, [
@@ -726,9 +466,7 @@
       estado.origem[escolhido.id] = 'identificado';
     }
     if (escolhido.pode_aprender && $('folhaGuardar').checked) {
-      var d = Array.from(atual.descritor);
-      escolhido.descritores.push(d);
-      estado.guardar.push({ rosto: atual, aluno_id: Number(escolhido.id), origem: 'chamada', descritor: d });
+      estado.guardar.push({ rosto: atual, aluno_id: escolhido.id });
     }
     fecharFolha();
   }
@@ -762,14 +500,20 @@
       // referência do aluno: o reconhecimento melhora a cada aula.
       estado.rostos.forEach(function (r) {
         var p = r.estado === 'reconhecido' && porId[r.aluno];
-        if (p && p.pode_aprender && estado.presentes.has(p.id) && r.dist > APRENDER) {
-          estado.guardar.push({ rosto: r, aluno_id: Number(p.id), origem: 'chamada', descritor: Array.from(r.descritor) });
+        if (p && p.pode_aprender && estado.presentes.has(p.id) && r.sim < APRENDER) {
+          estado.guardar.push({ rosto: r, aluno_id: p.id });
         }
       });
-      if (estado.guardar.length) {
-        await enviarDescritores(estado.guardar.map(function (g) {
-          return { aluno_id: g.aluno_id, origem: g.origem, descritor: g.descritor };
-        }));
+      // Um rosto por vez; falha aqui não desfaz a chamada, que já foi salva.
+      var aprendidos = 0;
+      for (var g = 0; g < estado.guardar.length && aprendidos < MAX_APRENDER; g++) {
+        try {
+          var fa = new FormData();
+          fa.append('aluno_id', estado.guardar[g].aluno_id);
+          fa.append('rosto', await recorteBlob(estado.guardar[g].rosto), 'rosto.jpg');
+          await postar(D.urlAprender, fa);
+          aprendidos++;
+        } catch (e) { /* fica para a próxima */ }
       }
 
       var conta = { foto: 0, identificado: 0, mao: 0 };
@@ -780,7 +524,7 @@
       $('fimFoto').textContent = conta.foto;
       $('fimIdentificados').textContent = conta.identificado;
       $('fimMao').textContent = conta.mao;
-      // Descarta as fotos: nada da imagem fica na página.
+      // Descarta as fotos: nada da imagem fica na página (nem no servidor).
       estado.fotos = [];
       estado.rostos = [];
       $('revisaoFotos').innerHTML = '';
@@ -831,6 +575,4 @@
     }
   });
 
-  // Começa a baixar os modelos já: quando a foto chegar, estão prontos.
-  carregarModelos();
 })();

@@ -111,8 +111,8 @@
     <label class="cf-btn" for="fotoGaleria" id="rotuloGaleria"><i class="bi bi-images"></i> Escolher da galeria (até 3)</label>
     <input type="file" id="fotoGaleria" accept="image/*" multiple hidden>
     <p class="cf-dica">Todos de frente, rosto à mostra, boa luz e sem contraluz. Turma grande: 2 ou 3 fotos.<br>
-      A foto é analisada aqui no aparelho e não é enviada para o servidor.</p>
-    <p class="cf-dica" id="modelosStatus" role="status" aria-live="polite">Preparando o reconhecimento…</p>
+      A foto é usada só para achar os rostos e não fica guardada.</p>
+    <p class="cf-dica" id="modelosStatus" role="status" aria-live="polite"></p>
   </section>
 
   {# ---------------------------------------------------------- analisando #}
@@ -121,10 +121,10 @@
       <p class="cf-rotulo" id="analiseTitulo">Analisando</p>
       <div class="cf-progresso" role="progressbar" aria-label="Progresso da análise" aria-valuemin="0" aria-valuemax="100"><div id="analiseBarra"></div></div>
       <ol class="cf-passos" id="analisePassos">
-        <li data-p="modelos"><span class="bola"></span>Carregando o reconhecimento</li>
-        <li data-p="cadastro"><span class="bola"></span><span>Lendo as fotos do cadastro</span></li>
-        <li data-p="rostos"><span class="bola"></span>Encontrando os rostos nas fotos</li>
-        <li data-p="comparar"><span class="bola"></span>Comparando com os alunos da turma</li>
+        <li data-p="modelos"><span class="bola"></span>Conferindo as fotos do cadastro</li>
+        <li data-p="cadastro"><span class="bola"></span><span>Enviando as fotos da turma</span></li>
+        <li data-p="rostos"><span class="bola"></span>Encontrando e comparando os rostos</li>
+        <li data-p="comparar"><span class="bola"></span>Montando a lista</li>
       </ol>
     </div>
     <p class="cf-dica">Quem aparece em mais de uma foto conta uma vez só.</p>
@@ -193,7 +193,7 @@
       <div><span>Rosto identificado por você</span><b id="fimIdentificados">0</b></div>
       <div><span>Marcados à mão</span><b id="fimMao">0</b></div>
     </div>
-    <p class="cf-dica" style="text-align:left;"><i class="bi bi-trash3"></i> As fotos da turma não saíram deste aparelho e foram descartadas. Ficou só a lista de presença.</p>
+    <p class="cf-dica" style="text-align:left;"><i class="bi bi-trash3"></i> As fotos da turma foram usadas só para achar os rostos e foram descartadas. Ficou só a lista de presença.</p>
     <a class="cf-btn cf-btn--forte" href="{{ back_url }}">Abrir a chamada (plano da aula, observações)</a>
   </section>
 </div>
@@ -243,14 +243,13 @@
 <script type="application/json" id="cfDados">{{ {
   "pessoas": pessoas,
   "urlGravar": url_for('presencas.registro_presenca'),
-  "urlDescritores": url_for('chamada_foto.salvar_descritores', academia_id=academia_id),
-  "modelos": "https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/model/",
-  "referencia": asset('img/chamada_foto_referencia.jpg')
+  "urlPreparar": url_for('chamada_foto.preparar', academia_id=academia_id),
+  "urlAnalisar": url_for('chamada_foto.analisar', academia_id=academia_id),
+  "urlAprender": url_for('chamada_foto.aprender', academia_id=academia_id)
 } | tojson }}</script>
 {% endblock %}
 
 {% block extra_js %}
-<script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/dist/face-api.js"></script>
 {# asset() põe ?v=<data do arquivo>: o nginx manda o celular guardar /static por 30 dias. #}
 <script src="{{ asset('js/chamada_foto.js') }}"></script>
 {% endblock %}
