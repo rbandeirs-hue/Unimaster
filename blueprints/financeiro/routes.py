@@ -6436,6 +6436,8 @@ def _registrar_pagamento_e_receita(conn, cur, tipo, registro_id, id_academia, id
             data_ref = date.fromisoformat(str(data_pagamento)[:10]).strftime("%Y-%m-%d")
     except (ValueError, TypeError):
         data_ref = hoje
+    if data_ref > hoje:   # ISO: comparar texto é comparar data
+        return False      # pagamento no futuro é erro de digitação
     if tipo == "mensalidade_aluno":
         hoje = data_ref  # a mensalidade usa a data efetiva do pagamento (juros e receita)
         dcur = conn.cursor(dictionary=True)
@@ -6609,9 +6611,11 @@ def _registrar_pagamento_e_receita(conn, cur, tipo, registro_id, id_academia, id
     # receita continua sendo gravada como sempre; o lançamento é que diz em
     # QUAL conta o dinheiro entrou. Em academia sem conta cadastrada ou com o
     # controle desativado, devolve None e nada muda.
+    # Data do pagamento informada, não a do lançamento: baixa retroativa caía
+    # num mês no Entradas x Saídas e em outro no extrato.
     registrar_entrada_de_pagamento(
         conn, cur, id_academia=id_acad, valor=valor, descricao=descricao,
-        data=date.today(), id_forma_pagamento=_fin.get("forma"),
+        data=date.fromisoformat(str(hoje)[:10]), id_forma_pagamento=_fin.get("forma"),
         id_aluno=_fin.get("aluno_id"), origem=_fin.get("origem"),
         origem_id=_fin.get("origem_id"), id_receita=cur.lastrowid,
         usuario_id=getattr(current_user, "id", None),
@@ -7112,6 +7116,10 @@ def _registrar_pagamento_mensalidade_partes(conn, cur, registro_id, id_academia,
             continue
         if data_ref is None or d > data_ref:
             data_ref = d
+    # Pagamento no futuro é erro de digitação (havia 17 mensalidades assim) e
+    # jogava a receita num mês que ainda não aconteceu.
+    if data_ref and data_ref > date.today():
+        return False, "A data do pagamento não pode ser no futuro."
 
     _ma_enriquecer_exibicao(ma, ma["aluno_id"], ma.get("id_academia") or id_academia, hoje=data_ref)
     valor_total = round(float(ma.get("valor_final") or ma.get("valor") or 0), 2)
