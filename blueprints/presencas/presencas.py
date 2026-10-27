@@ -1878,13 +1878,16 @@ def registro_presenca():
                         a["aluno_outra_turma"] = False
                 ids_alunos_turma = set()
             elif academia_id:
+                # Mesmo filtro da gravação: entra também o aluno vinculado a esta
+                # academia que tem outra como principal (treina nas duas).
+                _t, _p = filtro_alunos_da_academia(academia_id)
                 cursor.execute(
                     f"""SELECT a.id, a.nome, a.foto, g.faixa AS faixa_aluno FROM alunos a
                        {_join_faixa()}
                        LEFT JOIN aluno_turmas at ON at.aluno_id = a.id AND at.TurmaID = %s
-                       WHERE (at.TurmaID IS NOT NULL OR a.TurmaID = %s) AND a.id_academia = %s
+                       WHERE (at.TurmaID IS NOT NULL OR a.TurmaID = %s) AND {_t}
                        ORDER BY a.nome""",
-                    (turma_selecionada, turma_selecionada, academia_id),
+                    (turma_selecionada, turma_selecionada, *_p),
                 )
             else:
                 cursor.execute("SELECT id, nome, foto FROM alunos WHERE TurmaID=%s ORDER BY nome", (turma_selecionada,))
