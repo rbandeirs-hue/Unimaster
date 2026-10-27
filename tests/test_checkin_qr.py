@@ -169,6 +169,7 @@ def test_filho_ligado_so_pelo_cpf_do_responsavel():
         cur.execute("SELECT cpf FROM usuarios WHERE id = %s", (USUARIO,))
         cpf = cur.fetchone()["cpf"]
         formatado = f"{cpf[:3]}.{cpf[3:6]}.{cpf[6:9]}-{cpf[9:]}"
+        cur.execute("INSERT INTO academias (id, nome) VALUES (%s, 'ZZ Check-in CPF')", (FICTICIA,))
         cur.execute("""INSERT INTO turmas (Nome, DiasHorario, IdadeMin, IdadeMax, Professor, Classificacao,
                                            Capacidade, id_academia) VALUES ('T', '', 0, 99, '', '', 30, %s)""",
                     (FICTICIA,))
