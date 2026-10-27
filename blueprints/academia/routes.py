@@ -1677,6 +1677,17 @@ def dash():
             _c.close()
     except Exception:
         pass
+    # Alerta de evasão: quem parou de treinar ou está vindo menos.
+    dash_data["evasao"] = None
+    try:
+        from utils import evasao as _ev
+        _c = get_db_connection()
+        try:
+            dash_data["evasao"] = _ev.resumo(_c.cursor(dictionary=True), academia_id)
+        finally:
+            _c.close()
+    except Exception:
+        pass
     # O shell (base_academia.html) usa `academia` para montar o menu lateral e o
     # rodapé; sem ele o item "Professores" some da navegação.
     academia = next((a for a in academias if a.get("id") == academia_id), None)

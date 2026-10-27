@@ -140,6 +140,24 @@
 </section>
 
 {# -------------------------------------------------------------- financeiro #}
+{# Alerta de evasão (utils/evasao.py): só aparece quando há alguém em risco. #}
+{% if dash.evasao and dash.evasao.total %}
+<section class="dash-card">
+  <header class="dash-card__topo">
+    <h2 class="dash-card__titulo dash-card__titulo--alerta">
+      <i class="bi bi-person-dash-fill"></i> Alunos em risco de evasão
+    </h2>
+    <div class="dash-card__acoes">
+      <a class="dash-btn" href="{{ url_for('checkin.evasao', academia_id=academia_id) }}"><i class="bi bi-list-ul"></i> Ver e chamar no WhatsApp</a>
+    </div>
+  </header>
+  <p class="mb-0">
+    <strong>{{ dash.evasao.sumiu }}</strong> aluno{{ 's' if dash.evasao.sumiu != 1 }} que treinava{{ 'm' if dash.evasao.sumiu != 1 }} não {{ 'vieram' if dash.evasao.sumiu != 1 else 'veio' }} nos últimos 30 dias
+    e <strong>{{ dash.evasao.caindo }}</strong> {{ 'estão' if dash.evasao.caindo != 1 else 'está' }} vindo bem menos que antes.
+  </p>
+</section>
+{% endif %}
+
 <section class="dash-card">
   <header class="dash-card__topo">
     <h2 class="dash-card__titulo">Financeiro · {{ meses_nomes[mes-1] }} de {{ ano }}</h2>

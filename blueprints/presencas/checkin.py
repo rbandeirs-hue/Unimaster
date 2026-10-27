@@ -254,3 +254,32 @@ def ler(turma_id, codigo):
                                shell_sem_lateral=True)
     finally:
         conn.close()
+
+
+# ------------------------------------------------------------------ evasão
+@bp_checkin.route("/presencas/evasao")
+@login_required
+def evasao():
+    """Alunos que pararam de treinar ou estão vindo menos (utils/evasao.py)."""
+    from flask import session
+    from utils import evasao as ev
+    from utils.acesso_academia import academia_atual
+    if not (current_user.has_role("admin") or current_user.has_role("gestor_academia")
+            or current_user.has_role("professor")):
+        abort(403)
+    academia_id = request.args.get("academia_id", type=int) or academia_atual()
+    if not academia_id:
+        return redirect(url_for("painel.home"))
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        if not current_user.has_role("admin"):
+            cur.execute("SELECT 1 FROM usuarios_academias WHERE usuario_id = %s AND academia_id = %s",
+                        (current_user.id, academia_id))
+            if not cur.fetchone():
+                abort(403)
+        lista = ev.alunos_em_risco(cur, academia_id)
+    finally:
+        conn.close()
+    return render_template("presencas/evasao.html", lista=lista, academia_id=academia_id,
+                           janela=ev.JANELA, base_dias=ev.BASE_DIAS)

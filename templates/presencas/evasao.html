@@ -1,0 +1,57 @@
+{% extends "base_academia.html" %}
+{% set menu_ativo = 'presencas' %}
+{% block title %}Alunos em risco de evasão{% endblock %}
+{% block pagina_titulo %}Alunos em risco de evasão{% endblock %}
+{% block pagina_subtitulo %}Quem parou de treinar ou está vindo bem menos — fale com eles antes que cancelem.{% endblock %}
+{% block content %}
+<style>
+  .ev-lin { grid-template-columns: minmax(0, 2fr) 130px 120px 110px 150px; }
+  @media (max-width: 760px) { .ev-lin { grid-template-columns: minmax(0, 1fr) 120px; } .ev-col-x { display: none; } }
+  .ev-tag { display: inline-block; font-size: .75rem; font-weight: 700; padding: .1rem .5rem; border-radius: 999px; }
+  .ev-tag--sumiu { background: rgba(164, 19, 31, .12); color: #a4131f; }
+  .ev-tag--caindo { background: rgba(217, 119, 6, .14); color: #a35a00; }
+  .ev-wpp { display: inline-flex; align-items: center; gap: .35rem; height: 32px; padding: 0 .7rem; border-radius: 6px;
+            background: #25d366; color: #fff; font-size: .82rem; font-weight: 600; text-decoration: none; }
+</style>
+<div class="sh__faixa">
+  <div class="sh__faixa-item"><span class="sh__faixa-rotulo">Sumiram</span>
+    <span class="sh__faixa-valor">{{ lista|selectattr('nivel', 'equalto', 'sumiu')|list|length }}</span>
+    <span class="lst-sub">Treinavam e não vieram nos últimos {{ janela }} dias</span></div>
+  <div class="sh__faixa-item"><span class="sh__faixa-rotulo">Vindo menos</span>
+    <span class="sh__faixa-valor">{{ lista|selectattr('nivel', 'equalto', 'caindo')|list|length }}</span>
+    <span class="lst-sub">Metade ou menos do que costumavam vir</span></div>
+</div>
+
+<section class="lst-quadro">
+  <div class="lst-rolagem"><div class="lst-largura" style="--lst-min:620px">
+    <div class="lst-linha ev-lin lst-cab">
+      <div>Aluno</div><div class="ev-col-x">Situação</div><div class="ev-col-x">Últimos {{ janela }} dias</div>
+      <div class="ev-col-x">Último treino</div><div class="lst-fim">Contato</div>
+    </div>
+    {% for r in lista %}
+    {% set _primeiro = (r.responsavel_nome or r.nome).split()[0] %}
+    {% set _msg = 'Olá, ' ~ _primeiro ~ '! Sentimos falta ' ~ ('do(a) ' ~ r.nome.split()[0] if r.responsavel_nome else 'de você') ~ ' nos treinos. Está tudo bem? Estamos te esperando no tatame! 🥋' %}
+    <div class="lst-linha ev-lin lst-item">
+      <div class="lst-corta">
+        <a class="lst-nome" href="{{ url_for('alunos.ficha_aluno', aluno_id=r.id) }}">{{ r.nome }}</a>
+        <span class="lst-sub">{{ r.responsavel_nome and ('Resp.: ' ~ r.responsavel_nome) or '' }}</span>
+      </div>
+      <div class="ev-col-x"><span class="ev-tag ev-tag--{{ r.nivel }}">{{ 'Sumiu' if r.nivel == 'sumiu' else 'Vindo menos' }}</span></div>
+      <div class="ev-col-x">{{ r.ult30 }} de ~{{ r.esperado|round|int }}</div>
+      <div class="ev-col-x">{{ r.ultima|data_br if r.ultima else '—' }}{% if r.dias_sem_vir %}<span class="lst-sub">há {{ r.dias_sem_vir }} dias</span>{% endif %}</div>
+      <div class="lst-fim">
+        {% if r.whatsapp %}
+        <a class="ev-wpp" target="_blank" rel="noopener" href="https://wa.me/{{ r.whatsapp }}?text={{ _msg|urlencode }}"><i class="bi bi-whatsapp"></i> Chamar</a>
+        {% else %}<span class="lst-sub">sem telefone</span>{% endif %}
+      </div>
+    </div>
+    {% else %}
+    <p class="lst-vazio">Nenhum aluno em risco. Todos que treinavam continuam vindo — ou a academia ainda não registra a chamada no sistema.</p>
+    {% endfor %}
+  </div></div>
+</section>
+<p class="lst-sub mt-2">
+  Compara as presenças dos últimos {{ janela }} dias com a média dos {{ base_dias }} dias anteriores, só nas turmas desta academia.
+  Depende da chamada (ou do check-in por QR) estar sendo registrada.
+</p>
+{% endblock %}
