@@ -1,6 +1,14 @@
 import os
 import mysql.connector
 
+# Credenciais só no .env (fora do git). Carregado aqui para valer também em
+# scripts e migrações que importam config sem passar pelo app.
+try:
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
+except ImportError:
+    pass
+
 
 class DatabaseUnavailableError(Exception):
     """Compatibilidade com blueprints de competição quando o banco não responde."""
@@ -20,11 +28,11 @@ DB_CONNECT_TIMEOUT = int(os.environ.get("DB_CONNECT_TIMEOUT", "5"))
 
 
 def get_db_connection():
-    """Conexão MySQL — usa variáveis de ambiente ou fallback."""
+    """Conexão MySQL — credenciais do .env (DB_HOST, DB_USER, DB_PASSWORD, DB_NAME)."""
     return mysql.connector.connect(
-        host=os.environ.get("DB_HOST", "177.153.51.151"),
+        host=os.environ.get("DB_HOST", "127.0.0.1"),
         user=os.environ.get("DB_USER", "unimaster"),
-        password=os.environ.get("DB_PASSWORD", "Un1m@ster_2024"),
+        password=os.environ.get("DB_PASSWORD", ""),
         database=os.environ.get("DB_NAME", "unimaster"),
         connection_timeout=DB_CONNECT_TIMEOUT,
     )
