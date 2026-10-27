@@ -1,0 +1,108 @@
+{# =========================================================================
+   Navegação do financeiro — 5 grupos com abas de segundo nível.
+
+   Eram 18 abas numa linha só: no notebook os rótulos saíam cortados e no
+   celular cabiam duas e meia. Agora o dia a dia fica nos quatro primeiros
+   grupos e a configuração, usada raramente, sai da frente.
+
+   Usado por painel/_base.html e pelas telas que têm layout próprio
+   (Mensalidades por aluno). Precisa de `fin_aba` e `academia_id`.
+   ========================================================================= #}
+{% set _a = {'academia_id': academia_id} if academia_id else {} %}
+{% set _grupos = [
+  ('visao', 'Visão geral', 'bi-speedometer2', [
+      ('dashboard',    'Painel',               'financeiro_painel.dashboard'),
+      ('fluxo',        'Entradas x Saídas',    'financeiro_painel.fluxo')]),
+  ('mensalidades', 'Mensalidades', 'bi-calendar-check', [
+      ('por_aluno',    'Por aluno',            'financeiro.mensalidades_alunos'),
+      ('mensalidades', 'Em aberto do mês',     'financeiro_painel.mensalidades'),
+      ('cobrancas',    'Gerar cobranças',      'financeiro_painel.cobrancas'),
+      ('historico',    'Histórico',            'financeiro_painel.historico')]),
+  ('cobranca', 'Cobrança', 'bi-whatsapp', [
+      ('monitor',      'Monitor',              'financeiro_painel.monitor'),
+      ('regua',        'Régua automática',     'financeiro_painel.regua'),
+      ('familias',     'Famílias',             'financeiro_painel.familias')]),
+  ('caixa', 'Caixa', 'bi-cash-stack', [
+      ('receitas',     'Entradas',             'financeiro.lista_receitas'),
+      ('despesas',     'Saídas',               'financeiro.lista_despesas'),
+      ('contas',       'Contas',               'financeiro_painel.contas'),
+      ('extrato',      'Extrato',              'financeiro_painel.extrato')]),
+  ('config', 'Configurações', 'bi-sliders', [
+      ('planos',       'Planos',               'financeiro_painel.planos'),
+      ('contratos',    'Contratos',            'financeiro_painel.contratos'),
+      ('descontos',    'Descontos',            'financeiro_painel.descontos'),
+      ('formas',       'Formas de pagamento',  'financeiro_painel.formas'),
+      ('alunos',       'Valor por aluno',      'financeiro_painel.alunos'),
+      ('controle',     'Nível de controle',    'financeiro_painel.controle')]),
+] %}
+{% set _aba = fin_aba or ativo %}
+{% set _ns = namespace(grupo=_grupos[0]) %}
+{% for g in _grupos %}{% for chave, r, e in g[3] %}{% if chave == _aba %}{% set _ns.grupo = g %}{% endif %}{% endfor %}{% endfor %}
+
+<nav class="fin-grupos" aria-label="Áreas do financeiro">
+  {% for g in _grupos %}
+  <a href="{{ url_for(g[3][0][2], **_a) }}" class="fin-grupo {% if g[0] == _ns.grupo[0] %}is-ativo{% endif %}"
+     {% if g[0] == _ns.grupo[0] %}aria-current="true"{% endif %}>
+    <i class="bi {{ g[2] }}" aria-hidden="true"></i><span>{{ g[1] }}</span>
+  </a>
+  {% endfor %}
+</nav>
+
+<div class="fin-abas-caixa" data-fin-abas>
+  <button type="button" class="fin-passador fin-passador--esq" data-fin-passar="-1"
+          aria-label="Ver abas anteriores" hidden>
+    <i class="bi bi-chevron-left"></i>
+  </button>
+  <nav class="lst-abas fin-abas" data-fin-tira aria-label="{{ _ns.grupo[1] }}">
+  {% for chave, rotulo, endpoint in _ns.grupo[3] %}
+  <a href="{{ url_for(endpoint, **_a) }}" class="lst-aba {% if _aba == chave %}is-ativa{% endif %}"
+     {% if _aba == chave %}aria-current="page"{% endif %}>{{ rotulo }}</a>
+  {% endfor %}
+  </nav>
+  <button type="button" class="fin-passador fin-passador--dir" data-fin-passar="1"
+          aria-label="Ver mais abas" hidden>
+    <i class="bi bi-chevron-right"></i>
+  </button>
+</div>
+
+<script>
+(function () {
+  var caixa = document.querySelector('[data-fin-abas]');
+  if (!caixa) return;
+  var tira = caixa.querySelector('[data-fin-tira]');
+  var botoes = caixa.querySelectorAll('[data-fin-passar]');
+
+  function atualizar() {
+    // 1px de folga: larguras fracionárias fazem scrollWidth passar o
+    // clientWidth por uma fração mesmo quando cabe tudo.
+    var passa = tira.scrollWidth - tira.clientWidth > 1;
+    var fim = tira.scrollLeft + tira.clientWidth >= tira.scrollWidth - 1;
+    botoes.forEach(function (b) {
+      var paraDireita = b.dataset.finPassar === '1';
+      b.hidden = !passa;
+      b.disabled = paraDireita ? fim : tira.scrollLeft <= 0;
+    });
+    caixa.classList.toggle('tem-passador', passa);
+  }
+
+  botoes.forEach(function (b) {
+    b.addEventListener('click', function () {
+      var salto = Math.max(160, Math.round(tira.clientWidth * 0.7));
+      var suave = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      tira.scrollBy({ left: salto * Number(b.dataset.finPassar),
+                      behavior: suave ? 'smooth' : 'auto' });
+    });
+  });
+
+  tira.addEventListener('scroll', atualizar, { passive: true });
+  window.addEventListener('resize', atualizar);
+
+  // No celular a linha de grupos também rola: traz o grupo atual para a vista.
+  var grupo = document.querySelector('.fin-grupo.is-ativo');
+  if (grupo) grupo.scrollIntoView({ inline: 'center', block: 'nearest' });
+
+  var ativa = tira.querySelector('.lst-aba.is-ativa');
+  if (ativa) ativa.scrollIntoView({ inline: 'center', block: 'nearest' });
+  atualizar();
+})();
+</script>

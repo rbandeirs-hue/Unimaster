@@ -3,6 +3,8 @@
 {% from "financeiro/_modal_alterar_vencimento.html" import modal_alterar_vencimento with context %}
 {% from "financeiro/_modal_trocar_pacote.html" import modal_trocar_pacote with context %}
 {% set menu_ativo = 'financeiro' %}
+{# Dentro da navegação do financeiro: grupo Mensalidades, aba "Por aluno". #}
+{% set fin_aba = 'por_aluno' %}
 {% block title %}Mensalidades por aluno{% endblock %}
 
 {# Badge da forma de pagamento recorrente do aluno (cartão/PIX recorrente) #}
@@ -80,7 +82,7 @@
 {% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/painel/financeiro.css') }}">
+<link rel="stylesheet" href="{{ asset('css/painel/financeiro.css') }}">
 <style>
   /* Uma marcação só para celular e desktop: cada coluna some junto com a sua
      célula, senão os títulos se encavalam. Os limites medem a JANELA — o
@@ -184,14 +186,11 @@
     <i class="bi bi-arrow-left"></i>
     <span class="sh__btn__nome">Voltar para {{ (aluno_filtro_nome or 'o aluno').split()[0] }}</span>
   </a>
-  {% else %}
-  <a href="{{ url_for('financeiro.painel_mensalidades', **_a) }}" class="sh__btn">
-    <i class="bi bi-arrow-left"></i> Voltar
-  </a>
   {% endif %}
 {% endblock %}
 
 {% block content %}
+{% include "financeiro/painel/_nav.html" %}
 {% set _base = {'academia_id': academia_id, 'mes': mes or '', 'ano': ano, 'busca': busca or ''} %}
 
 <div class="sh__faixa">
