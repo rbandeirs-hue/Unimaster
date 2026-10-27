@@ -3351,13 +3351,19 @@ def _baixar_cobranca_paga(origem, registro_id, valor_pago, gateway_nome):
     Confirma o status primeiro (commit) e lança a receita em transação separada,
     de modo que falha na receita não desfaz a baixa.
     """
+    # Todo aviso de pagamento fica registrado com o que aconteceu: é a trilha
+    # do lado do gateway para a tela Caixa › Conferência.
+    from utils import conferencia_gateway as _cg
+    _ev = _cg.registrar(gateway_nome, origem, registro_id, valor_pago)
+
     # Cobrança familiar: uma só entrada de dinheiro que quita as mensalidades de
     # todos os irmãos. A baixa e o rateio das receitas ficam no módulo dela.
     if origem == "grupo":
         try:
             from utils.cobranca_familia import baixar_grupo
-            baixar_grupo(registro_id, valor_pago, gateway_nome)
+            _cg.resultado(_ev, "baixado" if baixar_grupo(registro_id, valor_pago, gateway_nome) else "erro")
         except Exception as e:
+            _cg.resultado(_ev, "erro", str(e))
             current_app.logger.error(f"Baixa {gateway_nome} do grupo {registro_id} falhou: {e}",
                                      exc_info=True)
         return
@@ -3379,6 +3385,7 @@ def _baixar_cobranca_paga(origem, registro_id, valor_pago, gateway_nome):
             )
         rec = cur.fetchone()
         if not rec or rec["status"] == "pago":
+            _cg.resultado(_ev, "ja_pago" if rec else "nao_encontrado")
             return
         vp = valor_pago or rec["valor"]
         if origem == "mensalidade":
@@ -3413,11 +3420,14 @@ def _baixar_cobranca_paga(origem, registro_id, valor_pago, gateway_nome):
                     cur, rec["id"], vp, date.today(), rec["id_academia"],
                     f"Cobrança avulsa ({gateway_nome})")
             conn.commit()
+            _cg.resultado(_ev, "baixado")
         except Exception as e2:
             conn.rollback()
+            _cg.resultado(_ev, "baixado", f"baixa OK, receita falhou: {e2}")
             current_app.logger.error(f"Webhook {gateway_nome}: baixa OK, receita falhou ({origem} {registro_id}): {e2}")
     except Exception as e:
         conn.rollback()
+        _cg.resultado(_ev, "erro", str(e))
         current_app.logger.error(f"Baixa {gateway_nome} erro ({origem} {registro_id}): {e}")
     finally:
         conn.close()
@@ -3883,6 +3893,12 @@ def webhook_infinitepay():
         "Webhook InfinitePay RECUSADO (sem token na URL e sem confirmação na API): "
         "order_nsu=%r slug=%r transaction_nsu=%r corpo=%s — nenhuma baixa foi dada.",
         order_nsu, slug or None, transacao or None, data)
+    # Fica na conferência (Caixa › Conferência) para alguém olhar no app da
+    # InfinitePay: pode ser um pagamento real que não deu baixa.
+    if origem in ("mensalidade", "avulsa", "grupo"):
+        from utils import conferencia_gateway as _cg
+        _cg.registrar("InfinitePay", origem, rid, None, resultado="erro",
+                      detalhe="Aviso recusado: sem token na URL e sem confirmação na API.")
     return jsonify({"ok": True})
 
 

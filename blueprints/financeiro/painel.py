@@ -2225,6 +2225,26 @@ def receita_forma(receita_id):
                   entradas=request.form.get("entradas") or None)
 
 
+@bp_financeiro_painel.route("/conferencia")
+@login_required
+def conferencia():
+    """O que não bate entre o gateway, as cobranças e o caixa (utils/conferencia_gateway.py)."""
+    from utils import conferencia_gateway as cg
+    academia_id = _get_academia_id()
+    if not academia_id:
+        return _sem_academia()
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        dados = cg.pendencias(cur, academia_id)
+        conn.commit()   # CREATE TABLE IF NOT EXISTS na primeira vez
+    finally:
+        conn.close()
+    ctx = _ctx_base(academia_id)
+    ctx.update(fin_aba="conferencia", dias_link_velho=cg.DIAS_LINK_VELHO, **dados)
+    return render_template("financeiro/painel/conferencia.html", **ctx)
+
+
 @bp_financeiro_painel.route("/exportar-contador")
 @login_required
 def exportar_contador():

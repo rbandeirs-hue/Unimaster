@@ -1,0 +1,123 @@
+{% extends "financeiro/painel/_base.html" %}
+{% set fin_aba = 'conferencia' %}
+{% block title %}Conferência — Financeiro{% endblock %}
+{% block pagina_titulo %}Conferência{% endblock %}
+{% block pagina_subtitulo %}O que não bate entre o gateway de pagamento, as cobranças e o caixa — para resolver antes de fechar o mês.{% endblock %}
+
+{% block fin_css %}
+<style>
+  .cf-ok { display: flex; align-items: center; gap: .6rem; padding: 1rem 1.2rem; border-radius: 10px;
+           background: rgba(22, 163, 74, .08); color: #15803d; font-weight: 600; margin-bottom: 1rem; }
+  .cf-bloco { margin-bottom: 1rem; }
+  .cf-bloco .lst-quadro__titulo { display: flex; align-items: center; gap: .5rem; }
+  .cf-n { font-size: .75rem; font-weight: 700; padding: .1rem .55rem; border-radius: 999px;
+          background: rgba(164, 19, 31, .12); color: #a4131f; }
+  .cf-n--leve { background: rgba(217, 119, 6, .14); color: #a35a00; }
+  .cf-ajuda { padding: 0 1.25rem .8rem; margin: 0; font-size: .85rem; color: var(--sh-ink-soft); }
+  .cf-lin { grid-template-columns: 110px minmax(0, 2fr) minmax(0, 1.2fr) 120px; }
+  @media (max-width: 620px) { .cf-lin { grid-template-columns: minmax(0, 1fr) 110px; } .cf-x { display: none; } }
+</style>
+{% endblock %}
+
+{% macro bloco(titulo, itens, ajuda, leve=false) %}
+<section class="lst-quadro cf-bloco">
+  <header class="lst-quadro__topo">
+    <h2 class="lst-quadro__titulo">{{ titulo }} <span class="cf-n {{ 'cf-n--leve' if leve }}">{{ itens|length }}</span></h2>
+  </header>
+  <p class="cf-ajuda">{{ ajuda }}</p>
+  <div class="lst-rolagem"><div class="lst-largura" style="--lst-min:460px">
+    {{ caller() }}
+  </div></div>
+</section>
+{% endmacro %}
+
+{% block fin_conteudo %}
+{% if not total %}
+<div class="cf-ok"><i class="bi bi-check-circle-fill"></i> Tudo confere: nenhum aviso do gateway sem baixa, nenhum pagamento fora do caixa e nenhum link sobrando.</div>
+{% endif %}
+
+{% if aviso_sem_baixa %}
+{% call bloco("Gateway avisou pagamento e a cobrança não está paga", aviso_sem_baixa,
+              "O gateway mandou o aviso, mas a baixa não aconteceu (erro, cobrança não encontrada ou aviso recusado). Confira no app do gateway e, se o pagamento for real, registre a baixa manualmente.") %}
+  {% for e in aviso_sem_baixa %}
+  <div class="lst-linha cf-lin lst-item">
+    <div>{{ e.recebido_em.strftime('%d/%m %H:%M') }}</div>
+    <div class="lst-corta"><span class="lst-nome">{{ e.aluno or (e.origem ~ ' ' ~ e.registro_id) }}</span>
+      <span class="lst-sub">{{ e.gateway }} · {{ e.origem }} {{ e.registro_id }} · {{ e.resultado }}{% if e.detalhe %} · {{ e.detalhe }}{% endif %}</span></div>
+    <div class="cf-x lst-sub">Hoje: {{ e.status_atual or '—' }}</div>
+    <div class="lst-num">{{ fmt_moeda(e.valor) if e.valor else '—' }}</div>
+  </div>
+  {% endfor %}
+{% endcall %}
+{% endif %}
+
+{% if pago_sem_receita %}
+{% call bloco("Paga e sem entrada registrada", pago_sem_receita,
+              "A cobrança está como paga, mas não há receita: o dinheiro não aparece nas Entradas nem no caixa. Desfaça e refaça a baixa pela tela de mensalidades.") %}
+  {% for r in pago_sem_receita %}
+  <div class="lst-linha cf-lin lst-item">
+    <div>{{ r.data_pagamento|data_br if r.data_pagamento else '—' }}</div>
+    <div class="lst-corta"><span class="lst-nome">{{ r.aluno }}</span><span class="lst-sub">{{ r.origem }} {{ r.id }}{% if r.gateway %} · {{ r.gateway }}{% endif %}</span></div>
+    <div class="cf-x"></div>
+    <div class="lst-num">{{ fmt_moeda(r.valor) }}</div>
+  </div>
+  {% endfor %}
+{% endcall %}
+{% endif %}
+
+{% if receita_fora_caixa %}
+{% call bloco("Entrada fora do caixa", receita_fora_caixa,
+              "Receita sem lançamento no caixa — some do Extrato e dos saldos. Rode a importação (migrations/executar_receitas_no_caixa.py) ou cadastre a conta da forma de pagamento.") %}
+  {% for r in receita_fora_caixa %}
+  <div class="lst-linha cf-lin lst-item">
+    <div>{{ r.data|data_br }}</div>
+    <div class="lst-corta"><span class="lst-nome">{{ r.descricao }}</span></div>
+    <div class="cf-x"></div>
+    <div class="lst-num">{{ fmt_moeda(r.valor) }}</div>
+  </div>
+  {% endfor %}
+{% endcall %}
+{% endif %}
+
+{% if familia_com_link_individual %}
+{% call bloco("Cobrança familiar com link individual ainda ativo", familia_com_link_individual,
+              "A mensalidade está na cobrança única da família, mas o link individual dela continua valendo: a família pode pagar duas vezes. Avise o responsável para usar só o link da família.", true) %}
+  {% for r in familia_com_link_individual %}
+  <div class="lst-linha cf-lin lst-item">
+    <div>{{ r.data_vencimento|data_br }}</div>
+    <div class="lst-corta"><span class="lst-nome">{{ r.aluno }}</span><span class="lst-sub">Família de {{ r.responsavel_nome }} · grupo {{ r.grupo_id }}</span></div>
+    <div class="cf-x"></div>
+    <div class="lst-num">{{ fmt_moeda(r.valor) }}</div>
+  </div>
+  {% endfor %}
+{% endcall %}
+{% endif %}
+
+{% if link_em_cancelada %}
+{% call bloco("Cobrança cancelada com link de pagamento", link_em_cancelada,
+              "A cobrança foi cancelada, mas o link do gateway foi gerado antes. Se o aluno ainda tiver o link, ele consegue pagar uma cobrança que não existe mais.", true) %}
+  {% for r in link_em_cancelada %}
+  <div class="lst-linha cf-lin lst-item">
+    <div>{{ r.data_vencimento|data_br if r.data_vencimento else '—' }}</div>
+    <div class="lst-corta"><span class="lst-nome">{{ r.aluno }}</span><span class="lst-sub">mensalidade {{ r.id }} · {{ r.gateway or '' }}</span></div>
+    <div class="cf-x"></div>
+    <div class="lst-num">{{ fmt_moeda(r.valor) }}</div>
+  </div>
+  {% endfor %}
+{% endcall %}
+{% endif %}
+
+{% if link_velho_em_aberto %}
+{% call bloco("Em aberto há mais de " ~ dias_link_velho ~ " dias, com link do gateway", link_velho_em_aberto,
+              "O gateway não deixa o sistema perguntar se um link antigo foi pago. Confira estes no app do gateway: se algum foi pago, dê a baixa; se não, cobre ou cancele.", true) %}
+  {% for r in link_velho_em_aberto %}
+  <div class="lst-linha cf-lin lst-item">
+    <div>{{ r.data_vencimento|data_br }}</div>
+    <div class="lst-corta"><span class="lst-nome">{{ r.aluno }}</span><span class="lst-sub">mensalidade {{ r.id }} · {{ r.gateway or '' }}</span></div>
+    <div class="cf-x lst-sub">{{ r.dias }} dias</div>
+    <div class="lst-num">{{ fmt_moeda(r.valor) }}</div>
+  </div>
+  {% endfor %}
+{% endcall %}
+{% endif %}
+{% endblock %}
