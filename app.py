@@ -1027,6 +1027,20 @@ def filtro_moeda_br(valor):
     return f"{n:,.2f}".replace(",", "\x00").replace(".", ",").replace("\x00", ".")
 
 
+@app.template_filter("brl")
+def filtro_brl(valor):
+    """'R$ 1.234,56', com o sinal antes do símbolo: '−R$ 2.800,00'.
+
+    Para valor exibido. Campo de formulário e data-* lidos por JavaScript
+    continuam com '%.2f' (ponto decimal), que é o que o código espera."""
+    try:
+        n = float(valor or 0)
+    except (TypeError, ValueError):
+        n = 0.0
+    txt = filtro_moeda_br(abs(n))
+    return ("−R$ " if n < -0.004 else "R$ ") + txt
+
+
 @app.template_filter("telefone_br")
 def filtro_telefone_br(valor):
     """Formata telefone: (11) 99999-9999 ou (11) 3333-3333."""

@@ -25,7 +25,7 @@
                     <select name="desconto_id" class="u-campo__controle" required aria-label="Desconto">
                         <option value="">Selecione...</option>
                         {% for d in descontos_disponiveis %}
-                        <option value="{{ d.id }}">{{ d.nome }} — {% if d.tipo == 'percentual' %}{{ "%.0f"|format(d.valor|float) }}%{% else %}R$ {{ "%.2f"|format(d.valor|float) }}{% endif %}</option>
+                        <option value="{{ d.id }}">{{ d.nome }} — {% if d.tipo == 'percentual' %}{{ "%.0f"|format(d.valor|float) }}%{% else %}{{ (d.valor|float)|brl }}{% endif %}</option>
                         {% endfor %}
                     </select>
                 </div>
@@ -72,7 +72,7 @@
                             {% if v.tipo == 'percentual' %}
                             {{ "%.0f"|format(v.desconto_valor|float) }}%
                             {% else %}
-                            R$ {{ "%.2f"|format(v.desconto_valor|float) }}
+                            {{ (v.desconto_valor|float)|brl }}
                             {% endif %}
                             {% if v.get('tipo_vigencia') == 'integral' %}
                             · <span class="badge bg-info">Integral</span>
@@ -114,7 +114,7 @@
                                 {% if v.tipo == 'percentual' %}
                                 {{ "%.0f"|format(v.desconto_valor|float) }}%
                                 {% else %}
-                                R$ {{ "%.2f"|format(v.desconto_valor|float) }}
+                                {{ (v.desconto_valor|float)|brl }}
                                 {% endif %}
                             </td>
                             <td>

@@ -294,7 +294,9 @@ def fmt_moeda(v):
         n = float(v or 0)
     except (TypeError, ValueError):
         n = 0.0
-    return "R$ " + f"{n:,.2f}".replace(",", "~").replace(".", ",").replace("~", ".")
+    # Sinal antes do símbolo: "−R$ 2.800,00", não "R$ -2.800,00".
+    txt = f"{abs(n):,.2f}".replace(",", "~").replace(".", ",").replace("~", ".")
+    return ("−R$ " if n < -0.004 else "R$ ") + txt
 
 
 def fmt_mes(ano, mes):

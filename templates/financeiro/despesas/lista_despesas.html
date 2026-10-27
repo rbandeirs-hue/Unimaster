@@ -41,17 +41,17 @@
 <div class="sh__faixa">
   <div class="sh__faixa-item">
     <span class="sh__faixa-rotulo">Total do mês</span>
-    <span class="sh__faixa-valor fin-valor">R$ {{ '%.2f'|format(total_mes or 0)|replace('.', ',') }}</span>
+    <span class="sh__faixa-valor fin-valor">{{ (total_mes or 0)|brl }}</span>
     <span class="lst-sub">{{ despesas|length }} despesa{{ 's' if despesas|length != 1 }} em {{ '%02d'|format(mes) }}/{{ ano }}</span>
   </div>
   <div class="sh__faixa-item">
     <span class="sh__faixa-rotulo">Pago</span>
-    <span class="sh__faixa-valor fin-valor fin-valor--saida">R$ {{ '%.2f'|format(total_pago or 0)|replace('.', ',') }}</span>
+    <span class="sh__faixa-valor fin-valor fin-valor--saida">{{ (total_pago or 0)|brl }}</span>
     <span class="lst-sub">Já saiu do caixa</span>
   </div>
   <div class="sh__faixa-item">
     <span class="sh__faixa-rotulo">A pagar</span>
-    <span class="sh__faixa-valor fin-valor">R$ {{ '%.2f'|format(total_a_pagar or 0)|replace('.', ',') }}</span>
+    <span class="sh__faixa-valor fin-valor">{{ (total_a_pagar or 0)|brl }}</span>
     <span class="lst-sub">{% if n_vencidas %}{{ n_vencidas }} vencida{{ 's' if n_vencidas != 1 }}{% else %}Nenhuma vencida{% endif %}</span>
   </div>
 </div>
@@ -131,8 +131,8 @@
           {% endif %}
         </div>
         <div class="lst-num fin-valor fin-valor--saida">
-          R$ {{ '%.2f'|format((d.valor_pago if d.paga else d.valor) or 0)|replace('.', ',') }}
-          {% if d.paga and d.valor_pago != d.valor %}<span class="lst-sub">de R$ {{ '%.2f'|format(d.valor or 0)|replace('.', ',') }}</span>{% endif %}
+          {{ ((d.valor_pago if d.paga else d.valor) or 0)|brl }}
+          {% if d.paga and d.valor_pago != d.valor %}<span class="lst-sub">de {{ (d.valor or 0)|brl }}</span>{% endif %}
         </div>
         <div class="lst-fim col-acoes">
           <div class="lst-acoes">

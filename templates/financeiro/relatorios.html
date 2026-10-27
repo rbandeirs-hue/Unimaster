@@ -78,25 +78,25 @@
   <div class="row g-3 mb-4">
     <div class="col-6 col-lg-3">
       <div class="card shadow-sm border-success h-100"><div class="card-body py-3 text-center">
-        <div class="h5 fw-bold text-success mb-0">R$ {{ "%.2f"|format(rel.receitas_total) }}</div>
+        <div class="h5 fw-bold text-success mb-0">{{ (rel.receitas_total)|brl }}</div>
         <div class="small text-muted">Receitas</div>
       </div></div>
     </div>
     <div class="col-6 col-lg-3">
       <div class="card shadow-sm border-danger h-100"><div class="card-body py-3 text-center">
-        <div class="h5 fw-bold text-danger mb-0">R$ {{ "%.2f"|format(rel.despesas_total) }}</div>
+        <div class="h5 fw-bold text-danger mb-0">{{ (rel.despesas_total)|brl }}</div>
         <div class="small text-muted">Despesas</div>
       </div></div>
     </div>
     <div class="col-6 col-lg-3">
       <div class="card shadow-sm {{ 'border-success' if rel.saldo >= 0 else 'border-warning' }} h-100"><div class="card-body py-3 text-center">
-        <div class="h5 fw-bold {{ 'text-success' if rel.saldo >= 0 else 'text-warning' }} mb-0">R$ {{ "%.2f"|format(rel.saldo) }}</div>
+        <div class="h5 fw-bold {{ 'text-success' if rel.saldo >= 0 else 'text-warning' }} mb-0">{{ (rel.saldo)|brl }}</div>
         <div class="small text-muted">Saldo (DRE)</div>
       </div></div>
     </div>
     <div class="col-6 col-lg-3">
       <div class="card shadow-sm border-warning h-100"><div class="card-body py-3 text-center">
-        <div class="h5 fw-bold text-warning mb-0">R$ {{ "%.2f"|format(rel.inadimplencia_total) }}</div>
+        <div class="h5 fw-bold text-warning mb-0">{{ (rel.inadimplencia_total)|brl }}</div>
         <div class="small text-muted">Em atraso ({{ rel.inadimplentes|length }} aluno(s))</div>
       </div></div>
     </div>
@@ -115,10 +115,10 @@
           <thead><tr><th>Categoria</th><th class="text-center">Qtd</th><th class="text-end">Total</th></tr></thead>
           <tbody>
             {% for r in rel.receitas_cat %}
-            <tr><td>{{ r.cat }}</td><td class="text-center">{{ r.qtd }}</td><td class="text-end text-success fw-semibold">R$ {{ "%.2f"|format(r.total) }}</td></tr>
+            <tr><td>{{ r.cat }}</td><td class="text-center">{{ r.qtd }}</td><td class="text-end text-success fw-semibold">{{ (r.total)|brl }}</td></tr>
             {% endfor %}
           </tbody>
-          <tfoot><tr class="fw-bold"><td>Total</td><td></td><td class="text-end">R$ {{ "%.2f"|format(rel.receitas_total) }}</td></tr></tfoot>
+          <tfoot><tr class="fw-bold"><td>Total</td><td></td><td class="text-end">{{ (rel.receitas_total)|brl }}</td></tr></tfoot>
         </table>
         {% else %}<p class="text-muted mb-0 small">Sem receitas no período.</p>{% endif %}
       </div></div>
@@ -136,10 +136,10 @@
           <thead><tr><th>Categoria</th><th class="text-center">Qtd</th><th class="text-end">Total</th></tr></thead>
           <tbody>
             {% for r in rel.despesas_cat %}
-            <tr><td>{{ r.cat }}</td><td class="text-center">{{ r.qtd }}</td><td class="text-end text-danger fw-semibold">R$ {{ "%.2f"|format(r.total) }}</td></tr>
+            <tr><td>{{ r.cat }}</td><td class="text-center">{{ r.qtd }}</td><td class="text-end text-danger fw-semibold">{{ (r.total)|brl }}</td></tr>
             {% endfor %}
           </tbody>
-          <tfoot><tr class="fw-bold"><td>Total</td><td></td><td class="text-end">R$ {{ "%.2f"|format(rel.despesas_total) }}</td></tr></tfoot>
+          <tfoot><tr class="fw-bold"><td>Total</td><td></td><td class="text-end">{{ (rel.despesas_total)|brl }}</td></tr></tfoot>
         </table>
         {% else %}<p class="text-muted mb-0 small">Sem despesas no período.</p>{% endif %}
       </div></div>
@@ -157,7 +157,7 @@
         <tr>
           <td>{{ m.modalidade }}</td>
           <td class="text-center">{{ m.qtd }}</td>
-          <td class="text-end text-success fw-semibold">R$ {{ "%.2f"|format(m.total) }}</td>
+          <td class="text-end text-success fw-semibold">{{ (m.total)|brl }}</td>
         </tr>
         {% endfor %}
       </tbody>
@@ -181,7 +181,7 @@
         <thead><tr><th>Aluno</th><th class="text-center">Cobranças</th><th class="text-end">Total em atraso</th><th>Vencimento + antigo</th></tr></thead>
         <tbody>
           {% for i in rel.inadimplentes %}
-          <tr><td>{{ i.nome }}</td><td class="text-center">{{ i.qtd }}</td><td class="text-end text-danger fw-semibold">R$ {{ "%.2f"|format(i.total) }}</td><td>{{ i.venc|data_br if i.venc else '-' }}</td></tr>
+          <tr><td>{{ i.nome }}</td><td class="text-center">{{ i.qtd }}</td><td class="text-end text-danger fw-semibold">{{ (i.total)|brl }}</td><td>{{ i.venc|data_br if i.venc else '-' }}</td></tr>
           {% endfor %}
         </tbody>
       </table>

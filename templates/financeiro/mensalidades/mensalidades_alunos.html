@@ -38,7 +38,7 @@
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body text-center">
-          {% if valor %}<p class="mb-2">Valor: <strong>R$ {{ "%.2f"|format(valor|float) }}</strong></p>{% endif %}
+          {% if valor %}<p class="mb-2">Valor: <strong>{{ (valor|float)|brl }}</strong></p>{% endif %}
           {% if qrcode %}
           <img src="data:image/png;base64,{{ qrcode }}" alt="QR Code PIX" class="img-fluid mb-3" style="max-width:260px">
           {% endif %}
@@ -330,23 +330,23 @@
         <div class="lst-num">
           {% if m.tem_desconto %}
           <span class="fin-val">
-            <span class="fin-val__final">R$ {{ "%.2f"|format(m.valor_final or 0) }}</span>
-            <span class="lst-sub">integral R$ {{ "%.2f"|format(m.valor_integral or 0) }}</span>
+            <span class="fin-val__final">{{ (m.valor_final or 0)|brl }}</span>
+            <span class="lst-sub">integral {{ (m.valor_integral or 0)|brl }}</span>
             <span class="lst-sub fin-val__desconto">
-              −R$ {{ "%.2f"|format(m.valor_desconto or 0) }}{% if m.desconto_nome %} {{ m.desconto_nome }}{% endif %}
+              −{{ (m.valor_desconto or 0)|brl }}{% if m.desconto_nome %} {{ m.desconto_nome }}{% endif %}
             </span>
             {% if m.tem_juros %}
-            <span class="lst-sub fin-val__juros">+ multa R$ {{ "%.2f"|format(m.multa_val or 0) }} e juros R$ {{ "%.2f"|format(m.juros_val or 0) }}</span>
+            <span class="lst-sub fin-val__juros">+ multa {{ (m.multa_val or 0)|brl }} e juros {{ (m.juros_val or 0)|brl }}</span>
             {% endif %}
           </span>
           {% elif m.tem_juros %}
           <span class="fin-val">
-            <span class="fin-val__final">R$ {{ "%.2f"|format(m.valor_final or m.valor or 0) }}</span>
-            <span class="lst-sub">base R$ {{ "%.2f"|format(m.valor_original or m.valor or 0) }}</span>
-            <span class="lst-sub fin-val__juros">multa 2% R$ {{ "%.2f"|format(m.multa_val or 0) }} · juros 0,033%/dia R$ {{ "%.2f"|format(m.juros_val or 0) }}</span>
+            <span class="fin-val__final">{{ (m.valor_final or m.valor or 0)|brl }}</span>
+            <span class="lst-sub">base {{ (m.valor_original or m.valor or 0)|brl }}</span>
+            <span class="lst-sub fin-val__juros">multa 2% {{ (m.multa_val or 0)|brl }} · juros 0,033%/dia {{ (m.juros_val or 0)|brl }}</span>
           </span>
           {% else %}
-          <span class="fin-val"><span class="fin-val__final">R$ {{ "%.2f"|format(m.valor or 0) }}</span></span>
+          <span class="fin-val"><span class="fin-val__final">{{ (m.valor or 0)|brl }}</span></span>
           {% endif %}
         </div>
 
@@ -448,7 +448,7 @@
               <input type="hidden" name="next" value="{{ request.full_path }}">
               <button type="submit" class="lst-acao lst-acao--perigo" title="Cancelar mensalidade"
                       aria-label="Cancelar mensalidade de {{ m.aluno_nome }}"
-                      data-confirmar="Cancelar a mensalidade de {{ m.aluno_nome|e }} — {% if m.data_vencimento %}venc. {{ m.data_vencimento.strftime('%d/%m/%Y') }}{% endif %} (R$ {{ '%.2f'|format(m.valor or 0)|replace('.', ',') }})?
+                      data-confirmar="Cancelar a mensalidade de {{ m.aluno_nome|e }} — {% if m.data_vencimento %}venc. {{ m.data_vencimento.strftime('%d/%m/%Y') }}{% endif %} ({{ (m.valor or 0)|brl }})?
 
 A cobrança sai da lista. Só faça isso se for realmente esta.">
                 <i class="bi bi-x-circle"></i>
@@ -534,7 +534,7 @@ A cobrança sai da lista. Só faça isso se for realmente esta.">
         </div>
         <div class="col-descricao lst-corta">{{ a.descricao or '—' }}</div>
         <div class="col-venc">{{ a.data_vencimento|data_br if a.data_vencimento else '—' }}</div>
-        <div class="lst-num"><span class="fin-val"><span class="fin-val__final">R$ {{ "%.2f"|format(a.valor or 0) }}</span></span></div>
+        <div class="lst-num"><span class="fin-val"><span class="fin-val__final">{{ (a.valor or 0)|brl }}</span></span></div>
         <div class="col-situacao">
           {% if a.status == 'pago' %}<span class="lst-situacao is-ativo"><i></i>Pago</span>
           {% elif a.status == 'atrasado' %}<span class="lst-tag lst-tag--alerta">Atrasado</span>
@@ -656,7 +656,7 @@ A cobrança sai da lista. Só faça isso se for realmente esta.">
         <div class="col-pagto">{{ m.data|data_br if m.data else '—' }}</div>
         <div class="col-forma lst-corta">{{ m.forma_nome or '—' }}</div>
         <div class="lst-num">
-          <span class="fin-val"><span class="fin-val__final">R$ {{ "%.2f"|format(m.valor or 0) }}</span></span>
+          <span class="fin-val"><span class="fin-val__final">{{ (m.valor or 0)|brl }}</span></span>
         </div>
         <div class="col-situacao"><span class="lst-situacao is-ativo"><i></i>Paga</span></div>
       </div>
@@ -958,7 +958,7 @@ document.addEventListener('click', function (ev) {
             <option value="">Sem desconto</option>
             {% for d in descontos or [] %}
             <option value="{{ d.id }}" data-tipo="{{ d.tipo }}" data-valor="{{ '%.2f'|format(d.valor|float) }}">
-              {{ d.nome }} — {% if d.tipo == 'percentual' %}{{ '%.0f'|format(d.valor|float) }}%{% else %}R$ {{ '%.2f'|format(d.valor|float) }}{% endif %}
+              {{ d.nome }} — {% if d.tipo == 'percentual' %}{{ '%.0f'|format(d.valor|float) }}%{% else %}{{ (d.valor|float)|brl }}{% endif %}
             </option>
             {% endfor %}
             <option value="avulso">Desconto avulso (valor em R$)…</option>

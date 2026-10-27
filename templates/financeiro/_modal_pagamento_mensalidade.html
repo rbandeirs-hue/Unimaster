@@ -36,7 +36,7 @@
                           <select class="u-campo__controle js-fin-pag-desc-sel" name="desconto_id_pagamento" aria-label="Desconto — se o aluno tiver direito">
                             <option value="">Sem desconto</option>
                             {% for d in descontos or [] %}
-                            <option value="{{ d.id }}" data-tipo="{{ d.tipo }}" data-valor="{{ '%.2f'|format(d.valor or 0) }}">{{ d.nome }} — {% if d.tipo == 'percentual' %}{{ '%.0f'|format(d.valor|float) }}%{% else %}R$ {{ '%.2f'|format(d.valor|float) }}{% endif %}</option>
+                            <option value="{{ d.id }}" data-tipo="{{ d.tipo }}" data-valor="{{ '%.2f'|format(d.valor or 0) }}">{{ d.nome }} — {% if d.tipo == 'percentual' %}{{ '%.0f'|format(d.valor|float) }}%{% else %}{{ (d.valor|float)|brl }}{% endif %}</option>
                             {% endfor %}
                             <option value="avulso" data-tipo="avulso">Desconto avulso…</option>
                           </select>
@@ -73,7 +73,7 @@
                           </label>
                           <select class="u-campo__controle js-fin-pag-plano" id="finPagPlano" name="novo_plano_id">
                             {% for pl in _planos_pag %}
-                            <option value="{{ pl.id }}">{{ pl.nome }} — R$ {{ '%.2f'|format(pl.valor|float)|replace('.', ',') }}</option>
+                            <option value="{{ pl.id }}">{{ pl.nome }} — {{ (pl.valor|float)|brl }}</option>
                             {% endfor %}
                           </select>
                         </div>
