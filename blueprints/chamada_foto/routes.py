@@ -81,6 +81,10 @@ def configuracao():
                         ORDER BY a.nome""", tuple(p))
         alunos = cur.fetchall()
         status = cf.status_dos_alunos(cur, [a["id"] for a in alunos])
+        cur.execute(f"""SELECT DISTINCT d.aluno_id FROM chamada_foto_descritor d
+                        JOIN alunos a ON a.id = d.aluno_id
+                        WHERE d.origem = 'chamada' AND {t}""", tuple(p))
+        aprendidos = {r["aluno_id"] for r in cur.fetchall()}
     finally:
         cur.close()
         conn.close()
@@ -93,7 +97,8 @@ def configuracao():
         a["pedido_em"] = c.get("pedido_em")
         a["sem_foto"] = not (a.get("foto") or "").strip()
         a["menor"] = cf.menor_de_idade(a)
-        a["reconhecivel"] = a["status"] == "autorizou" and not a["sem_foto"]
+        a["aprendido"] = a["id"] in aprendidos
+        a["reconhecivel"] = a["status"] == "autorizou" and (not a["sem_foto"] or a["aprendido"])
         contagem["todos"] += 1
         contagem[a["status"] or "sem_resposta"] += 1
         if a["sem_foto"]:
@@ -273,9 +278,10 @@ def salvar_descritores():
             if (status.get(aid) or {}).get("status") != "autorizou":
                 continue
             aluno = _aluno_da_academia(cur, academia_id, aid)
-            if not aluno or not aluno.get("foto"):
+            if not aluno:
                 continue
-            if origem == "cadastro" and item.get("foto") != aluno["foto"]:
+            # O de cadastro vale para a foto atual; o de chamada não depende de foto.
+            if origem == "cadastro" and (not aluno.get("foto") or item.get("foto") != aluno["foto"]):
                 continue
             cf.salvar_descritor(cur, aid, origem, aluno["foto"], desc)
             gravados += 1
@@ -386,8 +392,10 @@ def pagina_chamada(*, alunos, turmas, turma_id, data_presenca, horario_aula, aca
             return None
         ids_alunos = [a["id"] for a in alunos if isinstance(a.get("id"), int)]
         status = cf.status_dos_alunos(cur, ids_alunos)
-        fotos = {a["id"]: a.get("foto") for a in alunos
-                 if isinstance(a.get("id"), int) and a.get("foto")
+        # Todo aluno com consentimento, com foto ou sem: quem não tem foto no
+        # cadastro também aprende pelos rostos identificados na chamada.
+        fotos = {a["id"]: a.get("foto") or None for a in alunos
+                 if isinstance(a.get("id"), int)
                  and (status.get(a["id"]) or {}).get("status") == "autorizou"}
         descritores = cf.descritores_validos(cur, fotos)
     finally:
@@ -407,18 +415,21 @@ def pagina_chamada(*, alunos, turmas, turma_id, data_presenca, horario_aula, aca
             "marcado": bool(a.get("marcado")),
             "outra_turma": bool(a.get("aluno_outra_turma")),
         }
+        consentiu = isinstance(aid, int) and (status.get(aid) or {}).get("status") == "autorizou"
+        # Só quem consentiu pode ter o rosto guardado ao ser identificado.
+        item["pode_aprender"] = consentiu
+        d = (descritores.get(aid) or {}) if consentiu else {}
+        item["descritores"] = d.get("lista") or []
         if not isinstance(aid, int):
             item["motivo"] = "visitante"
-        elif (status.get(aid) or {}).get("status") != "autorizou":
+        elif not consentiu:
             item["motivo"] = "sem_consentimento"
-        elif not foto:
+        elif not foto and not item["descritores"]:
             item["motivo"] = "sem_foto"
         else:
             item["motivo"] = None
-            d = descritores.get(aid) or {}
-            item["descritores"] = d.get("lista") or []
             # Sem descritor da foto atual: o navegador calcula e devolve.
-            item["calcular"] = foto if not d.get("cadastro") else None
+            item["calcular"] = foto if foto and not d.get("cadastro") else None
         pessoas.append(item)
 
     turma = next((t for t in turmas if t.get("TurmaID") == turma_id), {}) or {}

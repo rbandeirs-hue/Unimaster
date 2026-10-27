@@ -334,7 +334,7 @@
 
   function notaAusente(p) {
     if (estado.presentes.has(p.id)) return p.marcado && estado.origem[p.id] === 'mao' ? 'Já estava marcado' : 'Marcado à mão';
-    if (p.motivo === 'sem_foto') return 'Sem foto no cadastro';
+    if (p.motivo === 'sem_foto') return 'Sem foto — identifique uma vez para passar a ser reconhecido';
     if (p.motivo === 'sem_consentimento') return 'Sem consentimento — marcar à mão';
     if (p.motivo === 'visitante') return 'Visitante ou registro avulso';
     if (p.semRosto) return 'A foto do cadastro não mostra o rosto';
@@ -465,8 +465,17 @@
       box.appendChild(b);
     });
     if (!lista.length) box.appendChild(el('p', { class: 'cf-dica', text: 'Ninguém com esse nome fora da lista de presentes.' }));
-    var podeGuardar = escolhido && escolhido.motivo === null;
+    // Só guarda o rosto de quem consentiu; para os outros, diz por quê.
+    var podeGuardar = !!(escolhido && escolhido.pode_aprender);
     $('folhaGuardarRotulo').hidden = !podeGuardar;
+    var aviso = $('folhaGuardarAviso');
+    aviso.hidden = !escolhido || podeGuardar;
+    if (escolhido && !podeGuardar) {
+      aviso.textContent = escolhido.motivo === 'visitante'
+        ? 'Visitante não tem o rosto guardado.'
+        : 'Sem consentimento, o rosto não é guardado: na próxima aula ele aparece de novo para identificar. ' +
+          'O consentimento se lança em Chamada por foto, no menu.';
+    }
     $('folhaConfirmar').disabled = !escolhido;
     $('folhaConfirmar').textContent = escolhido ? 'É ' + escolhido.nome.split(' ')[0] + ' · marcar presente' : 'Marcar presente';
   }
@@ -478,7 +487,7 @@
     atual.estado = 'identificado';
     estado.presentes.add(escolhido.id);
     estado.origem[escolhido.id] = 'identificado';
-    if (escolhido.motivo === null && $('folhaGuardar').checked) {
+    if (escolhido.pode_aprender && $('folhaGuardar').checked) {
       var d = Array.from(atual.descritor);
       escolhido.descritores.push(d);
       estado.guardar.push({ rosto: atual, aluno_id: Number(escolhido.id), origem: 'chamada', descritor: d });

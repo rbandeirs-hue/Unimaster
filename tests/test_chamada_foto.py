@@ -242,6 +242,29 @@ def main():
             rotas._alunos_que_posso_autorizar = original_busca
         checar("21. menor no próprio login não se autoriza", "quem autoriza é o responsável" in r)
 
+        print("\nSem foto no cadastro, aprende pela chamada\n")
+        # O menor agora tem consentimento (teste 19), mas continua sem foto.
+        h = cli.get(f"/registro_presenca?modo=foto&{q}").get_data(as_text=True)
+        pes = {p["nome"]: p for p in json.loads(re.search(r'id="cfDados">(.*?)</script>', h, re.S).group(1))["pessoas"]}
+        menor = pes.get("ZZ Menor Sem Foto", {})
+        checar("21b. consentiu sem foto: ainda não reconhece, mas pode aprender",
+               menor.get("motivo") == "sem_foto" and menor.get("pode_aprender") is True, str(menor))
+        checar("21c. quem não consentiu não pode aprender",
+               pes.get("ZZ Recusou", {}).get("pode_aprender") is False)
+        tok = _token(h)
+        r = enviar([{"aluno_id": ids["menor"], "origem": "chamada", "descritor": DESC}])
+        checar("21d. o rosto identificado na chamada é guardado mesmo sem foto", r.get("gravados") == 1, str(r))
+        r = enviar([{"aluno_id": ids["menor"], "origem": "cadastro", "foto": None, "descritor": DESC}])
+        checar("21e. mas descritor de cadastro sem foto, não", r.get("gravados") == 0, str(r))
+        h = cli.get(f"/registro_presenca?modo=foto&{q}").get_data(as_text=True)
+        pes = {p["nome"]: p for p in json.loads(re.search(r'id="cfDados">(.*?)</script>', h, re.S).group(1))["pessoas"]}
+        menor = pes.get("ZZ Menor Sem Foto", {})
+        checar("21f. na próxima chamada ele já entra no reconhecimento",
+               menor.get("motivo") is None and len(menor.get("descritores") or []) == 1 and not menor.get("calcular"),
+               str(menor)[:200])
+        h = cli.get(f"/chamada-foto/configuracao?academia_id={ACADEMIA}").get_data(as_text=True)
+        checar("21g. e a configuração mostra que foi reconhecido pela chamada", "reconhecido pelos rostos da chamada" in h)
+
         print("\nRetirar apaga o rosto\n")
         h = cli.get(f"/chamada-foto/configuracao?academia_id={ACADEMIA}").get_data(as_text=True)
         cli.post(f"/chamada-foto/aluno/{ids['adulto']}/termo-papel?academia_id={ACADEMIA}",
