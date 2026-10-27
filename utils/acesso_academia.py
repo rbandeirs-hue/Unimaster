@@ -22,13 +22,13 @@ AREAS = ("financeiro", "academico")
 # Blueprints de cada área: a guarda das rotas e o menu usam o mesmo mapa.
 BLUEPRINTS_AREA = {
     "financeiro": {"financeiro", "financeiro_painel"},
-    "academico": {"presencas", "turmas", "exame_faixa", "calendario", "eventos_competicoes",
+    "academico": {"presencas", "checkin", "turmas", "exame_faixa", "calendario", "eventos_competicoes",
                   "competicoes", "aula_particular"},
 }
 # Itens do menu lateral (chaves de utils/menu.py) de cada área.
 MENU_AREA = {
     "financeiro": {"financeiro"},
-    "academico": {"presencas", "turmas", "aulas_particulares", "ranking", "exame_faixa",
+    "academico": {"presencas", "chamada_qr", "turmas", "aulas_particulares", "ranking", "exame_faixa",
                   "calendario", "eventos", "competicoes", "ata", "historico"},
 }
 # Só o gestor principal gerencia usuários e o acesso deles.

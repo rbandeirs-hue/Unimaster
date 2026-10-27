@@ -1,0 +1,37 @@
+{% extends "base_academia.html" %}
+{% set menu_ativo = 'chamada_qr' %}
+{% block title %}Chamada por QR Code{% endblock %}
+{% block pagina_titulo %}Chamada por QR Code{% endblock %}
+{% block pagina_subtitulo %}Abra o QR da turma num tablet ou celular no tatame: cada aluno lê com o próprio celular e a presença entra na chamada.{% endblock %}
+{% block content %}
+<style>
+  .ckt-lin { grid-template-columns: minmax(0, 2fr) minmax(0, 1.4fr) 170px; }
+  @media (max-width: 640px) { .ckt-lin { grid-template-columns: minmax(0, 1fr) 140px; } .ckt-col-x { display: none; } }
+  .ckt-hoje { font-size: .72rem; font-weight: 700; padding: .1rem .5rem; border-radius: 999px;
+              background: rgba(22, 163, 74, .12); color: #15803d; margin-left: .4rem; }
+</style>
+<section class="lst-quadro">
+  <div class="lst-rolagem"><div class="lst-largura" style="--lst-min:460px">
+    <div class="lst-linha ckt-lin lst-cab"><div>Turma</div><div class="ckt-col-x">Horário</div><div class="lst-fim"></div></div>
+    {% for t in turmas %}
+    <div class="lst-linha ckt-lin lst-item">
+      <div class="lst-corta">
+        <span class="lst-nome">{{ t.Nome }}</span>{% if t.aula_hoje and not t.fora %}<span class="ckt-hoje">aula agora</span>{% elif t.aula_hoje %}<span class="ckt-hoje" style="background:rgba(127,127,127,.12);color:inherit">hoje</span>{% endif %}
+        {% if t.fora %}<span class="lst-sub">{{ t.fora }}</span>{% endif %}
+      </div>
+      <div class="ckt-col-x lst-corta">{{ t.DiasHorario or '—' }}</div>
+      <div class="lst-fim">
+        <a class="sh__btn {{ 'sh__btn--forte' if t.aula_hoje and not t.fora }}" target="_blank" rel="noopener"
+           href="{{ url_for('checkin.tela', turma_id=t.TurmaID) }}"><i class="bi bi-qr-code"></i> Abrir QR</a>
+      </div>
+    </div>
+    {% else %}
+    <p class="lst-vazio">Nenhuma turma encontrada.</p>
+    {% endfor %}
+  </div></div>
+</section>
+<p class="lst-sub mt-2">
+  O código muda a cada minuto e só vale para alunos matriculados na turma, no dia e perto do horário da aula.
+  O professor confere e corrige na chamada normal, onde as presenças por QR já aparecem marcadas.
+</p>
+{% endblock %}

@@ -157,6 +157,40 @@ def registrar(cur, aluno_ids, turma, usuario_id, usuario_nome):
 
 
 # ------------------------------------------------------------------ rotas
+@bp_checkin.route("/presencas/checkin")
+@login_required
+def escolher_turma():
+    """Chamada por QR Code: escolher a turma e abrir a tela do tatame.
+    Gestor vê as turmas da academia aberta; professor, as turmas dele."""
+    from flask import session
+    from utils.acesso_academia import academia_atual
+    eh_gestor = current_user.has_role("admin") or current_user.has_role("gestor_academia")
+    if not (eh_gestor or current_user.has_role("professor")):
+        abort(403)
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        aid = request.args.get("academia_id", type=int) or academia_atual()
+        if eh_gestor and aid:
+            cur.execute("""SELECT TurmaID, Nome, dias_semana, hora_inicio, hora_fim, DiasHorario
+                           FROM turmas WHERE id_academia = %s ORDER BY hora_inicio, Nome""", (aid,))
+        else:
+            cur.execute("""SELECT DISTINCT t.TurmaID, t.Nome, t.dias_semana, t.hora_inicio, t.hora_fim, t.DiasHorario
+                           FROM turmas t JOIN turma_professor tp ON tp.TurmaID = t.TurmaID
+                           JOIN professores p ON p.id = tp.professor_id
+                           WHERE p.usuario_id = %s ORDER BY t.hora_inicio, t.Nome""", (current_user.id,))
+        turmas = cur.fetchall()
+    finally:
+        conn.close()
+    hoje = str(datetime.now().isoweekday())
+    for t in turmas:
+        dias = {d.strip() for d in str(t.get("dias_semana") or "").split(",") if d.strip()}
+        t["aula_hoje"] = (not dias) or hoje in dias or (hoje == "7" and "0" in dias)
+        t["fora"] = motivo_fora_de_hora(t)
+    turmas.sort(key=lambda t: (not t["aula_hoje"], t["fora"] is not None))
+    return render_template("presencas/checkin_turmas.html", turmas=turmas)
+
+
 @bp_checkin.route("/presencas/checkin/<int:turma_id>/tela")
 @login_required
 def tela(turma_id):

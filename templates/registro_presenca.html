@@ -4,10 +4,6 @@
 {% block pagina_subtitulo %}Marque os alunos presentes e grave a chamada.{% endblock %}
 {% block pagina_acoes %}
   {% set back_url = back_url or get_back_url_default() %}
-  {% if turma_selecionada %}
-  <a href="{{ url_for('checkin.tela', turma_id=turma_selecionada) }}" class="sh__btn" target="_blank" rel="noopener"
-     title="Abre o QR Code para os alunos marcarem presença pelo celular"><i class="bi bi-qr-code"></i> Check-in por QR</a>
-  {% endif %}
   <a href="{{ url_voltar(back_url) }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Voltar</a>
 {% endblock %}
 {% block content %}
@@ -413,6 +409,13 @@
                 <button type="button" class="u-btn registro-acao-btn" data-bs-toggle="modal" data-bs-target="#modalPresencaAvulsa">
                   <i class="bi bi-person-plus"></i>Registro avulso
                 </button>
+                {# Chamada por QR Code: abre a tela do tatame; o que os alunos
+                   confirmam pelo celular volta marcado nesta lista. #}
+                <a class="u-btn registro-acao-btn" target="_blank" rel="noopener"
+                   href="{{ url_for('checkin.tela', turma_id=turma_selecionada) }}"
+                   title="Abre o QR Code para os alunos marcarem presença pelo celular">
+                  <i class="bi bi-qr-code"></i>Chamada por QR Code
+                </a>
                 {% if chamada_foto_ativa %}
                 <a class="u-btn registro-acao-btn" href="{{ url_for('presencas.registro_presenca', modo='foto', turma_id=turma_selecionada, data_presenca=data_presenca, horario_aula=horario_aula, academia_id=academia_id) }}">
                   <i class="bi bi-camera"></i>Chamada por foto

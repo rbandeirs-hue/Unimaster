@@ -90,6 +90,8 @@ def _menu_academia(ctx):
                  _rota("aula_particular.lista", academia_id=aid)),
             Item("chamada_foto", "bi-camera", "Chamada por foto",
                  _rota("chamada_foto.configuracao", academia_id=aid)),
+            Item("chamada_qr", "bi-qr-code", "Chamada por QR Code",
+                 _rota("checkin.escolher_turma", academia_id=aid)),
             Item("ranking", "bi-trophy", "Ranking de frequência",
                  _rota("presencas.ranking_frequencia_pagina")),
             Item("solicitacoes", "bi-inbox", "Aprovar Solicitações",
@@ -292,6 +294,8 @@ def _menu_professor(ctx):
         ("Dia a dia", [
             Item("presencas", "bi-clipboard-check", "Registrar presença",
                  _rota("presencas.registro_presenca")),
+            Item("chamada_qr", "bi-qr-code", "Chamada por QR Code",
+                 _rota("checkin.escolher_turma")),
             Item("historico", "bi-clock-history", "Histórico de presença",
                  _rota("presencas.historico_presenca_lista")),
             Item("ata", "bi-file-text", "Ata de presença", _rota("presencas.ata_presenca")),

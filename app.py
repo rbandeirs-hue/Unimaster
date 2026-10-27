@@ -601,6 +601,7 @@ MENU_POR_BLUEPRINT = {
     "painel_responsavel": "gerenciamento",
     "precadastro": "precadastro",
     "presencas": "presencas",
+    "checkin": "chamada_qr",
     "relatorios": "relatorios",
     "professor": "gerenciamento",
     "professores": "professores",
