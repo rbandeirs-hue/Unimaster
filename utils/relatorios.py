@@ -410,8 +410,12 @@ def _aging(cur, rec):
             END faixa,
             COUNT(DISTINCT ma.aluno_id) alunos, COUNT(*) cobrancas,
             COALESCE(SUM(ma.valor),0) valor
-        FROM mensalidade_aluno ma JOIN alunos a ON a.id = ma.aluno_id
-        WHERE a.id_academia = %s AND ma.status <> 'pago' AND ma.data_vencimento < CURDATE()
+        FROM mensalidade_aluno ma JOIN mensalidades m ON m.id = ma.mensalidade_id
+        -- Em aberto é pendente ou atrasado: cancelada não é dívida (contava 69
+        -- canceladas na academia 2). A academia é a da cobrança, não a
+        -- principal do aluno — quem treina em duas tinha a dívida na errada.
+        WHERE m.id_academia = %s AND ma.status IN ('pendente', 'atrasado')
+          AND ma.data_vencimento < CURDATE()
         GROUP BY faixa
         ORDER BY FIELD(faixa,'1 a 30 dias','31 a 60 dias','61 a 90 dias','mais de 90 dias')""",
         [rec.academia_id])
@@ -748,7 +752,7 @@ def _alunos_ativos(cur, rec):
                            TIMESTAMPDIFF(YEAR, a.data_nascimento, CURDATE()) idade,
                            g.faixa, t.Nome turma,
                            (SELECT COUNT(*) FROM mensalidade_aluno ma
-                             WHERE ma.aluno_id = a.id AND ma.status <> 'pago'
+                             WHERE ma.aluno_id = a.id AND ma.status IN ('pendente', 'atrasado')
                                AND ma.data_vencimento < CURDATE()) atrasadas
                     FROM alunos a
                     {_join_faixa()}

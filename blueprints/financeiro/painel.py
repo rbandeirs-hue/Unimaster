@@ -426,10 +426,11 @@ def dashboard():
         do_mes = cur.fetchall()
 
         cur.execute(
+            # Academia da cobrança (mensalidades.id_academia), como o mês atual.
             """SELECT COALESCE(SUM(ma.valor), 0) AS total
                FROM mensalidade_aluno ma
-               JOIN alunos a ON a.id = ma.aluno_id
-               WHERE a.id_academia = %s AND ma.status = 'pago'
+               JOIN mensalidades mp ON mp.id = ma.mensalidade_id
+               WHERE mp.id_academia = %s AND ma.status = 'pago'
                  AND YEAR(ma.data_vencimento) = %s AND MONTH(ma.data_vencimento) = %s""",
             (academia_id, ant_ano, ant_mes),
         )
@@ -454,10 +455,18 @@ def dashboard():
     # como inadimplente e a "adimplência" era só a taxa de arrecadação do mês.
     hoje_ref = date.today()
     vencidas = pagas_vencidas = 0
+    # Isenta (bolsa integral, valor final R$ 0) não é cobrança: contava como
+    # "paga" e inflava a adimplência — 91 delas no sistema. Fica à parte.
+    isentas = 0
+    cobradas = []
     for r in do_mes:
         efetivo = (_status_efetivo(r.get("status"), r.get("data_vencimento"),
                                    r.get("status_pagamento")) or "").lower()
         valor = float(r.get("valor") or 0)
+        if valor <= 0 and efetivo == "pago":
+            isentas += 1
+            continue
+        cobradas.append(r)
         venc = r.get("data_vencimento")
         if venc is not None and hasattr(venc, "year") and venc <= hoje_ref:
             vencidas += 1
@@ -479,7 +488,7 @@ def dashboard():
                 "status": "Atrasado" if efetivo == "atrasado" else "Pendente",
             })
 
-    total_cobrado = len(do_mes)
+    total_cobrado = len(cobradas)
     taxa = round((pagos / total_cobrado) * 100) if total_cobrado else 0
     adimplencia = round((pagas_vencidas / vencidas) * 100) if vencidas else 100
 
@@ -550,6 +559,7 @@ def dashboard():
         inadimplentes=inadimplentes,
         a_vencer=a_vencer,
         adimplencia=adimplencia,
+        isentas=isentas,
         arrecadacao=taxa,
         ano=ano, mes=mes,
         mes_label=fmt_mes(ano, mes),
