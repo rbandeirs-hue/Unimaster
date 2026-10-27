@@ -124,7 +124,10 @@
 
     <label class="lst-campo">
       <span class="lst-campo__rotulo">Plano *</span>
+      {# Sem plano pré-escolhido: o primeiro da lista era às vezes um de R$ 0
+         (bolsista) e gerava cobrança zerada para a turma inteira por engano. #}
       <select name="plano_id" id="finPlano" required>
+        <option value="" data-valor="0" selected disabled>Selecione o plano…</option>
         {% for p in planos %}
         <option value="{{ p.id }}" data-valor="{{ '%.2f'|format(p.valor) }}">{{ p.nome }} · {{ fmt_moeda(p.valor) }}</option>
         {% endfor %}
@@ -320,7 +323,7 @@
 
   function atualizar() {
     var n = marcados().length;
-    btn.disabled = n === 0;
+    btn.disabled = n === 0 || !plano.value;
     caixa.hidden = n === 0;
     elN.textContent = n + (n === 1 ? ' aluno selecionado' : ' alunos selecionados');
     elTotal.textContent = moeda(n * valorUnitario());
