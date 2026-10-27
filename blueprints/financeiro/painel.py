@@ -2225,6 +2225,42 @@ def receita_forma(receita_id):
                   entradas=request.form.get("entradas") or None)
 
 
+@bp_financeiro_painel.route("/exportar-contador")
+@login_required
+def exportar_contador():
+    """Excel do movimento do mês para o contador (utils/exportacao_contabil.py).
+    Período: ?mes=AAAA-MM (padrão o mês atual) ou ?inicio=&fim= (AAAA-MM-DD)."""
+    from flask import Response
+    from utils import exportacao_contabil as ex
+    academia_id = _get_academia_id()
+    if not academia_id:
+        return _sem_academia()
+    if not _pode_gerir_financeiro():
+        flash("Só a gestão da academia exporta o financeiro.", "warning")
+        return _volta("financeiro_painel.fluxo", academia_id)
+    try:
+        inicio = date.fromisoformat(request.args.get("inicio") or "")
+        fim = date.fromisoformat(request.args.get("fim") or "")
+    except ValueError:
+        ano, mes = _mes_ref()
+        inicio = date(ano, mes, 1)
+        fim = date(ano + (mes == 12), mes % 12 + 1, 1) - timedelta(days=1)
+    if fim < inicio:
+        inicio, fim = fim, inicio
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute("SELECT nome FROM academias WHERE id = %s", (academia_id,))
+        nome = (cur.fetchone() or {}).get("nome") or ""
+        conteudo, _ = ex.planilha(cur, academia_id, nome, inicio, fim)
+    finally:
+        conn.close()
+    arq = f"financeiro-{inicio:%Y-%m-%d}-a-{fim:%Y-%m-%d}.xlsx"
+    return Response(conteudo,
+                    mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": f'attachment; filename="{arq}"'})
+
+
 @bp_financeiro_painel.route("/extrato")
 @login_required
 def extrato():
