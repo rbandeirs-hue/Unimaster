@@ -18,7 +18,7 @@
   var LIMIAR = 0.55;     // distância máxima para dizer "é esta pessoa"
   var CONFIRA = 0.47;    // acima disto, reconhece mas pede para conferir
   var REPETIDO = 0.5;    // mesmo aluno em outra foto: conta uma vez
-  var MAX_LADO = 1600;
+  var MAX_LADO = 3000;   // a foto da turma fica grande: rosto pequeno precisa de pixel
   var MAX_FOTOS = 3;
 
   var pessoas = D.pessoas.map(function (p) {
@@ -189,9 +189,7 @@
       passo('cadastro', i / Math.max(1, faltam.length));
       rotulo.textContent = 'Lendo as fotos do cadastro (' + (i + 1) + ' de ' + faltam.length + ')';
       try {
-        var img = reduzir(await carregarImagem(p.foto_url), 800);
-        var r = await faceapi.detectSingleFace(img, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.3 }))
-          .withFaceLandmarks().withFaceDescriptor();
+        var r = await detectarUm(await carregarImagem(p.foto_url));
         if (r) {
           var d = Array.from(r.descriptor);
           p.descritores.push(d);
@@ -206,6 +204,97 @@
     }
     rotulo.textContent = 'Lendo as fotos do cadastro';
     if (novos.length) enviarDescritores(novos);
+  }
+
+  // ------------------------------------------------------- detecção
+  var SSD = function (conf) { return new faceapi.SsdMobilenetv1Options({ minConfidence: conf, maxResults: 100 }); };
+
+  // Foto do cadastro: o recorte do sistema deixa o rosto ocupando o quadro
+  // inteiro, e o detector se perde sem margem. Põe uma moldura neutra em volta;
+  // se ainda assim não achar, tenta de novo menos exigente.
+  async function detectarUm(img) {
+    var base = reduzir(img, 640);
+    var m = Math.round(Math.max(base.width, base.height) * 0.35);
+    var c = document.createElement('canvas');
+    c.width = base.width + 2 * m; c.height = base.height + 2 * m;
+    var ctx = c.getContext('2d');
+    ctx.fillStyle = '#808080';
+    ctx.fillRect(0, 0, c.width, c.height);
+    ctx.drawImage(base, m, m);
+    var tentativas = [[c, 0.3], [c, 0.15], [base, 0.15]];
+    for (var i = 0; i < tentativas.length; i++) {
+      var r = await faceapi.detectSingleFace(tentativas[i][0], SSD(tentativas[i][1]))
+        .withFaceLandmarks().withFaceDescriptor();
+      if (r) return r;
+    }
+    return null;
+  }
+
+  function iou(a, b) {
+    var x1 = Math.max(a.x, b.x), y1 = Math.max(a.y, b.y);
+    var x2 = Math.min(a.x + a.width, b.x + b.width), y2 = Math.min(a.y + a.height, b.y + b.height);
+    var inter = Math.max(0, x2 - x1) * Math.max(0, y2 - y1);
+    var menor = Math.min(a.width * a.height, b.width * b.height);
+    return { iou: inter / (a.width * a.height + b.width * b.height - inter), cobre: inter / menor };
+  }
+
+  // Foto da turma: o detector encolhe tudo para 512 px por dentro, e numa foto
+  // de grupo o rosto do fundo some. Por isso passa três vezes, de longe para
+  // perto: a foto inteira (rostos grandes, na frente), uma grade média e uma
+  // grade fina de pedaços de ~640 px, que numa foto de celular dá uns 35
+  // pedaços — cada um ampliado por dentro, o que acha até o rosto da última
+  // fileira de uma turma de 50+. Junta tudo sem repetir rosto.
+  var PEDACO_FINO = 640, SOBRA = 0.3;
+
+  function grade(W, H, lado) {
+    lado = Math.min(lado, W, H);
+    var passo = lado * (1 - SOBRA);
+    var cols = Math.max(1, Math.ceil((W - lado) / passo) + 1), lins = Math.max(1, Math.ceil((H - lado) / passo) + 1);
+    var out = [];
+    for (var li = 0; li < lins; li++) {
+      for (var co = 0; co < cols; co++) {
+        var x = cols === 1 ? 0 : Math.round(co * (W - lado) / (cols - 1));
+        var y = lins === 1 ? 0 : Math.round(li * (H - lado) / (lins - 1));
+        out.push({ x: x, y: y, w: lado, h: lado });
+      }
+    }
+    return out;
+  }
+
+  async function detectarTodos(foto, aoAvancar) {
+    var W = foto.width, H = foto.height;
+    var pedacos = [{ x: 0, y: 0, w: W, h: H, inteira: true }]
+      .concat(grade(W, H, Math.round(Math.max(W, H) / 2.2)))
+      .concat(Math.max(W, H) > PEDACO_FINO * 1.5 ? grade(W, H, PEDACO_FINO) : []);
+    var achados = [];
+    var t = document.createElement('canvas');
+    for (var k = 0; k < pedacos.length; k++) {
+      var pc = pedacos[k];
+      var fonte = foto;
+      if (!pc.inteira) {
+        t.width = pc.w; t.height = pc.h;
+        t.getContext('2d').drawImage(foto, pc.x, pc.y, pc.w, pc.h, 0, 0, pc.w, pc.h);
+        fonte = t;
+      }
+      var dets = await faceapi.detectAllFaces(fonte, SSD(pc.inteira ? 0.45 : 0.4)).withFaceLandmarks().withFaceDescriptors();
+      dets.forEach(function (d) {
+        var b = d.detection.box;
+        // Rosto cortado na borda do pedaço é meio rosto: o vizinho, que se
+        // sobrepõe em 30%, o pega inteiro.
+        if (!pc.inteira && ((b.x < 3 && pc.x > 0) || (b.y < 3 && pc.y > 0) ||
+            (b.x + b.width > pc.w - 3 && pc.x + pc.w < W) || (b.y + b.height > pc.h - 3 && pc.y + pc.h < H))) return;
+        achados.push({ box: { x: pc.x + b.x, y: pc.y + b.y, width: b.width, height: b.height },
+                       score: d.detection.score, descritor: d.descriptor });
+      });
+      if (aoAvancar) aoAvancar((k + 1) / pedacos.length);
+    }
+    achados.sort(function (a, b) { return b.score - a.score; });
+    var ficam = [];
+    achados.forEach(function (a) {
+      var repetido = ficam.some(function (f) { var q = iou(a.box, f.box); return q.iou > 0.3 || q.cobre > 0.6; });
+      if (!repetido) ficam.push(a);
+    });
+    return ficam;
   }
 
   function distancia(desc, p) {
@@ -261,12 +350,12 @@
       await calcularCadastro();
       passo('rostos');
       estado.rostos = [];
-      var opc = new faceapi.SsdMobilenetv1Options({ minConfidence: 0.45, maxResults: 100 });
       for (var i = 0; i < estado.fotos.length; i++) {
-        passo('rostos', i / estado.fotos.length);
-        var dets = await faceapi.detectAllFaces(estado.fotos[i], opc).withFaceLandmarks().withFaceDescriptors();
+        var nf = estado.fotos.length, fi = i;
+        passo('rostos', i / nf);
+        var dets = await detectarTodos(estado.fotos[i], function (f) { passo('rostos', (fi + f) / nf); });
         dets.forEach(function (d) {
-          estado.rostos.push({ foto: i, box: d.detection.box, descritor: d.descriptor, aluno: null, dist: null, estado: 'novo' });
+          estado.rostos.push({ foto: i, box: d.box, descritor: d.descritor, aluno: null, dist: null, estado: 'novo' });
         });
       }
       passo('comparar');
