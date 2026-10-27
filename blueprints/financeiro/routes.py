@@ -9675,21 +9675,14 @@ def excluir_receita(receita_id):
 
     conn = get_db_connection()
     cur = conn.cursor(dictionary=True)
-    rec = None
-    for query, params in [
-        ("SELECT id, id_mensalidade_aluno, id_cobranca_avulsa FROM receitas WHERE id = %s AND (id_academia = %s OR id_academia IS NULL)", (receita_id, academia_id)),
-        ("SELECT id, id_mensalidade_aluno, id_cobranca_avulsa FROM receitas WHERE id = %s", (receita_id,)),
-        ("SELECT id FROM receitas WHERE id = %s AND id_academia = %s", (receita_id, academia_id)),
-    ]:
-        try:
-            cur.execute(query, params)
-            rec = cur.fetchone()
-            if rec:
-                rec.setdefault("id_mensalidade_aluno", None)
-                rec.setdefault("id_cobranca_avulsa", None)
-                break
-        except Exception:
-            continue
+    # Só receita de uma academia do usuário. Havia um segundo SELECT só pelo
+    # id, sem academia, que deixava apagar receita manual de qualquer academia.
+    ph_ids = ",".join(["%s"] * len(ids))
+    cur.execute(
+        f"""SELECT id, id_mensalidade_aluno, id_cobranca_avulsa FROM receitas
+            WHERE id = %s AND id_academia IN ({ph_ids})""",
+        (receita_id, *ids))
+    rec = cur.fetchone()
     if not rec:
         conn.close()
         flash("Receita não encontrada.", "warning")
@@ -9700,7 +9693,7 @@ def excluir_receita(receita_id):
         return redirect(url_for("financeiro.lista_receitas", academia_id=academia_id, mes=mes, ano=ano))
     try:
         cur = conn.cursor()
-        cur.execute("DELETE FROM receitas WHERE id = %s", (receita_id,))
+        cur.execute(f"DELETE FROM receitas WHERE id = %s AND id_academia IN ({ph_ids})", (receita_id, *ids))
         conn.commit()
         flash("Receita excluída.", "success")
     except Exception:
