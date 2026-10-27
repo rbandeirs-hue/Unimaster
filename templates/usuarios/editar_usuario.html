@@ -16,153 +16,222 @@
 {% endblock %}
 {% block content %}
 <style>
-  /* Editar usuário — padrão do design system (tokens --sh-*): cartões brancos
-     com fio, rótulos em caixa alta, seleção em preto/bege, rodapé fixo. */
-  .ue { max-width: none; padding-bottom: 5.5rem; }
+  /* Editar usuário — artboard 9 (canvas do redesign): resumo fixo à esquerda,
+     seções numeradas à direita, papéis com chave e barra de salvar que acusa
+     o que mudou. Tokens do design system (--sh-*). */
+  .ue { max-width: none; padding-bottom: 6.5rem; }
+  .ue-layout { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 1.5rem; align-items: start; }
+  .ue-lado { position: sticky; top: 1rem; display: flex; flex-direction: column; gap: 1rem; }
+  .ue-rotulo { display: block; margin: 0 0 .55rem; font-size: .7rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--sh-ink-soft); }
 
-  /* perfil: foto + identidade + ações de foto */
+  /* perfil */
   .ue-perfil {
-    display: flex; align-items: center; gap: 1.25rem; flex-wrap: wrap;
-    padding: 1.25rem 1.5rem; margin-bottom: 1rem;
-    background: #fff; border: 1px solid var(--sh-line); border-radius: var(--u-radius);
+    display: flex; flex-direction: column; align-items: center; gap: .55rem; text-align: center;
+    padding: 1.4rem 1.25rem 1.25rem; background: #fff; border: 1px solid var(--sh-line); border-radius: 12px;
   }
-  .photo-frame {
-    position: relative; width: 88px; height: 88px; flex: none; overflow: hidden;
-    border-radius: 50%; background: #f1efeb; box-shadow: 0 0 0 1px var(--sh-line);
+  .photo-frame { position: relative; width: 104px; height: 104px; flex: none; border-radius: 50%; background: #f1efeb; box-shadow: 0 0 0 1px var(--sh-line); }
+  .photo-frame img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
+  .photo-frame .placeholder { width: 100%; height: 100%; border-radius: 50%; align-items: center; justify-content: center; color: #fff; font-size: 2.5rem; font-weight: 600; }
+  .ue-perfil__cam {
+    position: absolute; right: 0; bottom: 2px; width: 34px; height: 34px; display: flex; align-items: center; justify-content: center;
+    border-radius: 50%; border: 3px solid #fff; background: var(--sh-ink); color: #fff; font-size: .85rem; cursor: pointer;
   }
-  .photo-frame img { width: 100%; height: 100%; object-fit: cover; }
-  .photo-frame .placeholder {
-    width: 100%; height: 100%; align-items: center; justify-content: center;
-    color: #fff; font-size: 2rem; font-weight: 600;
-  }
-  .ue-perfil__info { flex: 1 1 240px; min-width: 0; }
-  .ue-perfil__info h2 { margin: 0; font-size: 1.35rem; font-weight: 600; letter-spacing: -.01em; overflow-wrap: anywhere; }
-  .ue-perfil__email { margin: .2rem 0 0; font-size: .88rem; color: var(--sh-ink-soft); overflow-wrap: anywhere; }
-  .ue-perfil__selos { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .55rem; }
-  .ue-perfil__acoes { display: flex; flex-wrap: wrap; gap: .5rem; }
-  .ue-arquivo { position: relative; cursor: pointer; }
+  .ue-perfil h2 { margin: .2rem 0 0; font-size: 1.15rem; font-weight: 600; overflow-wrap: anywhere; }
+  .ue-perfil__email { margin: -.3rem 0 0; font-size: .84rem; color: var(--sh-ink-soft); overflow-wrap: anywhere; }
+  .ue-perfil__selos { display: flex; flex-wrap: wrap; justify-content: center; gap: .35rem; }
+  .ue-perfil__acoes { display: flex; gap: .5rem; width: 100%; margin-top: .25rem; }
+  .ue-perfil__acoes .sh__btn { flex: 1 1 0; justify-content: center; font-size: .84rem; padding-left: .5rem; padding-right: .5rem; }
+  .ue-arquivo { position: relative; cursor: pointer; overflow: hidden; }
   .ue-arquivo input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
   .ue-arquivo:focus-within { outline: 2px solid var(--sh-ink); outline-offset: 2px; }
 
-  /* grade de seções */
-  .ue-grade { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 1rem; align-items: start; }
-  .ue-grade > .section-card:not(.ue-ident):not(.ue-senha) { grid-column: 1 / -1; }
-  .ue-grade > script { display: none; }
-  .section-card {
-    background: #fff; border: 1px solid var(--sh-line); border-radius: var(--u-radius);
-    padding: 1.15rem 1.35rem 1.3rem; margin: 0; min-width: 0;
+  /* resumo e índice */
+  .ue-resumo, .ue-indice { background: #fff; border: 1px solid var(--sh-line); border-radius: 12px; }
+  .ue-resumo { padding: 1rem 1.1rem 1.1rem; }
+  .ue-resumo ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: .6rem; }
+  .ue-resumo li { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: .55rem; font-size: .84rem; line-height: 1.35; }
+  .ue-resumo li::before {
+    content: "✓"; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;
+    border-radius: 50%; background: #f4f2ee; font-size: .68rem; font-weight: 700;
   }
-  .section-title {
-    display: flex; align-items: center; gap: .5rem; margin: 0 0 .9rem; padding: 0 0 .7rem;
-    border-bottom: 1px solid var(--sh-line);
-    font-size: .74rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--sh-ink-soft);
-  }
-  .section-title i { color: var(--sh-ink-soft); font-size: .95rem; }
-  .section-help { margin: -.3rem 0 .85rem; font-size: .85rem; color: var(--sh-ink-soft); }
-  .ue-rotulo { margin: .4rem 0 .45rem; font-size: .7rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--sh-ink-soft); }
+  .ue-resumo li.is-vazio::before { content: "–"; }
+  .ue-resumo li strong { font-weight: 600; display: block; }
+  .ue-resumo li span { color: var(--sh-ink-soft); }
+  .ue-indice { padding: .5rem; display: flex; flex-direction: column; gap: .1rem; }
+  .ue-indice a { display: flex; justify-content: space-between; align-items: baseline; gap: .5rem; padding: .5rem .65rem; border-radius: 6px; font-size: .88rem; color: var(--sh-ink); text-decoration: none; }
+  .ue-indice a:hover { background: #f4f2ee; }
+  .ue-indice b { display: inline-block; min-width: 1.1rem; font-weight: 500; color: var(--sh-ink-soft); }
+  .ue-indice small { font-size: .76rem; color: var(--sh-ink-soft); }
 
-  .form-label { color: var(--sh-ink); font-weight: 600; font-size: .85rem; margin-bottom: .35rem; }
+  /* seções */
+  .ue-grade { display: flex; flex-direction: column; gap: 1rem; min-width: 0; counter-reset: ue-sec; }
+  .ue-grade > script, .ue-grade > style { display: none; }
+  .section-card { background: #fff; border: 1px solid var(--sh-line); border-radius: 12px; padding: 0 1.5rem 1.4rem; margin: 0; min-width: 0; scroll-margin-top: 1rem; }
+  .section-title {
+    display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; flex-wrap: wrap;
+    margin: 0 -1.5rem 1.15rem; padding: 1rem 1.5rem; border-bottom: 1px solid var(--sh-line);
+  }
+  .section-title h2 { margin: 0; font-size: 1.05rem; font-weight: 600; }
+  .section-title h2::before { counter-increment: ue-sec; content: counter(ue-sec); margin-right: .55rem; color: var(--sh-ink-soft); }
+  .section-title > span { font-size: .82rem; color: var(--sh-ink-soft); }
+  .section-help { margin: -.2rem 0 .85rem; font-size: .85rem; color: var(--sh-ink-soft); }
+
+  .ue-campos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem 1.25rem; }
+  .form-label { display: block; color: var(--sh-ink); font-weight: 600; font-size: .85rem; margin-bottom: .35rem; }
+  .ue-opc { font-weight: 400; color: var(--sh-ink-soft); margin-left: .25rem; }
   .ue small.text-muted { display: block; margin-top: .3rem; font-size: .8rem; color: var(--sh-ink-soft) !important; }
   .input-icon-wrap { position: relative; }
-  .input-icon-wrap > i {
-    position: absolute; left: .85rem; top: 50%; transform: translateY(-50%);
-    color: var(--sh-ink-soft); pointer-events: none; font-size: .95rem;
-  }
+  .input-icon-wrap > i:first-child { position: absolute; left: .85rem; top: 50%; transform: translateY(-50%); color: var(--sh-ink-soft); pointer-events: none; font-size: .95rem; }
   .input-icon-wrap > .u-campo__controle { padding-left: 2.3rem; }
-  .ue .u-campo__controle:disabled { background: #f6f5f2; color: var(--sh-ink-soft); }
+  .ue .u-campo__controle:disabled { background: #f6f5f2; color: #4a4843; }
+  .ue-travado > .u-campo__controle { padding-right: 2.3rem; }
+  .ue-cadeado { position: absolute; right: .85rem; top: 50%; transform: translateY(-50%); color: var(--sh-ink-soft); font-size: .85rem; }
+  #cpf { padding-right: 5.5rem; }
+  .ue-cpf-st { position: absolute; right: .85rem; top: 50%; transform: translateY(-50%); font-size: .76rem; font-weight: 600; }
+  .ue-cpf-st.is-ok { color: #146c43; }
+  .ue-cpf-st.is-erro { color: #b42318; }
+  #ueSenha { padding-right: 5rem; }
+  .ue-mostrar {
+    position: absolute; right: .35rem; top: 50%; transform: translateY(-50%); height: 2rem; padding: 0 .65rem;
+    border: 0; border-radius: 6px; background: none; font: inherit; font-size: .8rem; font-weight: 600; color: var(--sh-ink); cursor: pointer;
+  }
+  .ue-mostrar:hover { background: #f4f2ee; }
 
-  /* escolhas (papéis, áreas, modalidades, academias) */
+  /* papéis: linhas com chave */
+  .ue-papeis { margin: -1.15rem -1.5rem 0; }
+  .ue-papel { border-top: 1px solid #f0eeea; }
+  .ue-papel:first-child { border-top: 0; }
+  .ue-papel__linha { display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; gap: .9rem; align-items: center; margin: 0; padding: .85rem 1.5rem; cursor: pointer; }
+  .ue-papel__linha:hover { background: #fcfbfa; }
+  .ue-papel__ic {
+    width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;
+    border-radius: 8px; background: #f1efeb; color: #9a968f; font-size: .9rem; font-weight: 700; transition: background .15s ease, color .15s ease;
+  }
+  .ue-papel:has(.ue-switch:checked) .ue-papel__ic { background: var(--sh-ink); color: #fff; }
+  .ue-papel__txt { display: flex; flex-direction: column; gap: .1rem; min-width: 0; }
+  .ue-papel__txt strong { font-size: .95rem; font-weight: 600; }
+  .ue-papel__txt span { font-size: .83rem; color: var(--sh-ink-soft); line-height: 1.35; }
+  .ue-switch {
+    appearance: none; -webkit-appearance: none; position: relative; width: 44px; height: 26px; margin: 0; flex: none;
+    border-radius: 999px; background: #d9d6d0; cursor: pointer; transition: background .15s ease;
+  }
+  .ue-switch::after {
+    content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%;
+    background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, .25); transition: transform .15s ease;
+  }
+  .ue-switch:checked { background: var(--sh-ink); }
+  .ue-switch:checked::after { transform: translateX(18px); }
+  .ue-switch:focus-visible { outline: 2px solid var(--sh-ink); outline-offset: 2px; }
+  .ue-papel .conditional-block { margin: -.2rem 1.5rem 1rem calc(1.5rem + 38px + .9rem); }
+
+  /* escolhas em cartão (modo de acesso, áreas, modalidades, academias) */
+  .ue-modo { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; margin-bottom: 1rem; }
+  .ue-opcao { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: .65rem; margin: 0; padding: .85rem 1rem; border: 1px solid var(--sh-line); border-radius: 10px; cursor: pointer; }
+  .ue-opcao input { width: 18px; height: 18px; margin: .1rem 0 0; accent-color: var(--sh-ink); }
+  .ue-opcao strong { display: block; font-size: .95rem; font-weight: 600; }
+  .ue-opcao small { display: block; margin-top: .1rem; font-size: .83rem; color: var(--sh-ink-soft); }
+  .ue-opcao:has(input:checked) { border: 1.5px solid var(--sh-ink); background: #f4f2ee; padding: calc(.85rem - .5px) calc(1rem - .5px); }
   .role-grid, .acad-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(200px, 100%), 1fr)); gap: .5rem; }
+  .ue-areas { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
   .role-pill, .acad-pill {
-    position: relative; display: flex; align-items: center; gap: .6rem; min-height: 2.9rem;
-    padding: .6rem .8rem; border: 1px solid var(--sh-line); border-radius: 8px; background: #fff;
+    position: relative; display: flex; align-items: center; gap: .65rem; min-height: 2.9rem; margin: 0;
+    padding: .65rem .85rem; border: 1px solid var(--sh-line); border-radius: 10px; background: #fff;
     color: var(--sh-ink); cursor: pointer; user-select: none; transition: border-color .15s ease, background .15s ease;
   }
+  .ue-areas .role-pill { align-items: flex-start; padding: .85rem 1rem; }
   .role-pill input, .acad-pill input { position: absolute; opacity: 0; pointer-events: none; }
   .role-pill .check-ic, .acad-pill .check-ic {
     width: 18px; height: 18px; flex: none; display: inline-flex; align-items: center; justify-content: center;
     border: 1.5px solid #c9c6c0; border-radius: 5px; color: transparent; font-size: .7rem;
   }
+  .ue-areas .role-pill .check-ic { margin-top: .15rem; }
   .role-pill:hover, .acad-pill:hover { border-color: #c9c6c0; background: #faf9f7; }
-  .role-pill.checked, .acad-pill.checked { border-color: var(--sh-ink); background: #f4f2ee; color: var(--sh-ink); }
+  .role-pill.checked, .acad-pill.checked { border-color: var(--sh-ink); background: #f4f2ee; }
   .role-pill.checked .check-ic, .acad-pill.checked .check-ic { background: var(--sh-ink); border-color: var(--sh-ink); color: #fff; }
   .role-pill:focus-within, .acad-pill:focus-within { outline: 2px solid var(--sh-ink); outline-offset: 1px; }
-  .role-pill .role-name { font-size: .88rem; font-weight: 500; line-height: 1.3; }
+  .role-pill .role-name { font-size: .92rem; font-weight: 600; line-height: 1.3; }
+  .role-pill .role-name small { display: block; margin-top: .15rem; font-size: .83rem; font-weight: 400; color: var(--sh-ink-soft); }
   .acad-pill > .bi-building { color: var(--sh-ink-soft); }
   .acad-pill span:last-child { font-size: .88rem; line-height: 1.3; }
-  .acad-pill.disabled { cursor: default; }
-  .acad-pill.disabled:hover { border-color: var(--sh-line); background: #fff; }
-  .acad-pill.disabled.checked:hover { border-color: var(--sh-ink); background: #f4f2ee; }
+  .acad-pill.disabled { cursor: default; background: #faf9f7; }
+  .acad-pill.disabled:hover { border-color: var(--sh-line); background: #faf9f7; }
+  .acad-pill.disabled.checked { border-color: var(--sh-line); background: #faf9f7; }
+  .acad-pill.disabled .check-ic { display: none; }
+  .acad-pill.disabled.checked > .bi-building { color: #146c43; }
 
-  /* blocos que aparecem conforme o papel */
-  .conditional-block {
-    margin-top: 1rem; padding: 1rem 1.1rem;
-    background: #faf9f7; border: 1px solid var(--sh-line); border-radius: 10px;
-  }
+  /* blocos que aparecem com o papel */
+  .conditional-block { margin-top: 1rem; padding: .95rem 1.05rem; background: #faf9f7; border: 1px solid var(--sh-line); border-radius: 10px; }
   .conditional-block .block-title, .block-title {
     display: flex; align-items: center; gap: .4rem; margin-bottom: .6rem;
-    font-size: .85rem; font-weight: 600; color: var(--sh-ink);
+    font-size: .72rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--sh-ink-soft);
   }
-  .conditional-block .block-title i { color: var(--sh-ink-soft); }
+  .conditional-block .block-title i { display: none; }
 
   /* picker de alunos (responsável) */
   .aluno-picker { position: relative; }
   .aluno-picker .picker-input-wrap { position: relative; }
-  .aluno-picker .picker-input-wrap > i.bi-search {
-    position: absolute; left: .85rem; top: 50%; transform: translateY(-50%); color: var(--sh-ink-soft); pointer-events: none;
-  }
-  .aluno-picker .picker-input {
-    width: 100%; min-height: 2.75rem; padding: .55rem .85rem .55rem 2.3rem;
-    border: 1px solid var(--sh-line); border-radius: 8px; background: #fff; font-size: 16px;
-  }
+  .aluno-picker .picker-input-wrap > i.bi-search { position: absolute; left: .85rem; top: 50%; transform: translateY(-50%); color: var(--sh-ink-soft); pointer-events: none; }
+  .aluno-picker .picker-input { width: 100%; min-height: 2.75rem; padding: .55rem .85rem .55rem 2.3rem; border: 1px solid var(--sh-line); border-radius: 8px; background: #fff; font-size: 16px; }
   .aluno-picker .picker-input:focus { outline: none; border-color: var(--sh-ink); box-shadow: 0 0 0 3px rgba(28, 28, 28, .12); }
   .aluno-picker .picker-suggestions {
     position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 20; display: none;
-    max-height: 240px; overflow-y: auto; background: #fff; border: 1px solid var(--sh-line); border-radius: 8px;
-    box-shadow: 0 8px 24px rgba(28, 28, 28, .1);
+    max-height: 240px; overflow-y: auto; background: #fff; border: 1px solid var(--sh-line); border-radius: 8px; box-shadow: 0 8px 24px rgba(28, 28, 28, .1);
   }
   .aluno-picker .picker-suggestions.open { display: block; }
-  .aluno-picker .picker-suggestion {
-    display: flex; align-items: center; gap: .5rem; padding: .55rem .85rem; cursor: pointer;
-    font-size: .9rem; color: var(--sh-ink); border-bottom: 1px solid #f0eeea;
-  }
+  .aluno-picker .picker-suggestion { display: flex; align-items: center; gap: .5rem; padding: .55rem .85rem; cursor: pointer; font-size: .9rem; color: var(--sh-ink); border-bottom: 1px solid #f0eeea; }
   .aluno-picker .picker-suggestion:last-child { border-bottom: 0; }
   .aluno-picker .picker-suggestion:hover, .aluno-picker .picker-suggestion.active { background: #f4f2ee; color: var(--sh-ink); }
   .aluno-picker .picker-suggestion i.bi-mortarboard { color: var(--sh-ink-soft); }
   .aluno-picker .picker-suggestion .empty, .aluno-picker .picker-suggestion-empty { color: var(--sh-ink-soft); font-style: italic; cursor: default; }
   .aluno-picker .picker-suggestion-empty:hover { background: transparent; }
-  .aluno-picker .picker-selected { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .65rem; }
+  .aluno-picker .picker-selected { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .65rem; }
   .aluno-picker .picker-selected:empty { margin-top: 0; }
-  .aluno-picker .chip {
-    display: inline-flex; align-items: center; gap: .35rem; padding: .3rem .4rem .3rem .7rem;
-    background: #fff; color: var(--sh-ink); border: 1px solid var(--sh-line); border-radius: 999px; font-size: .82rem; font-weight: 500;
-  }
+  .aluno-picker .chip { display: inline-flex; align-items: center; gap: .4rem; min-height: 34px; padding: 0 .3rem 0 .75rem; background: #fff; color: var(--sh-ink); border: 1px solid var(--sh-line); border-radius: 999px; font-size: .84rem; font-weight: 500; }
   .aluno-picker .chip i { color: var(--sh-ink-soft); }
-  .aluno-picker .chip button {
-    display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; padding: 0;
-    border: 0; border-radius: 50%; background: transparent; color: var(--sh-ink-soft); cursor: pointer;
-  }
+  .aluno-picker .chip button { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--sh-ink-soft); cursor: pointer; }
   .aluno-picker .chip button:hover { background: #f1efeb; color: var(--sh-ink); }
   .aluno-picker .picker-empty-state { margin-top: .5rem; font-size: .82rem; color: var(--sh-ink-soft); }
 
-  /* rodapé fixo com as ações */
-  .ue-rodape {
-    position: sticky; bottom: 0; z-index: 30; display: flex; justify-content: flex-end; gap: .6rem;
-    margin: 1rem 0 0; padding: .85rem 0;
-    background: linear-gradient(to bottom, rgba(250, 249, 247, 0), var(--sh-page-bg, #faf9f7) 30%);
+  /* barra de salvar: clara sem mudanças, escura quando há o que salvar */
+  .ue-salvar {
+    position: sticky; bottom: 1rem; z-index: 30; display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+    margin: 1.25rem 0 0 calc(300px + 1.5rem); padding: .6rem .6rem .6rem 1.15rem;
+    background: #fff; border: 1px solid var(--sh-line); border-radius: 12px; box-shadow: 0 8px 24px rgba(28, 28, 28, .08);
+    transition: background .2s ease, color .2s ease;
   }
+  .ue-salvar__msg { display: flex; align-items: center; gap: .6rem; font-size: .88rem; color: var(--sh-ink-soft); min-width: 0; }
+  #ueSalvarTxt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ue-salvar__ponto { width: 8px; height: 8px; flex: none; border-radius: 50%; background: #c9c6c0; }
+  .ue-salvar__acoes { display: flex; gap: .5rem; flex: none; }
+  .ue-salvar.is-sujo { background: var(--sh-ink); border-color: var(--sh-ink); box-shadow: 0 12px 32px rgba(0, 0, 0, .2); }
+  .ue-salvar.is-sujo .ue-salvar__msg { color: #fff; }
+  .ue-salvar.is-sujo .ue-salvar__ponto { background: #f2c200; }
+  .ue-salvar.is-sujo .ue-salvar__sair { background: transparent; color: #fff; border-color: #4a4843; }
+  .ue-salvar.is-sujo .ue-salvar__ok { background: #fff; color: var(--sh-ink); border-color: #fff; }
 
   /* câmera */
   .camera-modal-usuario { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; justify-content: center; align-items: center; background: rgba(0,0,0,.9); z-index: 9999; padding: 10px; }
   .camera-content-usuario { width: 90%; max-width: 480px; text-align: center; }
-  .camera-content-usuario video, .camera-content-usuario canvas {
-    width: 100%; max-width: 100%; height: auto; max-height: 70vh;
-    border-radius: 10px; border: 2px solid #ddd; margin-bottom: 10px; object-fit: contain; background: #000;
-  }
+  .camera-content-usuario video, .camera-content-usuario canvas { width: 100%; max-width: 100%; height: auto; max-height: 70vh; border-radius: 10px; border: 2px solid #ddd; margin-bottom: 10px; object-fit: contain; background: #000; }
   .camera-content-usuario .btn, .camera-content-usuario .u-btn { margin: 5px; }
 
-  @media (max-width: 900px) {
-    .ue-grade { grid-template-columns: minmax(0, 1fr); }
+  @media (max-width: 1100px) {
+    .ue-layout { grid-template-columns: minmax(0, 1fr); }
+    .ue-lado { position: static; }
+    .ue-perfil { flex-direction: row; flex-wrap: wrap; text-align: left; align-items: center; }
+    .ue-perfil h2, .ue-perfil__email, .ue-perfil__selos { width: calc(100% - 104px - 1rem); }
+    .ue-perfil .photo-frame { order: -1; }
+    .ue-resumo { display: none; }
+    .ue-indice { flex-direction: row; overflow-x: auto; scrollbar-width: none; border: 0; background: none; padding: 0; gap: .5rem; position: sticky; top: 0; z-index: 25; }
+    .ue-indice a { flex: none; padding: .45rem .9rem; border: 1px solid var(--sh-line); border-radius: 999px; background: #fff; font-size: .82rem; }
+    .ue-indice b, .ue-indice small:empty { display: none; }
+    .ue-salvar { margin-left: 0; }
+  }
+  @media (max-width: 1100px) and (min-width: 576px) {
+    .ue-perfil { display: grid; grid-template-columns: 104px minmax(0, 1fr) auto; column-gap: 1.25rem; row-gap: .25rem; }
+    .ue-perfil .photo-frame { grid-row: 1 / span 3; }
+    .ue-perfil h2, .ue-perfil__email, .ue-perfil__selos { width: auto; grid-column: 2; justify-content: flex-start; }
+    .ue-perfil__acoes { grid-column: 3; grid-row: 1 / span 3; width: auto; margin: 0; }
   }
   @media (max-width: 768px) {
     .camera-content-usuario { width: 100%; max-width: 100%; }
@@ -171,13 +240,21 @@
     .camera-content-usuario > div { display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; }
   }
   @media (max-width: 575.98px) {
-    .ue-perfil { padding: 1rem; gap: .9rem; }
+    .ue-perfil { padding: 1rem; gap: .4rem .9rem; }
     .photo-frame { width: 72px; height: 72px; }
-    .ue-perfil__acoes { width: 100%; }
-    .ue-perfil__acoes .sh__btn { flex: 1 1 0; justify-content: center; }
-    .section-card { padding: 1rem; }
+    .ue-perfil__cam { width: 28px; height: 28px; font-size: .75rem; right: -2px; bottom: -2px; }
+    .ue-perfil h2, .ue-perfil__email, .ue-perfil__selos { width: calc(100% - 72px - .9rem); justify-content: flex-start; }
+    .section-card { padding: 0 1rem 1.1rem; }
+    .section-title { margin: 0 -1rem 1rem; padding: .85rem 1rem; }
+    .ue-papeis { margin: -1rem -1rem 0; }
+    .ue-papel__linha { grid-template-columns: minmax(0, 1fr) auto; padding: .8rem 1rem; }
+    .ue-papel__ic { display: none; }
+    .ue-papel .conditional-block { margin: -.2rem 1rem .9rem; }
+    .ue-campos, .ue-modo, .ue-areas { grid-template-columns: minmax(0, 1fr); }
     .role-grid, .acad-grid { grid-template-columns: minmax(0, 1fr); }
-    .ue-rodape .sh__btn { flex: 1 1 0; justify-content: center; }
+    .ue { padding-bottom: 8rem; }
+    .ue-salvar { position: fixed; left: 0; right: 0; bottom: 0; margin: 0; border-radius: 0; border-width: 1px 0 0; flex-direction: column; align-items: stretch; gap: .5rem; padding: .7rem 1rem 1rem; }
+    .ue-salvar__acoes .sh__btn { flex: 1 1 0; justify-content: center; min-height: 46px; }
     .ue-longo { display: none; }
   }
 </style>
@@ -191,193 +268,99 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="next" value="{{ back_url }}">
 
-    <!-- PERFIL: foto + identidade -->
-    <section class="ue-perfil">
-      <div class="photo-frame ue-perfil__foto">
-        <img id="miniaturaUsuario"
-             src="{{ url_for('static', filename='uploads/' + usuario.foto) if usuario.get('foto') else '' }}"
-             class="{{ 'd-block' if usuario.foto else 'd-none' }}"
-             alt="Foto de {{ usuario.nome }}" onerror="this.style.display='none'">
-        <div id="placeholderFoto" class="{{ 'd-none' if usuario.get('foto') else 'd-flex' }} placeholder" style="background: {{ cor }}">
-          {{ (usuario.nome or '?')[:1] }}
+{% set DESC = {
+  'admin': 'Acesso total ao sistema, em todas as associações.',
+  'gestor_federacao': 'Administra a federação e as associações dela.',
+  'gestor_associacao': 'Administra a associação: academias, programa de exame e eventos.',
+  'gestor_academia': 'Administra a academia: alunos, financeiro, turmas e usuários.',
+  'professor': 'Faz a chamada, vê as turmas e lança avaliações do exame.',
+  'aluno': 'Entra no app do aluno: presença, mensalidades e exame de faixa.',
+  'responsavel': 'Acompanha alunos menores: pagamentos, presença e avisos.',
+  'visitante': 'Aula experimental; vira aluno depois da matrícula.'} %}
+    <div class="ue-layout">
+    <!-- LADO: perfil, resumo e índice -->
+    <aside class="ue-lado">
+      <section class="ue-perfil">
+        <div class="photo-frame ue-perfil__foto">
+          <img id="miniaturaUsuario"
+               src="{{ url_for('static', filename='uploads/' + usuario.foto) if usuario.get('foto') else '' }}"
+               class="{{ 'd-block' if usuario.foto else 'd-none' }}"
+               alt="Foto de {{ usuario.nome }}" onerror="this.style.display='none'">
+          <div id="placeholderFoto" class="{{ 'd-none' if usuario.get('foto') else 'd-flex' }} placeholder" style="background: {{ cor }}">
+            {{ (usuario.nome or '?')[:1] }}
+          </div>
+          <label class="ue-perfil__cam" for="fotoArquivoUsuario" title="Trocar foto" aria-hidden="true"><i class="bi bi-camera-fill"></i></label>
         </div>
-      </div>
-      <div class="ue-perfil__info">
         <h2>{{ usuario.nome }}</h2>
-        {% if usuario.email %}<p class="ue-perfil__email"><i class="bi bi-envelope" aria-hidden="true"></i> {{ usuario.email }}</p>{% endif %}
+        {% if usuario.email %}<p class="ue-perfil__email">{{ usuario.email }}</p>{% endif %}
         <div class="ue-perfil__selos">
           <span class="u-pill {{ 'u-pill--success' if usuario.get('ativo', 1) }}">{{ 'Ativo' if usuario.get('ativo', 1) else 'Inativo' }}</span>
-          {% if not usuario.cpf %}<span class="u-pill u-pill--warning">CPF pendente</span>{% endif %}
+          {% if usuario.cpf %}<span class="u-pill">Login por CPF</span>{% else %}<span class="u-pill u-pill--warning">CPF pendente</span>{% endif %}
         </div>
-      </div>
-      <div class="ue-perfil__acoes">
-        <input type="hidden" name="foto" id="fotoInputUsuario">
-        <button type="button" class="sh__btn" id="btnAbrirCameraUsuario"><i class="bi bi-camera"></i> Tirar foto</button>
-        <label class="sh__btn ue-arquivo" for="fotoArquivoUsuario"><i class="bi bi-upload"></i> Escolher arquivo
-          <input type="file" name="foto_arquivo" accept="image/*" id="fotoArquivoUsuario" aria-label="Escolher arquivo de foto"></label>
-      </div>
-    </section>
+        <div class="ue-perfil__acoes">
+          <input type="hidden" name="foto" id="fotoInputUsuario">
+          <button type="button" class="sh__btn" id="btnAbrirCameraUsuario"><i class="bi bi-camera"></i> Tirar foto</button>
+          <label class="sh__btn ue-arquivo"><i class="bi bi-upload"></i> Enviar arquivo
+            <input type="file" name="foto_arquivo" accept="image/*" id="fotoArquivoUsuario" aria-label="Enviar arquivo de foto"></label>
+        </div>
+      </section>
 
+      <section class="ue-resumo" aria-live="polite">
+        <span class="ue-rotulo">O que este usuário acessa</span>
+        <ul id="ueResumo"></ul>
+      </section>
+
+      <nav class="ue-indice" aria-label="Seções">
+        <a href="#ue-login"><span><b>1</b>Dados de login</span><small></small></a>
+        <a href="#ue-papeis"><span><b>2</b>Papéis no sistema</span><small id="ueIxPapeis"></small></a>
+        {% if acesso_secao %}<a href="#acessoAcademia"><span><b>3</b>Acesso na academia</span><small id="ueIxAcesso"></small></a>{% endif %}
+        {% if mostrar_academias and academias_disponiveis %}<a href="#ue-academias"><span><b>{{ 4 if acesso_secao else 3 }}</b>Academias vinculadas</span><small>{{ (academias_vinculadas_ids or [])|length }}</small></a>{% endif %}
+      </nav>
+    </aside>
+
+    <!-- SEÇÕES -->
     <div class="ue-grade">
-        <!-- IDENTIFICAÇÃO -->
-        <div class="section-card ue-ident">
-          <div class="section-title"><i class="bi bi-person-vcard"></i> Identificação</div>
-          <div class="row g-3">
-            <div class="col-12">
+        <!-- 1 DADOS DE LOGIN -->
+        <div class="section-card" id="ue-login">
+          <div class="section-title"><h2>Dados de login</h2><span>Nome e e-mail vêm do cadastro da pessoa</span></div>
+          <div class="ue-campos">
+            <div>
               <label class="form-label">Nome</label>
-              <div class="input-icon-wrap"><i class="bi bi-person"></i>
-                <input type="text" class="u-campo__controle" value="{{ usuario.nome }}" disabled aria-label="Nome">
+              <div class="input-icon-wrap ue-travado"><i class="bi bi-person"></i>
+                <input type="text" class="u-campo__controle" value="{{ usuario.nome }}" disabled aria-label="Nome"><i class="bi bi-lock ue-cadeado" aria-hidden="true"></i>
               </div>
             </div>
-            <div class="col-12 col-md-6">
+            <div>
               <label class="form-label">E-mail</label>
-              <div class="input-icon-wrap"><i class="bi bi-envelope"></i>
-                <input type="email" class="u-campo__controle" value="{{ usuario.email }}" disabled aria-label="E-mail">
+              <div class="input-icon-wrap ue-travado"><i class="bi bi-envelope"></i>
+                <input type="email" class="u-campo__controle" value="{{ usuario.email }}" disabled aria-label="E-mail"><i class="bi bi-lock ue-cadeado" aria-hidden="true"></i>
               </div>
             </div>
-            <div class="col-12 col-md-6">
-              <label for="cpf" class="form-label">
-                CPF (login)
-                {% if not usuario.cpf %}<span class="badge bg-warning text-dark ms-1" style="font-size:.65rem;">Pendente</span>{% endif %}
-              </label>
+            <div>
+              <label for="cpf" class="form-label">CPF — usado para entrar no sistema</label>
               <div class="input-icon-wrap"><i class="bi bi-person-badge"></i>
                 <input type="text" inputmode="numeric" class="u-campo__controle" id="cpf" name="cpf"
                        value="{{ usuario.cpf or '' }}" placeholder="000.000.000-00" maxlength="14" autocomplete="off">
+                <span class="ue-cpf-st" id="cpfStatus" aria-live="polite"></span>
               </div>
               <small class="text-muted">
-                {% if usuario.cpf %}
-                  CPF cadastrado. Editar somente em caso de correção.
-                {% else %}
-                  Informe o CPF — passa a ser o login do sistema. Se houver aluno vinculado, sincroniza automaticamente.
-                {% endif %}
+                {% if usuario.cpf %}Altere só para corrigir. O aluno vinculado é atualizado junto.
+                {% else %}Informe o CPF — passa a ser o login do sistema. Se houver aluno vinculado, sincroniza automaticamente.{% endif %}
               </small>
             </div>
-          </div>
-        </div>
-
-        <!-- ACESSO -->
-        <div class="section-card ue-senha">
-          <div class="section-title"><i class="bi bi-shield-lock"></i> Acesso</div>
-          <div class="row g-3">
-            <div class="col-12">
-              <label class="form-label">Nova senha <span class="text-muted fw-normal">(opcional)</span></label>
+            <div>
+              <label for="ueSenha" class="form-label">Nova senha <span class="ue-opc">opcional</span></label>
               <div class="input-icon-wrap"><i class="bi bi-lock"></i>
-                <input type="password" name="senha" class="u-campo__controle" placeholder="••••••" autocomplete="new-password" aria-label="Nova senha (opcional)">
+                <input type="password" name="senha" id="ueSenha" class="u-campo__controle" placeholder="Deixe em branco para manter a atual" autocomplete="new-password">
+                <button type="button" class="ue-mostrar" id="ueMostrarSenha" aria-controls="ueSenha">Mostrar</button>
               </div>
-              <small class="text-muted">Deixe em branco para manter a senha atual.</small>
             </div>
           </div>
         </div>
-
-        {# Acesso nesta academia (MM-13): o gestor principal define o que cada
-           gestor/professor vê. Gestor principal vê tudo e gerencia os outros. #}
-        {% if acesso_secao %}
-        {% set ac = acesso_secao.atual %}
-        <div class="section-card" id="acessoAcademia">
-          <input type="hidden" name="acesso_presente" value="1">
-          <input type="hidden" name="acesso_academia_id" value="{{ acesso_secao.academia_id }}">
-          <div class="section-title"><i class="bi bi-shield-lock"></i> Acesso em {{ acesso_secao.academia_nome }}</div>
-          {# Uma configuração por academia: quem está em várias troca aqui. #}
-          {% if acesso_secao.academias | length > 1 %}
-          <div class="acesso-academias" role="group" aria-label="Academia do acesso">
-            {% for ac_op in acesso_secao.academias %}
-            <a class="sh__btn {% if ac_op.id == acesso_secao.academia_id %}sh__btn--forte{% endif %}"
-               {% if ac_op.id == acesso_secao.academia_id %}aria-current="true"{% endif %}
-               href="{{ url_for('usuarios.editar_usuario', user_id=usuario.id, acesso_academia=ac_op.id, next=request.args.get('next')) }}#acessoAcademia">{{ ac_op.nome }}</a>
-            {% endfor %}
-          </div>
-          <div class="section-help">Cada academia tem a sua configuração. Salve antes de trocar de academia.</div>
-          {% else %}
-          <div class="section-help">O que este usuário vê e faz nesta academia.</div>
-          {% endif %}
-          <style>.acesso-academias { display: flex; gap: .5rem; flex-wrap: wrap; margin: .2rem 0 .6rem; }</style>
-
-          {% if acesso_secao.eh_gestor %}
-          <div class="role-grid mb-3">
-            <label class="role-pill" data-role-pill>
-              <input type="checkbox" class="acesso-cb" name="acesso_principal" value="1" id="acessoPrincipal" {% if ac.principal %}checked{% endif %}>
-              <span class="check-ic"><i class="bi bi-check-lg"></i></span>
-              <span class="role-name">Gestor principal — vê tudo e gerencia o acesso dos outros</span>
-            </label>
-          </div>
-          {% endif %}
-
-          {% if acesso_secao.eh_gestor %}
-          <p class="text-muted small mb-2" id="acessoAvisoPrincipal" {% if not ac.principal %}hidden{% endif %}>
-            Gestor principal vê tudo. <strong>Desmarque "Gestor principal"</strong> para escolher áreas e modalidades.
-          </p>
-          {% endif %}
-          <div id="acessoRestricoes">
-            <div class="ue-rotulo">Áreas</div>
-            <div class="role-grid mb-3">
-              <label class="role-pill" data-role-pill>
-                <input type="checkbox" class="acesso-cb" name="acesso_financeiro" value="1" {% if ac.financeiro %}checked{% endif %}>
-                <span class="check-ic"><i class="bi bi-check-lg"></i></span>
-                <span class="role-name">Financeiro</span>
-              </label>
-              <label class="role-pill" data-role-pill>
-                <input type="checkbox" class="acesso-cb" name="acesso_academico" value="1" {% if ac.academico %}checked{% endif %}>
-                <span class="check-ic"><i class="bi bi-check-lg"></i></span>
-                <span class="role-name">Acadêmico — presenças, turmas, exame, calendário, eventos</span>
-              </label>
-            </div>
-
-            {% if acesso_secao.modalidades | length > 1 %}
-            <div class="ue-rotulo">Modalidades</div>
-            <div class="role-grid">
-              <label class="role-pill" data-role-pill>
-                <input type="checkbox" class="acesso-cb" name="acesso_modalidades_todas" value="1" id="acessoTodas" {% if not ac.modalidades %}checked{% endif %}>
-                <span class="check-ic"><i class="bi bi-check-lg"></i></span>
-                <span class="role-name">Todas</span>
-              </label>
-              {% for m in acesso_secao.modalidades %}
-              <label class="role-pill" data-role-pill>
-                <input type="checkbox" class="acesso-cb acesso-mod" name="acesso_modalidades" value="{{ m.id }}" {% if m.id in ac.modalidades %}checked{% endif %}>
-                <span class="check-ic"><i class="bi bi-check-lg"></i></span>
-                <span class="role-name">{{ m.nome }}</span>
-              </label>
-              {% endfor %}
-            </div>
-            <small class="text-muted">Com modalidades marcadas, o usuário só vê essas — uma por vez no seletor do topo.</small>
-            {% endif %}
-          </div>
-        </div>
-        <script>
-        (function () {
-          var pr = document.getElementById('acessoPrincipal');
-          var bloco = document.getElementById('acessoRestricoes');
-          var todas = document.getElementById('acessoTodas');
-          var mods = document.querySelectorAll('.acesso-mod');
-          function principal() {
-            // Principal vê tudo: as restrições não se aplicam.
-            if (!pr || !bloco) return;
-            bloco.style.opacity = pr.checked ? .45 : 1;
-            bloco.querySelectorAll('input').forEach(function (i) { i.disabled = pr.checked; });
-            var aviso = document.getElementById('acessoAvisoPrincipal');
-            if (aviso) aviso.hidden = !pr.checked;
-          }
-          function sincTodas(ev) {
-            if (!todas) return;
-            var algum = Array.prototype.some.call(mods, function (m) { return m.checked; });
-            if (ev && ev.target === todas && todas.checked) mods.forEach(function (m) { m.checked = false; });
-            else todas.checked = !algum;
-            // As pílulas mostram o estado pela classe `checked`: avisa a mudança.
-            [todas].concat(Array.prototype.slice.call(mods)).forEach(function (c) {
-              var pill = c.closest('.role-pill'); if (pill) pill.classList.toggle('checked', c.checked);
-            });
-          }
-          if (pr) pr.addEventListener('change', principal);
-          if (todas) todas.addEventListener('change', sincTodas);
-          mods.forEach(function (m) { m.addEventListener('change', sincTodas); });
-          principal();
-        })();
-        </script>
-        {% endif %}
-
 
         <!-- ROLES -->
-        <div class="section-card">
-          <div class="section-title"><i class="bi bi-people"></i> Níveis de acesso (Roles){% if academia_papeis_nome %} em {{ academia_papeis_nome }}{% endif %}</div>
+        <div class="section-card" id="ue-papeis">
+          <div class="section-title"><h2>Papéis no sistema{% if academia_papeis_nome %} em {{ academia_papeis_nome }}{% endif %}</h2><span>Cada papel libera um conjunto de telas</span></div>
           <div class="section-help">
             {% if academia_papeis_nome %}
             Os papéis marcados valem <strong>só nesta academia</strong> — numa outra academia a mesma pessoa pode ser, por exemplo, aluno.
@@ -385,15 +368,18 @@
             Selecione os papéis que o usuário deve ter.
             {% endif %}
           </div>
-          <div class="role-grid">
+          <div class="ue-papeis">
             {% for role in roles %}
-            <label class="role-pill" data-role-pill>
-              <input type="checkbox" class="role-cb" name="roles" id="role_{{ role.id }}"
-                     value="{{ role.id }}" data-chave="{{ role.chave or role.nome|lower }}"
-                     {% if role.id in roles_do_usuario %}checked{% endif %}>
-              <span class="check-ic"><i class="bi bi-check-lg"></i></span>
-              <span class="role-name">{{ role.nome }}</span>
-            </label>
+            {% set chave = (role.chave or role.nome|lower) %}
+            <div class="ue-papel" data-chave="{{ chave }}">
+              <label class="ue-papel__linha" for="role_{{ role.id }}">
+                <span class="ue-papel__ic" aria-hidden="true">{{ role.nome[:1] }}</span>
+                <span class="ue-papel__txt"><strong>{{ role.nome }}</strong>{% if DESC[chave] %}<span>{{ DESC[chave] }}</span>{% endif %}</span>
+                <input type="checkbox" class="role-cb ue-switch" role="switch" name="roles" id="role_{{ role.id }}"
+                       value="{{ role.id }}" data-chave="{{ chave }}" data-nome="{{ role.nome }}" data-desc="{{ DESC[chave] or '' }}"
+                       {% if role.id in roles_do_usuario %}checked{% endif %}>
+              </label>
+            </div>
             {% endfor %}
           </div>
 
@@ -461,12 +447,119 @@
           {% endif %}
         </div>
 
+        {# Acesso nesta academia (MM-13): o gestor principal define o que cada
+           gestor/professor vê. Gestor principal vê tudo e gerencia os outros. #}
+        {% if acesso_secao %}
+        {% set ac = acesso_secao.atual %}
+        <div class="section-card" id="acessoAcademia">
+          <input type="hidden" name="acesso_presente" value="1">
+          <input type="hidden" name="acesso_academia_id" value="{{ acesso_secao.academia_id }}">
+          <div class="section-title"><h2>Acesso em {{ acesso_secao.academia_nome }}</h2><span>Vale para gestor e professor</span></div>
+          {# Uma configuração por academia: quem está em várias troca aqui. #}
+          {% if acesso_secao.academias | length > 1 %}
+          <div class="acesso-academias" role="group" aria-label="Academia do acesso">
+            {% for ac_op in acesso_secao.academias %}
+            <a class="sh__btn {% if ac_op.id == acesso_secao.academia_id %}sh__btn--forte{% endif %}"
+               {% if ac_op.id == acesso_secao.academia_id %}aria-current="true"{% endif %}
+               href="{{ url_for('usuarios.editar_usuario', user_id=usuario.id, acesso_academia=ac_op.id, next=request.args.get('next')) }}#acessoAcademia">{{ ac_op.nome }}</a>
+            {% endfor %}
+          </div>
+          <div class="section-help">Cada academia tem a sua configuração. Salve antes de trocar de academia.</div>
+          {% else %}
+          <div class="section-help">O que este usuário vê e faz nesta academia.</div>
+          {% endif %}
+          <style>.acesso-academias { display: flex; gap: .5rem; flex-wrap: wrap; margin: .2rem 0 .6rem; }</style>
+
+          {% if acesso_secao.eh_gestor %}
+          {# A escolha é de rádio na tela; o envio continua sendo a caixa acesso_principal. #}
+          <input type="checkbox" class="acesso-cb" name="acesso_principal" value="1" id="acessoPrincipal" hidden {% if ac.principal %}checked{% endif %}>
+          <div class="ue-modo" role="radiogroup" aria-label="Tipo de acesso">
+            <label class="ue-opcao"><input type="radio" name="ue_modo_acesso" value="principal" {% if ac.principal %}checked{% endif %}>
+              <span><strong>Gestor principal</strong><small>Vê tudo da academia e define o acesso dos outros.</small></span></label>
+            <label class="ue-opcao"><input type="radio" name="ue_modo_acesso" value="area" {% if not ac.principal %}checked{% endif %}>
+              <span><strong>Acesso por área</strong><small>Escolha abaixo o que ele pode ver e fazer.</small></span></label>
+          </div>
+          {% endif %}
+
+          {% if acesso_secao.eh_gestor %}
+          <p class="section-help" id="acessoAvisoPrincipal" {% if not ac.principal %}hidden{% endif %}>
+            Gestor principal vê tudo. Escolha <strong>Acesso por área</strong> para limitar áreas e modalidades.
+          </p>
+          {% endif %}
+          <div id="acessoRestricoes">
+            <div class="ue-rotulo">Áreas</div>
+            <div class="role-grid ue-areas mb-3">
+              <label class="role-pill" data-role-pill>
+                <input type="checkbox" class="acesso-cb" name="acesso_financeiro" value="1" {% if ac.financeiro %}checked{% endif %}>
+                <span class="check-ic"><i class="bi bi-check-lg"></i></span>
+                <span class="role-name">Financeiro<small>Mensalidades, cobranças, caixa e relatórios.</small></span>
+              </label>
+              <label class="role-pill" data-role-pill>
+                <input type="checkbox" class="acesso-cb" name="acesso_academico" value="1" {% if ac.academico %}checked{% endif %}>
+                <span class="check-ic"><i class="bi bi-check-lg"></i></span>
+                <span class="role-name">Acadêmico<small>Presenças, turmas, exame de faixa, calendário e eventos.</small></span>
+              </label>
+            </div>
+
+            {% if acesso_secao.modalidades | length > 1 %}
+            <div class="ue-rotulo">Modalidades</div>
+            <div class="role-grid">
+              <label class="role-pill" data-role-pill>
+                <input type="checkbox" class="acesso-cb" name="acesso_modalidades_todas" value="1" id="acessoTodas" {% if not ac.modalidades %}checked{% endif %}>
+                <span class="check-ic"><i class="bi bi-check-lg"></i></span>
+                <span class="role-name">Todas</span>
+              </label>
+              {% for m in acesso_secao.modalidades %}
+              <label class="role-pill" data-role-pill>
+                <input type="checkbox" class="acesso-cb acesso-mod" name="acesso_modalidades" value="{{ m.id }}" {% if m.id in ac.modalidades %}checked{% endif %}>
+                <span class="check-ic"><i class="bi bi-check-lg"></i></span>
+                <span class="role-name">{{ m.nome }}</span>
+              </label>
+              {% endfor %}
+            </div>
+            <small class="text-muted">Com modalidades marcadas, o usuário só vê essas — uma por vez no seletor do topo.</small>
+            {% endif %}
+          </div>
+        </div>
+        <script>
+        (function () {
+          var pr = document.getElementById('acessoPrincipal');
+          var bloco = document.getElementById('acessoRestricoes');
+          var todas = document.getElementById('acessoTodas');
+          var mods = document.querySelectorAll('.acesso-mod');
+          function principal() {
+            // Principal vê tudo: as restrições não se aplicam.
+            if (!pr || !bloco) return;
+            bloco.style.opacity = pr.checked ? .45 : 1;
+            bloco.querySelectorAll('input').forEach(function (i) { i.disabled = pr.checked; });
+            var aviso = document.getElementById('acessoAvisoPrincipal');
+            if (aviso) aviso.hidden = !pr.checked;
+          }
+          function sincTodas(ev) {
+            if (!todas) return;
+            var algum = Array.prototype.some.call(mods, function (m) { return m.checked; });
+            if (ev && ev.target === todas && todas.checked) mods.forEach(function (m) { m.checked = false; });
+            else todas.checked = !algum;
+            // As pílulas mostram o estado pela classe `checked`: avisa a mudança.
+            [todas].concat(Array.prototype.slice.call(mods)).forEach(function (c) {
+              var pill = c.closest('.role-pill'); if (pill) pill.classList.toggle('checked', c.checked);
+            });
+          }
+          if (pr) pr.addEventListener('change', principal);
+          if (todas) todas.addEventListener('change', sincTodas);
+          mods.forEach(function (m) { m.addEventListener('change', sincTodas); });
+          principal();
+        })();
+        </script>
+        {% endif %}
+
+
         <!-- ACADEMIAS -->
         {% if mostrar_academias and academias_disponiveis %}
-        <div class="section-card">
-          <div class="section-title"><i class="bi bi-building"></i> Academias vinculadas</div>
+        <div class="section-card" id="ue-academias">
+          <div class="section-title"><h2>Academias vinculadas</h2><span>{% if academias_bloqueadas %}<i class="bi bi-lock" aria-hidden="true"></i> Só a associação altera{% else %}Onde o usuário tem acesso{% endif %}</span></div>
           {% if academias_bloqueadas %}
-          <div class="section-help"><i class="bi bi-lock" aria-hidden="true"></i> No modo academia as academias vinculadas só podem ser vistas — a associação altera.</div>
+
           {% else %}
           <div class="section-help">Marque as academias às quais o usuário tem acesso.</div>
           {% endif %}
@@ -486,11 +579,16 @@
         {% endif %}
 
     </div>
+    </div>
 
-    <div class="ue-rodape">
+    <div class="ue-salvar" id="ueSalvar">
       {% set back_url = back_url or get_back_url_default() %}
-      <a href="{{ url_voltar(back_url) }}" class="sh__btn">Cancelar</a>
-      <button type="submit" class="sh__btn sh__btn--forte"><i class="bi bi-check-lg"></i> Salvar<span class="ue-longo"> alterações</span></button>
+      <span class="ue-salvar__msg"><span class="ue-salvar__ponto" aria-hidden="true"></span><span id="ueSalvarTxt">Nenhuma alteração</span></span>
+      <span class="ue-salvar__acoes">
+        <a href="{{ url_voltar(back_url) }}" class="sh__btn ue-salvar__sair" id="ueCancelar">Cancelar</a>
+        <a href="" class="sh__btn ue-salvar__sair" id="ueDescartar" hidden>Descartar</a>
+        <button type="submit" class="sh__btn sh__btn--forte ue-salvar__ok"><i class="bi bi-check-lg"></i> Salvar<span class="ue-longo"> alterações</span></button>
+      </span>
     </div>
   </form>
 </div>
@@ -881,6 +979,168 @@
   if (fa && fi && typeof initPhotoCrop === 'function') {
     initPhotoCrop(fa, { fotoInput: fi, miniatura: m, placeholder: p });
   }
+})();
+</script>
+<script>
+/* Editar usuário (artboard 9): blocos sob o papel, resumo do acesso, índice,
+   CPF, mostrar senha, tipo de acesso e a barra que acusa o que mudou. */
+(function () {
+  var form = document.querySelector('.ue form');
+  if (!form) return;
+
+  // 1) Vínculo de aluno / responsável / visitante logo abaixo do próprio papel
+  [['blocoAluno', 'aluno'], ['blocoResponsavel', 'responsavel'], ['blocoVisitante', 'visitante']].forEach(function (par) {
+    var bloco = document.getElementById(par[0]);
+    var linha = document.querySelector('.ue-papel[data-chave="' + par[1] + '"]');
+    if (bloco && linha) linha.appendChild(bloco);
+  });
+
+  // 2) Tipo de acesso (rádio na tela) -> caixa acesso_principal que vai no envio
+  var principal = document.getElementById('acessoPrincipal');
+  document.querySelectorAll('input[name="ue_modo_acesso"]').forEach(function (r) {
+    r.addEventListener('change', function () {
+      if (!principal || !r.checked) return;
+      principal.checked = r.value === 'principal';
+      principal.dispatchEvent(new Event('change'));
+      atualizar();
+    });
+  });
+
+  // 3) CPF: confere os dígitos verificadores enquanto digita
+  var cpf = document.getElementById('cpf'), cpfSt = document.getElementById('cpfStatus');
+  function cpfValido(v) {
+    var d = (v || '').replace(/\D/g, '');
+    if (d.length !== 11 || /^(\d)\1{10}$/.test(d)) return false;
+    for (var t = 9; t < 11; t++) {
+      var s = 0;
+      for (var i = 0; i < t; i++) s += +d[i] * (t + 1 - i);
+      if (((s * 10) % 11) % 10 !== +d[t]) return false;
+    }
+    return true;
+  }
+  function checaCpf() {
+    if (!cpf || !cpfSt) return;
+    var d = cpf.value.replace(/\D/g, '');
+    cpfSt.className = 'ue-cpf-st';
+    if (!d) { cpfSt.textContent = ''; return; }
+    if (d.length < 11) { cpfSt.textContent = ''; return; }
+    var ok = cpfValido(d);
+    cpfSt.textContent = ok ? '✓ válido' : 'inválido';
+    cpfSt.classList.add(ok ? 'is-ok' : 'is-erro');
+  }
+  if (cpf) cpf.addEventListener('input', checaCpf);
+  checaCpf();
+
+  // 4) Mostrar / esconder a nova senha
+  var senha = document.getElementById('ueSenha'), mostrar = document.getElementById('ueMostrarSenha');
+  if (senha && mostrar) mostrar.addEventListener('click', function () {
+    var ver = senha.type === 'password';
+    senha.type = ver ? 'text' : 'password';
+    mostrar.textContent = ver ? 'Ocultar' : 'Mostrar';
+  });
+
+  // 5) Resumo "o que acessa" e contadores do índice
+  var resumo = document.getElementById('ueResumo');
+  function textoAreas() {
+    if (!document.getElementById('acessoAcademia')) return null;
+    if (principal && principal.checked) return ['Gestor principal', 'vê tudo da academia'];
+    var nomes = [];
+    document.querySelectorAll('.ue-areas input:checked').forEach(function (i) {
+      var n = i.closest('label').querySelector('.role-name');
+      if (n) nomes.push(n.firstChild.textContent.trim());
+    });
+    return nomes.length ? ['Áreas', nomes.join(' e ')] : ['Áreas', 'nenhuma área liberada'];
+  }
+  function atualizar() {
+    var papeis = document.querySelectorAll('.role-cb:checked');
+    if (resumo) {
+      resumo.innerHTML = '';
+      papeis.forEach(function (cb) {
+        var li = document.createElement('li'), b = document.createElement('div');
+        b.innerHTML = '<strong></strong><span></span>';
+        b.querySelector('strong').textContent = cb.dataset.nome || '';
+        b.querySelector('span').textContent = cb.dataset.desc || '';
+        li.appendChild(b); resumo.appendChild(li);
+      });
+      var ar = textoAreas();
+      if (ar && papeis.length) {
+        var li = document.createElement('li'), b = document.createElement('div');
+        b.innerHTML = '<strong></strong><span></span>';
+        b.querySelector('strong').textContent = ar[0]; b.querySelector('span').textContent = ar[1];
+        li.appendChild(b); resumo.appendChild(li);
+      }
+      if (!papeis.length) {
+        var vazio = document.createElement('li'); vazio.className = 'is-vazio';
+        vazio.innerHTML = '<div><strong>Sem papéis</strong><span>não entra em nenhuma área do sistema</span></div>';
+        resumo.appendChild(vazio);
+      }
+    }
+    var ixP = document.getElementById('ueIxPapeis');
+    if (ixP) ixP.textContent = papeis.length + (papeis.length === 1 ? ' ativo' : ' ativos');
+    var ixA = document.getElementById('ueIxAcesso');
+    if (ixA) ixA.textContent = principal && principal.checked ? 'tudo' : 'por área';
+  }
+  form.addEventListener('change', atualizar);
+  atualizar();
+
+  // 6) Barra de salvar: compara com o estado ao abrir a tela
+  var IGNORA = { csrf_token: 1, next: 1, ue_modo_acesso: 1, acesso_presente: 1, acesso_academia_id: 1 };
+  function rotulo(el) {
+    var n = el.name;
+    if (n === 'roles') return 'papel ' + (el.dataset.nome || '');
+    if (n === 'senha') return 'senha';
+    if (n === 'cpf') return 'CPF';
+    if (n === 'foto' || n === 'foto_arquivo') return 'foto';
+    if (n === 'aluno_id') return 'aluno vinculado';
+    if (n === 'aluno_ids') return 'alunos do responsável';
+    if (n === 'academias') return 'academias';
+    if (n.indexOf('acesso_') === 0) return 'acesso na academia';
+    return n;
+  }
+  function estado() {
+    var m = {};
+    Array.prototype.forEach.call(form.elements, function (el) {
+      if (!el.name || IGNORA[el.name] || el.type === 'submit' || el.type === 'button') return;
+      var k = el.name + (el.type === 'checkbox' || el.type === 'radio' ? ':' + el.value : '');
+      var v = el.type === 'checkbox' || el.type === 'radio' ? el.checked
+            : el.type === 'file' ? (el.files && el.files.length ? el.files[0].name : '') : el.value;
+      m[k] = { v: v, el: el };
+    });
+    return m;
+  }
+  var inicial = estado();
+  var barra = document.getElementById('ueSalvar'), txt = document.getElementById('ueSalvarTxt');
+  var cancelar = document.getElementById('ueCancelar'), descartar = document.getElementById('ueDescartar');
+  if (descartar) descartar.href = window.location.href.split('#')[0];
+  var enviando = false;
+  function confere() {
+    if (!barra || !txt) return;
+    var agora = estado(), mud = 0, nomes = [];
+    Object.keys(agora).forEach(function (k) {
+      if (!inicial[k] || inicial[k].v !== agora[k].v) {
+        mud++;
+        var r = rotulo(agora[k].el);
+        if (nomes.indexOf(r) < 0) nomes.push(r);
+      }
+    });
+    barra.classList.toggle('is-sujo', mud > 0);
+    if (cancelar) cancelar.hidden = mud > 0;
+    if (descartar) descartar.hidden = mud === 0;
+    txt.textContent = mud
+      ? mud + (mud === 1 ? ' alteração não salva' : ' alterações não salvas') + ' · ' + nomes.join(', ')
+      : 'Nenhuma alteração';
+    barra.dataset.sujo = mud ? '1' : '';
+  }
+  form.addEventListener('input', confere);
+  form.addEventListener('change', confere);
+  setInterval(confere, 800);   // a foto da câmera/recorte muda o campo sem disparar evento
+  form.addEventListener('submit', function () { enviando = true; });
+  window.addEventListener('beforeunload', function (e) {
+    if (enviando || !barra || !barra.dataset.sujo) return;
+    e.preventDefault(); e.returnValue = '';
+  });
+  if (descartar) descartar.addEventListener('click', function () { enviando = true; });
+  confere();
 })();
 </script>
 {% endblock %}
