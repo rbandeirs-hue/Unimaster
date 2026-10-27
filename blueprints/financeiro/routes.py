@@ -6446,6 +6446,9 @@ def _registrar_pagamento_e_receita(conn, cur, tipo, registro_id, id_academia, id
         data_ref = hoje
     if data_ref > hoje:   # ISO: comparar texto é comparar data
         return False      # pagamento no futuro é erro de digitação
+    from utils.financeiro_core import mes_fechado as _mes_fechado
+    if _mes_fechado(cur, id_academia, data_ref):
+        return False      # mês fechado: nada entra com data nele
     if tipo == "mensalidade_aluno":
         hoje = data_ref  # a mensalidade usa a data efetiva do pagamento (juros e receita)
         dcur = conn.cursor(dictionary=True)
@@ -7132,6 +7135,9 @@ def _registrar_pagamento_mensalidade_partes(conn, cur, registro_id, id_academia,
     # jogava a receita num mês que ainda não aconteceu.
     if data_ref and data_ref > date.today():
         return False, "A data do pagamento não pode ser no futuro."
+    from utils.financeiro_core import mes_fechado as _mes_fechado
+    if data_ref and _mes_fechado(cur, id_academia, data_ref):
+        return False, f"O mês {data_ref:%m/%Y} está fechado. Reabra o período para lançar nele."
 
     _ma_enriquecer_exibicao(ma, ma["aluno_id"], ma.get("id_academia") or id_academia, hoje=data_ref)
     valor_total = round(float(ma.get("valor_final") or ma.get("valor") or 0), 2)
@@ -8712,7 +8718,15 @@ def cancelar_pagamento():
         # Antes de apagar as receitas: estorno no caixa e registro na auditoria
         # (utils/financeiro_core.estornar_receitas). Sem isso o dinheiro sumia
         # dos relatórios mas ficava no caixa, e ninguém sabia quem cancelou.
-        from utils.financeiro_core import estornar_receitas
+        from utils.financeiro_core import estornar_receitas, mes_fechado
+        # O pagamento é de um mês fechado: desfazer mudaria um mês já entregue.
+        cur.execute(f"SELECT data, id_academia FROM receitas WHERE {'id_mensalidade_aluno' if tipo == 'mensalidade_aluno' else 'id_cobranca_avulsa'} = %s",
+                    (registro_id,))
+        _fechado = next((r for r in cur.fetchall() if mes_fechado(cur, r["id_academia"], r["data"])), None)
+        if _fechado:
+            conn.close()
+            flash(f"Este pagamento é de {_fechado['data']:%m/%Y}, mês já fechado. Reabra o mês para cancelar.", "warning")
+            return redirect(request.referrer or url_for("financeiro.mensalidades_alunos", academia_id=academia_id))
         _motivo = (request.form.get("motivo") or "").strip()[:255] or None
         estornar_receitas(cur, "id_mensalidade_aluno" if tipo == "mensalidade_aluno" else "id_cobranca_avulsa",
                           registro_id, motivo=_motivo, usuario_id=getattr(current_user, "id", None))
@@ -9601,6 +9615,8 @@ def cadastrar_receita():
         try:
             conn = get_db_connection()
             cur = conn.cursor()
+            from utils.financeiro_core import exigir_mes_aberto
+            exigir_mes_aberto(cur, id_acad, data_str)
             cur.execute(
                 "INSERT INTO receitas (descricao, valor, data, categoria, id_academia, observacoes, criado_por) VALUES (%s, %s, %s, %s, %s, %s, %s)",
                 (descricao, valor, data_str, categoria, id_acad, observacoes, current_user.id),
@@ -9610,8 +9626,9 @@ def cadastrar_receita():
             conn.close()
             flash("Receita cadastrada com sucesso.", "success")
             return redirect(url_for("financeiro.lista_receitas", academia_id=academia_id))
-        except Exception:
-            flash("Erro ao salvar receita.", "danger")
+        except Exception as e:
+            from utils.financeiro_core import ErroFinanceiro
+            flash(str(e) if isinstance(e, ErroFinanceiro) else "Erro ao salvar receita.", "danger")
             return render_template("financeiro/receitas/form_receita.html", receita=None, academias=academias, academia_id=academia_id, categorias_sugeridas=_categorias_lancadas(academia_id, "receitas"), hoje_iso=date.today().isoformat())
 
     return render_template("financeiro/receitas/form_receita.html", receita=None, academias=academias, academia_id=academia_id, categorias_sugeridas=_categorias_lancadas(academia_id, "receitas"), hoje_iso=date.today().isoformat())
@@ -9683,16 +9700,30 @@ def editar_receita(receita_id):
         try:
             conn = get_db_connection()
             cur = conn.cursor()
+            # Mês fechado não muda (nem o antigo, nem o novo). O caixa acompanha
+            # a edição: estorna o lançamento antigo e lança com valor/data novos.
+            from utils.financeiro_core import (ErroFinanceiro, desfazer_espelho_receita,
+                                               exigir_mes_aberto)
+            exigir_mes_aberto(cur, receita.get("id_academia"), receita.get("data"))
+            exigir_mes_aberto(cur, id_acad, data_str)
+            desfazer_espelho_receita(cur, receita_id, motivo="Receita editada.",
+                                     usuario_id=current_user.id)
             cur.execute(
                 "UPDATE receitas SET descricao=%s, valor=%s, data=%s, categoria=%s, id_academia=%s, observacoes=%s WHERE id=%s",
                 (descricao, valor, data_str, categoria, id_acad, observacoes, receita_id),
             )
+            espelhar_receita(cur, receita_id, usuario_id=current_user.id)
             conn.commit()
             conn.close()
             flash("Receita atualizada.", "success")
             return redirect(url_for("financeiro.lista_receitas", academia_id=academia_id))
-        except Exception:
-            flash("Erro ao atualizar receita.", "danger")
+        except Exception as e:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            from utils.financeiro_core import ErroFinanceiro
+            flash(str(e) if isinstance(e, ErroFinanceiro) else "Erro ao atualizar receita.", "danger")
 
     return render_template("financeiro/receitas/form_receita.html", receita=receita, academias=academias, academia_id=academia_id, categorias_sugeridas=_categorias_lancadas(academia_id, "receitas"), hoje_iso=date.today().isoformat())
 
@@ -9734,15 +9765,23 @@ def excluir_receita(receita_id):
         return redirect(url_for("financeiro.lista_receitas", academia_id=academia_id, mes=mes, ano=ano))
     try:
         cur = conn.cursor()
+        from utils.financeiro_core import desfazer_espelho_receita, exigir_mes_aberto
+        cur.execute("SELECT id_academia, data FROM receitas WHERE id = %s", (receita_id,))
+        _rd = cur.fetchone()
+        exigir_mes_aberto(cur, _rd[0], _rd[1])
+        # Estorno no caixa antes de apagar: o dinheiro sai do extrato junto.
+        desfazer_espelho_receita(cur, receita_id, motivo="Receita excluída.",
+                                 usuario_id=getattr(current_user, "id", None))
         cur.execute(f"DELETE FROM receitas WHERE id = %s AND id_academia IN ({ph_ids})", (receita_id, *ids))
         conn.commit()
         flash("Receita excluída.", "success")
-    except Exception:
+    except Exception as e:
+        from utils.financeiro_core import ErroFinanceiro
         try:
             conn.rollback()
         except Exception:
             pass
-        flash("Erro ao excluir receita.", "danger")
+        flash(str(e) if isinstance(e, ErroFinanceiro) else "Erro ao excluir receita.", "danger")
     conn.close()
     return redirect(url_for("financeiro.lista_receitas", academia_id=academia_id, mes=mes, ano=ano))
 

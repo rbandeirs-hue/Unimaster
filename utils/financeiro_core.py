@@ -825,3 +825,100 @@ def estornar_receitas(cur, coluna, valor_id, *, motivo=None, usuario_id=None):
     finally:
         dc.close()
     return n
+
+
+# =====================================================================
+# Fechamento de mês
+# =====================================================================
+def mes_fechado(cur, id_academia, data_ref):
+    """True se o mês de `data_ref` (date ou 'AAAA-MM-DD') está fechado."""
+    from datetime import date as _date
+    if not data_ref or not id_academia:
+        return False
+    if not isinstance(data_ref, _date):
+        try:
+            data_ref = _date.fromisoformat(str(data_ref)[:10])
+        except ValueError:
+            return False
+    return _competencia_fechada(cur, id_academia, data_ref)
+
+
+def exigir_mes_aberto(cur, id_academia, data_ref):
+    """Levanta PeriodoFechado se o mês estiver fechado — para as rotas que
+    mexem em dinheiro (baixa, cancelamento, receita/despesa manual)."""
+    if mes_fechado(cur, id_academia, data_ref):
+        from datetime import date as _date
+        d = data_ref if isinstance(data_ref, _date) else _date.fromisoformat(str(data_ref)[:10])
+        raise PeriodoFechado(d.month, d.year)
+
+
+def fechamentos(cur, id_academia):
+    cur.execute("""SELECT f.*, u.nome AS fechado_por_nome, u2.nome AS reaberto_por_nome
+                   FROM fin_fechamentos f
+                   LEFT JOIN usuarios u ON u.id = f.fechado_por
+                   LEFT JOIN usuarios u2 ON u2.id = f.reaberto_por
+                   WHERE f.id_academia = %s ORDER BY f.ano DESC, f.mes DESC""", (id_academia,))
+    return cur.fetchall()
+
+
+def fechar_mes(conn, cur, id_academia, ano, mes, usuario_id=None):
+    """Fecha o mês: nada mais entra, sai ou é estornado com data nele.
+    Guarda o saldo de cada conta no último dia do mês (o 'saldo de fechamento')."""
+    from datetime import date as _date, timedelta as _td
+    fim = _date(ano + (mes == 12), mes % 12 + 1, 1) - _td(days=1)
+    if fim >= _date.today():
+        raise ErroFinanceiro("Só dá para fechar um mês que já terminou.")
+    cur.execute("SELECT id, saldo_inicial FROM fin_contas WHERE id_academia = %s", (id_academia,))
+    contas = cur.fetchall()
+    total = Decimal("0")
+    for c in contas:
+        cur.execute("""SELECT COALESCE(SUM(CASE WHEN sentido='entrada' THEN valor ELSE -valor END), 0) AS m
+                       FROM fin_lancamentos WHERE id_conta = %s AND status = 'efetivado'
+                         AND COALESCE(data_efetivacao, data_competencia) <= %s""", (c["id"], fim))
+        total += Decimal(str(c["saldo_inicial"] or 0)) + Decimal(str(cur.fetchone()["m"] or 0))
+    uid = usuario_id or getattr(current_user, "id", None)
+    cur.execute("""INSERT INTO fin_fechamentos (id_academia, ano, mes, status, saldo_final, fechado_por)
+                   VALUES (%s, %s, %s, 'fechado', %s, %s)
+                   ON DUPLICATE KEY UPDATE status = 'fechado', saldo_final = VALUES(saldo_final),
+                       fechado_por = VALUES(fechado_por), fechado_em = CURRENT_TIMESTAMP""",
+                (id_academia, ano, mes, total, uid))
+    auditar(cur, id_academia, "fin_fechamentos", ano * 100 + mes, "fechar",
+            valor_novo=total, status_novo="fechado", usuario_id=uid,
+            detalhes=f"{mes:02d}/{ano} · saldo total {total}")
+    return total
+
+
+def reabrir_mes(conn, cur, id_academia, ano, mes, motivo, usuario_id=None):
+    motivo = (motivo or "").strip()
+    if not motivo:
+        raise ErroFinanceiro("Informe o motivo para reabrir o mês.")
+    uid = usuario_id or getattr(current_user, "id", None)
+    cur.execute("""UPDATE fin_fechamentos SET status = 'reaberto', reaberto_por = %s,
+                          reaberto_em = CURRENT_TIMESTAMP, motivo_reabertura = %s
+                   WHERE id_academia = %s AND ano = %s AND mes = %s AND status = 'fechado'""",
+                (uid, motivo[:500], id_academia, ano, mes))
+    if not cur.rowcount:
+        raise ErroFinanceiro("Esse mês não está fechado.")
+    auditar(cur, id_academia, "fin_fechamentos", ano * 100 + mes, "reabrir",
+            status_anterior="fechado", status_novo="reaberto", motivo=motivo, usuario_id=uid,
+            detalhes=f"{mes:02d}/{ano}")
+
+
+def desfazer_espelho_receita(cur, receita_id, motivo=None, usuario_id=None):
+    """Estorna o lançamento de uma receita e solta o vínculo — antes de editar
+    valor/data (depois, espelhar_receita lança de novo) ou de excluí-la.
+    Levanta PeriodoFechado se o lançamento é de mês fechado."""
+    dc = cur._connection.cursor(dictionary=True)
+    try:
+        dc.execute("""SELECT r.id_lancamento, l.status, l.id_estorno FROM receitas r
+                      LEFT JOIN fin_lancamentos l ON l.id = r.id_lancamento WHERE r.id = %s""", (receita_id,))
+        r = dc.fetchone()
+        if not r or not r["id_lancamento"]:
+            return None
+        estorno = None
+        if r["status"] == "efetivado" and not r["id_estorno"]:
+            estorno = estornar(None, dc, r["id_lancamento"], motivo=motivo, usuario_id=usuario_id)
+        dc.execute("UPDATE receitas SET id_lancamento = NULL WHERE id = %s", (receita_id,))
+        return estorno
+    finally:
+        dc.close()

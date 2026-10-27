@@ -30,6 +30,16 @@
   .ext-entrada { color: #16713c; }
   .ext-saida { color: #a4131f; }
   .ext-negativo { color: #a4131f; }
+  .ext-fech { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem 1rem; padding: .8rem 1rem;
+              border: 1px solid var(--sh-line); border-radius: 10px; margin-bottom: 1rem; font-size: .9rem; }
+  .ext-fech > div { flex: 1 1 280px; min-width: 0; }
+  .ext-fech > i { font-size: 1.2rem; }
+  .ext-fech--fechado { background: rgba(28, 28, 28, .04); border-color: rgba(28, 28, 28, .25); }
+  .ext-fech__reabrir > summary { list-style: none; cursor: pointer; }
+  .ext-fech__reabrir > summary::-webkit-details-marker { display: none; }
+  .ext-fech__reabrir form { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .5rem; }
+  .ext-fech__reabrir input[type=text] { flex: 1 1 260px; height: 38px; padding: 0 .6rem;
+                                        border: 1px solid var(--sh-line); border-radius: 6px; }
 </style>
 {% endblock %}
 
@@ -60,6 +70,46 @@
     <input type="month" name="mes" value="{{ mes_chave }}" onchange="this.form.submit()">
   </label>
 </form>
+
+{# Fechamento do mês: fechado, nada mais entra, sai ou é estornado com data
+   nele (utils/financeiro_core.fechar_mes). Reabrir pede motivo. #}
+{% if fechamento and fechamento.status == 'fechado' %}
+<div class="ext-fech ext-fech--fechado">
+  <i class="bi bi-lock-fill" aria-hidden="true"></i>
+  <div>
+    <strong>{{ mes_label }} está fechado.</strong>
+    Fechado em {{ fechamento.fechado_em.strftime('%d/%m/%Y') }}{% if fechamento.fechado_por_nome %} por {{ fechamento.fechado_por_nome }}{% endif %}
+    · saldo das contas no fim do mês: {{ fmt_moeda(fechamento.saldo_final) }}.
+  </div>
+  {% if pode_gerir %}
+  <details class="ext-fech__reabrir">
+    <summary class="sh__btn">Reabrir</summary>
+    <form method="POST" action="{{ url_for('financeiro_painel.fechamento') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="academia_id" value="{{ academia_id }}">
+      <input type="hidden" name="mes" value="{{ mes_chave }}">
+      <input type="hidden" name="acao" value="reabrir">
+      <input type="text" name="motivo" required maxlength="255" placeholder="Motivo (ex.: pagamento lançado com data errada)">
+      <button type="submit" class="sh__btn sh__btn--forte">Reabrir {{ mes_label }}</button>
+    </form>
+  </details>
+  {% endif %}
+</div>
+{% elif pode_fechar and pode_gerir %}
+<div class="ext-fech">
+  <i class="bi bi-unlock" aria-hidden="true"></i>
+  <div>{% if fechamento and fechamento.status == 'reaberto' %}{{ mes_label }} foi reaberto{% if fechamento.motivo_reabertura %} ({{ fechamento.motivo_reabertura }}){% endif %}.{% else %}{{ mes_label }} já terminou e ainda está aberto.{% endif %}
+    Conferido o mês, feche para ninguém lançar, cancelar ou estornar nada com data nele.</div>
+  <form method="POST" action="{{ url_for('financeiro_painel.fechamento') }}"
+        data-confirmar="Fechar {{ mes_label }}? Pagamentos, cancelamentos e lançamentos com data neste mês passam a ser recusados até alguém reabrir.">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="academia_id" value="{{ academia_id }}">
+    <input type="hidden" name="mes" value="{{ mes_chave }}">
+    <input type="hidden" name="acao" value="fechar">
+    <button type="submit" class="sh__btn sh__btn--forte"><i class="bi bi-lock"></i> Fechar {{ mes_label }}</button>
+  </form>
+</div>
+{% endif %}
 
 {# Saldo inicial, o que entrou, o que saiu e onde fechou — a leitura de um
    extrato bancário. #}

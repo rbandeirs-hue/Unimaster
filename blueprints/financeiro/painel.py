@@ -2305,11 +2305,64 @@ def extrato():
     finally:
         conn.close()
 
+    # Fechamento do mês em foco (fin_fechamentos).
+    conn = get_db_connection()
+    try:
+        _c = conn.cursor(dictionary=True)
+        _c.execute("""SELECT f.*, u.nome AS fechado_por_nome FROM fin_fechamentos f
+                      LEFT JOIN usuarios u ON u.id = f.fechado_por
+                      WHERE f.id_academia = %s AND f.ano = %s AND f.mes = %s""", (academia_id, ano, mes))
+        fechamento = _c.fetchone()
+    finally:
+        conn.close()
+    pode_fechar = fim < date.today() and not (fechamento and fechamento["status"] == "fechado")
+
     ctx = _ctx_base(academia_id)
+    ctx.update(fechamento=fechamento, pode_fechar=pode_fechar)
     ctx.update(fin_aba="extrato", contas=lista_contas, id_conta=id_conta,
                mes=mes, ano=ano, mes_chave=f"{ano:04d}-{mes:02d}",
                mes_label=fmt_mes(ano, mes), pode_gerir=_pode_gerir_financeiro(), **dados)
     return render_template("financeiro/painel/extrato.html", **ctx)
+
+
+@bp_financeiro_painel.route("/fechamento", methods=["POST"])
+@login_required
+def fechamento():
+    """Fecha ou reabre o mês (utils/financeiro_core.fechar_mes / reabrir_mes)."""
+    academia_id = _get_academia_id()
+    if not academia_id:
+        return _sem_academia()
+    ano, mes = _mes_ref_form()
+    if not _pode_gerir_financeiro():
+        flash("Só a gestão da academia fecha ou reabre o mês.", "warning")
+        return _volta("financeiro_painel.extrato", academia_id, mes=f"{ano:04d}-{mes:02d}")
+    acao = request.form.get("acao")
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        if acao == "fechar":
+            total = fin.fechar_mes(conn, cur, academia_id, ano, mes, usuario_id=current_user.id)
+            flash(f"{mes:02d}/{ano} fechado. Saldo das contas no fim do mês: {fmt_moeda(total)}. "
+                  "Nada mais entra, sai ou é estornado com data nesse mês.", "success")
+        elif acao == "reabrir":
+            fin.reabrir_mes(conn, cur, academia_id, ano, mes, request.form.get("motivo"),
+                            usuario_id=current_user.id)
+            flash(f"{mes:02d}/{ano} reaberto. O motivo ficou registrado.", "success")
+        conn.commit()
+    except fin.ErroFinanceiro as e:
+        conn.rollback()
+        flash(str(e), "danger")
+    finally:
+        conn.close()
+    return _volta("financeiro_painel.extrato", academia_id, mes=f"{ano:04d}-{mes:02d}")
+
+
+def _mes_ref_form():
+    bruto = (request.form.get("mes") or "").strip()
+    try:
+        return int(bruto[:4]), int(bruto[5:7])
+    except ValueError:
+        return _mes_ref()
 
 
 @bp_financeiro_painel.route("/controle", methods=["GET", "POST"])
@@ -2613,6 +2666,13 @@ def familias_baixar(grupo_id):
     if data_pag and data_pag > date.today():
         flash("A data do pagamento não pode ser no futuro.", "danger")
         return _volta("financeiro_painel.familias", academia_id, mes=f"{ano:04d}-{mes:02d}")
+    _c = get_db_connection()
+    try:
+        if fin.mes_fechado(_c.cursor(), academia_id, data_pag or date.today()):
+            flash("Esse mês está fechado. Reabra o período para lançar nele.", "danger")
+            return _volta("financeiro_painel.familias", academia_id, mes=f"{ano:04d}-{mes:02d}")
+    finally:
+        _c.close()
     forma = request.form.get("id_forma_pagamento", type=int)
     if forma:
         conn = get_db_connection(); cur = conn.cursor()
