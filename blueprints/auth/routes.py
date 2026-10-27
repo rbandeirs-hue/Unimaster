@@ -241,6 +241,12 @@ def login():
             flash("Para continuar, cadastre seu CPF. Ele será o seu novo login.", "info")
             return redirect(url_for("auth.cadastrar_cpf"))
 
+        # Quem leu o QR de check-in sem estar logado volta para ele. Só esse
+        # destino é aceito: o resto do sistema entra pelo painel, como sempre.
+        proximo = (request.args.get("next") or "").strip()
+        if proximo.startswith("/checkin/") and "//" not in proximo and "\\" not in proximo:
+            return redirect(proximo)
+
         return redirect(url_for("painel.home"))
 
     return render_template("login.html")

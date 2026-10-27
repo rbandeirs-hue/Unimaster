@@ -1,0 +1,75 @@
+{% extends "base_app.html" %}
+{% block title %}Check-in · {{ turma.Nome }}{% endblock %}
+{% block pagina_titulo %}Check-in — {{ turma.Nome }}{% endblock %}
+{% block pagina_subtitulo %}Deixe esta tela aberta no tatame. O aluno lê o QR com o celular, já logado no sistema.{% endblock %}
+{% block pagina_acoes %}
+  <a href="{{ url_for('presencas.registro_presenca', turma_id=turma.TurmaID) }}" class="sh__btn"><i class="bi bi-arrow-left"></i> Voltar à chamada</a>
+{% endblock %}
+{% block content %}
+<style>
+  .ck-tela { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr); gap: 1.5rem; align-items: start; }
+  @media (max-width: 860px) { .ck-tela { grid-template-columns: 1fr; } }
+  .ck-qr { background: #fff; border-radius: 14px; padding: 1.25rem; text-align: center; border: 1px solid var(--sh-line, #ddd); }
+  .ck-qr svg { width: min(420px, 100%); height: auto; display: block; margin: 0 auto; }
+  .ck-barra { height: 4px; background: #e5e7eb; border-radius: 2px; overflow: hidden; margin-top: .75rem; }
+  .ck-barra i { display: block; height: 100%; background: var(--sh-red, #e4001b); width: 100%; transition: width 1s linear; }
+  .ck-aviso { color: #a35a00; font-weight: 600; margin-top: .75rem; }
+  .ck-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: .35rem; }
+  .ck-lista li { display: flex; justify-content: space-between; gap: .75rem; padding: .45rem .7rem;
+                 border-radius: 8px; background: rgba(22, 113, 60, .08); font-size: .92rem; }
+  .ck-total { font-size: 2rem; font-weight: 700; }
+</style>
+<div class="ck-tela">
+  <section class="ck-qr">
+    <div id="ckQr" aria-label="QR Code de check-in"><p class="text-muted my-5">Gerando o código…</p></div>
+    <div class="ck-barra" aria-hidden="true"><i id="ckBarra"></i></div>
+    <p class="lst-sub mt-2 mb-0">O código muda a cada minuto — foto do QR não serve para quem não está na aula.</p>
+    <p class="ck-aviso" id="ckAviso" {% if not aviso %}hidden{% endif %}>{{ aviso or '' }}</p>
+  </section>
+  <section class="lst-quadro" style="padding:1rem 1.15rem">
+    <div class="d-flex justify-content-between align-items-baseline">
+      <h2 class="lst-quadro__titulo m-0">Presentes hoje</h2>
+      <span class="ck-total" id="ckTotal">{{ presentes|length }}</span>
+    </div>
+    <ul class="ck-lista mt-2" id="ckLista">
+      {% for p in presentes %}<li><span>{{ p.nome }}</span><span class="lst-sub">{{ p.registrado_em.strftime('%H:%M') if p.registrado_em }}</span></li>{% endfor %}
+    </ul>
+    <p class="lst-sub mt-2 mb-0">Inclui quem foi marcado na chamada. A chamada continua valendo: o professor confirma ou corrige lá.</p>
+  </section>
+</div>
+<script>
+(function () {
+  var url = {{ url_for('checkin.codigo', turma_id=turma.TurmaID)|tojson }};
+  var periodo = {{ janela_seg }} * 1000;
+  var qr = document.getElementById('ckQr'), barra = document.getElementById('ckBarra');
+  function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+  function atualizar() {
+    fetch(url, {headers: {'X-Requested-With': 'XMLHttpRequest'}, credentials: 'same-origin'})
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        qr.innerHTML = j.svg;
+        var aviso = document.getElementById('ckAviso');
+        aviso.hidden = !j.aviso; aviso.textContent = j.aviso || '';
+        document.getElementById('ckTotal').textContent = j.presentes.length;
+        document.getElementById('ckLista').innerHTML = j.presentes.map(function (p) {
+          return '<li><span>' + esc(p.nome) + '</span><span class="lst-sub">' + esc(p.hora) + '</span></li>';
+        }).join('');
+      }).catch(function () {});
+    // Barra mostra quanto falta para o código mudar.
+    barra.style.transition = 'none'; barra.style.width = '100%';
+    requestAnimationFrame(function () { barra.style.transition = 'width ' + (periodo / 1000) + 's linear'; barra.style.width = '0%'; });
+  }
+  // Alinha a troca ao minuto do servidor (o código é por minuto).
+  atualizar();
+  var falta = periodo - (Date.now() % periodo);
+  setTimeout(function () { atualizar(); setInterval(atualizar, periodo); }, falta + 300);
+  // Lista de presentes também atualiza no meio do minuto.
+  setInterval(function () { fetch(url, {headers: {'X-Requested-With': 'XMLHttpRequest'}, credentials: 'same-origin'})
+    .then(function (r) { return r.json(); }).then(function (j) {
+      document.getElementById('ckTotal').textContent = j.presentes.length;
+      document.getElementById('ckLista').innerHTML = j.presentes.map(function (p) {
+        return '<li><span>' + esc(p.nome) + '</span><span class="lst-sub">' + esc(p.hora) + '</span></li>'; }).join('');
+    }).catch(function () {}); }, 15000);
+})();
+</script>
+{% endblock %}

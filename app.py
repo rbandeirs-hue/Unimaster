@@ -32,6 +32,7 @@ from blueprints.cadastros import cadastros_bp
 from blueprints.usuarios.routes import bp_usuarios
 from blueprints.turmas.routes import bp_turmas
 from blueprints.presencas.presencas import bp_presencas
+from blueprints.presencas.checkin import bp_checkin
 from blueprints.relatorios import bp_relatorios
 from blueprints.professores.routes import bp_professores
 from blueprints.professor.routes import bp_professor
@@ -247,6 +248,9 @@ _CADASTRO_ALUNO_PERMITIDOS = {
     "painel.home",
     "painel.escolher_modo",
     "painel_aluno.completar_cadastro",
+    # Check-in por QR: o aluno está no tatame, com a aula começando — mandar
+    # completar o cadastro ali perderia o check-in. O cadastro é cobrado depois.
+    "checkin.ler",
     "static",
 }
 
@@ -1058,6 +1062,7 @@ app.register_blueprint(cadastros_bp)    # Hub de Cadastros
 app.register_blueprint(bp_usuarios)     # Usuários (lista/cadastro/editar/excluir)
 app.register_blueprint(bp_turmas)       # Turmas (CRUD)
 app.register_blueprint(bp_presencas)    # Presenças (registro, ata, histórico)
+app.register_blueprint(bp_checkin)      # Check-in por QR Code (tela do tatame + leitura do aluno)
 app.register_blueprint(bp_professores)  # Professores (CRUD por academia)
 app.register_blueprint(bp_professor)    # Painel Professor (presença, relatório, histórico)
 app.register_blueprint(bp_configuracoes)  # Configurações (admin: modalidades)
