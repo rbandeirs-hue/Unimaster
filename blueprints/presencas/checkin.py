@@ -119,15 +119,23 @@ def _pode_ver_tela(cur, turma):
 
 
 def alunos_do_usuario_na_turma(cur, usuario_id, turma_id):
-    """O próprio aluno e os filhos (responsável) matriculados na turma."""
+    """O próprio aluno e os filhos matriculados na turma.
+
+    Filho é quem está em responsavel_alunos OU tem o CPF do usuário como
+    responsável financeiro no cadastro — muitos vínculos existem só pelo CPF
+    (o cadastro guarda com pontuação, o usuário sem)."""
+    cur.execute("SELECT cpf FROM usuarios WHERE id = %s", (usuario_id,))
+    cpf = "".join(ch for ch in str((cur.fetchone() or {}).get("cpf") or "") if ch.isdigit())
     cur.execute(
         """SELECT DISTINCT a.id, a.nome, a.foto
            FROM alunos a
            JOIN aluno_turmas at ON at.aluno_id = a.id AND at.TurmaID = %s
            WHERE COALESCE(a.ativo, 1) = 1 AND (
                  a.usuario_id = %s
-              OR a.id IN (SELECT aluno_id FROM responsavel_alunos WHERE usuario_id = %s))
-           ORDER BY a.nome""", (turma_id, usuario_id, usuario_id))
+              OR a.id IN (SELECT aluno_id FROM responsavel_alunos WHERE usuario_id = %s)
+              OR (%s <> '' AND REPLACE(REPLACE(REPLACE(COALESCE(a.responsavel_financeiro_cpf, ''),
+                                       '.', ''), '-', ''), ' ', '') = %s))
+           ORDER BY a.nome""", (turma_id, usuario_id, usuario_id, cpf, cpf))
     return cur.fetchall()
 
 

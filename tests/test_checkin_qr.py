@@ -159,3 +159,26 @@ def test_login_volta_para_o_checkin():
     cli = app.test_client()
     r = cli.get("/checkin/1/123-abc")
     assert r.status_code == 302 and "next=" in r.headers["Location"]
+
+
+def test_filho_ligado_so_pelo_cpf_do_responsavel():
+    """Responsável cujo vínculo com o filho é só o CPF no cadastro (com pontuação)."""
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute("SELECT cpf FROM usuarios WHERE id = %s", (USUARIO,))
+        cpf = cur.fetchone()["cpf"]
+        formatado = f"{cpf[:3]}.{cpf[3:6]}.{cpf[6:9]}-{cpf[9:]}"
+        cur.execute("""INSERT INTO turmas (Nome, DiasHorario, IdadeMin, IdadeMax, Professor, Classificacao,
+                                           Capacidade, id_academia) VALUES ('T', '', 0, 99, '', '', 30, %s)""",
+                    (FICTICIA,))
+        turma = cur.lastrowid
+        cur.execute("""INSERT INTO alunos (nome, id_academia, responsavel_financeiro_cpf)
+                       VALUES ('Filho pelo CPF', %s, %s)""", (FICTICIA, formatado))
+        filho = cur.lastrowid
+        cur.execute("INSERT INTO aluno_turmas (aluno_id, TurmaID) VALUES (%s, %s)", (filho, turma))
+        assert filho in [a["id"] for a in ck.alunos_do_usuario_na_turma(cur, USUARIO, turma)]
+        assert ck.alunos_do_usuario_na_turma(cur, 999999, turma) == []
+    finally:
+        conn.rollback()
+        conn.close()
