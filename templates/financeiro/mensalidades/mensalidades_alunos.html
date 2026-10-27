@@ -469,6 +469,11 @@ A cobrança sai da lista. Só faça isso se for realmente esta.">
 
           {% else %}
             {% if m.status_efetivo == 'pago' %}
+            {% if (m.valor_pago or m.valor or 0)|float > 0 %}
+            <a class="lst-acao" target="_blank" rel="noopener" title="Recibo do pagamento (PDF)"
+               aria-label="Recibo de {{ m.aluno_nome }}"
+               href="{{ url_for('financeiro.recibo_pdf', tipo='mensalidade', registro_id=m.id) }}"><i class="bi bi-receipt"></i></a>
+            {% endif %}
             <form method="POST" action="{{ url_for('financeiro.cancelar_pagamento') }}">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               {# Sem isto a rota remonta a URL da lista e perde o filtro do aluno. #}
@@ -587,6 +592,9 @@ A cobrança sai da lista. Só faça isso se for realmente esta.">
           </button>
           {% else %}
             {% if a.status == 'pago' %}
+            <a class="lst-acao" target="_blank" rel="noopener" title="Recibo do pagamento (PDF)"
+               aria-label="Recibo de {{ a.aluno_nome }}"
+               href="{{ url_for('financeiro.recibo_pdf', tipo='avulsa', registro_id=a.id) }}"><i class="bi bi-receipt"></i></a>
             <form method="POST" action="{{ url_for('financeiro.cancelar_pagamento') }}">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               {# Sem isto a rota remonta a URL da lista e perde o filtro do aluno. #}

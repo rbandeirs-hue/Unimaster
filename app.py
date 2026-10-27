@@ -256,6 +256,8 @@ _CADASTRO_ALUNO_PERMITIDOS = {
     # para responder uma pergunta só. O cadastro é cobrado na navegação normal.
     "chamada_foto.autorizar",
     "chamada_foto.autorizar_salvar",
+    # Recibo é só leitura de um pagamento já feito: não faz sentido barrar.
+    "financeiro.recibo_pdf",
     "static",
 }
 

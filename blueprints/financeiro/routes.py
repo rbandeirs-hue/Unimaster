@@ -5,7 +5,7 @@ import hashlib
 import hmac
 import os
 import uuid
-from flask import Blueprint, render_template, request, redirect, url_for, flash, session, jsonify, current_app
+from flask import Blueprint, render_template, request, redirect, url_for, flash, session, jsonify, current_app, abort
 from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
 from utils.upload_seguro import validar_upload, nome_seguro, UploadInvalido
@@ -829,7 +829,9 @@ def _financeiro_exige_modo_academia():
     if not current_user.is_authenticated:
         return None
     endpoint = request.endpoint or ""
-    if endpoint in ("financeiro.informar_pagamento_mensalidade", "financeiro.cobrancas_por_aluno_json"):
+    # O recibo também abre para aluno/responsável; a rota confere de quem é.
+    if endpoint in ("financeiro.informar_pagamento_mensalidade", "financeiro.cobrancas_por_aluno_json",
+                    "financeiro.recibo_pdf"):
         return None
     if not (endpoint.startswith("financeiro.") or endpoint.startswith("financeiro_painel.")):
         return None
@@ -9995,3 +9997,51 @@ def excluir_despesa(despesa_id):
     except Exception:
         flash("Erro ao excluir despesa.", "danger")
     return redirect(url_for("financeiro.lista_despesas", academia_id=_get_academia_id()))
+
+
+# ---------------------------------------------------------------------
+# Recibo de pagamento (PDF) — utils/recibo.py
+# ---------------------------------------------------------------------
+def _usuario_e_do_aluno(cur, usuario_id, aluno_id):
+    """O próprio aluno, ou responsável (vínculo ou CPF do responsável financeiro)."""
+    cur.execute("SELECT cpf FROM usuarios WHERE id = %s", (usuario_id,))
+    cpf = "".join(ch for ch in str((cur.fetchone() or {}).get("cpf") or "") if ch.isdigit())
+    cur.execute(
+        """SELECT 1 FROM alunos a WHERE a.id = %s AND (
+               a.usuario_id = %s
+            OR EXISTS (SELECT 1 FROM responsavel_alunos ra WHERE ra.aluno_id = a.id AND ra.usuario_id = %s)
+            OR (%s <> '' AND REPLACE(REPLACE(REPLACE(COALESCE(a.responsavel_financeiro_cpf, ''),
+                                     '.', ''), '-', ''), ' ', '') = %s))""",
+        (aluno_id, usuario_id, usuario_id, cpf, cpf))
+    return cur.fetchone() is not None
+
+
+@bp_financeiro.route("/recibo/<tipo>/<int:registro_id>.pdf")
+@login_required
+def recibo_pdf(tipo, registro_id):
+    """Recibo da mensalidade/avulsa paga. Abre para a equipe da academia da
+    cobrança e para o próprio aluno ou responsável."""
+    from flask import Response
+    from utils import recibo
+    from utils.contexto_logo import buscar_logo_arquivo
+    if tipo not in ("mensalidade", "avulsa"):
+        abort(404)
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        d = recibo.dados(cur, tipo, registro_id)
+        if not d:
+            abort(404)
+        equipe = (current_user.has_role("admin") or current_user.has_role("gestor_academia")
+                  or current_user.has_role("professor") or current_user.has_role("gestor_associacao"))
+        permitido = (equipe and d["academia"].get("id") in (_get_academias_ids() or [])) \
+            or _usuario_e_do_aluno(cur, current_user.id, d["aluno_id"])
+        if not permitido:
+            abort(404)
+    finally:
+        conn.close()
+    conteudo = recibo.pdf(d, buscar_logo_arquivo("academia", d["academia"].get("id")))
+    nome = f"recibo-{d['numero']}.pdf"
+    disp = "attachment" if request.args.get("baixar") else "inline"
+    return Response(conteudo, mimetype="application/pdf",
+                    headers={"Content-Disposition": f'{disp}; filename="{nome}"'})
