@@ -220,8 +220,13 @@ def _panorama(cur, rec):
                      AND data BETWEEN %s AND %s""",
                 [rec.academia_id, rec.ini, rec.fim])
     receita = float(cur.fetchone()["v"] or 0)
-    cur.execute("""SELECT COALESCE(SUM(valor),0) v FROM despesas
-                   WHERE id_academia=%s AND data BETWEEN %s AND %s""",
+    # Despesa = o que saiu do caixa: paga e não estornada, pela data do
+    # pagamento (utils/despesas_pagamento.py). Cadastrada e não paga é conta
+    # a pagar, não gasto.
+    cur.execute("""SELECT COALESCE(SUM(l.valor),0) v
+                   FROM despesas d JOIN fin_lancamentos l ON l.id = d.id_lancamento
+                    AND l.status = 'efetivado' AND l.id_estorno IS NULL
+                   WHERE d.id_academia=%s AND l.data_efetivacao BETWEEN %s AND %s""",
                 [rec.academia_id, rec.ini, rec.fim])
     despesa = float(cur.fetchone()["v"] or 0)
     linhas.append({"indicador": "Receita", "valor": f"R$ {receita:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."),
@@ -637,13 +642,15 @@ def _receitas_categoria(cur, rec):
     "despesas_categoria", "financeiro", "Despesas por categoria",
     "Para onde o dinheiro foi.",
     [("categoria", "Categoria"), ("qtd", "Lançamentos", "numero"), ("total", "Total", "moeda")],
-    criterio="Despesas com data dentro do período.",
+    criterio="Despesas pagas, pela data do pagamento.",
     totaliza=["qtd", "total"],
 )
 def _despesas_categoria(cur, rec):
-    cur.execute("""SELECT COALESCE(NULLIF(categoria,''),'Sem categoria') categoria,
-                          COUNT(*) qtd, COALESCE(SUM(valor),0) total
-                   FROM despesas WHERE id_academia=%s AND data BETWEEN %s AND %s
+    cur.execute("""SELECT COALESCE(NULLIF(d.categoria,''),'Sem categoria') categoria,
+                          COUNT(*) qtd, COALESCE(SUM(l.valor),0) total
+                   FROM despesas d JOIN fin_lancamentos l ON l.id = d.id_lancamento
+                    AND l.status = 'efetivado' AND l.id_estorno IS NULL
+                   WHERE d.id_academia=%s AND l.data_efetivacao BETWEEN %s AND %s
                    GROUP BY categoria ORDER BY total DESC""",
                 [rec.academia_id, rec.ini, rec.fim])
     return [{"categoria": r["categoria"], "qtd": r["qtd"], "total": float(r["total"] or 0)}
@@ -680,7 +687,7 @@ def _inadimplentes(cur, rec):
     "Entradas, saídas e saldo dos últimos 12 meses.",
     [("mes", "Mês", "mes"), ("receitas", "Receitas", "moeda"),
      ("despesas", "Despesas", "moeda"), ("saldo", "Saldo", "moeda")],
-    criterio="Receitas não canceladas e despesas, pela data do lançamento.",
+    criterio="Receitas não canceladas, pela data; despesas pagas, pela data do pagamento.",
     totaliza=["receitas", "despesas", "saldo"],
 )
 def _fluxo_caixa(cur, rec):
@@ -691,8 +698,10 @@ def _fluxo_caixa(cur, rec):
                        WHERE id_academia=%s AND (cancelada=0 OR cancelada IS NULL)
                          AND data BETWEEN %s AND %s""", [rec.academia_id, ini, fim])
         r = float(cur.fetchone()["v"] or 0)
-        cur.execute("""SELECT COALESCE(SUM(valor),0) v FROM despesas
-                       WHERE id_academia=%s AND data BETWEEN %s AND %s""",
+        cur.execute("""SELECT COALESCE(SUM(l.valor),0) v
+                       FROM despesas d JOIN fin_lancamentos l ON l.id = d.id_lancamento
+                        AND l.status = 'efetivado' AND l.id_estorno IS NULL
+                       WHERE d.id_academia=%s AND l.data_efetivacao BETWEEN %s AND %s""",
                     [rec.academia_id, ini, fim])
         d = float(cur.fetchone()["v"] or 0)
         linhas.append({"mes": _mes_rotulo(ano, mes), "receitas": r, "despesas": d, "saldo": r - d})

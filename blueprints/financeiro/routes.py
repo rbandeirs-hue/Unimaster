@@ -928,7 +928,7 @@ def dashboard_classico():
     if mes:
         try:
             cur.execute(
-                "SELECT COALESCE(SUM(valor), 0) as total FROM receitas WHERE id_academia = %s AND MONTH(data) = %s AND YEAR(data) = %s",
+                "SELECT COALESCE(SUM(valor), 0) as total FROM receitas WHERE id_academia = %s AND COALESCE(cancelada, 0) = 0 AND MONTH(data) = %s AND YEAR(data) = %s",
                 (academia_id, mes, ano),
             )
             receitas_mes = float(cur.fetchone().get("total") or 0)
@@ -936,7 +936,10 @@ def dashboard_classico():
             pass
         try:
             cur.execute(
-                "SELECT COALESCE(SUM(valor), 0) as total FROM despesas WHERE id_academia = %s AND MONTH(data) = %s AND YEAR(data) = %s",
+                # Só despesa paga, pela data do pagamento (utils/despesas_pagamento.py).
+                """SELECT COALESCE(SUM(l.valor), 0) as total FROM despesas d
+                   JOIN fin_lancamentos l ON l.id = d.id_lancamento AND l.status = 'efetivado' AND l.id_estorno IS NULL
+                   WHERE d.id_academia = %s AND MONTH(l.data_efetivacao) = %s AND YEAR(l.data_efetivacao) = %s""",
                 (academia_id, mes, ano),
             )
             despesas_mes = float(cur.fetchone().get("total") or 0)
@@ -945,7 +948,7 @@ def dashboard_classico():
     else:
         try:
             cur.execute(
-                "SELECT COALESCE(SUM(valor), 0) as total FROM receitas WHERE id_academia = %s AND YEAR(data) = %s",
+                "SELECT COALESCE(SUM(valor), 0) as total FROM receitas WHERE id_academia = %s AND COALESCE(cancelada, 0) = 0 AND YEAR(data) = %s",
                 (academia_id, ano),
             )
             receitas_mes = float(cur.fetchone().get("total") or 0)
@@ -953,7 +956,9 @@ def dashboard_classico():
             pass
         try:
             cur.execute(
-                "SELECT COALESCE(SUM(valor), 0) as total FROM despesas WHERE id_academia = %s AND YEAR(data) = %s",
+                """SELECT COALESCE(SUM(l.valor), 0) as total FROM despesas d
+                   JOIN fin_lancamentos l ON l.id = d.id_lancamento AND l.status = 'efetivado' AND l.id_estorno IS NULL
+                   WHERE d.id_academia = %s AND YEAR(l.data_efetivacao) = %s""",
                 (academia_id, ano),
             )
             despesas_mes = float(cur.fetchone().get("total") or 0)
@@ -1866,8 +1871,10 @@ def _dados_relatorio(academia_id, ano, mes):
         )
         d["receitas_cat"] = [{"cat": r["cat"], "total": float(r["total"] or 0), "qtd": r["qtd"]} for r in cur.fetchall()]
         cur.execute(
-            """SELECT COALESCE(NULLIF(categoria,''),'Sem categoria') cat, COALESCE(SUM(valor),0) total, COUNT(*) qtd
-               FROM despesas WHERE id_academia=%s AND data BETWEEN %s AND %s
+            """SELECT COALESCE(NULLIF(d.categoria,''),'Sem categoria') cat, COALESCE(SUM(l.valor),0) total, COUNT(*) qtd
+               FROM despesas d JOIN fin_lancamentos l ON l.id = d.id_lancamento
+                AND l.status = 'efetivado' AND l.id_estorno IS NULL
+               WHERE d.id_academia=%s AND l.data_efetivacao BETWEEN %s AND %s
                GROUP BY cat ORDER BY total DESC""",
             (academia_id, ini, fim),
         )
