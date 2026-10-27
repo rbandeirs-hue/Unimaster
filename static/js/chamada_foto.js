@@ -15,9 +15,10 @@
   var D = JSON.parse(document.getElementById('cfDados').textContent);
   var $ = function (id) { return document.getElementById(id); };
 
-  var LIMIAR = 0.55;     // distância máxima para dizer "é esta pessoa"
-  var CONFIRA = 0.47;    // acima disto, reconhece mas pede para conferir
-  var REPETIDO = 0.5;    // mesmo aluno em outra foto: conta uma vez
+  var LIMIAR = 0.58;     // distância máxima para dizer "é esta pessoa" (a biblioteca sugere 0,6)
+  var CONFIRA = 0.5;     // acima disto, reconhece mas pede para conferir
+  var REPETIDO = 0.62;   // mesmo aluno em outra foto: conta uma vez
+  var APRENDER = 0.3;    // reconhecido com folga menor que isto vira mais uma referência
   var MAX_LADO = 3000;   // a foto da turma fica grande: rosto pequeno precisa de pixel
   var MAX_FOTOS = 3;
 
@@ -64,24 +65,63 @@
   }
 
   // --------------------------------------------------------- modelos
+  // Celular com WebGL de precisão reduzida (comum em Android) faz o detector
+  // errar e os números do rosto saírem tortos: o cadastro não é lido e o rosto
+  // já indicado não bate de novo. Por isso o motor se autotesta num rosto de
+  // referência, calculado no servidor; se não bater, troca: WebGL (rápido) →
+  // WebAssembly (mesma conta da CPU, ~10x mais rápido que ela) → CPU.
+  var REF_SCORE = 0.9604;
+  var REF_DESC = [-0.0539, 0.09736, 0.09807, -0.08141, -0.11523, 0.01202, -0.13585, -0.04563, 0.18254, -0.0214, 0.12021, -0.04676, -0.18774, 0.09389, -0.11829, 0.12444, -0.18656, -0.13548, -0.01522, -0.06051, 0.01539, 0.05844, 0.02688, 0.11383, -0.11737, -0.28481, -0.0739, -0.03285, 0.04013, -0.13192, -0.01953, 0.09916, -0.21656, -0.00669, 0.02448, 0.1089, -0.03726, -0.10601, 0.16955, 0.06742, -0.1943, -0.0465, 0.11431, 0.34274, 0.23706, 0.09262, -0.00934, -0.04891, 0.10216, -0.29759, 0.04063, 0.2632, 0.04266, 0.06647, 0.04732, -0.1626, 0.06037, 0.07149, -0.12653, 0.08446, 0.1036, -0.04115, 0.06761, -0.09784, 0.27887, 0.09127, -0.1004, -0.09731, 0.19175, -0.13935, -0.07801, 0.05084, -0.13608, -0.17709, -0.27009, -0.01002, 0.39981, 0.14558, -0.08603, 0.12824, -0.05483, -0.03595, -0.0248, 0.14389, -0.12267, 0.06207, -0.06877, 0.07276, 0.2533, 0.00041, 0.03883, 0.20274, -0.00097, -0.05235, 0.0334, 0.07091, -0.12162, 0.01973, -0.20611, -0.00167, -0.02498, -0.04619, 0.0322, 0.16191, -0.22611, 0.12521, 0.00972, -0.08977, -0.03822, 0.02256, -0.10301, -0.0638, 0.19287, -0.24287, 0.14564, 0.14774, 0.10323, 0.1266, 0.06594, 0.15444, 0.02146, -0.03129, -0.075, -0.06656, -0.00191, -0.06358, 0.01002, 0.08772];
+  var WASM = 'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@4.16.0/dist/';
+  var diag = { motor: null, testes: [], cadastro: { tentados: 0, lidos: 0 } };
+
+  async function autoteste() {
+    try {
+      var img = await carregarImagem(D.referencia);
+      var r = await faceapi.detectSingleFace(img, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.3 }))
+        .withFaceLandmarks().withFaceDescriptor();
+      if (!r) return { ok: false, nota: 0, dist: 9 };
+      var dist = faceapi.euclideanDistance(r.descriptor, REF_DESC);
+      return { ok: Math.abs(r.detection.score - REF_SCORE) < 0.06 && dist < 0.12,
+               nota: Math.round(r.detection.score * 100) / 100, dist: Math.round(dist * 1000) / 1000 };
+    } catch (e) {
+      return { ok: false, nota: 0, dist: 9, erro: String(e && e.message || e).slice(0, 80) };
+    }
+  }
+
   var modelos = null;
   function carregarModelos() {
     if (modelos) return modelos;
     modelos = (async function () {
       if (!window.faceapi) throw new Error('O reconhecimento não carregou. Confira a internet e recarregue a página.');
-      // O motor precisa ser escolhido e iniciado antes do primeiro uso. WebGL
-      // (placa de vídeo) é o rápido; aparelho sem ele cai para a CPU, mais lento.
       var tf = faceapi.tf;
-      var ok = false;
-      try { ok = await tf.setBackend('webgl'); } catch (e) { ok = false; }
-      if (!ok) await tf.setBackend('cpu');
-      await tf.ready();
-      await faceapi.nets.ssdMobilenetv1.loadFromUri(D.modelos);
-      await faceapi.nets.faceLandmark68Net.loadFromUri(D.modelos);
-      await faceapi.nets.faceRecognitionNet.loadFromUri(D.modelos);
+      var motores = ['webgl', 'wasm', 'cpu'];
+      // ?motor=wasm na URL força um motor: saída para um aparelho que se dê mal com o automático.
+      var forcado = new URLSearchParams(location.search).get('motor');
+      if (motores.indexOf(forcado) >= 0) motores = [forcado];
+      for (var k = 0; k < motores.length; k++) {
+        var m = motores[k], ok = false;
+        try {
+          if (m === 'wasm') tf.setWasmPaths(WASM);
+          ok = await tf.setBackend(m);
+          if (ok) await tf.ready();
+        } catch (e) { ok = false; }
+        if (!ok) { diag.testes.push({ motor: m, indisponivel: true }); continue; }
+        if (!faceapi.nets.ssdMobilenetv1.isLoaded) {
+          await faceapi.nets.ssdMobilenetv1.loadFromUri(D.modelos);
+          await faceapi.nets.faceLandmark68Net.loadFromUri(D.modelos);
+          await faceapi.nets.faceRecognitionNet.loadFromUri(D.modelos);
+        }
+        var t = await autoteste();
+        t.motor = m;
+        diag.testes.push(t);
+        if (t.ok || m === 'cpu') { diag.motor = m; return; }
+      }
+      throw new Error('O reconhecimento não rodou neste aparelho.');
     })();
     modelos.then(function () {
-      $('modelosStatus').textContent = 'Reconhecimento pronto.';
+      $('modelosStatus').textContent = 'Reconhecimento pronto' +
+        (diag.motor === 'webgl' ? '.' : diag.motor === 'wasm' ? ' (modo compatível).' : ' (modo lento: pode demorar).');
     }, function (e) {
       $('modelosStatus').textContent = e.message || 'Não foi possível carregar o reconhecimento.';
       modelos = null;
@@ -134,7 +174,7 @@
         await fetch(D.urlDescritores, {
           method: 'POST', credentials: 'same-origin',
           headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
-          body: JSON.stringify({ itens: itens.slice(i, i + 50) })
+          body: JSON.stringify({ itens: itens.slice(i, i + 50), diag: diag })
         });
       } catch (e) { /* não impede a chamada: recalcula na próxima */ }
     }
@@ -188,8 +228,10 @@
       var p = faltam[i];
       passo('cadastro', i / Math.max(1, faltam.length));
       rotulo.textContent = 'Lendo as fotos do cadastro (' + (i + 1) + ' de ' + faltam.length + ')';
+      var lido = false;
       try {
         var r = await detectarUm(await carregarImagem(p.foto_url));
+        lido = !!r;
         if (r) {
           var d = Array.from(r.descriptor);
           p.descritores.push(d);
@@ -200,10 +242,13 @@
       } catch (e) {
         if (!p.descritores.length) p.semRosto = true;
       }
+      diag.cadastro.tentados++;
+      if (lido) diag.cadastro.lidos++;
       p.calcular = null;
     }
     rotulo.textContent = 'Lendo as fotos do cadastro';
-    if (novos.length) enviarDescritores(novos);
+    // Vai mesmo sem nenhum lido: leva o diagnóstico do aparelho.
+    if (faltam.length) enviarDescritores(novos);
   }
 
   // ------------------------------------------------------- detecção
@@ -321,12 +366,18 @@
       r.aluno = x.p.id; r.dist = x.d; r.estado = 'reconhecido';
       usados[x.p.id] = r;
     });
+    // Rosto que sobrou e se parece com alguém já reconhecido em OUTRA foto é a
+    // mesma criança fotografada de novo: não vai para "Quem é?".
     rostos.forEach(function (r) {
       if (r.aluno) return;
       var melhor = null;
-      pares.forEach(function (x) { if (rostos[x.ri] === r && (!melhor || x.d < melhor.d)) melhor = x; });
-      var dono = melhor && usados[melhor.p.id];
-      r.estado = (dono && dono.foto !== r.foto && melhor.d < REPETIDO) ? 'repetido' : 'desconhecido';
+      Object.keys(usados).forEach(function (id) {
+        var dono = usados[id];
+        if (dono.foto === r.foto) return;
+        var d = distancia(r.descritor, porId[id]);
+        if (d < REPETIDO && (!melhor || d < melhor.d)) melhor = { d: d };
+      });
+      r.estado = melhor ? 'repetido' : 'desconhecido';
     });
 
     // Quem a foto achou entra; quem já estava marcado continua marcado.
@@ -390,7 +441,7 @@
       estado.rostos.forEach(function (r) {
         if (r.foto !== fi) return;
         var cor = { reconhecido: '#4ade80', identificado: '#4ade80', desconhecido: '#fbbf24',
-                    visitante: '#93c5fd', repetido: '#d6d3ce', ignorado: null }[r.estado];
+                    visitante: '#93c5fd', repetido: '#d6d3ce', mesmo: '#d6d3ce', ignorado: null }[r.estado];
         if (r.estado === 'desconhecido') n++;
         if (!cor) return;
         ctx.lineWidth = lw;
@@ -440,14 +491,15 @@
     lr.innerHTML = '';
     var pendentes = 0;
     estado.rostos.forEach(function (r, i) {
-      if (['desconhecido', 'identificado', 'visitante', 'ignorado'].indexOf(r.estado) < 0) return;
+      if (['desconhecido', 'identificado', 'visitante', 'ignorado', 'mesmo'].indexOf(r.estado) < 0) return;
       if (r.estado === 'desconhecido') pendentes++;
       var mini = el('canvas', { 'aria-hidden': 'true' });
       mini.width = 80; mini.height = 80;
       recortar(mini, r);
       var txt = r.estado === 'desconhecido' ? 'Quem é?'
         : r.estado === 'identificado' ? (porId[r.aluno] || {}).nome
-        : r.estado === 'visitante' ? r.nome + ' (visitante)' : 'Ignorado';
+        : r.estado === 'visitante' ? r.nome + ' (visitante)'
+        : r.estado === 'mesmo' ? (porId[r.mesmo] || {}).nome + ' (de novo)' : 'Ignorado';
       var b = el('button', { type: 'button', class: 'cf-rosto' + (r.estado === 'desconhecido' ? '' : ' resolvido') },
         [mini, el('span', { text: txt })]);
       b.addEventListener('click', function () { abrirFolha(i); });
@@ -497,6 +549,10 @@
       estado.guardar = estado.guardar.filter(function (g) { return g.rosto !== r; });
       r.aluno = null;
     }
+    if (r.estado === 'mesmo') {
+      estado.guardar = estado.guardar.filter(function (g) { return g.rosto !== r; });
+      r.mesmo = null;
+    }
     if (r.estado === 'visitante') estado.visitantes = estado.visitantes.filter(function (v) { return v.rosto !== r; });
     r.estado = 'desconhecido';
   }
@@ -504,7 +560,7 @@
   function abrirFolha(i) {
     atual = estado.rostos[i];
     var total = estado.rostos.filter(function (r) {
-      return ['desconhecido', 'identificado', 'visitante', 'ignorado'].indexOf(r.estado) >= 0;
+      return ['desconhecido', 'identificado', 'visitante', 'ignorado', 'mesmo'].indexOf(r.estado) >= 0;
     });
     $('folhaSub').textContent = 'Rosto ' + (total.indexOf(atual) + 1) + ' de ' + total.length +
       (estado.fotos.length > 1 ? ' · foto ' + (atual.foto + 1) : '');
@@ -526,21 +582,24 @@
     var termo = sem_acento($('folhaBusca').value.trim());
     var ocupados = {};
     estado.rostos.forEach(function (r) { if (r.aluno && r !== atual) ocupados[r.aluno] = true; });
+    // Primeiro quem ainda está sem presença; no fim, quem já está marcado — se
+    // o rosto for de um deles, é a mesma criança aparecendo de novo.
     var lista = pessoas.filter(function (p) {
-      if (ocupados[p.id]) return false;
-      if (estado.presentes.has(p.id) && !(atual && atual.aluno === p.id)) return false;
       return !termo || sem_acento(p.nome).indexOf(termo) >= 0;
     }).map(function (p) {
-      return { p: p, d: p.descritores.length ? distancia(atual.descritor, p) : Infinity };
-    }).sort(function (a, b) { return (a.d - b.d) || a.p.nome.localeCompare(b.p.nome); });
+      var ja = !!ocupados[p.id] || (estado.presentes.has(p.id) && !(atual && atual.aluno === p.id));
+      return { p: p, ja: ja, d: p.descritores.length ? distancia(atual.descritor, p) : Infinity };
+    }).sort(function (a, b) { return (a.ja - b.ja) || (a.d - b.d) || a.p.nome.localeCompare(b.p.nome); });
     if (!escolhido || !lista.some(function (x) { return x.p === escolhido; })) {
-      escolhido = atual.aluno ? porId[atual.aluno] : (lista[0] ? lista[0].p : null);
+      escolhido = atual.aluno ? porId[atual.aluno] : atual.mesmo ? porId[atual.mesmo] : (lista[0] ? lista[0].p : null);
     }
+    var escolhidoJa = lista.some(function (x) { return x.p === escolhido && x.ja; });
     var box = $('folhaOpcoes');
     box.innerHTML = '';
     lista.slice(0, 40).forEach(function (x) {
       var p = x.p;
-      var nota = isFinite(x.d) ? pct(x.d) + '% parecido com a foto do cadastro' : notaAusente(p);
+      var nota = (x.ja ? 'Já presente · ' : '') +
+        (isFinite(x.d) ? pct(x.d) + '% parecido' : (x.ja ? 'mesma criança de novo?' : notaAusente(p)));
       var avatar = p.foto_url ? el('img', { src: p.foto_url, alt: '', style: 'width:38px;height:38px;border-radius:999px;object-fit:cover' })
         : el('span', { text: iniciais(p.nome), style: 'width:38px;height:38px;border-radius:999px;background:#e6e4e0;display:flex;align-items:center;justify-content:center;font-size:.75rem;font-weight:600;color:#6b6862;flex-shrink:0' });
       var b = el('button', { type: 'button', class: 'cf-opcao', 'aria-pressed': p === escolhido ? 'true' : 'false' }, [
@@ -553,7 +612,7 @@
       b.addEventListener('click', function () { escolhido = p; desenharOpcoes(); });
       box.appendChild(b);
     });
-    if (!lista.length) box.appendChild(el('p', { class: 'cf-dica', text: 'Ninguém com esse nome fora da lista de presentes.' }));
+    if (!lista.length) box.appendChild(el('p', { class: 'cf-dica', text: 'Ninguém com esse nome nesta chamada.' }));
     // Só guarda o rosto de quem consentiu; para os outros, diz por quê.
     var podeGuardar = !!(escolhido && escolhido.pode_aprender);
     $('folhaGuardarRotulo').hidden = !podeGuardar;
@@ -566,16 +625,24 @@
           'O consentimento se lança em Chamada por foto, no menu.';
     }
     $('folhaConfirmar').disabled = !escolhido;
-    $('folhaConfirmar').textContent = escolhido ? 'É ' + escolhido.nome.split(' ')[0] + ' · marcar presente' : 'Marcar presente';
+    $('folhaConfirmar').textContent = !escolhido ? 'Marcar presente'
+      : 'É ' + escolhido.nome.split(' ')[0] + (escolhidoJa ? ' · já está presente' : ' · marcar presente');
   }
 
   function confirmarRosto() {
     if (!atual || !escolhido) return;
     desfazer(atual);
-    atual.aluno = escolhido.id;
-    atual.estado = 'identificado';
-    estado.presentes.add(escolhido.id);
-    estado.origem[escolhido.id] = 'identificado';
+    var jaEsta = estado.presentes.has(escolhido.id);
+    if (jaEsta) {
+      // Mesma criança de novo: não muda a presença, mas o rosto ensina.
+      atual.mesmo = escolhido.id;
+      atual.estado = 'mesmo';
+    } else {
+      atual.aluno = escolhido.id;
+      atual.estado = 'identificado';
+      estado.presentes.add(escolhido.id);
+      estado.origem[escolhido.id] = 'identificado';
+    }
     if (escolhido.pode_aprender && $('folhaGuardar').checked) {
       var d = Array.from(atual.descritor);
       escolhido.descritores.push(d);
@@ -609,6 +676,14 @@
         if (blob) f.append('foto_presenca_avulsa', blob, 'visitante.jpg');
         await fetch(D.urlGravar, { method: 'POST', body: f, credentials: 'same-origin' });
       }
+      // Reconhecido com folga pequena (outro ângulo, outra luz) vira mais uma
+      // referência do aluno: o reconhecimento melhora a cada aula.
+      estado.rostos.forEach(function (r) {
+        var p = r.estado === 'reconhecido' && porId[r.aluno];
+        if (p && p.pode_aprender && estado.presentes.has(p.id) && r.dist > APRENDER) {
+          estado.guardar.push({ rosto: r, aluno_id: Number(p.id), origem: 'chamada', descritor: Array.from(r.descritor) });
+        }
+      });
       if (estado.guardar.length) {
         await enviarDescritores(estado.guardar.map(function (g) {
           return { aluno_id: g.aluno_id, origem: g.origem, descritor: g.descritor };

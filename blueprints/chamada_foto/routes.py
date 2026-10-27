@@ -257,6 +257,14 @@ def salvar_descritores():
     dados = request.get_json(silent=True) or {}
     academia_id = _academia()
     itens = dados.get("itens") or []
+    # Diagnóstico do aparelho (motor, autoteste, cadastros lidos): é o que dá
+    # para ver de um celular que não está aqui.
+    if isinstance(dados.get("diag"), dict):
+        import json as _json
+        from flask import current_app
+        current_app.logger.warning("chamada_foto diag academia=%s usuario=%s %s", academia_id,
+                                   getattr(current_user, "id", None),
+                                   _json.dumps(dados["diag"], ensure_ascii=False)[:600])
     if not academia_id or not isinstance(itens, list):
         return jsonify(ok=False, erro="requisição inválida"), 400
 
