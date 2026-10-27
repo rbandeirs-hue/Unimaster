@@ -141,6 +141,7 @@ def _limpar_ficticia(cur):
     cur.execute("DELETE FROM despesas WHERE id_academia = %s", (FICTICIA,))
     cur.execute("DELETE FROM fin_contas WHERE id_academia = %s", (FICTICIA,))
     cur.execute("DELETE FROM usuarios_academias WHERE academia_id = %s", (FICTICIA,))
+    cur.execute("DELETE FROM roles_usuario WHERE academia_id = %s", (FICTICIA,))
     cur.execute("DELETE FROM academias WHERE id = %s", (FICTICIA,))
 
 
@@ -150,7 +151,11 @@ def ficticia():
     cur = conn.cursor(dictionary=True)
     _limpar_ficticia(cur)
     cur.execute("INSERT INTO academias (id, nome) VALUES (%s, 'ZZ Pagamento de despesa')", (FICTICIA,))
-    cur.execute("INSERT INTO usuarios_academias (usuario_id, academia_id) VALUES (%s, %s)", (USUARIO, FICTICIA))
+    cur.execute("INSERT INTO usuarios_academias (usuario_id, academia_id, gestor_principal) VALUES (%s, %s, 1)",
+                (USUARIO, FICTICIA))
+    # Papel por academia (MM-14): sem ele o usuário não é gestor aqui.
+    cur.execute("""INSERT INTO roles_usuario (usuario_id, role_id, academia_id)
+                   SELECT %s, id, %s FROM roles WHERE chave = 'gestor_academia'""", (USUARIO, FICTICIA))
     cur.execute("INSERT INTO fin_contas (id_academia, nome, tipo, saldo_inicial) VALUES (%s, 'Caixa', 'caixa', 0)", (FICTICIA,))
     conta = cur.lastrowid
     conn.commit()
@@ -202,7 +207,9 @@ def test_rotas_ponta_a_ponta(ficticia):
     assert "Desfaça o pagamento" in h and _despesa(conn, cur, "Aluguel")
     h = cli.post(f"/financeiro/despesas/{aluguel['id']}/desfazer-pagamento",
                  follow_redirects=True).get_data(as_text=True)
-    assert "Pagamento desfeito" in h and not _despesa(conn, cur, "Aluguel")["id_lancamento"]
+    import re as _re
+    _msgs = _re.findall(r'(?:alert|flash|toast)[^>]*>\s*([^<]{5,200})', h)
+    assert "Pagamento desfeito" in h and not _despesa(conn, cur, "Aluguel")["id_lancamento"], _msgs
 
     h = cli.get("/financeiro/painel/fluxo").get_data(as_text=True)
     assert "R$ 90,50" in h and "Aluguel" in h   # paga nas saídas; aluguel volta a "a pagar"
@@ -245,4 +252,5 @@ def test_trocar_forma_move_o_lancamento_para_a_conta_da_forma(transacao):
 
 def test_tela_lista_entradas_sem_forma(cliente):
     h = cliente.get("/financeiro/painel/fluxo?mes=2026-10&entradas=sem").get_data(as_text=True)
-    assert 'id="entradas"' in h and "receitas/" in h and "/forma" in h
+    # A lista abre mesmo quando não há nenhuma (os dados reais mudam).
+    assert 'id="entradas"' in h and ("/forma" in h or "Nenhuma entrada aqui" in h)
