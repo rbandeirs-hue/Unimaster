@@ -3,6 +3,7 @@ from datetime import date, timedelta
 from flask import Blueprint, render_template, redirect, url_for, flash, session, request, jsonify, current_app
 from flask_login import login_required, current_user
 from config import get_db_connection
+from utils.financeiro_core import espelhar_receita
 from werkzeug.security import generate_password_hash
 from math import ceil
 from blueprints.auth.user_model import Usuario
@@ -796,6 +797,7 @@ def confirmar_pagamento_diaria(pagamento_id):
             INSERT INTO receitas (descricao, valor, data, categoria, id_academia, criado_por)
             VALUES (%s, %s, %s, 'Diária de Visitante', %s, %s)
         """, (descricao, valor, hoje, academia_id, current_user.id))
+        espelhar_receita(cur, cur.lastrowid)  # receita → caixa (utils/financeiro_core.py)
         receita_id = cur.lastrowid
         
         # Atualizar pagamento e aprovar aula

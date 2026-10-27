@@ -587,6 +587,8 @@ def baixar_grupo(grupo_id, valor_pago=None, gateway_nome="gateway", data_pagamen
                     (f"Cobrança avulsa - {i['aluno_nome']} (cobrança familiar {gateway_nome})",
                      v, dia, g["id_academia"], i["registro_id"], id_forma_pagamento, i.get("aluno_id")),
                 )
+                from utils.financeiro_core import espelhar_receita
+                espelhar_receita(cur, cur.lastrowid)  # receita → caixa (utils/financeiro_core.py)
             else:
                 cur.execute(
                     """INSERT INTO receitas (descricao, valor, data, categoria,
@@ -595,6 +597,8 @@ def baixar_grupo(grupo_id, valor_pago=None, gateway_nome="gateway", data_pagamen
                     (f"Mensalidade - {i['aluno_nome']} (cobrança familiar {gateway_nome})",
                      v, dia, g["id_academia"], i["registro_id"], id_forma_pagamento, i.get("aluno_id")),
                 )
+                from utils.financeiro_core import espelhar_receita
+                espelhar_receita(cur, cur.lastrowid)  # receita → caixa (utils/financeiro_core.py)
             id_receita = cur.lastrowid
             # Espelha no caixa, como a baixa individual (respeita o modo do
             # controle financeiro; desativado não grava nada).

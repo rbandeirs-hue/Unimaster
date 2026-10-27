@@ -615,6 +615,14 @@ def registrar_entrada_de_pagamento(conn, cur, *, id_academia, valor, descricao,
     falhar, o pagamento continua registrado como sempre foi.
     """
     try:
+        if id_receita:
+            # A receita pode já ter ido ao caixa por espelhar_receita(), chamada
+            # logo depois do INSERT. Sem esta trava o dinheiro entrava duas vezes.
+            cur.execute("SELECT id_lancamento FROM receitas WHERE id = %s", (id_receita,))
+            _r = cur.fetchone()
+            _ja = (_r.get("id_lancamento") if isinstance(_r, dict) else (_r[0] if _r else None)) if _r else None
+            if _ja:
+                return _ja
         if modo_controle(cur, id_academia) == MODO_DESATIVADO:
             return None
         if not valor or Decimal(str(valor)) <= 0:
@@ -693,3 +701,127 @@ def reatribuir_conta(conn, cur, lanc_id, id_conta_nova, *, motivo=None, usuario_
             status_anterior=str(anterior), status_novo=destino["nome"],
             motivo=motivo, usuario_id=usuario_id)
     return lanc_id
+
+
+# =====================================================================
+# Receita → caixa: o ponto único
+# =====================================================================
+def espelhar_receita(cur, receita_id, usuario_id=None):
+    """Lança no caixa a entrada de uma receita recém-gravada e audita a baixa.
+
+    Chamada logo depois de cada INSERT em `receitas` — webhook de gateway,
+    baixa manual, receita avulsa, matrícula, cobrança familiar, estoque. Antes
+    só três caminhos espelhavam no razão, e um deles passava um cursor de
+    tuplas para funções que leem dicionário: o erro era engolido e o
+    lançamento não saía. Resultado: 367 de 378 receitas fora do caixa.
+
+    Recebe o cursor de quem gravou e usa a MESMA conexão (mesma transação):
+    se a baixa for desfeita, o lançamento vai junto. Idempotente — receita
+    que já tem `id_lancamento` não lança de novo. Nunca derruba a baixa:
+    qualquer falha aqui só é registrada no log. Devolve o id do lançamento ou None.
+    """
+    import logging
+    log = logging.getLogger(__name__)
+    if not receita_id:
+        return None
+    try:
+        conn = cur._connection
+        dc = conn.cursor(dictionary=True)
+    except Exception:
+        return None
+    try:
+        dc.execute(
+            """SELECT r.id, r.descricao, r.valor, r.data, r.id_academia, r.id_forma_pagamento,
+                      r.id_mensalidade_aluno, r.id_cobranca_avulsa, r.id_lancamento,
+                      COALESCE(r.cancelada, 0) AS cancelada, r.criado_por,
+                      COALESCE(r.id_aluno, ma.aluno_id, ca.aluno_id) AS aluno_id
+               FROM receitas r
+               LEFT JOIN mensalidade_aluno ma ON ma.id = r.id_mensalidade_aluno
+               LEFT JOIN cobranca_avulsa ca ON ca.id = r.id_cobranca_avulsa
+               WHERE r.id = %s""", (receita_id,))
+        r = dc.fetchone()
+        if (not r or r["id_lancamento"] or r["cancelada"] or not r["id_academia"]
+                or Decimal(str(r["valor"] or 0)) <= 0):
+            return r["id_lancamento"] if r else None
+        if modo_controle(dc, r["id_academia"]) == MODO_DESATIVADO:
+            return None
+        id_conta = conta_padrao(dc, r["id_academia"], r["id_forma_pagamento"])
+        if not id_conta:
+            return None
+        if r["id_mensalidade_aluno"]:
+            origem, origem_id, entidade = "mensalidade", r["id_mensalidade_aluno"], "mensalidade_aluno"
+        elif r["id_cobranca_avulsa"]:
+            origem, origem_id, entidade = "cobranca_avulsa", r["id_cobranca_avulsa"], "cobranca_avulsa"
+        else:
+            origem, origem_id, entidade = "receita", r["id"], "receitas"
+        quem = usuario_id or r["criado_por"]
+        if quem is None:
+            try:
+                quem = getattr(current_user, "id", None)
+            except Exception:
+                quem = None
+        lanc = lancar(
+            conn, dc, id_academia=r["id_academia"], id_conta=id_conta, sentido="entrada",
+            valor=r["valor"], descricao=(r["descricao"] or "Receita")[:255],
+            data_competencia=r["data"], data_efetivacao=r["data"], status="efetivado",
+            origem=origem, origem_id=origem_id, id_forma_pagamento=r["id_forma_pagamento"],
+            id_aluno=r["aluno_id"], usuario_id=quem)
+        dc.execute("UPDATE receitas SET id_lancamento = %s WHERE id = %s", (lanc, r["id"]))
+        auditar(dc, r["id_academia"], entidade, origem_id, "baixa",
+                valor_novo=r["valor"], status_novo="pago", usuario_id=quem,
+                detalhes=f"receita {r['id']} · lançamento {lanc} · conta {id_conta}")
+        return lanc
+    except Exception:
+        log.warning("Receita %s: entrada no caixa não registrada", receita_id, exc_info=True)
+        return None
+    finally:
+        try:
+            dc.close()
+        except Exception:
+            pass
+
+
+def estornar_receitas(cur, coluna, valor_id, *, motivo=None, usuario_id=None):
+    """Antes de apagar as receitas de um pagamento cancelado: estorna a entrada
+    no caixa e deixa o registro na auditoria.
+
+    O cancelamento continua apagando a receita — várias telas checam "esta
+    mensalidade já tem receita?" e somam receitas sem olhar `cancelada`; mudar
+    isso agora quebraria o novo pagamento da mesma mensalidade. O que faltava
+    era o rastro: o dinheiro saía do relatório, mas continuava no caixa, e não
+    ficava registro de quem cancelou, quando e por quê. Aqui o lançamento
+    recebe o estorno (fica no extrato) e a auditoria guarda valor, data e forma.
+
+    `coluna` é 'id_mensalidade_aluno' ou 'id_cobranca_avulsa'. Mesma conexão
+    de quem chama. Devolve quantas receitas foram tratadas.
+    """
+    import logging
+    if coluna not in ("id_mensalidade_aluno", "id_cobranca_avulsa"):
+        raise ValueError(coluna)
+    dc = cur._connection.cursor(dictionary=True)
+    n = 0
+    try:
+        dc.execute(f"""SELECT r.id, r.id_academia, r.valor, r.data, r.descricao, r.id_lancamento,
+                              r.id_forma_pagamento, l.status AS l_status, l.id_estorno
+                       FROM receitas r LEFT JOIN fin_lancamentos l ON l.id = r.id_lancamento
+                       WHERE r.{coluna} = %s""", (valor_id,))
+        for r in dc.fetchall():
+            n += 1
+            estorno = None
+            if r["id_lancamento"] and r["l_status"] == "efetivado" and not r["id_estorno"]:
+                try:
+                    estorno = estornar(None, dc, r["id_lancamento"],
+                                       motivo=motivo or "Pagamento cancelado.", usuario_id=usuario_id)
+                except ErroFinanceiro:
+                    logging.getLogger(__name__).warning(
+                        "Receita %s: estorno no caixa recusado", r["id"], exc_info=True)
+            entidade = "mensalidade_aluno" if coluna == "id_mensalidade_aluno" else "cobranca_avulsa"
+            auditar(dc, r["id_academia"], entidade, valor_id, "cancelar_pagamento",
+                    valor_anterior=r["valor"], status_anterior="pago", status_novo="pendente",
+                    motivo=motivo or "Pagamento cancelado.", usuario_id=usuario_id,
+                    detalhes=(f"receita {r['id']} apagada · {r['descricao'] or ''} · {r['data']} · "
+                              f"forma {r['id_forma_pagamento'] or '—'} · lançamento {r['id_lancamento'] or '—'}"
+                              + (f" · estorno {estorno}" if estorno else ""))[:500])
+    finally:
+        dc.close()
+    return n

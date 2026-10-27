@@ -14,7 +14,7 @@ from decimal import Decimal, InvalidOperation
 import json
 from config import get_db_connection
 from utils.planos_modalidade import filtrar_contexto as filtrar_planos
-from utils.financeiro_core import registrar_entrada_de_pagamento
+from utils.financeiro_core import registrar_entrada_de_pagamento, espelhar_receita
 from utils.alunos_academias import filtro_alunos_da_academia, aluno_vinculado_a_academia
 from extensions import csrf
 
@@ -3326,6 +3326,7 @@ def webhook_asaas():
                                VALUES (%s, %s, CURDATE(), 'Mensalidades', %s, %s)""",
                             ("Mensalidade (Asaas)", valor_pago, rec["id_academia"], rec["id"]),
                         )
+                        espelhar_receita(cur, cur.lastrowid)  # receita → caixa (utils/financeiro_core.py)
                     else:
                         _inserir_receita_de_avulsa(
                             cur, rec["id"], valor_pago, date.today(), rec["id_academia"],
@@ -3404,6 +3405,7 @@ def _baixar_cobranca_paga(origem, registro_id, valor_pago, gateway_nome):
                        VALUES (%s, %s, CURDATE(), 'Mensalidades', %s, %s)""",
                     (f"Mensalidade ({gateway_nome})", vp, rec["id_academia"], rec["id"]),
                 )
+                espelhar_receita(cur, cur.lastrowid)  # receita → caixa (utils/financeiro_core.py)
             else:
                 _inserir_receita_de_avulsa(
                     cur, rec["id"], vp, date.today(), rec["id_academia"],
@@ -3539,6 +3541,7 @@ def _inserir_receita_de_avulsa(cur, avulsa_id, valor, data, id_academia,
                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
             (descricao, valor, data, categoria, id_academia, avulsa_id, criado_por, aluno_id),
         )
+        espelhar_receita(cur, cur.lastrowid)  # receita → caixa (utils/financeiro_core.py)
     except Exception:
         # Banco sem `receitas.id_aluno` (migração não rodada): lança como antes.
         cur.execute(
@@ -3546,6 +3549,7 @@ def _inserir_receita_de_avulsa(cur, avulsa_id, valor, data, id_academia,
                VALUES (%s, %s, %s, %s, %s, %s)""",
             (descricao, valor, data, categoria, id_academia, avulsa_id),
         )
+        espelhar_receita(cur, cur.lastrowid)  # receita → caixa (utils/financeiro_core.py)
 
 
 def _data_do_form(valor):
@@ -3695,6 +3699,7 @@ def _baixar_matricula_paga(*, precad_id=None, payment_id=None, valor=None,
                          id_forma_pagamento, getattr(current_user, "id", None),
                          aluno_da_matricula),
                     )
+                    espelhar_receita(cur, cur.lastrowid)  # receita → caixa (utils/financeiro_core.py)
                     # Espelha no razão, como faz a baixa de mensalidade. Em
                     # academia sem conta ou com o controle desativado a função
                     # devolve None e nada muda.
@@ -5764,6 +5769,7 @@ def gerar_cobranca():
                              "Matrículas" if eh_matricula else "Cobranças avulsas",
                              id_acad, current_user.id, aluno_ids[0]),
                         )
+                        espelhar_receita(cur, cur.lastrowid)  # receita → caixa (utils/financeiro_core.py)
                     except Exception:
                         pass
                 conn.commit()
@@ -6567,6 +6573,7 @@ def _registrar_pagamento_e_receita(conn, cur, tipo, registro_id, id_academia, id
                     """,
                     (descricao, valor, hoje, id_acad, registro_id, id_fp, current_user.id),
                 )
+                espelhar_receita(cur, cur.lastrowid)  # receita → caixa (utils/financeiro_core.py)
             else:
                 cur.execute(
                     """
@@ -6575,17 +6582,20 @@ def _registrar_pagamento_e_receita(conn, cur, tipo, registro_id, id_academia, id
                     """,
                     (descricao, valor, hoje, id_acad, registro_id, current_user.id),
                 )
+                espelhar_receita(cur, cur.lastrowid)  # receita → caixa (utils/financeiro_core.py)
         except Exception:
             try:
                 cur.execute(
                     "INSERT INTO receitas (descricao, valor, data, categoria, id_academia, id_mensalidade_aluno, criado_por) VALUES (%s, %s, %s, 'Mensalidades', %s, %s, %s)",
                     (descricao, valor, hoje, id_acad, registro_id, current_user.id),
                 )
+                espelhar_receita(cur, cur.lastrowid)  # receita → caixa (utils/financeiro_core.py)
             except Exception:
                 cur.execute(
                     "INSERT INTO receitas (descricao, valor, data, categoria, id_academia, id_mensalidade_aluno) VALUES (%s, %s, %s, 'Mensalidades', %s, %s)",
                     (descricao, valor, hoje, id_acad, registro_id),
                 )
+                espelhar_receita(cur, cur.lastrowid)  # receita → caixa (utils/financeiro_core.py)
     else:
         cur.execute(
             "SELECT ca.id, ca.valor, ca.descricao, a.nome, ca.id_academia, ca.aluno_id FROM cobranca_avulsa ca JOIN alunos a ON a.id = ca.aluno_id WHERE ca.id = %s",
@@ -7274,6 +7284,7 @@ def _registrar_pagamento_mensalidade_partes(conn, cur, registro_id, id_academia,
                 """,
                 (desc, val, d_sql, id_acad, registro_id, fid, current_user.id),
             )
+            espelhar_receita(cur, cur.lastrowid)  # receita → caixa (utils/financeiro_core.py)
         except Exception:
             try:
                 cur.execute(
@@ -7283,11 +7294,13 @@ def _registrar_pagamento_mensalidade_partes(conn, cur, registro_id, id_academia,
                     """,
                     (desc, val, d_sql, id_acad, registro_id, current_user.id),
                 )
+                espelhar_receita(cur, cur.lastrowid)  # receita → caixa (utils/financeiro_core.py)
             except Exception:
                 cur.execute(
                     "INSERT INTO receitas (descricao, valor, data, categoria, id_academia, id_mensalidade_aluno) VALUES (%s, %s, %s, 'Mensalidades', %s, %s)",
                     (desc, val, d_sql, id_acad, registro_id),
                 )
+                espelhar_receita(cur, cur.lastrowid)  # receita → caixa (utils/financeiro_core.py)
 
     # Parte quitada com crédito de carteira: debita a carteira e gera receita
     # (o crédito veio de dinheiro já recebido, então a receita é reconhecida agora).
@@ -7309,12 +7322,14 @@ def _registrar_pagamento_mensalidade_partes(conn, cur, registro_id, id_academia,
                    VALUES (%s, %s, %s, 'Mensalidades', %s, %s, %s)""",
                 (_desc_cart, cart, data_ma, id_acad, registro_id, getattr(current_user, "id", None)),
             )
+            espelhar_receita(cur, cur.lastrowid)  # receita → caixa (utils/financeiro_core.py)
         except Exception:
             try:
                 cur.execute(
                     "INSERT INTO receitas (descricao, valor, data, categoria, id_academia, id_mensalidade_aluno) VALUES (%s, %s, %s, 'Mensalidades', %s, %s)",
                     (_desc_cart, cart, data_ma, id_acad, registro_id),
                 )
+                espelhar_receita(cur, cur.lastrowid)  # receita → caixa (utils/financeiro_core.py)
             except Exception:
                 pass
     return True, None
@@ -8692,6 +8707,14 @@ def cancelar_pagamento():
             conn.close()
             return redirect(request.referrer or url_for("financeiro.mensalidades_alunos", academia_id=academia_id))
         
+        # Antes de apagar as receitas: estorno no caixa e registro na auditoria
+        # (utils/financeiro_core.estornar_receitas). Sem isso o dinheiro sumia
+        # dos relatórios mas ficava no caixa, e ninguém sabia quem cancelou.
+        from utils.financeiro_core import estornar_receitas
+        _motivo = (request.form.get("motivo") or "").strip()[:255] or None
+        estornar_receitas(cur, "id_mensalidade_aluno" if tipo == "mensalidade_aluno" else "id_cobranca_avulsa",
+                          registro_id, motivo=_motivo, usuario_id=getattr(current_user, "id", None))
+
         # Excluir receitas associadas (uma ou várias linhas em pagamento misto)
         if tipo == "mensalidade_aluno":
             try:
@@ -8785,7 +8808,7 @@ def cancelar_pagamento():
                 "success",
             )
         else:
-            flash("Pagamento cancelado. Status revertido para pendente e receita excluída.", "success")
+            flash("Pagamento cancelado: a cobrança voltou a ficar em aberto e a entrada foi estornada no caixa.", "success")
     except Exception as e:
         conn.rollback()
         current_app.logger.error(
@@ -9580,6 +9603,7 @@ def cadastrar_receita():
                 "INSERT INTO receitas (descricao, valor, data, categoria, id_academia, observacoes, criado_por) VALUES (%s, %s, %s, %s, %s, %s, %s)",
                 (descricao, valor, data_str, categoria, id_acad, observacoes, current_user.id),
             )
+            espelhar_receita(cur, cur.lastrowid)  # receita → caixa (utils/financeiro_core.py)
             conn.commit()
             conn.close()
             flash("Receita cadastrada com sucesso.", "success")

@@ -356,6 +356,8 @@ def _lancar_entrada(cur, pedido, total, quando, forma_pagamento, usuario_id):
            VALUES (%s,%s,%s,'Estoque',%s,%s,%s)""",
         (descricao, total, quando, pedido["id_academia"], pedido["aluno_id"],
          usuario_id))
+    from utils.financeiro_core import espelhar_receita
+    espelhar_receita(cur, cur.lastrowid)  # receita → caixa (utils/financeiro_core.py)
     return cur.lastrowid
 
 
