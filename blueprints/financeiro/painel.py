@@ -2624,7 +2624,7 @@ def familias():
         meses=_meses_disponiveis(date.today().year, date.today().month, 6),
         n_ativas=sum(1 for f in lista if f.get("ativo")),
         gateway_ok=_gateway_ativo(_gateway_config_academia(academia_id)),
-        formas=_formas_ativas(academia_id), hoje_iso=date.today().isoformat(),
+        formas=_formas_ativas(academia_id), hoje=date.today(), hoje_iso=date.today().isoformat(),
     )
     return render_template("financeiro/painel/familias.html", **ctx)
 

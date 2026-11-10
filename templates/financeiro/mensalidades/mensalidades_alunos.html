@@ -388,7 +388,14 @@
           {% endif %}
 
           {% if m.status_efetivo in ['pendente', 'atrasado'] %}
-            {% if formas_lista %}
+            {% set fam = familia_por_ma.get(m.id) if familia_por_ma else None %}
+            {% if fam %}
+            {# Está na cobrança única da família: a baixa é lá, de uma vez só. #}
+            <a class="sh__btn sh__btn--forte" style="padding:.35rem .7rem"
+               title="Esta mensalidade está na cobrança única da família ({{ (fam.valor_total or 0)|brl }})"
+               href="{{ url_for('financeiro_painel.familias', mes=fam.competencia.strftime('%Y-%m'), academia_id=academia_id) }}#familia-{{ fam.familia_id }}">
+              <i class="bi bi-people-fill" aria-hidden="true"></i> Baixar na família</a>
+            {% elif formas_lista %}
             <button type="button" class="sh__btn js-fin-open-modal-pagamento-financeiro" style="padding:.35rem .7rem"
                     data-post-url="{{ url_for('financeiro.registrar_pagamento') }}"
                     data-fluxo="registrar"

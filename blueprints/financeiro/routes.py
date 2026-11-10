@@ -5015,6 +5015,26 @@ def mensalidades_alunos():
     except Exception:
         pass
 
+    # Mensalidade que está numa cobrança familiar em aberto: a baixa é pela
+    # família (Cobrança › Famílias), e sem o atalho ninguém achava onde fazer.
+    familia_por_ma = {}
+    try:
+        _ids_ma = [m["id"] for m in mensalidades if m.get("id")
+                   and (m.get("status_efetivo") or m.get("status")) in ("pendente", "atrasado")]
+        if _ids_ma:
+            _ph = ",".join(["%s"] * len(_ids_ma))
+            cur.execute(
+                f"""SELECT i.mensalidade_aluno_id, g.familia_id, g.competencia, g.valor_total
+                    FROM cobranca_grupo_item i
+                    JOIN cobranca_grupo g ON g.id = i.grupo_id AND g.status IN ('pendente', 'atrasado')
+                    WHERE i.mensalidade_aluno_id IN ({_ph})""",
+                tuple(_ids_ma),
+            )
+            for r in cur.fetchall() or []:
+                familia_por_ma[r["mensalidade_aluno_id"]] = r
+    except Exception:
+        pass
+
     # Matrícula do aluno filtrado. Ela não é uma cobrança do aluno: o pré-cadastro
     # some quando a matrícula é aprovada, e o que sobra é a receita lançada na
     # baixa (categoria "Matrículas", descrição "Matrícula - <nome>"). Sem isto, o
@@ -5171,6 +5191,7 @@ def mensalidades_alunos():
         planos_cobranca=_planos_ativos_academia(academia_id),
         ano_atual=date.today().year,
         formas_lista=formas_lista,
+        familia_por_ma=familia_por_ma,
         asaas_on=_asaas_habilitado_academia(academia_id),
         gateway_ativo=_gateway_ativo(_gateway_config_academia(academia_id)),
         recorrencia_gw=_gateway_recorrencia(_gateway_config_academia(academia_id)),

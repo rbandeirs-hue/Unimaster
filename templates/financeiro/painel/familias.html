@@ -11,6 +11,8 @@
   .fam-card.is-ativa { border-color:#1c1c1c33; background:#1c1c1c08; }
   .fam-topo { display:flex; flex-wrap:wrap; gap:.75rem; align-items:flex-start; justify-content:space-between; }
   .fam-nome { font-weight:600; }
+  .fam-situacao { display:flex; flex-wrap:wrap; gap:.5rem; align-items:center; }
+  .fam-card.is-paga { border-color:#c8e6d2; background:#f2fbf5; }
   .fam-alunos { font-size:.86rem; opacity:.75; margin-top:.15rem; }
   .fam-itens { margin:.75rem 0 0; padding:.6rem .8rem; border-radius:10px; background:rgba(127,127,127,.08); }
   .fam-item { display:flex; justify-content:space-between; gap:1rem; font-size:.9rem; padding:.15rem 0; }
@@ -69,14 +71,24 @@
 
     {% for f in lista %}
     {% set g = f.grupo %}
-    <article class="fam-card {% if f.ativo %}is-ativa{% endif %}">
+    <article class="fam-card {% if f.ativo %}is-ativa{% endif %}{% if f.ativo and g and g.status == 'pago' %} is-paga{% endif %}"
+             id="familia-{{ f.familia_id }}">
       <div class="fam-topo">
         <div style="min-width:0">
           <div class="fam-nome">{{ f.responsavel or 'Responsável sem nome' }}</div>
           <div class="fam-alunos">{{ f.qtd }} alunos · {{ f.alunos }}</div>
         </div>
-        <div>
+        <div class="fam-situacao">
           {% if f.ativo %}
+            {# Situação do mês em destaque: o "paga em" só no rodapé passava despercebido. #}
+            {% if g and g.status == 'pago' %}
+              <span class="lst-tag lst-tag--ok"><i class="bi bi-check-circle-fill" aria-hidden="true"></i>
+                Paga{% if g.data_pagamento %} em {{ g.data_pagamento.strftime('%d/%m') }}{% endif %}</span>
+            {% elif g and g.itens and g.data_vencimento and g.data_vencimento < hoje %}
+              <span class="lst-tag lst-tag--alerta">Atrasada</span>
+            {% elif g and g.itens %}
+              <span class="lst-tag">Em aberto</span>
+            {% endif %}
             <span class="lst-situacao is-ativo"><i></i>Cobrança única</span>
           {% else %}
             <span class="lst-situacao"><i></i>Cobrança individual</span>
@@ -191,5 +203,13 @@
       navigator.clipboard.writeText(i.value).then(ok).catch(function () { try { document.execCommand('copy'); } catch (e) {} ok(); });
     } else { try { document.execCommand('copy'); } catch (e) {} ok(); }
   }
+  // Vindo do "Baixar na família" (Mensalidades › Por aluno): abre o pagamento.
+  (function () {
+    var c = location.hash && document.querySelector(location.hash.replace(/[^#\w-]/g, ''));
+    if (!c || !c.classList.contains('fam-card')) return;
+    var d = c.querySelector('details.fam-baixa');
+    if (d) d.open = true;
+    c.scrollIntoView({ block: 'center' });
+  })();
 </script>
 {% endblock %}
